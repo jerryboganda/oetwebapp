@@ -24,6 +24,11 @@
 # misc
 .DS_Store
 *.pem
+/.codex/
+/.playwright-cli/
+codex-dev.log
+start-test.log
+*.zip
 
 # debug
 npm-debug.log*

@@ -1,4 +1,0 @@
-interface:
-  display_name: "Feature Execution Planning"
-  short_description: "Turn repo goals into phased plans"
-  default_prompt: "Use $feature-execution-planning to turn a repo goal into a phased execution plan with risks, dependencies, and validation."

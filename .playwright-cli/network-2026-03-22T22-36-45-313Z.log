@@ -1,6 +1,0 @@
-[GET] http://localhost:3000/images/logo/1.png => [400] Bad Request
-[GET] http://localhost:3000/_next/static/css/0bba572968920ede.css => [400] Bad Request
-[GET] http://localhost:3000/_next/static/chunks/app/layout-9cce34e5d6bd04f6.js => [400] Bad Request
-[GET] http://localhost:3000/_next/static/css/0bba572968920ede.css => [400] Bad Request
-[GET] http://localhost:3000/_next/static/chunks/app/layout-9cce34e5d6bd04f6.js => [400] Bad Request
-[GET] http://localhost:3000/images/logo/favicon.png => [400] Bad Request
