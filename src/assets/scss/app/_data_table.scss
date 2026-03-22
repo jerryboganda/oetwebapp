@@ -1,0 +1,217 @@
+// >>-- 36 Data_table css start --<<
+
+.app-datatable-default {
+  .dt-container {
+    .pagination {
+      .dt-paging-button {
+        font-weight: 600;
+        font-size: 16px;
+        color: rgba(var(--secondary-dark), 1);
+        &.current {
+          background-color: rgba(var(--primary), 0.3) !important;
+          color: rgba(var(--primary-dark), 1) !important;
+        }
+      }
+    }
+  }
+
+  .dt-column-order {
+    display: none;
+  }
+
+  .dt-layout-row {
+    padding: 0 1.25rem;
+    margin: 1rem 0 !important;
+
+    label {
+      color: rgba(var(--dark), 0.8);
+      font-weight: 500;
+    }
+  }
+
+  .dt-layout-table {
+    padding: 0;
+  }
+
+  .dt-input {
+    color: rgba(var(--secondary), 1);
+    font-size: 14px;
+    padding: 0.4rem 0.75rem;
+    border: 1px dotted rgba(var(--secondary), 0.4) !important;
+  }
+
+  table {
+    tr,
+    th,
+    td {
+      box-shadow: none !important;
+    }
+
+    thead {
+      th {
+        border-bottom: none !important;
+        color: rgba(var(--dark), 1);
+        font-weight: 600;
+        padding: 0.5rem 0.75rem !important;
+
+        &:first-child {
+          padding-left: 20px !important;
+        }
+
+        &:last-child {
+          padding-right: 20px !important;
+        }
+      }
+    }
+
+    tbody {
+      tr {
+        td {
+          border-top: 1px dashed rgba(var(--secondary), 0.4) !important;
+          color: rgba(var(--dark), 0.8);
+          font-size: 15px;
+          padding: 0.8rem 0.75rem !important;
+
+          &:last-child {
+            padding-right: 20px !important;
+          }
+
+          &:first-child {
+            padding-left: 20px !important;
+          }
+        }
+
+        &:nth-child(odd) {
+          background-color: rgba(var(--light), 0.2);
+        }
+        &:last-child {
+          td {
+            border-bottom: 1px dashed rgba(var(--secondary), 0.4) !important;
+          }
+        }
+      }
+    }
+
+    tfoot {
+      border: none !important;
+    }
+  }
+
+  input[type="checkbox"],
+  .check-box {
+    margin-bottom: 0 !important;
+
+    .checkmark {
+      border-radius: 5px;
+      border: 2px solid rgba(var(--dark), 0.4);
+    }
+  }
+}
+
+.default-data-table {
+  thead {
+    tr {
+      th:nth-child(1) {
+        min-width: 150px;
+      }
+
+      th:nth-child(3) {
+        min-width: 100px;
+      }
+
+      th:nth-child(5) {
+        min-width: 100px;
+      }
+
+      th:nth-child(7) {
+        min-width: 100px;
+      }
+    }
+  }
+}
+
+.row-border-table {
+  thead {
+    tr {
+      th:nth-child(1) {
+        min-width: 150px;
+      }
+
+      th:nth-child(2) {
+        min-width: 200px;
+      }
+
+      th:nth-child(3) {
+        min-width: 100px;
+      }
+
+      th:nth-child(5) {
+        min-width: 100px;
+      }
+    }
+  }
+}
+
+.row-callback-datatable {
+  thead {
+    tr {
+      th:nth-child(1) {
+        min-width: 150px;
+      }
+
+      th:nth-child(2) {
+        min-width: 200px;
+      }
+
+      th:nth-child(3) {
+        min-width: 100px;
+      }
+
+      th:nth-child(5) {
+        min-width: 100px;
+      }
+    }
+  }
+}
+
+.child-row-datatable {
+  thead {
+    tr {
+      th:nth-child(2) {
+        min-width: 150px;
+      }
+
+      th:nth-child(3) {
+        min-width: 200px;
+      }
+
+      th:nth-child(4) {
+        min-width: 100px;
+      }
+    }
+  }
+
+  td {
+    &.highlight {
+      font-weight: bold;
+      color: rgba(var(--primary));
+    }
+
+    //&.details-control {
+    //	background: url("../resources/details_open.png") no-repeat center center;
+    //	cursor: pointer;
+    //}
+  }
+
+  tr {
+    &.shown {
+      td {
+        //&.details-control {
+        //	background: url("../resources/details_close.png") no-repeat center center;
+        //}
+      }
+    }
+  }
+}
+
+// >>-- 36 Data_table css end --<<

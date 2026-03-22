@@ -1,0 +1,4 @@
+interface:
+  display_name: "Contract Check"
+  short_description: "Check request and response contracts"
+  default_prompt: "Use $contract-check to trace request, response, and type contracts before changing an API or server action."

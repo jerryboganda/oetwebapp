@@ -1,0 +1,75 @@
+// >>-- 42 Coming Soon css start --<<
+
+.coming-soon {
+  background-image: url("/images/background/coming-soon.jpg");
+  background-repeat: no-repeat;
+  background-size: cover;
+  min-height: 100vh;
+  .app-form {
+    min-width: 50%;
+    .form-control-lg {
+      min-width: 50%;
+      max-width: 75%;
+      background: transparent;
+    }
+  }
+  h3 {
+    font-size: calc(18px + (28 - 18) * ((100vw - 300px) / (1920 - 300)));
+  }
+  .coundown-timmer {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    text-align: center;
+    min-height: 100vh;
+    .content {
+      h2 {
+        font-size: calc(22px + (45 - 22) * ((100vw - 300px) / (1920 - 300)));
+      }
+    }
+    .font-coming-p {
+      color: rgba(var(--secondary));
+      font-size: calc(15px + (18 - 15) * ((100vw - 300px) / (1920 - 300)));
+    }
+    & .timmer-content {
+      display: flex;
+      padding: 2rem 0px;
+      align-items: center;
+      span {
+        font-size: calc(22px + (44 - 38) * ((100vw - 300px) / (1920 - 320)));
+        font-weight: 600;
+      }
+
+      & .numbers {
+        font-size: calc(22px + (44 - 34) * ((100vw - 300px) / (1920 - 320)));
+        font-weight: 600;
+        color: rgba(var(--primary-dark), 1);
+        border-radius: var(--app-border-radius);
+        padding: 0 20px;
+        width: 100%;
+        height: calc(55px + (110 - 100) * ((100vw - 300px) / (1920 - 320)));
+        display: inline-flex;
+        margin: 0 19px;
+        align-items: center;
+        justify-content: center;
+        background-color: rgba(var(--primary), 0.3);
+
+        outline: 1px solid rgba(var(--primary));
+
+        & span:nth-child(even) {
+          font-size: calc(14px + (20 - 14) * ((100vw - 300px) / (1920 - 320)));
+          color: rgba(var(--primary-dark), 0.3);
+          margin: 10px;
+          font-weight: 600;
+        }
+      }
+    }
+
+    .coming-soon-input {
+      padding: 9px 0;
+    }
+  }
+}
+
+// >>-- 42 Coming Soon css end --<<

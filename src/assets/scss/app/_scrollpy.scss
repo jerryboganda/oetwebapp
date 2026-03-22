@@ -1,0 +1,50 @@
+@use "sass:map";
+@use "reboot";
+
+// >>-- 68 Scrollpy css start --<<
+
+@mixin btn_pill($name, $color) {
+  .nav-link,
+  .dropdown-item {
+    &.nav-pill-#{$name} {
+      &.active {
+        background-color: rgba(#{$color}, 1);
+        color: rgba(var(--white), 1);
+      }
+    }
+  }
+  .list-group-item {
+    &.nav-pill-#{$name} {
+      &.active {
+        background-color: rgba(#{$color}, 1);
+        border-color: rgba(#{$color}, 1);
+      }
+    }
+  }
+}
+
+@each $name, $color in reboot.$colors {
+  @include btn_pill("#{$name}", map.get(reboot.$colors, $name));
+}
+
+.simple-list-example-scrollspy {
+  .active {
+    color: rgba(var(--primary), 1);
+  }
+}
+
+.scrollpy-nested-nav {
+  .nav-link {
+    color: var(--secondary) !important;
+  }
+}
+.nav-link.nav-pill-primary.active {
+  color: white !important;
+}
+.nav-pills {
+  .nav-link {
+    border-radius: var(--app-border-radius);
+    color: rgba(var(--primary), 1);
+  }
+}
+// >>-- 68 Scrollpy css end --<<

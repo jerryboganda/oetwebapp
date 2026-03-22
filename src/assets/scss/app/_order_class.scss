@@ -1,0 +1,23 @@
+@media screen and (max-width: 1399px) and (min-width: 992px) {
+  .order--1-lg {
+    order: -1;
+  }
+  .order--2-lg {
+    order: -2;
+  }
+  .order--3-lg {
+    order: -3;
+  }
+  .order-1-lg {
+    order: 1;
+  }
+}
+
+@media screen and (max-width: 1399px) and (min-width: 768px) {
+  .order--1-md {
+    order: -1;
+  }
+  .order-1-md {
+    order: 1;
+  }
+}

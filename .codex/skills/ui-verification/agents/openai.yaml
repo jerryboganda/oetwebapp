@@ -1,0 +1,4 @@
+interface:
+  display_name: "UI Verification"
+  short_description: "Verify UI behavior after changes"
+  default_prompt: "Use $ui-verification to validate the changed UI surface with targeted browser or build checks."

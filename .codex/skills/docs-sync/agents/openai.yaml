@@ -1,0 +1,4 @@
+interface:
+  display_name: "Docs Sync"
+  short_description: "Keep repo docs aligned with behavior"
+  default_prompt: "Use $docs-sync to update repo docs and decision logs after behavior, routes, or commands change."

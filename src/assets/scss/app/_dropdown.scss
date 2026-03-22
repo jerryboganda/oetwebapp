@@ -1,0 +1,143 @@
+@use "sass:map";
+@use "reboot";
+
+// >>-- 68 7ropdown css start --<<
+
+.dropdown-section {
+  a,
+  .btn {
+    border-radius: var(--app-border-radius);
+  }
+}
+.header-right {
+  li {
+    cursor: pointer;
+  }
+}
+.hover-dropdown:hover > .dropdown-menu {
+  display: block;
+}
+.hover-dropdown:hover {
+  ul {
+    margin-top: 2.5rem;
+  }
+}
+.hover-dropdown > .dropdown-toggle:active {
+  pointer-events: none;
+}
+.dropdown-icon-none {
+  .dropdown-toggle::after {
+    display: none;
+  }
+}
+.alignment-dropdown {
+  .dropdown-toggle::after {
+    display: none;
+  }
+  .dropdown-toggle::before {
+    display: none;
+  }
+}
+.dropdown-light {
+  .dropdown-toggle::after {
+    display: none;
+  }
+  .dropdown-toggle::before {
+    display: none;
+  }
+}
+.form-dropdown {
+  width: 250px;
+}
+@mixin dropdown($name, $color, $light-color: null) {
+$light-color: if(sass($light-color == null): $color; else: $light-color);
+  .dropdown-menu {
+    &.menu-#{$name} {
+      background-color: rgba(#{$color}, 0.3);
+      color: rgba(#{$light-color}, 1);
+      i {
+        color: rgba(#{$light-color}, 1) !important;
+      }
+    }
+  }
+}
+@each $name, $color in reboot.$colors {
+  @include dropdown(
+    "#{$name}",
+    map.get(reboot.$colors, $name),
+    map.get(reboot.$colors, "#{$name}-dark")
+  );
+}
+
+.app-dropdown {
+  .dropdown-menu {
+    position: relative;
+    width: 280px;
+    padding: 0px;
+    border-radius: var(--app-border-radius);
+    .dropdown-item {
+      font-size: 14px;
+      font-weight: 600;
+      display: flex;
+      align-items: center;
+      padding: 0.6rem 1rem;
+      text-decoration: none;
+      color: var(--black);
+      i {
+        font-size: 20px;
+        color: var(--font-light-color);
+      }
+      &:hover {
+        background-color: rgba(var(--light), 0.2);
+      }
+    }
+    &.sub-menu {
+      position: absolute;
+      transform: translate(280px, 96px) !important;
+    }
+    .active {
+      background-color: rgba(var(--primary), 1);
+      color: rgba(var(--white), 1);
+      &:hover {
+        color: var(--black);
+        background-color: rgba(var(--primary), 0.6);
+      }
+    }
+  }
+}
+
+.app-hover-dropdown {
+  position: relative;
+  .dropdown-menu {
+    width: 280px;
+    border-radius: 5px;
+    top: 0px;
+    .dropdown-item {
+      font-size: 14px;
+      display: flex;
+      align-items: center;
+      padding: 0.6rem 1rem;
+      text-decoration: none;
+      color: rgba(var(--secondary), 1);
+      i {
+        font-size: 20px;
+        color: var(--font-light-color);
+      }
+      &:hover {
+        background-color: rgba(var(--light), 0.2);
+      }
+    }
+    &.hover-submenu {
+      position: absolute;
+      bottom: 0px;
+      transform: translate(280px, 0px) !important;
+    }
+  }
+}
+.outline-btn {
+  .outline-variant {
+    border-top-left-radius: 0 !important;
+    border-bottom-left-radius: 0 !important;
+  }
+}
+// >>-- 67 Dropdown css end --<<
