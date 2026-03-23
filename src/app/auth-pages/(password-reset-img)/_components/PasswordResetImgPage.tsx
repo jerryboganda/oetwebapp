@@ -1,80 +1,74 @@
 "use client";
-import React from "react";
-import { Col, Container, Row, Form, FormGroup, Label, Input } from "reactstrap";
+
+import React, { useState } from "react";
 import Link from "next/link";
+import { Spinner } from "reactstrap";
+import { resetPassword } from "@/lib/auth/action";
+import AuthBackgroundShell from "@/app/auth-pages/_components/AuthBackgroundShell";
+import styles from "@/app/auth-pages/_components/AuthBackgroundShell.module.scss";
 
 const PasswordResetImgPage = () => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
   return (
-    <div>
-      <Container fluid>
-        <Row>
-          <Col xs={12} className="p-0">
-            <div className="login-form-container">
-              <div className="mb-4 text-center">
-                <Link className="logo d-inline-block" href="/">
-                  <img
-                    src="/images/logo/polytronx-dark.svg"
-                    className="w-250"
-                    alt="logo"
-                  />
-                </Link>
-              </div>
+    <AuthBackgroundShell
+      eyebrow="Recover Access"
+      title="Reset Your Password"
+      subtitle="Choose a fresh password to secure your account and get back into PolytronX without losing momentum."
+      footer={
+        <>
+          Remembered it?{" "}
+          <Link
+            className={styles.link}
+            href="/auth-pages/sign-in-with-bg-image"
+          >
+            Back to sign in
+          </Link>
+        </>
+      }
+    >
+      <form action={resetPassword} onSubmit={() => setIsSubmitting(true)}>
+        <div className={styles.field}>
+          <label htmlFor="currentPassword">Current Password</label>
+          <input
+            id="currentPassword"
+            name="currentPassword"
+            type="password"
+            className={styles.input}
+            placeholder="Enter your current password"
+            required
+          />
+        </div>
 
-              <div className="form_container">
-                <Form className="app-form rounded-control">
-                  <div className="mb-3 text-center">
-                    <h3 className="text-primary-dark">Reset Your Password</h3>
-                    <p className="f-s-12 text-secondary">
-                      Create a new password and sign in to admin
-                    </p>
-                  </div>
+        <div className={styles.field}>
+          <label htmlFor="newPassword">New Password</label>
+          <input
+            id="newPassword"
+            name="newPassword"
+            type="password"
+            className={styles.input}
+            placeholder="Enter your new password"
+            required
+          />
+        </div>
 
-                  <FormGroup className="mb-3">
-                    <Label for="currentPassword">Current Password</Label>
-                    <Input
-                      type="password"
-                      id="currentPassword"
-                      placeholder="Enter Your Password"
-                      required
-                    />
-                  </FormGroup>
+        <div className={styles.field}>
+          <label htmlFor="confirmPassword">Confirm Password</label>
+          <input
+            id="confirmPassword"
+            name="confirmPassword"
+            type="password"
+            className={styles.input}
+            placeholder="Confirm your new password"
+            required
+          />
+        </div>
 
-                  <FormGroup className="mb-3">
-                    <Label for="newPassword">New Password</Label>
-                    <Input
-                      type="password"
-                      id="newPassword"
-                      placeholder="Enter Your Password"
-                      required
-                    />
-                  </FormGroup>
-
-                  <FormGroup className="mb-3">
-                    <Label for="confirmPassword">Confirm Password</Label>
-                    <Input
-                      type="password"
-                      id="confirmPassword"
-                      placeholder="Enter Your Password"
-                      required
-                    />
-                  </FormGroup>
-
-                  <div>
-                    <Link
-                      href="/"
-                      role="button"
-                      className="btn btn-light-primary w-100"
-                    >
-                      Reset Password
-                    </Link>
-                  </div>
-                </Form>
-              </div>
-            </div>
-          </Col>
-        </Row>
-      </Container>
-    </div>
+        <button className={styles.submit} type="submit" disabled={isSubmitting}>
+          {isSubmitting ? <Spinner size="sm" /> : "Reset Password"}
+        </button>
+      </form>
+    </AuthBackgroundShell>
   );
 };
 

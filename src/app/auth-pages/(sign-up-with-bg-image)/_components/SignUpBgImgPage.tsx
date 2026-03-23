@@ -1,143 +1,124 @@
 "use client";
-import React from "react";
-import {
-  Col,
-  Container,
-  Row,
-  Form,
-  FormGroup,
-  Label,
-  Input,
-  Button,
-} from "reactstrap";
+
+import React, { FormEvent, useState } from "react";
 import Link from "next/link";
 import {
   IconBrandFacebook,
   IconBrandGithub,
   IconBrandGoogle,
 } from "@tabler/icons-react";
+import { Spinner } from "reactstrap";
+import AuthBackgroundShell from "@/app/auth-pages/_components/AuthBackgroundShell";
+import styles from "@/app/auth-pages/_components/AuthBackgroundShell.module.scss";
 
 const SignUpBgImgPage = () => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setIsSubmitting(true);
+    await new Promise((resolve) => setTimeout(resolve, 700));
+    setIsSubmitting(false);
+  };
+
   return (
-    <div>
-      <Container fluid>
-        <Row>
-          <Col xs={12} className="p-0">
-            <div className="login-form-container">
-              <div className="mb-4">
-                <Link className="logo d-inline-block" href="/">
-                  <img
-                    src="/images/logo/polytronx-dark.svg"
-                    className="w-250"
-                    alt="logo"
-                  />
-                </Link>
-              </div>
+    <AuthBackgroundShell
+      eyebrow="Create Workspace"
+      title="Open your PolytronX Account"
+      subtitle="Create your account, set your credentials, and start using the full product with the same polished experience across every auth step."
+      footer={
+        <>
+          Already have an account?{" "}
+          <Link
+            className={styles.link}
+            href="/auth-pages/sign-in-with-bg-image"
+          >
+            Sign in
+          </Link>
+        </>
+      }
+      terms={
+        <Link className={styles.link} href="/other-pages/terms-condition">
+          Terms of use &amp; Conditions
+        </Link>
+      }
+      socials={[
+        {
+          href: "#",
+          label: "Sign up with Facebook",
+          icon: <IconBrandFacebook size={18} />,
+        },
+        {
+          href: "#",
+          label: "Sign up with Google",
+          icon: <IconBrandGoogle size={18} />,
+        },
+        {
+          href: "#",
+          label: "Sign up with GitHub",
+          icon: <IconBrandGithub size={18} />,
+        },
+      ]}
+    >
+      <form onSubmit={handleSubmit}>
+        <div className={styles.field}>
+          <label htmlFor="username">Username</label>
+          <input
+            id="username"
+            name="username"
+            type="text"
+            className={styles.input}
+            placeholder="Choose a username"
+            required
+          />
+        </div>
 
-              <div className="form_container">
-                <Form className="app-form p-3 rounded-control">
-                  <div className="mb-3 text-center">
-                    <h3 className="text-primary-dark">Create Account</h3>
-                    <p className="f-s-12 text-secondary">
-                      Get started For Free Today.
-                    </p>
-                  </div>
+        <div className={styles.field}>
+          <label htmlFor="email">Email</label>
+          <input
+            id="email"
+            name="email"
+            type="email"
+            className={styles.input}
+            placeholder="Enter your email"
+            required
+          />
+        </div>
 
-                  <FormGroup className="mb-3">
-                    <Label className="form-label">Username</Label>
-                    <Input
-                      type="text"
-                      placeholder="Enter Your Username"
-                      required
-                    />
-                  </FormGroup>
+        <div className={styles.field}>
+          <label htmlFor="password">Password</label>
+          <input
+            id="password"
+            name="password"
+            type="password"
+            className={styles.input}
+            placeholder="Create a password"
+            required
+          />
+        </div>
 
-                  <FormGroup className="mb-3">
-                    <Label className="form-label">Email</Label>
-                    <Input
-                      type="email"
-                      placeholder="Enter Your Email"
-                      required
-                    />
-                  </FormGroup>
+        <div className={styles.field}>
+          <label htmlFor="confirmPassword">Confirm password</label>
+          <input
+            id="confirmPassword"
+            name="confirmPassword"
+            type="password"
+            className={styles.input}
+            placeholder="Repeat your password"
+            required
+          />
+        </div>
 
-                  <FormGroup className="mb-3">
-                    <Label className="form-label">Password</Label>
-                    <Input
-                      type="password"
-                      placeholder="Enter Your Password"
-                      required
-                    />
-                  </FormGroup>
+        <label className={styles.checkbox} htmlFor="rememberSignUp">
+          <input id="rememberSignUp" name="rememberSignUp" type="checkbox" />
+          <span>Remember this device</span>
+        </label>
 
-                  <FormGroup check className="mb-3">
-                    <Input
-                      type="checkbox"
-                      id="formCheck1"
-                      className="form-check-input"
-                    />
-                    <Label
-                      check
-                      htmlFor="formCheck1"
-                      className="form-check-label"
-                    >
-                      Remember me
-                    </Label>
-                  </FormGroup>
-
-                  <div className="mb-3">
-                    <Button
-                      color="light-primary"
-                      type="submit"
-                      className="w-100 "
-                    >
-                      Submit
-                    </Button>
-                  </div>
-
-                  <div className="app-divider-v justify-content-center">
-                    <p>OR</p>
-                  </div>
-
-                  <div className="mb-3 text-center">
-                    <Button
-                      type="button"
-                      color="light-primary"
-                      className="icon-btn b-r-5 m-1"
-                    >
-                      <IconBrandFacebook size={18} />
-                    </Button>
-                    <Button
-                      type="button"
-                      color="light-danger"
-                      className="icon-btn b-r-5 m-1"
-                    >
-                      <IconBrandGoogle size={18} />
-                    </Button>
-                    <Button
-                      type="button"
-                      color="light-dark"
-                      className="icon-btn b-r-5 m-1"
-                    >
-                      <IconBrandGithub size={18} />
-                    </Button>
-                  </div>
-
-                  <div className="text-center">
-                    <Link
-                      href="/other-pages/terms-condition"
-                      className="text-secondary text-decoration-underline"
-                    >
-                      Terms of use &amp; Conditions
-                    </Link>
-                  </div>
-                </Form>
-              </div>
-            </div>
-          </Col>
-        </Row>
-      </Container>
-    </div>
+        <button className={styles.submit} type="submit" disabled={isSubmitting}>
+          {isSubmitting ? <Spinner size="sm" /> : "Create account"}
+        </button>
+      </form>
+    </AuthBackgroundShell>
   );
 };
 
