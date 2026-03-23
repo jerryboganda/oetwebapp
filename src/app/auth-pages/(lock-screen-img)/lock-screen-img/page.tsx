@@ -31,7 +31,7 @@ export async function generateMetadata(): Promise<Metadata> {
       title: "Lock Screen with Background - PolytronX",
       description:
         "Secure your session with our visually appealing lock screen interface featuring a background image.",
-      url: "/auth/lock-screen-img",
+      url: "/lock-screen",
       siteName: "PolytronX",
       locale: "en_US",
       type: "website",

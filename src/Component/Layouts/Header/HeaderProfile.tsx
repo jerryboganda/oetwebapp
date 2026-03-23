@@ -13,6 +13,7 @@ import {
 import { Detective, SignOut } from "phosphor-react";
 import Image from "next/image";
 import { logoutUser } from "@/lib/auth/action";
+import { AUTH_ROUTES } from "@/lib/auth/routes";
 import { useSessionStore } from "@/lib/oet/stores/session-store";
 
 type MenuItem = {
@@ -50,7 +51,7 @@ const menuItems: MenuItem[] = [
   },
   {
     label: "Add account",
-    href: "/auth-pages/sign-up-with-bg-image",
+    href: AUTH_ROUTES.signUp,
     icon: <Plus height={24} width={24} className="pe-1 f-s-20" />,
     external: true,
     className: "text-secondary",

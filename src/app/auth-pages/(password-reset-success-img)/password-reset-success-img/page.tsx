@@ -18,7 +18,7 @@ export async function generateMetadata(): Promise<Metadata> {
       title: "Password Reset Successful - PolytronX",
       description:
         "Your OET password has been updated successfully. Return to sign in with your new password.",
-      url: "/auth/password-reset-success-img",
+      url: "/reset-password/success",
       siteName: "PolytronX",
       locale: "en_US",
       type: "website",

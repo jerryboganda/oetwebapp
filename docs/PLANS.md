@@ -30,10 +30,12 @@
 - 4 server-action modules for auth, blog, projects, and textarea flows.
 - One shared app shell and no current CI, lockfile, or test suite.
 - Shared OET role surfaces now live under `/app`, `/expert`, and `/admin`.
-- Background auth routes are the only supported auth contract:
-  `/auth-pages/sign-in-with-bg-image`, `/sign-up-with-bg-image`,
-  `/password-reset-img`, `/password-create-img`, `/lock-screen-img`,
-  `/two-step-verification-img`.
+- Public auth URLs are now short product routes:
+  `/login`, `/register`, `/register/success`, `/forgot-password`,
+  `/forgot-password/verify`, `/reset-password`, `/reset-password/success`,
+  `/verify`, and `/lock-screen`.
+- Legacy `auth-pages/*` auth paths are maintained as redirects so old links and
+  bookmarks keep working.
 - A lockfile and focused Vitest suite are now checked in for the OET helpers,
   route contracts, schemas, and taxonomy store.
 

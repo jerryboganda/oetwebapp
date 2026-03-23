@@ -18,6 +18,7 @@ import {
   ViewGrid,
   WarningTriangle,
 } from "iconoir-react";
+import { AUTH_ROUTES } from "@/lib/auth/routes";
 
 export const MenuList = [
   {
@@ -327,14 +328,14 @@ export const MenuList = [
     collapseId: "auth-pages",
     path: "/auth-pages",
     children: [
-      { name: "Sign In", path: "/auth-pages/sign-in-with-bg-image" },
-      { name: "Sign Up", path: "/auth-pages/sign-up-with-bg-image" },
-      { name: "Password Reset", path: "/auth-pages/password-reset-img" },
-      { name: "Password Create", path: "/auth-pages/password-create-img" },
-      { name: "Lock Screen", path: "/auth-pages/lock-screen-img" },
+      { name: "Sign In", path: AUTH_ROUTES.signIn },
+      { name: "Sign Up", path: AUTH_ROUTES.signUp },
+      { name: "Password Reset", path: AUTH_ROUTES.passwordReset },
+      { name: "Password Create", path: AUTH_ROUTES.passwordCreate },
+      { name: "Lock Screen", path: AUTH_ROUTES.lockScreen },
       {
         name: "Two Step Verification",
-        path: "/auth-pages/two-step-verification-img",
+        path: AUTH_ROUTES.twoStepVerification,
       },
     ],
   },

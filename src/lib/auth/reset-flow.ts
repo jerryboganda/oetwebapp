@@ -51,7 +51,7 @@ export function buildPasswordResetHref(options?: {
   email?: string;
   error?: string;
 }) {
-  return withQuery("/auth-pages/password-reset-img", {
+  return withQuery("/forgot-password", {
     email: options?.email,
     error: options?.error,
   });
@@ -61,7 +61,7 @@ export function buildPasswordResetOtpHref(options: {
   email: string;
   error?: string;
 }) {
-  return withQuery("/auth-pages/password-reset-otp-img", {
+  return withQuery("/forgot-password/verify", {
     email: options.email,
     error: options.error,
   });
@@ -71,7 +71,7 @@ export function buildPasswordCreateHref(options: {
   email: string;
   error?: string;
 }) {
-  return withQuery("/auth-pages/password-create-img", {
+  return withQuery("/reset-password", {
     email: options.email,
     error: options.error,
     token: RESET_PASSWORD_TOKEN,
@@ -79,7 +79,7 @@ export function buildPasswordCreateHref(options: {
 }
 
 export function buildPasswordResetSuccessHref(options: { email: string }) {
-  return withQuery("/auth-pages/password-reset-success-img", {
+  return withQuery("/reset-password/success", {
     email: options.email,
   });
 }

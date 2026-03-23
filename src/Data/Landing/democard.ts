@@ -328,32 +328,32 @@ export const demoAuth = [
   {
     title: "Sign In",
     imgSrc: "/images/landing/auth-1.jpg",
-    link: "/auth-pages/sign-in-with-bg-image",
+    link: AUTH_ROUTES.signIn,
   },
   {
     title: "Sign Up",
     imgSrc: "/images/landing/auth-3.jpg",
-    link: "/auth-pages/sign-up-with-bg-image",
+    link: AUTH_ROUTES.signUp,
   },
   {
     title: "Password Create",
     imgSrc: "/images/landing/auth-5.jpg",
-    link: "/auth-pages/password-create-img",
+    link: AUTH_ROUTES.passwordCreate,
   },
   {
     title: "Password Reset",
     imgSrc: "/images/landing/auth-6.jpg",
-    link: "/auth-pages/password-reset-img",
+    link: AUTH_ROUTES.passwordReset,
   },
   {
     title: "Lock Screen",
     imgSrc: "/images/landing/auth-7.jpg",
-    link: "/auth-pages/lock-screen-img",
+    link: AUTH_ROUTES.lockScreen,
   },
   {
     title: "Two Step Verification",
     imgSrc: "/images/landing/auth-8.jpg",
-    link: "/auth-pages/two-step-verification-img",
+    link: AUTH_ROUTES.twoStepVerification,
   },
 ];
 
@@ -530,3 +530,4 @@ export const cardData = [
     link: "/ui-kit/notification",
   },
 ];
+import { AUTH_ROUTES } from "@/lib/auth/routes";

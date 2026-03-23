@@ -18,7 +18,7 @@ export async function generateMetadata(): Promise<Metadata> {
       title: "Reset OTP Verification - PolytronX",
       description:
         "Verify the email OTP sent for your password reset request in the OET recovery flow.",
-      url: "/auth/password-reset-otp-img",
+      url: "/forgot-password/verify",
       siteName: "PolytronX",
       locale: "en_US",
       type: "website",

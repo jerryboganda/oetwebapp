@@ -31,7 +31,7 @@ export async function generateMetadata(): Promise<Metadata> {
       title: "Two-Step Verification with Background - PolytronX",
       description:
         "Enhance your account security with our visually appealing two-step verification system featuring a background image.",
-      url: "/auth/two-step-verification-img",
+      url: "/verify",
       siteName: "PolytronX",
       locale: "en_US",
       type: "website",

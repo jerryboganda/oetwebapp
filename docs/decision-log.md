@@ -49,6 +49,11 @@
 - Keep learner settings tabs deep-linkable through `?tab=` with the supported
   ids `profile`, `activity`, `security`, `privacy`, `notifications`,
   `subscription`, `connections`, and `delete`.
+- Treat clean, product-facing auth URLs as canonical in production:
+  `/login`, `/register`, `/register/success`, `/forgot-password`,
+  `/forgot-password/verify`, `/reset-password`, `/reset-password/success`,
+  `/verify`, and `/lock-screen`. Keep legacy `auth-pages/*` URLs as permanent
+  redirects rather than the public contract.
 - Persist learner settings client-side through a dedicated settings store so
   profile, notification, privacy, security, and connection changes survive
   refresh without introducing backend writes in this phase.

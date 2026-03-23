@@ -42,7 +42,7 @@ export async function generateMetadata(): Promise<Metadata> {
       title: "Create Password with Background - PolytronX",
       description:
         "Create a secure password for your account with our visually appealing password creation system featuring a background image.",
-      url: "/auth/password-create-img",
+      url: "/reset-password",
       siteName: "PolytronX",
       locale: "en_US",
       type: "website",

@@ -32,7 +32,7 @@ export async function generateMetadata(): Promise<Metadata> {
       title: "Password Reset with Background - PolytronX",
       description:
         "Reset your password with our visually appealing password recovery system featuring a background image.",
-      url: "/auth/password-reset-img",
+      url: "/forgot-password",
       siteName: "PolytronX",
       locale: "en_US",
       type: "website",

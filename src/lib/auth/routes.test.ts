@@ -2,15 +2,16 @@ import { describe, expect, it } from "vitest";
 import { AUTH_ROUTES, getAuthFlowLinks } from "@/lib/auth/routes";
 
 describe("auth route contract", () => {
-  it("keeps the background-image auth pages as the only supported auth routes", () => {
-    expect(AUTH_ROUTES.signIn).toBe("/auth-pages/sign-in-with-bg-image");
-    expect(AUTH_ROUTES.signUp).toBe("/auth-pages/sign-up-with-bg-image");
-    expect(AUTH_ROUTES.passwordReset).toBe("/auth-pages/password-reset-img");
-    expect(AUTH_ROUTES.passwordCreate).toBe("/auth-pages/password-create-img");
-    expect(AUTH_ROUTES.lockScreen).toBe("/auth-pages/lock-screen-img");
-    expect(AUTH_ROUTES.twoStepVerification).toBe(
-      "/auth-pages/two-step-verification-img"
-    );
+  it("exposes clean public auth urls as the canonical route contract", () => {
+    expect(AUTH_ROUTES.signIn).toBe("/login");
+    expect(AUTH_ROUTES.signUp).toBe("/register");
+    expect(AUTH_ROUTES.signUpSuccess).toBe("/register/success");
+    expect(AUTH_ROUTES.passwordReset).toBe("/forgot-password");
+    expect(AUTH_ROUTES.passwordResetOtp).toBe("/forgot-password/verify");
+    expect(AUTH_ROUTES.passwordCreate).toBe("/reset-password");
+    expect(AUTH_ROUTES.passwordResetSuccess).toBe("/reset-password/success");
+    expect(AUTH_ROUTES.lockScreen).toBe("/lock-screen");
+    expect(AUTH_ROUTES.twoStepVerification).toBe("/verify");
   });
 
   it("returns the expected cross-links for the auth flow", () => {

@@ -11,7 +11,7 @@ export async function generateMetadata(): Promise<Metadata> {
       title: "Registration Complete - PolytronX",
       description:
         "Review your OET registration details, subscription snapshot, and next-step actions after creating your account.",
-      url: "/auth/sign-up-success",
+      url: "/register/success",
       siteName: "PolytronX",
       locale: "en_US",
       type: "website",

@@ -31,7 +31,7 @@ export async function generateMetadata(): Promise<Metadata> {
       title: "Sign Up with Background - PolytronX",
       description:
         "Create your account with our visually appealing registration system featuring a background image.",
-      url: "/auth/sign-up-with-bg-image",
+      url: "/register",
       siteName: "PolytronX",
       locale: "en_US",
       type: "website",
