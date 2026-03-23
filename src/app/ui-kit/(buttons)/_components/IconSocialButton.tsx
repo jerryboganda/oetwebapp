@@ -1,6 +1,25 @@
 import React from "react";
 import { Card, CardHeader, CardBody, Button, Col } from "reactstrap";
-import { IconCode, IconCapture, IconBellRinging } from "@tabler/icons-react";
+import {
+  IconBellRinging,
+  IconBrandBehance,
+  IconBrandFacebook,
+  IconBrandGmail,
+  IconBrandGithub,
+  IconBrandLinkedin,
+  IconBrandPinterest,
+  IconBrandReddit,
+  IconBrandSkype,
+  IconBrandSnapchat,
+  IconBrandTelegram,
+  IconBrandTwitter,
+  IconBrandVimeo,
+  IconBrandWhatsapp,
+  IconBrandYoutube,
+  IconCapture,
+  IconCode,
+  type IconProps,
+} from "@tabler/icons-react";
 import UncontrolledCollapseWrapper from "@/Component/CommonElements/UncontrolledCollapseWrapper";
 
 const iconData = [
@@ -12,7 +31,26 @@ const iconData = [
   { btnClass: "btn-light-secondary", icon: "bell-ringing" },
 ];
 
-const socialButtonData = [
+type SocialIconName =
+  | "behance"
+  | "facebook"
+  | "gmail"
+  | "github"
+  | "linkedin"
+  | "pinterest"
+  | "reddit"
+  | "skype"
+  | "snapchat"
+  | "telegram"
+  | "twitter"
+  | "vimeo"
+  | "whatsapp"
+  | "youtube";
+
+const socialButtonData: Array<{
+  icon: SocialIconName;
+  className: string;
+}> = [
   { icon: "facebook", className: "btn btn-facebook" },
   { icon: "twitter", className: "btn btn-twitter" },
   { icon: "pinterest", className: "btn btn-pinterest" },
@@ -28,6 +66,23 @@ const socialButtonData = [
   { icon: "skype", className: "btn btn-skype" },
   { icon: "snapchat", className: "btn btn-snapchat" },
 ];
+
+const socialIconMap = {
+  behance: IconBrandBehance,
+  facebook: IconBrandFacebook,
+  gmail: IconBrandGmail,
+  github: IconBrandGithub,
+  linkedin: IconBrandLinkedin,
+  pinterest: IconBrandPinterest,
+  reddit: IconBrandReddit,
+  skype: IconBrandSkype,
+  snapchat: IconBrandSnapchat,
+  telegram: IconBrandTelegram,
+  twitter: IconBrandTwitter,
+  vimeo: IconBrandVimeo,
+  whatsapp: IconBrandWhatsapp,
+  youtube: IconBrandYoutube,
+} satisfies Record<string, React.ComponentType<IconProps>>;
 
 const ButtonsSection = () => {
   const iconMap: Record<string, JSX.Element> = {
@@ -107,19 +162,17 @@ ${socialButtonData
           <CardBody>
             <div className="app-btn-list">
               {socialButtonData.map((btn, index) => {
-                const iconName =
-                  "IconBrand" +
-                  btn.icon.charAt(0).toUpperCase() +
-                  btn.icon.slice(1);
-                const BrandIcon =
-                  require("@tabler/icons-react")[iconName] || (() => null);
+                const BrandIcon = socialIconMap[btn.icon];
+
                 return (
                   <Button
                     key={index}
                     type="button"
                     className={`${btn.className} icon-btn b-r-22`}
                   >
-                    <BrandIcon size={18} className="text-white" />
+                    {BrandIcon ? (
+                      <BrandIcon size={18} className="text-white" />
+                    ) : null}
                   </Button>
                 );
               })}

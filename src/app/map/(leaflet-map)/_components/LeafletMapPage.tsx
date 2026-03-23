@@ -3,12 +3,19 @@ import { Card, CardBody, CardHeader, Col, Container, Row } from "reactstrap";
 import Breadcrumbs from "@/Component/CommonElements/Breadcrumbs";
 import { IconMapPin } from "@tabler/icons-react";
 import "leaflet/dist/leaflet.css";
+import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
+import markerIcon from "leaflet/dist/images/marker-icon.png";
+import markerShadow from "leaflet/dist/images/marker-shadow.png";
 
 interface MapConfig {
   id: string;
   title: string;
   options: L.MapOptions;
-  initMap?: (L: typeof import("leaflet"), map: L.Map) => void;
+  initMap?: (
+    L: typeof import("leaflet"),
+    map: L.Map,
+    defaultMarkerIcon: L.Icon
+  ) => void;
 }
 
 const mapConfigs: MapConfig[] = [
@@ -21,8 +28,8 @@ const mapConfigs: MapConfig[] = [
     id: "accessiblemap",
     title: "Markers, Circles and Polygons",
     options: { center: [51.505, -0.09], zoom: 13 },
-    initMap: (L, map) => {
-      L.marker([51.5, -0.09])
+    initMap: (L, map, defaultMarkerIcon) => {
+      L.marker([51.5, -0.09], { icon: defaultMarkerIcon })
         .bindPopup("<b>Hello!</b><br>I am a popup.")
         .addTo(map);
       L.circle([51.508, -0.1], {
@@ -38,8 +45,8 @@ const mapConfigs: MapConfig[] = [
     id: "markersmap",
     title: "Accessible Maps",
     options: { center: [50.4501, 30.5234], zoom: 4 },
-    initMap: (L, map) => {
-      L.marker([50.4501, 30.5234])
+    initMap: (L, map, defaultMarkerIcon) => {
+      L.marker([50.4501, 30.5234], { icon: defaultMarkerIcon })
         .bindPopup("Kyiv, Ukraine is the birthplace of Leaflet!")
         .addTo(map);
     },
@@ -106,6 +113,9 @@ const mapConfigs: MapConfig[] = [
   },
 ];
 
+const resolveMarkerAsset = (asset: string | { src: string }) =>
+  typeof asset === "string" ? asset : asset.src;
+
 const LeafletMapPage = () => {
   const mapRefs = useRef<Record<string, L.Map | null>>({});
   const containerRefs = useRef<Record<string, HTMLDivElement | null>>({});
@@ -116,12 +126,14 @@ const LeafletMapPage = () => {
 
     const initializeMaps = async () => {
       const L = await import("leaflet");
-
-      // Fix default marker icons
-      delete (L.Icon.Default.prototype as any)._getIconUrl;
-      L.Icon.Default.mergeOptions({
-        iconUrl: "/images/leafletmaps/images/marker-icon.png",
-        shadowUrl: "/images/leafletmaps/images/marker-shadow.png",
+      const defaultMarkerIcon = L.icon({
+        iconRetinaUrl: resolveMarkerAsset(markerIcon2x),
+        iconUrl: resolveMarkerAsset(markerIcon),
+        shadowUrl: resolveMarkerAsset(markerShadow),
+        iconSize: [25, 41],
+        iconAnchor: [12, 41],
+        popupAnchor: [1, -34],
+        shadowSize: [41, 41],
       });
 
       if (!isMounted) return;
@@ -136,7 +148,7 @@ const LeafletMapPage = () => {
             attribution: "&copy; OpenStreetMap contributors",
           }).addTo(map);
 
-          config.initMap?.(L, map);
+          config.initMap?.(L, map, defaultMarkerIcon);
           mapInstances[config.id] = map;
         }
       });

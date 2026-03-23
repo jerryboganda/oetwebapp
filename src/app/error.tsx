@@ -7,11 +7,5 @@ export default function Error({ error }: { error: Error; reset: () => void }) {
     console.error(error);
   }, [error]);
 
-  return (
-    <html>
-      <body>
-        <NotFoundPage />
-      </body>
-    </html>
-  );
+  return <NotFoundPage />;
 }

@@ -5,59 +5,32 @@ import { Card, CardBody, CardHeader, Col, Container, Row } from "reactstrap";
 import Breadcrumbs from "@/Component/CommonElements/Breadcrumbs";
 import Toastify from "toastify-js";
 import "toastify-js/src/toastify.css";
-import * as TablerIcons from "@tabler/icons-react";
-import { Icon, IconIcons } from "@tabler/icons-react";
-
-interface IconProps extends Partial<
-  Omit<React.ComponentPropsWithoutRef<"svg">, "stroke">
-> {
-  size?: string | number;
-  stroke?: string | number;
-  title?: string;
-}
+import { IconIcons } from "@tabler/icons-react";
+import iconsList from "@tabler/icons-react/dist/esm/icons-list.mjs";
 
 const size = 50;
 const color = "#000";
 
-type IconComponentType = React.ForwardRefExoticComponent<
-  IconProps & React.RefAttributes<Icon>
->;
-
-const isValidIcon = (
-  IconComponent: unknown
-): IconComponent is IconComponentType => {
-  return (
-    typeof IconComponent === "object" &&
-    IconComponent !== null &&
-    "$$typeof" in IconComponent
-  );
-};
-
-// Convert TablerIcons into a properly typed array
-const iconEntries: [string, IconComponentType][] = Object.entries(
-  TablerIcons as unknown as Record<string, IconComponentType>
-)
-  .filter(([, IconComponent]) =>
-    isValidIcon(
-      IconComponent as React.ForwardRefExoticComponent<
-        Omit<IconProps, "ref"> & React.RefAttributes<TablerIcons.Icon>
-      >
+const toComponentName = (iconName: string) =>
+  `Icon${iconName
+    .split("-")
+    .filter(Boolean)
+    .map((segment) =>
+      /^\d/.test(segment)
+        ? segment.toUpperCase()
+        : `${segment.charAt(0).toUpperCase()}${segment.slice(1)}`
     )
-  )
-  .map(([iconName, IconComponent]) => [
-    iconName,
-    IconComponent as IconComponentType,
-  ]);
+    .join("")}`;
 
 const TablerIconsComponent: React.FC = () => {
-  const [iconList, setIconList] = useState(iconEntries);
+  const [iconList, setIconList] = useState(iconsList);
   const [searchValue, setSearchValue] = useState("");
 
   useEffect(() => {
     if (searchValue.trim() === "") {
-      setIconList(iconEntries);
+      setIconList(iconsList);
     } else {
-      const filteredIcons = iconEntries.filter(([iconName]) =>
+      const filteredIcons = iconsList.filter((iconName) =>
         iconName.toLowerCase().includes(searchValue.toLowerCase())
       );
       setIconList(filteredIcons);
@@ -65,7 +38,7 @@ const TablerIconsComponent: React.FC = () => {
   }, [searchValue]);
 
   const copyIcon = (iconName: string) => {
-    const iconTag = `<${iconName} size={${size}} color="${color}" />`;
+    const iconTag = `<${toComponentName(iconName)} size={${size}} color="${color}" />`;
     navigator.clipboard.writeText(iconTag);
     Toastify({
       text: "Copied to the clipboard successfully",
@@ -110,18 +83,24 @@ const TablerIconsComponent: React.FC = () => {
             </CardHeader>
             <CardBody>
               <ul className="icon-list space-top-icon">
-                {iconList.map(([iconName, IconComponent], index) => {
+                {iconList.map((iconName, index) => {
+                  const componentName = toComponentName(iconName);
+
                   return (
                     <li
                       className="icon-box"
                       onClick={() => copyIcon(iconName)}
                       key={index}
                     >
-                      {IconComponent && (
-                        <IconComponent size={size} stroke={2} />
-                      )}
+                      <i
+                        className={`ti ti-${iconName}`}
+                        style={{ fontSize: `${size}px`, color }}
+                        aria-hidden="true"
+                      />
                       <div className="icon-box-codes d-flex flex-column">
-                        <strong className="text-capitalize">{iconName}</strong>
+                        <strong className="text-capitalize">
+                          {componentName}
+                        </strong>
                         <code>{iconName}</code>
                       </div>
                     </li>

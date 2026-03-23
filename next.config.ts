@@ -8,13 +8,8 @@ const nextConfig: NextConfig = {
     quietDeps: true,
     silenceDeprecations: ["import", "global-builtin", "legacy-js-api"],
   },
-  webpack: (config) => {
-    config.cache = false;
-    return config;
-  },
   experimental: {
     serverActions: {},
-    webpackBuildWorker: true,
   },
   async redirects() {
     return [

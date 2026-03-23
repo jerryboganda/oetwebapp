@@ -33,6 +33,7 @@
     /* Module Resolution Options */
     "baseUrl": ".",
     "paths": {
+      "@tabler/icons-react": ["./src/lib/icons/tabler.ts"],
       "@/*": ["./src/*"],
       "@/components/*": ["./src/components/*"],
       "@/lib/*": ["./src/lib/*"],
@@ -42,7 +43,7 @@
       "@/utils/*": ["./src/utils/*"]
     },
     "typeRoots": ["./node_modules/@types", "./src/types"],
-    "types": ["webpack", "node"],
+    "types": ["node"],
     /* Build Options */
     "allowJs": true,
     "noEmitOnError": true,

@@ -5,7 +5,9 @@
   "scripts": {
     "format": "prettier --write .",
     "dev": "set NODE_OPTIONS=--max-old-space-size=4096 && next dev --turbo",
-    "build": "next build",
+    "dev:turbopack": "set NODE_OPTIONS=--max-old-space-size=4096 && next dev --turbo",
+    "build": "next build --turbopack",
+    "build:turbopack": "next build --turbopack --no-lint",
     "start": "next start",
     "lint": "eslint src next.config.ts eslint.config.mjs"
   },
@@ -101,13 +103,11 @@
     "@types/react-filepond": "^7.1.0",
     "@types/react-slick": "^0.23.13",
     "@types/toastify-js": "^1.12.3",
-    "@types/webpack": "^5.28.5",
     "eslint": "^9.29.0",
     "eslint-config-next": "^15.3.3",
     "eslint-config-prettier": "^9.1.0",
     "eslint-plugin-prettier": "^5.5.0",
     "prettier": "^3.4.2",
-    "typescript": "^5",
-    "webpack": "^5.97.1"
+    "typescript": "^5"
   }
 }
