@@ -327,43 +327,13 @@ export const MenuList = [
     collapseId: "auth-pages",
     path: "/auth-pages",
     children: [
-      { name: "Sign In", path: "/auth-pages/sign-in" },
-      {
-        name: "Sign In with Bg-image",
-        path: "/auth-pages/sign-in-with-bg-image",
-      },
-      { name: "Sign Up", path: "/auth-pages/sign-up" },
-      {
-        name: "Sign Up with Bg-image",
-        path: "/auth-pages/sign-up-with-bg-image",
-      },
-      {
-        name: "Password Reset",
-        path: "/auth-pages/password-reset",
-      },
-      {
-        name: "Password Reset with Bg-image",
-        path: "/auth-pages/password-reset-img",
-      },
-      {
-        name: "Password Create",
-        path: "/auth-pages/password-create",
-      },
-      {
-        name: "Password Create with Bg-image",
-        path: "/auth-pages/password-create-img",
-      },
-      { name: "Lock Screen", path: "/auth-pages/lock-screen" },
-      {
-        name: "Lock Screen with Bg-image",
-        path: "/auth-pages/lock-screen-img",
-      },
+      { name: "Sign In", path: "/auth-pages/sign-in-with-bg-image" },
+      { name: "Sign Up", path: "/auth-pages/sign-up-with-bg-image" },
+      { name: "Password Reset", path: "/auth-pages/password-reset-img" },
+      { name: "Password Create", path: "/auth-pages/password-create-img" },
+      { name: "Lock Screen", path: "/auth-pages/lock-screen-img" },
       {
         name: "Two Step Verification",
-        path: "/auth-pages/two-step-verification",
-      },
-      {
-        name: "Two Step Verification with Bg-image",
         path: "/auth-pages/two-step-verification-img",
       },
     ],

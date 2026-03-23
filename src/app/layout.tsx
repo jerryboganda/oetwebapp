@@ -18,6 +18,7 @@ import "datatables.net-dt/css/dataTables.dataTables.css";
 import "datatables.net-dt/css/dataTables.dataTables.min.css";
 import DefaultLayout from "@/Component/Layouts/DefaultLayout";
 import DocumentTitleManager from "@/Component/DocumentTitleManager";
+import AppProviders from "@/Component/OET/Providers/AppProviders";
 
 const montserrat = Montserrat({
   subsets: ["latin"],
@@ -90,13 +91,15 @@ export default function RootLayout({
         />
       </head>
       <body className="ltr light" suppressHydrationWarning>
-        <DefaultLayout>
-          <DocumentTitleManager
-            defaultTitle="PolytronX Admin Dashboard"
-            blurTitle="Come back to PolytronX"
-          />
-          {children}
-        </DefaultLayout>
+        <AppProviders>
+          <DefaultLayout>
+            <DocumentTitleManager
+              defaultTitle="PolytronX Admin Dashboard"
+              blurTitle="Come back to PolytronX"
+            />
+            {children}
+          </DefaultLayout>
+        </AppProviders>
       </body>
     </html>
   );

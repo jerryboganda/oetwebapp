@@ -8,8 +8,10 @@ import Header from "@/Component/Layouts/Header";
 import Footer from "@/Component/Layouts/Footer";
 import { usePathname } from "next/navigation";
 import Customizer from "@/Component/Customizer";
+import LearnerBottomNav from "@/Component/OET/Layout/LearnerBottomNav";
 import { Modal, ModalBody, ModalFooter } from "reactstrap";
 import PreviewBrandImage from "@/Component/CommonElements/PreviewBrandImage";
+import { getRoleFromPath } from "@/lib/oet/routing";
 
 interface DefaultLayoutProps {
   children: ReactNode;
@@ -19,6 +21,7 @@ const DefaultLayout: React.FC<DefaultLayoutProps> = ({ children }) => {
   const [sidebarOpen, setSidebarOpen] = useState<boolean>(false);
   const [welcomeModal, setWelcomeModal] = useState<boolean>(false);
   const pathname = usePathname();
+  const isOetSurface = Boolean(getRoleFromPath(pathname));
 
   useEffect(() => {
     const head = document.getElementsByTagName("head")[0];
@@ -31,18 +34,25 @@ const DefaultLayout: React.FC<DefaultLayoutProps> = ({ children }) => {
       "fill",
       "duotone",
     ]) {
-      const link = document.createElement("link");
-      link.rel = "stylesheet";
-      link.type = "text/css";
-      link.href = `https://unpkg.com/@phosphor-icons/web@2.0.3/src/${weight}/style.css`;
-      if (head) {
+      const href = `https://unpkg.com/@phosphor-icons/web@2.0.3/src/${weight}/style.css`;
+      if (head && !head.querySelector(`link[href="${href}"]`)) {
+        const link = document.createElement("link");
+        link.rel = "stylesheet";
+        link.type = "text/css";
+        link.href = href;
         head.appendChild(link);
       }
     }
-    if (pathname === "/dashboard/project" || pathname === "/") {
+    if (
+      !isOetSurface &&
+      (pathname === "/dashboard/project" || pathname === "/")
+    ) {
       setWelcomeModal(true);
+      return;
     }
-  }, [pathname]);
+
+    setWelcomeModal(false);
+  }, [isOetSurface, pathname]);
 
   if (
     pathname.includes("/auth-pages") ||
@@ -64,8 +74,9 @@ const DefaultLayout: React.FC<DefaultLayoutProps> = ({ children }) => {
           <main>{children}</main>
           <TopGo />
           <Footer />
+          <LearnerBottomNav />
         </div>
-        <Customizer />
+        {!isOetSurface ? <Customizer /> : null}
 
         <Modal
           isOpen={welcomeModal}

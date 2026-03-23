@@ -2,15 +2,26 @@ import Scrollbar from "simplebar-react";
 import MenuItem from "./MenuItem";
 import Link from "next/link";
 import { MenuList } from "@/Data/Sidebar/sidebar";
+import { getNavigationItemsForRole } from "@/Data/Sidebar/oetNavigation";
 import React, { Fragment, useState, useRef, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { SidebarProps } from "@/interface/common";
 import { IconChevronsRight } from "@tabler/icons-react";
 import HorizontalNav from "@/Component/Layouts/Sidebar/HorizontalNav";
+import { getRoleFromPath, resolveRoleLandingPath } from "@/lib/oet/routing";
 
 const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
   const [navTranslateX, setNavTranslateX] = useState(0);
   const [isHorizontal, setIsHorizontal] = useState(false);
   const navRef = useRef<HTMLUListElement>(null);
+  const pathname = usePathname();
+  const activeRole = getRoleFromPath(pathname);
+  const activeMenuList = activeRole
+    ? getNavigationItemsForRole(activeRole)
+    : MenuList;
+  const logoHref = activeRole
+    ? resolveRoleLandingPath(activeRole)
+    : "/dashboard/project";
 
   useEffect(() => {
     const getSidebarOption = () => {
@@ -36,7 +47,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
         .join(" ")}
     >
       <div className="app-logo">
-        <Link className="logo d-inline-block" href="/dashboard/project">
+        <Link className="logo d-inline-block" href={logoHref}>
           <img
             src="/images/logo/polytronx-dark.svg"
             alt="#"
@@ -65,7 +76,7 @@ const Sidebar: React.FC<SidebarProps> = ({ sidebarOpen, setSidebarOpen }) => {
               transition: isHorizontal ? "margin-left 0.3s ease" : "none",
             }}
           >
-            {MenuList.map((opt, index) => (
+            {activeMenuList.map((opt, index) => (
               <Fragment key={index}>
                 <MenuItem
                   title={opt.title ?? ""}

@@ -11,15 +11,6 @@ const nextConfig: NextConfig = {
   experimental: {
     serverActions: {},
   },
-  async redirects() {
-    return [
-      {
-        source: "/",
-        destination: "/dashboard/project",
-        permanent: true,
-      },
-    ];
-  },
   // async headers() {
   //   return [
   //     {

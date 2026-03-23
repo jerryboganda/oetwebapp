@@ -328,42 +328,32 @@ export const demoAuth = [
   {
     title: "Sign In",
     imgSrc: "/images/landing/auth-1.jpg",
-    link: "/auth-pages/sign-in",
-  },
-  {
-    title: "Sign In With Bgimage",
-    imgSrc: "/images/landing/auth-2.jpg",
     link: "/auth-pages/sign-in-with-bg-image",
   },
   {
-    title: "Sign-up",
+    title: "Sign Up",
     imgSrc: "/images/landing/auth-3.jpg",
-    link: "/auth-pages/sign-up",
-  },
-  {
-    title: "Sign Up With Bgimage",
-    imgSrc: "/images/landing/auth-4.jpg",
     link: "/auth-pages/sign-up-with-bg-image",
   },
   {
     title: "Password Create",
     imgSrc: "/images/landing/auth-5.jpg",
-    link: "/auth-pages/password-create",
+    link: "/auth-pages/password-create-img",
   },
   {
     title: "Password Reset",
     imgSrc: "/images/landing/auth-6.jpg",
-    link: "/auth-pages/password-reset",
+    link: "/auth-pages/password-reset-img",
   },
   {
     title: "Lock Screen",
     imgSrc: "/images/landing/auth-7.jpg",
-    link: "/auth-pages/lock-screen",
+    link: "/auth-pages/lock-screen-img",
   },
   {
     title: "Two Step Verification",
     imgSrc: "/images/landing/auth-8.jpg",
-    link: "/auth-pages/two-step-verification",
+    link: "/auth-pages/two-step-verification-img",
   },
 ];
 
@@ -426,10 +416,10 @@ export const features = [
     badgeText: "Charts",
   },
   {
-    title: "Webpack",
+    title: "Turbopack",
     icon: "ti ti-package",
     badgeColor: "primary",
-    badgeText: "Module bundler",
+    badgeText: "Dev + build",
   },
   {
     title: "Google Map",

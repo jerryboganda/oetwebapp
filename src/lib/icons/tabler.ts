@@ -108,6 +108,7 @@ export { default as IconDropletFilled } from "@tabler/icons-react/dist/esm/icons
 export { default as IconEdit } from "@tabler/icons-react/dist/esm/icons/IconEdit.mjs";
 export { default as IconExternalLink } from "@tabler/icons-react/dist/esm/icons/IconExternalLink.mjs";
 export { default as IconEye } from "@tabler/icons-react/dist/esm/icons/IconEye.mjs";
+export { default as IconEyeOff } from "@tabler/icons-react/dist/esm/icons/IconEyeOff.mjs";
 export { default as IconFile } from "@tabler/icons-react/dist/esm/icons/IconFile.mjs";
 export { default as IconFileCheck } from "@tabler/icons-react/dist/esm/icons/IconFileCheck.mjs";
 export { default as IconFileDislike } from "@tabler/icons-react/dist/esm/icons/IconFileDislike.mjs";

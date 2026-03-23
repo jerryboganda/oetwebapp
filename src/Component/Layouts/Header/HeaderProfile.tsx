@@ -12,6 +12,8 @@ import {
 } from "iconoir-react";
 import { Detective, SignOut } from "phosphor-react";
 import Image from "next/image";
+import { logoutUser } from "@/lib/auth/action";
+import { useSessionStore } from "@/lib/oet/stores/session-store";
 
 type MenuItem = {
   label: string;
@@ -48,7 +50,7 @@ const menuItems: MenuItem[] = [
   },
   {
     label: "Add account",
-    href: "/auth-pages/sign-up",
+    href: "/auth-pages/sign-up-with-bg-image",
     icon: <Plus height={24} width={24} className="pe-1 f-s-20" />,
     external: true,
     className: "text-secondary",
@@ -57,6 +59,7 @@ const menuItems: MenuItem[] = [
 
 const HeaderProfile: React.FC = () => {
   const [isCanvasOpen, setCanvasOpen] = useState(false);
+  const sessionUser = useSessionStore((state) => state.user);
 
   const toggleCanvas = () => setCanvasOpen(!isCanvasOpen);
 
@@ -64,7 +67,7 @@ const HeaderProfile: React.FC = () => {
     <>
       <a role="button" className="d-block head-icon" onClick={toggleCanvas}>
         <Image
-          src="/images/avatar/woman.jpg"
+          src={sessionUser?.avatarUrl ?? "/images/avatar/woman.jpg"}
           alt="avatar"
           width={35}
           height={35}
@@ -94,13 +97,13 @@ const HeaderProfile: React.FC = () => {
                     width={45}
                     height={45}
                     className="img-fluid rounded-2"
-                    src="/images/avatar/woman.jpg"
+                    src={sessionUser?.avatarUrl ?? "/images/avatar/woman.jpg"}
                   />
                 </span>
               </div>
               <div className="text-center mt-2">
                 <h6 className="mb-0">
-                  Laura Monaldo{" "}
+                  {sessionUser?.fullName ?? "Laura Monaldo"}{" "}
                   <Image
                     alt="verified"
                     src="/images/profile/01.png"
@@ -109,7 +112,7 @@ const HeaderProfile: React.FC = () => {
                   />
                 </h6>
                 <p className="f-s-12 mb-0 text-secondary">
-                  lauradesign@gmail.com
+                  {sessionUser?.username ?? "lauradesign@gmail.com"}
                 </p>
               </div>
             </li>
@@ -176,19 +179,20 @@ const HeaderProfile: React.FC = () => {
 
             {/* Logout Button */}
             <li>
-              <Link
-                className="mb-0 btn btn-light-danger btn-sm d-flex align-items-center justify-content-center"
-                href="/auth-pages/sign-in"
-                role="button"
-              >
-                <SignOut
-                  weight="duotone"
-                  height={24}
-                  width={24}
-                  className="pe-1 f-s-20"
-                />
-                Log Out
-              </Link>
+              <form action={logoutUser}>
+                <button
+                  className="mb-0 btn btn-light-danger btn-sm d-flex align-items-center justify-content-center w-100"
+                  type="submit"
+                >
+                  <SignOut
+                    weight="duotone"
+                    height={24}
+                    width={24}
+                    className="pe-1 f-s-20"
+                  />
+                  Log Out
+                </button>
+              </form>
             </li>
           </ul>
         </OffcanvasBody>

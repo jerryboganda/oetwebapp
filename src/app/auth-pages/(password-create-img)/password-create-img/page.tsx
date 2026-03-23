@@ -1,6 +1,17 @@
 import React from "react";
+import { redirect } from "next/navigation";
 import PasswordCreateImgPage from "@/app/auth-pages/(password-create-img)/_components/PasswordCreateImgPage";
 import type { Metadata } from "next";
+import { AUTH_ROUTES } from "@/lib/auth/routes";
+import {
+  buildPasswordResetOtpHref,
+  getResetEmailFromSearchParams,
+  hasVerifiedResetToken,
+} from "@/lib/auth/reset-flow";
+
+interface PageProps {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}
 
 export async function generateMetadata(): Promise<Metadata> {
   return {
@@ -39,7 +50,22 @@ export async function generateMetadata(): Promise<Metadata> {
   };
 }
 
-const Page = () => {
+const Page = async ({ searchParams }: PageProps) => {
+  const resolvedSearchParams = await searchParams;
+  const email = getResetEmailFromSearchParams(resolvedSearchParams);
+
+  if (!email) {
+    redirect(AUTH_ROUTES.passwordReset);
+  }
+
+  if (!hasVerifiedResetToken(resolvedSearchParams)) {
+    redirect(
+      buildPasswordResetOtpHref({
+        email,
+      })
+    );
+  }
+
   return (
     <div>
       <PasswordCreateImgPage />
