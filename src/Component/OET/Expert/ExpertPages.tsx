@@ -68,8 +68,8 @@ function QueueScreen() {
         onEdit={(item) => {
           window.location.href =
             item.subtest === "Writing"
-              ? `/expert/review/writing/${item.reviewId}`
-              : `/expert/review/speaking/${item.reviewId}`;
+              ? `/reviewer/review/writing/${item.reviewId}`
+              : `/reviewer/review/speaking/${item.reviewId}`;
         }}
         title="Assigned review queue"
       />

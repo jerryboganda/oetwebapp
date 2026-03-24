@@ -58,6 +58,10 @@
   Keep legacy `/app/*` learner URLs as permanent redirects, and bridge the
   clean public path to the existing implementation with a rewrite rather than
   duplicating the learner route tree.
+- Treat `/reviewer/*` and `/cms/*` as the canonical expert and admin workspace
+  contracts in production. Keep legacy `/expert/*` and `/admin/*` URLs as
+  permanent redirects, and bridge the clean public paths to the existing
+  internal route trees with rewrites.
 - Persist learner settings client-side through a dedicated settings store so
   profile, notification, privacy, security, and connection changes survive
   refresh without introducing backend writes in this phase.

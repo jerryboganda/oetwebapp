@@ -39,6 +39,9 @@
 - The learner workspace now uses `/learner/*` as the public path contract.
   Legacy `/app/*` learner URLs redirect to `/learner/*`, while a rewrite keeps
   the existing learner implementation under `/app/*`.
+- Expert and admin now use `/reviewer/*` and `/cms/*` as their public contracts.
+  Legacy `/expert/*` and `/admin/*` URLs redirect forward, while rewrites keep
+  the existing internal route trees in place.
 - A lockfile and focused Vitest suite are now checked in for the OET helpers,
   route contracts, schemas, and taxonomy store.
 

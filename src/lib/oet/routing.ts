@@ -2,14 +2,14 @@ import type { OetRole } from "@/types/oet";
 
 const ROLE_PREFIXES = {
   learner: ["/learner", "/app"],
-  expert: ["/expert"],
-  admin: ["/admin"],
+  expert: ["/reviewer", "/expert"],
+  admin: ["/cms", "/admin"],
 } as const satisfies Record<OetRole, readonly string[]>;
 
 const ROLE_LANDING_PATHS = {
   learner: "/learner/dashboard",
-  expert: "/expert/queue",
-  admin: "/admin/content",
+  expert: "/reviewer/queue",
+  admin: "/cms/content",
 } as const satisfies Record<OetRole, string>;
 
 export function resolveRoleLandingPath(role: OetRole): string {

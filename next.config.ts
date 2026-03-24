@@ -63,6 +63,16 @@ const nextConfig: NextConfig = {
         destination: "/learner/:path*",
         permanent: true,
       },
+      {
+        source: "/expert/:path*",
+        destination: "/reviewer/:path*",
+        permanent: true,
+      },
+      {
+        source: "/admin/:path*",
+        destination: "/cms/:path*",
+        permanent: true,
+      },
     ];
   },
   async rewrites() {
@@ -70,6 +80,14 @@ const nextConfig: NextConfig = {
       {
         source: "/learner/:path*",
         destination: "/app/:path*",
+      },
+      {
+        source: "/reviewer/:path*",
+        destination: "/expert/:path*",
+      },
+      {
+        source: "/cms/:path*",
+        destination: "/admin/:path*",
       },
     ];
   },

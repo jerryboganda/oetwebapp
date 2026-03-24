@@ -49,9 +49,9 @@ export function resolveLoginRedirectPath(
 ): string {
   switch (role) {
     case "expert":
-      return "/expert/queue";
+      return "/reviewer/queue";
     case "admin":
-      return "/admin/content";
+      return "/cms/content";
     case "learner":
     default:
       return "/learner/dashboard";

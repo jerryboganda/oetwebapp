@@ -64,7 +64,7 @@ function ContentLibraryScreen() {
 
   return (
     <OetPageShell
-      action={{ href: "/admin/content/new", label: "Create content" }}
+      action={{ href: "/cms/content/new", label: "Create content" }}
       description="Published, draft, and archived content with revisions and saved filters."
       icon={Folder}
       mainTitle="Content Library"
@@ -83,7 +83,7 @@ function ContentLibraryScreen() {
         data={data.content}
         description="Final integrated version can layer saved filters and bulk actions on top of the same table structure."
         onEdit={(item) => {
-          window.location.href = `/admin/content/${item.id}`;
+          window.location.href = `/cms/content/${item.id}`;
         }}
         title="Content inventory"
       />
