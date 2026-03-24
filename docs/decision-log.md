@@ -54,6 +54,10 @@
   `/forgot-password/verify`, `/reset-password`, `/reset-password/success`,
   `/verify`, and `/lock-screen`. Keep legacy `auth-pages/*` URLs as permanent
   redirects rather than the public contract.
+- Treat `/learner/*` as the canonical learner workspace contract in production.
+  Keep legacy `/app/*` learner URLs as permanent redirects, and bridge the
+  clean public path to the existing implementation with a rewrite rather than
+  duplicating the learner route tree.
 - Persist learner settings client-side through a dedicated settings store so
   profile, notification, privacy, security, and connection changes survive
   refresh without introducing backend writes in this phase.

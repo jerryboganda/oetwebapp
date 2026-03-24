@@ -55,7 +55,7 @@ function WritingTaskDetailScreen({ taskId }: { taskId: string }) {
   return (
     <OetPageShell
       action={{
-        href: "/app/writing/attempt/attempt-writing-1",
+        href: "/learner/writing/attempt/attempt-writing-1",
         label: "Start attempt",
       }}
       description="Preview the task before entering the timed writing player."
@@ -251,11 +251,11 @@ function WritingAttemptScreen({ attemptId }: { attemptId: string }) {
       <StickyActionBar
         actions={[
           {
-            href: "/app/writing/result/eval-writing-1",
+            href: "/learner/writing/result/eval-writing-1",
             label: "Submit attempt",
           },
           {
-            href: "/app/writing/revision/attempt-writing-1",
+            href: "/learner/writing/revision/attempt-writing-1",
             label: "Open revision mode",
           },
         ]}
@@ -326,11 +326,11 @@ function WritingResultScreen({ evaluationId }: { evaluationId: string }) {
       <StickyActionBar
         actions={[
           {
-            href: "/app/writing/revision/attempt-writing-1",
+            href: "/learner/writing/revision/attempt-writing-1",
             label: "Revise this letter",
           },
           {
-            href: "/app/reviews",
+            href: "/learner/reviews",
             label: "Request expert review",
           },
         ]}
@@ -474,7 +474,7 @@ function SpeakingTaskDetailScreen({ taskId }: { taskId: string }) {
   return (
     <OetPageShell
       action={{
-        href: "/app/speaking/attempt/attempt-speaking-1",
+        href: "/learner/speaking/attempt/attempt-speaking-1",
         label: "Start speaking attempt",
       }}
       description="Preview the role card and prep notes before launching the speaking task."
@@ -584,11 +584,11 @@ function SpeakingAttemptScreen({ attemptId }: { attemptId: string }) {
       <StickyActionBar
         actions={[
           {
-            href: "/app/speaking/result/eval-speaking-1",
+            href: "/learner/speaking/result/eval-speaking-1",
             label: "Submit speaking attempt",
           },
           {
-            href: "/app/speaking/review/attempt-speaking-1",
+            href: "/learner/speaking/review/attempt-speaking-1",
             label: "Open transcript review",
           },
         ]}
@@ -634,10 +634,10 @@ function SpeakingResultScreen({ evaluationId }: { evaluationId: string }) {
       <StickyActionBar
         actions={[
           {
-            href: "/app/speaking/review/attempt-speaking-1",
+            href: "/learner/speaking/review/attempt-speaking-1",
             label: "Open transcript review",
           },
-          { href: "/app/reviews", label: "Request expert review" },
+          { href: "/learner/reviews", label: "Request expert review" },
         ]}
       />
     </OetPageShell>
@@ -781,7 +781,7 @@ function ReadingTaskScreen({ taskId }: { taskId: string }) {
         </Col>
       </Row>
       <StickyActionBar
-        actions={[{ href: "/app/progress", label: "Submit reading task" }]}
+        actions={[{ href: "/learner/progress", label: "Submit reading task" }]}
       />
     </OetPageShell>
   );
@@ -835,7 +835,9 @@ function ListeningTaskScreen({ taskId }: { taskId: string }) {
         </Col>
       </Row>
       <StickyActionBar
-        actions={[{ href: "/app/progress", label: "Submit listening task" }]}
+        actions={[
+          { href: "/learner/progress", label: "Submit listening task" },
+        ]}
       />
     </OetPageShell>
   );
@@ -890,7 +892,7 @@ function MockReportScreen({ mockId }: { mockId: string }) {
       </Row>
       <StickyActionBar
         actions={[
-          { href: "/app/study-plan", label: "Update study plan focus" },
+          { href: "/learner/study-plan", label: "Update study plan focus" },
         ]}
       />
     </OetPageShell>

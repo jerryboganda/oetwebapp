@@ -2064,10 +2064,14 @@ function SubscriptionPanel({ data }: { data: LearnerSettingsWorkspaceData }) {
               review purchases.
             </p>
             <div className={styles.ctaRow}>
-              <Button color="primary" tag={Link} href="/app/billing">
+              <Button color="primary" tag={Link} href="/learner/billing">
                 Open billing
               </Button>
-              <Button color="light-secondary" tag={Link} href="/app/billing">
+              <Button
+                color="light-secondary"
+                tag={Link}
+                href="/learner/billing"
+              >
                 Manage credits
               </Button>
             </div>

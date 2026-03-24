@@ -1,13 +1,13 @@
 import type { OetRole } from "@/types/oet";
 
 const ROLE_PREFIXES = {
-  learner: "/app",
-  expert: "/expert",
-  admin: "/admin",
-} as const satisfies Record<OetRole, string>;
+  learner: ["/learner", "/app"],
+  expert: ["/expert"],
+  admin: ["/admin"],
+} as const satisfies Record<OetRole, readonly string[]>;
 
 const ROLE_LANDING_PATHS = {
-  learner: "/app/dashboard",
+  learner: "/learner/dashboard",
   expert: "/expert/queue",
   admin: "/admin/content",
 } as const satisfies Record<OetRole, string>;
@@ -17,13 +17,13 @@ export function resolveRoleLandingPath(role: OetRole): string {
 }
 
 export function getRoleFromPath(pathname: string): OetRole | null {
-  if (pathname.startsWith(ROLE_PREFIXES.learner)) {
+  if (ROLE_PREFIXES.learner.some((prefix) => pathname.startsWith(prefix))) {
     return "learner";
   }
-  if (pathname.startsWith(ROLE_PREFIXES.expert)) {
+  if (ROLE_PREFIXES.expert.some((prefix) => pathname.startsWith(prefix))) {
     return "expert";
   }
-  if (pathname.startsWith(ROLE_PREFIXES.admin)) {
+  if (ROLE_PREFIXES.admin.some((prefix) => pathname.startsWith(prefix))) {
     return "admin";
   }
 
@@ -40,5 +40,5 @@ export function canAccessRolePath(role: OetRole, pathname: string): boolean {
 }
 
 export function getRoleSurfacePrefix(role: OetRole): string {
-  return ROLE_PREFIXES[role];
+  return ROLE_PREFIXES[role][0];
 }

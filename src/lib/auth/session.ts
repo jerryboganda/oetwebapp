@@ -54,6 +54,6 @@ export function resolveLoginRedirectPath(
       return "/admin/content";
     case "learner":
     default:
-      return "/app/dashboard";
+      return "/learner/dashboard";
   }
 }

@@ -9,7 +9,7 @@ export const AUTH_ROUTES = {
   lockScreen: "/lock-screen",
   twoStepVerification: "/verify",
   terms: "/other-pages/terms-condition",
-  appHome: "/app/dashboard",
+  appHome: "/learner/dashboard",
 } as const;
 
 export type AuthScreenKey = Exclude<

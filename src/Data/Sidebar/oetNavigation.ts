@@ -48,10 +48,10 @@ const learnerNavigation: OetNavigationItem[] = [
     iconClass: HomeAlt,
     name: "Workspace",
     collapseId: "oet-learner-workspace",
-    path: "/app/dashboard",
+    path: "/learner/dashboard",
     children: [
-      { name: "Dashboard", path: "/app/dashboard" },
-      { name: "Onboarding", path: "/app/onboarding" },
+      { name: "Dashboard", path: "/learner/dashboard" },
+      { name: "Onboarding", path: "/learner/onboarding" },
     ],
   },
   {
@@ -59,13 +59,13 @@ const learnerNavigation: OetNavigationItem[] = [
     iconClass: Calendar,
     name: "Planning",
     collapseId: "oet-learner-planning",
-    path: "/app/goals",
+    path: "/learner/goals",
     children: [
-      { name: "Goals", path: "/app/goals" },
-      { name: "Diagnostic", path: "/app/diagnostic" },
-      { name: "Study Plan", path: "/app/study-plan" },
-      { name: "Readiness", path: "/app/readiness" },
-      { name: "Progress", path: "/app/progress" },
+      { name: "Goals", path: "/learner/goals" },
+      { name: "Diagnostic", path: "/learner/diagnostic" },
+      { name: "Study Plan", path: "/learner/study-plan" },
+      { name: "Readiness", path: "/learner/readiness" },
+      { name: "Progress", path: "/learner/progress" },
     ],
   },
   {
@@ -74,10 +74,10 @@ const learnerNavigation: OetNavigationItem[] = [
     iconClass: Book,
     name: "Reading",
     collapseId: "oet-learner-reading",
-    path: "/app/reading",
+    path: "/learner/reading",
     children: [
-      { name: "Reading Overview", path: "/app/reading" },
-      { name: "Reading Task", path: "/app/reading/task/reading-task-1" },
+      { name: "Reading Overview", path: "/learner/reading" },
+      { name: "Reading Task", path: "/learner/reading/task/reading-task-1" },
     ],
   },
   {
@@ -85,10 +85,13 @@ const learnerNavigation: OetNavigationItem[] = [
     iconClass: Brain,
     name: "Listening",
     collapseId: "oet-learner-listening",
-    path: "/app/listening",
+    path: "/learner/listening",
     children: [
-      { name: "Listening Overview", path: "/app/listening" },
-      { name: "Listening Task", path: "/app/listening/task/listening-task-1" },
+      { name: "Listening Overview", path: "/learner/listening" },
+      {
+        name: "Listening Task",
+        path: "/learner/listening/task/listening-task-1",
+      },
     ],
   },
   {
@@ -96,13 +99,13 @@ const learnerNavigation: OetNavigationItem[] = [
     iconClass: PageEdit,
     name: "Writing",
     collapseId: "oet-learner-writing",
-    path: "/app/writing",
+    path: "/learner/writing",
     children: [
-      { name: "Writing Overview", path: "/app/writing" },
-      { name: "Writing Tasks", path: "/app/writing/tasks" },
+      { name: "Writing Overview", path: "/learner/writing" },
+      { name: "Writing Tasks", path: "/learner/writing/tasks" },
       {
         name: "Model Answer",
-        path: "/app/writing/model-answer/writing-task-1",
+        path: "/learner/writing/model-answer/writing-task-1",
       },
     ],
   },
@@ -111,11 +114,11 @@ const learnerNavigation: OetNavigationItem[] = [
     iconClass: MessageText,
     name: "Speaking",
     collapseId: "oet-learner-speaking",
-    path: "/app/speaking",
+    path: "/learner/speaking",
     children: [
-      { name: "Speaking Overview", path: "/app/speaking" },
-      { name: "Speaking Tasks", path: "/app/speaking/tasks" },
-      { name: "Mic Check", path: "/app/speaking/mic-check" },
+      { name: "Speaking Overview", path: "/learner/speaking" },
+      { name: "Speaking Tasks", path: "/learner/speaking/tasks" },
+      { name: "Mic Check", path: "/learner/speaking/mic-check" },
     ],
   },
   {
@@ -124,11 +127,11 @@ const learnerNavigation: OetNavigationItem[] = [
     iconClass: Reports,
     name: "Mocks & Reviews",
     collapseId: "oet-learner-assessment",
-    path: "/app/mocks",
+    path: "/learner/mocks",
     children: [
-      { name: "Mock Center", path: "/app/mocks" },
-      { name: "Reviews", path: "/app/reviews" },
-      { name: "History", path: "/app/history" },
+      { name: "Mock Center", path: "/learner/mocks" },
+      { name: "Reviews", path: "/learner/reviews" },
+      { name: "History", path: "/learner/history" },
     ],
   },
   {
@@ -137,10 +140,10 @@ const learnerNavigation: OetNavigationItem[] = [
     iconClass: Settings,
     name: "Account",
     collapseId: "oet-learner-account",
-    path: "/app/settings",
+    path: "/learner/settings",
     children: [
-      { name: "Billing", path: "/app/billing" },
-      { name: "Settings", path: "/app/settings" },
+      { name: "Billing", path: "/learner/billing" },
+      { name: "Settings", path: "/learner/settings" },
     ],
   },
 ];
@@ -200,11 +203,11 @@ const adminNavigation: OetNavigationItem[] = [
 ];
 
 const learnerBottomNav: OetBottomNavItem[] = [
-  { name: "Dashboard", path: "/app/dashboard" },
-  { name: "Study Plan", path: "/app/study-plan" },
-  { name: "Writing", path: "/app/writing" },
-  { name: "Speaking", path: "/app/speaking" },
-  { name: "Progress", path: "/app/progress" },
+  { name: "Dashboard", path: "/learner/dashboard" },
+  { name: "Study Plan", path: "/learner/study-plan" },
+  { name: "Writing", path: "/learner/writing" },
+  { name: "Speaking", path: "/learner/speaking" },
+  { name: "Progress", path: "/learner/progress" },
 ];
 
 const roleNavigationMap: Record<OetRole, OetNavigationItem[]> = {

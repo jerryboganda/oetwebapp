@@ -36,6 +36,9 @@
   `/verify`, and `/lock-screen`.
 - Legacy `auth-pages/*` auth paths are maintained as redirects so old links and
   bookmarks keep working.
+- The learner workspace now uses `/learner/*` as the public path contract.
+  Legacy `/app/*` learner URLs redirect to `/learner/*`, while a rewrite keeps
+  the existing learner implementation under `/app/*`.
 - A lockfile and focused Vitest suite are now checked in for the OET helpers,
   route contracts, schemas, and taxonomy store.
 

@@ -58,6 +58,19 @@ const nextConfig: NextConfig = {
         destination: "/lock-screen",
         permanent: true,
       },
+      {
+        source: "/app/:path*",
+        destination: "/learner/:path*",
+        permanent: true,
+      },
+    ];
+  },
+  async rewrites() {
+    return [
+      {
+        source: "/learner/:path*",
+        destination: "/app/:path*",
+      },
     ];
   },
   // async headers() {

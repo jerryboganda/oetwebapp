@@ -9,7 +9,7 @@ const navItems = getBottomNavigationItemsForRole("learner");
 const LearnerBottomNav = () => {
   const pathname = usePathname();
 
-  if (!pathname.startsWith("/app")) {
+  if (!pathname.startsWith("/learner") && !pathname.startsWith("/app")) {
     return null;
   }
 
@@ -24,7 +24,7 @@ const LearnerBottomNav = () => {
           return (
             <Link
               key={item.name}
-              href={item.path || "/app/dashboard"}
+              href={item.path || "/learner/dashboard"}
               className={`text-decoration-none text-center ${
                 isActive ? "text-primary" : "text-secondary"
               }`}

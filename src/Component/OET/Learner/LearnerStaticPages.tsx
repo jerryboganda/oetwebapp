@@ -96,7 +96,7 @@ function LearnerDashboardScreen() {
       title="Learner App"
     >
       <RecommendedActionStrip
-        href="/app/writing/attempt/attempt-writing-1"
+        href="/learner/writing/attempt/attempt-writing-1"
         label="Resume Writing"
         summary="Purpose and organisation remain your fastest route to a higher Writing band."
         title="Resume referral letter revision sprint"
@@ -151,12 +151,12 @@ function LearnerDashboardScreen() {
                           tag={Link}
                           href={
                             task.subtest === "writing"
-                              ? "/app/writing/attempt/attempt-writing-1"
+                              ? "/learner/writing/attempt/attempt-writing-1"
                               : task.subtest === "speaking"
-                                ? "/app/speaking/attempt/attempt-speaking-1"
+                                ? "/learner/speaking/attempt/attempt-speaking-1"
                                 : task.subtest === "reading"
-                                  ? "/app/reading/task/reading-task-1"
-                                  : "/app/listening/task/listening-task-1"
+                                  ? "/learner/reading/task/reading-task-1"
+                                  : "/learner/listening/task/listening-task-1"
                           }
                           color="primary"
                           size="sm"
@@ -190,7 +190,7 @@ function LearnerDashboardScreen() {
                 </p>
                 <Button
                   tag={Link}
-                  href={`/app/${latestEvaluation.subtest}/result/${latestEvaluation.id}`}
+                  href={`/learner/${latestEvaluation.subtest}/result/${latestEvaluation.id}`}
                   color="primary"
                 >
                   View latest feedback
@@ -198,7 +198,7 @@ function LearnerDashboardScreen() {
               </div>
             ) : (
               <EmptyStateCard
-                ctaHref="/app/diagnostic"
+                ctaHref="/learner/diagnostic"
                 ctaLabel="Start diagnostic"
                 summary="Once your first evaluated task is complete, your latest feedback will surface here."
                 title="No evaluated submission yet"
@@ -250,7 +250,7 @@ function LearnerDashboardScreen() {
             />
             <Button
               tag={Link}
-              href="/app/mocks/mock-1"
+              href="/learner/mocks/mock-1"
               color="primary"
               className="mt-3"
             >
@@ -266,7 +266,7 @@ function LearnerDashboardScreen() {
 function OnboardingScreen() {
   return (
     <OetPageShell
-      action={{ href: "/app/goals", label: "Begin setup" }}
+      action={{ href: "/learner/goals", label: "Begin setup" }}
       description="Set expectations for the diagnostic, study plan, and profession-specific OET workflow."
       icon={ClipboardCheck}
       mainTitle="Onboarding"
@@ -538,7 +538,10 @@ function GoalsScreen() {
 function DiagnosticScreen() {
   return (
     <OetPageShell
-      action={{ href: "/app/diagnostic/results", label: "Open last results" }}
+      action={{
+        href: "/learner/diagnostic/results",
+        label: "Open last results",
+      }}
       description="A four-part diagnostic estimates readiness and shapes the first study week."
       icon={ClipboardCheck}
       mainTitle="Diagnostic"
@@ -546,7 +549,7 @@ function DiagnosticScreen() {
       title="Learner App"
     >
       <RecommendedActionStrip
-        href="/app/writing/tasks/writing-task-1"
+        href="/learner/writing/tasks/writing-task-1"
         label="Start Writing diagnostic"
         summary="The first learner flow begins with a profession-specific Writing task and clear confidence messaging."
         title="Training estimate, not an official OET score"
@@ -554,23 +557,23 @@ function DiagnosticScreen() {
       <Row>
         {[
           {
-            href: "/app/writing/tasks/writing-task-1",
+            href: "/learner/writing/tasks/writing-task-1",
             summary:
               "Case notes left, editor center, timer and checklist right.",
             title: "Writing diagnostic",
           },
           {
-            href: "/app/speaking/task/speaking-task-1",
+            href: "/learner/speaking/task/speaking-task-1",
             summary: "Mic check, role card, and async transcript flow.",
             title: "Speaking diagnostic",
           },
           {
-            href: "/app/reading/task/reading-task-1",
+            href: "/learner/reading/task/reading-task-1",
             summary: "Timed item navigation with answer persistence.",
             title: "Reading diagnostic",
           },
           {
-            href: "/app/listening/task/listening-task-1",
+            href: "/learner/listening/task/listening-task-1",
             summary: "Stable audio controls and mobile-safe playback behavior.",
             title: "Listening diagnostic",
           },
@@ -611,7 +614,7 @@ function DiagnosticResultsScreen() {
 
   return (
     <OetPageShell
-      action={{ href: "/app/study-plan", label: "Open study plan" }}
+      action={{ href: "/learner/study-plan", label: "Open study plan" }}
       description="Actionable first-plan output with confidence-labeled estimates."
       icon={WarningTriangle}
       mainTitle="Diagnostic Results"
@@ -656,7 +659,7 @@ function StudyPlanScreen() {
       title="Learner App"
     >
       <RecommendedActionStrip
-        href="/app/writing/attempt/attempt-writing-1"
+        href="/learner/writing/attempt/attempt-writing-1"
         label="Start now"
         summary={
           data.today[0]?.reason ?? "Keep the first task clear and visible."
@@ -718,7 +721,7 @@ function StudyPlanScreen() {
 function WritingOverviewScreen() {
   return (
     <OetPageShell
-      action={{ href: "/app/writing/tasks", label: "Open task library" }}
+      action={{ href: "/learner/writing/tasks", label: "Open task library" }}
       description="Recommended task, criterion drill library, expert review credits, and past submissions."
       icon={PageEdit}
       mainTitle="Writing"
@@ -726,7 +729,7 @@ function WritingOverviewScreen() {
       title="Learner App"
     >
       <RecommendedActionStrip
-        href="/app/writing/tasks/writing-task-1"
+        href="/learner/writing/tasks/writing-task-1"
         label="Open recommended task"
         summary="Current plan is pushing Purpose and Organisation improvements in a nursing referral letter."
         title="Referral to community wound clinic"
@@ -807,7 +810,7 @@ function WritingLibraryScreen() {
                 </div>
                 <Button
                   tag={Link}
-                  href={`/app/writing/tasks/${task.id}`}
+                  href={`/learner/writing/tasks/${task.id}`}
                   color="primary"
                 >
                   View task
@@ -824,7 +827,10 @@ function WritingLibraryScreen() {
 function SpeakingOverviewScreen() {
   return (
     <OetPageShell
-      action={{ href: "/app/speaking/tasks", label: "Open role-play library" }}
+      action={{
+        href: "/learner/speaking/tasks",
+        label: "Open role-play library",
+      }}
       description="Recommended role-play, common improvement issues, empathy drills, and expert review access."
       icon={MessageText}
       mainTitle="Speaking"
@@ -832,7 +838,7 @@ function SpeakingOverviewScreen() {
       title="Learner App"
     >
       <RecommendedActionStrip
-        href="/app/speaking/mic-check"
+        href="/learner/speaking/mic-check"
         label="Run mic check"
         summary="Keep the recording path stable before starting the next speaking task."
         title="Post-operative pain discussion"
@@ -904,7 +910,7 @@ function SpeakingTaskLibraryScreen() {
                 <p className="text-secondary">{task.scenarioType}</p>
                 <Button
                   tag={Link}
-                  href={`/app/speaking/task/${task.id}`}
+                  href={`/learner/speaking/task/${task.id}`}
                   color="primary"
                 >
                   Preview role card
@@ -922,7 +928,7 @@ function MicCheckScreen() {
   return (
     <OetPageShell
       action={{
-        href: "/app/speaking/task/speaking-task-1",
+        href: "/learner/speaking/task/speaking-task-1",
         label: "Open speaking task",
       }}
       description="Verify microphone access, recording, playback, and device readiness before the task."
@@ -953,7 +959,7 @@ function ReadingOverviewScreen() {
   return (
     <OetPageShell
       action={{
-        href: "/app/reading/task/reading-task-1",
+        href: "/learner/reading/task/reading-task-1",
         label: "Start reading task",
       }}
       description="Part A/B/C entry points, speed drills, accuracy drills, explanations, and mock sets."
@@ -994,7 +1000,7 @@ function ListeningOverviewScreen() {
   return (
     <OetPageShell
       action={{
-        href: "/app/listening/task/listening-task-1",
+        href: "/learner/listening/task/listening-task-1",
         label: "Start listening task",
       }}
       description="Part-based practice, transcript-backed review, distractor drills, and mock sets."
@@ -1034,7 +1040,10 @@ function ListeningOverviewScreen() {
 function MockCenterScreen() {
   return (
     <OetPageShell
-      action={{ href: "/app/mocks/mock-1", label: "Open latest mock report" }}
+      action={{
+        href: "/learner/mocks/mock-1",
+        label: "Open latest mock report",
+      }}
       description="Sub-test mocks, full mocks, previous reports, and the next recommended simulation."
       icon={Reports}
       mainTitle="Mock Center"
@@ -1225,8 +1234,8 @@ function ReviewsScreen() {
         onEdit={(item) => {
           window.location.href =
             item.subtest === "writing"
-              ? "/app/writing/result/eval-writing-1"
-              : "/app/speaking/review/attempt-speaking-1";
+              ? "/learner/writing/result/eval-writing-1"
+              : "/learner/speaking/review/attempt-speaking-1";
         }}
         title="Review requests"
       />
@@ -1280,12 +1289,12 @@ function HistoryScreen() {
         onEdit={(item) => {
           window.location.href =
             item.subtest === "Writing"
-              ? "/app/writing/result/eval-writing-1"
+              ? "/learner/writing/result/eval-writing-1"
               : item.subtest === "Speaking"
-                ? "/app/speaking/review/attempt-speaking-1"
+                ? "/learner/speaking/review/attempt-speaking-1"
                 : item.subtest === "Reading"
-                  ? "/app/reading/task/reading-task-1"
-                  : "/app/listening/task/listening-task-1";
+                  ? "/learner/reading/task/reading-task-1"
+                  : "/learner/listening/task/listening-task-1";
         }}
         title="Submission history"
       />
@@ -1462,7 +1471,7 @@ export function LearnerStaticPage({ slug }: { slug?: string[] }) {
           title="Learner App"
         >
           <EmptyStateCard
-            ctaHref="/app/dashboard"
+            ctaHref="/learner/dashboard"
             ctaLabel="Back to dashboard"
             summary="The requested learner screen could not be resolved."
             title="Unknown learner route"
