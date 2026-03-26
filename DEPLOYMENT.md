@@ -60,6 +60,7 @@ Notes:
 - `CHECKOUT_BASE_URL` should point at your frontend billing route or external payment handoff page.
 - `PUBLIC_API_BASE_URL` must be the final public HTTPS API URL because the backend returns absolute upload/audio links.
 - `SEED_DEMO_DATA` should stay `false` in production.
+- `NEXT_PUBLIC_ENABLE_MOCK_AUTH=true` and `AUTH_ALLOW_DEVELOPMENT_AUTH_IN_PRODUCTION=true` are only for an intentional temporary mock-auth launch when real Firebase/JWT auth is not ready yet.
 
 ## 3. Build and start the stack
 

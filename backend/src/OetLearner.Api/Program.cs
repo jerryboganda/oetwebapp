@@ -17,7 +17,8 @@ var bootstrapOptions = builder.Configuration.GetSection("Bootstrap").Get<Bootstr
 var storageOptions = builder.Configuration.GetSection("Storage").Get<StorageOptions>() ?? new StorageOptions();
 var platformOptions = builder.Configuration.GetSection("Platform").Get<PlatformOptions>() ?? new PlatformOptions();
 var billingOptions = builder.Configuration.GetSection("Billing").Get<BillingOptions>() ?? new BillingOptions();
-var useDevelopmentAuth = builder.Environment.IsDevelopment() && authOptions.UseDevelopmentAuth;
+var allowDevelopmentAuthOutsideDevelopment = !builder.Environment.IsDevelopment() && authOptions.AllowDevelopmentAuthInProduction;
+var useDevelopmentAuth = authOptions.UseDevelopmentAuth && (builder.Environment.IsDevelopment() || allowDevelopmentAuthOutsideDevelopment);
 var enableSwagger = builder.Environment.IsDevelopment() || builder.Configuration.GetValue<bool>("Features:EnableSwagger");
 var trustForwardHeaders = builder.Configuration.GetValue<bool?>("Proxy:TrustForwardHeaders") ?? !builder.Environment.IsDevelopment();
 var enforceHttps = builder.Configuration.GetValue<bool?>("Proxy:EnforceHttps") ?? !builder.Environment.IsDevelopment();
@@ -27,9 +28,9 @@ var corsOrigins = (builder.Configuration["Cors:AllowedOriginsCsv"]
                        : string.Empty))
     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-if (!builder.Environment.IsDevelopment() && authOptions.UseDevelopmentAuth)
+if (!builder.Environment.IsDevelopment() && authOptions.UseDevelopmentAuth && !authOptions.AllowDevelopmentAuthInProduction)
 {
-    throw new InvalidOperationException("Development auth cannot be enabled outside the Development environment.");
+    throw new InvalidOperationException("Development auth cannot be enabled outside the Development environment unless Auth:AllowDevelopmentAuthInProduction is explicitly set to true.");
 }
 
 if (!useDevelopmentAuth && string.IsNullOrWhiteSpace(authOptions.Authority))

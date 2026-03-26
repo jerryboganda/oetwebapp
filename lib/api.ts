@@ -1,4 +1,4 @@
-import { auth } from './firebase';
+import { auth, isFirebaseConfigured } from './firebase';
 import type {
   UserProfile,
   StudyPlanTask,
@@ -43,6 +43,7 @@ import type {
 } from './types/expert';
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:5198').replace(/\/$/, '');
+const ENABLE_MOCK_AUTH = process.env.NEXT_PUBLIC_ENABLE_MOCK_AUTH === 'true';
 
 type ApiRecord = Record<string, any>;
 
@@ -158,8 +159,13 @@ function resolveApiUrl(pathOrUrl: string): string {
   return `${API_BASE_URL}${pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`}`;
 }
 
-function getDevelopmentAuthHeaders(path: string): HeadersInit | undefined {
-  if (typeof window === 'undefined' || process.env.NODE_ENV !== 'development') {
+function getMockAuthHeaders(path: string): HeadersInit | undefined {
+  if (typeof window === 'undefined') {
+    return undefined;
+  }
+
+  const useMockAuth = ENABLE_MOCK_AUTH || (process.env.NODE_ENV === 'development' && !isFirebaseConfigured);
+  if (!useMockAuth) {
     return undefined;
   }
 
@@ -201,7 +207,7 @@ async function getHeaders(path: string, extra?: HeadersInit, options?: { json?: 
     headers.set('Content-Type', 'application/json');
   }
 
-  const debugHeaders = getDevelopmentAuthHeaders(path);
+  const debugHeaders = getMockAuthHeaders(path);
   if (debugHeaders) {
     Object.entries(debugHeaders).forEach(([key, value]) => headers.set(key, value));
   }
@@ -212,7 +218,7 @@ async function getHeaders(path: string, extra?: HeadersInit, options?: { json?: 
       headers.set('Authorization', `Bearer ${token}`);
     }
   } catch {
-    // Development auth works without a token.
+    // Mock-auth deployments and local development both work without a token.
   }
 
   return headers;
