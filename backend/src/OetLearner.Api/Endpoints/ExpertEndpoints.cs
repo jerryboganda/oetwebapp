@@ -1,0 +1,85 @@
+using System.Security.Claims;
+using OetLearner.Api.Contracts;
+using OetLearner.Api.Services;
+
+namespace OetLearner.Api.Endpoints;
+
+public static class ExpertEndpoints
+{
+    public static IEndpointRouteBuilder MapExpertEndpoints(this IEndpointRouteBuilder app)
+    {
+        var expert = app.MapGroup("/v1/expert").RequireAuthorization("ExpertOnly");
+
+        // Identity
+        expert.MapGet("/me", async (HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetMeAsync(http.ExpertId(), ct)));
+
+        // Queue
+        expert.MapGet("/queue", async (HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetQueueAsync(http.ExpertId(), ct)));
+
+        expert.MapPost("/queue/{reviewRequestId}/claim", async (string reviewRequestId, HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.ClaimReviewAsync(reviewRequestId, http.ExpertId(), ct)));
+
+        expert.MapPost("/queue/{reviewRequestId}/release", async (string reviewRequestId, HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.ReleaseReviewAsync(reviewRequestId, http.ExpertId(), ct)));
+
+        // Review bundles
+        expert.MapGet("/reviews/{reviewRequestId}/writing", async (string reviewRequestId, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetWritingReviewBundleAsync(reviewRequestId, ct)));
+
+        expert.MapGet("/reviews/{reviewRequestId}/speaking", async (string reviewRequestId, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetSpeakingReviewBundleAsync(reviewRequestId, ct)));
+        expert.MapGet("/reviews/{reviewRequestId}/speaking/audio", async (string reviewRequestId, HttpContext http, ExpertService service, CancellationToken ct) =>
+        {
+            var file = await service.GetSpeakingReviewAudioAsync(reviewRequestId, http.ExpertId(), ct);
+            return Results.File(file.Stream, file.ContentType, enableRangeProcessing: true);
+        });
+
+        // Draft
+        expert.MapPut("/reviews/{reviewRequestId}/draft", async (string reviewRequestId, HttpContext http, ExpertDraftSaveRequest request, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.SaveDraftAsync(reviewRequestId, http.ExpertId(), request, ct)));
+
+        // Submit
+        expert.MapPost("/reviews/{reviewRequestId}/writing/submit", async (string reviewRequestId, HttpContext http, ExpertReviewSubmitRequest request, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.SubmitWritingReviewAsync(reviewRequestId, http.ExpertId(), request, ct)));
+
+        expert.MapPost("/reviews/{reviewRequestId}/speaking/submit", async (string reviewRequestId, HttpContext http, ExpertReviewSubmitRequest request, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.SubmitSpeakingReviewAsync(reviewRequestId, http.ExpertId(), request, ct)));
+
+        // Rework
+        expert.MapPost("/reviews/{reviewRequestId}/rework", async (string reviewRequestId, HttpContext http, ExpertReworkRequest request, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.RequestReworkAsync(reviewRequestId, http.ExpertId(), request, ct)));
+
+        // Learner profile
+        expert.MapGet("/learners/{learnerId}", async (string learnerId, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetLearnerProfileAsync(learnerId, ct)));
+
+        // Calibration
+        expert.MapGet("/calibration/cases", async (HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetCalibrationCasesAsync(http.ExpertId(), ct)));
+
+        expert.MapGet("/calibration/notes", async (HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetCalibrationNotesAsync(http.ExpertId(), ct)));
+
+        expert.MapPost("/calibration/cases/{caseId}/submit", async (string caseId, HttpContext http, ExpertCalibrationSubmitRequest request, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.SubmitCalibrationAsync(caseId, http.ExpertId(), request, ct)));
+
+        // Schedule / Availability
+        expert.MapGet("/schedule", async (HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetAvailabilityAsync(http.ExpertId(), ct)));
+
+        expert.MapPut("/schedule", async (HttpContext http, ExpertAvailabilityUpdateRequest request, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.SaveAvailabilityAsync(http.ExpertId(), request, ct)));
+
+        // Metrics
+        expert.MapGet("/metrics", async (HttpContext http, ExpertService service, CancellationToken ct, int? days)
+            => Results.Ok(await service.GetMetricsAsync(http.ExpertId(), days ?? 7, ct)));
+
+        return app;
+    }
+
+    private static string ExpertId(this HttpContext httpContext)
+        => httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+           ?? throw new InvalidOperationException("Authenticated expert id is required.");
+}

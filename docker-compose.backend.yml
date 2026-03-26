@@ -1,0 +1,43 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: oet-learner-postgres
+    environment:
+      POSTGRES_DB: oet_learner_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - '5432:5432'
+    volumes:
+      - oet_learner_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U postgres -d oet_learner_dev']
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  learner-api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: oet-learner-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=oet_learner_dev;Username=postgres;Password=postgres
+      Auth__UseDevelopmentAuth: 'true'
+      Platform__PublicApiBaseUrl: http://localhost:5198
+      Billing__CheckoutBaseUrl: http://localhost:3000/billing/checkout
+      Bootstrap__AutoMigrate: 'true'
+      Bootstrap__SeedDemoData: 'true'
+    ports:
+      - '5198:8080'
+    volumes:
+      - oet_learner_storage:/var/opt/oet-learner/storage
+
+volumes:
+  oet_learner_pgdata:
+  oet_learner_storage:

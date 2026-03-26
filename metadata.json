@@ -1,0 +1,5 @@
+{
+  "name": "Learner App",
+  "description": "An OET preparation app for healthcare professionals.",
+  "requestFramePermissions": ["microphone"]
+}

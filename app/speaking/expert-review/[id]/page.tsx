@@ -1,0 +1,268 @@
+'use client';
+
+import { useState, useEffect, Suspense } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { motion } from 'motion/react';
+import {
+  Clock, CreditCard, MessageSquare, CheckCircle2,
+  Target, Loader2, ArrowRight, Sparkles,
+} from 'lucide-react';
+import Link from 'next/link';
+import { AppShell } from '@/components/layout/app-shell';
+import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { InlineAlert } from '@/components/ui/alert';
+import { fetchFocusAreas, fetchTurnaroundOptions, fetchBilling, submitReviewRequest } from '@/lib/api';
+import { analytics } from '@/lib/analytics';
+import type { TurnaroundOption } from '@/lib/mock-data';
+
+function ExpertReviewRequestContent() {
+  const params = useParams();
+  const router = useRouter();
+  const id = params?.id as string;
+
+  // --- Data State ---
+  const [focusAreas, setFocusAreas] = useState<{ id: string; label: string; description: string }[]>([]);
+  const [turnaroundOptions, setTurnaroundOptions] = useState<TurnaroundOption[]>([]);
+  const [credits, setCredits] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // --- Form State ---
+  const [selectedFocus, setSelectedFocus] = useState<string[]>([]);
+  const [notes, setNotes] = useState('');
+  const [turnaroundId, setTurnaroundId] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
+
+  useEffect(() => {
+    Promise.all([fetchFocusAreas(), fetchTurnaroundOptions(), fetchBilling()])
+      .then(([areas, options, billing]) => {
+        setFocusAreas(areas);
+        setTurnaroundOptions(options);
+        if (options.length > 0) setTurnaroundId(options[0].id);
+        setCredits(billing.reviewCredits);
+      })
+      .catch(() => setError('Failed to load review options. Please try again.'))
+      .finally(() => setLoading(false));
+  }, []);
+
+  const toggleFocus = (areaId: string) => {
+    setSelectedFocus(prev =>
+      prev.includes(areaId) ? prev.filter(i => i !== areaId) : [...prev, areaId]
+    );
+  };
+
+  const selectedTurnaround = turnaroundOptions.find(t => t.id === turnaroundId);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSubmitting(true);
+    try {
+      await submitReviewRequest({ submissionId: id, turnaroundId, focusAreas: selectedFocus, notes });
+      analytics.track('review_requested', { submissionId: id, subtest: 'speaking', turnaroundId, focusCount: selectedFocus.length });
+      setIsSuccess(true);
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
+
+  if (isSuccess) {
+    return (
+      <AppShell pageTitle="Request Submitted">
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="max-w-md w-full">
+            <div className="w-24 h-24 bg-green-50 rounded-3xl flex items-center justify-center mx-auto mb-8">
+              <CheckCircle2 className="w-12 h-12 text-green-600" />
+            </div>
+            <h1 className="text-3xl font-black text-navy mb-4 tracking-tight">Request Submitted</h1>
+            <p className="text-muted mb-10 leading-relaxed">
+              Your recording has been sent to our OET experts. You will be notified via email once your detailed feedback is ready.
+            </p>
+            <Link href="/speaking">
+              <Button size="lg">
+                Back to Dashboard <ArrowRight className="w-5 h-5" />
+              </Button>
+            </Link>
+          </motion.div>
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (loading) {
+    return (
+      <AppShell pageTitle="Expert Review Request">
+        <div className="max-w-3xl mx-auto p-6 space-y-6">
+          <Skeleton className="h-32 rounded-xl" />
+          <Skeleton className="h-48 rounded-xl" />
+          <Skeleton className="h-32 rounded-xl" />
+          <Skeleton className="h-48 rounded-xl" />
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (error) {
+    return (
+      <AppShell pageTitle="Expert Review Request">
+        <div className="max-w-3xl mx-auto p-6">
+          <InlineAlert variant="error">{error}</InlineAlert>
+        </div>
+      </AppShell>
+    );
+  }
+
+  return (
+    <AppShell pageTitle="Expert Review Request">
+      <main className="flex-1 p-6">
+        <form onSubmit={handleSubmit} className="max-w-3xl mx-auto space-y-8">
+
+          {/* AI vs Human Distinction */}
+          <InlineAlert variant="info">
+            <div className="flex items-start gap-4">
+              <Sparkles className="w-6 h-6 text-blue-600 shrink-0" />
+              <div>
+                <h2 className="text-sm font-bold text-blue-900 uppercase tracking-widest mb-1">Beyond AI Evaluation</h2>
+                <p className="text-sm text-blue-800/80 leading-relaxed">
+                  While our AI provides immediate insights, an Expert Review offers deep clinical nuance, specific OET grading, and personalized coaching from certified healthcare educators.
+                </p>
+              </div>
+            </div>
+          </InlineAlert>
+
+          {/* Focus Areas */}
+          <Card className="p-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-xl bg-primary/5 flex items-center justify-center">
+                <Target className="w-5 h-5 text-primary" />
+              </div>
+              <h2 className="text-lg font-black text-navy">Focus Areas</h2>
+            </div>
+            <p className="text-sm text-muted mb-6">Select specific criteria you want the reviewer to prioritize.</p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {focusAreas.map((area) => (
+                <button
+                  key={area.id}
+                  type="button"
+                  onClick={() => toggleFocus(area.id)}
+                  className={`flex items-start gap-4 p-4 rounded-2xl border-2 transition-all text-left ${
+                    selectedFocus.includes(area.id) ? 'border-primary bg-primary/5' : 'border-gray-100 hover:border-gray-200 bg-white'
+                  }`}
+                >
+                  <div className={`w-5 h-5 rounded-md border-2 mt-0.5 flex items-center justify-center transition-all ${
+                    selectedFocus.includes(area.id) ? 'bg-primary border-primary' : 'border-gray-300'
+                  }`}>
+                    {selectedFocus.includes(area.id) && <CheckCircle2 className="w-4 h-4 text-white" />}
+                  </div>
+                  <div>
+                    <h3 className="text-sm font-bold text-navy">{area.label}</h3>
+                    <p className="text-xs text-muted leading-relaxed">{area.description}</p>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </Card>
+
+          {/* Reviewer Notes */}
+          <Card className="p-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-xl bg-primary/5 flex items-center justify-center">
+                <MessageSquare className="w-5 h-5 text-primary" />
+              </div>
+              <h2 className="text-lg font-black text-navy">Reviewer Notes</h2>
+            </div>
+            <textarea
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="E.g., 'I struggled with the transition to the physical exam explanation. Please check my empathy during the patient's interruption.'"
+              className="w-full h-32 p-4 bg-gray-50 border border-gray-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+            />
+          </Card>
+
+          {/* Priority & Turnaround */}
+          <Card className="p-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-xl bg-primary/5 flex items-center justify-center">
+                <Clock className="w-5 h-5 text-primary" />
+              </div>
+              <h2 className="text-lg font-black text-navy">Priority & Turnaround</h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              {turnaroundOptions.map((opt) => (
+                <button
+                  key={opt.id}
+                  type="button"
+                  onClick={() => setTurnaroundId(opt.id)}
+                  className={`p-6 rounded-2xl border-2 transition-all text-center ${
+                    turnaroundId === opt.id ? 'border-primary bg-primary/5' : 'border-gray-100 hover:border-gray-200 bg-white'
+                  }`}
+                >
+                  <h3 className="text-sm font-bold text-navy mb-1">{opt.label}</h3>
+                  <p className="text-xs text-primary font-bold mb-2">{opt.time}</p>
+                  <p className="text-xs text-muted font-bold uppercase tracking-widest">{opt.cost} Credit{opt.cost > 1 ? 's' : ''}</p>
+                </button>
+              ))}
+            </div>
+          </Card>
+
+          {/* Payment Info */}
+          <Card className="p-8">
+            <div className="flex items-center gap-3 mb-6">
+              <div className="w-10 h-10 rounded-xl bg-primary/5 flex items-center justify-center">
+                <CreditCard className="w-5 h-5 text-primary" />
+              </div>
+              <h2 className="text-lg font-black text-navy">Payment</h2>
+            </div>
+
+            <div className="flex items-center justify-between p-6 rounded-2xl border-2 border-primary bg-primary/5">
+              <div>
+                <h3 className="text-sm font-bold text-navy">Use Review Credits</h3>
+                <p className="text-xs text-muted">You have {credits} credit{credits !== 1 ? 's' : ''} remaining</p>
+              </div>
+              <div className="text-xs font-bold text-primary uppercase tracking-widest">
+                -{selectedTurnaround?.cost ?? 1} Credit{(selectedTurnaround?.cost ?? 1) > 1 ? 's' : ''}
+              </div>
+            </div>
+          </Card>
+
+          {/* Submit Button */}
+          <Button
+            type="submit"
+            fullWidth
+            size="lg"
+            loading={isSubmitting}
+            disabled={isSubmitting || selectedFocus.length === 0}
+          >
+            {isSubmitting ? 'Submitting Request...' : (
+              <>Submit Review Request <ArrowRight className="w-5 h-5" /></>
+            )}
+          </Button>
+
+          {selectedFocus.length === 0 && (
+            <p className="text-center text-xs font-bold text-amber-600 uppercase tracking-widest">
+              Please select at least one focus area
+            </p>
+          )}
+        </form>
+      </main>
+    </AppShell>
+  );
+}
+
+export default function ExpertReviewRequest() {
+  return (
+    <Suspense fallback={
+      <AppShell pageTitle="Expert Review Request">
+        <div className="flex-1 flex items-center justify-center">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        </div>
+      </AppShell>
+    }>
+      <ExpertReviewRequestContent />
+    </Suspense>
+  );
+}

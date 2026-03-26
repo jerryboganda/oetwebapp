@@ -1,0 +1,211 @@
+'use client';
+
+import { useState, useEffect } from 'react';
+import { motion } from 'motion/react';
+import {
+  CheckCircle2, AlertCircle, TrendingUp, Zap, Target, Loader2, FileText, Mic, UserCheck, ChevronRight,
+} from 'lucide-react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { AppShell } from '@/components/layout/app-shell';
+import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
+import { InlineAlert } from '@/components/ui/alert';
+import { fetchSpeakingResult } from '@/lib/api';
+import { analytics } from '@/lib/analytics';
+import type { SpeakingResult } from '@/lib/mock-data';
+
+export default function SpeakingResultSummary() {
+  const params = useParams();
+  const id = params?.id as string;
+  const [analysing, setAnalysing] = useState(true);
+  const [result, setResult] = useState<SpeakingResult | null>(null);
+  const [error, setError] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const poll = async () => {
+      try {
+        const response = await fetchSpeakingResult(id);
+        if (cancelled) return;
+        if (response.evalStatus === 'completed') {
+          setResult(response);
+          analytics.track('evaluation_viewed', { resultId: id, subtest: 'speaking' });
+          setAnalysing(false);
+          return;
+        }
+        setTimeout(() => { void poll(); }, 2000);
+      } catch {
+        if (!cancelled) {
+          setError(true);
+          setAnalysing(false);
+        }
+      }
+    };
+
+    const timer = setTimeout(() => { void poll(); }, 800);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [id]);
+
+  if (analysing) {
+    return (
+      <AppShell pageTitle="Analyzing...">
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
+          <motion.div
+            initial={{ opacity: 0, scale: 0.9 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className="max-w-md w-full bg-white rounded-3xl p-10 shadow-xl border border-gray-100"
+          >
+            <div className="w-20 h-20 bg-primary/5 rounded-3xl flex items-center justify-center mx-auto mb-8 relative">
+              <Loader2 className="w-10 h-10 text-primary animate-spin" />
+              <div className="absolute inset-0 flex items-center justify-center">
+                <Mic className="w-4 h-4 text-primary/40" />
+              </div>
+            </div>
+            <h1 className="text-3xl font-black text-navy mb-4 tracking-tight">Analyzing Recording</h1>
+            <p className="text-muted mb-10 leading-relaxed">
+              Our AI is evaluating your performance against OET linguistic and clinical communication criteria...
+            </p>
+            <div className="space-y-4">
+              {['Linguistic Criteria', 'Clinical Communication', 'Score Estimation'].map((label, i) => (
+                <div key={label} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                  <span className="text-sm font-bold text-muted">{label}</span>
+                  <motion.div
+                    initial={{ width: 0 }}
+                    animate={{ width: '40%' }}
+                    transition={{ duration: 1, delay: i * 0.2, repeat: Infinity, repeatType: 'reverse' }}
+                    className="h-1.5 bg-primary/20 rounded-full overflow-hidden"
+                  >
+                    <div className="h-full bg-primary w-full" />
+                  </motion.div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (error || !result) {
+    return (
+      <AppShell pageTitle="Results">
+        <InlineAlert variant="error">Could not load your speaking result. Please try again later.</InlineAlert>
+      </AppShell>
+    );
+  }
+
+  return (
+    <AppShell pageTitle="Performance Summary">
+      <div className="max-w-4xl mx-auto space-y-6 p-6">
+        {/* Score Card */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+          <Card className="p-8 flex flex-col md:flex-row items-center gap-8">
+            <div className="flex-1 text-center md:text-left">
+              <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
+                <span className="text-xs font-bold text-muted uppercase tracking-widest">Estimated Score Range</span>
+                <Badge variant={result.confidence === 'High' ? 'success' : result.confidence === 'Medium' ? 'warning' : 'danger'} size="sm">
+                  {result.confidence} Confidence
+                </Badge>
+              </div>
+              <div className="text-6xl font-black text-navy tracking-tighter mb-4">
+                {result.scoreRange}
+              </div>
+              <p className="text-sm text-muted leading-relaxed max-w-md">
+                This estimate is based on your performance in linguistic and clinical communication criteria. It is not an official OET score.
+              </p>
+            </div>
+
+            <div className="w-px h-24 bg-gray-100 hidden md:block" />
+
+            <div className="flex flex-col gap-4 w-full md:w-auto">
+              <Link href={`/speaking/transcript/${id}`}>
+                <Button fullWidth>
+                  <FileText className="w-5 h-5" /> Review Transcript
+                </Button>
+              </Link>
+              <Link href={`/speaking/expert-review/${id}`}>
+                <Button variant="outline" fullWidth>
+                  <UserCheck className="w-5 h-5" /> Request Expert Review
+                </Button>
+              </Link>
+            </div>
+          </Card>
+        </motion.div>
+
+        {/* Strengths & Improvements */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}>
+            <Card className="p-8 h-full">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
+                  <Zap className="w-5 h-5 text-green-600" />
+                </div>
+                <h2 className="text-lg font-black text-navy">Key Strengths</h2>
+              </div>
+              <ul className="space-y-4">
+                {result.strengths.map((s, i) => (
+                  <li key={i} className="flex gap-4 items-start">
+                    <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0 mt-0.5" />
+                    <p className="text-sm text-navy font-medium leading-relaxed">{s}</p>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}>
+            <Card className="p-8 h-full">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
+                  <Target className="w-5 h-5 text-amber-600" />
+                </div>
+                <h2 className="text-lg font-black text-navy">Top Improvements</h2>
+              </div>
+              <ul className="space-y-4">
+                {result.improvements.map((imp, i) => (
+                  <li key={i} className="flex gap-4 items-start">
+                    <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                    <p className="text-sm text-navy font-medium leading-relaxed">{imp}</p>
+                  </li>
+                ))}
+              </ul>
+            </Card>
+          </motion.div>
+        </div>
+
+        {/* Recommended Drill */}
+        {result.nextDrill && (
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3 }}
+            className="bg-navy rounded-3xl p-8 text-white flex flex-col md:flex-row items-center justify-between gap-8"
+          >
+            <div className="flex items-center gap-6">
+              <div className="w-16 h-16 rounded-2xl bg-white/10 flex items-center justify-center shrink-0">
+                <TrendingUp className="w-8 h-8 text-primary" />
+              </div>
+              <div>
+                <div className="text-xs font-bold text-primary uppercase tracking-widest mb-1">Recommended Next Drill</div>
+                <h3 className="text-xl font-black mb-2">{result.nextDrill.title}</h3>
+                <p className="text-sm text-white/60 max-w-sm">{result.nextDrill.description}</p>
+              </div>
+            </div>
+            <Link href={`/speaking/phrasing/${result.nextDrill.id}`}>
+              <Button className="bg-primary text-white px-8 py-4 rounded-2xl font-black whitespace-nowrap">
+                Start Drill <ChevronRight className="w-5 h-5" />
+              </Button>
+            </Link>
+          </motion.section>
+        )}
+      </div>
+    </AppShell>
+  );
+}

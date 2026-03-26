@@ -1,0 +1,68 @@
+import { cn } from '@/lib/utils';
+import { Check } from 'lucide-react';
+import { type ReactNode } from 'react';
+
+export interface Step {
+  id: string;
+  label: string;
+  description?: string;
+  icon?: ReactNode;
+}
+
+interface StepperProps {
+  steps: Step[];
+  currentStep: number; // 0-indexed
+  className?: string;
+  orientation?: 'horizontal' | 'vertical';
+}
+
+export function Stepper({ steps, currentStep, className, orientation = 'horizontal' }: StepperProps) {
+  const isVertical = orientation === 'vertical';
+
+  return (
+    <nav aria-label="Progress" className={cn(isVertical ? 'flex flex-col gap-4' : 'flex items-center gap-2', className)}>
+      {steps.map((step, idx) => {
+        const isComplete = idx < currentStep;
+        const isCurrent = idx === currentStep;
+        const isUpcoming = idx > currentStep;
+
+        return (
+          <div
+            key={step.id}
+            className={cn(
+              isVertical ? 'flex items-start gap-3' : 'flex items-center gap-2',
+              !isVertical && idx < steps.length - 1 && 'flex-1',
+            )}
+          >
+            {/* Step indicator */}
+            <div className="flex items-center gap-2">
+              <div
+                className={cn(
+                  'w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0 transition-colors',
+                  isComplete && 'bg-primary text-white',
+                  isCurrent && 'bg-primary/10 text-primary border-2 border-primary',
+                  isUpcoming && 'bg-gray-100 text-muted border border-gray-200',
+                )}
+                aria-current={isCurrent ? 'step' : undefined}
+              >
+                {isComplete ? <Check className="w-4 h-4" /> : step.icon || idx + 1}
+              </div>
+              <div className={cn(!isVertical && 'hidden sm:block')}>
+                <p className={cn('text-xs font-semibold', isCurrent ? 'text-primary' : isComplete ? 'text-navy' : 'text-muted')}>
+                  {step.label}
+                </p>
+                {step.description && isVertical && (
+                  <p className="text-xs text-muted mt-0.5">{step.description}</p>
+                )}
+              </div>
+            </div>
+            {/* Connector line */}
+            {!isVertical && idx < steps.length - 1 && (
+              <div className={cn('flex-1 h-0.5 rounded', isComplete ? 'bg-primary' : 'bg-gray-200')} />
+            )}
+          </div>
+        );
+      })}
+    </nav>
+  );
+}

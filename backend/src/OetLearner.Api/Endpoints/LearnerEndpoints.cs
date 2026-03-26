@@ -1,0 +1,138 @@
+using System.Security.Claims;
+using Microsoft.AspNetCore.Mvc;
+using OetLearner.Api.Contracts;
+using OetLearner.Api.Services;
+
+namespace OetLearner.Api.Endpoints;
+
+public static class LearnerEndpoints
+{
+    public static IEndpointRouteBuilder MapLearnerEndpoints(this IEndpointRouteBuilder app)
+    {
+        var v1 = app.MapGroup("/v1").RequireAuthorization("LearnerOnly");
+
+        v1.MapGet("/me", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetMeAsync(http.UserId(), ct)));
+        v1.MapGet("/me/bootstrap", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBootstrapAsync(http.UserId(), ct)));
+
+        v1.MapGet("/reference/professions", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetProfessionsAsync(ct)));
+        v1.MapGet("/reference/subtests", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSubtestsAsync(ct)));
+        v1.MapGet("/reference/criteria", async ([FromQuery] string? subtest, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetCriteriaAsync(subtest, ct)));
+        v1.MapGet("/reference/filters/{surface}", (string surface, LearnerService service) => Results.Ok(service.GetFilters(surface)));
+
+        var onboarding = v1.MapGroup("/learner/onboarding");
+        onboarding.MapGet("/state", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetOnboardingStateAsync(http.UserId(), ct)));
+        onboarding.MapPost("/start", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.StartOnboardingAsync(http.UserId(), ct)));
+        onboarding.MapPost("/complete", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.CompleteOnboardingAsync(http.UserId(), ct)));
+
+        var goals = v1.MapGroup("/learner/goals");
+        goals.MapGet("/", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetGoalsAsync(http.UserId(), ct)));
+        goals.MapPatch("/", async (HttpContext http, PatchGoalsRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.PatchGoalsAsync(http.UserId(), request, ct)));
+        goals.MapPost("/submit", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.SubmitGoalsAsync(http.UserId(), ct)));
+
+        v1.MapGet("/settings", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSettingsAsync(http.UserId(), ct)));
+        v1.MapPatch("/settings/profile", async (HttpContext http, PatchSectionRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.PatchSettingsSectionAsync(http.UserId(), "profile", request, ct)));
+        v1.MapPatch("/settings/goals", async (HttpContext http, PatchSectionRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.PatchSettingsSectionAsync(http.UserId(), "goals", request, ct)));
+        v1.MapPatch("/settings/notifications", async (HttpContext http, PatchSectionRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.PatchSettingsSectionAsync(http.UserId(), "notifications", request, ct)));
+        v1.MapPatch("/settings/privacy", async (HttpContext http, PatchSectionRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.PatchSettingsSectionAsync(http.UserId(), "privacy", request, ct)));
+        v1.MapPatch("/settings/accessibility", async (HttpContext http, PatchSectionRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.PatchSettingsSectionAsync(http.UserId(), "accessibility", request, ct)));
+        v1.MapPatch("/settings/audio", async (HttpContext http, PatchSectionRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.PatchSettingsSectionAsync(http.UserId(), "audio", request, ct)));
+        v1.MapPatch("/settings/study", async (HttpContext http, PatchSectionRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.PatchSettingsSectionAsync(http.UserId(), "study", request, ct)));
+
+        var diagnostic = v1.MapGroup("/diagnostic");
+        diagnostic.MapGet("/overview", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetDiagnosticOverviewAsync(http.UserId(), ct)));
+        diagnostic.MapPost("/attempts", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateOrResumeDiagnosticAsync(http.UserId(), ct)));
+        diagnostic.MapGet("/attempts/{diagnosticId}", async (HttpContext http, string diagnosticId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetDiagnosticAttemptAsync(http.UserId(), diagnosticId, ct)));
+        diagnostic.MapGet("/attempts/{diagnosticId}/hub", async (HttpContext http, string diagnosticId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetDiagnosticHubAsync(http.UserId(), diagnosticId, ct)));
+        diagnostic.MapGet("/attempts/{diagnosticId}/results", async (HttpContext http, string diagnosticId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetDiagnosticResultsAsync(http.UserId(), diagnosticId, ct)));
+
+        v1.MapGet("/learner/dashboard", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetDashboardAsync(http.UserId(), ct)));
+        v1.MapGet("/study-plan", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetStudyPlanAsync(http.UserId(), ct)));
+        v1.MapPost("/study-plan/regenerate", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.RegenerateStudyPlanAsync(http.UserId(), ct)));
+        v1.MapPost("/study-plan/items/{itemId}/complete", async (HttpContext http, string itemId, LearnerService service, CancellationToken ct) => Results.Ok(await service.CompleteStudyPlanItemAsync(http.UserId(), itemId, ct)));
+        v1.MapPost("/study-plan/items/{itemId}/skip", async (HttpContext http, string itemId, LearnerService service, CancellationToken ct) => Results.Ok(await service.SkipStudyPlanItemAsync(http.UserId(), itemId, ct)));
+        v1.MapPost("/study-plan/items/{itemId}/reset", async (HttpContext http, string itemId, LearnerService service, CancellationToken ct) => Results.Ok(await service.ResetStudyPlanItemAsync(http.UserId(), itemId, ct)));
+        v1.MapPost("/study-plan/items/{itemId}/reschedule", async (HttpContext http, string itemId, StudyPlanRescheduleRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.RescheduleStudyPlanItemAsync(http.UserId(), itemId, request, ct)));
+        v1.MapPost("/study-plan/items/{itemId}/swap", async (HttpContext http, string itemId, StudyPlanSwapRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.SwapStudyPlanItemAsync(http.UserId(), itemId, request, ct)));
+        v1.MapGet("/readiness", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReadinessAsync(http.UserId(), ct)));
+        v1.MapGet("/progress", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetProgressAsync(http.UserId(), ct)));
+        v1.MapGet("/submissions", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSubmissionsAsync(http.UserId(), ct)));
+        v1.MapGet("/submissions/compare", async (HttpContext http, [FromQuery] string? leftId, [FromQuery] string? rightId, LearnerService service, CancellationToken ct) => Results.Ok(await service.CompareSubmissionsAsync(http.UserId(), leftId, rightId, ct)));
+
+        var writing = v1.MapGroup("/writing");
+        writing.MapGet("/home", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingHomeAsync(http.UserId(), ct)));
+        writing.MapGet("/tasks", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingTasksAsync(ct)));
+        writing.MapGet("/tasks/{contentId}", async (string contentId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingTaskAsync(contentId, ct)));
+        writing.MapPost("/attempts", async (HttpContext http, CreateAttemptRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateWritingAttemptAsync(http.UserId(), request, ct)));
+        writing.MapGet("/attempts/{attemptId}", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingAttemptAsync(http.UserId(), attemptId, ct)));
+        writing.MapPatch("/attempts/{attemptId}/draft", async (HttpContext http, string attemptId, DraftUpdateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.UpdateWritingDraftAsync(http.UserId(), attemptId, request, ct)));
+        writing.MapPatch("/attempts/{attemptId}/heartbeat", async (HttpContext http, string attemptId, HeartbeatRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.HeartbeatAttemptAsync(http.UserId(), attemptId, request, ct)));
+        writing.MapPost("/attempts/{attemptId}/submit", async (HttpContext http, string attemptId, SubmitAttemptRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.SubmitWritingAttemptAsync(http.UserId(), attemptId, request, ct)));
+        writing.MapGet("/evaluations/{evaluationId}/summary", async (HttpContext http, string evaluationId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingEvaluationSummaryAsync(http.UserId(), evaluationId, ct)));
+        writing.MapGet("/evaluations/{evaluationId}/feedback", async (HttpContext http, string evaluationId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingFeedbackAsync(http.UserId(), evaluationId, ct)));
+        writing.MapGet("/revisions/{attemptId}", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingRevisionAsync(http.UserId(), attemptId, ct)));
+        writing.MapPost("/revisions/{attemptId}/submit", async (HttpContext http, string attemptId, RevisionSubmitRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.SubmitWritingRevisionAsync(http.UserId(), attemptId, request, ct)));
+        writing.MapGet("/content/{contentId}/model-answer", async (string contentId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingModelAnswerAsync(contentId, ct)));
+
+        var speaking = v1.MapGroup("/speaking");
+        speaking.MapGet("/home", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingHomeAsync(http.UserId(), ct)));
+        speaking.MapGet("/tasks", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingTasksAsync(ct)));
+        speaking.MapGet("/tasks/{contentId}", async (string contentId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingTaskAsync(contentId, ct)));
+        speaking.MapPost("/attempts", async (HttpContext http, CreateAttemptRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateSpeakingAttemptAsync(http.UserId(), request, ct)));
+        speaking.MapGet("/attempts/{attemptId}", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingAttemptAsync(http.UserId(), attemptId, ct)));
+        speaking.MapPost("/attempts/{attemptId}/audio/upload-session", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateSpeakingUploadSessionAsync(http.UserId(), attemptId, ct)));
+        speaking.MapPut("/upload-sessions/{uploadSessionId}/content", async (HttpContext http, string uploadSessionId, LearnerService service, CancellationToken ct) => Results.Ok(await service.UploadSpeakingAudioAsync(http.UserId(), uploadSessionId, http.Request.Body, http.Request.ContentType, ct)));
+        speaking.MapPost("/attempts/{attemptId}/audio/complete", async (HttpContext http, string attemptId, UploadCompleteRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CompleteSpeakingUploadAsync(http.UserId(), attemptId, request, ct)));
+        speaking.MapPatch("/attempts/{attemptId}/heartbeat", async (HttpContext http, string attemptId, HeartbeatRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.HeartbeatAttemptAsync(http.UserId(), attemptId, request, ct)));
+        speaking.MapPost("/attempts/{attemptId}/submit", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.SubmitSpeakingAttemptAsync(http.UserId(), attemptId, ct)));
+        speaking.MapGet("/attempts/{attemptId}/processing", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingProcessingAsync(http.UserId(), attemptId, ct)));
+        speaking.MapGet("/evaluations/{evaluationId}/summary", async (HttpContext http, string evaluationId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingEvaluationSummaryAsync(http.UserId(), evaluationId, ct)));
+        speaking.MapGet("/evaluations/{evaluationId}/review", async (HttpContext http, string evaluationId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingReviewAsync(http.UserId(), evaluationId, ct)));
+        speaking.MapPost("/device-checks", (DeviceCheckRequest request, LearnerService service) => Results.Ok(service.SaveDeviceCheck(request)));
+
+        var reading = v1.MapGroup("/reading");
+        reading.MapGet("/home", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReadingHomeAsync(ct)));
+        reading.MapGet("/tasks/{contentId}", async (string contentId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReadingTaskAsync(contentId, ct)));
+        reading.MapPost("/attempts", async (HttpContext http, CreateAttemptRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateReadingAttemptAsync(http.UserId(), request, ct)));
+        reading.MapGet("/attempts/{attemptId}", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReadingAttemptAsync(http.UserId(), attemptId, ct)));
+        reading.MapPatch("/attempts/{attemptId}/answers", async (HttpContext http, string attemptId, AnswersUpdateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.UpdateReadingAnswersAsync(http.UserId(), attemptId, request, ct)));
+        reading.MapPatch("/attempts/{attemptId}/heartbeat", async (HttpContext http, string attemptId, HeartbeatRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.HeartbeatAttemptAsync(http.UserId(), attemptId, request, ct)));
+        reading.MapPost("/attempts/{attemptId}/submit", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.SubmitReadingAttemptAsync(http.UserId(), attemptId, ct)));
+        reading.MapGet("/evaluations/{evaluationId}", async (HttpContext http, string evaluationId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReadingEvaluationAsync(http.UserId(), evaluationId, ct)));
+
+        var listening = v1.MapGroup("/listening");
+        listening.MapGet("/home", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetListeningHomeAsync(ct)));
+        listening.MapGet("/tasks/{contentId}", async (string contentId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetListeningTaskAsync(contentId, ct)));
+        listening.MapPost("/attempts", async (HttpContext http, CreateAttemptRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateListeningAttemptAsync(http.UserId(), request, ct)));
+        listening.MapGet("/attempts/{attemptId}", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetListeningAttemptAsync(http.UserId(), attemptId, ct)));
+        listening.MapPatch("/attempts/{attemptId}/answers", async (HttpContext http, string attemptId, AnswersUpdateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.UpdateListeningAnswersAsync(http.UserId(), attemptId, request, ct)));
+        listening.MapPatch("/attempts/{attemptId}/heartbeat", async (HttpContext http, string attemptId, HeartbeatRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.HeartbeatAttemptAsync(http.UserId(), attemptId, request, ct)));
+        listening.MapPost("/attempts/{attemptId}/submit", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.SubmitListeningAttemptAsync(http.UserId(), attemptId, ct)));
+        listening.MapGet("/evaluations/{evaluationId}", async (HttpContext http, string evaluationId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetListeningEvaluationAsync(http.UserId(), evaluationId, ct)));
+
+        v1.MapGet("/mocks", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetMocksAsync(http.UserId(), ct)));
+        v1.MapGet("/mocks/options", (LearnerService service, CancellationToken ct) => Results.Ok(service.GetMockOptionsAsync(ct)));
+        v1.MapPost("/mock-attempts", async (HttpContext http, MockAttemptCreateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateMockAttemptAsync(http.UserId(), request, ct)));
+        v1.MapGet("/mock-attempts/{mockAttemptId}", async (HttpContext http, string mockAttemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetMockAttemptAsync(http.UserId(), mockAttemptId, ct)));
+        v1.MapPost("/mock-attempts/{mockAttemptId}/submit", async (HttpContext http, string mockAttemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.SubmitMockAttemptAsync(http.UserId(), mockAttemptId, ct)));
+        v1.MapGet("/mock-reports/{reportId}", async (HttpContext http, string reportId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetMockReportAsync(http.UserId(), reportId, ct)));
+
+        var reviews = v1.MapGroup("/reviews");
+        reviews.MapGet("/", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReviewsAsync(http.UserId(), ct)));
+        reviews.MapGet("/eligibility", async (HttpContext http, [FromQuery] string? attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReviewEligibilityAsync(http.UserId(), attemptId, ct)));
+        reviews.MapPost("/requests", async (HttpContext http, ReviewRequestCreateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateReviewRequestAsync(http.UserId(), request, ct)));
+        reviews.MapGet("/requests/{reviewRequestId}", async (HttpContext http, string reviewRequestId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReviewRequestAsync(http.UserId(), reviewRequestId, ct)));
+
+        var billing = v1.MapGroup("/billing");
+        billing.MapGet("/summary", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingSummaryAsync(http.UserId(), ct)));
+        billing.MapGet("/invoices", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetInvoicesAsync(http.UserId(), ct)));
+        billing.MapGet("/review-options", (LearnerService service) => Results.Ok(service.GetReviewOptions()));
+        billing.MapGet("/extras", (LearnerService service) => Results.Ok(service.GetExtras()));
+        billing.MapPost("/checkout-sessions", async (HttpContext http, CheckoutSessionCreateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateCheckoutSessionAsync(http.UserId(), request, ct)));
+
+        return app;
+    }
+
+    private static string UserId(this HttpContext httpContext)
+        => httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+           ?? throw new InvalidOperationException("Authenticated user id is required.");
+}
