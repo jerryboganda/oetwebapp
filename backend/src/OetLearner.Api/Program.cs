@@ -172,6 +172,7 @@ else
 {
     authBuilder.AddJwtBearer(options =>
     {
+        options.MapInboundClaims = false;
         if (!string.IsNullOrWhiteSpace(authOptions.Authority))
         {
             options.Authority = authOptions.Authority;
