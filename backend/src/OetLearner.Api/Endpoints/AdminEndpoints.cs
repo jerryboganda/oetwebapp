@@ -137,9 +137,12 @@ public static class AdminEndpoints
     }
 
     private static string AdminId(this HttpContext httpContext)
-        => httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+        => httpContext.User.FindFirstValue("user_id")
+           ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
            ?? throw new InvalidOperationException("Authenticated admin id is required.");
 
     private static string AdminName(this HttpContext httpContext)
-        => httpContext.User.FindFirstValue(ClaimTypes.Name) ?? "Admin";
+        => httpContext.User.FindFirstValue(ClaimTypes.Name)
+           ?? httpContext.User.FindFirstValue("name")
+           ?? "Admin";
 }

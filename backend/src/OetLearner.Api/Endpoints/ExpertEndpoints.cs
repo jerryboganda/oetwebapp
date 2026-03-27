@@ -92,6 +92,7 @@ public static class ExpertEndpoints
     }
 
     private static string ExpertId(this HttpContext httpContext)
-        => httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+        => httpContext.User.FindFirstValue("user_id")
+           ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
            ?? throw new InvalidOperationException("Authenticated expert id is required.");
 }

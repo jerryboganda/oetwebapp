@@ -133,6 +133,7 @@ public static class LearnerEndpoints
     }
 
     private static string UserId(this HttpContext httpContext)
-        => httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+        => httpContext.User.FindFirstValue("user_id")
+           ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
            ?? throw new InvalidOperationException("Authenticated user id is required.");
 }
