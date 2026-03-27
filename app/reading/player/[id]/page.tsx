@@ -246,6 +246,8 @@ function ReadingPlayerContent() {
                       </span>
                       <button
                         onClick={toggleFlag}
+                        aria-pressed={!!flagged[currentQuestion.id]}
+                        aria-label={flagged[currentQuestion.id] ? 'Remove flag from this question' : 'Flag this question for review'}
                         className={`flex items-center gap-2 text-xs font-bold uppercase tracking-widest px-3 py-1.5 rounded-lg transition-colors ${
                           flagged[currentQuestion.id] ? 'bg-amber-50 text-amber-700' : 'bg-gray-50 text-muted hover:bg-gray-100'
                         }`}

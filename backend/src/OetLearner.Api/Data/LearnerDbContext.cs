@@ -59,6 +59,17 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<AnalyticsEventRecord>().HasIndex(x => new { x.UserId, x.EventName, x.OccurredAt });
         modelBuilder.Entity<IdempotencyRecord>().HasIndex(x => new { x.Scope, x.Key }).IsUnique();
 
+        // Learner lookup indexes (frequently queried by UserId)
+        modelBuilder.Entity<LearnerGoal>().HasIndex(x => x.UserId);
+        modelBuilder.Entity<LearnerSettings>().HasIndex(x => x.UserId);
+        modelBuilder.Entity<Subscription>().HasIndex(x => x.UserId);
+        modelBuilder.Entity<Wallet>().HasIndex(x => x.UserId);
+        modelBuilder.Entity<StudyPlan>().HasIndex(x => x.UserId);
+        modelBuilder.Entity<ReadinessSnapshot>().HasIndex(x => x.UserId);
+        modelBuilder.Entity<DiagnosticSession>().HasIndex(x => new { x.UserId, x.State });
+        modelBuilder.Entity<MockAttempt>().HasIndex(x => x.UserId);
+        modelBuilder.Entity<UploadSession>().HasIndex(x => x.AttemptId);
+
         // Expert indexes
         modelBuilder.Entity<ExpertReviewAssignment>().HasIndex(x => new { x.ReviewRequestId, x.ClaimState });
         modelBuilder.Entity<ExpertReviewAssignment>().HasIndex(x => x.AssignedReviewerId);

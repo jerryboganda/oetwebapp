@@ -6,13 +6,36 @@ namespace OetLearner.Api.Services;
 
 public static class SeedData
 {
-    public static async Task EnsureSeededAsync(LearnerDbContext db, CancellationToken cancellationToken = default)
+    public static async Task EnsureReferenceDataAsync(LearnerDbContext db, CancellationToken cancellationToken = default)
     {
         if (await db.Professions.AnyAsync(cancellationToken))
         {
             return;
         }
 
+        SeedReferenceData(db);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public static async Task EnsureDemoDataAsync(LearnerDbContext db, CancellationToken cancellationToken = default)
+    {
+        if (await db.Users.AnyAsync(x => x.Id == "mock-user-001", cancellationToken))
+        {
+            return;
+        }
+
+        SeedDemoUser(db);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private static void SeedDemoUser(LearnerDbContext db)
+    {
+        SeedDemoUserCore(db);
+        SeedDemoUserData(db);
+    }
+
+    private static void SeedDemoUserCore(LearnerDbContext db)
+    {
         var now = DateTimeOffset.UtcNow;
         var userId = "mock-user-001";
 
@@ -97,7 +120,10 @@ public static class SeedData
                 ["weekendFocus"] = true
             })
         });
+    }
 
+    private static void SeedReferenceData(LearnerDbContext db)
+    {
         db.Professions.AddRange(
             new ProfessionReference { Id = "nursing", Code = "nursing", Label = "Nursing", Status = "active", SortOrder = 1 },
             new ProfessionReference { Id = "medicine", Code = "medicine", Label = "Medicine", Status = "active", SortOrder = 2 },
@@ -282,6 +308,12 @@ public static class SeedData
                 })
             }
         );
+    }
+
+    private static void SeedDemoUserData(LearnerDbContext db)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var userId = "mock-user-001";
 
         db.StudyPlans.Add(new StudyPlan
         {
@@ -584,21 +616,50 @@ public static class SeedData
             new Invoice { Id = "inv-003", UserId = userId, IssuedAt = now.AddDays(-5), Amount = 49.99m, Currency = "AUD", Status = "Paid", Description = "Premium Monthly subscription" }
         );
 
-        db.ReviewRequests.Add(new ReviewRequest
-        {
-            Id = "review-001",
-            AttemptId = "wa-001",
-            SubtestCode = "writing",
-            State = ReviewRequestState.Completed,
-            TurnaroundOption = "standard",
-            FocusAreasJson = JsonSupport.Serialize(new[] { "conciseness", "genre" }),
-            LearnerNotes = "Please focus on conciseness and layout.",
-            PaymentSource = "credits",
-            PriceSnapshot = 1m,
-            CreatedAt = now.AddDays(-3),
-            CompletedAt = now.AddDays(-1),
-            EligibilitySnapshotJson = JsonSupport.Serialize(new { canRequestReview = true, reasonCodes = Array.Empty<string>() })
-        });
+        db.ReviewRequests.AddRange(
+            new ReviewRequest
+            {
+                Id = "review-001",
+                AttemptId = "wa-001",
+                SubtestCode = "writing",
+                State = ReviewRequestState.Completed,
+                TurnaroundOption = "standard",
+                FocusAreasJson = JsonSupport.Serialize(new[] { "conciseness", "genre" }),
+                LearnerNotes = "Please focus on conciseness and layout.",
+                PaymentSource = "credits",
+                PriceSnapshot = 1m,
+                CreatedAt = now.AddDays(-3),
+                CompletedAt = now.AddDays(-1),
+                EligibilitySnapshotJson = JsonSupport.Serialize(new { canRequestReview = true, reasonCodes = Array.Empty<string>() })
+            },
+            new ReviewRequest
+            {
+                Id = "review-queue-001",
+                AttemptId = "sa-001",
+                SubtestCode = "speaking",
+                State = ReviewRequestState.Queued,
+                TurnaroundOption = "express",
+                FocusAreasJson = JsonSupport.Serialize(new[] { "fluency" }),
+                LearnerNotes = "Please focus on flow and clarity.",
+                PaymentSource = "credits",
+                PriceSnapshot = 2m,
+                CreatedAt = now.AddHours(-8),
+                EligibilitySnapshotJson = JsonSupport.Serialize(new { canRequestReview = true, reasonCodes = Array.Empty<string>() })
+            },
+            new ReviewRequest
+            {
+                Id = "review-queue-002",
+                AttemptId = "wa-001",
+                SubtestCode = "writing",
+                State = ReviewRequestState.Queued,
+                TurnaroundOption = "standard",
+                FocusAreasJson = JsonSupport.Serialize(new[] { "content", "language" }),
+                LearnerNotes = "Please focus on clinical relevance and language control.",
+                PaymentSource = "credits",
+                PriceSnapshot = 1m,
+                CreatedAt = now.AddHours(-6),
+                EligibilitySnapshotJson = JsonSupport.Serialize(new { canRequestReview = true, reasonCodes = Array.Empty<string>() })
+            });
 
         db.MockAttempts.Add(new MockAttempt
         {
@@ -806,6 +867,5 @@ public static class SeedData
             new ContentRevision { Id = "rev-w01-2", ContentItemId = "writing-referral-01", RevisionNumber = 2, State = "published", ChangeNote = "Published after QA review", SnapshotJson = "{}", CreatedBy = "Admin", CreatedAt = now.AddDays(-28) }
         );
 
-        await db.SaveChangesAsync(cancellationToken);
     }
 }

@@ -6,6 +6,7 @@ import { Button } from '@/components/ui/button';
 import { Play, Pause, FastForward } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Select } from '@/components/ui/form-controls';
+import { fetchAuthorizedObjectUrl, isApiError } from '@/lib/api';
 
 interface AudioPlayerWaveformProps {
   audioUrl: string;
@@ -17,12 +18,53 @@ interface AudioPlayerWaveformProps {
 export function AudioPlayerWaveform({ audioUrl, onTimeUpdate, seekToTime, className }: AudioPlayerWaveformProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const waveSurferRef = useRef<WaveSurfer | null>(null);
+  const objectUrlRef = useRef<string | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [playbackRate, setPlaybackRate] = useState(1);
   const [isReady, setIsReady] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [resolvedAudioUrl, setResolvedAudioUrl] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!containerRef.current) return;
+    let cancelled = false;
+
+    const loadAudioUrl = async () => {
+      setIsReady(false);
+      setLoadError(null);
+
+      try {
+        const nextUrl = audioUrl.startsWith('blob:') ? audioUrl : await fetchAuthorizedObjectUrl(audioUrl);
+        if (cancelled) {
+          if (nextUrl.startsWith('blob:')) {
+            URL.revokeObjectURL(nextUrl);
+          }
+          return;
+        }
+
+        if (objectUrlRef.current && objectUrlRef.current.startsWith('blob:') && objectUrlRef.current !== nextUrl) {
+          URL.revokeObjectURL(objectUrlRef.current);
+        }
+
+        objectUrlRef.current = nextUrl;
+        setResolvedAudioUrl(nextUrl);
+      } catch (error) {
+        if (cancelled) return;
+        setLoadError(isApiError(error) ? error.userMessage : 'Audio could not be loaded. Please refresh the workspace and try again.');
+        setResolvedAudioUrl(null);
+      }
+    };
+
+    void loadAudioUrl();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [audioUrl]);
+
+  useEffect(() => {
+    if (!containerRef.current || !resolvedAudioUrl) return;
+    setIsReady(false);
+    setLoadError(null);
 
     const ws = WaveSurfer.create({
       container: containerRef.current,
@@ -38,10 +80,15 @@ export function AudioPlayerWaveform({ audioUrl, onTimeUpdate, seekToTime, classN
 
     waveSurferRef.current = ws;
 
-    ws.load(audioUrl);
+    ws.load(resolvedAudioUrl);
 
     ws.on('ready', () => {
       setIsReady(true);
+    });
+
+    ws.on('error', () => {
+      setLoadError('Audio could not be loaded. Please refresh the workspace and try again.');
+      setIsReady(false);
     });
 
     ws.on('play', () => setIsPlaying(true));
@@ -52,12 +99,17 @@ export function AudioPlayerWaveform({ audioUrl, onTimeUpdate, seekToTime, classN
 
     return () => {
       ws.destroy();
-      if (audioUrl.startsWith('blob:')) {
-        URL.revokeObjectURL(audioUrl);
-      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [audioUrl]);
+  }, [resolvedAudioUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (objectUrlRef.current?.startsWith('blob:')) {
+        URL.revokeObjectURL(objectUrlRef.current);
+      }
+    };
+  }, []);
 
   // Handle external seek request
   useEffect(() => {
@@ -85,6 +137,12 @@ export function AudioPlayerWaveform({ audioUrl, onTimeUpdate, seekToTime, classN
 
   return (
     <div className={cn('p-4 bg-white border border-gray-200 rounded-lg flex flex-col gap-3', className)} role="region" aria-label="Audio player">
+      {!isReady && !loadError && (
+        <p className="text-xs text-muted">Loading audio waveform...</p>
+      )}
+      {loadError && (
+        <p className="text-xs text-red-600" role="alert">{loadError}</p>
+      )}
       <div ref={containerRef} className="w-full" aria-hidden="true" />
       
       <div className="flex items-center justify-between">
@@ -112,6 +170,7 @@ export function AudioPlayerWaveform({ audioUrl, onTimeUpdate, seekToTime, classN
               { value: '2', label: '2x' },
             ]}
             className="h-8 py-1 text-xs min-w-[100px]"
+            disabled={!isReady}
           />
         </div>
       </div>

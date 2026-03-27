@@ -78,6 +78,7 @@ export default function Settings() {
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [comingSoonId, setComingSoonId] = useState<string | null>(null);
 
   // Track page view
   useEffect(() => {
@@ -124,17 +125,17 @@ export default function Settings() {
     }
   };
 
+  const IMPLEMENTED_SECTIONS = new Set(['goals', 'exam-date']);
+
   const handleOpen = (id: string) => {
-    if (id === 'goals' || id === 'exam-date') {
+    if (IMPLEMENTED_SECTIONS.has(id)) {
       router.push('/goals');
       return;
     }
 
-    if (id === 'profile') {
-      router.push('/goals');
-      return;
-    }
-
+    // Show "coming soon" indicator for unimplemented sections
+    setComingSoonId(id);
+    setTimeout(() => setComingSoonId(null), 2500);
     analytics.track('content_view', { page: 'settings', setting: id, action: 'open' });
   };
 
@@ -179,7 +180,14 @@ export default function Settings() {
                           <Icon className="w-5 h-5 text-gray-600" />
                         </div>
                         <div>
-                          <h3 className="text-base font-bold text-navy">{item.title}</h3>
+                          <div className="flex items-center gap-2">
+                            <h3 className="text-base font-bold text-navy">{item.title}</h3>
+                            {comingSoonId === item.id && (
+                              <span className="text-xs font-bold text-amber-600 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-full">
+                                Coming soon
+                              </span>
+                            )}
+                          </div>
                           <p className="text-xs sm:text-sm text-muted mt-0.5">{item.description}</p>
                         </div>
                       </div>

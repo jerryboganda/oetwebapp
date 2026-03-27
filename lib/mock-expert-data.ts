@@ -250,9 +250,11 @@ export const MOCK_CALIBRATION_NOTES: CalibrationNote[] = [
 
 export const MOCK_EXPERT_METRICS: ExpertMetrics = {
   totalReviewsCompleted: 452,
+  draftReviews: 3,
   averageSlaCompliance: 98.5,
   averageCalibrationAlignment: 94.0,
   reworkRate: 1.2,
+  averageTurnaroundHours: 16.8,
 };
 
 export const MOCK_EXPERT_COMPLETION_DATA: ExpertCompletionData[] = [

@@ -32,7 +32,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         var jobs = await db.BackgroundJobs
             .Where(x => x.State == AsyncState.Queued && x.AvailableAt <= now)
             .OrderBy(x => x.CreatedAt)
-            .Take(10)
+            .Take(50)
             .ToListAsync(cancellationToken);
 
         foreach (var job in jobs)
@@ -60,13 +60,28 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Job {JobId} failed", job.Id);
-                job.State = AsyncState.Failed;
-                job.StatusReasonCode = "processing_failed";
-                job.StatusMessage = ex.Message;
-                job.LastTransitionAt = DateTimeOffset.UtcNow;
+                logger.LogError(ex, "Job {JobId} of type {JobType} failed (attempt {Attempt})", job.Id, job.Type, job.RetryCount + 1);
                 job.RetryCount += 1;
-                job.RetryAfterMs = 5000;
+                job.LastTransitionAt = DateTimeOffset.UtcNow;
+
+                const int maxRetries = 3;
+                if (job.RetryCount < maxRetries)
+                {
+                    // Re-queue with exponential backoff
+                    var delayMs = (int)Math.Pow(2, job.RetryCount) * 5000;
+                    job.State = AsyncState.Queued;
+                    job.AvailableAt = DateTimeOffset.UtcNow.AddMilliseconds(delayMs);
+                    job.StatusReasonCode = "retrying";
+                    job.StatusMessage = $"Retry {job.RetryCount}/{maxRetries} after failure: {ex.Message}";
+                    job.RetryAfterMs = delayMs;
+                }
+                else
+                {
+                    job.State = AsyncState.Failed;
+                    job.StatusReasonCode = "processing_failed";
+                    job.StatusMessage = $"Failed after {maxRetries} attempts: {ex.Message}";
+                    job.RetryAfterMs = 0;
+                }
             }
 
             await db.SaveChangesAsync(cancellationToken);
@@ -304,8 +319,13 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
     {
         if (string.IsNullOrWhiteSpace(job.ResourceId)) return;
         var request = await db.ReviewRequests.FirstAsync(x => x.Id == job.ResourceId, cancellationToken);
-        request.State = ReviewRequestState.Completed;
-        request.CompletedAt = DateTimeOffset.UtcNow;
+        if (request.State != ReviewRequestState.Completed || request.CompletedAt is null)
+        {
+            job.StatusReasonCode = "review_completion_not_ready";
+            job.StatusMessage = "Review completion fan-out skipped because the review has not been completed by an expert yet.";
+            return;
+        }
+
         var attempt = await db.Attempts.FirstOrDefaultAsync(x => x.Id == request.AttemptId, cancellationToken);
         if (attempt is not null)
         {

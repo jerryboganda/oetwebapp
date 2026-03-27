@@ -1,4 +1,39 @@
+using Microsoft.AspNetCore.Mvc;
+
 namespace OetLearner.Api.Contracts;
+
+public sealed class ExpertQueueQueryRequest
+{
+    [FromQuery(Name = "search")]
+    public string? Search { get; init; }
+
+    [FromQuery(Name = "type")]
+    public string? Type { get; init; }
+
+    [FromQuery(Name = "profession")]
+    public string? Profession { get; init; }
+
+    [FromQuery(Name = "priority")]
+    public string? Priority { get; init; }
+
+    [FromQuery(Name = "status")]
+    public string? Status { get; init; }
+
+    [FromQuery(Name = "confidence")]
+    public string? Confidence { get; init; }
+
+    [FromQuery(Name = "assignment")]
+    public string? Assignment { get; init; }
+
+    [FromQuery(Name = "overdue")]
+    public bool? Overdue { get; init; }
+
+    [FromQuery(Name = "page")]
+    public int? Page { get; init; }
+
+    [FromQuery(Name = "pageSize")]
+    public int? PageSize { get; init; }
+}
 
 public record ExpertDraftSaveRequest(
     Dictionary<string, int> Scores,
@@ -11,7 +46,8 @@ public record ExpertDraftSaveRequest(
 public record ExpertReviewSubmitRequest(
     Dictionary<string, int> Scores,
     Dictionary<string, string> CriterionComments,
-    string FinalComment);
+    string FinalComment,
+    int? Version);
 
 public record ExpertReworkRequest(string Reason);
 

@@ -34,30 +34,34 @@ export function AsyncStateWrapper({
   partialMessage = 'Some data may be incomplete or still loading.',
   className,
 }: AsyncStateWrapperProps) {
-  switch (status) {
-    case 'loading':
-      return <>{loadingContent ?? <PageSkeleton className={className} />}</>;
+  const content = (() => {
+    switch (status) {
+      case 'loading':
+        return loadingContent ?? <PageSkeleton className={className} />;
 
-    case 'error':
-      return <ErrorState message={errorMessage} onRetry={onRetry} className={className} />;
+      case 'error':
+        return <ErrorState message={errorMessage} onRetry={onRetry} className={className} />;
 
-    case 'empty':
-      return <>{emptyContent ?? <div className="py-12 text-center text-sm text-muted">No data available.</div>}</>;
+      case 'empty':
+        return emptyContent ?? <div className="py-12 text-center text-sm text-muted">No data available.</div>;
 
-    case 'partial':
-      return (
-        <div className={className}>
-          <InlineAlert variant="warning" className="mb-4" dismissible>
-            {partialMessage}
-          </InlineAlert>
-          {children}
-        </div>
-      );
+      case 'partial':
+        return (
+          <div className={className}>
+            <InlineAlert variant="warning" className="mb-4" dismissible>
+              {partialMessage}
+            </InlineAlert>
+            {children}
+          </div>
+        );
 
-    case 'success':
-    default:
-      return <>{children}</>;
-  }
+      case 'success':
+      default:
+        return <>{children}</>;
+    }
+  })();
+
+  return <div aria-live="polite" aria-busy={status === 'loading'}>{content}</div>;
 }
 
 /* ─── Loading Page ─── */

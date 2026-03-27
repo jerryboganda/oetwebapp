@@ -6,179 +6,258 @@ import { DataTable, Column } from '@/components/ui/data-table';
 import { FilterBar, FilterGroup } from '@/components/ui/filter-bar';
 import { ConfidenceBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/form-controls';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { ReviewRequest } from '@/lib/types/expert';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { EmptyState } from '@/components/ui/empty-error';
-import { InlineAlert } from '@/components/ui/alert';
-import { fetchReviewQueue } from '@/lib/api';
+import { InlineAlert, Toast } from '@/components/ui/alert';
+import { claimReview, fetchReviewQueue, isApiError, releaseReview } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
-import { RefreshCw, Search, Inbox } from 'lucide-react';
+import { RefreshCw, Search, Inbox, Unlock } from 'lucide-react';
 
 type AsyncStatus = 'loading' | 'error' | 'empty' | 'success';
 
+const FILTER_KEYS = ['type', 'profession', 'priority', 'status', 'confidence', 'assignment', 'overdue'] as const;
+const PAGE_SIZE = 25;
+
+const FILTER_GROUPS: FilterGroup[] = [
+  { id: 'type', label: 'Sub-test', options: [{ id: 'writing', label: 'Writing' }, { id: 'speaking', label: 'Speaking' }] },
+  { id: 'profession', label: 'Profession', options: [{ id: 'medicine', label: 'Medicine' }, { id: 'nursing', label: 'Nursing' }, { id: 'dentistry', label: 'Dentistry' }, { id: 'pharmacy', label: 'Pharmacy' }, { id: 'physiotherapy', label: 'Physiotherapy' }] },
+  { id: 'priority', label: 'Priority', options: [{ id: 'high', label: 'High' }, { id: 'normal', label: 'Normal' }, { id: 'low', label: 'Low' }] },
+  { id: 'status', label: 'Status', options: [{ id: 'queued', label: 'Queued' }, { id: 'assigned', label: 'Assigned' }, { id: 'in_progress', label: 'In Progress' }] },
+  { id: 'confidence', label: 'AI Confidence', options: [{ id: 'high', label: 'High' }, { id: 'medium', label: 'Medium' }, { id: 'low', label: 'Low' }, { id: 'unknown', label: 'Unknown' }] },
+  { id: 'assignment', label: 'Assignment', options: [{ id: 'assigned', label: 'Assigned' }, { id: 'unassigned', label: 'Unassigned' }] },
+  { id: 'overdue', label: 'Overdue', options: [{ id: 'true', label: 'Only Overdue' }] },
+];
+
+function parseFilters(searchParams: URLSearchParams | null): Record<string, string[]> {
+  const initial: Record<string, string[]> = {};
+  FILTER_KEYS.forEach((key) => {
+    const value = searchParams?.get(key);
+    if (value) {
+      initial[key] = value.split(',').filter(Boolean);
+    }
+  });
+  return initial;
+}
+
 export default function ReviewQueuePage() {
   const router = useRouter();
+  const pathname = usePathname();
   const searchParams = useSearchParams();
+
   const [data, setData] = useState<ReviewRequest[]>([]);
   const [status, setStatus] = useState<AsyncStatus>('loading');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
+  const [searchQuery, setSearchQuery] = useState(() => searchParams?.get('search') ?? '');
+  const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>(() => parseFilters(searchParams));
   const [lastRefreshed, setLastRefreshed] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isRowActionPending, setIsRowActionPending] = useState<string | null>(null);
   const [showStaleWarning, setShowStaleWarning] = useState(false);
+  const [totalCount, setTotalCount] = useState(0);
+  const [page, setPage] = useState(() => Math.max(1, Number(searchParams?.get('page') ?? '1')));
 
-  // URL-persisted filters
-  const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>(() => {
-    const initial: Record<string, string[]> = {};
-    ['type', 'profession', 'priority', 'status', 'confidence', 'assignment'].forEach(key => {
-      const val = searchParams?.get(key);
-      if (val) initial[key] = val.split(',');
+  useEffect(() => {
+    setSelectedFilters(parseFilters(searchParams));
+    setSearchQuery(searchParams?.get('search') ?? '');
+    setPage(Math.max(1, Number(searchParams?.get('page') ?? '1')));
+  }, [searchParams]);
+
+  const updateUrl = useCallback((nextFilters: Record<string, string[]>, nextSearch: string, nextPage: number) => {
+    const params = new URLSearchParams();
+    Object.entries(nextFilters).forEach(([key, values]) => {
+      if (values.length > 0) {
+        params.set(key, values.join(','));
+      }
     });
-    return initial;
-  });
+    if (nextSearch.trim()) {
+      params.set('search', nextSearch.trim());
+    }
+    if (nextPage > 1) {
+      params.set('page', String(nextPage));
+    }
+    const query = params.toString();
+    router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+  }, [pathname, router]);
 
-  const filterGroups: FilterGroup[] = [
-    { id: 'type', label: 'Sub-test', options: [{ id: 'writing', label: 'Writing' }, { id: 'speaking', label: 'Speaking' }] },
-    { id: 'profession', label: 'Profession', options: [{ id: 'medicine', label: 'Medicine' }, { id: 'nursing', label: 'Nursing' }, { id: 'dentistry', label: 'Dentistry' }, { id: 'pharmacy', label: 'Pharmacy' }, { id: 'physiotherapy', label: 'Physiotherapy' }] },
-    { id: 'priority', label: 'Priority', options: [{ id: 'high', label: 'High' }, { id: 'normal', label: 'Normal' }, { id: 'low', label: 'Low' }] },
-    { id: 'status', label: 'Status', options: [{ id: 'queued', label: 'Queued' }, { id: 'assigned', label: 'Assigned' }, { id: 'overdue', label: 'Overdue' }, { id: 'in_progress', label: 'In Progress' }] },
-    { id: 'confidence', label: 'AI Confidence', options: [{ id: 'high', label: 'High' }, { id: 'medium', label: 'Medium' }, { id: 'low', label: 'Low' }] },
-    { id: 'assignment', label: 'Assignment', options: [{ id: 'assigned', label: 'Assigned' }, { id: 'unassigned', label: 'Unassigned' }] },
-  ];
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      updateUrl(selectedFilters, searchQuery, page);
+    }, 250);
+    return () => window.clearTimeout(timeout);
+  }, [page, searchQuery, selectedFilters, updateUrl]);
 
-  const loadQueue = useCallback(async () => {
+  const requestParams = useMemo(() => ({
+    search: searchQuery.trim() || undefined,
+    type: selectedFilters.type,
+    profession: selectedFilters.profession,
+    priority: selectedFilters.priority,
+    status: selectedFilters.status,
+    confidence: selectedFilters.confidence,
+    assignment: selectedFilters.assignment,
+    overdue: selectedFilters.overdue?.includes('true') || undefined,
+    page,
+    pageSize: PAGE_SIZE,
+  }), [page, searchQuery, selectedFilters]);
+
+  const loadQueue = useCallback(async (showLoadingState = true) => {
     try {
-      setStatus('loading');
+      if (showLoadingState) {
+        setStatus('loading');
+      }
       setErrorMsg(null);
-      const reviews = await fetchReviewQueue();
-      setData(reviews);
-      setStatus(reviews.length === 0 ? 'empty' : 'success');
-      setLastRefreshed(new Date().toLocaleTimeString());
+      const response = await fetchReviewQueue(requestParams);
+      setData(response.items);
+      setTotalCount(response.totalCount);
+      setStatus(response.items.length === 0 ? 'empty' : 'success');
+      setLastRefreshed(new Date(response.lastUpdatedAt).toLocaleTimeString());
       setShowStaleWarning(false);
-    } catch {
-      setErrorMsg('Failed to load review queue. Please try again.');
+    } catch (error) {
+      const message = isApiError(error) ? error.userMessage : 'Failed to load the review queue. Please try again.';
+      setErrorMsg(message);
       setStatus('error');
     }
-  }, []);
+  }, [requestParams]);
 
   useEffect(() => {
-    const initialLoad = setTimeout(() => { void loadQueue(); }, 0);
-    analytics.track('review_queue_viewed');
-    // Auto-refresh queue every 2 minutes (§6.1.4)
-    const interval = setInterval(() => { void loadQueue(); }, 2 * 60 * 1000);
-    return () => {
-      clearTimeout(initialLoad);
-      clearInterval(interval);
-    };
-  }, [loadQueue]);
+    void loadQueue();
+    analytics.track('review_queue_viewed', { search: requestParams.search ?? null });
+    const interval = window.setInterval(() => { void loadQueue(false); }, 2 * 60 * 1000);
+    return () => window.clearInterval(interval);
+  }, [loadQueue, requestParams.search]);
 
-  // Stale data warning after 5 minutes without successful refresh
   useEffect(() => {
-    const timer = setTimeout(() => setShowStaleWarning(true), 5 * 60 * 1000);
-    return () => clearTimeout(timer);
+    const timer = window.setTimeout(() => setShowStaleWarning(true), 5 * 60 * 1000);
+    return () => window.clearTimeout(timer);
   }, [lastRefreshed]);
 
   const handleRefresh = async () => {
     setIsRefreshing(true);
-    await loadQueue();
+    await loadQueue(false);
     setIsRefreshing(false);
   };
 
   const handleFilterChange = (groupId: string, optionId: string) => {
-    setSelectedFilters(prev => {
-      const current = prev[groupId] || [];
-      const updated = current.includes(optionId) ? current.filter(id => id !== optionId) : [...current, optionId];
-      const next = { ...prev, [groupId]: updated };
-      // Update URL
-      const params = new URLSearchParams();
-      Object.entries(next).forEach(([k, v]) => { if (v.length) params.set(k, v.join(',')); });
-      window.history.replaceState(null, '', `?${params.toString()}`);
-      return next;
+    setPage(1);
+    setSelectedFilters((current) => {
+      const currentValues = current[groupId] ?? [];
+      const nextValues = currentValues.includes(optionId)
+        ? currentValues.filter((value) => value !== optionId)
+        : [...currentValues, optionId];
+      return { ...current, [groupId]: nextValues };
     });
   };
 
   const clearFilters = () => {
     setSelectedFilters({});
-    window.history.replaceState(null, '', window.location.pathname);
+    setSearchQuery('');
+    setPage(1);
   };
 
-  // Apply filters + search + default sort (SLA ascending, priority descending)
-  const filteredData = useMemo(() => {
-    let result = [...data];
-
-    // Apply filters
-    Object.entries(selectedFilters).forEach(([groupId, values]) => {
-      if (!values.length) return;
-      if (groupId === 'confidence') {
-        result = result.filter(r => values.includes(r.aiConfidence));
-      } else if (groupId === 'assignment') {
-        result = result.filter(r => {
-          if (values.includes('assigned') && values.includes('unassigned')) return true;
-          if (values.includes('assigned')) return !!r.assignedReviewerId;
-          return !r.assignedReviewerId;
-        });
-      } else {
-        result = result.filter(r => values.includes(String(r[groupId as keyof ReviewRequest])));
+  const openReview = useCallback(async (review: ReviewRequest) => {
+    const route = `/expert/review/${review.type}/${review.id}`;
+    try {
+      setIsRowActionPending(review.id);
+      if (review.availableActions?.canClaim) {
+        await claimReview(review.id);
       }
-    });
-
-    // Search by review ID or learner name
-    if (searchQuery.trim()) {
-      const q = searchQuery.toLowerCase();
-      result = result.filter(r => r.id.toLowerCase().includes(q) || r.learnerName.toLowerCase().includes(q));
+      router.push(route);
+    } catch (error) {
+      const message = isApiError(error) ? error.userMessage : 'Unable to open this review right now.';
+      setToast({ variant: 'error', message });
+      await loadQueue(false);
+    } finally {
+      setIsRowActionPending(null);
     }
+  }, [loadQueue, router]);
 
-    // Default sort: SLA ascending, then priority descending
-    const priorityOrder: Record<string, number> = { high: 0, normal: 1, low: 2 };
-    result.sort((a, b) => {
-      const slaA = new Date(a.slaDue).getTime();
-      const slaB = new Date(b.slaDue).getTime();
-      if (slaA !== slaB) return slaA - slaB;
-      return (priorityOrder[a.priority] ?? 1) - (priorityOrder[b.priority] ?? 1);
-    });
+  const handleRelease = useCallback(async (review: ReviewRequest) => {
+    try {
+      setIsRowActionPending(review.id);
+      await releaseReview(review.id);
+      setToast({ variant: 'success', message: `Released ${review.id} back to the queue.` });
+      await loadQueue(false);
+    } catch (error) {
+      const message = isApiError(error) ? error.userMessage : 'Unable to release this review right now.';
+      setToast({ variant: 'error', message });
+    } finally {
+      setIsRowActionPending(null);
+    }
+  }, [loadQueue]);
 
-    return result;
-  }, [data, selectedFilters, searchQuery]);
+  const hasActiveFilters = Object.values(selectedFilters).some((values) => values.length > 0) || !!searchQuery.trim();
 
   const columns: Column<ReviewRequest>[] = [
     { key: 'id', header: 'Review ID', render: (row) => <span className="font-mono text-xs">{row.id}</span> },
     { key: 'learner', header: 'Learner', render: (row) => (
-      <button className="font-medium text-primary hover:underline text-left" onClick={(e) => { e.stopPropagation(); router.push(`/expert/learners/${row.learnerId}`); }} aria-label={`View profile for ${row.learnerName}`}>
+      <button className="font-medium text-primary hover:underline text-left" onClick={(event) => { event.stopPropagation(); router.push(`/expert/learners/${row.learnerId}`); }} aria-label={`View profile for ${row.learnerName}`}>
         {row.learnerName}
       </button>
     )},
     { key: 'profession', header: 'Profession', render: (row) => <span className="capitalize">{row.profession.replace('_', ' ')}</span> },
     { key: 'type', header: 'Sub-test', render: (row) => <span className="capitalize">{row.type}</span> },
-    { key: 'aiConfidence', header: 'AI Confidence', render: (row) => row.aiConfidence === 'unknown' ? <span className="text-muted text-xs">N/A</span> : <ConfidenceBadge level={row.aiConfidence} /> },
+    { key: 'aiConfidence', header: 'AI Confidence', render: (row) => row.aiConfidence === 'unknown' ? <span className="text-muted text-xs">Unknown</span> : <ConfidenceBadge level={row.aiConfidence} /> },
     { key: 'priority', header: 'Priority', render: (row) => <span className={row.priority === 'high' ? 'text-error font-semibold capitalize' : 'capitalize'}>{row.priority}</span> },
-    { key: 'slaDue', header: 'SLA Due', render: (row) => {
-      const date = new Date(row.slaDue);
-      const now = Date.now();
-      const isOverdue = date.getTime() < now;
-      const isUrgent = !isOverdue && date.getTime() - now < 3600000;
-      const formatted = `${date.toISOString().split('T')[0]} ${date.toISOString().split('T')[1].slice(0, 5)}`;
-      return <span className={isOverdue ? 'text-error font-bold' : isUrgent ? 'text-amber-600 font-semibold' : ''}>{formatted} UTC</span>;
-    }},
-    { key: 'assignedReviewer', header: 'Assigned Reviewer', render: (row) => (
-      <span className={row.assignedReviewerName ? 'text-navy' : 'text-muted italic'}>{row.assignedReviewerName ?? 'Unassigned'}</span>
-    )},
-    { key: 'status', header: 'Status', render: (row) => {
-      const v = row.status === 'overdue' ? 'danger' : row.status === 'queued' ? 'muted' : row.status === 'assigned' ? 'info' : 'default';
-      return <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full ${v === 'danger' ? 'bg-red-100 text-red-800' : v === 'info' ? 'bg-blue-100 text-blue-800' : v === 'muted' ? 'bg-gray-100 text-gray-600' : 'bg-gray-100 text-gray-800'}`}>{row.status.replace('_', ' ')}</span>;
-    }},
-    { key: 'actions', header: 'Action', render: (row) => (
-      <Button size="sm" onClick={() => router.push(`/expert/review/${row.type}/${row.id}`)} aria-label={`Review ${row.id}`}>Review</Button>
-    )},
+    {
+      key: 'slaDue',
+      header: 'SLA Due',
+      render: (row) => {
+        const date = new Date(row.slaDue);
+        const formatted = `${date.toISOString().split('T')[0]} ${date.toISOString().split('T')[1].slice(0, 5)}`;
+        return <span className={row.isOverdue ? 'text-error font-bold' : row.slaState === 'at_risk' ? 'text-amber-600 font-semibold' : ''}>{formatted} UTC</span>;
+      },
+    },
+    { key: 'assignedReviewer', header: 'Assigned Reviewer', render: (row) => <span className={row.assignedReviewerName ? 'text-navy' : 'text-muted italic'}>{row.assignedReviewerName ?? 'Unassigned'}</span> },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (row) => {
+        const variant = row.status === 'overdue' ? 'bg-red-100 text-red-800' : row.status === 'assigned' ? 'bg-blue-100 text-blue-800' : row.status === 'in_progress' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-700';
+        return <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full ${variant}`}>{row.status.replace('_', ' ')}</span>;
+      },
+    },
+    {
+      key: 'actions',
+      header: 'Action',
+      render: (row) => {
+        const pending = isRowActionPending === row.id;
+        return (
+          <div className="flex items-center gap-2">
+            <Button
+              size="sm"
+              onClick={(event) => { event.stopPropagation(); void openReview(row); }}
+              disabled={pending || !(row.availableActions?.canOpen || row.availableActions?.canClaim)}
+              aria-label={row.availableActions?.canClaim ? `Claim and review ${row.id}` : `Open ${row.id}`}
+            >
+              {pending ? 'Working…' : row.availableActions?.canClaim ? 'Claim & Review' : 'Open'}
+            </Button>
+            {row.availableActions?.canRelease && (
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={(event) => { event.stopPropagation(); void handleRelease(row); }}
+                disabled={pending}
+                aria-label={`Release ${row.id}`}
+              >
+                <Unlock className="w-4 h-4 mr-1" /> Release
+              </Button>
+            )}
+          </div>
+        );
+      },
+    },
   ];
 
   return (
     <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-6" role="main" aria-label="Review Queue">
+      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
+
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
           <h1 className="text-2xl font-bold text-navy tracking-tight">Review Queue</h1>
-          <p className="text-sm text-muted mt-1">Manage and prioritise pending learner submissions.</p>
+          <p className="text-sm text-muted mt-1">Manage and prioritise pending learner submissions. {totalCount > 0 ? `${totalCount} review${totalCount === 1 ? '' : 's'} available.` : 'No active reviews loaded.'}</p>
         </div>
         <div className="flex items-center gap-3">
           {lastRefreshed && <span className="text-xs text-muted">Last updated: {lastRefreshed}</span>}
@@ -188,8 +267,14 @@ export default function ReviewQueuePage() {
         </div>
       </div>
 
+      <InlineAlert variant="info" title="Ownership" action={<span className="text-xs">Claim a shared review before entering the workspace.</span>}>
+        Shared queue items remain locked to the reviewer who claims them first. Release a claimed review if you are handing it back.
+      </InlineAlert>
+
       {showStaleWarning && status === 'success' && (
-        <InlineAlert variant="warning" dismissible>Queue data may be outdated. Click Refresh to load the latest reviews.</InlineAlert>
+        <InlineAlert variant="warning" dismissible>
+          Queue data may be outdated. Refresh the queue before claiming time-sensitive work.
+        </InlineAlert>
       )}
 
       <div className="bg-surface p-4 rounded-xl border border-gray-200/60 shadow-sm space-y-3">
@@ -197,28 +282,32 @@ export default function ReviewQueuePage() {
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
           <input
             type="text"
-            placeholder="Search by Review ID or Learner Name…"
+            placeholder="Search by Review ID or Learner Name..."
             value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
+            onChange={(event) => { setSearchQuery(event.target.value); setPage(1); }}
             className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white"
             aria-label="Search reviews"
           />
         </div>
-        <FilterBar groups={filterGroups} selected={selectedFilters} onChange={handleFilterChange} onClear={clearFilters} />
+        <FilterBar groups={FILTER_GROUPS} selected={selectedFilters} onChange={handleFilterChange} onClear={clearFilters} />
       </div>
 
       <AsyncStateWrapper
         status={status}
-        onRetry={loadQueue}
+        onRetry={() => void loadQueue()}
         errorMessage={errorMsg ?? undefined}
         emptyContent={
-          <EmptyState icon={<Inbox className="w-12 h-12 text-muted" />} title="No reviews in queue" description="New reviews will appear when learners request expert feedback." />
+          <EmptyState
+            icon={<Inbox className="w-12 h-12 text-muted" />}
+            title={hasActiveFilters ? 'No reviews match the current filters' : 'No reviews in queue'}
+            description={hasActiveFilters ? 'Try clearing some filters or broadening your search.' : 'New reviews will appear here when learner requests are ready for expert handling.'}
+          />
         }
       >
         <Card padding="none" className="overflow-hidden">
           <CardContent className="p-0">
             <DataTable
-              data={filteredData}
+              data={data}
               columns={columns}
               keyExtractor={(item) => item.id}
               emptyMessage="No reviews match the current filters."
@@ -226,6 +315,19 @@ export default function ReviewQueuePage() {
             />
           </CardContent>
         </Card>
+        {totalCount > PAGE_SIZE && (
+          <div className="flex items-center justify-between gap-3 text-sm text-muted">
+            <span>Page {page} of {Math.max(1, Math.ceil(totalCount / PAGE_SIZE))}</span>
+            <div className="flex items-center gap-2">
+              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+                Previous
+              </Button>
+              <Button variant="outline" size="sm" disabled={page >= Math.ceil(totalCount / PAGE_SIZE)} onClick={() => setPage((current) => current + 1)}>
+                Next
+              </Button>
+            </div>
+          </div>
+        )}
       </AsyncStateWrapper>
     </div>
   );

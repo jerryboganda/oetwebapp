@@ -12,7 +12,7 @@ import { EmptyState } from '@/components/ui/empty-error';
 import { Toast } from '@/components/ui/alert';
 import type { CalibrationCase, CalibrationNote } from '@/lib/types/expert';
 import { CheckCircle, AlertTriangle, Inbox, Clock, MessageSquare, Settings, X } from 'lucide-react';
-import { fetchCalibrationCases, fetchCalibrationNotes, submitCalibrationCase } from '@/lib/api';
+import { fetchCalibrationCases, fetchCalibrationNotes, isApiError, submitCalibrationCase } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
 type AsyncStatus = 'loading' | 'error' | 'empty' | 'success';
@@ -33,16 +33,19 @@ export default function CalibrationCenterPage() {
   const [calibrationNotes, setCalibrationNotes] = useState('');
   const [isSubmittingCalibration, setIsSubmittingCalibration] = useState(false);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     try {
       setPageStatus('loading');
+      setErrorMessage(null);
       const [data, notesData] = await Promise.all([fetchCalibrationCases(), fetchCalibrationNotes()]);
       setCases(data);
       setNotes(notesData);
       setPageStatus(data.length === 0 ? 'empty' : 'success');
       analytics.track('calibration_viewed', { count: data.length });
-    } catch {
+    } catch (error) {
+      setErrorMessage(isApiError(error) ? error.userMessage : 'Unable to load calibration data right now.');
       setPageStatus('error');
     }
   }, []);
@@ -73,8 +76,8 @@ export default function CalibrationCenterPage() {
       setToast({ variant: 'success', message: 'Calibration case submitted!' });
       setActiveCase(null);
       void loadData();
-    } catch {
-      setToast({ variant: 'error', message: 'Failed to submit calibration. Please try again.' });
+    } catch (error) {
+      setToast({ variant: 'error', message: isApiError(error) ? error.userMessage : 'Failed to submit calibration. Please try again.' });
     } finally {
       setIsSubmittingCalibration(false);
     }
@@ -155,6 +158,7 @@ export default function CalibrationCenterPage() {
       <AsyncStateWrapper
         status={pageStatus}
         onRetry={() => void loadData()}
+        errorMessage={errorMessage ?? undefined}
         emptyContent={<EmptyState icon={<Inbox className="w-12 h-12 text-muted" />} title="No Calibration Cases" description="There are no calibration cases available at the moment." />}
       >
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">

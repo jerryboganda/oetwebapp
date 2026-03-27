@@ -2,7 +2,7 @@
 
 import { cn } from '@/lib/utils';
 import { AlertCircle, CheckCircle2, Info, AlertTriangle, X } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 
 /* ─── Inline Alert ─── */
 type AlertVariant = 'info' | 'success' | 'warning' | 'error';
@@ -35,7 +35,7 @@ export function InlineAlert({ variant = 'info', title, children, dismissible, cl
       role="alert"
       className={cn('flex items-start gap-3 px-4 py-3 rounded border', config.bgClass, config.borderClass, className)}
     >
-      <Icon className={cn('w-5 h-5 shrink-0 mt-0.5', config.textClass)} />
+      <Icon className={cn('w-5 h-5 shrink-0 mt-0.5', config.textClass)} aria-hidden="true" />
       <div className="flex-1 min-w-0">
         {title && <p className={cn('font-semibold text-sm', config.textClass)}>{title}</p>}
         <div className={cn('text-sm', config.textClass, title && 'mt-0.5')}>{children}</div>
@@ -58,17 +58,23 @@ interface ToastProps {
   className?: string;
 }
 
-export function Toast({ variant = 'info', message, onClose, className }: ToastProps) {
+export function Toast({ variant = 'info', message, onClose, className, duration = 5000 }: ToastProps & { duration?: number }) {
   const config = alertConfig[variant];
   const Icon = config.icon;
 
+  useEffect(() => {
+    if (!onClose || duration <= 0) return;
+    const timer = setTimeout(onClose, duration);
+    return () => clearTimeout(timer);
+  }, [onClose, duration]);
+
   return (
-    <div className={cn('fixed bottom-6 right-6 z-[100] flex items-center gap-3 px-5 py-3 rounded-lg shadow-lg border', config.bgClass, config.borderClass, className)}>
-      <Icon className={cn('w-5 h-5', config.textClass)} />
+    <div role="status" aria-live="polite" className={cn('fixed bottom-6 right-6 z-[100] flex items-center gap-3 px-5 py-3 rounded-lg shadow-lg border animate-in slide-in-from-bottom-4 fade-in duration-300', config.bgClass, config.borderClass, className)}>
+      <Icon className={cn('w-5 h-5', config.textClass)} aria-hidden="true" />
       <span className={cn('text-sm font-medium', config.textClass)}>{message}</span>
       {onClose && (
         <button onClick={onClose} className={cn('p-0.5 rounded', config.textClass, 'hover:opacity-70')} aria-label="Dismiss">
-          <X className="w-4 h-4" />
+          <X className="w-4 h-4" aria-hidden="true" />
         </button>
       )}
     </div>

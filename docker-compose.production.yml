@@ -35,8 +35,6 @@ services:
       Auth__Issuer: ${AUTH_ISSUER:-}
       Auth__SigningKey: ${AUTH_SIGNING_KEY:-}
       Auth__RequireHttpsMetadata: ${AUTH_REQUIRE_HTTPS_METADATA:-true}
-      Auth__UseDevelopmentAuth: ${AUTH_USE_DEVELOPMENT_AUTH:-false}
-      Auth__AllowDevelopmentAuthInProduction: ${AUTH_ALLOW_DEVELOPMENT_AUTH_IN_PRODUCTION:-false}
       Platform__PublicApiBaseUrl: ${PUBLIC_API_BASE_URL}
       Platform__FallbackEmailDomain: ${FALLBACK_EMAIL_DOMAIN:-example.invalid}
       Billing__CheckoutBaseUrl: ${CHECKOUT_BASE_URL}
@@ -63,7 +61,6 @@ services:
       args:
         NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
         APP_URL: ${APP_URL}
-        NEXT_PUBLIC_ENABLE_MOCK_AUTH: ${NEXT_PUBLIC_ENABLE_MOCK_AUTH:-false}
     container_name: oet-web
     restart: unless-stopped
     depends_on:
@@ -75,7 +72,6 @@ services:
       HOSTNAME: 0.0.0.0
       NEXT_PUBLIC_API_BASE_URL: ${NEXT_PUBLIC_API_BASE_URL}
       APP_URL: ${APP_URL}
-      NEXT_PUBLIC_ENABLE_MOCK_AUTH: ${NEXT_PUBLIC_ENABLE_MOCK_AUTH:-false}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
     expose:
       - "3000"

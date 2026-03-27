@@ -33,10 +33,12 @@ import type {
 import type {
   CalibrationCase,
   CalibrationNote,
+  ExpertMe,
   ExpertMetrics,
   ExpertSchedule,
   LearnerProfileExpanded,
   ReviewDraft,
+  ReviewQueueResponse,
   ReviewRequest as ExpertReviewRequest,
   SpeakingReviewDetail,
   WritingReviewDetail,
@@ -62,6 +64,9 @@ function toSubTest(code: string): SubTest {
     case 'listening':
       return 'Listening';
     default:
+      if (process.env.NODE_ENV === 'development') {
+        console.warn('[API] Unknown subtest code:', code, '— defaulting to Writing');
+      }
       return 'Writing';
   }
 }
@@ -164,7 +169,12 @@ function getMockAuthHeaders(path: string): HeadersInit | undefined {
     return undefined;
   }
 
-  const useMockAuth = ENABLE_MOCK_AUTH || (process.env.NODE_ENV === 'development' && !isFirebaseConfigured);
+  // Only allow mock auth in development - never in production
+  if (process.env.NODE_ENV !== 'development') {
+    return undefined;
+  }
+
+  const useMockAuth = ENABLE_MOCK_AUTH || !isFirebaseConfigured;
   if (!useMockAuth) {
     return undefined;
   }
@@ -189,16 +199,12 @@ function getMockAuthHeaders(path: string): HeadersInit | undefined {
     };
   }
 
-  if (normalizedPath.startsWith('/v1/learner/')) {
-    return {
-      'X-Debug-UserId': 'mock-user-001',
-      'X-Debug-Role': 'learner',
-      'X-Debug-Email': 'learner@oet-prep.dev',
-      'X-Debug-Name': 'Faisal Maqsood',
-    };
-  }
-
-  return undefined;
+  return {
+    'X-Debug-UserId': 'mock-user-001',
+    'X-Debug-Role': 'learner',
+    'X-Debug-Email': 'learner@oet-prep.dev',
+    'X-Debug-Name': 'Faisal Maqsood',
+  };
 }
 
 async function getHeaders(path: string, extra?: HeadersInit, options?: { json?: boolean }): Promise<HeadersInit> {
@@ -216,36 +222,118 @@ async function getHeaders(path: string, extra?: HeadersInit, options?: { json?: 
     const token = auth?.currentUser ? await auth.currentUser.getIdToken() : null;
     if (token) {
       headers.set('Authorization', `Bearer ${token}`);
+    } else if (process.env.NODE_ENV !== 'development' && !debugHeaders) {
+      console.error('[API] No auth token available for production request to', path);
     }
-  } catch {
-    // Mock-auth deployments and local development both work without a token.
+  } catch (err) {
+    if (process.env.NODE_ENV !== 'development') {
+      console.error('[API] Failed to retrieve auth token:', err);
+    }
   }
 
   return headers;
 }
 
+/** Typed API error with status, error code, retryable flag, and user-friendly message. */
+export class ApiError extends Error {
+  status: number;
+  code: string;
+  retryable: boolean;
+  userMessage: string;
+  fieldErrors: Array<{ field: string; code: string; message: string }>;
+
+  constructor(status: number, code: string, message: string, retryable: boolean, fieldErrors: Array<{ field: string; code: string; message: string }> = []) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    this.code = code;
+    this.retryable = retryable;
+    this.fieldErrors = fieldErrors;
+    this.userMessage = mapErrorCodeToUserMessage(code, message);
+  }
+}
+
+export function isApiError(error: unknown): error is ApiError {
+  return error instanceof ApiError;
+}
+
+function mapErrorCodeToUserMessage(code: string, fallback: string): string {
+  switch (code) {
+    case 'draft_version_conflict': return 'Your draft was updated in another tab. Please refresh and try again.';
+    case 'idempotency_duplicate': return 'This action was already completed.';
+    case 'not_found': return 'The requested resource was not found.';
+    case 'forbidden': return 'You do not have permission to perform this action.';
+    case 'validation_error': return 'Please check your input and try again.';
+    case 'rate_limited': return 'Too many requests. Please wait a moment and try again.';
+    case 'internal_server_error': return 'Something went wrong. Please try again later.';
+    default: return fallback;
+  }
+}
+
+const MAX_RETRIES = 2;
+const RETRY_DELAYS = [1000, 3000];
+
+function isRetryable(status: number): boolean {
+  return status >= 500 || status === 408 || status === 429;
+}
+
 async function apiRequest<T = any>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(resolveApiUrl(path), {
-    ...init,
-    headers: await getHeaders(path, init?.headers),
-  });
+  let lastError: Error | null = null;
 
-  if (!response.ok) {
-    let message = `Request failed: ${response.status}`;
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const error = await response.json();
-      message = error.message ?? error.title ?? message;
-    } catch {
-      // noop
+      const response = await fetch(resolveApiUrl(path), {
+        ...init,
+        headers: await getHeaders(path, init?.headers),
+      });
+
+      if (!response.ok) {
+        let code = 'unknown_error';
+        let message = `Request failed: ${response.status}`;
+        let retryable = false;
+        let fieldErrors: Array<{ field: string; code: string; message: string }> = [];
+        try {
+          const error = await response.json();
+          code = error.code ?? code;
+          message = error.message ?? error.title ?? message;
+          retryable = error.retryable ?? isRetryable(response.status);
+          fieldErrors = Array.isArray(error.fieldErrors) ? error.fieldErrors : [];
+        } catch {
+          retryable = isRetryable(response.status);
+        }
+
+        const apiError = new ApiError(response.status, code, message, retryable, fieldErrors);
+
+        // Retry on 5xx/408/429, but not on 4xx client errors
+        if (retryable && attempt < MAX_RETRIES) {
+          lastError = apiError;
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
+          continue;
+        }
+
+        throw apiError;
+      }
+
+      if (response.status === 204) {
+        return undefined as T;
+      }
+
+      return response.json() as Promise<T>;
+    } catch (err) {
+      if (err instanceof ApiError) {
+        throw err;
+      }
+      // Network errors (TypeError from fetch) are retryable
+      lastError = err instanceof Error ? err : new Error(String(err));
+      if (attempt < MAX_RETRIES) {
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
+        continue;
+      }
+      throw new ApiError(0, 'network_error', 'Unable to connect to the server. Please check your internet connection.', true);
     }
-    throw new Error(message);
   }
 
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return response.json() as Promise<T>;
+  throw lastError ?? new Error('Request failed');
 }
 
 async function uploadBinary(pathOrUrl: string, blob: Blob): Promise<void> {
@@ -267,7 +355,7 @@ async function uploadBinary(pathOrUrl: string, blob: Blob): Promise<void> {
   }
 }
 
-async function fetchAuthorizedObjectUrl(pathOrUrl: string): Promise<string> {
+export async function fetchAuthorizedObjectUrl(pathOrUrl: string): Promise<string> {
   const response = await fetch(resolveApiUrl(pathOrUrl), {
     headers: await getHeaders(pathOrUrl, undefined, { json: false }),
   });
@@ -1226,11 +1314,38 @@ export async function fetchDiagnosticResults(): Promise<DiagnosticResult[]> {
 
 // ─── Expert Console API ───
 
-export async function fetchReviewQueue(): Promise<ExpertReviewRequest[]> {
-  return apiRequest<ExpertReviewRequest[]>('/v1/expert/queue');
+export async function fetchExpertMe(): Promise<ExpertMe> {
+  return apiRequest<ExpertMe>('/v1/expert/me');
 }
 
-export async function fetchExpertMetrics(days?: number): Promise<{ metrics: ExpertMetrics; completionData: { day: string; count: number }[] }> {
+export async function fetchReviewQueue(params?: {
+  search?: string;
+  type?: string[];
+  profession?: string[];
+  priority?: string[];
+  status?: string[];
+  confidence?: string[];
+  assignment?: string[];
+  overdue?: boolean;
+  page?: number;
+  pageSize?: number;
+}): Promise<ReviewQueueResponse> {
+  const queryParams = new URLSearchParams();
+  if (params?.search?.trim()) queryParams.set('search', params.search.trim());
+  if (params?.type?.length) queryParams.set('type', params.type.join(','));
+  if (params?.profession?.length) queryParams.set('profession', params.profession.join(','));
+  if (params?.priority?.length) queryParams.set('priority', params.priority.join(','));
+  if (params?.status?.length) queryParams.set('status', params.status.join(','));
+  if (params?.confidence?.length) queryParams.set('confidence', params.confidence.join(','));
+  if (params?.assignment?.length) queryParams.set('assignment', params.assignment.join(','));
+  if (params?.overdue) queryParams.set('overdue', 'true');
+  if (params?.page) queryParams.set('page', String(params.page));
+  if (params?.pageSize) queryParams.set('pageSize', String(params.pageSize));
+  const query = queryParams.toString();
+  return apiRequest<ReviewQueueResponse>(`/v1/expert/queue${query ? `?${query}` : ''}`);
+}
+
+export async function fetchExpertMetrics(days?: number): Promise<{ metrics: ExpertMetrics; completionData: { day: string; count: number }[]; days: number; generatedAt: string }> {
   const query = days ? `?days=${days}` : '';
   return apiRequest(`/v1/expert/metrics${query}`);
 }
@@ -1263,37 +1378,52 @@ export async function fetchWritingReviewDetail(reviewRequestId: string): Promise
 }
 
 export async function fetchSpeakingReviewDetail(reviewRequestId: string): Promise<SpeakingReviewDetail> {
-  const detail = await apiRequest<SpeakingReviewDetail>(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/speaking`);
-  if (!detail.audioUrl) {
-    return detail;
-  }
-
-  return {
-    ...detail,
-    audioUrl: await fetchAuthorizedObjectUrl(detail.audioUrl),
-  };
+  return apiRequest<SpeakingReviewDetail>(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/speaking`);
 }
 
 export async function saveDraftReview(draft: ReviewDraft): Promise<ReviewDraft> {
-  return apiRequest<ReviewDraft>(`/v1/expert/reviews/${encodeURIComponent(draft.reviewRequestId)}/draft`, {
+  const comments = Array.isArray(draft.comments) ? draft.comments : [];
+  const hasTimestampComments = comments.some((comment) => 'timestampStart' in comment);
+  const response = await apiRequest<{
+    version: number;
+    state: string;
+    scores: Record<string, number>;
+    criterionComments: Record<string, string>;
+    finalComment: string;
+    anchoredComments: ReviewDraft['comments'];
+    timestampComments: ReviewDraft['comments'];
+    savedAt: string;
+  }>(`/v1/expert/reviews/${encodeURIComponent(draft.reviewRequestId)}/draft`, {
     method: 'PUT',
     body: JSON.stringify({
       scores: draft.scores,
       criterionComments: draft.criterionComments,
       finalComment: draft.finalComment,
-      anchoredComments: Array.isArray(draft.comments) ? draft.comments : undefined,
+      anchoredComments: hasTimestampComments ? undefined : comments,
+      timestampComments: hasTimestampComments ? comments : undefined,
+      version: draft.version,
     }),
   });
+
+  return {
+    reviewRequestId: draft.reviewRequestId,
+    scores: response.scores,
+    criterionComments: response.criterionComments,
+    finalComment: response.finalComment,
+    comments: hasTimestampComments ? response.timestampComments : response.anchoredComments,
+    savedAt: response.savedAt,
+    version: response.version,
+  };
 }
 
-export async function submitExpertWritingReview(reviewRequestId: string, payload: { scores: Record<string, number>; criterionComments: Record<string, string>; finalComment: string; }): Promise<{ success: boolean; reviewRequestId: string }> {
+export async function submitExpertWritingReview(reviewRequestId: string, payload: { scores: Record<string, number>; criterionComments: Record<string, string>; finalComment: string; version?: number; }): Promise<{ success: boolean; reviewRequestId: string }> {
   return apiRequest(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/writing/submit`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
-export async function submitExpertSpeakingReview(reviewRequestId: string, payload: { scores: Record<string, number>; criterionComments: Record<string, string>; finalComment: string; }): Promise<{ success: boolean; reviewRequestId: string }> {
+export async function submitExpertSpeakingReview(reviewRequestId: string, payload: { scores: Record<string, number>; criterionComments: Record<string, string>; finalComment: string; version?: number; }): Promise<{ success: boolean; reviewRequestId: string }> {
   return apiRequest(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/speaking/submit`, {
     method: 'POST',
     body: JSON.stringify(payload),

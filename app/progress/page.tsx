@@ -24,6 +24,7 @@ import {
   Clock
 } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import { fetchTrendData, fetchCompletionData, fetchSubmissionVolume } from '@/lib/api';
 import type { TrendPoint } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
@@ -42,17 +43,24 @@ export default function ProgressDashboard() {
 
   useEffect(() => {
     analytics.track('progress_viewed');
-    Promise.all([
+    Promise.allSettled([
       fetchTrendData(),
       fetchCompletionData(),
       fetchSubmissionVolume(),
-    ]).then(([trend, completion, volume]) => {
-      setTrendData(trend);
-      setCompletionData(completion as CompletionPoint[]);
-      setVolumeData(volume as VolumePoint[]);
-      setLoading(false);
-    }).catch(() => {
-      setError('Failed to load progress data. Please try again.');
+    ]).then((results) => {
+      const [trendResult, completionResult, volumeResult] = results;
+      if (trendResult.status === 'fulfilled') setTrendData(trendResult.value);
+      if (completionResult.status === 'fulfilled') setCompletionData(completionResult.value as CompletionPoint[]);
+      if (volumeResult.status === 'fulfilled') setVolumeData(volumeResult.value as VolumePoint[]);
+
+      const anyFailed = results.some(r => r.status === 'rejected');
+      const allFailed = results.every(r => r.status === 'rejected');
+
+      if (allFailed) {
+        setError('Failed to load progress data. Please try again.');
+      } else if (anyFailed) {
+        setError('Some progress data could not be loaded.');
+      }
       setLoading(false);
     });
   }, []);
@@ -68,7 +76,7 @@ export default function ProgressDashboard() {
         {loading && (
           <div className="space-y-6">
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-64 rounded-[32px] bg-gray-100 animate-pulse" />
+              <Skeleton key={i} className="h-64 rounded-2xl" />
             ))}
           </div>
         )}

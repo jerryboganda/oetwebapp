@@ -14,6 +14,7 @@ import {
   CheckCircle2
 } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
+import { Skeleton } from '@/components/ui/skeleton';
 import { fetchBilling } from '@/lib/api';
 import type { BillingData } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
@@ -42,7 +43,7 @@ export default function Billing() {
       <AppShell pageTitle="Billing" backHref="/">
         <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
           {[1, 2, 3].map(i => (
-            <div key={i} className="h-32 rounded-[32px] bg-gray-100 animate-pulse" />
+            <Skeleton key={i} className="h-32 rounded-2xl" />
           ))}
         </div>
       </AppShell>
@@ -89,10 +90,20 @@ export default function Billing() {
             </div>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-gray-100">
-            <button className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-navy text-white text-sm font-bold rounded-xl hover:bg-navy/90 transition-colors">
+            <button
+              disabled
+              title="Plan changes are coming soon"
+              aria-label="Upgrade Plan (coming soon)"
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-navy text-white text-sm font-bold rounded-xl opacity-50 cursor-not-allowed"
+            >
               <ArrowUpCircle className="w-4 h-4" /> Upgrade Plan
             </button>
-            <button className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white border border-gray-200 text-navy text-sm font-bold rounded-xl hover:bg-background-light transition-colors">
+            <button
+              disabled
+              title="Plan changes are coming soon"
+              aria-label="Downgrade Plan (coming soon)"
+              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white border border-gray-200 text-navy text-sm font-bold rounded-xl opacity-50 cursor-not-allowed"
+            >
               <ArrowDownCircle className="w-4 h-4" /> Downgrade Plan
             </button>
           </div>
@@ -118,7 +129,12 @@ export default function Billing() {
                 </div>
               </div>
             </div>
-            <button className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-white border border-indigo-200 text-indigo-700 text-sm font-bold rounded-xl hover:bg-indigo-50 transition-colors shadow-sm">
+            <button
+              disabled
+              title="Credit purchases coming soon"
+              aria-label="Purchase Extra Credits (coming soon)"
+              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-white border border-indigo-200 text-indigo-700 text-sm font-bold rounded-xl opacity-50 cursor-not-allowed shadow-sm"
+            >
               <PlusCircle className="w-4 h-4" /> Purchase Extras
             </button>
           </div>

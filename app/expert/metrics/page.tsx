@@ -1,13 +1,13 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect } from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select } from '@/components/ui/form-controls';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import type { ExpertMetrics, ExpertCompletionData } from '@/lib/types/expert';
 import { CheckCircle, Clock, AlertTriangle, TrendingUp } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { fetchExpertMetrics } from '@/lib/api';
+import { fetchExpertMetrics, isApiError } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
 type AsyncStatus = 'loading' | 'error' | 'success';
@@ -17,23 +17,31 @@ export default function PerformanceMetricsPage() {
   const [completionData, setCompletionData] = useState<ExpertCompletionData[]>([]);
   const [pageStatus, setPageStatus] = useState<AsyncStatus>('loading');
   const [dateRange, setDateRange] = useState('7');
-
-  const loadMetrics = useCallback(async (days: number) => {
-    try {
-      setPageStatus('loading');
-      const data = await fetchExpertMetrics(days);
-      setMetrics(data.metrics);
-      setCompletionData(data.completionData);
-      setPageStatus('success');
-      analytics.track('expert_metrics_viewed', { days });
-    } catch {
-      setPageStatus('error');
-    }
-  }, []);
+  const [retryKey, setRetryKey] = useState(0);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    void loadMetrics(parseInt(dateRange));
-  }, [dateRange, loadMetrics]);
+    let cancelled = false;
+    async function load() {
+      try {
+        setPageStatus('loading');
+        setErrorMessage(null);
+        const data = await fetchExpertMetrics(parseInt(dateRange));
+        if (cancelled) return;
+        setMetrics(data.metrics);
+        setCompletionData(data.completionData);
+        setPageStatus('success');
+        analytics.track('expert_metrics_viewed', { days: parseInt(dateRange) });
+      } catch (error) {
+        if (!cancelled) {
+          setErrorMessage(isApiError(error) ? error.userMessage : 'Unable to load performance metrics right now.');
+          setPageStatus('error');
+        }
+      }
+    }
+    void load();
+    return () => { cancelled = true; };
+  }, [dateRange, retryKey]);
 
   const dateRangeOptions = [
     { value: '7', label: 'Last 7 Days' },
@@ -58,9 +66,9 @@ export default function PerformanceMetricsPage() {
         </div>
       </div>
 
-      <AsyncStateWrapper status={pageStatus} onRetry={() => void loadMetrics(parseInt(dateRange))}>
+      <AsyncStateWrapper status={pageStatus} onRetry={() => setRetryKey((k) => k + 1)} errorMessage={errorMessage ?? undefined}>
         {/* KPI Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-4">
           <Card>
             <CardContent className="p-4 flex items-center justify-between">
               <div>
@@ -74,10 +82,30 @@ export default function PerformanceMetricsPage() {
           <Card>
             <CardContent className="p-4 flex items-center justify-between">
               <div>
+                <p className="text-sm text-muted font-semibold">Draft Reviews</p>
+                <p className="text-2xl font-bold text-navy mt-1">{metrics?.draftReviews ?? '-'}</p>
+              </div>
+              <Clock className="w-8 h-8 text-blue-100" />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
                 <p className="text-sm text-muted font-semibold">SLA Compliance</p>
                 <p className="text-2xl font-bold text-emerald-600 mt-1">{metrics?.averageSlaCompliance ?? '-'}%</p>
               </div>
               <Clock className="w-8 h-8 text-emerald-100" />
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardContent className="p-4 flex items-center justify-between">
+              <div>
+                <p className="text-sm text-muted font-semibold">Avg Turnaround</p>
+                <p className="text-2xl font-bold text-navy mt-1">{metrics?.averageTurnaroundHours ?? '-'}h</p>
+              </div>
+              <Clock className="w-8 h-8 text-gray-100" />
             </CardContent>
           </Card>
 

@@ -82,6 +82,9 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
         var reviewRequestId = reviewJson.RootElement.GetProperty("reviewRequestId").GetString()!;
 
         using var expert = CreateExpertClient("expert-audio-reviewer");
+        var claimResponse = await expert.PostAsync($"/v1/expert/queue/{reviewRequestId}/claim", content: null);
+        claimResponse.EnsureSuccessStatusCode();
+
         var audioResponse = await expert.GetAsync($"/v1/expert/reviews/{reviewRequestId}/speaking/audio");
         audioResponse.EnsureSuccessStatusCode();
         Assert.Equal("audio/webm", audioResponse.Content.Headers.ContentType?.MediaType);

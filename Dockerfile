@@ -13,11 +13,9 @@ COPY . .
 
 ARG NEXT_PUBLIC_API_BASE_URL
 ARG APP_URL
-ARG NEXT_PUBLIC_ENABLE_MOCK_AUTH
 
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
 ENV APP_URL=${APP_URL}
-ENV NEXT_PUBLIC_ENABLE_MOCK_AUTH=${NEXT_PUBLIC_ENABLE_MOCK_AUTH}
 ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN --mount=type=cache,target=/app/.next/cache npm run build
@@ -39,7 +37,7 @@ COPY --from=builder /app/.next/static ./.next/static
 EXPOSE 3000
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=5 \
-  CMD wget -qO- http://127.0.0.1:3000/ >/dev/null || exit 1
+  CMD wget -qO- http://127.0.0.1:3000/api/health >/dev/null || exit 1
 
 USER nextjs
 

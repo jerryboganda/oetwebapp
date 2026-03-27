@@ -133,9 +133,9 @@ function TranscriptReviewContent() {
   return (
     <AppShell pageTitle={data.title} distractionFree>
 
-      <div className="flex-1 flex overflow-hidden">
+      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden">
         {/* Left: Transcript Pane */}
-        <main className="flex-1 flex flex-col bg-white border-r border-gray-200 overflow-hidden">
+        <main className="flex-1 flex flex-col bg-white lg:border-r border-gray-200 overflow-hidden">
           {/* Transcript Toolbar */}
           <div className="px-6 py-3 border-b border-gray-100 flex items-center justify-between bg-gray-50/50">
             <div className="flex items-center gap-4">
@@ -225,7 +225,7 @@ function TranscriptReviewContent() {
         </main>
 
         {/* Right: Insights & Waveform Pane */}
-        <aside className="w-96 bg-gray-50 border-l border-gray-200 flex flex-col shrink-0">
+        <aside className="w-full lg:w-96 bg-gray-50 border-t lg:border-t-0 lg:border-l border-gray-200 flex flex-col shrink-0">
           {/* Waveform / Audio Control */}
           <div className="p-6 bg-white border-b border-gray-200">
             <div className="flex items-center justify-between mb-6">

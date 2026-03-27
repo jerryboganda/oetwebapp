@@ -52,11 +52,17 @@ export function Accordion({ items, allowMultiple = false, className }: Accordion
                 className={cn('w-4 h-4 text-muted transition-transform', isOpen && 'rotate-180')}
               />
             </button>
-            {isOpen && (
-              <div id={`accordion-panel-${item.id}`} role="region" aria-labelledby={`accordion-button-${item.id}`} className="px-5 pb-4 text-sm text-navy/80">
+            <div
+              id={`accordion-panel-${item.id}`}
+              role="region"
+              aria-labelledby={`accordion-button-${item.id}`}
+              className="overflow-hidden transition-all duration-200 ease-in-out"
+              style={{ maxHeight: isOpen ? '2000px' : '0px', opacity: isOpen ? 1 : 0 }}
+            >
+              <div className="px-5 pb-4 text-sm text-navy/80">
                 {item.content}
               </div>
-            )}
+            </div>
           </div>
         );
       })}

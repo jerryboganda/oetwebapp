@@ -5,7 +5,6 @@ import { NavItem } from '@/components/layout/sidebar';
 import { Inbox, CheckCircle, BarChart3, CalendarClock, Users, Lock } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useExpertAuth } from '@/lib/hooks/use-expert-auth';
-import { useEffect } from 'react';
 
 const expertNavItems: NavItem[] = [
   { href: '/expert/queue', label: 'Review Queue', icon: <Inbox className="w-5 h-5" />, matchPrefix: '/expert/queue' },
@@ -17,7 +16,7 @@ const expertNavItems: NavItem[] = [
 
 export default function ExpertLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { role, isAuthenticated, isLoading } = useExpertAuth();
+  const { role, isAuthenticated, isLoading, expert, error } = useExpertAuth();
   
   // Hide nav for specific review workspaces
   const isReviewWorkspace = pathname?.includes('/expert/review/') ?? false;
@@ -38,16 +37,19 @@ export default function ExpertLayout({ children }: { children: React.ReactNode }
   // Basic RBAC Simulation - Render nothing if not an expert (the hook handles redirecting, but this acts as an extra visual guard)
   if (!isAuthenticated || role !== 'expert') {
     return (
-      <div className="flex h-screen w-full items-center justify-center bg-gray-50 text-red-600 font-sans">
-        <p>Access Denied. You do not have permission to view this console.</p>
-        <div className="hidden">{children}</div>
+      <div className="flex h-screen w-full items-center justify-center bg-gray-50 font-sans px-6 text-center">
+        <div className="space-y-2">
+          <p className="text-red-600 font-semibold">Access Denied</p>
+          <p className="text-sm text-gray-600">{error?.userMessage ?? 'You do not have permission to view this console.'}</p>
+          <div className="hidden">{children}</div>
+        </div>
       </div>
     );
   }
 
   if (isReviewWorkspace) {
     return (
-      <AppShell distractionFree pageTitle="Review Workspace">
+      <AppShell distractionFree pageTitle="Review Workspace" navItems={expertNavItems} userSummary={{ displayName: expert?.displayName, email: expert?.email }}>
         {children}
       </AppShell>
     );
@@ -57,6 +59,7 @@ export default function ExpertLayout({ children }: { children: React.ReactNode }
     <AppShell 
       navItems={expertNavItems} 
       mobileNavItems={expertNavItems} 
+      userSummary={{ displayName: expert?.displayName, email: expert?.email }}
     >
       {children}
     </AppShell>

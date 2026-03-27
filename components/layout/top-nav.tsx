@@ -4,24 +4,28 @@ import { cn } from '@/lib/utils';
 import { BriefcaseMedical, Bell, Menu, X } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
-import { mainNavItems, type NavItem } from './sidebar';
+import { mainNavItems, type NavItem, type ShellUserSummary } from './sidebar';
 import { usePathname } from 'next/navigation';
 
 interface TopNavProps {
   pageTitle?: string;
   className?: string;
   actions?: React.ReactNode;
+  items?: NavItem[];
+  userSummary?: ShellUserSummary;
 }
 
-export function TopNav({ pageTitle, className, actions }: TopNavProps) {
+export function TopNav({ pageTitle, className, actions, items = mainNavItems, userSummary }: TopNavProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pathname = usePathname();
+  const displayName = userSummary?.displayName?.trim() || 'User';
+  const initials = displayName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
 
   return (
     <>
       <header
         className={cn(
-          'h-16 bg-surface border-b border-gray-200 flex items-center justify-between px-4 lg:px-6 shrink-0 sticky top-0 z-30 shadow-sm',
+          'h-16 bg-surface border-b border-border flex items-center justify-between px-4 lg:px-6 shrink-0 sticky top-0 z-30 shadow-sm',
           className,
         )}
       >
@@ -31,14 +35,16 @@ export function TopNav({ pageTitle, className, actions }: TopNavProps) {
             className="lg:hidden p-2 text-muted hover:text-navy transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
             aria-label={mobileMenuOpen ? 'Close menu' : 'Open menu'}
+            aria-expanded={mobileMenuOpen}
+            aria-controls="mobile-menu"
           >
-            {mobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            {mobileMenuOpen ? <X className="w-5 h-5" aria-hidden="true" /> : <Menu className="w-5 h-5" aria-hidden="true" />}
           </button>
 
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 text-navy">
             <div className="w-8 h-8 flex items-center justify-center bg-primary text-white rounded">
-              <BriefcaseMedical className="w-5 h-5" />
+              <BriefcaseMedical className="w-5 h-5" aria-hidden="true" />
             </div>
             <h1 className="text-lg font-bold tracking-tight hidden sm:block">OET Prep</h1>
           </Link>
@@ -57,11 +63,12 @@ export function TopNav({ pageTitle, className, actions }: TopNavProps) {
           <button
             className="p-2 text-muted hover:text-navy transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
             aria-label="Notifications"
+            type="button"
           >
-            <Bell className="w-5 h-5" />
+            <Bell className="w-5 h-5" aria-hidden="true" />
           </button>
           <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
-            FM
+            {initials}
           </div>
         </div>
       </header>
@@ -69,10 +76,10 @@ export function TopNav({ pageTitle, className, actions }: TopNavProps) {
       {/* Mobile slide-out menu */}
       {mobileMenuOpen && (
         <div className="lg:hidden fixed inset-0 z-40" role="dialog" aria-modal="true">
-          <div className="fixed inset-0 bg-black/40" onClick={() => setMobileMenuOpen(false)} />
-          <nav className="fixed top-16 left-0 bottom-0 w-64 bg-surface shadow-xl overflow-y-auto" aria-label="Mobile menu">
+          <div className="fixed inset-0 bg-black/40" onClick={() => setMobileMenuOpen(false)} aria-hidden="true" />
+          <nav id="mobile-menu" className="fixed top-16 left-0 bottom-0 w-64 bg-surface shadow-xl overflow-y-auto animate-in slide-in-from-left duration-200" aria-label="Mobile menu">
             <ul className="flex flex-col gap-0.5 p-3">
-              {mainNavItems.map((item) => {
+              {items.map((item) => {
                 const active = item.href === '/' ? pathname === '/' : pathname?.startsWith(item.matchPrefix ?? item.href) ?? false;
                 return (
                   <li key={item.href}>

@@ -15,15 +15,19 @@ const paddingStyles: Record<string, string> = {
 };
 
 export const Card = forwardRef<HTMLDivElement, CardProps>(
-  ({ className, hoverable, padding = 'md', children, ...props }, ref) => (
+  ({ className, hoverable, padding = 'md', children, onClick, ...props }, ref) => (
     <div
       ref={ref}
       className={cn(
-        'bg-surface border border-gray-200/60 rounded-xl shadow-sm',
+        'bg-surface border border-border rounded-2xl shadow-sm',
         paddingStyles[padding],
-        hoverable && 'hover:shadow-md hover:border-gray-300 transition-all duration-200 cursor-pointer',
+        hoverable && 'hover:shadow-clinical hover:border-border-hover transition-all duration-200 cursor-pointer',
         className,
       )}
+      role={hoverable && onClick ? 'button' : undefined}
+      tabIndex={hoverable && onClick ? 0 : undefined}
+      onKeyDown={hoverable && onClick ? (e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onClick(e as unknown as React.MouseEvent<HTMLDivElement>); } } : undefined}
+      onClick={onClick}
       {...props}
     >
       {children}

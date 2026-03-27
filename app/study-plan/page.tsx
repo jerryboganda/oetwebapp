@@ -65,7 +65,7 @@ export default function StudyPlanPage() {
       const data = await fetchStudyPlan();
       setTasks(data);
     } catch (e: any) {
-      setError(e.message);
+      setError(e.userMessage ?? e.message ?? 'Failed to load study plan.');
     } finally {
       setLoading(false);
     }
@@ -76,14 +76,25 @@ export default function StudyPlanPage() {
   }, [loadData]);
 
   const handleMarkComplete = async (id: string) => {
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: 'completed' } : t)));
-    await updateStudyPlanTask(id, { status: 'completed' });
-    track('plan_item_completed');
+    const prev = tasks.find(t => t.id === id);
+    setTasks((all) => all.map((t) => (t.id === id ? { ...t, status: 'completed' } : t)));
+    try {
+      await updateStudyPlanTask(id, { status: 'completed' });
+      track('plan_item_completed');
+    } catch {
+      // Rollback on failure
+      if (prev) setTasks((all) => all.map((t) => (t.id === id ? { ...t, status: prev.status } : t)));
+    }
   };
 
   const handleUndo = async (id: string) => {
-    setTasks((prev) => prev.map((t) => (t.id === id ? { ...t, status: 'not_started' } : t)));
-    await updateStudyPlanTask(id, { status: 'not_started' });
+    const prev = tasks.find(t => t.id === id);
+    setTasks((all) => all.map((t) => (t.id === id ? { ...t, status: 'not_started' } : t)));
+    try {
+      await updateStudyPlanTask(id, { status: 'not_started' });
+    } catch {
+      if (prev) setTasks((all) => all.map((t) => (t.id === id ? { ...t, status: prev.status } : t)));
+    }
   };
 
   const handleReschedule = (id: string) => {

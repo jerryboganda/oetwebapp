@@ -60,22 +60,45 @@ const TRACKED_EVENTS = [
 
 export type AnalyticsEvent = typeof TRACKED_EVENTS[number];
 
+type AnalyticsProvider = (event: string, properties?: EventProperties) => void;
+
+const MAX_BUFFER_SIZE = 1000;
+
 class AnalyticsService {
   private enabled = true;
+  private provider: AnalyticsProvider | null = null;
+  private buffer: Array<{ event: AnalyticsEvent; properties: EventProperties }> = [];
+
+  setProvider(provider: AnalyticsProvider) {
+    this.provider = provider;
+    // Flush buffered events
+    for (const entry of this.buffer) {
+      provider(entry.event, entry.properties);
+    }
+    this.buffer = [];
+  }
 
   track(event: AnalyticsEvent, properties?: EventProperties) {
     if (!this.enabled) return;
 
-    const enriched = {
+    const enriched: EventProperties = {
       ...properties,
       timestamp: new Date().toISOString(),
       deviceType: typeof window !== 'undefined' && window.innerWidth < 768 ? 'mobile' : 'desktop',
     };
 
+    if (this.provider) {
+      this.provider(event, enriched);
+    } else {
+      // Buffer events until a provider is set
+      if (this.buffer.length < MAX_BUFFER_SIZE) {
+        this.buffer.push({ event, properties: enriched });
+      }
+    }
+
     if (process.env.NODE_ENV === 'development') {
       console.log(`[Analytics] ${event}`, enriched);
     }
-    // In production, send to analytics provider here
   }
 
   identify(userId: string, traits?: EventProperties) {

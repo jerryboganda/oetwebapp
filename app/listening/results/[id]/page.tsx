@@ -91,7 +91,12 @@ function ListeningResultsContent() {
           className="bg-surface rounded-[32px] border border-gray-200 p-8 sm:p-10 text-center shadow-sm flex flex-col items-center"
         >
           <div className="relative w-32 h-32 mb-6">
-            <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+            <svg
+              className="w-full h-full transform -rotate-90"
+              viewBox="0 0 100 100"
+              role="img"
+              aria-label={`Score ${result.score} out of ${result.total}, ${percentage}%`}
+            >
               <circle cx="50" cy="50" r="40" fill="transparent" stroke="#f3f4f6" strokeWidth="8" />
               <circle
                 cx="50" cy="50" r="40" fill="transparent"

@@ -18,6 +18,8 @@ import {
   Search
 } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
+import { Skeleton } from '@/components/ui/skeleton';
+import { InlineAlert } from '@/components/ui/alert';
 import { fetchReadiness } from '@/lib/api';
 import type { ReadinessData } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
@@ -43,7 +45,9 @@ export default function ReadinessCenter() {
   if (error) {
     return (
       <AppShell pageTitle="Readiness Center" backHref="/">
-        <div className="max-w-5xl mx-auto px-4 py-24 text-center text-muted">{error}</div>
+        <div className="max-w-5xl mx-auto px-4 py-8">
+          <InlineAlert variant="error">{error}</InlineAlert>
+        </div>
       </AppShell>
     );
   }
@@ -53,7 +57,7 @@ export default function ReadinessCenter() {
       <AppShell pageTitle="Readiness Center" backHref="/">
         <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
           {[1, 2, 3].map(i => (
-            <div key={i} className="h-40 rounded-[32px] bg-gray-100 animate-pulse" />
+            <Skeleton key={i} className="h-40 rounded-2xl" />
           ))}
         </div>
       </AppShell>

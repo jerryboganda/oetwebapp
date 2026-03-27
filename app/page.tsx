@@ -65,7 +65,7 @@ export default function Dashboard() {
       setProfile(p);
       track('readiness_viewed');
     } catch (e: any) {
-      setError(e.message);
+      setError(e.userMessage ?? e.message ?? 'Something went wrong. Please try again.');
     } finally {
       setLoading(false);
     }

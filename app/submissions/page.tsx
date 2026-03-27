@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import {
   FileText,
@@ -15,6 +16,8 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-error';
 import { fetchSubmissions } from '@/lib/api';
 import type { Submission, SubTest, ReviewStatus } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
@@ -48,6 +51,7 @@ function ReviewBadge({ status }: { status: ReviewStatus }) {
 }
 
 export default function SubmissionHistory() {
+  const router = useRouter();
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -70,7 +74,7 @@ export default function SubmissionHistory() {
         {loading && (
           <div className="space-y-4">
             {[1, 2, 3].map(i => (
-              <div key={i} className="h-36 rounded-[24px] bg-gray-100 animate-pulse" />
+              <Skeleton key={i} className="h-36 rounded-2xl" />
             ))}
           </div>
         )}
@@ -80,7 +84,7 @@ export default function SubmissionHistory() {
         )}
 
         {!loading && !error && submissions.length === 0 && (
-          <div className="text-center text-muted py-24">No submissions yet.</div>
+          <EmptyState title="No submissions yet" description="Complete a writing or speaking task to see your history here." action={{ label: 'Start a writing task', onClick: () => router.push('/writing') }} className="py-24" />
         )}
 
         {!loading && !error && submissions.length > 0 && (
@@ -123,11 +127,21 @@ export default function SubmissionHistory() {
                   </div>
 
                   <div className="flex flex-col gap-2 md:w-48 shrink-0 border-t md:border-t-0 md:border-l border-gray-100 pt-5 md:pt-0 md:pl-6 justify-center">
-                    <button className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-navy text-sm font-bold rounded-xl hover:bg-background-light transition-colors">
+                    <button
+                      disabled
+                      title="Coming soon"
+                      aria-label="Reopen Feedback (coming soon)"
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-navy text-sm font-bold rounded-xl opacity-50 cursor-not-allowed"
+                    >
                       <MessageSquare className="w-4 h-4" />
                       Reopen Feedback
                     </button>
-                    <button className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-navy text-sm font-bold rounded-xl hover:bg-background-light transition-colors">
+                    <button
+                      disabled
+                      title="Coming soon"
+                      aria-label="Compare Attempts (coming soon)"
+                      className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-navy text-sm font-bold rounded-xl opacity-50 cursor-not-allowed"
+                    >
                       <GitCompare className="w-4 h-4" />
                       Compare Attempts
                     </button>

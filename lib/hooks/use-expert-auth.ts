@@ -1,55 +1,74 @@
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { ApiError, fetchExpertMe, isApiError } from '@/lib/api';
+import type { ExpertMe } from '@/lib/types/expert';
 
 export interface UserRole {
   role: 'learner' | 'expert' | 'admin';
   isAuthenticated: boolean;
 }
 
-// MOCK AUTHENTICATION HOOK
-// TODO: Replace with actual Firebase Auth / NextAuth implementation later
+interface ExpertAuthState extends UserRole {
+  expert: ExpertMe | null;
+  error: ApiError | null;
+}
+
 export function useExpertAuth() {
   const router = useRouter();
-  const [authState, setAuthState] = useState<UserRole>({
-    role: 'expert', // Defaulting to 'expert' for development, switch to 'learner' to test the protection
-    isAuthenticated: true,
+  const [authState, setAuthState] = useState<ExpertAuthState>({
+    role: 'learner',
+    isAuthenticated: false,
+    expert: null,
+    error: null,
   });
   const [isLoading, setIsLoading] = useState(true);
 
   useEffect(() => {
-    // Simulate an API call to verify session and role
+    let cancelled = false;
+
     const verifyAuth = async () => {
       setIsLoading(true);
-      
-      // Simulate network delay
-      await new Promise(resolve => setTimeout(resolve, 500));
-      
-      // We are artificially forcing the role here. 
-      // In production, this data comes from your JWT or Firebase user claims.
-      const currentRole = 'expert'; 
-      
-      setAuthState({
-        role: currentRole,
-        isAuthenticated: true,
-      });
-      setIsLoading(false);
+      try {
+        const expert = await fetchExpertMe();
+        if (cancelled) return;
+        setAuthState({
+          role: 'expert',
+          isAuthenticated: true,
+          expert,
+          error: null,
+        });
+      } catch (error) {
+        if (cancelled) return;
+
+        const apiError = isApiError(error)
+          ? error
+          : new ApiError(0, 'expert_auth_failed', 'Unable to verify expert access.', false);
+
+        setAuthState({
+          role: 'learner',
+          isAuthenticated: false,
+          expert: null,
+          error: apiError,
+        });
+
+        if (apiError.status === 401 || apiError.status === 403) {
+          router.replace('/');
+        }
+      } finally {
+        if (!cancelled) {
+          setIsLoading(false);
+        }
+      }
     };
 
-    verifyAuth();
-  }, []);
-
-  const requireExpertAccess = () => {
-    if (!isLoading) {
-      if (!authState.isAuthenticated || authState.role !== 'expert') {
-        // Redirect standard learners away from the expert console
-        router.push('/');
-      }
-    }
-  };
+    void verifyAuth();
+    return () => {
+      cancelled = true;
+    };
+  }, [router]);
 
   return {
     ...authState,
     isLoading,
-    requireExpertAccess,
   };
 }

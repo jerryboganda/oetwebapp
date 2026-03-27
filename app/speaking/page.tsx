@@ -14,6 +14,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { TaskCard } from '@/components/domain/task-card';
 import { fetchSpeakingTasks, fetchBilling, fetchSubmissions } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { InlineAlert } from '@/components/ui/alert';
 import type { SpeakingTask, Submission } from '@/lib/mock-data';
 
 export default function SpeakingHome() {
@@ -21,6 +22,7 @@ export default function SpeakingHome() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [credits, setCredits] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     analytics.track('module_entry', { module: 'speaking' });
@@ -30,10 +32,21 @@ export default function SpeakingHome() {
         setCredits(b.reviewCredits);
         setSubmissions(s.filter((sub) => sub.subTest === 'Speaking'));
       })
+      .catch(() => setError('Failed to load speaking tasks. Please try again.'))
       .finally(() => setLoading(false));
   }, []);
 
   const recommended = tasks[0];
+
+  if (error) {
+    return (
+      <AppShell pageTitle="Speaking">
+        <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <InlineAlert variant="error">{error}</InlineAlert>
+        </div>
+      </AppShell>
+    );
+  }
 
   if (loading) {
     return (

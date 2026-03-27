@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Tabs, TabPanel } from '@/components/ui/tabs';
 import { Select, Textarea } from '@/components/ui/form-controls';
@@ -12,12 +12,12 @@ import { Save, Send, Flag, PlayCircle, MessageSquare, RotateCcw } from 'lucide-r
 import { useParams, useRouter } from 'next/navigation';
 import { AudioPlayerWaveform } from '@/components/domain/audio-player-waveform';
 import { SpeakingRoleCard } from '@/components/domain/speaking-role-card';
-import { fetchSpeakingReviewDetail, saveDraftReview, submitExpertSpeakingReview, requestRework } from '@/lib/api';
+import { fetchSpeakingReviewDetail, isApiError, requestRework, saveDraftReview, submitExpertSpeakingReview } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { useExpertStore } from '@/lib/stores/expert-store';
-import type { SpeakingReviewDetail, SpeakingCriterionKey, TimestampComment, ExpertTranscriptLine } from '@/lib/types/expert';
+import type { ExpertSavedDraft, ExpertTranscriptLine, SpeakingCriterionKey, SpeakingReviewDetail, TimestampComment } from '@/lib/types/expert';
 
-type AsyncStatus = 'loading' | 'error' | 'success';
+type AsyncStatus = 'loading' | 'error' | 'partial' | 'success';
 
 const LINGUISTIC_CRITERIA: { key: SpeakingCriterionKey; label: string }[] = [
   { key: 'intelligibility', label: 'Intelligibility' },
@@ -42,182 +42,324 @@ const BAND_OPTIONS = [
   { value: '0', label: '0 (Unscorable)' },
 ];
 
+type DraftCandidate = {
+  reviewId: string;
+  scores: Record<string, number>;
+  criterionComments: Record<string, string>;
+  finalComment: string;
+  anchoredComments: unknown[];
+  timestampComments: TimestampComment[];
+  version?: number;
+  updatedAt: string;
+};
+
+function toDraftSnapshot(reviewId: string, draft: ExpertSavedDraft | null | undefined): DraftCandidate | null {
+  if (!draft) {
+    return null;
+  }
+
+  return {
+    reviewId,
+    scores: draft.scores,
+    criterionComments: draft.criterionComments,
+    finalComment: draft.finalComment,
+    anchoredComments: draft.anchoredComments,
+    timestampComments: draft.timestampComments,
+    version: draft.version,
+    updatedAt: draft.savedAt,
+  };
+}
+
+function pickLatestDraft(localDraft: DraftCandidate | null, serverDraft: DraftCandidate | null): DraftCandidate | null {
+  if (!localDraft) return serverDraft;
+  if (!serverDraft) return localDraft;
+  return new Date(localDraft.updatedAt).getTime() >= new Date(serverDraft.updatedAt).getTime() ? localDraft : serverDraft;
+}
+
 export default function SpeakingReviewWorkspace() {
   const params = useParams();
   const reviewRequestId = params?.reviewRequestId as string | undefined;
   const router = useRouter();
+  const { getReviewDraft, upsertReviewDraft, clearReviewDraft } = useExpertStore();
+  const activeTranscriptLineId = useRef<string | null>(null);
 
-  // Page state
   const [reviewDetail, setReviewDetail] = useState<SpeakingReviewDetail | null>(null);
   const [pageStatus, setPageStatus] = useState<AsyncStatus>('loading');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState('transcript');
   const [currentTime, setCurrentTime] = useState(0);
   const [seekTo, setSeekTo] = useState<number | null>(null);
-
-  // Rubric state
-  const { draftScores, setDraftScores, draftCriterionComments, setDraftCriterionComments, draftFinalComment, setDraftFinalComment, clearDraft } = useExpertStore();
   const [scores, setScores] = useState<Record<string, string>>({});
   const [criterionComments, setCriterionComments] = useState<Record<string, string>>({});
   const [finalComment, setFinalComment] = useState('');
   const [validationErrors, setValidationErrors] = useState<Set<string>>(new Set());
-
-  // Timestamp comments
   const [timestampComments, setTimestampComments] = useState<TimestampComment[]>([]);
   const [activeCommentLine, setActiveCommentLine] = useState<string | null>(null);
-
-  // Toast/save state
+  const [draftVersion, setDraftVersion] = useState<number | undefined>(undefined);
+  const [isDirty, setIsDirty] = useState(false);
+  const [lastSavedAt, setLastSavedAt] = useState<string | null>(null);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isReworking, setIsReworking] = useState(false);
   const [showReworkPrompt, setShowReworkPrompt] = useState(false);
   const [reworkReason, setReworkReason] = useState('');
-
-  // SLA
   const [slaSeconds, setSlaSeconds] = useState(0);
+  const [reloadToken, setReloadToken] = useState(0);
+  const [isInitialized, setIsInitialized] = useState(false);
 
-  // Load review detail
+  const localDraft = reviewRequestId ? getReviewDraft(reviewRequestId) : null;
+
+  const applyDraft = useCallback((draft: DraftCandidate | null) => {
+    if (!draft) return;
+    setScores(Object.fromEntries(Object.entries(draft.scores).map(([key, value]) => [key, String(value)])));
+    setCriterionComments(draft.criterionComments);
+    setFinalComment(draft.finalComment);
+    setTimestampComments(draft.timestampComments);
+    setDraftVersion(draft.version);
+    setLastSavedAt(draft.updatedAt);
+  }, []);
+
+  const partialMessage = reviewDetail?.artifactStatus?.transcript?.message
+    ?? reviewDetail?.artifactStatus?.aiFlags?.message
+    ?? 'Some speaking review artifacts are still being prepared.';
+
   useEffect(() => {
     if (!reviewRequestId) return;
     let cancelled = false;
     (async () => {
       try {
         setPageStatus('loading');
+        setErrorMsg(null);
+        setIsInitialized(false);
+        setScores({});
+        setCriterionComments({});
+        setFinalComment('');
+        setTimestampComments([]);
+        setDraftVersion(undefined);
+        setLastSavedAt(null);
+        setIsDirty(false);
         const detail = await fetchSpeakingReviewDetail(reviewRequestId);
         if (cancelled) return;
         setReviewDetail(detail);
-        setPageStatus('success');
-        const remaining = Math.max(0, Math.floor((new Date(detail.slaDue).getTime() - Date.now()) / 1000));
-        setSlaSeconds(remaining);
+        setSlaSeconds(Math.max(0, Math.floor((new Date(detail.slaDue).getTime() - Date.now()) / 1000)));
+        const latestDraft = pickLatestDraft(localDraft, toDraftSnapshot(reviewRequestId, detail.existingDraft));
+        applyDraft(latestDraft);
+        setIsInitialized(true);
+
+        const isPartial = Object.values(detail.artifactStatus ?? {}).some((artifact) => artifact.state !== 'completed');
+        setPageStatus(isPartial ? 'partial' : 'success');
         analytics.track('review_started', { reviewRequestId, type: 'speaking' });
-      } catch {
-        if (!cancelled) { setErrorMsg('Failed to load review details.'); setPageStatus('error'); }
+      } catch (error) {
+        if (!cancelled) {
+          setErrorMsg(isApiError(error) ? error.userMessage : 'Failed to load review details.');
+          setPageStatus('error');
+        }
       }
     })();
     return () => { cancelled = true; };
-  }, [reviewRequestId]);
+  }, [applyDraft, localDraft, reloadToken, reviewRequestId]);
 
-  // Restore draft from store
   useEffect(() => {
-    if (Object.keys(draftScores).length > 0) {
-      const restored: Record<string, string> = {};
-      Object.entries(draftScores).forEach(([k, v]) => { restored[k] = String(v); });
-      setScores(restored);
+    if (!reviewRequestId || !isInitialized) return;
+    upsertReviewDraft(reviewRequestId, {
+      scores: Object.fromEntries(Object.entries(scores).filter(([, value]) => value).map(([key, value]) => [key, Number(value)])),
+      criterionComments,
+      finalComment,
+      anchoredComments: [],
+      timestampComments,
+      version: draftVersion,
+    });
+  }, [criterionComments, draftVersion, finalComment, isInitialized, reviewRequestId, scores, timestampComments, upsertReviewDraft]);
+
+  useEffect(() => {
+    const handleBeforeUnload = (event: BeforeUnloadEvent) => {
+      if (!isDirty) return;
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    return () => window.removeEventListener('beforeunload', handleBeforeUnload);
+  }, [isDirty]);
+
+  const persistDraft = useCallback(async (options?: { quiet?: boolean }) => {
+    if (!reviewRequestId) return null;
+    const payload = {
+      reviewRequestId,
+      scores: Object.fromEntries(Object.entries(scores).filter(([, value]) => value).map(([key, value]) => [key, Number(value)])),
+      criterionComments,
+      finalComment,
+      comments: timestampComments,
+      savedAt: new Date().toISOString(),
+      version: draftVersion,
+    };
+
+    const savedDraft = await saveDraftReview(payload);
+    setDraftVersion(savedDraft.version);
+    setLastSavedAt(savedDraft.savedAt);
+    setIsDirty(false);
+    upsertReviewDraft(reviewRequestId, {
+      scores: savedDraft.scores,
+      criterionComments: savedDraft.criterionComments,
+      finalComment: savedDraft.finalComment,
+      anchoredComments: [],
+      timestampComments: savedDraft.comments as TimestampComment[],
+      version: savedDraft.version,
+      updatedAt: savedDraft.savedAt,
+    });
+    if (!options?.quiet) {
+      setToast({ variant: 'success', message: 'Draft saved successfully.' });
     }
-    if (Object.keys(draftCriterionComments).length > 0) setCriterionComments(draftCriterionComments);
-    if (draftFinalComment) setFinalComment(draftFinalComment);
-  }, [draftCriterionComments, draftFinalComment, draftScores]);
-
-  // Auto-save to store
-  useEffect(() => {
-    const numScores: Record<string, number> = {};
-    Object.entries(scores).forEach(([k, v]) => { if (v) numScores[k] = parseInt(v); });
-    setDraftScores(numScores);
-    setDraftCriterionComments(criterionComments);
-    setDraftFinalComment(finalComment);
-  }, [scores, criterionComments, finalComment, setDraftScores, setDraftCriterionComments, setDraftFinalComment]);
-
-  const handleScoreChange = (criterion: string, val: string) => {
-    setScores(prev => ({ ...prev, [criterion]: val }));
-    setValidationErrors(prev => { const next = new Set(prev); next.delete(criterion); return next; });
-  };
-
-  const handleTranscriptClick = (time: number) => {
-    setSeekTo(time);
-    setTimeout(() => setSeekTo(null), 100);
-  };
-
-  // Auto-scroll transcript
-  useEffect(() => {
-    if (!reviewDetail || activeTab !== 'transcript') return;
-    const activeLine = reviewDetail.transcriptLines.find(l => currentTime >= l.startTime && currentTime <= l.endTime);
-    if (activeLine) {
-      const el = document.getElementById(`transcript-line-${activeLine.id}`);
-      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
-    }
-  }, [currentTime, activeTab, reviewDetail]);
-
-  const addTimestampComment = (lineId: string, line: ExpertTranscriptLine, commentText: string) => {
-    if (!commentText.trim()) return;
-    const comment: TimestampComment = { id: `tc-${Date.now()}`, text: commentText, timestampStart: line.startTime, timestampEnd: line.endTime, createdAt: new Date().toISOString() };
-    setTimestampComments(prev => [...prev, comment]);
-    setActiveCommentLine(null);
-  };
+    analytics.track('review_draft_saved', { reviewRequestId });
+    return savedDraft;
+  }, [criterionComments, draftVersion, finalComment, reviewRequestId, scores, timestampComments, upsertReviewDraft]);
 
   const handleSaveDraft = useCallback(async () => {
-    if (!reviewRequestId) return;
     setIsSaving(true);
     try {
-      const numScores: Record<string, number> = {};
-      Object.entries(scores).forEach(([k, v]) => { if (v) numScores[k] = parseInt(v); });
-      await saveDraftReview({ reviewRequestId, scores: numScores, criterionComments, finalComment, comments: timestampComments, savedAt: new Date().toISOString() });
-      setToast({ variant: 'success', message: 'Draft saved successfully.' });
-      analytics.track('review_draft_saved', { reviewRequestId });
-    } catch {
-      setToast({ variant: 'error', message: 'Failed to save draft. Your work is preserved locally.' });
+      await persistDraft();
+    } catch (error) {
+      setToast({ variant: 'error', message: isApiError(error) ? error.userMessage : 'Failed to save draft. Your local work is still preserved.' });
     } finally {
       setIsSaving(false);
     }
-  }, [reviewRequestId, scores, criterionComments, finalComment, timestampComments]);
+  }, [persistDraft]);
 
   const handleSubmit = useCallback(async () => {
     if (!reviewRequestId) return;
     const missing = new Set<string>();
-    ALL_CRITERIA.forEach(c => { if (!scores[c.key]) missing.add(c.key); });
-    if (missing.size > 0) { setValidationErrors(missing); setToast({ variant: 'error', message: `Please complete all ${missing.size} rubric score(s).` }); return; }
-    if (!finalComment.trim()) { setToast({ variant: 'error', message: 'Please provide a final overall comment.' }); return; }
+    ALL_CRITERIA.forEach((criterion) => {
+      if (!scores[criterion.key]) {
+        missing.add(criterion.key);
+      }
+    });
+    if (missing.size > 0) {
+      setValidationErrors(missing);
+      setToast({ variant: 'error', message: `Please complete all ${missing.size} rubric score(s) before submitting.` });
+      return;
+    }
+    if (!finalComment.trim()) {
+      setToast({ variant: 'error', message: 'Please provide a final overall comment.' });
+      return;
+    }
 
     setIsSubmitting(true);
     try {
-      const numScores: Record<string, number> = {};
-      Object.entries(scores).forEach(([k, v]) => { numScores[k] = parseInt(v); });
-      await submitExpertSpeakingReview(reviewRequestId, { scores: numScores, criterionComments, finalComment });
+      const savedDraft = await persistDraft({ quiet: true });
+      const normalizedScores = Object.fromEntries(Object.entries(scores).map(([key, value]) => [key, Number(value)]));
+      await submitExpertSpeakingReview(reviewRequestId, {
+        scores: normalizedScores,
+        criterionComments,
+        finalComment,
+        version: savedDraft?.version ?? draftVersion,
+      });
       analytics.track('review_submitted', { reviewRequestId, type: 'speaking' });
-      clearDraft();
-      setToast({ variant: 'success', message: 'Review submitted successfully!' });
-      setTimeout(() => router.push('/expert/queue'), 1000);
-    } catch {
-      setToast({ variant: 'error', message: 'Failed to submit review. Please try again.' });
+      clearReviewDraft(reviewRequestId);
+      setIsDirty(false);
+      setToast({ variant: 'success', message: 'Review submitted successfully.' });
+      window.setTimeout(() => router.push('/expert/queue'), 800);
+    } catch (error) {
+      setToast({ variant: 'error', message: isApiError(error) ? error.userMessage : 'Failed to submit review. Please try again.' });
     } finally {
       setIsSubmitting(false);
     }
-  }, [reviewRequestId, scores, criterionComments, finalComment, clearDraft, router]);
+  }, [clearReviewDraft, criterionComments, draftVersion, finalComment, persistDraft, reviewRequestId, router, scores]);
 
   const handleRework = useCallback(async () => {
-    if (!reviewRequestId || !reworkReason.trim()) {
+    if (!reviewRequestId) return;
+    if (!reworkReason.trim()) {
       setToast({ variant: 'error', message: 'Please provide a reason for the rework request.' });
       return;
     }
+
     setIsReworking(true);
     try {
+      if (isDirty) {
+        await persistDraft({ quiet: true });
+      }
       await requestRework(reviewRequestId, reworkReason);
+      clearReviewDraft(reviewRequestId);
       setToast({ variant: 'success', message: 'Rework request submitted.' });
       setShowReworkPrompt(false);
       setReworkReason('');
-      setTimeout(() => router.push('/expert/queue'), 1000);
-    } catch {
-      setToast({ variant: 'error', message: 'Failed to submit rework request.' });
+      setIsDirty(false);
+      window.setTimeout(() => router.push('/expert/queue'), 800);
+    } catch (error) {
+      setToast({ variant: 'error', message: isApiError(error) ? error.userMessage : 'Failed to submit rework request.' });
     } finally {
       setIsReworking(false);
     }
-  }, [reviewRequestId, reworkReason, router]);
+  }, [clearReviewDraft, isDirty, persistDraft, reviewRequestId, reworkReason, router]);
 
-  // Keyboard shortcuts
   useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key === 's') { e.preventDefault(); handleSaveDraft(); }
-      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); handleSubmit(); }
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+        event.preventDefault();
+        void handleSaveDraft();
+      }
+      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+        event.preventDefault();
+        void handleSubmit();
+      }
     };
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [handleSaveDraft, handleSubmit]);
+
+  useEffect(() => {
+    if (!reviewDetail || activeTab !== 'transcript') return;
+    const activeLine = reviewDetail.transcriptLines.find((line) => currentTime >= line.startTime && currentTime <= line.endTime);
+    if (!activeLine || activeTranscriptLineId.current === activeLine.id) return;
+    activeTranscriptLineId.current = activeLine.id;
+    const element = document.getElementById(`transcript-line-${activeLine.id}`);
+    element?.scrollIntoView({ behavior: 'auto', block: 'nearest' });
+  }, [activeTab, currentTime, reviewDetail]);
+
+  const handleScoreChange = (criterion: string, value: string) => {
+    setScores((current) => ({ ...current, [criterion]: value }));
+    setValidationErrors((current) => {
+      const next = new Set(current);
+      next.delete(criterion);
+      return next;
+    });
+    setIsDirty(true);
+  };
+
+  const handleTranscriptClick = (time: number) => {
+    setSeekTo(time);
+    window.setTimeout(() => setSeekTo(null), 120);
+  };
+
+  const addTimestampComment = (line: ExpertTranscriptLine, commentText: string) => {
+    if (!commentText.trim()) return;
+    const comment: TimestampComment = {
+      id: `tc-${Date.now()}`,
+      text: commentText.trim(),
+      timestampStart: line.startTime,
+      timestampEnd: line.endTime,
+      createdAt: new Date().toISOString(),
+    };
+    setTimestampComments((current) => [...current, comment]);
+    setActiveCommentLine(null);
+    setIsDirty(true);
+  };
 
   const tabOptions = [
     { id: 'transcript', label: 'Transcript & Audio' },
     { id: 'rolecard', label: 'Role Card' },
     { id: 'aiflags', label: 'AI Flags' },
   ];
+
+  const workspaceMeta = useMemo(() => {
+    if (!reviewDetail) return null;
+    return {
+      isReadOnly: reviewDetail.permissions?.readOnly ?? false,
+      canSaveDraft: reviewDetail.permissions?.canSaveDraft ?? true,
+      canSubmit: reviewDetail.permissions?.canSubmit ?? true,
+      canRequestRework: reviewDetail.permissions?.canRequestRework ?? true,
+    };
+  }, [reviewDetail]);
 
   const renderCriteriaGroup = (title: string, criteria: { key: SpeakingCriterionKey; label: string }[]) => (
     <>
@@ -227,19 +369,21 @@ export default function SpeakingReviewWorkspace() {
           <Select
             label={label}
             value={scores[key] ?? ''}
-            onChange={(e) => handleScoreChange(key, e.target.value)}
+            onChange={(event) => handleScoreChange(key, event.target.value)}
             options={BAND_OPTIONS}
-            placeholder="Select band…"
+            placeholder="Select band..."
             error={validationErrors.has(key) ? 'Score required' : undefined}
             aria-label={`Score for ${label}`}
+            disabled={workspaceMeta?.isReadOnly}
           />
           <Textarea
-            placeholder={`Comment on ${label.toLowerCase()}…`}
+            placeholder={`Comment on ${label.toLowerCase()}...`}
             value={criterionComments[key] ?? ''}
-            onChange={(e) => setCriterionComments(prev => ({ ...prev, [key]: e.target.value }))}
+            onChange={(event) => { setCriterionComments((current) => ({ ...current, [key]: event.target.value })); setIsDirty(true); }}
             rows={2}
             className="mt-2"
             aria-label={`Comment for ${label}`}
+            disabled={workspaceMeta?.isReadOnly}
           />
         </div>
       ))}
@@ -247,22 +391,19 @@ export default function SpeakingReviewWorkspace() {
   );
 
   return (
-    <div className="h-screen flex flex-col md:flex-row overflow-hidden bg-background-light">
+    <div className="min-h-screen flex flex-col md:flex-row bg-background-light">
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
-      <AsyncStateWrapper status={pageStatus} onRetry={() => reviewRequestId && window.location.reload()} errorMessage={errorMsg ?? undefined}>
-        {/* Left Pane: Media & Context */}
-        <div className="flex-1 w-full md:w-1/2 flex flex-col border-r border-gray-200 overflow-hidden">
-          {/* Sticky Audio Player */}
+      <AsyncStateWrapper
+        status={pageStatus}
+        onRetry={() => setReloadToken((current) => current + 1)}
+        errorMessage={errorMsg ?? undefined}
+        partialMessage={partialMessage}
+      >
+        <div className="flex-1 min-w-0 md:w-1/2 flex flex-col border-r border-gray-200 overflow-hidden">
           <div className="p-4 bg-surface border-b border-gray-200 shrink-0">
             <h3 className="text-sm font-semibold text-navy mb-2">Candidate Audio Submission</h3>
-            {reviewDetail && (
-              <AudioPlayerWaveform
-                audioUrl={reviewDetail.audioUrl}
-                onTimeUpdate={setCurrentTime}
-                seekToTime={seekTo}
-              />
-            )}
+            {reviewDetail && <AudioPlayerWaveform audioUrl={reviewDetail.audioUrl} onTimeUpdate={setCurrentTime} seekToTime={seekTo} />}
           </div>
 
           <Tabs tabs={tabOptions} activeTab={activeTab} onChange={setActiveTab} className="bg-surface shrink-0" />
@@ -270,57 +411,68 @@ export default function SpeakingReviewWorkspace() {
           <div className="flex-1 overflow-y-auto p-4 bg-white" role="region" aria-label="Review content">
             <TabPanel id="transcript" activeTab={activeTab} className="h-full space-y-2">
               {!reviewDetail?.transcriptLines.length && (
-                <InlineAlert variant="warning">Transcript is still being processed. You may begin reviewing with the audio.</InlineAlert>
+                <InlineAlert variant="warning">Transcript is still being processed. You can continue reviewing with the audio and save a draft.</InlineAlert>
               )}
+
               {reviewDetail?.transcriptLines.map((line) => {
                 const isActive = currentTime >= line.startTime && currentTime <= line.endTime;
-                const lineComments = timestampComments.filter(c => c.timestampStart === line.startTime);
+                const lineComments = timestampComments.filter((comment) => comment.timestampStart === line.startTime);
                 return (
                   <div key={line.id} id={`transcript-line-${line.id}`}>
-                    <div
-                      className={`p-3 rounded-lg border transition-colors cursor-pointer ${isActive ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-transparent hover:border-gray-200'}`}
+                    <button
+                      type="button"
+                      className={`w-full text-left p-3 rounded-lg border transition-colors ${isActive ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-transparent hover:border-gray-200'} focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary`}
                       onClick={() => handleTranscriptClick(line.startTime)}
-                      role="button"
-                      aria-label={`Seek to ${line.startTime.toFixed(1)} seconds — ${line.speaker}`}
+                      aria-label={`Seek to ${line.startTime.toFixed(1)} seconds for ${line.speaker}`}
                     >
-                      <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center justify-between mb-1 gap-3">
                         <div className="flex items-center gap-2">
                           <span className={`text-xs font-bold ${line.speaker === 'candidate' ? 'text-primary' : 'text-muted'}`}>{line.speaker === 'candidate' ? 'Candidate' : 'Interlocutor'}</span>
                           <span className="text-xs text-muted flex items-center gap-1"><PlayCircle className="w-3 h-3" /> {line.startTime.toFixed(1)}s</span>
                         </div>
-                        <button
-                          className="text-xs text-muted hover:text-primary flex items-center gap-1"
-                          onClick={(e) => { e.stopPropagation(); setActiveCommentLine(activeCommentLine === line.id ? null : line.id); }}
-                          aria-label={`Add comment at ${line.startTime.toFixed(1)}s`}
-                        >
-                          <MessageSquare className="w-3 h-3" /> Comment
-                        </button>
+                        {!workspaceMeta?.isReadOnly && (
+                          <span className="text-xs text-muted flex items-center gap-1"><MessageSquare className="w-3 h-3" /> Add note</span>
+                        )}
                       </div>
                       <p className="text-sm text-navy">{line.text}</p>
-                    </div>
+                    </button>
 
-                    {/* Timestamp comment input */}
-                    {activeCommentLine === line.id && (
+                    {!workspaceMeta?.isReadOnly && (
+                      <div className="mt-1 flex justify-end">
+                        <Button size="sm" variant="outline" onClick={() => setActiveCommentLine((current) => current === line.id ? null : line.id)} aria-label={`Add comment at ${line.startTime.toFixed(1)} seconds`}>
+                          <MessageSquare className="w-3 h-3 mr-1" /> Comment
+                        </Button>
+                      </div>
+                    )}
+
+                    {activeCommentLine === line.id && !workspaceMeta?.isReadOnly && (
                       <div className="ml-4 mt-1 p-2 bg-blue-50 border border-blue-200 rounded">
                         <div className="flex gap-2">
                           <input
                             type="text"
-                            placeholder="Your comment…"
+                            placeholder="Your comment..."
                             className="flex-1 text-sm border border-gray-200 rounded px-2 py-1 focus:outline-none focus:ring-2 focus:ring-primary/30"
                             autoFocus
-                            onKeyDown={(e) => { if (e.key === 'Enter') { addTimestampComment(line.id, line, (e.target as HTMLInputElement).value); (e.target as HTMLInputElement).value = ''; } }}
+                            onKeyDown={(event) => {
+                              if (event.key === 'Enter') {
+                                addTimestampComment(line, (event.target as HTMLInputElement).value);
+                                (event.target as HTMLInputElement).value = '';
+                              }
+                            }}
                             aria-label="Timestamp comment text"
                           />
+                          <Button size="sm" onClick={(event) => { const input = (event.currentTarget.previousElementSibling as HTMLInputElement | null); addTimestampComment(line, input?.value ?? ''); if (input) input.value = ''; }}>Add</Button>
                           <Button size="sm" variant="outline" onClick={() => setActiveCommentLine(null)}>Cancel</Button>
                         </div>
                       </div>
                     )}
 
-                    {/* Existing comments for this line */}
-                    {lineComments.map(c => (
-                      <div key={c.id} className="ml-4 mt-1 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm flex justify-between items-start">
-                        <p className="text-navy">{c.text}</p>
-                        <button onClick={() => setTimestampComments(prev => prev.filter(x => x.id !== c.id))} className="text-muted hover:text-error text-xs ml-2 shrink-0" aria-label="Remove comment">&times;</button>
+                    {lineComments.map((comment) => (
+                      <div key={comment.id} className="ml-4 mt-1 p-2 bg-yellow-50 border border-yellow-200 rounded text-sm flex justify-between items-start gap-3">
+                        <p className="text-navy">{comment.text}</p>
+                        {!workspaceMeta?.isReadOnly && (
+                          <button onClick={() => { setTimestampComments((current) => current.filter((item) => item.id !== comment.id)); setIsDirty(true); }} className="text-muted hover:text-error text-xs shrink-0" aria-label="Remove comment">&times;</button>
+                        )}
                       </div>
                     ))}
                   </div>
@@ -342,16 +494,16 @@ export default function SpeakingReviewWorkspace() {
 
             <TabPanel id="aiflags" activeTab={activeTab} className="h-full">
               {!reviewDetail?.aiFlags.length ? (
-                <InlineAlert variant="info">AI analysis pending. Flags will appear once processing completes.</InlineAlert>
+                <InlineAlert variant="info">AI analysis is still pending. Flags will appear once processing completes.</InlineAlert>
               ) : (
                 <div className="space-y-3" role="list" aria-label="AI-detected flags">
-                  {reviewDetail.aiFlags.map(flag => (
+                  {reviewDetail.aiFlags.map((flag) => (
                     <div key={flag.id} className={`p-3 border rounded-md ${flag.severity === 'warning' ? 'border-amber-200 bg-amber-50' : 'border-blue-200 bg-blue-50'}`} role="listitem">
                       <div className="flex items-center gap-2 font-semibold text-sm mb-1" style={{ color: flag.severity === 'warning' ? '#92400e' : '#1e40af' }}>
                         <Flag className="w-4 h-4" /> {flag.type}
                       </div>
                       <p className="text-xs" style={{ color: flag.severity === 'warning' ? '#78350f' : '#1e3a8a' }}>{flag.message}</p>
-                      <Button variant="outline" size="sm" className="mt-2 h-7 text-xs" onClick={() => handleTranscriptClick(flag.timestampStart)} aria-label={`Go to ${flag.timestampStart.toFixed(1)}s`}>
+                      <Button variant="outline" size="sm" className="mt-2 h-7 text-xs" onClick={() => handleTranscriptClick(flag.timestampStart)} aria-label={`Go to ${flag.timestampStart.toFixed(1)} seconds`}>
                         Go to {flag.timestampStart.toFixed(1)}s
                       </Button>
                     </div>
@@ -362,19 +514,17 @@ export default function SpeakingReviewWorkspace() {
           </div>
         </div>
 
-        {/* Right Pane: Rubric & Entry */}
-        <div className="w-full md:w-[450px] lg:w-[500px] flex flex-col bg-surface overflow-hidden">
+        <div className="w-full md:w-[460px] lg:w-[520px] flex flex-col bg-surface">
           <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-white shrink-0" role="banner">
             <div>
               <h2 className="font-semibold text-navy">Review Rubric</h2>
               <p className="text-xs text-muted">ID: {reviewRequestId}</p>
+              {lastSavedAt && <p className="text-xs text-muted mt-1">Last saved: {new Date(lastSavedAt).toLocaleTimeString()}</p>}
             </div>
             <div className="flex items-center gap-2">
-              {slaSeconds > 0 ? (
-                <Timer mode="countdown" initialSeconds={slaSeconds} running size="sm" showWarning />
-              ) : (
-                <Badge variant="danger">SLA Overdue</Badge>
-              )}
+              {workspaceMeta?.isReadOnly && <Badge variant="info">Read Only</Badge>}
+              {isDirty && !workspaceMeta?.isReadOnly && <Badge variant="warning">Unsaved</Badge>}
+              {slaSeconds > 0 ? <Timer mode="countdown" initialSeconds={slaSeconds} running size="sm" showWarning /> : <Badge variant="danger">SLA Overdue</Badge>}
             </div>
           </div>
 
@@ -385,11 +535,12 @@ export default function SpeakingReviewWorkspace() {
             <div className="p-3 bg-white border border-gray-200 rounded-md">
               <Textarea
                 label="Final Overall Comment"
-                placeholder="Provide a summary of the learner's performance…"
+                placeholder="Provide a summary of the learner's performance..."
                 value={finalComment}
-                onChange={(e) => setFinalComment(e.target.value)}
+                onChange={(event) => { setFinalComment(event.target.value); setIsDirty(true); }}
                 rows={5}
                 aria-label="Final overall comment"
+                disabled={workspaceMeta?.isReadOnly}
               />
               <p className="text-xs text-muted mt-1 text-right">{finalComment.length} characters</p>
             </div>
@@ -397,17 +548,17 @@ export default function SpeakingReviewWorkspace() {
             <p className="text-xs text-muted">Keyboard: Ctrl+S save draft · Ctrl+Enter submit</p>
           </div>
 
-          <div className="p-4 border-t border-gray-200 bg-white flex justify-between items-center shrink-0" role="toolbar" aria-label="Review actions">
+          <div className="p-4 border-t border-gray-200 bg-white flex justify-between items-center gap-3 shrink-0" role="toolbar" aria-label="Review actions">
             <div className="flex items-center gap-2">
-              <Button variant="outline" onClick={handleSaveDraft} disabled={isSaving} className="flex items-center gap-2" aria-label="Save draft">
-                <Save className="w-4 h-4" /> {isSaving ? 'Saving…' : 'Save Draft'}
+              <Button variant="outline" onClick={() => void handleSaveDraft()} disabled={isSaving || !workspaceMeta?.canSaveDraft} className="flex items-center gap-2" aria-label="Save draft">
+                <Save className="w-4 h-4" /> {isSaving ? 'Saving...' : 'Save Draft'}
               </Button>
-              <Button variant="outline" onClick={() => setShowReworkPrompt(!showReworkPrompt)} className="flex items-center gap-2" aria-label="Request rework">
+              <Button variant="outline" onClick={() => setShowReworkPrompt((current) => !current)} disabled={!workspaceMeta?.canRequestRework} className="flex items-center gap-2" aria-label="Request rework">
                 <RotateCcw className="w-4 h-4" /> Rework
               </Button>
             </div>
-            <Button onClick={handleSubmit} disabled={isSubmitting} className="flex items-center gap-2" aria-label="Submit review">
-              <Send className="w-4 h-4" /> {isSubmitting ? 'Submitting…' : 'Submit Review'}
+            <Button onClick={() => void handleSubmit()} disabled={isSubmitting || !workspaceMeta?.canSubmit} className="flex items-center gap-2" aria-label="Submit review">
+              <Send className="w-4 h-4" /> {isSubmitting ? 'Submitting...' : 'Submit Review'}
             </Button>
           </div>
 
@@ -417,14 +568,14 @@ export default function SpeakingReviewWorkspace() {
               <textarea
                 className="w-full text-sm border border-amber-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-amber-400/30 bg-white"
                 rows={2}
-                placeholder="Reason for rework…"
+                placeholder="Reason for rework..."
                 value={reworkReason}
-                onChange={(e) => setReworkReason(e.target.value)}
+                onChange={(event) => setReworkReason(event.target.value)}
                 aria-label="Rework reason"
               />
               <div className="flex justify-end gap-2 mt-2">
                 <Button size="sm" variant="outline" onClick={() => { setShowReworkPrompt(false); setReworkReason(''); }}>Cancel</Button>
-                <Button size="sm" onClick={handleRework} disabled={isReworking}>{isReworking ? 'Sending…' : 'Submit Rework'}</Button>
+                <Button size="sm" onClick={() => void handleRework()} disabled={isReworking}>{isReworking ? 'Sending...' : 'Submit Rework'}</Button>
               </div>
             </div>
           )}

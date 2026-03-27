@@ -195,6 +195,16 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
         await EnsureUserAsync(userId, cancellationToken);
         var goal = await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken);
 
+        // Validate score ranges (OET scores: 0-500)
+        ValidateScoreRange(request.TargetWritingScore, nameof(request.TargetWritingScore));
+        ValidateScoreRange(request.TargetSpeakingScore, nameof(request.TargetSpeakingScore));
+        ValidateScoreRange(request.TargetReadingScore, nameof(request.TargetReadingScore));
+        ValidateScoreRange(request.TargetListeningScore, nameof(request.TargetListeningScore));
+        if (request.StudyHoursPerWeek.HasValue && (request.StudyHoursPerWeek.Value < 0 || request.StudyHoursPerWeek.Value > 168))
+            throw ApiException.Validation("invalid_study_hours", "Study hours per week must be between 0 and 168.", [new ApiFieldError("studyHoursPerWeek", "out_of_range", "Must be 0–168.")]);
+        if (request.PreviousAttempts.HasValue && request.PreviousAttempts.Value < 0)
+            throw ApiException.Validation("invalid_previous_attempts", "Previous attempts cannot be negative.", [new ApiFieldError("previousAttempts", "out_of_range", "Must be 0 or greater.")]);
+
         if (!string.IsNullOrWhiteSpace(request.ProfessionId)) goal.ProfessionId = request.ProfessionId;
         if (request.TargetExamDate.HasValue) goal.TargetExamDate = request.TargetExamDate;
         if (request.OverallGoal is not null) goal.OverallGoal = request.OverallGoal;
@@ -215,29 +225,47 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
         return GoalDto(goal);
     }
 
+    private static void ValidateScoreRange(int? score, string fieldName)
+    {
+        if (score.HasValue && (score.Value < 0 || score.Value > 500))
+            throw ApiException.Validation("invalid_score_range", $"Target score must be between 0 and 500.", [new ApiFieldError(fieldName, "out_of_range", "Must be 0–500.")]);
+    }
+
     public async Task<object> SubmitGoalsAsync(string userId, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
-        var goal = await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken);
-        goal.SubmittedAt = DateTimeOffset.UtcNow;
-        goal.UpdatedAt = DateTimeOffset.UtcNow;
 
-        var plan = await GetActiveStudyPlanEntityAsync(userId, cancellationToken);
-        plan.State = AsyncState.Queued;
-        await QueueJobAsync(JobType.StudyPlanRegeneration, resourceId: plan.Id, cancellationToken: cancellationToken);
-        await RecordEventAsync(userId, "goals_saved", new { userId, professionId = goal.ProfessionId, submitted = true }, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
-
-        return new
+        await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
+        try
         {
-            goals = GoalDto(goal),
-            studyPlanRegeneration = new
+            var goal = await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken);
+            goal.SubmittedAt = DateTimeOffset.UtcNow;
+            goal.UpdatedAt = DateTimeOffset.UtcNow;
+
+            var plan = await GetActiveStudyPlanEntityAsync(userId, cancellationToken);
+            plan.State = AsyncState.Queued;
+            await QueueJobAsync(JobType.StudyPlanRegeneration, resourceId: plan.Id, cancellationToken: cancellationToken);
+            await RecordEventAsync(userId, "goals_saved", new { userId, professionId = goal.ProfessionId, submitted = true }, cancellationToken);
+            LogAudit(userId, "Submitted", "Goals", goal.Id.ToString(), "Goals submitted, triggering study plan regeneration");
+            await db.SaveChangesAsync(cancellationToken);
+            await transaction.CommitAsync(cancellationToken);
+
+            return new
             {
-                state = ToAsyncState(plan.State),
-                nextPollAfterMs = 2000,
-                planId = plan.Id
-            }
-        };
+                goals = GoalDto(goal),
+                studyPlanRegeneration = new
+                {
+                    state = ToAsyncState(plan.State),
+                    nextPollAfterMs = 2000,
+                    planId = plan.Id
+                }
+            };
+        }
+        catch
+        {
+            await transaction.RollbackAsync(cancellationToken);
+            throw;
+        }
     }
 
     public async Task<object> GetSettingsAsync(string userId, CancellationToken cancellationToken)
@@ -258,6 +286,7 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
             ApplyGoalSettingsPatch(goal, request.Values);
             goal.UpdatedAt = DateTimeOffset.UtcNow;
             await RecordEventAsync(userId, "settings_changed", new { userId, section = "goals" }, cancellationToken);
+            LogAudit(userId, "Updated", "Settings", "goals", "Updated goal settings");
             await db.SaveChangesAsync(cancellationToken);
             return new { section = "goals", values = GoalSettingsDto(goal) };
         }
@@ -277,6 +306,7 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
         };
 
         await RecordEventAsync(userId, "settings_changed", new { userId, section = section.ToLowerInvariant() }, cancellationToken);
+        LogAudit(userId, "Updated", "Settings", section.ToLowerInvariant(), $"Updated {section} settings");
         await db.SaveChangesAsync(cancellationToken);
         return new { section, values = JsonSupport.Deserialize<Dictionary<string, object?>>(merged, new Dictionary<string, object?>()) };
     }
@@ -331,16 +361,27 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
         var active = await db.DiagnosticSessions.Where(x => x.UserId == userId && x.State == AttemptState.InProgress).FirstOrDefaultAsync(cancellationToken);
         if (active is not null)
         {
-            return await GetDiagnosticAttemptAsync(userId, active.Id, cancellationToken);
+            if (active.ExpiresAt.HasValue && DateTimeOffset.UtcNow > active.ExpiresAt.Value)
+            {
+                active.State = AttemptState.Abandoned;
+                await db.SaveChangesAsync(cancellationToken);
+                // Fall through to create a new session
+            }
+            else
+            {
+                return await GetDiagnosticAttemptAsync(userId, active.Id, cancellationToken);
+            }
         }
 
         var id = $"diag-{Guid.NewGuid():N}";
+        var now = DateTimeOffset.UtcNow;
         var session = new DiagnosticSession
         {
             Id = id,
             UserId = userId,
             State = AttemptState.InProgress,
-            StartedAt = DateTimeOffset.UtcNow
+            StartedAt = now,
+            ExpiresAt = now.AddDays(7)
         };
         db.DiagnosticSessions.Add(session);
         db.DiagnosticSubtests.AddRange(
@@ -1790,12 +1831,9 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
         };
 
         db.ReviewRequests.Add(review);
-        if (state == ReviewRequestState.Queued)
-        {
-            await QueueJobAsync(JobType.ReviewCompletion, resourceId: review.Id, cancellationToken: cancellationToken);
-        }
 
         await RecordEventAsync(userId, "review_requested", new { reviewRequestId = review.Id, attemptId = review.AttemptId, subtest = review.SubtestCode, turnaroundOption = review.TurnaroundOption }, cancellationToken);
+        LogAudit(userId, "Created", "ReviewRequest", review.Id, $"Expert review requested for {review.SubtestCode} attempt {review.AttemptId}, cost={cost} credits");
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
             await SaveIdempotentResponseAsync("review-request", request.IdempotencyKey, new { reviewRequestId = review.Id }, cancellationToken);
@@ -2533,6 +2571,21 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
             OccurredAt = DateTimeOffset.UtcNow
         });
         await Task.CompletedTask;
+    }
+
+    private void LogAudit(string userId, string action, string resourceType, string? resourceId, string? details)
+    {
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"AUD-{Guid.NewGuid():N}",
+            OccurredAt = DateTimeOffset.UtcNow,
+            ActorId = userId,
+            ActorName = $"learner:{userId}",
+            Action = action,
+            ResourceType = resourceType,
+            ResourceId = resourceId,
+            Details = details
+        });
     }
 
     private async Task<Dictionary<string, object?>?> GetIdempotentResponseAsync(string scope, string key, CancellationToken cancellationToken)

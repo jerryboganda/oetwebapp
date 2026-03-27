@@ -9,7 +9,7 @@ import type { LearnerProfileExpanded } from '@/lib/types/expert';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Target, History, BarChart3, FileText } from 'lucide-react';
-import { fetchLearnerProfile } from '@/lib/api';
+import { fetchLearnerProfile, isApiError } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
 type AsyncStatus = 'loading' | 'error' | 'success';
@@ -21,6 +21,8 @@ export default function AssignedLearnerPage() {
 
   const [learner, setLearner] = useState<LearnerProfileExpanded | null>(null);
   const [pageStatus, setPageStatus] = useState<AsyncStatus>('loading');
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
     if (!learnerId) return;
@@ -28,17 +30,21 @@ export default function AssignedLearnerPage() {
     (async () => {
       try {
         setPageStatus('loading');
+        setErrorMessage(null);
         const data = await fetchLearnerProfile(learnerId);
         if (cancelled) return;
         setLearner(data);
         setPageStatus('success');
         analytics.track('learner_profile_viewed', { learnerId });
-      } catch {
-        if (!cancelled) setPageStatus('error');
+      } catch (error) {
+        if (!cancelled) {
+          setErrorMessage(isApiError(error) ? error.userMessage : 'Unable to load learner context right now.');
+          setPageStatus('error');
+        }
       }
     })();
     return () => { cancelled = true; };
-  }, [learnerId]);
+  }, [learnerId, reloadToken]);
 
   return (
     <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6" role="main" aria-label="Learner Profile">
@@ -46,19 +52,22 @@ export default function AssignedLearnerPage() {
         <ArrowLeft className="w-4 h-4 mr-2" /> Back
       </Button>
 
-      <AsyncStateWrapper status={pageStatus} onRetry={() => window.location.reload()}>
+      <AsyncStateWrapper status={pageStatus} onRetry={() => setReloadToken((current) => current + 1)} errorMessage={errorMessage ?? undefined}>
         {learner && (
           <>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-4 flex-wrap">
               <div>
                 <h1 className="text-2xl font-bold text-navy">{learner.name}</h1>
                 <p className="text-muted text-sm mt-1">Learner ID: {learnerId}</p>
               </div>
-              <Badge variant="info" className="capitalize text-sm px-3 py-1">{learner.profession}</Badge>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Badge variant="info" className="capitalize text-sm px-3 py-1">{learner.profession}</Badge>
+                {learner.visibilityScope && <Badge variant="default">{learner.visibilityScope.replace(/_/g, ' ')}</Badge>}
+              </div>
             </div>
 
             <InlineAlert variant="info" title="Privacy Notice">
-              Learner data is shared in a limited context for review purposes only. Do not share externally.
+              Learner context is shown only to support the reviews assigned to you. Use it for review decisions only and do not share it outside the console.
             </InlineAlert>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -99,7 +108,6 @@ export default function AssignedLearnerPage() {
               </Card>
             </div>
 
-            {/* Sub-Test Performance */}
             <Card>
               <div className="p-4 border-b border-gray-100 font-semibold text-navy flex items-center gap-2">
                 <BarChart3 className="w-4 h-4" /> Sub-Test Performance
@@ -115,34 +123,33 @@ export default function AssignedLearnerPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {learner.subTestScores.map(st => (
-                      <tr key={st.subTest} className="border-b border-gray-100 last:border-0">
-                        <td className="p-3 capitalize font-medium text-navy">{st.subTest}</td>
-                        <td className="p-3">{st.latestScore ?? '-'}</td>
-                        <td className="p-3">{st.latestGrade ? <Badge variant={st.latestGrade.startsWith('A') || st.latestGrade.startsWith('B') ? 'success' : 'warning'}>{st.latestGrade}</Badge> : '-'}</td>
-                        <td className="p-3">{st.attempts}</td>
+                    {learner.subTestScores.map((subTestScore) => (
+                      <tr key={subTestScore.subTest} className="border-b border-gray-100 last:border-0">
+                        <td className="p-3 capitalize font-medium text-navy">{subTestScore.subTest}</td>
+                        <td className="p-3">{subTestScore.latestScore ?? '-'}</td>
+                        <td className="p-3">{subTestScore.latestGrade ? <Badge variant={subTestScore.latestGrade.startsWith('A') || subTestScore.latestGrade.startsWith('B') ? 'success' : 'warning'}>{subTestScore.latestGrade}</Badge> : '-'}</td>
+                        <td className="p-3">{subTestScore.attempts}</td>
                       </tr>
                     ))}
                     {learner.subTestScores.length === 0 && (
-                      <tr><td colSpan={4} className="p-4 text-center text-muted italic">No sub-test data available.</td></tr>
+                      <tr><td colSpan={4} className="p-4 text-center text-muted italic">No sub-test data is available yet.</td></tr>
                     )}
                   </tbody>
                 </table>
               </CardContent>
             </Card>
 
-            {/* Prior Expert Reviews */}
             <Card>
               <div className="p-4 border-b border-gray-100 font-semibold text-navy flex items-center gap-2">
                 <FileText className="w-4 h-4" /> Prior Expert Reviews
               </div>
               <CardContent className="p-4 space-y-4">
                 {learner.priorReviews.length === 0 ? (
-                  <p className="italic text-muted text-sm">No prior expert feedback available for this learner.</p>
+                  <p className="italic text-muted text-sm">No prior expert feedback is available for this learner.</p>
                 ) : (
-                  learner.priorReviews.map(review => (
+                  learner.priorReviews.map((review) => (
                     <div key={review.id} className="p-3 border border-gray-200 rounded-md">
-                      <div className="flex items-center justify-between mb-1">
+                      <div className="flex items-center justify-between mb-1 gap-3 flex-wrap">
                         <span className="text-sm font-medium text-navy capitalize">{review.type} Review</span>
                         <span className="text-xs text-muted">{review.date.split('T')[0]}</span>
                       </div>

@@ -1,8 +1,8 @@
 services:
-  web:
-    ports:
-      - "${HOST_WEB_PORT:-3003}:3000"
-
   learner-api:
     ports:
       - "${HOST_API_PORT:-5001}:8080"
+
+  web:
+    ports:
+      - "${HOST_WEB_PORT:-3003}:3000"

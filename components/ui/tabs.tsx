@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { useState, type ReactNode } from 'react';
+import { type KeyboardEvent, type ReactNode } from 'react';
 
 export interface Tab {
   id: string;
@@ -18,16 +18,40 @@ interface TabsProps {
 }
 
 export function Tabs({ tabs, activeTab, onChange, className }: TabsProps) {
+  const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (event.key === 'ArrowRight') {
+      event.preventDefault();
+      onChange(tabs[(index + 1) % tabs.length].id);
+    }
+
+    if (event.key === 'ArrowLeft') {
+      event.preventDefault();
+      onChange(tabs[(index - 1 + tabs.length) % tabs.length].id);
+    }
+
+    if (event.key === 'Home') {
+      event.preventDefault();
+      onChange(tabs[0].id);
+    }
+
+    if (event.key === 'End') {
+      event.preventDefault();
+      onChange(tabs[tabs.length - 1].id);
+    }
+  };
+
   return (
     <div className={cn('flex border-b border-gray-200 overflow-x-auto', className)} role="tablist">
-      {tabs.map((tab) => (
+      {tabs.map((tab, index) => (
         <button
           key={tab.id}
           id={`tab-${tab.id}`}
           role="tab"
           aria-selected={activeTab === tab.id}
           aria-controls={`tabpanel-${tab.id}`}
+          tabIndex={activeTab === tab.id ? 0 : -1}
           onClick={() => onChange(tab.id)}
+          onKeyDown={(event) => handleKeyDown(event, index)}
           className={cn(
             'flex items-center gap-2 px-4 py-3 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
             activeTab === tab.id

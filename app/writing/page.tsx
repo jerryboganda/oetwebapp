@@ -23,6 +23,8 @@ import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchWritingTasks, fetchWritingSubmissions, fetchBilling } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { EmptyState } from '@/components/ui/empty-error';
+import { InlineAlert } from '@/components/ui/alert';
 import type { WritingTask, WritingSubmission } from '@/lib/mock-data';
 
 type TabType = 'practice' | 'drills' | 'past';
@@ -44,12 +46,14 @@ export default function WritingHome() {
   const [submissions, setSubmissions] = useState<WritingSubmission[]>([]);
   const [credits, setCredits] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<Record<string, string[]>>({});
 
   useEffect(() => {
     analytics.track('module_entry', { module: 'writing' });
     Promise.all([fetchWritingTasks(), fetchWritingSubmissions(), fetchBilling()])
       .then(([t, s, b]) => { setTasks(t); setSubmissions(s); setCredits(b.reviewCredits); })
+      .catch(() => setError('Failed to load writing tasks. Please try again.'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -78,6 +82,16 @@ export default function WritingHome() {
           </div>
           <Skeleton className="h-10 w-80" />
           {[1,2,3].map(i => <Skeleton key={i} className="h-20 rounded-xl" />)}
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (error) {
+    return (
+      <AppShell pageTitle="Writing">
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          <InlineAlert variant="error">{error}</InlineAlert>
         </div>
       </AppShell>
     );
@@ -190,7 +204,9 @@ export default function WritingHome() {
               {activeTab === 'practice' && (
                 <motion.div key="practice" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="divide-y divide-gray-100">
                   {filteredTasks.length === 0 ? (
-                    <div className="p-10 text-center text-muted text-sm">No tasks match your filters.</div>
+                    <div className="p-10">
+                      <EmptyState title="No tasks match your filters" description="Try removing some filters to see more tasks." />
+                    </div>
                   ) : filteredTasks.map(task => (
                     <div key={task.id} className="p-5 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer"
                       onClick={() => { analytics.track('task_started', { taskId: task.id, subtest: 'writing' }); router.push(`/writing/player?taskId=${task.id}`); }}>
@@ -211,7 +227,9 @@ export default function WritingHome() {
               {activeTab === 'drills' && (
                 <motion.div key="drills" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="divide-y divide-gray-100">
                   {filteredTasks.length === 0 ? (
-                    <div className="p-10 text-center text-muted text-sm">No drills match your filters.</div>
+                    <div className="p-10">
+                      <EmptyState title="No drills match your filters" description="Try removing some filters to see more drills." />
+                    </div>
                   ) : filteredTasks.map(task => (
                     <div key={task.id} className="p-5 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer">
                       <div>
@@ -233,7 +251,9 @@ export default function WritingHome() {
               {activeTab === 'past' && (
                 <motion.div key="past" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="divide-y divide-gray-100">
                   {submissions.length === 0 ? (
-                    <div className="p-10 text-center text-muted text-sm">No submissions yet. Complete a task to see it here.</div>
+                    <div className="p-10">
+                      <EmptyState title="No submissions yet" description="Complete a writing task to see your history here." />
+                    </div>
                   ) : submissions.map(sub => (
                     <div key={sub.id} className="p-5 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer"
                       onClick={() => router.push(`/writing/result?id=${sub.id}`)}>

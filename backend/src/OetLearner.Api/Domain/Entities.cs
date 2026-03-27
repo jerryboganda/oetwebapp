@@ -455,6 +455,7 @@ public class DiagnosticSession
     public AttemptState State { get; set; }
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
+    public DateTimeOffset? ExpiresAt { get; set; }
 }
 
 public class DiagnosticSubtestStatus

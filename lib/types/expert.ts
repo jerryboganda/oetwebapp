@@ -19,6 +19,33 @@ export type SubTest = 'reading' | 'listening' | 'writing' | 'speaking';
 
 export type AIConfidence = 'high' | 'medium' | 'low' | 'unknown';
 
+export interface ExpertMe {
+  userId: string;
+  role: 'expert';
+  displayName: string;
+  email: string;
+  timezone: string;
+  isActive: boolean;
+  specialties: string[];
+  createdAt: string;
+}
+
+export interface ExpertReviewActions {
+  canClaim: boolean;
+  canRelease: boolean;
+  canOpen: boolean;
+  canSaveDraft: boolean;
+  canSubmit: boolean;
+  canRequestRework: boolean;
+  readOnly: boolean;
+}
+
+export interface ExpertArtifactState {
+  state: 'queued' | 'processing' | 'completed' | 'failed' | 'stale';
+  isStale: boolean;
+  message?: string | null;
+}
+
 export type WritingCriterionKey = 'purpose' | 'content' | 'conciseness' | 'genre' | 'organization' | 'language';
 
 export type SpeakingCriterionKey = 'intelligibility' | 'fluency' | 'appropriateness' | 'grammar' | 'clinicalCommunication';
@@ -35,10 +62,22 @@ export interface ReviewRequest {
   slaDue: string; // ISO Date String
   assignedReviewerId?: string;
   assignedReviewerName?: string;
+  assignmentState?: 'unassigned' | 'assigned' | 'claimed' | 'reassigned';
+  slaState?: 'on_track' | 'at_risk' | 'overdue' | 'completed_on_time' | 'completed_late';
+  isOverdue?: boolean;
+  availableActions?: ExpertReviewActions;
   status: ReviewStatus;
   contentId?: string;
   attemptId?: string;
   createdAt: string;
+}
+
+export interface ReviewQueueResponse {
+  items: ReviewRequest[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  lastUpdatedAt: string;
 }
 
 export interface AnchoredComment {
@@ -82,6 +121,9 @@ export interface WritingReviewDetail extends ReviewRequest {
   aiDraftFeedback: string;
   aiSuggestedScores?: Partial<Record<WritingCriterionKey, number>>;
   modelAnswer?: string;
+  existingDraft?: ExpertSavedDraft | null;
+  permissions?: ExpertReviewActions;
+  artifactStatus?: Record<string, ExpertArtifactState>;
 }
 
 export interface SpeakingReviewDetail extends ReviewRequest {
@@ -90,6 +132,20 @@ export interface SpeakingReviewDetail extends ReviewRequest {
   roleCard: { role: string; setting: string; patient: string; task: string; background?: string };
   aiFlags: AIFlag[];
   aiSuggestedScores?: Partial<Record<SpeakingCriterionKey, number>>;
+  existingDraft?: ExpertSavedDraft | null;
+  permissions?: ExpertReviewActions;
+  artifactStatus?: Record<string, ExpertArtifactState>;
+}
+
+export interface ExpertSavedDraft {
+  version: number;
+  state: string;
+  scores: Record<string, number>;
+  criterionComments: Record<string, string>;
+  finalComment: string;
+  anchoredComments: AnchoredComment[];
+  timestampComments: TimestampComment[];
+  savedAt: string;
 }
 
 export interface ReviewDraft {
@@ -99,6 +155,7 @@ export interface ReviewDraft {
   finalComment: string;
   comments: AnchoredComment[] | TimestampComment[];
   savedAt: string;
+  version?: number;
 }
 
 export interface CalibrationCase {
@@ -123,9 +180,11 @@ export interface CalibrationNote {
 
 export interface ExpertMetrics {
   totalReviewsCompleted: number;
+  draftReviews: number;
   averageSlaCompliance: number;
   averageCalibrationAlignment: number;
   reworkRate: number;
+  averageTurnaroundHours: number;
 }
 
 export interface ExpertCompletionData {
@@ -142,6 +201,7 @@ export interface ExpertScheduleDay {
 export type ExpertSchedule = {
   timezone: string;
   days: Record<string, ExpertScheduleDay>;
+  lastUpdatedAt?: string | null;
 };
 
 export interface LearnerProfile {
@@ -173,4 +233,5 @@ export interface LearnerProfileExpanded extends LearnerProfile {
   totalReviews: number;
   subTestScores: SubTestScore[];
   priorReviews: PriorReview[];
+  visibilityScope?: string;
 }

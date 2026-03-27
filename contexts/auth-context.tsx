@@ -4,6 +4,8 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { type User, onAuthStateChanged, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut as firebaseSignOut } from 'firebase/auth';
 import { auth, isFirebaseConfigured } from '@/lib/firebase';
 
+const IS_DEV = process.env.NODE_ENV === 'development';
+
 interface AuthState {
   user: User | null;
   loading: boolean;
@@ -14,13 +16,13 @@ interface AuthContextValue extends AuthState {
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
-  /** For dev: simulate auth without Firebase */
+  /** For dev only: simulate auth without Firebase */
   mockSignIn: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-// Mock user for development when Firebase is not configured
+// Mock user for development ONLY when Firebase is not configured
 const MOCK_USER = {
   uid: 'mock-user-001',
   email: 'learner@oet-prep.dev',
@@ -31,9 +33,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<AuthState>({ user: null, loading: true, error: null });
 
   useEffect(() => {
-    // If Firebase is not configured, use mock auth
     if (!isFirebaseConfigured || !auth) {
-      setState({ user: MOCK_USER, loading: false, error: null });
+      if (IS_DEV) {
+        // Development fallback: use mock auth
+        setState({ user: MOCK_USER, loading: false, error: null });
+      } else {
+        // Production: Firebase must be configured
+        setState({ user: null, loading: false, error: 'Authentication is not configured. Please contact support.' });
+      }
       return;
     }
 
@@ -46,7 +53,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    if (!auth) { setState({ user: MOCK_USER, loading: false, error: null }); return; }
+    if (!auth) {
+      if (IS_DEV) { setState({ user: MOCK_USER, loading: false, error: null }); return; }
+      setState((s) => ({ ...s, loading: false, error: 'Authentication is not configured.' }));
+      return;
+    }
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
       await signInWithEmailAndPassword(auth, email, password);
@@ -56,7 +67,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signUp = async (email: string, password: string) => {
-    if (!auth) { setState({ user: MOCK_USER, loading: false, error: null }); return; }
+    if (!auth) {
+      if (IS_DEV) { setState({ user: MOCK_USER, loading: false, error: null }); return; }
+      setState((s) => ({ ...s, loading: false, error: 'Authentication is not configured.' }));
+      return;
+    }
     setState((s) => ({ ...s, loading: true, error: null }));
     try {
       await createUserWithEmailAndPassword(auth, email, password);
@@ -74,6 +89,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const mockSignIn = () => {
+    if (!IS_DEV) return;
     setState({ user: MOCK_USER, loading: false, error: null });
   };
 

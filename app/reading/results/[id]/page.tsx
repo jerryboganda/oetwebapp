@@ -83,7 +83,12 @@ function ReadingResultsContent() {
             className="bg-surface rounded-[24px] border border-gray-200 p-8 shadow-sm flex flex-col items-center justify-center text-center md:col-span-1"
           >
             <div className="w-24 h-24 rounded-full border-8 border-primary/20 flex items-center justify-center mb-4 relative">
-              <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 100 100">
+              <svg
+                className="absolute inset-0 w-full h-full -rotate-90"
+                viewBox="0 0 100 100"
+                role="img"
+                aria-label={`Score ${result.score} out of ${result.totalQuestions}, ${result.percentage}%`}
+              >
                 <circle
                   cx="50"
                   cy="50"

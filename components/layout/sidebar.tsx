@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useAuth } from '@/contexts/auth-context';
 import {
   LayoutDashboard,
   FilePenLine,
@@ -26,6 +27,11 @@ export interface NavItem {
   label: string;
   icon: React.ReactNode;
   matchPrefix?: string;
+}
+
+export interface ShellUserSummary {
+  displayName?: string | null;
+  email?: string | null;
 }
 
 export const mainNavItems: NavItem[] = [
@@ -56,11 +62,15 @@ function isActive(pathname: string | null, item: NavItem): boolean {
 }
 
 /* ─── Desktop Sidebar ─── */
-export function Sidebar({ className, items = mainNavItems }: { className?: string; items?: NavItem[] }) {
+export function Sidebar({ className, items = mainNavItems, userSummary }: { className?: string; items?: NavItem[]; userSummary?: ShellUserSummary }) {
   const pathname = usePathname();
+  const { user } = useAuth();
+  const displayName = userSummary?.displayName ?? user?.displayName ?? 'User';
+  const initials = displayName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
+  const email = userSummary?.email ?? user?.email ?? '';
 
   return (
-    <aside className={cn('hidden lg:flex flex-col w-64 bg-surface border-r border-gray-200/60 shrink-0 sticky top-0 h-screen', className)}>
+    <aside className={cn('hidden lg:flex flex-col w-64 bg-surface border-r border-border shrink-0 sticky top-0 h-screen', className)}>
       {/* Brand Header */}
       <div className="h-16 flex items-center px-6 border-b border-gray-100 shrink-0">
         <Link href="/" className="flex items-center gap-2.5 text-navy hover:opacity-90 transition-opacity">
@@ -124,13 +134,13 @@ export function Sidebar({ className, items = mainNavItems }: { className?: strin
         {/* User Profile Snippet */}
         <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors group">
           <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0 border border-primary/10 group-hover:bg-primary/30 transition-colors">
-            FM
+            {initials}
           </div>
           <div className="flex flex-col overflow-hidden">
-            <span className="text-sm font-bold text-navy truncate">Faisal Maqsood</span>
-            <span className="text-xs text-muted truncate">Admin</span>
+            <span className="text-sm font-bold text-navy truncate">{displayName}</span>
+            <span className="text-xs text-muted truncate">{email}</span>
           </div>
-          <LogOut className="w-4 h-4 ml-auto text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+          <LogOut className="w-4 h-4 ml-auto text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
         </div>
       </div>
     </aside>
@@ -143,7 +153,7 @@ export function BottomNav({ className, items = mobileNavItems }: { className?: s
 
   return (
     <nav
-      className={cn('lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-gray-200 safe-area-inset-bottom shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]', className)}
+      className={cn('lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-border safe-area-inset-bottom shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]', className)}
       aria-label="Mobile navigation"
     >
       <ul className="flex items-center justify-around py-2 px-2">
