@@ -212,6 +212,7 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddScoped<LearnerService>();
 builder.Services.AddScoped<ExpertService>();
 builder.Services.AddScoped<AdminService>();
+builder.Services.AddScoped<AuthService>();
 builder.Services.AddSingleton<PlatformLinkService>();
 builder.Services.AddSingleton<MediaStorageService>();
 builder.Services.AddHostedService<BackgroundJobProcessor>();
@@ -382,6 +383,7 @@ app.MapGet("/health", async (LearnerDbContext db, CancellationToken ct) =>
         : Results.Json(new { status = "failed", service = "OET Learner API", database = "unavailable", timestamp = DateTimeOffset.UtcNow }, statusCode: StatusCodes.Status503ServiceUnavailable);
 }).AllowAnonymous();
 
+app.MapAuthEndpoints();
 app.MapLearnerEndpoints();
 app.MapExpertEndpoints();
 app.MapAdminEndpoints();

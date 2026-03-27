@@ -32,5 +32,7 @@ public static class DatabaseBootstrapper
         {
             await SeedData.EnsureDemoDataAsync(db, cancellationToken);
         }
+
+        await SeedData.EnsureBootstrapAuthAsync(db, options, cancellationToken);
     }
 }

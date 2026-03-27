@@ -1,4 +1,3 @@
-import { auth, isFirebaseConfigured } from './firebase';
 import type {
   UserProfile,
   StudyPlanTask,
@@ -46,8 +45,18 @@ import type {
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:5198').replace(/\/$/, '');
 const ENABLE_MOCK_AUTH = process.env.NEXT_PUBLIC_ENABLE_MOCK_AUTH === 'true';
+const AUTH_TOKEN_KEY = 'oet_access_token';
+const AUTH_USER_KEY = 'oet_auth_user';
 
 type ApiRecord = Record<string, any>;
+
+export interface AuthUser {
+  userId: string;
+  role: 'learner' | 'expert' | 'admin';
+  email: string;
+  displayName: string;
+  isActive: boolean;
+}
 
 function isBrowser() {
   return typeof window !== 'undefined';
@@ -174,7 +183,7 @@ function getMockAuthHeaders(path: string): HeadersInit | undefined {
     return undefined;
   }
 
-  const useMockAuth = ENABLE_MOCK_AUTH || !isFirebaseConfigured;
+  const useMockAuth = ENABLE_MOCK_AUTH;
   if (!useMockAuth) {
     return undefined;
   }
@@ -218,20 +227,42 @@ async function getHeaders(path: string, extra?: HeadersInit, options?: { json?: 
     Object.entries(debugHeaders).forEach(([key, value]) => headers.set(key, value));
   }
 
-  try {
-    const token = auth?.currentUser ? await auth.currentUser.getIdToken() : null;
-    if (token) {
-      headers.set('Authorization', `Bearer ${token}`);
-    } else if (process.env.NODE_ENV !== 'development' && !debugHeaders) {
-      console.error('[API] No auth token available for production request to', path);
-    }
-  } catch (err) {
-    if (process.env.NODE_ENV !== 'development') {
-      console.error('[API] Failed to retrieve auth token:', err);
-    }
+  const token = getStoredAccessToken();
+  if (token) {
+    headers.set('Authorization', `Bearer ${token}`);
+  } else if (process.env.NODE_ENV !== 'development' && !debugHeaders) {
+    console.error('[API] No auth token available for production request to', path);
   }
 
   return headers;
+}
+
+export function getStoredAccessToken(): string | null {
+  if (!isBrowser()) return null;
+  return window.localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+export function getStoredAuthUser(): AuthUser | null {
+  if (!isBrowser()) return null;
+  const raw = window.localStorage.getItem(AUTH_USER_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw) as AuthUser;
+  } catch {
+    return null;
+  }
+}
+
+export function setStoredAuthSession(accessToken: string, user: AuthUser) {
+  if (!isBrowser()) return;
+  window.localStorage.setItem(AUTH_TOKEN_KEY, accessToken);
+  window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
+}
+
+export function clearStoredAuthSession() {
+  if (!isBrowser()) return;
+  window.localStorage.removeItem(AUTH_TOKEN_KEY);
+  window.localStorage.removeItem(AUTH_USER_KEY);
 }
 
 /** Typed API error with status, error code, retryable flag, and user-friendly message. */
@@ -303,6 +334,9 @@ async function apiRequest<T = any>(path: string, init?: RequestInit): Promise<T>
         }
 
         const apiError = new ApiError(response.status, code, message, retryable, fieldErrors);
+        if (response.status === 401) {
+          clearStoredAuthSession();
+        }
 
         // Retry on 5xx/408/429, but not on 4xx client errors
         if (retryable && attempt < MAX_RETRIES) {
@@ -1310,6 +1344,19 @@ export async function fetchDiagnosticResults(): Promise<DiagnosticResult[]> {
       issues: criterion.issues ?? [],
     })),
   }));
+}
+
+// ─── Auth API ───
+
+export async function loginWithPassword(email: string, password: string): Promise<{ accessToken: string; expiresAt: string; user: AuthUser }> {
+  return apiRequest('/v1/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function fetchCurrentAuthUser(): Promise<AuthUser> {
+  return apiRequest<AuthUser>('/v1/auth/me');
 }
 
 // ─── Expert Console API ───

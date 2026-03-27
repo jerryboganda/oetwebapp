@@ -29,6 +29,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<MockReport> MockReports => Set<MockReport>();
     public DbSet<AnalyticsEventRecord> AnalyticsEvents => Set<AnalyticsEventRecord>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
+    public DbSet<AuthAccount> AuthAccounts => Set<AuthAccount>();
 
     // Expert Console entities
     public DbSet<ExpertUser> ExpertUsers => Set<ExpertUser>();
@@ -58,6 +59,8 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<Invoice>().HasIndex(x => new { x.UserId, x.IssuedAt });
         modelBuilder.Entity<AnalyticsEventRecord>().HasIndex(x => new { x.UserId, x.EventName, x.OccurredAt });
         modelBuilder.Entity<IdempotencyRecord>().HasIndex(x => new { x.Scope, x.Key }).IsUnique();
+        modelBuilder.Entity<AuthAccount>().HasIndex(x => x.Email).IsUnique();
+        modelBuilder.Entity<AuthAccount>().HasIndex(x => new { x.SubjectId, x.Role }).IsUnique();
 
         // Learner lookup indexes (frequently queried by UserId)
         modelBuilder.Entity<LearnerGoal>().HasIndex(x => x.UserId);

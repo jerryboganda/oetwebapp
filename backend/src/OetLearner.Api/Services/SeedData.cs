@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 
@@ -25,6 +26,70 @@ public static class SeedData
         }
 
         SeedDemoUser(db);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public static async Task EnsureBootstrapAuthAsync(LearnerDbContext db, BootstrapOptions options, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(options.ExpertEmail) || string.IsNullOrWhiteSpace(options.ExpertPassword))
+        {
+            return;
+        }
+
+        var email = options.ExpertEmail.Trim().ToLowerInvariant();
+        var expertId = "expert-001";
+        var displayName = string.IsNullOrWhiteSpace(options.ExpertDisplayName)
+            ? "Expert Reviewer"
+            : options.ExpertDisplayName.Trim();
+
+        var expert = await db.ExpertUsers.FirstOrDefaultAsync(candidate => candidate.Id == expertId, cancellationToken);
+        if (expert is null)
+        {
+            expert = new ExpertUser
+            {
+                Id = expertId,
+                DisplayName = displayName,
+                Email = email,
+                CreatedAt = DateTimeOffset.UtcNow,
+                Timezone = "UTC",
+                IsActive = true
+            };
+            db.ExpertUsers.Add(expert);
+        }
+        else
+        {
+            expert.DisplayName = displayName;
+            expert.Email = email;
+            expert.IsActive = true;
+        }
+
+        var account = await db.AuthAccounts.FirstOrDefaultAsync(candidate => candidate.Email == email || (candidate.SubjectId == expertId && candidate.Role == "expert"), cancellationToken);
+        var passwordHash = AuthService.HashPassword(options.ExpertPassword);
+
+        if (account is null)
+        {
+            db.AuthAccounts.Add(new AuthAccount
+            {
+                Id = $"auth-{Guid.NewGuid():N}",
+                SubjectId = expertId,
+                Role = "expert",
+                Email = email,
+                DisplayName = displayName,
+                PasswordHash = passwordHash,
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+        }
+        else
+        {
+            account.SubjectId = expertId;
+            account.Role = "expert";
+            account.Email = email;
+            account.DisplayName = displayName;
+            account.PasswordHash = passwordHash;
+            account.IsActive = true;
+        }
+
         await db.SaveChangesAsync(cancellationToken);
     }
 

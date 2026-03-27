@@ -42,6 +42,9 @@ services:
       Storage__MaxUploadBytes: ${MAX_UPLOAD_BYTES:-26214400}
       Bootstrap__AutoMigrate: ${AUTO_MIGRATE:-true}
       Bootstrap__SeedDemoData: ${SEED_DEMO_DATA:-false}
+      Bootstrap__ExpertEmail: ${BOOTSTRAP_EXPERT_EMAIL:-}
+      Bootstrap__ExpertPassword: ${BOOTSTRAP_EXPERT_PASSWORD:-}
+      Bootstrap__ExpertDisplayName: ${BOOTSTRAP_EXPERT_DISPLAY_NAME:-Expert Reviewer}
       Proxy__TrustForwardHeaders: true
       Proxy__EnforceHttps: true
       Cors__AllowedOriginsCsv: ${CORS_ALLOWED_ORIGINS}

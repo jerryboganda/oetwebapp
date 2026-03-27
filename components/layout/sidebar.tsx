@@ -2,7 +2,7 @@
 
 import { cn } from '@/lib/utils';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import {
   LayoutDashboard,
@@ -64,7 +64,8 @@ function isActive(pathname: string | null, item: NavItem): boolean {
 /* ─── Desktop Sidebar ─── */
 export function Sidebar({ className, items = mainNavItems, userSummary }: { className?: string; items?: NavItem[]; userSummary?: ShellUserSummary }) {
   const pathname = usePathname();
-  const { user } = useAuth();
+  const router = useRouter();
+  const { user, signOut } = useAuth();
   const displayName = userSummary?.displayName ?? user?.displayName ?? 'User';
   const initials = displayName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
   const email = userSummary?.email ?? user?.email ?? '';
@@ -132,7 +133,14 @@ export function Sidebar({ className, items = mainNavItems, userSummary }: { clas
         </ul>
 
         {/* User Profile Snippet */}
-        <div className="flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors group">
+        <button
+          type="button"
+          onClick={async () => {
+            await signOut();
+            router.push('/login');
+          }}
+          className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors group text-left"
+        >
           <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0 border border-primary/10 group-hover:bg-primary/30 transition-colors">
             {initials}
           </div>
@@ -141,7 +149,7 @@ export function Sidebar({ className, items = mainNavItems, userSummary }: { clas
             <span className="text-xs text-muted truncate">{email}</span>
           </div>
           <LogOut className="w-4 h-4 ml-auto text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity" aria-hidden="true" />
-        </div>
+        </button>
       </div>
     </aside>
   );

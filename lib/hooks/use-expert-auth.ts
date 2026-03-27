@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import { ApiError, fetchExpertMe, isApiError } from '@/lib/api';
 import type { ExpertMe } from '@/lib/types/expert';
 
@@ -15,6 +15,7 @@ interface ExpertAuthState extends UserRole {
 
 export function useExpertAuth() {
   const router = useRouter();
+  const pathname = usePathname();
   const [authState, setAuthState] = useState<ExpertAuthState>({
     role: 'learner',
     isAuthenticated: false,
@@ -52,7 +53,8 @@ export function useExpertAuth() {
         });
 
         if (apiError.status === 401 || apiError.status === 403) {
-          router.replace('/');
+          const redirect = pathname ? `?redirect=${encodeURIComponent(pathname)}` : '';
+          router.replace(`/login${redirect}`);
         }
       } finally {
         if (!cancelled) {
@@ -65,7 +67,7 @@ export function useExpertAuth() {
     return () => {
       cancelled = true;
     };
-  }, [router]);
+  }, [pathname, router]);
 
   return {
     ...authState,
