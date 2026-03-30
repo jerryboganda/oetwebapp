@@ -57,7 +57,7 @@ export function RegisterPersonalStep({
           id="email"
           type="email"
           className={styles.input}
-          placeholder="name@example.com"
+          placeholder="you@example.com"
           autoComplete="email"
           inputMode="email"
           spellCheck={false}

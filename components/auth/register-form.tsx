@@ -254,8 +254,6 @@ export function RegisterForm() {
     }
   });
 
-  const nextStepLabel = step === 1 ? 'Continue to Enrollment' : 'Continue to Security';
-
   return (
     <AuthScreenShell
       brandHref={AUTH_ROUTES.signIn}
@@ -337,7 +335,7 @@ export function RegisterForm() {
 
           {step < 3 ? (
             <button type="button" className={styles.submit} onClick={nextStep}>
-              {nextStepLabel}
+              Next Step
             </button>
           ) : (
             <button

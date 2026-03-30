@@ -37,7 +37,7 @@ export function RegisterSecurityStep({
       <PasswordField
         id="password"
         label="Password"
-        placeholder="Create a strong password"
+        placeholder="Create password"
         autoComplete="new-password"
         {...register('password')}
       />
@@ -46,7 +46,7 @@ export function RegisterSecurityStep({
       <PasswordField
         id="confirmPassword"
         label="Confirm Password"
-        placeholder="Repeat your password"
+        placeholder="Repeat password"
         autoComplete="new-password"
         {...register('confirmPassword')}
       />
@@ -89,7 +89,7 @@ export function RegisterSecurityStep({
               <IconMail size={14} />
             </span>
             <p>
-              {getValues('firstName')} {getValues('lastName')} - {getValues('email')}
+              {getValues('firstName')} {getValues('lastName')} · {getValues('email')}
             </p>
           </div>
           <div className={styles.summaryItem}>
@@ -97,7 +97,7 @@ export function RegisterSecurityStep({
               <IconBriefcase size={14} />
             </span>
             <p>
-              {examTypes.find((item) => item.id === selectedExamTypeId)?.label ?? 'Exam'} -{' '}
+              {examTypes.find((item) => item.id === selectedExamTypeId)?.label ?? 'Exam'} ·{' '}
               {selectedProfession?.label ?? 'Profession'}
             </p>
           </div>

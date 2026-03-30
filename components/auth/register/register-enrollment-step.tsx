@@ -73,7 +73,7 @@ export function RegisterEnrollmentStep({
           <option value="">Select session</option>
           {filteredSessions.map((item) => (
             <option key={item.id} value={item.id}>
-              {item.name} - {item.priceLabel}
+              {item.name} · {item.priceLabel}
             </option>
           ))}
         </select>
@@ -103,7 +103,7 @@ export function RegisterEnrollmentStep({
           <>
             <p>{selectedSession.name}</p>
             <p>
-              {selectedSession.priceLabel} - {selectedSession.deliveryMode}
+              {selectedSession.priceLabel} · {selectedSession.deliveryMode}
             </p>
             <p>
               {selectedSession.startDate} to {selectedSession.endDate}
