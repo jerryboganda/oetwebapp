@@ -67,7 +67,7 @@ describe('RegisterPage', () => {
     render(<RegisterPage />);
 
     expect(await screen.findByRole('heading', { name: /register your account/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /continue to enrollment/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /next step/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /sign up with linkedin/i })).toBeInTheDocument();
   });
 });
