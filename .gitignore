@@ -3,6 +3,10 @@ node_modules/
 coverage/
 .DS_Store
 *.log
+.playwright-cli/
+.playwright/
+playwright/.auth/
+output/playwright/
 .agents/
 .claude/
 backend/**/bin/

@@ -1,8 +1,10 @@
 using System.Text;
 using System.Threading.RateLimiting;
+using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Diagnostics;
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -16,37 +18,77 @@ using OetLearner.Api.Security;
 using OetLearner.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
+const string HybridDevelopmentAuthScheme = "DevelopmentOrJwt";
 var authOptions = builder.Configuration.GetSection("Auth").Get<AuthOptions>() ?? new AuthOptions();
+var authTokenOptions = builder.Configuration.GetSection(AuthTokenOptions.SectionName).Get<AuthTokenOptions>() ?? new AuthTokenOptions();
+var brevoOptions = builder.Configuration.GetSection(BrevoOptions.SectionName).Get<BrevoOptions>() ?? new BrevoOptions();
+var smtpOptions = builder.Configuration.GetSection(SmtpOptions.SectionName).Get<SmtpOptions>() ?? new SmtpOptions();
 var bootstrapOptions = builder.Configuration.GetSection("Bootstrap").Get<BootstrapOptions>() ?? new BootstrapOptions();
 var storageOptions = builder.Configuration.GetSection("Storage").Get<StorageOptions>() ?? new StorageOptions();
 var platformOptions = builder.Configuration.GetSection("Platform").Get<PlatformOptions>() ?? new PlatformOptions();
 var billingOptions = builder.Configuration.GetSection("Billing").Get<BillingOptions>() ?? new BillingOptions();
+var externalAuthOptions = builder.Configuration.GetSection(ExternalAuthOptions.SectionName).Get<ExternalAuthOptions>() ?? new ExternalAuthOptions();
 var useDevelopmentAuth = authOptions.UseDevelopmentAuth && builder.Environment.IsDevelopment();
 var enableSwagger = builder.Environment.IsDevelopment() || builder.Configuration.GetValue<bool>("Features:EnableSwagger");
 var trustForwardHeaders = builder.Configuration.GetValue<bool?>("Proxy:TrustForwardHeaders") ?? !builder.Environment.IsDevelopment();
 var enforceHttps = builder.Configuration.GetValue<bool?>("Proxy:EnforceHttps") ?? !builder.Environment.IsDevelopment();
+var externalAuthEnabled = externalAuthOptions.Google.Enabled || externalAuthOptions.Facebook.Enabled || externalAuthOptions.LinkedIn.Enabled;
 var corsOrigins = (builder.Configuration["Cors:AllowedOriginsCsv"]
                    ?? (builder.Environment.IsDevelopment()
-                       ? "http://localhost:3000,https://localhost:3000,http://127.0.0.1:3000,https://127.0.0.1:3000"
+                       ? "http://localhost:3000,https://localhost:3000,http://127.0.0.1:3000,https://127.0.0.1:3000,http://localhost:3007,https://localhost:3007,http://127.0.0.1:3007,https://127.0.0.1:3007"
                        : string.Empty))
     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
-if (!useDevelopmentAuth && string.IsNullOrWhiteSpace(authOptions.Authority))
+if (!useDevelopmentAuth)
 {
-    if (string.IsNullOrWhiteSpace(authOptions.Issuer)
-        || string.IsNullOrWhiteSpace(authOptions.Audience)
-        || string.IsNullOrWhiteSpace(authOptions.SigningKey)
-        || authOptions.SigningKey.Length < 32)
+    if (string.IsNullOrWhiteSpace(authTokenOptions.Issuer)
+        || string.IsNullOrWhiteSpace(authTokenOptions.Audience)
+        || string.IsNullOrWhiteSpace(authTokenOptions.AccessTokenSigningKey)
+        || authTokenOptions.AccessTokenSigningKey.Length < AuthTokenOptions.MinimumSigningKeyLength
+        || string.IsNullOrWhiteSpace(authTokenOptions.RefreshTokenSigningKey)
+        || authTokenOptions.RefreshTokenSigningKey.Length < AuthTokenOptions.MinimumSigningKeyLength
+        || authTokenOptions.AccessTokenLifetime <= TimeSpan.Zero
+        || authTokenOptions.RefreshTokenLifetime <= TimeSpan.Zero
+        || authTokenOptions.OtpLifetime <= TimeSpan.Zero
+        || string.IsNullOrWhiteSpace(authTokenOptions.AuthenticatorIssuer))
     {
-        throw new InvalidOperationException("Configure Auth:Authority or Auth:Issuer/Auth:Audience/Auth:SigningKey (32+ chars) for production JWT validation.");
+        throw new InvalidOperationException(
+            "Configure AuthTokens:Issuer/AuthTokens:Audience/AuthTokens:AccessTokenSigningKey/AuthTokens:RefreshTokenSigningKey " +
+            "(32+ chars), AuthTokens:AccessTokenLifetime/AuthTokens:RefreshTokenLifetime/AuthTokens:OtpLifetime, and AuthTokens:AuthenticatorIssuer for first-party auth.");
     }
 }
 
 if (!builder.Environment.IsDevelopment())
 {
+    if (brevoOptions.Enabled)
+    {
+        if (string.IsNullOrWhiteSpace(brevoOptions.ApiKey)
+            || string.IsNullOrWhiteSpace(brevoOptions.FromEmail)
+            || brevoOptions.EmailVerificationTemplateId is null
+            || brevoOptions.PasswordResetTemplateId is null)
+        {
+            throw new InvalidOperationException(
+                "Configure Brevo:Enabled=true, Brevo:ApiKey, Brevo:FromEmail, Brevo:EmailVerificationTemplateId, and Brevo:PasswordResetTemplateId outside the Development environment.");
+        }
+    }
+    else if (!smtpOptions.Enabled
+        || string.IsNullOrWhiteSpace(smtpOptions.Host)
+        || smtpOptions.Port <= 0
+        || !smtpOptions.EnableSsl
+        || string.IsNullOrWhiteSpace(smtpOptions.FromEmail))
+    {
+        throw new InvalidOperationException(
+            "Configure either Brevo:Enabled=true with Brevo API settings, or Smtp:Enabled=true, Smtp:Host, Smtp:Port, Smtp:EnableSsl=true, Smtp:Username, Smtp:Password, and Smtp:FromEmail outside the Development environment. For Brevo SMTP relay, use smtp-relay.brevo.com, the Brevo login, and the Brevo SMTP key.");
+    }
+
     if (!Uri.TryCreate(platformOptions.PublicApiBaseUrl, UriKind.Absolute, out _))
     {
         throw new InvalidOperationException("Platform:PublicApiBaseUrl must be configured as an absolute URL outside the Development environment.");
+    }
+
+    if (externalAuthEnabled && !Uri.TryCreate(platformOptions.PublicWebBaseUrl, UriKind.Absolute, out _))
+    {
+        throw new InvalidOperationException("Platform:PublicWebBaseUrl must be configured as an absolute URL when external authentication is enabled.");
     }
 
     if (!Uri.TryCreate(billingOptions.CheckoutBaseUrl, UriKind.Absolute, out _))
@@ -89,6 +131,7 @@ builder.Services.AddDbContext<LearnerDbContext>((serviceProvider, options) =>
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddProblemDetails();
+builder.Services.AddDataProtection();
 if (enableSwagger)
 {
     builder.Services.AddSwaggerGen();
@@ -96,10 +139,37 @@ if (enableSwagger)
 }
 
 builder.Services.Configure<AuthOptions>(builder.Configuration.GetSection("Auth"));
+builder.Services.Configure<AuthTokenOptions>(builder.Configuration.GetSection(AuthTokenOptions.SectionName));
+builder.Services.Configure<BrevoOptions>(builder.Configuration.GetSection(BrevoOptions.SectionName));
+builder.Services.Configure<SmtpOptions>(builder.Configuration.GetSection(SmtpOptions.SectionName));
 builder.Services.Configure<BootstrapOptions>(builder.Configuration.GetSection("Bootstrap"));
 builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection("Storage"));
 builder.Services.Configure<PlatformOptions>(builder.Configuration.GetSection("Platform"));
 builder.Services.Configure<BillingOptions>(builder.Configuration.GetSection("Billing"));
+builder.Services.Configure<ExternalAuthOptions>(builder.Configuration.GetSection(ExternalAuthOptions.SectionName));
+builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSingleton<IPasswordHasher<ApplicationUserAccount>, PasswordHasher<ApplicationUserAccount>>();
+builder.Services.AddSingleton<AuthTokenService>();
+builder.Services.AddHttpClient<IExternalIdentityProviderClient, ExternalIdentityProviderClient>();
+builder.Services.AddSingleton<ExternalAuthTicketService>();
+if (brevoOptions.Enabled)
+{
+    builder.Services.AddHttpClient<BrevoEmailSender>((serviceProvider, client) =>
+    {
+        var configuredBrevoOptions = serviceProvider.GetRequiredService<IOptions<BrevoOptions>>().Value;
+        client.BaseAddress = new Uri(string.IsNullOrWhiteSpace(configuredBrevoOptions.BaseUrl) ? "https://api.brevo.com/v3" : configuredBrevoOptions.BaseUrl);
+        client.DefaultRequestHeaders.Add("api-key", configuredBrevoOptions.ApiKey);
+        client.DefaultRequestHeaders.Add("accept", "application/json");
+    });
+    builder.Services.AddTransient<IEmailSender, BrevoEmailSender>();
+}
+else
+{
+    builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
+}
+builder.Services.AddScoped<EmailOtpService>();
+builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<ExternalAuthService>();
 
 if (corsOrigins.Length > 0)
 {
@@ -158,62 +228,131 @@ builder.Services.AddRateLimiter(options =>
     });
 });
 
+var defaultAuthScheme = useDevelopmentAuth ? HybridDevelopmentAuthScheme : JwtBearerDefaults.AuthenticationScheme;
+
+void ConfigureJwtBearer(JwtBearerOptions options)
+{
+    options.MapInboundClaims = false;
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = authTokenOptions.Issuer,
+        ValidAudience = authTokenOptions.Audience,
+        NameClaimType = ClaimTypes.NameIdentifier,
+        RoleClaimType = ClaimTypes.Role,
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(authTokenOptions.AccessTokenSigningKey!))
+    };
+
+    options.Events = new JwtBearerEvents
+    {
+        OnTokenValidated = async context =>
+        {
+            var principal = context.Principal;
+            var authAccountId = principal?.FindFirst(AuthTokenService.AuthAccountIdClaimType)?.Value;
+            if (string.IsNullOrWhiteSpace(authAccountId))
+            {
+                context.Fail("auth_account_id_required");
+                return;
+            }
+
+            await using var scope = context.HttpContext.RequestServices.CreateAsyncScope();
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var account = await db.ApplicationUserAccounts
+                .AsNoTracking()
+                .SingleOrDefaultAsync(x => x.Id == authAccountId, context.HttpContext.RequestAborted);
+
+            if (account is null)
+            {
+                context.Fail("account_not_found");
+                return;
+            }
+
+            if (account.DeletedAt is not null)
+            {
+                context.Fail("account_deleted");
+                return;
+            }
+
+            if (string.Equals(account.Role, ApplicationUserRoles.Learner, StringComparison.Ordinal))
+            {
+                var learnerActive = await db.Users
+                    .AsNoTracking()
+                    .Where(x => x.AuthAccountId == account.Id)
+                    .Select(x => x.AccountStatus)
+                    .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
+
+                if (!string.Equals(learnerActive, "active", StringComparison.OrdinalIgnoreCase))
+                {
+                    context.Fail("account_suspended");
+                }
+
+                return;
+            }
+
+            if (string.Equals(account.Role, ApplicationUserRoles.Expert, StringComparison.Ordinal))
+            {
+                var expertActive = await db.ExpertUsers
+                    .AsNoTracking()
+                    .Where(x => x.AuthAccountId == account.Id)
+                    .Select(x => x.IsActive)
+                    .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
+
+                if (!expertActive)
+                {
+                    context.Fail("account_suspended");
+                }
+            }
+        }
+    };
+}
+
 var authBuilder = builder.Services.AddAuthentication(options =>
 {
-    options.DefaultAuthenticateScheme = useDevelopmentAuth ? DevelopmentAuthHandler.SchemeName : JwtBearerDefaults.AuthenticationScheme;
-    options.DefaultChallengeScheme = useDevelopmentAuth ? DevelopmentAuthHandler.SchemeName : JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultAuthenticateScheme = defaultAuthScheme;
+    options.DefaultChallengeScheme = defaultAuthScheme;
 });
 
 if (useDevelopmentAuth)
 {
+    authBuilder.AddPolicyScheme(HybridDevelopmentAuthScheme, HybridDevelopmentAuthScheme, options =>
+    {
+        options.ForwardDefaultSelector = context =>
+        {
+            var authorizationHeader = context.Request.Headers.Authorization.ToString();
+            return !string.IsNullOrWhiteSpace(authorizationHeader)
+                   && authorizationHeader.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase)
+                ? JwtBearerDefaults.AuthenticationScheme
+                : DevelopmentAuthHandler.SchemeName;
+        };
+    });
     authBuilder.AddScheme<AuthenticationSchemeOptions, DevelopmentAuthHandler>(DevelopmentAuthHandler.SchemeName, _ => { });
+    authBuilder.AddJwtBearer(JwtBearerDefaults.AuthenticationScheme, ConfigureJwtBearer);
 }
 else
 {
-    authBuilder.AddJwtBearer(options =>
-    {
-        options.MapInboundClaims = false;
-        if (!string.IsNullOrWhiteSpace(authOptions.Authority))
-        {
-            options.Authority = authOptions.Authority;
-            options.RequireHttpsMetadata = authOptions.RequireHttpsMetadata;
-        }
-
-        if (!string.IsNullOrWhiteSpace(authOptions.Audience))
-        {
-            options.Audience = authOptions.Audience;
-        }
-
-        options.TokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateIssuer = !string.IsNullOrWhiteSpace(authOptions.Authority) || !string.IsNullOrWhiteSpace(authOptions.Issuer),
-            ValidateAudience = !string.IsNullOrWhiteSpace(authOptions.Audience),
-            ValidateLifetime = true,
-            ValidateIssuerSigningKey = true,
-            ValidIssuer = authOptions.Issuer,
-            ValidAudience = authOptions.Audience,
-            NameClaimType = "user_id",
-            RoleClaimType = "role"
-        };
-
-        if (string.IsNullOrWhiteSpace(authOptions.Authority))
-        {
-            options.TokenValidationParameters.IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(authOptions.SigningKey!));
-        }
-    });
+    authBuilder.AddJwtBearer(ConfigureJwtBearer);
 }
 
 builder.Services.AddAuthorization(options =>
 {
     options.AddPolicy("LearnerOnly", policy => policy.RequireAuthenticatedUser().RequireRole("learner"));
-    options.AddPolicy("ExpertOnly", policy => policy.RequireAuthenticatedUser().RequireRole("expert"));
-    options.AddPolicy("AdminOnly", policy => policy.RequireAuthenticatedUser().RequireRole("admin"));
+    options.AddPolicy("ExpertOnly", policy => policy
+        .RequireAuthenticatedUser()
+        .RequireRole("expert")
+        .RequireClaim(AuthTokenService.IsEmailVerifiedClaimType, bool.TrueString.ToLowerInvariant()));
+    options.AddPolicy("AdminOnly", policy => policy
+        .RequireAuthenticatedUser()
+        .RequireRole("admin")
+        .RequireClaim(AuthTokenService.IsEmailVerifiedClaimType, bool.TrueString.ToLowerInvariant()));
 });
 
 builder.Services.AddScoped<LearnerService>();
 builder.Services.AddScoped<ExpertService>();
 builder.Services.AddScoped<AdminService>();
-builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<AnalyticsIngestionService>();
 builder.Services.AddSingleton<PlatformLinkService>();
 builder.Services.AddSingleton<MediaStorageService>();
 builder.Services.AddHostedService<BackgroundJobProcessor>();
@@ -249,8 +388,6 @@ app.Use(async (context, next) =>
     await next();
 });
 
-app.UseRateLimiter();
-
 app.UseExceptionHandler(handler =>
 {
     handler.Run(async context =>
@@ -279,6 +416,22 @@ app.UseExceptionHandler(handler =>
                 correlationId
             };
             await context.Response.WriteAsync(JsonSupport.Serialize(apiPayload));
+            return;
+        }
+
+        if (exception is MfaChallengeRequiredException mfaChallengeRequiredException)
+        {
+            context.Response.StatusCode = StatusCodes.Status403Forbidden;
+            var mfaPayload = new
+            {
+                code = "mfa_challenge_required",
+                message = mfaChallengeRequiredException.Message,
+                email = mfaChallengeRequiredException.Email,
+                challengeToken = mfaChallengeRequiredException.ChallengeToken,
+                retryable = false,
+                correlationId
+            };
+            await context.Response.WriteAsync(JsonSupport.Serialize(mfaPayload));
             return;
         }
 
@@ -321,6 +474,7 @@ if (corsOrigins.Length > 0)
 }
 
 app.UseAuthentication();
+app.UseRateLimiter();
 app.UseAuthorization();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok", service = "OET Learner API", timestamp = DateTimeOffset.UtcNow, check = "live" }))
@@ -385,6 +539,7 @@ app.MapGet("/health", async (LearnerDbContext db, CancellationToken ct) =>
 }).AllowAnonymous();
 
 app.MapAuthEndpoints();
+app.MapAnalyticsEndpoints();
 app.MapLearnerEndpoints();
 app.MapExpertEndpoints();
 app.MapAdminEndpoints();
@@ -392,7 +547,7 @@ app.MapAdminEndpoints();
 await using (var scope = app.Services.CreateAsyncScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-    await DatabaseBootstrapper.InitializeAsync(db, app.Environment, bootstrapOptions);
+    await DatabaseBootstrapper.InitializeAsync(db, app.Environment, bootstrapOptions, storageOptions);
 }
 
 app.Run();

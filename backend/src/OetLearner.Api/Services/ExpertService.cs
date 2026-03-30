@@ -12,9 +12,13 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
     private static readonly string[] WritingCriteria = ["purpose", "content", "conciseness", "genre", "organization", "language"];
     private static readonly string[] SpeakingCriteria = ["intelligibility", "fluency", "appropriateness", "grammar", "clinicalCommunication"];
     private const int MaxQueuePageSize = 100;
+    private const int MaxLearnerPageSize = 100;
     private const int MaxFinalCommentLength = 4000;
     private const int MaxCriterionCommentLength = 1500;
     private const int MaxCommentTextLength = 1500;
+    private const int MaxScratchpadLength = 4000;
+    private const int MaxChecklistItemLabelLength = 200;
+    private const int MaxChecklistItemCount = 12;
     private const int MaxReworkReasonLength = 1000;
     private const int MaxCalibrationNotesLength = 1500;
 
@@ -123,6 +127,253 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         return new ExpertQueueResponse(pagedItems, totalCount, page, pageSize, now);
     }
 
+    public async Task<ExpertDashboardResponse> GetDashboardAsync(string reviewerId, CancellationToken ct)
+    {
+        var expert = await EnsureExpertAsync(reviewerId, ct);
+        var now = DateTimeOffset.UtcNow;
+
+        var assignedQueue = await GetQueueAsync(reviewerId, new ExpertQueueQueryRequest
+        {
+            Assignment = "assigned",
+            Page = 1,
+            PageSize = 5
+        }, ct);
+
+        var overdueAssignedQueue = await GetQueueAsync(reviewerId, new ExpertQueueQueryRequest
+        {
+            Assignment = "assigned",
+            Overdue = true,
+            Page = 1,
+            PageSize = 5
+        }, ct);
+
+        var draftRows = await db.ExpertReviewDrafts
+            .AsNoTracking()
+            .Where(draft => draft.ReviewerId == reviewerId && (draft.State == null || draft.State != "submitted"))
+            .OrderByDescending(draft => draft.DraftSavedAt)
+            .ToListAsync(ct);
+
+        var draftReviewIds = draftRows.Select(draft => draft.ReviewRequestId).Distinct().ToHashSet(StringComparer.Ordinal);
+        var resumeDrafts = assignedQueue.Items
+            .Where(item => draftReviewIds.Contains(item.Id))
+            .OrderBy(item => item.IsOverdue ? 0 : 1)
+            .ThenBy(item => item.SlaDue)
+            .Take(3)
+            .ToList();
+
+        var pendingCalibrationCount = await db.ExpertCalibrationCases
+            .AsNoTracking()
+            .Where(calibrationCase => !db.ExpertCalibrationResults.Any(result => result.CalibrationCaseId == calibrationCase.Id && result.ReviewerId == reviewerId))
+            .CountAsync(ct);
+
+        var assignedLearnerCount = await db.ExpertReviewAssignments
+            .AsNoTracking()
+            .Where(assignment => assignment.AssignedReviewerId == reviewerId)
+            .Join(db.ReviewRequests.AsNoTracking(), assignment => assignment.ReviewRequestId, reviewRequest => reviewRequest.Id, (assignment, reviewRequest) => reviewRequest.AttemptId)
+            .Join(db.Attempts.AsNoTracking(), attemptId => attemptId, attempt => attempt.Id, (_, attempt) => attempt.UserId)
+            .Distinct()
+            .CountAsync(ct);
+
+        var metrics = await GetMetricsAsync(reviewerId, 7, ct);
+
+        var availability = await db.ExpertAvailabilities
+            .AsNoTracking()
+            .Where(existingAvailability => existingAvailability.ReviewerId == reviewerId)
+            .OrderByDescending(existingAvailability => existingAvailability.EffectiveFrom)
+            .FirstOrDefaultAsync(ct);
+
+        var todayKey = ResolveTodayKey(expert.Timezone);
+        var todaySchedule = availability is null
+            ? DefaultScheduleDays().GetValueOrDefault(todayKey)
+            : JsonSupport.Deserialize(availability.DaysJson, DefaultScheduleDays()).GetValueOrDefault(todayKey);
+
+        var auditEvents = await db.AuditEvents
+            .AsNoTracking()
+            .Where(auditEvent => auditEvent.ActorId == reviewerId || auditEvent.ActorName == expert.DisplayName)
+            .OrderByDescending(auditEvent => auditEvent.OccurredAt)
+            .Take(6)
+            .ToListAsync(ct);
+
+        var recentActivity = auditEvents
+            .Select(auditEvent => new ExpertDashboardActivityResponse(
+                auditEvent.OccurredAt,
+                "audit",
+                auditEvent.Action,
+                auditEvent.Details,
+                auditEvent.ResourceId is null ? null : BuildReviewRoute(auditEvent.ResourceId)))
+            .ToList();
+
+        return new ExpertDashboardResponse(
+            metrics.Metrics,
+            assignedQueue.TotalCount,
+            overdueAssignedQueue.TotalCount,
+            draftRows.Count,
+            pendingCalibrationCount,
+            assignedLearnerCount,
+            now,
+            new ExpertDashboardAvailabilityResponse(
+                availability?.Timezone ?? expert.Timezone,
+                todayKey,
+                todaySchedule?.Active ?? false,
+                todaySchedule is null ? null : $"{todaySchedule.Start}-{todaySchedule.End}",
+                availability?.EffectiveFrom),
+            assignedQueue.Items,
+            resumeDrafts,
+            recentActivity);
+    }
+
+    public async Task<ExpertLearnerDirectoryResponse> GetLearnersAsync(string reviewerId, ExpertLearnersQueryRequest request, CancellationToken ct)
+    {
+        await EnsureExpertAsync(reviewerId, ct);
+
+        var page = request.Page is > 0 ? request.Page.Value : 1;
+        var pageSize = Math.Clamp(request.PageSize ?? 25, 1, MaxLearnerPageSize);
+        var now = DateTimeOffset.UtcNow;
+
+        var assignments = await db.ExpertReviewAssignments
+            .AsNoTracking()
+            .Where(assignment => assignment.AssignedReviewerId == reviewerId)
+            .ToListAsync(ct);
+
+        if (assignments.Count == 0)
+        {
+            return new ExpertLearnerDirectoryResponse([], 0, page, pageSize, now);
+        }
+
+        var reviewIds = assignments.Select(assignment => assignment.ReviewRequestId).Distinct().ToList();
+        var reviewRequests = await db.ReviewRequests
+            .AsNoTracking()
+            .Where(reviewRequest => reviewIds.Contains(reviewRequest.Id))
+            .ToListAsync(ct);
+
+        if (reviewRequests.Count == 0)
+        {
+            return new ExpertLearnerDirectoryResponse([], 0, page, pageSize, now);
+        }
+
+        var attemptIds = reviewRequests.Select(reviewRequest => reviewRequest.AttemptId).Distinct().ToList();
+        var attempts = await db.Attempts
+            .AsNoTracking()
+            .Where(attempt => attemptIds.Contains(attempt.Id))
+            .ToListAsync(ct);
+
+        if (attempts.Count == 0)
+        {
+            return new ExpertLearnerDirectoryResponse([], 0, page, pageSize, now);
+        }
+
+        var learnerIds = attempts.Select(attempt => attempt.UserId).Distinct().ToList();
+        var learners = await db.Users
+            .AsNoTracking()
+            .Where(user => learnerIds.Contains(user.Id))
+            .ToDictionaryAsync(user => user.Id, ct);
+
+        var goals = await db.Goals
+            .AsNoTracking()
+            .Where(goal => learnerIds.Contains(goal.UserId))
+            .ToDictionaryAsync(goal => goal.UserId, ct);
+
+        var items = learnerIds
+            .Select(learnerId =>
+            {
+                if (!learners.TryGetValue(learnerId, out var learner))
+                {
+                    return null;
+                }
+
+                var learnerAttempts = attempts.Where(attempt => string.Equals(attempt.UserId, learnerId, StringComparison.Ordinal)).ToList();
+                var learnerReviewRequests = reviewRequests.Where(reviewRequest => learnerAttempts.Any(attempt => string.Equals(attempt.Id, reviewRequest.AttemptId, StringComparison.Ordinal))).ToList();
+                if (learnerReviewRequests.Count == 0)
+                {
+                    return null;
+                }
+
+                var lastReview = learnerReviewRequests
+                    .OrderByDescending(reviewRequest => reviewRequest.CompletedAt ?? reviewRequest.CreatedAt)
+                    .First();
+
+                goals.TryGetValue(learnerId, out var goal);
+                var goalScore = goal is null
+                    ? "Review context only"
+                    : string.Join(" / ", new[]
+                    {
+                        goal.TargetWritingScore is not null ? $"W {goal.TargetWritingScore}" : null,
+                        goal.TargetSpeakingScore is not null ? $"S {goal.TargetSpeakingScore}" : null
+                    }.Where(value => !string.IsNullOrWhiteSpace(value)));
+
+                if (string.IsNullOrWhiteSpace(goalScore))
+                {
+                    goalScore = "Review context only";
+                }
+
+                return new ExpertLearnerListItemResponse(
+                    learner.Id,
+                    learner.DisplayName,
+                    learner.ActiveProfessionId ?? "nursing",
+                    goalScore,
+                    goal?.TargetExamDate?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
+                    learnerReviewRequests.Count,
+                    learnerReviewRequests.Select(reviewRequest => reviewRequest.SubtestCode).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(value => value).ToList(),
+                    lastReview.Id,
+                    lastReview.SubtestCode,
+                    MapReviewRequestState(lastReview, assignments.FirstOrDefault(assignment => string.Equals(assignment.ReviewRequestId, lastReview.Id, StringComparison.Ordinal)), reviewerId, now),
+                    lastReview.CompletedAt ?? lastReview.CreatedAt);
+            })
+            .Where(item => item is not null)
+            .Cast<ExpertLearnerListItemResponse>()
+            .ToList();
+
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim();
+            items = items
+                .Where(item =>
+                    item.Name.Contains(search, StringComparison.OrdinalIgnoreCase)
+                    || item.Id.Contains(search, StringComparison.OrdinalIgnoreCase)
+                    || item.LastReviewId.Contains(search, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Profession))
+        {
+            items = items
+                .Where(item => string.Equals(item.Profession, request.Profession, StringComparison.OrdinalIgnoreCase))
+                .ToList();
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.SubTest))
+        {
+            items = items
+                .Where(item => item.SubTests.Any(subTest => string.Equals(subTest, request.SubTest, StringComparison.OrdinalIgnoreCase)))
+                .ToList();
+        }
+
+        if (!string.IsNullOrWhiteSpace(request.Relevance))
+        {
+            items = request.Relevance.Trim().ToLowerInvariant() switch
+            {
+                "active" => items.Where(item => item.LastReviewState is "queued" or "assigned" or "in_progress" or "overdue").ToList(),
+                "completed" => items.Where(item => item.LastReviewState == "completed").ToList(),
+                "overdue" => items.Where(item => item.LastReviewState == "overdue").ToList(),
+                "rework" => items.Where(item => item.LastReviewState == "queued").ToList(),
+                _ => items
+            };
+        }
+
+        items = items
+            .OrderByDescending(item => item.LastReviewAt)
+            .ThenBy(item => item.Name)
+            .ToList();
+
+        var totalCount = items.Count;
+        var pagedItems = items
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+
+        return new ExpertLearnerDirectoryResponse(pagedItems, totalCount, page, pageSize, now);
+    }
+
     public async Task<object> ClaimReviewAsync(string reviewRequestId, string reviewerId, CancellationToken ct)
     {
         var expert = await EnsureExpertAsync(reviewerId, ct);
@@ -130,13 +381,22 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         var reviewRequest = await db.ReviewRequests.FirstOrDefaultAsync(rr => rr.Id == reviewRequestId, ct)
             ?? throw ApiException.NotFound("review_request_not_found", "The requested review does not exist.");
 
-        if (reviewRequest.State == ReviewRequestState.Completed || reviewRequest.State == ReviewRequestState.Cancelled)
+        if (reviewRequest.State is ReviewRequestState.Completed or ReviewRequestState.Cancelled or ReviewRequestState.Failed)
         {
             throw ApiException.Conflict("review_not_claimable", "Only active reviews can be claimed.");
         }
 
         var assignment = await GetActiveAssignmentAsync(reviewRequestId, tracked: true, ct);
-        if (assignment is not null && !string.Equals(assignment.AssignedReviewerId, reviewerId, StringComparison.Ordinal))
+
+        // If already InReview, only the currently assigned reviewer can re-claim
+        if (reviewRequest.State == ReviewRequestState.InReview)
+        {
+            if (assignment is not null && !string.Equals(assignment.AssignedReviewerId, reviewerId, StringComparison.Ordinal))
+            {
+                throw ApiException.Conflict("review_already_claimed", "This review is already assigned to another reviewer.");
+            }
+        }
+        else if (assignment is not null && !string.Equals(assignment.AssignedReviewerId, reviewerId, StringComparison.Ordinal))
         {
             throw ApiException.Conflict("review_already_claimed", "This review is already assigned to another reviewer.");
         }
@@ -338,12 +598,16 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         var finalComment = NormalizeFinalComment(request.FinalComment, required: false);
         var anchoredComments = NormalizeAnchoredComments(request.AnchoredComments);
         var timestampComments = NormalizeTimestampComments(request.TimestampComments);
+        var scratchpad = NormalizeScratchpad(request.Scratchpad);
+        var checklistItems = NormalizeChecklistItems(request.ChecklistItems);
 
         draft.RubricEntriesJson = JsonSupport.Serialize(normalizedScores);
         draft.CriterionCommentsJson = JsonSupport.Serialize(normalizedCriterionComments);
         draft.FinalCommentDraft = finalComment;
         draft.AnchoredCommentsJson = JsonSupport.Serialize(anchoredComments);
         draft.TimestampCommentsJson = JsonSupport.Serialize(timestampComments);
+        draft.ScratchpadJson = JsonSupport.Serialize(scratchpad);
+        draft.ChecklistItemsJson = JsonSupport.Serialize(checklistItems);
         draft.Version += 1;
         draft.State = "saved";
         draft.DraftSavedAt = DateTimeOffset.UtcNow;
@@ -523,13 +787,13 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
             goal?.TargetExamDate?.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc),
             attempts.Count,
             user.CreatedAt,
-            priorReviews.Count,
+            accessibleReviewRequests.Count,
             subTestScores,
             priorReviews,
             "review_context_only");
     }
 
-    public async Task<IEnumerable<object>> GetCalibrationCasesAsync(string reviewerId, CancellationToken ct)
+    public async Task<IReadOnlyList<ExpertCalibrationCaseSummaryResponse>> GetCalibrationCasesAsync(string reviewerId, CancellationToken ct)
     {
         await EnsureExpertAsync(reviewerId, ct);
 
@@ -546,22 +810,20 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         return cases.Select(calibrationCase =>
         {
             results.TryGetValue(calibrationCase.Id, out var result);
-            return (object)new
-            {
-                id = calibrationCase.Id,
-                title = calibrationCase.Title,
-                profession = calibrationCase.ProfessionId,
-                subTest = calibrationCase.SubtestCode,
-                type = calibrationCase.SubtestCode,
-                benchmarkScore = calibrationCase.BenchmarkScore,
-                reviewerScore = result?.ReviewerScore,
-                status = result is not null ? "completed" : "pending",
-                createdAt = calibrationCase.CreatedAt
-            };
-        });
+            return new ExpertCalibrationCaseSummaryResponse(
+                calibrationCase.Id,
+                calibrationCase.Title,
+                calibrationCase.ProfessionId,
+                calibrationCase.SubtestCode,
+                calibrationCase.SubtestCode,
+                calibrationCase.BenchmarkScore,
+                result?.ReviewerScore,
+                result is not null ? "completed" : "pending",
+                calibrationCase.CreatedAt);
+        }).ToList();
     }
 
-    public async Task<IEnumerable<object>> GetCalibrationNotesAsync(string reviewerId, CancellationToken ct)
+    public async Task<IReadOnlyList<ExpertCalibrationNoteResponse>> GetCalibrationNotesAsync(string reviewerId, CancellationToken ct)
     {
         await EnsureExpertAsync(reviewerId, ct);
 
@@ -572,14 +834,56 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
             .Take(50)
             .ToListAsync(ct);
 
-        return notes.Select(note => new
-        {
-            id = note.Id,
-            type = note.Type.ToString().ToLowerInvariant(),
-            message = note.Message,
-            caseId = note.CaseId,
-            createdAt = note.CreatedAt
-        });
+        return notes.Select(note => new ExpertCalibrationNoteResponse(
+            note.Id,
+            note.Type.ToString().ToLowerInvariant(),
+            note.Message,
+            note.CaseId,
+            note.CreatedAt)).ToList();
+    }
+
+    public async Task<ExpertCalibrationCaseDetailResponse> GetCalibrationCaseDetailAsync(string caseId, string reviewerId, CancellationToken ct)
+    {
+        var expert = await EnsureExpertAsync(reviewerId, ct);
+
+        var calibrationCase = await db.ExpertCalibrationCases
+            .AsNoTracking()
+            .FirstOrDefaultAsync(existingCase => existingCase.Id == caseId, ct)
+            ?? throw ApiException.NotFound("calibration_case_not_found", "The requested calibration case does not exist.");
+
+        var existingSubmission = await db.ExpertCalibrationResults
+            .AsNoTracking()
+            .FirstOrDefaultAsync(result => result.CalibrationCaseId == caseId && result.ReviewerId == reviewerId, ct);
+
+        var artifacts = DeserializeCalibrationArtifacts(calibrationCase);
+        var benchmarkRubric = DeserializeCalibrationRubric(calibrationCase);
+        var referenceNotes = DeserializeCalibrationReferenceNotes(calibrationCase);
+
+        return new ExpertCalibrationCaseDetailResponse(
+            calibrationCase.Id,
+            calibrationCase.Title,
+            calibrationCase.ProfessionId,
+            calibrationCase.SubtestCode,
+            calibrationCase.SubtestCode,
+            calibrationCase.BenchmarkLabel,
+            calibrationCase.BenchmarkScore,
+            calibrationCase.Difficulty,
+            existingSubmission is not null ? "completed" : "pending",
+            calibrationCase.CreatedAt,
+            artifacts,
+            benchmarkRubric,
+            referenceNotes,
+            existingSubmission is null
+                ? null
+                : new ExpertCalibrationSubmissionResponse(
+                    reviewerId,
+                    expert.DisplayName,
+                    existingSubmission.ReviewerScore,
+                    existingSubmission.AlignmentScore,
+                    existingSubmission.DisagreementSummary,
+                    existingSubmission.Notes,
+                    JsonSupport.Deserialize(existingSubmission.SubmittedRubricJson, new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)),
+                    existingSubmission.SubmittedAt));
     }
 
     public async Task<object> SubmitCalibrationAsync(string caseId, string reviewerId, ExpertCalibrationSubmitRequest request, CancellationToken ct)
@@ -612,22 +916,52 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
             throw ApiException.Conflict("calibration_already_submitted", "This calibration case has already been submitted.");
         }
 
-        var totalScore = request.Scores.Values.Sum();
-        var benchmarkTotal = calibrationCase.BenchmarkScore;
-        var alignment = benchmarkTotal > 0
-            ? Math.Round(100.0 - Math.Abs(totalScore - benchmarkTotal) / benchmarkTotal * 100.0, 1)
-            : 100.0;
-        var disagreementSummary = totalScore == benchmarkTotal
+        var normalizedScores = NormalizeScores(request.Scores, calibrationCase.SubtestCode);
+        var benchmarkRubric = DeserializeCalibrationRubric(calibrationCase);
+        var benchmarkLookup = benchmarkRubric.ToDictionary(
+            entry => entry.Criterion,
+            entry => entry.BenchmarkScore,
+            StringComparer.OrdinalIgnoreCase);
+
+        var reviewerScore = normalizedScores.Count == 0
+            ? 0
+            : (int)Math.Round(normalizedScores.Values.Average(), MidpointRounding.AwayFromZero);
+
+        var maxCriterionScore = string.Equals(calibrationCase.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase) ? 7 : 6;
+        var comparableCriteria = normalizedScores.Keys
+            .Where(criterion => benchmarkLookup.ContainsKey(criterion))
+            .ToList();
+
+        var alignment = comparableCriteria.Count == 0
+            ? calibrationCase.BenchmarkScore > 0
+                ? Math.Round(100.0 - Math.Abs(reviewerScore - calibrationCase.BenchmarkScore) / calibrationCase.BenchmarkScore * 100.0, 1)
+                : 100.0
+            : Math.Round(
+                Math.Max(
+                    0.0,
+                    100.0 - comparableCriteria.Sum(criterion => Math.Abs(normalizedScores[criterion] - benchmarkLookup[criterion])) * 100.0 / (comparableCriteria.Count * maxCriterionScore)),
+                1);
+
+        var largestDelta = comparableCriteria
+            .Select(criterion => new
+            {
+                Criterion = criterion,
+                Gap = Math.Abs(normalizedScores[criterion] - benchmarkLookup[criterion])
+            })
+            .OrderByDescending(item => item.Gap)
+            .FirstOrDefault();
+
+        var disagreementSummary = largestDelta is null || largestDelta.Gap == 0
             ? "Aligned with benchmark."
-            : $"Benchmark difference: {Math.Abs(totalScore - benchmarkTotal)} point(s).";
+            : $"{ToLabel(largestDelta.Criterion)} differs from benchmark by {largestDelta.Gap} point(s).";
 
         db.ExpertCalibrationResults.Add(new ExpertCalibrationResult
         {
             Id = $"ecr-{Guid.NewGuid():N}",
             CalibrationCaseId = caseId,
             ReviewerId = reviewerId,
-            SubmittedRubricJson = JsonSupport.Serialize(request.Scores),
-            ReviewerScore = totalScore,
+            SubmittedRubricJson = JsonSupport.Serialize(normalizedScores),
+            ReviewerScore = reviewerScore,
             AlignmentScore = alignment,
             DisagreementSummary = disagreementSummary,
             Notes = request.Notes?.Trim() ?? string.Empty,
@@ -715,6 +1049,133 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         };
     }
 
+    public async Task<ExpertQueueFilterMetadataResponse> GetQueueFilterMetadataAsync(string reviewerId, CancellationToken ct)
+    {
+        await EnsureExpertAsync(reviewerId, ct);
+
+        var professions = await db.Professions
+            .AsNoTracking()
+            .Select(p => p.Id)
+            .ToListAsync(ct);
+
+        return new ExpertQueueFilterMetadataResponse(
+            Types: ["writing", "speaking"],
+            Professions: professions.Count > 0 ? professions : ["nursing", "medicine", "dentistry", "pharmacy", "physiotherapy", "radiography", "dietetics", "podiatry", "speech_pathology", "occupational_therapy", "optometry", "veterinary_science"],
+            Priorities: ["high", "normal"],
+            Statuses: ["queued", "assigned", "in_progress", "overdue", "completed"],
+            ConfidenceBands: ["high", "medium", "low", "unknown"],
+            AssignmentStates: ["assigned", "unassigned"]);
+    }
+
+    public async Task<ExpertReviewHistoryResponse> GetReviewHistoryAsync(string reviewRequestId, string reviewerId, CancellationToken ct)
+    {
+        await EnsureExpertAsync(reviewerId, ct);
+
+        var reviewRequest = await db.ReviewRequests.AsNoTracking()
+            .FirstOrDefaultAsync(rr => rr.Id == reviewRequestId, ct)
+            ?? throw ApiException.NotFound("review_request_not_found", "The requested review does not exist.");
+
+        var assignments = await db.ExpertReviewAssignments.AsNoTracking()
+            .Where(a => a.ReviewRequestId == reviewRequestId)
+            .OrderBy(a => a.AssignedAt ?? DateTimeOffset.MinValue)
+            .ToListAsync(ct);
+
+        // Verify the requesting expert has access (current or historical)
+        var hasAccess = assignments.Any(a => string.Equals(a.AssignedReviewerId, reviewerId, StringComparison.Ordinal));
+        if (!hasAccess)
+        {
+            throw ApiException.Forbidden("review_history_forbidden", "You can only view history for reviews you are or were assigned to.");
+        }
+
+        var reviewerIds = assignments
+            .Select(a => a.AssignedReviewerId)
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct()
+            .Cast<string>()
+            .ToList();
+
+        var reviewers = reviewerIds.Count == 0
+            ? new Dictionary<string, ExpertUser>()
+            : await db.ExpertUsers.AsNoTracking()
+                .Where(e => reviewerIds.Contains(e.Id))
+                .ToDictionaryAsync(e => e.Id, ct);
+
+        var drafts = await db.ExpertReviewDrafts.AsNoTracking()
+            .Where(d => d.ReviewRequestId == reviewRequestId)
+            .OrderBy(d => d.DraftSavedAt)
+            .ToListAsync(ct);
+
+        var auditEvents = await db.AuditEvents.AsNoTracking()
+            .Where(ae => ae.ResourceId == reviewRequestId && ae.ResourceType == "ExpertReview")
+            .OrderBy(ae => ae.OccurredAt)
+            .Take(100)
+            .ToListAsync(ct);
+
+        var historyEntries = new List<ExpertReviewHistoryEntryResponse>();
+
+        // Add assignment events
+        foreach (var assignment in assignments)
+        {
+            var reviewerName = assignment.AssignedReviewerId is not null && reviewers.TryGetValue(assignment.AssignedReviewerId, out var r)
+                ? r.DisplayName : assignment.AssignedReviewerId ?? "Unknown";
+
+            historyEntries.Add(new ExpertReviewHistoryEntryResponse(
+                assignment.AssignedAt ?? DateTimeOffset.MinValue,
+                assignment.ClaimState.ToString().ToLowerInvariant(),
+                reviewerName,
+                assignment.ReasonCode));
+
+            if (assignment.ReleasedAt is not null)
+            {
+                historyEntries.Add(new ExpertReviewHistoryEntryResponse(
+                    assignment.ReleasedAt.Value,
+                    "released",
+                    reviewerName,
+                    assignment.ReasonCode));
+            }
+        }
+
+        // Add audit trail entries
+        foreach (var ae in auditEvents)
+        {
+            historyEntries.Add(new ExpertReviewHistoryEntryResponse(
+                ae.OccurredAt,
+                ae.Action.ToLowerInvariant(),
+                ae.ActorName,
+                ae.Details));
+        }
+
+        historyEntries = historyEntries.OrderBy(e => e.Timestamp).ToList();
+
+        return new ExpertReviewHistoryResponse(
+            reviewRequestId,
+            reviewRequest.State.ToString().ToLowerInvariant(),
+            reviewRequest.CreatedAt,
+            reviewRequest.CompletedAt,
+            drafts.Count,
+            historyEntries);
+    }
+
+    public async Task<ExpertLearnerReviewContextResponse> GetLearnerReviewContextAsync(string learnerId, string reviewerId, CancellationToken ct)
+    {
+        var accessibleReviewRequests = await LoadAccessibleLearnerReviewRequestsAsync(learnerId, reviewerId, ct);
+        if (accessibleReviewRequests.Count == 0)
+        {
+            throw ApiException.Forbidden("learner_context_forbidden", "You can only view learners connected to reviews assigned to you.");
+        }
+
+        var profile = await GetLearnerProfileAsync(learnerId, reviewerId, ct);
+        return new ExpertLearnerReviewContextResponse(
+            profile.Id,
+            profile.Name,
+            profile.Profession,
+            profile.GoalScore,
+            profile.ExamDate,
+            accessibleReviewRequests.Count,
+            profile.SubTestScores,
+            profile.PriorReviews.Take(3).ToList());
+    }
+
     public async Task<ExpertMetricsResponse> GetMetricsAsync(string reviewerId, int days, CancellationToken ct)
     {
         await EnsureExpertAsync(reviewerId, ct);
@@ -743,7 +1204,7 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         var totalReviewsCompleted = completedReviews.Count;
         var draftReviews = await db.ExpertReviewDrafts
             .AsNoTracking()
-            .CountAsync(draft => draft.ReviewerId == reviewerId && !string.Equals(draft.State, "submitted", StringComparison.OrdinalIgnoreCase), ct);
+            .CountAsync(draft => draft.ReviewerId == reviewerId && (draft.State == null || draft.State != "submitted"), ct);
 
         var slaHitRate = totalReviewsCompleted == 0
             ? 100.0
@@ -1441,6 +1902,21 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         };
     }
 
+    private static string ToLabel(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "Criterion";
+        }
+
+        var withSpaces = System.Text.RegularExpressions.Regex.Replace(
+            value.Replace("_", " ", StringComparison.Ordinal),
+            "([a-z])([A-Z])",
+            "$1 $2");
+
+        return CultureInfo.InvariantCulture.TextInfo.ToTitleCase(withSpaces.ToLowerInvariant());
+    }
+
     private static double ToDouble(object? value)
     {
         return value switch
@@ -1478,7 +1954,123 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
             draft.FinalCommentDraft,
             JsonSupport.Deserialize(draft.AnchoredCommentsJson, new List<ExpertAnchoredCommentResponse>()),
             JsonSupport.Deserialize(draft.TimestampCommentsJson, new List<ExpertTimestampCommentResponse>()),
+            JsonSupport.Deserialize(draft.ScratchpadJson, string.Empty),
+            JsonSupport.Deserialize(draft.ChecklistItemsJson, new List<ExpertChecklistItemResponse>()),
             draft.DraftSavedAt);
+    }
+
+    private static string ResolveTodayKey(string timezone)
+    {
+        try
+        {
+            var zone = TimeZoneInfo.FindSystemTimeZoneById(timezone);
+            return TimeZoneInfo.ConvertTime(DateTimeOffset.UtcNow, zone).DayOfWeek.ToString().ToLowerInvariant();
+        }
+        catch (TimeZoneNotFoundException)
+        {
+            return DateTimeOffset.UtcNow.DayOfWeek.ToString().ToLowerInvariant();
+        }
+        catch (InvalidTimeZoneException)
+        {
+            return DateTimeOffset.UtcNow.DayOfWeek.ToString().ToLowerInvariant();
+        }
+    }
+
+    private static string? BuildReviewRoute(string reviewRequestId)
+    {
+        if (string.IsNullOrWhiteSpace(reviewRequestId))
+        {
+            return null;
+        }
+
+        if (reviewRequestId.StartsWith("cal-", StringComparison.OrdinalIgnoreCase))
+        {
+            return $"/expert/calibration/{Uri.EscapeDataString(reviewRequestId)}";
+        }
+
+        if (reviewRequestId.StartsWith("review-", StringComparison.OrdinalIgnoreCase))
+        {
+            return "/expert/queue";
+        }
+
+        return null;
+    }
+
+    private static string MapReviewRequestState(ReviewRequest reviewRequest, ExpertReviewAssignment? assignment, string reviewerId, DateTimeOffset now)
+        => MapQueueStatus(reviewRequest, assignment, reviewerId, now);
+
+    private static List<ExpertCalibrationArtifactResponse> DeserializeCalibrationArtifacts(ExpertCalibrationCase calibrationCase)
+    {
+        var artifacts = JsonSupport.Deserialize<List<ExpertCalibrationArtifactResponse>>(calibrationCase.CaseArtifactsJson, []);
+        if (artifacts.Count > 0)
+        {
+            return artifacts;
+        }
+
+        return string.Equals(calibrationCase.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase)
+            ? new List<ExpertCalibrationArtifactResponse>
+            {
+                new("role_card", "Role Card", "You are the ward doctor handing over a patient with post-operative pain escalation and new abnormal observations."),
+                new("transcript", "Candidate Transcript", "Doctor, I am calling about a patient whose pain has worsened despite the current analgesia plan. We need to review the escalation steps and safety-net advice."),
+                new("benchmark_focus", "Benchmark Focus", "Benchmark case tests structured handover, prioritisation, and safe escalation language under time pressure.")
+            }
+            : new List<ExpertCalibrationArtifactResponse>
+            {
+                new("case_notes", "Case Notes", "Mrs Khan requires a referral following post-operative complications after laparoscopic cholecystectomy. Include wound concerns, analgesia response, and follow-up plan."),
+                new("learner_response", "Learner Response", "Dear Dr Patel, thank you for seeing Mrs Khan, who has persistent abdominal pain, mild wound ooze, and difficulty mobilising after surgery."),
+                new("benchmark_focus", "Benchmark Focus", "Benchmark case tests clear purpose, clinical relevance filtering, and concise sequencing of referral information.")
+            };
+    }
+
+    private static List<ExpertCalibrationRubricEntryResponse> DeserializeCalibrationRubric(ExpertCalibrationCase calibrationCase)
+    {
+        var rubric = JsonSupport.Deserialize<List<ExpertCalibrationRubricEntryResponse>>(calibrationCase.ReferenceRubricJson, []);
+        if (rubric.Count > 0)
+        {
+            return rubric;
+        }
+
+        return string.Equals(calibrationCase.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase)
+            ? new List<ExpertCalibrationRubricEntryResponse>
+            {
+                new("intelligibility", 5, "Speech remains easy to follow with only minor stress-related hesitation."),
+                new("fluency", 5, "Delivery is steady and recovers quickly after clarification moments."),
+                new("appropriateness", 4, "Register is professional but one reassurance phrase is slightly abrupt."),
+                new("grammar", 5, "Grammar is controlled throughout the handover."),
+                new("clinicalCommunication", 5, "Escalation, prioritisation, and safety-netting are explicit and well organised.")
+            }
+            : new List<ExpertCalibrationRubricEntryResponse>
+            {
+                new("purpose", 4, "Purpose is established immediately and sustained throughout the letter."),
+                new("content", 5, "Relevant post-operative facts are selected accurately for referral."),
+                new("conciseness", 3, "A few low-value details reduce efficiency."),
+                new("genre", 4, "Register and format match a professional referral letter."),
+                new("organization", 4, "Information flows logically from reason for referral to current concerns."),
+                new("language", 4, "Language is mostly controlled with minor slips that do not impede meaning.")
+            };
+    }
+
+    private static List<string> DeserializeCalibrationReferenceNotes(ExpertCalibrationCase calibrationCase)
+    {
+        var notes = JsonSupport.Deserialize<List<string>>(calibrationCase.ReferenceNotesJson, []);
+        if (notes.Count > 0)
+        {
+            return notes;
+        }
+
+        return string.Equals(calibrationCase.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase)
+            ? new List<string>
+            {
+                "Benchmark expects a concise opening summary before detailed escalation points.",
+                "Full marks require explicit clinical prioritisation and a clear follow-up request.",
+                "Minor alignment loss is acceptable when reassurance language is warm but slightly repetitive."
+            }
+            : new List<string>
+            {
+                "Benchmark prioritises referral purpose, current complication, and follow-up request in the opening half of the letter.",
+                "Low-value surgical background should be compressed unless it changes the referral decision.",
+                "Language control is important, but information selection remains the main separator in this case."
+            };
     }
 
     private static Dictionary<string, int> NormalizeScores(Dictionary<string, int> scores, string subtestCode)
@@ -1670,6 +2262,8 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         _ = NormalizeFinalComment(request.FinalComment, required: false);
         _ = NormalizeAnchoredComments(request.AnchoredComments);
         _ = NormalizeTimestampComments(request.TimestampComments);
+        _ = NormalizeScratchpad(request.Scratchpad);
+        _ = NormalizeChecklistItems(request.ChecklistItems);
     }
 
     private static void ValidateSubmitRequest(string subtestCode, ExpertReviewSubmitRequest request)
@@ -1749,6 +2343,68 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         }
 
         return trimmed;
+    }
+
+    private static string NormalizeScratchpad(string? scratchpad)
+    {
+        var normalized = scratchpad?.Trim() ?? string.Empty;
+        if (normalized.Length > MaxScratchpadLength)
+        {
+            throw ApiException.Validation(
+                "scratchpad_too_long",
+                "Scratchpad notes are too long.",
+                [new ApiFieldError("scratchpad", "too_long", $"Scratchpad notes cannot exceed {MaxScratchpadLength} characters.")]);
+        }
+
+        return normalized;
+    }
+
+    private static List<ExpertChecklistItemResponse> NormalizeChecklistItems(List<ExpertChecklistItemDto>? checklistItems)
+    {
+        if (checklistItems is null)
+        {
+            return [];
+        }
+
+        if (checklistItems.Count > MaxChecklistItemCount)
+        {
+            throw ApiException.Validation(
+                "checklist_too_long",
+                "Too many checklist items were submitted.",
+                [new ApiFieldError("checklistItems", "too_many", $"Checklist items cannot exceed {MaxChecklistItemCount} entries.")]);
+        }
+
+        return checklistItems.Select(item =>
+        {
+            var id = item.Id?.Trim() ?? string.Empty;
+            var label = item.Label?.Trim() ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(id))
+            {
+                throw ApiException.Validation(
+                    "checklist_item_id_required",
+                    "Checklist items must include an id.",
+                    [new ApiFieldError("checklistItems", "required", "Every checklist item must include an id.")]);
+            }
+
+            if (string.IsNullOrWhiteSpace(label))
+            {
+                throw ApiException.Validation(
+                    "checklist_item_label_required",
+                    "Checklist items must include a label.",
+                    [new ApiFieldError("checklistItems", "required", "Every checklist item must include a label.")]);
+            }
+
+            if (label.Length > MaxChecklistItemLabelLength)
+            {
+                throw ApiException.Validation(
+                    "checklist_item_label_too_long",
+                    "Checklist item labels are too long.",
+                    [new ApiFieldError("checklistItems", "too_long", $"Checklist labels cannot exceed {MaxChecklistItemLabelLength} characters.")]);
+            }
+
+            return new ExpertChecklistItemResponse(id, label, item.Checked);
+        }).ToList();
     }
 
     private static string? NormalizeCriterionKey(string? rawKey, IReadOnlyCollection<string> allowedCriteria)

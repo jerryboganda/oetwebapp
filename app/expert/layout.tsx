@@ -2,11 +2,12 @@
 
 import { AppShell } from '@/components/layout/app-shell';
 import { NavItem } from '@/components/layout/sidebar';
-import { Inbox, CheckCircle, BarChart3, CalendarClock, Users, Lock } from 'lucide-react';
+import { LayoutDashboard, Inbox, CheckCircle, BarChart3, CalendarClock, Users } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useExpertAuth } from '@/lib/hooks/use-expert-auth';
 
 const expertNavItems: NavItem[] = [
+  { href: '/expert', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, matchPrefix: '/expert', exact: true },
   { href: '/expert/queue', label: 'Review Queue', icon: <Inbox className="w-5 h-5" />, matchPrefix: '/expert/queue' },
   { href: '/expert/calibration', label: 'Calibration', icon: <CheckCircle className="w-5 h-5" />, matchPrefix: '/expert/calibration' },
   { href: '/expert/metrics', label: 'Metrics', icon: <BarChart3 className="w-5 h-5" />, matchPrefix: '/expert/metrics' },
@@ -16,40 +17,14 @@ const expertNavItems: NavItem[] = [
 
 export default function ExpertLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
-  const { role, isAuthenticated, isLoading, expert, error } = useExpertAuth();
+  const { expert } = useExpertAuth();
   
   // Hide nav for specific review workspaces
   const isReviewWorkspace = pathname?.includes('/expert/review/') ?? false;
 
-  if (isLoading) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-gray-50">
-        <div className="flex flex-col items-center gap-4 text-gray-500 font-sans">
-          <Lock className="w-8 h-8 animate-pulse text-primary" />
-          <p>Verifying Expert Credentials...</p>
-        </div>
-        {/* Next.js layouts MUST render children to prevent hydration and routing failures */}
-        <div className="hidden">{children}</div>
-      </div>
-    );
-  }
-
-  // Basic RBAC Simulation - Render nothing if not an expert (the hook handles redirecting, but this acts as an extra visual guard)
-  if (!isAuthenticated || role !== 'expert') {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-gray-50 font-sans px-6 text-center">
-        <div className="space-y-2">
-          <p className="text-red-600 font-semibold">Access Denied</p>
-          <p className="text-sm text-gray-600">{error?.userMessage ?? 'You do not have permission to view this console.'}</p>
-          <div className="hidden">{children}</div>
-        </div>
-      </div>
-    );
-  }
-
   if (isReviewWorkspace) {
     return (
-      <AppShell distractionFree pageTitle="Review Workspace" navItems={expertNavItems} userSummary={{ displayName: expert?.displayName, email: expert?.email }}>
+      <AppShell distractionFree pageTitle="Review Workspace" navItems={expertNavItems} userSummary={{ displayName: expert?.displayName, email: expert?.email }} requiredRole="expert">
         {children}
       </AppShell>
     );
@@ -60,6 +35,7 @@ export default function ExpertLayout({ children }: { children: React.ReactNode }
       navItems={expertNavItems} 
       mobileNavItems={expertNavItems} 
       userSummary={{ displayName: expert?.displayName, email: expert?.email }}
+      requiredRole="expert"
     >
       {children}
     </AppShell>

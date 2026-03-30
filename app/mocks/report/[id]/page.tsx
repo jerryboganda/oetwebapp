@@ -15,7 +15,7 @@ import {
   Mic
 } from 'lucide-react';
 import Link from 'next/link';
-import { AppShell } from '@/components/layout/app-shell';
+import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { fetchMockReport } from '@/lib/api';
@@ -50,35 +50,35 @@ function MockReportContent() {
 
   if (error) {
     return (
-      <AppShell pageTitle="Mock Report" backHref="/mocks">
-        <div className="max-w-3xl mx-auto px-4 py-8">
+      <LearnerDashboardShell pageTitle="Mock Report" backHref="/mocks">
+        <div>
           <InlineAlert variant="error">{error}</InlineAlert>
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
   if (!report) {
     return (
-      <AppShell pageTitle="Mock Report" backHref="/mocks">
-        <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+      <LearnerDashboardShell pageTitle="Mock Report" backHref="/mocks">
+        <div className="space-y-6">
           {[1, 2, 3].map(i => (
             <Skeleton key={i} className="h-32 rounded-2xl" />
           ))}
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
   const comp = report.priorComparison;
 
   return (
-    <AppShell
+    <LearnerDashboardShell
       pageTitle="Mock Report"
       subtitle={`${report.title} · ${report.date}`}
       backHref="/mocks"
     >
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <div className="space-y-8">
 
         {/* 1. Overall Score */}
         <motion.section
@@ -203,20 +203,20 @@ function MockReportContent() {
         </motion.section>
 
       </div>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }
 
 export default function MockReport() {
   return (
     <Suspense fallback={
-      <AppShell pageTitle="Mock Report" backHref="/mocks">
-        <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+      <LearnerDashboardShell pageTitle="Mock Report" backHref="/mocks">
+        <div className="space-y-6">
           {[1, 2, 3].map(i => (
             <Skeleton key={i} className="h-32 rounded-2xl" />
           ))}
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     }>
       <MockReportContent />
     </Suspense>

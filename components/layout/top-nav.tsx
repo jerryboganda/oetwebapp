@@ -42,7 +42,7 @@ export function TopNav({ pageTitle, className, actions, items = mainNavItems, us
           </button>
 
           {/* Logo */}
-          <Link href="/" className="flex items-center gap-2 text-navy">
+          <Link href="/" className="flex items-center gap-2 text-navy" aria-label="OET Prep home">
             <div className="w-8 h-8 flex items-center justify-center bg-primary text-white rounded">
               <BriefcaseMedical className="w-5 h-5" aria-hidden="true" />
             </div>

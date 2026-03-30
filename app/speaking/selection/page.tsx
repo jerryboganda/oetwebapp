@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { Search } from 'lucide-react';
 import Link from 'next/link';
-import { AppShell } from '@/components/layout/app-shell';
+import { LearnerDashboardShell } from '@/components/layout';
 import { TaskCard } from '@/components/domain/task-card';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -65,7 +65,7 @@ export default function SpeakingTaskSelection() {
   };
 
   return (
-    <AppShell pageTitle="Select Speaking Task">
+    <LearnerDashboardShell pageTitle="Select Speaking Task">
       <div className="space-y-6">
         <FilterBar
           groups={FILTER_GROUPS}
@@ -114,6 +114,6 @@ export default function SpeakingTaskSelection() {
           </div>
         )}
       </div>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }

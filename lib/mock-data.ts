@@ -266,6 +266,9 @@ export interface ListeningTask {
   title: string;
   audioSrc: string;
   duration: number;
+  audioAvailable: boolean;
+  audioUnavailableReason?: string;
+  transcriptPolicy?: string;
   questions: Question[];
 }
 
@@ -291,6 +294,37 @@ export interface ListeningResult {
   recommendedDrill: { id: string; title: string; description: string };
 }
 
+export interface ListeningDrill {
+  id: string;
+  title: string;
+  focusLabel: string;
+  description: string;
+  errorType: string;
+  estimatedMinutes: number;
+  highlights: string[];
+  launchRoute: string;
+  reviewRoute: string;
+}
+
+export interface ListeningReviewQuestionEvidence {
+  id: string;
+  number: number;
+  text: string;
+  learnerAnswer: string;
+  correctAnswer: string;
+  explanation: string;
+  transcriptExcerpt?: string;
+  distractorExplanation?: string;
+}
+
+export interface ListeningReview {
+  id: string;
+  title: string;
+  transcriptPolicy: string;
+  questions: ListeningReviewQuestionEvidence[];
+  recommendedDrill?: { id: string; title: string; description: string };
+}
+
 // ═══════════════════ MOCK TYPES ═══════════════════
 
 export interface MockConfig {
@@ -302,6 +336,26 @@ export interface MockConfig {
   profession: string;
   strictTimer: boolean;
   includeReview: boolean;
+  reviewSelection: 'none' | 'writing' | 'speaking' | 'writing_and_speaking' | 'current_subtest';
+}
+
+export interface MockSessionSection {
+  id: string;
+  title: string;
+  state: string;
+  reviewAvailable: boolean;
+  reviewSelected: boolean;
+  launchRoute: string;
+}
+
+export interface MockSession {
+  sessionId: string;
+  state: string;
+  config: MockConfig;
+  sectionStates: MockSessionSection[];
+  resumeRoute: string;
+  reportRoute?: string | null;
+  reportId?: string | null;
 }
 
 export interface SubTestScore {
@@ -366,11 +420,66 @@ export interface ReadinessData {
 
 export interface Submission {
   id: string;
+  contentId: string;
   taskName: string;
   subTest: SubTest;
   attemptDate: string;
   scoreEstimate: string;
   reviewStatus: ReviewStatus;
+  evaluationId?: string;
+  state?: string;
+  comparisonGroupId?: string | null;
+  canRequestReview: boolean;
+  actions: {
+    reopenFeedbackRoute?: string | null;
+    compareRoute?: string | null;
+    requestReviewRoute?: string | null;
+  };
+}
+
+export interface SubmissionDetail {
+  submission: Submission;
+  evidenceSummary: {
+    title: string;
+    scoreLabel: string;
+    stateLabel: string;
+    reviewLabel: string;
+    nextActionLabel: string;
+  };
+  strengths: string[];
+  issues: string[];
+  transcript?: TranscriptLine[];
+  criteria?: CriterionFeedback[];
+  questionReview?: Array<{
+    id: string;
+    number: number;
+    text: string;
+    learnerAnswer: string;
+    correctAnswer: string;
+    isCorrect: boolean;
+    explanation: string;
+    transcriptExcerpt?: string;
+    distractorExplanation?: string;
+  }>;
+}
+
+export interface SubmissionComparison {
+  canCompare: boolean;
+  reason?: string;
+  left?: {
+    attemptId: string;
+    evaluationId?: string;
+    scoreRange?: string;
+    subtest: SubTest;
+  };
+  right?: {
+    attemptId: string;
+    evaluationId?: string;
+    scoreRange?: string;
+    subtest: SubTest;
+  };
+  summary?: string;
+  comparisonGroupId?: string | null;
 }
 
 // ═══════════════════ BILLING TYPES ═══════════════════
@@ -380,16 +489,89 @@ export interface Invoice {
   date: string;
   amount: string;
   status: 'Paid' | 'Pending' | 'Failed';
+  currency?: string;
+  downloadUrl?: string;
+}
+
+export interface BillingEntitlements {
+  productiveSkillReviewsEnabled: boolean;
+  supportedReviewSubtests: string[];
+  invoiceDownloadsAvailable: boolean;
+}
+
+export interface BillingPlan {
+  id: string;
+  label: string;
+  tier: string;
+  description: string;
+  price: string;
+  interval: string;
+  reviewCredits: number;
+  canChangeTo: boolean;
+  changeDirection: 'current' | 'upgrade' | 'downgrade';
+  badge: string;
+}
+
+export interface BillingExtra {
+  id: string;
+  quantity: number;
+  price: string;
+  description: string;
+}
+
+export interface BillingChangePreview {
+  currentPlanId: string;
+  targetPlanId: string;
+  direction: 'upgrade' | 'downgrade';
+  proratedAmount: string;
+  effectiveAt: string;
+  summary: string;
+  currentCreditsIncluded: number;
+  targetCreditsIncluded: number;
 }
 
 export interface BillingData {
   currentPlan: string;
+  currentPlanId: string;
   price: string;
   interval: string;
   status: string;
   nextRenewal: string;
   reviewCredits: number;
+  entitlements: BillingEntitlements;
+  plans: BillingPlan[];
+  extras: BillingExtra[];
   invoices: Invoice[];
+}
+
+export type SettingsSectionId = 'profile' | 'goals' | 'study' | 'privacy' | 'notifications' | 'audio' | 'accessibility';
+
+export interface SettingsSectionData {
+  section: SettingsSectionId;
+  values: Record<string, unknown>;
+}
+
+export interface SpeakingTranscriptReview {
+  title: string;
+  date: string;
+  duration: number;
+  transcript: TranscriptLine[];
+  audioAvailable: boolean;
+  audioUrl?: string;
+  waveformPeaks: number[];
+}
+
+export interface ProgressEvidenceSummary {
+  reviewUsage: {
+    totalRequests: number;
+    completedRequests: number;
+    averageTurnaroundHours: number | null;
+    creditsConsumed: number;
+  };
+  freshness: {
+    generatedAt: string;
+    usesFallbackSeries: boolean;
+  };
 }
 
 // ═══════════════════ EXPERT REVIEW TYPES ═══════════════════
@@ -798,7 +980,11 @@ export const MOCK_READING_RESULTS: Record<string, ReadingResult> = {
 export const MOCK_LISTENING_TASKS: Record<string, ListeningTask> = {
   'lt-001': {
     id: 'lt-001', title: 'Consultation: Asthma Management Review',
-    audioSrc: '/audio/placeholder.mp3', duration: 240,
+    audioSrc: '',
+    duration: 240,
+    audioAvailable: false,
+    audioUnavailableReason: 'Audio is not published for this fallback listening task yet.',
+    transcriptPolicy: 'Use transcript-backed review until the recorded media asset is available.',
     questions: [
       { id: 'lq-1', number: 1, text: 'What is the patient\'s main concern during this consultation?', type: 'mcq', options: ['Increasing breathlessness at night', 'Side effects of current medication', 'Difficulty using the inhaler', 'Wanting to stop treatment'], correctAnswer: 'Increasing breathlessness at night' },
       { id: 'lq-2', number: 2, text: 'How often does the patient report using their reliever inhaler?', type: 'short_answer', correctAnswer: '3-4 times per week' },
@@ -909,26 +1095,160 @@ export const MOCK_SUBMISSION_VOLUME = [
 // ─── SUBMISSIONS HISTORY ──────────────────────────
 
 export const MOCK_SUBMISSIONS: Submission[] = [
-  { id: 'sub-001', taskName: 'Discharge Summary — Post-Surgical Patient', subTest: 'Writing', attemptDate: '2025-06-15', scoreEstimate: '330–360', reviewStatus: 'not_requested' },
-  { id: 'sub-002', taskName: 'Patient Handover — Post-Op Recovery', subTest: 'Speaking', attemptDate: '2025-06-14', scoreEstimate: '330–360', reviewStatus: 'pending' },
-  { id: 'sub-003', taskName: 'HAI Prevention — Part C', subTest: 'Reading', attemptDate: '2025-06-13', scoreEstimate: '67%', reviewStatus: 'not_requested' },
-  { id: 'sub-004', taskName: 'Asthma Management Review', subTest: 'Listening', attemptDate: '2025-06-12', scoreEstimate: '66%', reviewStatus: 'not_requested' },
-  { id: 'sub-005', taskName: 'Referral Letter — Cardiology', subTest: 'Writing', attemptDate: '2025-06-10', scoreEstimate: '310–340', reviewStatus: 'reviewed' },
+  {
+    id: 'sub-001',
+    contentId: 'wt-001',
+    taskName: 'Discharge Summary - Post-Surgical Patient',
+    subTest: 'Writing',
+    attemptDate: '2025-06-15',
+    scoreEstimate: '330-360',
+    reviewStatus: 'not_requested',
+    comparisonGroupId: 'cmp-writing-001',
+    canRequestReview: true,
+    actions: {
+      reopenFeedbackRoute: '/app/submissions/sub-001',
+      compareRoute: '/app/submissions/compare?left=sub-001',
+      requestReviewRoute: '/app/submissions/sub-001?requestReview=1',
+    },
+  },
+  {
+    id: 'sub-002',
+    contentId: 'sp-001',
+    taskName: 'Patient Handover - Post-Op Recovery',
+    subTest: 'Speaking',
+    attemptDate: '2025-06-14',
+    scoreEstimate: '330-360',
+    reviewStatus: 'pending',
+    evaluationId: 'eval-sp-002',
+    comparisonGroupId: 'cmp-speaking-001',
+    canRequestReview: true,
+    actions: {
+      reopenFeedbackRoute: '/app/submissions/sub-002',
+      compareRoute: '/app/submissions/compare?left=sub-002',
+      requestReviewRoute: '/app/submissions/sub-002?requestReview=1',
+    },
+  },
+  {
+    id: 'sub-003',
+    contentId: 'rt-001',
+    taskName: 'HAI Prevention - Part C',
+    subTest: 'Reading',
+    attemptDate: '2025-06-13',
+    scoreEstimate: '67%',
+    reviewStatus: 'not_requested',
+    comparisonGroupId: 'cmp-reading-001',
+    canRequestReview: false,
+    actions: {
+      reopenFeedbackRoute: '/app/submissions/sub-003',
+      compareRoute: '/app/submissions/compare?left=sub-003',
+      requestReviewRoute: null,
+    },
+  },
+  {
+    id: 'sub-004',
+    contentId: 'lt-001',
+    taskName: 'Asthma Management Review',
+    subTest: 'Listening',
+    attemptDate: '2025-06-12',
+    scoreEstimate: '66%',
+    reviewStatus: 'not_requested',
+    comparisonGroupId: 'cmp-listening-001',
+    canRequestReview: false,
+    actions: {
+      reopenFeedbackRoute: '/app/submissions/sub-004',
+      compareRoute: '/app/submissions/compare?left=sub-004',
+      requestReviewRoute: null,
+    },
+  },
+  {
+    id: 'sub-005',
+    contentId: 'wt-002',
+    taskName: 'Referral Letter - Cardiology',
+    subTest: 'Writing',
+    attemptDate: '2025-06-10',
+    scoreEstimate: '310-340',
+    reviewStatus: 'reviewed',
+    comparisonGroupId: 'cmp-writing-002',
+    canRequestReview: false,
+    actions: {
+      reopenFeedbackRoute: '/app/submissions/sub-005',
+      compareRoute: '/app/submissions/compare?left=sub-005',
+      requestReviewRoute: null,
+    },
+  },
 ];
 
 // ─── BILLING ──────────────────────────────────────
 
 export const MOCK_BILLING: BillingData = {
   currentPlan: 'Premium Monthly',
+  currentPlanId: 'premium-monthly',
   price: '$49.99',
   interval: 'monthly',
   status: 'Active',
   nextRenewal: '2025-07-15',
   reviewCredits: 3,
+  entitlements: {
+    productiveSkillReviewsEnabled: true,
+    supportedReviewSubtests: ['writing', 'speaking'],
+    invoiceDownloadsAvailable: true,
+  },
+  plans: [
+    {
+      id: 'starter-monthly',
+      label: 'Starter Monthly',
+      tier: 'starter',
+      description: 'Self-study access for learners who want guided practice without review credits.',
+      price: '$19.99',
+      interval: 'monthly',
+      reviewCredits: 0,
+      canChangeTo: true,
+      changeDirection: 'downgrade',
+      badge: 'Base plan',
+    },
+    {
+      id: 'premium-monthly',
+      label: 'Premium Monthly',
+      tier: 'premium',
+      description: 'Adds productive-skill review capacity and richer learner evidence surfaces.',
+      price: '$49.99',
+      interval: 'monthly',
+      reviewCredits: 3,
+      canChangeTo: false,
+      changeDirection: 'current',
+      badge: 'Current plan',
+    },
+    {
+      id: 'pro-monthly',
+      label: 'Pro Monthly',
+      tier: 'pro',
+      description: 'Higher monthly review-credit allowance for intensive OET preparation.',
+      price: '$79.99',
+      interval: 'monthly',
+      reviewCredits: 8,
+      canChangeTo: true,
+      changeDirection: 'upgrade',
+      badge: 'Best for heavy review',
+    },
+  ],
+  extras: [
+    {
+      id: 'review-credit-pack-2',
+      quantity: 2,
+      price: '$24.99',
+      description: 'Two extra expert-review credits for Writing or Speaking.',
+    },
+    {
+      id: 'review-credit-pack-5',
+      quantity: 5,
+      price: '$54.99',
+      description: 'Five extra expert-review credits for productive-skill submissions.',
+    },
+  ],
   invoices: [
-    { id: 'inv-003', date: '2025-06-15', amount: '$49.99', status: 'Paid' },
-    { id: 'inv-002', date: '2025-05-15', amount: '$49.99', status: 'Paid' },
-    { id: 'inv-001', date: '2025-04-15', amount: '$49.99', status: 'Paid' },
+    { id: 'inv-003', date: '2025-06-15', amount: '$49.99', status: 'Paid', currency: 'USD', downloadUrl: '/v1/billing/invoices/inv-003/download' },
+    { id: 'inv-002', date: '2025-05-15', amount: '$49.99', status: 'Paid', currency: 'USD', downloadUrl: '/v1/billing/invoices/inv-002/download' },
+    { id: 'inv-001', date: '2025-04-15', amount: '$49.99', status: 'Paid', currency: 'USD', downloadUrl: '/v1/billing/invoices/inv-001/download' },
   ],
 };
 

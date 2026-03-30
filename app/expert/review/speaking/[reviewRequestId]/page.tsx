@@ -12,10 +12,10 @@ import { Save, Send, Flag, PlayCircle, MessageSquare, RotateCcw } from 'lucide-r
 import { useParams, useRouter } from 'next/navigation';
 import { AudioPlayerWaveform } from '@/components/domain/audio-player-waveform';
 import { SpeakingRoleCard } from '@/components/domain/speaking-role-card';
-import { fetchSpeakingReviewDetail, isApiError, requestRework, saveDraftReview, submitExpertSpeakingReview } from '@/lib/api';
+import { fetchExpertLearnerReviewContext, fetchExpertReviewHistory, fetchSpeakingReviewDetail, isApiError, requestRework, saveDraftReview, submitExpertSpeakingReview } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { useExpertStore } from '@/lib/stores/expert-store';
-import type { ExpertSavedDraft, ExpertTranscriptLine, SpeakingCriterionKey, SpeakingReviewDetail, TimestampComment } from '@/lib/types/expert';
+import type { ExpertChecklistItem, ExpertLearnerReviewContext, ExpertReviewHistory, ExpertSavedDraft, ExpertTranscriptLine, SpeakingCriterionKey, SpeakingReviewDetail, TimestampComment } from '@/lib/types/expert';
 
 type AsyncStatus = 'loading' | 'error' | 'partial' | 'success';
 
@@ -49,6 +49,8 @@ type DraftCandidate = {
   finalComment: string;
   anchoredComments: unknown[];
   timestampComments: TimestampComment[];
+  scratchpad: string;
+  checklistItems: ExpertChecklistItem[];
   version?: number;
   updatedAt: string;
 };
@@ -65,6 +67,8 @@ function toDraftSnapshot(reviewId: string, draft: ExpertSavedDraft | null | unde
     finalComment: draft.finalComment,
     anchoredComments: draft.anchoredComments,
     timestampComments: draft.timestampComments,
+    scratchpad: draft.scratchpad,
+    checklistItems: [],
     version: draft.version,
     updatedAt: draft.savedAt,
   };
@@ -107,8 +111,8 @@ export default function SpeakingReviewWorkspace() {
   const [slaSeconds, setSlaSeconds] = useState(0);
   const [reloadToken, setReloadToken] = useState(0);
   const [isInitialized, setIsInitialized] = useState(false);
-
-  const localDraft = reviewRequestId ? getReviewDraft(reviewRequestId) : null;
+  const [reviewHistory, setReviewHistory] = useState<ExpertReviewHistory | null>(null);
+  const [learnerContext, setLearnerContext] = useState<ExpertLearnerReviewContext | null>(null);
 
   const applyDraft = useCallback((draft: DraftCandidate | null) => {
     if (!draft) return;
@@ -141,9 +145,17 @@ export default function SpeakingReviewWorkspace() {
         setIsDirty(false);
         const detail = await fetchSpeakingReviewDetail(reviewRequestId);
         if (cancelled) return;
+        const [history, context] = await Promise.all([
+          fetchExpertReviewHistory(reviewRequestId),
+          fetchExpertLearnerReviewContext(detail.learnerId),
+        ]);
+        if (cancelled) return;
         setReviewDetail(detail);
+        setReviewHistory(history);
+        setLearnerContext(context);
         setSlaSeconds(Math.max(0, Math.floor((new Date(detail.slaDue).getTime() - Date.now()) / 1000)));
-        const latestDraft = pickLatestDraft(localDraft, toDraftSnapshot(reviewRequestId, detail.existingDraft));
+        const localDraftSnapshot = getReviewDraft(reviewRequestId);
+        const latestDraft = pickLatestDraft(localDraftSnapshot, toDraftSnapshot(reviewRequestId, detail.existingDraft));
         applyDraft(latestDraft);
         setIsInitialized(true);
 
@@ -158,7 +170,7 @@ export default function SpeakingReviewWorkspace() {
       }
     })();
     return () => { cancelled = true; };
-  }, [applyDraft, localDraft, reloadToken, reviewRequestId]);
+  }, [applyDraft, getReviewDraft, reloadToken, reviewRequestId]);
 
   useEffect(() => {
     if (!reviewRequestId || !isInitialized) return;
@@ -168,6 +180,8 @@ export default function SpeakingReviewWorkspace() {
       finalComment,
       anchoredComments: [],
       timestampComments,
+      scratchpad: '',
+      checklistItems: [],
       version: draftVersion,
     });
   }, [criterionComments, draftVersion, finalComment, isInitialized, reviewRequestId, scores, timestampComments, upsertReviewDraft]);
@@ -190,6 +204,8 @@ export default function SpeakingReviewWorkspace() {
       criterionComments,
       finalComment,
       comments: timestampComments,
+      scratchpad: '',
+      checklistItems: [],
       savedAt: new Date().toISOString(),
       version: draftVersion,
     };
@@ -204,6 +220,8 @@ export default function SpeakingReviewWorkspace() {
       finalComment: savedDraft.finalComment,
       anchoredComments: [],
       timestampComments: savedDraft.comments as TimestampComment[],
+      scratchpad: '',
+      checklistItems: [],
       version: savedDraft.version,
       updatedAt: savedDraft.savedAt,
     });
@@ -293,11 +311,12 @@ export default function SpeakingReviewWorkspace() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+      const normalizedKey = event.key.toLowerCase();
+      if ((event.ctrlKey || event.metaKey) && normalizedKey === 's') {
         event.preventDefault();
         void handleSaveDraft();
       }
-      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      if ((event.ctrlKey || event.metaKey) && normalizedKey === 'enter') {
         event.preventDefault();
         void handleSubmit();
       }
@@ -404,6 +423,17 @@ export default function SpeakingReviewWorkspace() {
           <div className="p-4 bg-surface border-b border-gray-200 shrink-0">
             <h3 className="text-sm font-semibold text-navy mb-2">Candidate Audio Submission</h3>
             {reviewDetail && <AudioPlayerWaveform audioUrl={reviewDetail.audioUrl} onTimeUpdate={setCurrentTime} seekToTime={seekTo} />}
+            {reviewDetail?.artifactStatus && (
+              <div className="mt-3 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                {Object.entries(reviewDetail.artifactStatus).map(([artifact, artifactState]) => (
+                  <div key={artifact} className="rounded-lg bg-white px-3 py-2 text-xs text-slate-600">
+                    <p className="font-semibold text-slate-900">{artifact}</p>
+                    <p>{artifactState.state}{artifactState.isStale ? ' • stale' : ''}</p>
+                    {artifactState.message ? <p className="mt-1 text-slate-500">{artifactState.message}</p> : null}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <Tabs tabs={tabOptions} activeTab={activeTab} onChange={setActiveTab} className="bg-surface shrink-0" />
@@ -529,6 +559,55 @@ export default function SpeakingReviewWorkspace() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {learnerContext && (
+              <div className="rounded-xl border border-gray-200 bg-white p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-navy">{learnerContext.name}</p>
+                    <p className="text-xs text-muted capitalize">{learnerContext.profession.replace(/_/g, ' ')} • Goal {learnerContext.goalScore}</p>
+                  </div>
+                  <Badge variant="info">{learnerContext.reviewsInScope} in scope</Badge>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted">
+                  <span>{learnerContext.examDate ? `Exam ${new Date(learnerContext.examDate).toLocaleDateString()}` : 'Exam date not set'}</span>
+                  {learnerContext.subTestScores.length > 0 ? <span>{learnerContext.subTestScores.map((item) => `${item.subTest}:${item.latestScore ?? '-'}`).join(' • ')}</span> : null}
+                </div>
+              </div>
+            )}
+
+            {reviewDetail?.aiSuggestedScores && Object.keys(reviewDetail.aiSuggestedScores).length > 0 && (
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+                <p className="text-sm font-semibold text-blue-900">AI Reference Scores</p>
+                <p className="mt-1 text-xs text-blue-700">These scores are advisory AI guidance and are visually separated from your final rubric judgment.</p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {ALL_CRITERIA.map(({ key, label }) => (
+                    <div key={`ai-${key}`} className="rounded-lg bg-white px-3 py-2 text-sm text-navy">
+                      <span className="font-medium">{label}</span>
+                      <span className="ml-2 text-blue-700">{reviewDetail.aiSuggestedScores?.[key] ?? '-'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {reviewHistory && (
+              <div className="rounded-xl border border-gray-200 bg-white p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-navy">Review History</p>
+                  <span className="text-xs text-muted">{reviewHistory.draftVersionCount} draft version(s)</span>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {reviewHistory.entries.slice(-4).reverse().map((entry) => (
+                    <div key={`${entry.timestamp}-${entry.action}`} className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                      <p className="font-medium text-slate-900">{entry.action.replace(/_/g, ' ')}</p>
+                      <p>{entry.actorName ?? 'System'} • {new Date(entry.timestamp).toLocaleString()}</p>
+                      {entry.details ? <p className="mt-1">{entry.details}</p> : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {renderCriteriaGroup('Linguistic Criteria', LINGUISTIC_CRITERIA)}
             <div className="mt-2">{renderCriteriaGroup('Clinical Communication', CLINICAL_CRITERIA)}</div>
 

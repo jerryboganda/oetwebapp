@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { AppShell } from '@/components/layout';
+import { LearnerDashboardShell } from '@/components/layout';
 import { AsyncStateWrapper } from '@/components/state';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
@@ -75,8 +75,8 @@ export default function DiagnosticHubPage() {
     loading ? 'loading' : error ? 'error' : 'success';
 
   return (
-    <AppShell pageTitle="Diagnostic Hub">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-6">
+    <LearnerDashboardShell pageTitle="Diagnostic Hub">
+      <div className="space-y-6">
         <AsyncStateWrapper status={status} onRetry={load} errorMessage={error}>
           {session && (
             <>
@@ -190,6 +190,6 @@ export default function DiagnosticHubPage() {
           )}
         </AsyncStateWrapper>
       </div>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }

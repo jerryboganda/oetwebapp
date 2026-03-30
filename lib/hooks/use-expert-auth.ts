@@ -1,7 +1,11 @@
+'use client';
+
 import { useEffect, useState } from 'react';
-import { usePathname, useRouter } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import { ApiError, fetchExpertMe, isApiError } from '@/lib/api';
 import type { ExpertMe } from '@/lib/types/expert';
+import { useCurrentUser } from './use-current-user';
+import { defaultRouteForRole } from '@/lib/auth-routes';
 
 export interface UserRole {
   role: 'learner' | 'expert' | 'admin';
@@ -15,7 +19,7 @@ interface ExpertAuthState extends UserRole {
 
 export function useExpertAuth() {
   const router = useRouter();
-  const pathname = usePathname();
+  const { role, isAuthenticated, isLoading: isUserLoading } = useCurrentUser();
   const [authState, setAuthState] = useState<ExpertAuthState>({
     role: 'learner',
     isAuthenticated: false,
@@ -28,10 +32,43 @@ export function useExpertAuth() {
     let cancelled = false;
 
     const verifyAuth = async () => {
+      if (isUserLoading) {
+        setIsLoading(true);
+        return;
+      }
+
+      if (!isAuthenticated) {
+        setAuthState({
+          role: 'learner',
+          isAuthenticated: false,
+          expert: null,
+          error: new ApiError(401, 'not_authenticated', 'Please sign in to continue.', false),
+        });
+        setIsLoading(false);
+        router.replace('/sign-in?next=/expert');
+        return;
+      }
+
+      if (role !== 'expert') {
+        setAuthState({
+          role: role ?? 'learner',
+          isAuthenticated: false,
+          expert: null,
+          error: new ApiError(403, 'forbidden', 'You do not have permission to access the expert console.', false),
+        });
+        setIsLoading(false);
+        router.replace(defaultRouteForRole(role ?? 'learner'));
+        return;
+      }
+
       setIsLoading(true);
+
       try {
         const expert = await fetchExpertMe();
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
+
         setAuthState({
           role: 'expert',
           isAuthenticated: true,
@@ -39,7 +76,9 @@ export function useExpertAuth() {
           error: null,
         });
       } catch (error) {
-        if (cancelled) return;
+        if (cancelled) {
+          return;
+        }
 
         const apiError = isApiError(error)
           ? error
@@ -52,9 +91,13 @@ export function useExpertAuth() {
           error: apiError,
         });
 
-        if (apiError.status === 401 || apiError.status === 403) {
-          const redirect = pathname ? `?redirect=${encodeURIComponent(pathname)}` : '';
-          router.replace(`/login${redirect}`);
+        if (apiError.status === 401) {
+          router.replace('/sign-in?next=/expert');
+          return;
+        }
+
+        if (apiError.status === 403) {
+          router.replace(defaultRouteForRole('learner'));
         }
       } finally {
         if (!cancelled) {
@@ -67,7 +110,7 @@ export function useExpertAuth() {
     return () => {
       cancelled = true;
     };
-  }, [pathname, router]);
+  }, [isAuthenticated, isUserLoading, role, router]);
 
   return {
     ...authState,

@@ -14,7 +14,7 @@ import {
   Loader2
 } from 'lucide-react';
 import Link from 'next/link';
-import { AppShell } from '@/components/layout/app-shell';
+import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchReadingResult } from '@/lib/api';
@@ -44,8 +44,8 @@ function ReadingResultsContent() {
 
   if (loading) {
     return (
-      <AppShell pageTitle="Reading Results" backHref="/reading">
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <LearnerDashboardShell pageTitle="Reading Results" backHref="/reading">
+        <div className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <Skeleton className="h-48 rounded-[24px]" />
             <Skeleton className="h-48 rounded-[24px] md:col-span-2" />
@@ -53,25 +53,25 @@ function ReadingResultsContent() {
           <Skeleton className="h-40 rounded-[24px]" />
           <Skeleton className="h-64 rounded-[24px]" />
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
   if (!result) {
     return (
-      <AppShell pageTitle="Reading Results" backHref="/reading">
+      <LearnerDashboardShell pageTitle="Reading Results" backHref="/reading">
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center gap-4">
           <AlertCircle className="w-12 h-12 text-rose-500" />
           <h2 className="text-xl font-black text-navy">Result not found</h2>
           <Link href="/reading"><Button variant="ghost">Back to Reading</Button></Link>
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
   return (
-    <AppShell pageTitle={`Results: ${result.title}`} backHref="/reading">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 pb-20">
+    <LearnerDashboardShell pageTitle={`Results: ${result.title}`} backHref="/reading">
+      <div className="space-y-8 pb-20">
 
         {/* Top Section: Score & Recommendation */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
@@ -260,18 +260,18 @@ function ReadingResultsContent() {
         </motion.section>
 
       </div>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }
 
 export default function ReadingResults() {
   return (
     <Suspense fallback={
-      <AppShell pageTitle="Reading Results" backHref="/reading">
+      <LearnerDashboardShell pageTitle="Reading Results" backHref="/reading">
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     }>
       <ReadingResultsContent />
     </Suspense>

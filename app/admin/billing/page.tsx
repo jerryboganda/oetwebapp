@@ -1,60 +1,131 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
-import { FilterBar, FilterGroup } from '@/components/ui/filter-bar';
-import { DataTable, Column } from '@/components/ui/data-table';
-import { mockBillingPlans, mockBillingInvoices, AdminBillingPlan, AdminBillingInvoice } from '@/lib/mock-admin-data';
+import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from 'react';
+import { CreditCard, DollarSign, Receipt, Search, Users } from 'lucide-react';
+import { AdminMetricCard, AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
+import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
+import { DataTable, type Column } from '@/components/ui/data-table';
+import { EmptyState } from '@/components/ui/empty-error';
+import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
+import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { EmptyState } from '@/components/ui/empty-error';
-import { Toast } from '@/components/ui/alert';
-import { DollarSign, Users, TrendingUp, CreditCard, Receipt } from 'lucide-react';
-import { analytics } from '@/lib/analytics';
+import { Input, Select } from '@/components/ui/form-controls';
+import { Modal } from '@/components/ui/modal';
+import { createAdminBillingPlan } from '@/lib/api';
+import { getAdminBillingInvoiceData, getAdminBillingPlanData } from '@/lib/admin';
+import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import type { AdminBillingInvoice, AdminBillingPlan } from '@/lib/types/admin';
+
+type PageStatus = 'loading' | 'success' | 'empty' | 'error';
+type ToastState = { variant: 'success' | 'error'; message: string } | null;
+
+interface BillingPlanFormState {
+  name: string;
+  price: string;
+  interval: string;
+}
+
+const defaultPlanForm: BillingPlanFormState = {
+  name: '',
+  price: '0',
+  interval: 'month',
+};
+
+function formatCurrency(amount: number, currency = 'AUD') {
+  return new Intl.NumberFormat('en-AU', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+  }).format(amount);
+}
 
 export default function BillingPage() {
   const { isAuthenticated, role } = useAdminAuth();
-  const [activeFilters, setActiveFilters] = useState<Record<string, string[]>>({ status: [] });
-  const [pageStatus, setPageStatus] = useState<'loading' | 'success'>('loading');
-  const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
+  const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
+  const [planFilters, setPlanFilters] = useState<Record<string, string[]>>({ status: [] });
+  const [invoiceFilters, setInvoiceFilters] = useState<Record<string, string[]>>({ status: [] });
+  const [invoiceSearch, setInvoiceSearch] = useState('');
+  const [plans, setPlans] = useState<AdminBillingPlan[]>([]);
+  const [invoices, setInvoices] = useState<AdminBillingInvoice[]>([]);
+  const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+  const [planForm, setPlanForm] = useState<BillingPlanFormState>(defaultPlanForm);
+  const [isSavingPlan, setIsSavingPlan] = useState(false);
+  const [toast, setToast] = useState<ToastState>(null);
+
+  const selectedPlanStatus = planFilters.status?.[0];
+  const selectedInvoiceStatus = invoiceFilters.status?.[0];
 
   useEffect(() => {
-    const load = async () => {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      setPageStatus('success');
-    };
-    load();
-  }, []);
+    let cancelled = false;
 
-  // Compute revenue KPIs from mock data
-  const totalMRR = mockBillingPlans
-    .filter(p => p.status === 'active')
-    .reduce((sum, p) => sum + (p.price * p.activeSubscribers), 0);
-  const totalSubscribers = mockBillingPlans.reduce((sum, p) => sum + p.activeSubscribers, 0);
+    async function loadBilling() {
+      setPageStatus('loading');
+      try {
+        const [planItems, invoiceResult] = await Promise.all([
+          getAdminBillingPlanData({ status: selectedPlanStatus }),
+          getAdminBillingInvoiceData({
+            status: selectedInvoiceStatus,
+            search: invoiceSearch || undefined,
+            pageSize: 100,
+          }),
+        ]);
+
+        if (cancelled) return;
+
+        setPlans(planItems);
+        setInvoices(invoiceResult.items);
+        setPageStatus(planItems.length > 0 || invoiceResult.items.length > 0 ? 'success' : 'empty');
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setPageStatus('error');
+          setToast({ variant: 'error', message: 'Unable to load billing operations.' });
+        }
+      }
+    }
+
+    const handle = window.setTimeout(loadBilling, 200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(handle);
+    };
+  }, [selectedPlanStatus, selectedInvoiceStatus, invoiceSearch]);
+
+  const metrics = useMemo(() => {
+    const totalMRR = plans
+      .filter((plan) => plan.status === 'active')
+      .reduce((sum, plan) => sum + (plan.price * plan.activeSubscribers), 0);
+
+    const totalSubscribers = plans.reduce((sum, plan) => sum + plan.activeSubscribers, 0);
+    const failedInvoices = invoices.filter((invoice) => invoice.status === 'failed').length;
+    const activePlans = plans.filter((plan) => plan.status === 'active').length;
+
+    return { totalMRR, totalSubscribers, failedInvoices, activePlans };
+  }, [plans, invoices]);
 
   const planColumns: Column<AdminBillingPlan>[] = [
     {
       key: 'name',
-      header: 'Plan Name',
-      render: (item) => <div className="font-medium text-slate-900">{item.name}</div>,
+      header: 'Plan',
+      render: (plan) => <span className="font-medium text-slate-900">{plan.name}</span>,
     },
     {
       key: 'price',
       header: 'Pricing',
-      render: (item) => <div className="text-slate-600">${item.price} / {item.interval}</div>,
+      render: (plan) => <span className="text-slate-600">{formatCurrency(plan.price)} / {plan.interval}</span>,
     },
     {
       key: 'activeSubscribers',
-      header: 'Active Subscribers',
-      render: (item) => <div className="text-slate-600">{item.activeSubscribers.toLocaleString()}</div>,
+      header: 'Subscribers',
+      render: (plan) => <span className="text-slate-600">{plan.activeSubscribers.toLocaleString()}</span>,
     },
     {
       key: 'status',
       header: 'Status',
-      render: (item) => (
-        <Badge variant={item.status === 'active' ? 'success' : 'muted'}>
-          {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+      render: (plan) => (
+        <Badge variant={plan.status === 'active' ? 'success' : 'muted'}>
+          {plan.status}
         </Badge>
       ),
     },
@@ -64,43 +135,43 @@ export default function BillingPage() {
     {
       key: 'id',
       header: 'Invoice',
-      render: (item) => <div className="font-medium text-slate-900 font-mono">{item.id}</div>,
+      render: (invoice) => <span className="font-mono text-xs text-slate-600">{invoice.id}</span>,
     },
     {
       key: 'userName',
       header: 'User',
-      render: (item) => (
-        <div>
-          <div className="text-sm text-slate-900">{item.userName}</div>
-          <div className="text-xs text-slate-500">{item.plan}</div>
+      render: (invoice) => (
+        <div className="space-y-1">
+          <p className="font-medium text-slate-900">{invoice.userName}</p>
+          <p className="text-sm text-slate-500">{invoice.plan}</p>
         </div>
       ),
     },
     {
       key: 'amount',
       header: 'Amount',
-      render: (item) => <div className="text-slate-600 font-medium">${item.amount}</div>,
+      render: (invoice) => <span className="text-slate-600">{formatCurrency(invoice.amount, invoice.currency)}</span>,
     },
     {
       key: 'date',
-      header: 'Date',
-      render: (item) => <div className="text-slate-600">{new Date(item.date).toLocaleDateString()}</div>,
+      header: 'Issued',
+      render: (invoice) => <span className="text-sm text-slate-500">{new Date(invoice.date).toLocaleString()}</span>,
     },
     {
       key: 'status',
       header: 'Status',
-      render: (item) => (
-        <Badge variant={item.status === 'paid' ? 'success' : item.status === 'failed' ? 'danger' : item.status === 'refunded' ? 'warning' : 'muted'}>
-          {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
+      render: (invoice) => (
+        <Badge variant={invoice.status === 'paid' ? 'success' : invoice.status === 'failed' ? 'danger' : 'warning'}>
+          {invoice.status}
         </Badge>
       ),
     },
   ];
 
-  const filterGroups: FilterGroup[] = [
+  const planFilterGroups: FilterGroup[] = [
     {
       id: 'status',
-      label: 'Status',
+      label: 'Plan Status',
       options: [
         { id: 'active', label: 'Active' },
         { id: 'legacy', label: 'Legacy' },
@@ -108,126 +179,142 @@ export default function BillingPage() {
     },
   ];
 
-  const handleFilterChange = (groupId: string, optionId: string) => {
-    setActiveFilters((prev) => {
-      const current = prev[groupId] || [];
-      const updated = current.includes(optionId)
-        ? current.filter((id) => id !== optionId)
-        : [...current, optionId];
-      return { ...prev, [groupId]: updated };
-    });
-  };
+  const invoiceFilterGroups: FilterGroup[] = [
+    {
+      id: 'status',
+      label: 'Invoice Status',
+      options: [
+        { id: 'paid', label: 'Paid' },
+        { id: 'pending', label: 'Pending' },
+        { id: 'failed', label: 'Failed' },
+      ],
+    },
+  ];
 
-  const filteredPlans = mockBillingPlans.filter((item) => {
-    if (activeFilters.status.length > 0) {
-      return activeFilters.status.includes(item.status);
-    }
-    return true;
-  });
+  function handleSingleFilterChange(
+    setter: Dispatch<SetStateAction<Record<string, string[]>>>,
+    groupId: string,
+    optionId: string,
+  ) {
+    setter((current) => ({
+      ...current,
+      [groupId]: current[groupId]?.includes(optionId) ? [] : [optionId],
+    }));
+  }
 
-  const handleCreatePlan = () => {
+  async function reloadBilling() {
+    const [planItems, invoiceResult] = await Promise.all([
+      getAdminBillingPlanData({ status: selectedPlanStatus }),
+      getAdminBillingInvoiceData({
+        status: selectedInvoiceStatus,
+        search: invoiceSearch || undefined,
+        pageSize: 100,
+      }),
+    ]);
+
+    setPlans(planItems);
+    setInvoices(invoiceResult.items);
+    setPageStatus(planItems.length > 0 || invoiceResult.items.length > 0 ? 'success' : 'empty');
+  }
+
+  async function handleCreatePlan() {
+    setIsSavingPlan(true);
     try {
-      analytics.track('admin_billing_action', { action: 'create_plan' });
-      setToast({ variant: 'success', message: 'Plan creation flow initiated.' });
-    } catch {
-      setToast({ variant: 'error', message: 'Failed to initiate plan creation.' });
+      await createAdminBillingPlan({
+        name: planForm.name,
+        price: Number(planForm.price || 0),
+        interval: planForm.interval,
+      });
+
+      await reloadBilling();
+      setIsPlanModalOpen(false);
+      setPlanForm(defaultPlanForm);
+      setToast({ variant: 'success', message: 'Billing plan created successfully.' });
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: 'Unable to create this billing plan.' });
+    } finally {
+      setIsSavingPlan(false);
     }
-  };
+  }
 
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto" role="main" aria-label="Billing & Plans">
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
+    <div className="max-w-7xl space-y-6">
+      {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Billing & Plans</h1>
-          <p className="text-sm text-slate-500 mt-1">Manage subscription plans and revenue metrics.</p>
-        </div>
-        <Button onClick={handleCreatePlan}>Create Plan</Button>
-      </div>
+      <AdminPageHeader
+        title="Billing Operations"
+        description="Manage subscription plans, invoice visibility, and revenue risk with live plan and invoice data."
+        actions={
+          <Button onClick={() => setIsPlanModalOpen(true)} className="gap-2">
+            <CreditCard className="h-4 w-4" />
+            Create Plan
+          </Button>
+        }
+      />
 
-      <AsyncStateWrapper status={pageStatus} onRetry={() => window.location.reload()}>
-        {/* Revenue KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-lg bg-green-50 text-green-600 flex items-center justify-center">
-              <DollarSign className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-2xl font-semibold text-slate-900">${totalMRR.toLocaleString()}</div>
-              <div className="text-sm text-slate-500">Monthly Revenue</div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-              <Users className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-2xl font-semibold text-slate-900">{totalSubscribers.toLocaleString()}</div>
-              <div className="text-sm text-slate-500">Total Subscribers</div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
-              <TrendingUp className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-2xl font-semibold text-slate-900">{mockBillingPlans.filter(p => p.status === 'active').length}</div>
-              <div className="text-sm text-slate-500">Active Plans</div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-              <CreditCard className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-2xl font-semibold text-slate-900">{mockBillingInvoices.filter(i => i.status === 'failed').length}</div>
-              <div className="text-sm text-slate-500">Failed Payments</div>
-            </div>
-          </div>
-        </div>
-
-        {/* Plans Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-          <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/50">
-            <h3 className="font-medium text-slate-900">Subscription Plans</h3>
-          </div>
-          <FilterBar
-            groups={filterGroups}
-            selected={activeFilters}
-            onChange={handleFilterChange}
-            className="border-b border-slate-200 p-4"
+      <AsyncStateWrapper
+        status={pageStatus}
+        onRetry={() => window.location.reload()}
+        emptyContent={
+          <EmptyState
+            icon={<Receipt className="h-10 w-10 text-slate-400" />}
+            title="No billing records found"
+            description="Create a plan or wait for invoices to populate the admin billing workspace."
+            action={{ label: 'Create Plan', onClick: () => setIsPlanModalOpen(true) }}
           />
-          {filteredPlans.length === 0 ? (
-            <EmptyState
-              icon={<CreditCard className="w-12 h-12 text-muted" />}
-              title="No Matching Plans"
-              description="Adjust your filters to see billing plans."
-            />
-          ) : (
-            <DataTable columns={planColumns} data={filteredPlans} keyExtractor={(item) => item.id} />
-          )}
+        }
+      >
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <AdminMetricCard label="Monthly Revenue" value={formatCurrency(metrics.totalMRR)} icon={<DollarSign className="h-5 w-5" />} />
+          <AdminMetricCard label="Subscribers" value={metrics.totalSubscribers} icon={<Users className="h-5 w-5" />} />
+          <AdminMetricCard label="Active Plans" value={metrics.activePlans} icon={<CreditCard className="h-5 w-5" />} />
+          <AdminMetricCard label="Failed Invoices" value={metrics.failedInvoices} icon={<Receipt className="h-5 w-5" />} tone={metrics.failedInvoices > 0 ? 'danger' : 'default'} />
         </div>
 
-        {/* Invoices Table */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-          <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/50 flex items-center gap-2">
-            <Receipt className="w-4 h-4 text-slate-500" />
-            <h3 className="font-medium text-slate-900">Recent Invoices</h3>
+        <AdminSectionPanel title="Subscription Plans" description="Live plan data from the admin billing plan endpoint.">
+          <FilterBar groups={planFilterGroups} selected={planFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setPlanFilters, groupId, optionId)} onClear={() => setPlanFilters({ status: [] })} />
+          <DataTable columns={planColumns} data={plans} keyExtractor={(plan) => plan.id} />
+        </AdminSectionPanel>
+
+        <AdminSectionPanel title="Invoices" description="Search and filter real invoice records by status and learner reference.">
+          <div className="max-w-md">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input placeholder="Search by user or plan description" value={invoiceSearch} onChange={(event) => setInvoiceSearch(event.target.value)} className="pl-9" />
+            </div>
           </div>
-          {mockBillingInvoices.length === 0 ? (
-            <EmptyState
-              icon={<Receipt className="w-12 h-12 text-muted" />}
-              title="No Invoices"
-              description="Invoices will appear here when payments are processed."
-            />
-          ) : (
-            <DataTable columns={invoiceColumns} data={mockBillingInvoices} keyExtractor={(item) => item.id} />
-          )}
-        </div>
+          <FilterBar groups={invoiceFilterGroups} selected={invoiceFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setInvoiceFilters, groupId, optionId)} onClear={() => { setInvoiceFilters({ status: [] }); setInvoiceSearch(''); }} />
+          <DataTable columns={invoiceColumns} data={invoices} keyExtractor={(invoice) => invoice.id} />
+        </AdminSectionPanel>
       </AsyncStateWrapper>
+
+      <Modal open={isPlanModalOpen} onClose={() => setIsPlanModalOpen(false)} title="Create Billing Plan">
+        <div className="space-y-4 py-2">
+          <Input label="Plan Name" value={planForm.name} onChange={(event) => setPlanForm((current) => ({ ...current, name: event.target.value }))} />
+          <Input label="Price" type="number" min={0} step="0.01" value={planForm.price} onChange={(event) => setPlanForm((current) => ({ ...current, price: event.target.value }))} />
+          <Select
+            label="Interval"
+            value={planForm.interval}
+            onChange={(event) => setPlanForm((current) => ({ ...current, interval: event.target.value }))}
+            options={[
+              { value: 'month', label: 'Monthly' },
+              { value: 'year', label: 'Yearly' },
+            ]}
+          />
+
+          <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+            <Button variant="outline" onClick={() => setIsPlanModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleCreatePlan} loading={isSavingPlan}>
+              Save Plan
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

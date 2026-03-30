@@ -7,7 +7,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
-import { AppShell } from '@/components/layout/app-shell';
+import { LearnerDashboardShell } from '@/components/layout';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -55,7 +55,7 @@ export default function SpeakingResultSummary() {
 
   if (analysing) {
     return (
-      <AppShell pageTitle="Analyzing...">
+      <LearnerDashboardShell pageTitle="Analyzing...">
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
@@ -89,21 +89,29 @@ export default function SpeakingResultSummary() {
             </div>
           </motion.div>
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
   if (error || !result) {
     return (
-      <AppShell pageTitle="Results">
+      <LearnerDashboardShell pageTitle="Results">
         <InlineAlert variant="error">Could not load your speaking result. Please try again later.</InlineAlert>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
   return (
-    <AppShell pageTitle="Performance Summary">
-      <div className="max-w-4xl mx-auto space-y-6 p-6">
+    <LearnerDashboardShell pageTitle="Performance Summary">
+      <div className="space-y-6">
+        <section className="space-y-2">
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-muted">Speaking Results</p>
+          <h1 className="text-3xl font-black tracking-tight text-navy">Performance Summary</h1>
+          <p className="max-w-2xl text-sm text-muted">
+            Review your estimated range, strongest signals, and the next action to keep your speaking momentum moving.
+          </p>
+        </section>
+
         {/* Score Card */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
           <Card className="p-8 flex flex-col md:flex-row items-center gap-8">
@@ -206,6 +214,6 @@ export default function SpeakingResultSummary() {
           </motion.section>
         )}
       </div>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }

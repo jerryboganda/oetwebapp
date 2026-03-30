@@ -21,11 +21,12 @@ import {
   Flame,
 } from 'lucide-react';
 import { Button, Badge } from '@/components/ui';
-import { AppShell } from '@/components/layout';
+import { LearnerDashboardShell } from '@/components/layout';
 import { AsyncStateWrapper } from '@/components/state';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { fetchStudyPlan, updateStudyPlanTask } from '@/lib/api';
 import type { StudyPlanTask, SubTest } from '@/lib/mock-data';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 
 const SUBTEST_ICONS: Record<SubTest, React.ElementType> = {
   Reading: BookOpen,
@@ -206,9 +207,12 @@ export default function StudyPlanPage() {
   };
 
   const asyncStatus = loading ? 'loading' : error ? 'error' : tasks.length === 0 ? 'empty' : 'success' as const;
+  const todayTasks = tasks.filter((task) => task.section === 'today');
+  const completedToday = todayTasks.filter((task) => task.status === 'completed').length;
+  const nextCheckpointCount = tasks.filter((task) => task.section === 'nextCheckpoint').length;
 
   return (
-    <AppShell pageTitle="Study Plan">
+    <LearnerDashboardShell pageTitle="Study Plan">
       <AsyncStateWrapper
         status={asyncStatus}
         onRetry={loadData}
@@ -221,12 +225,19 @@ export default function StudyPlanPage() {
           </div>
         }
       >
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-8">
-          {/* Page header */}
-          <div>
-            <h1 className="text-2xl font-bold text-navy">Your Study Plan</h1>
-            <p className="text-muted mt-1">Personalised tasks based on your goals and performance.</p>
-          </div>
+        <div className="space-y-8">
+          <LearnerPageHero
+            eyebrow="Action Plan"
+            icon={Calendar}
+            accent="primary"
+            title="Keep today's study sequence visible"
+            description="Use this plan to see what to do now, what comes next, and why each task is here."
+            highlights={[
+              { icon: Calendar, label: 'Today', value: `${todayTasks.length} scheduled` },
+              { icon: CheckCircle2, label: 'Completed', value: `${completedToday} done` },
+              { icon: Target, label: 'Next checkpoint', value: `${nextCheckpointCount} tasks` },
+            ]}
+          />
 
           {/* Sections */}
           {SECTIONS.map(({ type, title, icon: SectionIcon, iconColor }) => {
@@ -235,13 +246,16 @@ export default function StudyPlanPage() {
 
             return (
               <section key={type}>
-                <h2 className="text-lg font-bold text-navy mb-3 flex items-center gap-2 border-b pb-2">
+                <LearnerSurfaceSectionHeader
+                  eyebrow="Plan Section"
+                  title={`${title} (${sectionTasks.length})`}
+                  description="Each section groups work by timing or purpose so the learner can see why these tasks belong together."
+                  className="mb-3"
+                />
+                <div className="flex items-center gap-2 text-sm font-semibold text-muted mb-3">
                   <SectionIcon className={`w-5 h-5 ${iconColor}`} />
                   {title}
-                  <span className="ml-1 bg-gray-100 text-muted text-xs py-0.5 px-2 rounded-full font-bold">
-                    {sectionTasks.length}
-                  </span>
-                </h2>
+                </div>
                 <div className="space-y-3">
                   <AnimatePresence mode="popLayout">
                     {sectionTasks.map(renderTaskCard)}
@@ -252,6 +266,6 @@ export default function StudyPlanPage() {
           })}
         </div>
       </AsyncStateWrapper>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }

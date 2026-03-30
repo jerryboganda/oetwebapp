@@ -30,6 +30,75 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
     }
 
     [Fact]
+    public async Task SettingsSectionEndpoints_ExposeConcreteLearnerSections()
+    {
+        using var client = CreateClientForUser("settings-section-user");
+
+        var profileResponse = await client.GetAsync("/v1/settings/profile");
+        profileResponse.EnsureSuccessStatusCode();
+        using var profileJson = JsonDocument.Parse(await profileResponse.Content.ReadAsStringAsync());
+        Assert.Equal("profile", profileJson.RootElement.GetProperty("section").GetString());
+        Assert.True(profileJson.RootElement.TryGetProperty("values", out _));
+
+        var studyResponse = await client.GetAsync("/v1/settings/study");
+        studyResponse.EnsureSuccessStatusCode();
+        using var studyJson = JsonDocument.Parse(await studyResponse.Content.ReadAsStringAsync());
+        Assert.Equal("study", studyJson.RootElement.GetProperty("section").GetString());
+        Assert.True(studyJson.RootElement.TryGetProperty("values", out _));
+    }
+
+    [Fact]
+    public async Task MockAttemptCreation_PersistsReviewSelectionAndLaunchRoutes()
+    {
+        using var client = CreateClientForUser("mock-route-user");
+
+        var response = await client.PostAsJsonAsync("/v1/mock-attempts", new
+        {
+            mockType = "full",
+            subType = (string?)null,
+            mode = "exam",
+            profession = "Medicine",
+            includeReview = true,
+            strictTimer = true,
+            reviewSelection = "writing_and_speaking"
+        });
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("writing_and_speaking", json.RootElement.GetProperty("config").GetProperty("reviewSelection").GetString());
+        var sectionStates = json.RootElement.GetProperty("sectionStates");
+        Assert.Equal(4, sectionStates.GetArrayLength());
+        Assert.All(sectionStates.EnumerateArray().ToArray(), section =>
+        {
+            Assert.True(section.TryGetProperty("launchRoute", out var launchRoute));
+            Assert.Contains("/app/mocks/player/", launchRoute.GetString());
+        });
+    }
+
+    [Fact]
+    public async Task BillingPlansAndListeningDrills_ExposeLearnerContracts()
+    {
+        using var client = CreateClientForUser("billing-contract-user");
+
+        var plansResponse = await client.GetAsync("/v1/billing/plans");
+        plansResponse.EnsureSuccessStatusCode();
+        using var plansJson = JsonDocument.Parse(await plansResponse.Content.ReadAsStringAsync());
+        Assert.True(plansJson.RootElement.GetProperty("items").GetArrayLength() >= 2);
+
+        var changePreviewResponse = await client.GetAsync("/v1/billing/change-preview?targetPlanId=premium-monthly");
+        changePreviewResponse.EnsureSuccessStatusCode();
+        using var changePreviewJson = JsonDocument.Parse(await changePreviewResponse.Content.ReadAsStringAsync());
+        Assert.Equal("premium-monthly", changePreviewJson.RootElement.GetProperty("targetPlanId").GetString());
+
+        var drillResponse = await client.GetAsync("/v1/listening/drills/listening-drill-distractor_confusion");
+        drillResponse.EnsureSuccessStatusCode();
+        using var drillJson = JsonDocument.Parse(await drillResponse.Content.ReadAsStringAsync());
+        Assert.Equal("listening-drill-distractor_confusion", drillJson.RootElement.GetProperty("drillId").GetString());
+        Assert.Contains("/app/listening/player/", drillJson.RootElement.GetProperty("launchRoute").GetString());
+        Assert.Contains("/app/listening/review/", drillJson.RootElement.GetProperty("reviewRoute").GetString());
+    }
+
+    [Fact]
     public async Task LearnerOwnedAttempt_CannotBeFetchedByAnotherUser()
     {
         using var ownerClient = CreateClientForUser("attempt-owner");

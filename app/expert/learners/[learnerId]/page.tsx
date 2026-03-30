@@ -5,11 +5,11 @@ import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import type { LearnerProfileExpanded } from '@/lib/types/expert';
+import type { ExpertLearnerReviewContext, LearnerProfileExpanded } from '@/lib/types/expert';
 import { useParams, useRouter } from 'next/navigation';
 import { Button } from '@/components/ui/button';
 import { ArrowLeft, Target, History, BarChart3, FileText } from 'lucide-react';
-import { fetchLearnerProfile, isApiError } from '@/lib/api';
+import { fetchExpertLearnerReviewContext, fetchLearnerProfile, isApiError } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
 type AsyncStatus = 'loading' | 'error' | 'success';
@@ -20,6 +20,7 @@ export default function AssignedLearnerPage() {
   const router = useRouter();
 
   const [learner, setLearner] = useState<LearnerProfileExpanded | null>(null);
+  const [context, setContext] = useState<ExpertLearnerReviewContext | null>(null);
   const [pageStatus, setPageStatus] = useState<AsyncStatus>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -31,9 +32,13 @@ export default function AssignedLearnerPage() {
       try {
         setPageStatus('loading');
         setErrorMessage(null);
-        const data = await fetchLearnerProfile(learnerId);
+        const [data, scopedContext] = await Promise.all([
+          fetchLearnerProfile(learnerId),
+          fetchExpertLearnerReviewContext(learnerId),
+        ]);
         if (cancelled) return;
         setLearner(data);
+        setContext(scopedContext);
         setPageStatus('success');
         analytics.track('learner_profile_viewed', { learnerId });
       } catch (error) {
@@ -63,6 +68,7 @@ export default function AssignedLearnerPage() {
               <div className="flex items-center gap-2 flex-wrap">
                 <Badge variant="info" className="capitalize text-sm px-3 py-1">{learner.profession}</Badge>
                 {learner.visibilityScope && <Badge variant="default">{learner.visibilityScope.replace(/_/g, ' ')}</Badge>}
+                {context && <Badge variant="success">{context.reviewsInScope} reviews in scope</Badge>}
               </div>
             </div>
 
@@ -83,6 +89,10 @@ export default function AssignedLearnerPage() {
                   <div>
                     <p className="text-xs font-semibold text-muted uppercase tracking-wide">Exam Date</p>
                     <p className="text-navy mt-1">{learner.examDate ? learner.examDate.split('T')[0] : 'Not Set'}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-muted uppercase tracking-wide">Review Scope</p>
+                    <p className="text-navy mt-1">{context ? `${context.reviewsInScope} expert-linked review(s)` : 'Loading scope...'}</p>
                   </div>
                 </CardContent>
               </Card>

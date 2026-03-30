@@ -7,5 +7,11 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
 export default defineConfig([{
+    ignores: [
+        "**/.next/**",
+        "**/node_modules/**",
+        "**/coverage/**",
+        "OET Web App Login only screens take from here/**",
+    ],
     extends: [...next],
 }]);

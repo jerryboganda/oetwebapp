@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { AnchoredComment, TimestampComment } from '@/lib/types/expert';
+import type { AnchoredComment, ExpertChecklistItem, TimestampComment } from '@/lib/types/expert';
 
 export interface LocalReviewDraft {
   reviewId: string;
@@ -9,6 +9,8 @@ export interface LocalReviewDraft {
   finalComment: string;
   anchoredComments: AnchoredComment[];
   timestampComments: TimestampComment[];
+  scratchpad: string;
+  checklistItems: ExpertChecklistItem[];
   version?: number;
   updatedAt: string;
 }
@@ -48,6 +50,8 @@ export const useExpertStore = create<ExpertState>()(
             finalComment: draft.finalComment,
             anchoredComments: draft.anchoredComments,
             timestampComments: draft.timestampComments,
+            scratchpad: draft.scratchpad,
+            checklistItems: draft.checklistItems,
             version: draft.version,
             updatedAt: draft.updatedAt ?? new Date().toISOString(),
           },

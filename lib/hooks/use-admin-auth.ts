@@ -1,5 +1,9 @@
-import { useState, useEffect } from 'react';
+'use client';
+
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useCurrentUser } from './use-current-user';
+import { defaultRouteForRole } from '@/lib/auth-routes';
 
 export interface UserRole {
   role: 'learner' | 'expert' | 'admin';
@@ -8,38 +12,43 @@ export interface UserRole {
 
 export function useAdminAuth() {
   const router = useRouter();
-  const [authState, setAuthState] = useState<UserRole>({
-    role: 'admin', // Defaulting to 'admin' for development
-    isAuthenticated: true,
-  });
-  const [isLoading, setIsLoading] = useState(true);
+  const { role, isAuthenticated, isLoading } = useCurrentUser();
+  const resolvedRole = role ?? 'learner';
 
   useEffect(() => {
-    // Simulate an API call to verify session and role
-    const verifyAuth = async () => {
-      setIsLoading(true);
-      await new Promise(resolve => setTimeout(resolve, 300));
-      
-      setAuthState({
-        role: 'admin',
-        isAuthenticated: true,
-      });
-      setIsLoading(false);
-    };
+    if (isLoading) {
+      return;
+    }
 
-    verifyAuth();
-  }, []);
+    if (!isAuthenticated) {
+      router.replace('/sign-in?next=/admin');
+      return;
+    }
+
+    if (resolvedRole !== 'admin') {
+      router.replace(defaultRouteForRole(resolvedRole));
+    }
+  }, [isAuthenticated, isLoading, resolvedRole, router]);
 
   const requireAdminAccess = () => {
-    if (!isLoading) {
-      if (!authState.isAuthenticated || authState.role !== 'admin') {
-        router.push('/');
-      }
+    if (isLoading) {
+      return;
+    }
+
+    if (!isAuthenticated) {
+      router.push('/sign-in?next=/admin');
+      return;
+    }
+
+    if (resolvedRole !== 'admin') {
+      router.push(defaultRouteForRole(resolvedRole));
+      return;
     }
   };
 
   return {
-    ...authState,
+    role: resolvedRole,
+    isAuthenticated,
     isLoading,
     requireAdminAccess,
   };

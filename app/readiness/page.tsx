@@ -17,12 +17,13 @@ import {
   Info,
   Search
 } from 'lucide-react';
-import { AppShell } from '@/components/layout/app-shell';
+import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { fetchReadiness } from '@/lib/api';
 import type { ReadinessData } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 
 const SUBTEST_ICONS: Record<string, React.ElementType> = {
   reading:   FileText,
@@ -44,23 +45,23 @@ export default function ReadinessCenter() {
 
   if (error) {
     return (
-      <AppShell pageTitle="Readiness Center" backHref="/">
-        <div className="max-w-5xl mx-auto px-4 py-8">
+      <LearnerDashboardShell pageTitle="Readiness Center" backHref="/">
+        <div>
           <InlineAlert variant="error">{error}</InlineAlert>
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
   if (!data) {
     return (
-      <AppShell pageTitle="Readiness Center" backHref="/">
-        <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+      <LearnerDashboardShell pageTitle="Readiness Center" backHref="/">
+        <div className="space-y-6">
           {[1, 2, 3].map(i => (
             <Skeleton key={i} className="h-40 rounded-2xl" />
           ))}
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
@@ -68,14 +69,30 @@ export default function ReadinessCenter() {
     data.overallRisk === 'High'     ? 'bg-rose-600' :
     data.overallRisk === 'Moderate' ? 'bg-amber-500' :
                                       'bg-green-600';
+  const riskIcon =
+    data.overallRisk === 'High' ? ShieldAlert :
+    data.overallRisk === 'Moderate' ? Shield :
+    ShieldCheck;
 
   return (
-    <AppShell
+    <LearnerDashboardShell
       pageTitle="Readiness Center"
       subtitle={`Target Exam: ${data.targetDate}`}
       backHref="/"
     >
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <div className="space-y-8">
+        <LearnerPageHero
+          eyebrow="Readiness Focus"
+          icon={TrendingUp}
+          accent="primary"
+          title="See what needs to close before your target date"
+          description="Use readiness evidence to identify current risk, weakest links, and the study volume you should protect next."
+          highlights={[
+            { icon: Calendar, label: 'Target date', value: data.targetDate },
+            { icon: riskIcon, label: 'Current risk', value: data.overallRisk },
+            { icon: Clock, label: 'Study volume', value: `${data.recommendedStudyHours} hours left` },
+          ]}
+        />
 
         {/* 1. Risk + Recommended Study Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -128,7 +145,12 @@ export default function ReadinessCenter() {
           <div className="lg:col-span-2 space-y-8">
 
             <section>
-              <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-4">Readiness by Sub-test</h2>
+              <LearnerSurfaceSectionHeader
+                eyebrow="Readiness by Sub-test"
+                title="See where the gap actually is"
+                description="Each sub-test should show current readiness, target, and whether it is the weakest link."
+                className="mb-4"
+              />
               <div className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm space-y-8">
                 {data.subTests.map((test, idx) => {
                   const Icon = SUBTEST_ICONS[test.id] ?? FileText;
@@ -180,9 +202,12 @@ export default function ReadinessCenter() {
             </section>
 
             <section>
-              <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-4 flex items-center gap-2">
-                <AlertTriangle className="w-4 h-4" /> Key Blockers
-              </h2>
+              <LearnerSurfaceSectionHeader
+                eyebrow="Key Blockers"
+                title="Make the biggest constraints explicit"
+                description="A learner should immediately understand what is slowing progress before looking at more charts."
+                className="mb-4"
+              />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {data.blockers.map((blocker, idx) => (
                   <motion.div
@@ -202,9 +227,12 @@ export default function ReadinessCenter() {
 
           {/* Right: Evidence Panel */}
           <div>
-            <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-4 flex items-center gap-2">
-              <Search className="w-4 h-4" /> Evidence
-            </h2>
+            <LearnerSurfaceSectionHeader
+              eyebrow="Evidence"
+              title="Show what the estimate is based on"
+              description="Readiness should feel earned by visible practice, mock, and expert-review evidence."
+              className="mb-4"
+            />
             <motion.div
               initial={{ opacity: 0, x: 20 }}
               animate={{ opacity: 1, x: 0 }}
@@ -245,33 +273,6 @@ export default function ReadinessCenter() {
         </div>
 
       </div>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }
-
-// --- Mock Data ---
-const readinessData = {
-  targetDate: 'Oct 15, 2024',
-  weeksRemaining: 4,
-  overallRisk: 'Moderate', // 'Low', 'Moderate', 'High'
-  recommendedStudyHours: 45,
-  weakestLink: 'Writing',
-  subTests: [
-    { id: 'reading', name: 'Reading', readiness: 85, target: 75, status: 'On Track', icon: FileText, color: 'text-blue-600', bg: 'bg-blue-100', barColor: 'bg-blue-500' },
-    { id: 'listening', name: 'Listening', readiness: 80, target: 75, status: 'On Track', icon: Headphones, color: 'text-indigo-600', bg: 'bg-indigo-100', barColor: 'bg-indigo-500' },
-    { id: 'speaking', name: 'Speaking', readiness: 70, target: 75, status: 'Borderline', icon: Mic, color: 'text-purple-600', bg: 'bg-purple-100', barColor: 'bg-purple-500' },
-    { id: 'writing', name: 'Writing', readiness: 55, target: 75, status: 'Needs Work', icon: PenTool, color: 'text-rose-600', bg: 'bg-rose-100', barColor: 'bg-rose-500', isWeakest: true },
-  ],
-  blockers: [
-    { id: 1, title: 'Writing Conciseness', description: 'Consistently losing marks for including irrelevant case history details in referral letters.' },
-    { id: 2, title: 'Listening Part C', description: 'Accuracy drops significantly on fast-paced, multi-speaker interview audio.' }
-  ],
-  evidence: {
-    mocksCompleted: 3,
-    practiceQuestions: 342,
-    expertReviews: 2,
-    recentTrend: 'Improving slowly over the last 14 days, but Writing scores have plateaued.',
-    lastUpdated: 'Today at 9:00 AM'
-  }
-};
-

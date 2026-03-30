@@ -7,7 +7,7 @@ import { z } from 'zod';
 import { Save, ArrowRight } from 'lucide-react';
 import { Button, Input, Select, Checkbox } from '@/components/ui';
 import { ProfessionSelector } from '@/components/domain';
-import { AppShell } from '@/components/layout';
+import { LearnerDashboardShell } from '@/components/layout';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { type SubTest } from '@/lib/mock-data';
 import { fetchUserProfile, updateUserProfile } from '@/lib/api';
@@ -116,8 +116,8 @@ export default function GoalSetupPage() {
   };
 
   return (
-    <AppShell pageTitle="Set Your Goals">
-      <div className="max-w-2xl mx-auto p-4 md:p-8 space-y-8">
+    <LearnerDashboardShell pageTitle="Set Your Goals">
+      <div className="space-y-8">
         <div>
           <h1 className="text-2xl font-bold text-navy">Set your study goals</h1>
           <p className="text-muted mt-1">
@@ -233,6 +233,6 @@ export default function GoalSetupPage() {
           </div>
         </form>
       </div>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }

@@ -337,6 +337,10 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 PayloadJson = JsonSupport.Serialize(new { reviewRequestId = request.Id, attemptId = request.AttemptId, subtest = request.SubtestCode }),
                 OccurredAt = DateTimeOffset.UtcNow
             });
+
+            // Trigger study plan regeneration after expert review completes
+            await RefreshReadinessAsync(db, attempt.UserId, cancellationToken);
+            await LearnerWorkflowCoordinator.QueueStudyPlanRegenerationAsync(db, attempt.UserId, cancellationToken);
         }
     }
 

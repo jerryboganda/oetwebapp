@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'motion/react';
 import { BookOpen } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { AppShell } from '@/components/layout/app-shell';
+import { LearnerDashboardShell } from '@/components/layout';
 import { TaskCard } from '@/components/domain/task-card';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -59,9 +59,9 @@ export default function WritingTaskLibrary() {
   });
 
   return (
-    <AppShell pageTitle="Writing Task Library">
+    <LearnerDashboardShell pageTitle="Writing Task Library">
       <header className="bg-navy text-white pt-10 pb-12 px-4 sm:px-6 lg:px-8">
-        <div className="max-w-7xl mx-auto">
+        <div>
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
               <BookOpen className="w-5 h-5 text-blue-300" />
@@ -72,7 +72,7 @@ export default function WritingTaskLibrary() {
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 -mt-6 relative z-10">
+      <main className="-mt-6 relative z-10">
         <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange}
           onClear={() => setFilters({})} className="mb-6 bg-white p-4 rounded-xl border border-gray-200 shadow-sm" />
 
@@ -106,6 +106,6 @@ export default function WritingTaskLibrary() {
           </div>
         )}
       </main>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }

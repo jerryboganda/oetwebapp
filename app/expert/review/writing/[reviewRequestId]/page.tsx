@@ -11,10 +11,10 @@ import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Save, Send, MessageSquare, RotateCcw } from 'lucide-react';
 import { WritingCaseNotesPanel } from '@/components/domain/writing-case-notes-panel';
 import { useParams, useRouter } from 'next/navigation';
-import { fetchWritingReviewDetail, isApiError, requestRework, saveDraftReview, submitExpertWritingReview } from '@/lib/api';
+import { fetchExpertLearnerReviewContext, fetchExpertReviewHistory, fetchWritingReviewDetail, isApiError, requestRework, saveDraftReview, submitExpertWritingReview } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { useExpertStore } from '@/lib/stores/expert-store';
-import type { AnchoredComment, ExpertSavedDraft, WritingCriterionKey, WritingReviewDetail } from '@/lib/types/expert';
+import type { AnchoredComment, ExpertChecklistItem, ExpertLearnerReviewContext, ExpertReviewHistory, ExpertSavedDraft, WritingCriterionKey, WritingReviewDetail } from '@/lib/types/expert';
 
 type AsyncStatus = 'loading' | 'error' | 'partial' | 'success';
 
@@ -45,9 +45,18 @@ type DraftCandidate = {
   finalComment: string;
   anchoredComments: AnchoredComment[];
   timestampComments: unknown[];
+  scratchpad: string;
+  checklistItems: ExpertChecklistItem[];
   version?: number;
   updatedAt: string;
 };
+
+const DEFAULT_CHECKLIST: ExpertChecklistItem[] = [
+  { id: 'purpose', label: 'Purpose is explicit in the opening and remains clear throughout.', checked: false },
+  { id: 'content', label: 'Only clinically relevant facts remain in scope for the receiving reader.', checked: false },
+  { id: 'organization', label: 'Sequence supports rapid reading and safe follow-up action.', checked: false },
+  { id: 'language', label: 'Tone, register, and language control stay appropriate for OET writing.', checked: false },
+];
 
 function toDraftSnapshot(reviewId: string, draft: ExpertSavedDraft | null | undefined) {
   if (!draft) {
@@ -61,6 +70,8 @@ function toDraftSnapshot(reviewId: string, draft: ExpertSavedDraft | null | unde
     finalComment: draft.finalComment,
     anchoredComments: draft.anchoredComments,
     timestampComments: draft.timestampComments,
+    scratchpad: draft.scratchpad,
+    checklistItems: draft.checklistItems,
     version: draft.version,
     updatedAt: draft.savedAt,
   };
@@ -121,13 +132,15 @@ export default function WritingReviewWorkspace() {
   const [showReworkPrompt, setShowReworkPrompt] = useState(false);
   const [reworkReason, setReworkReason] = useState('');
   const [scratchpad, setScratchpad] = useState('');
+  const [checklist, setChecklist] = useState<ExpertChecklistItem[]>(DEFAULT_CHECKLIST);
   const [caseNotesTab, setCaseNotesTab] = useState<'notes' | 'scratchpad' | 'checklist'>('notes');
   const [slaSeconds, setSlaSeconds] = useState(0);
   const [reloadToken, setReloadToken] = useState(0);
   const [isInitialized, setIsInitialized] = useState(false);
+  const [reviewHistory, setReviewHistory] = useState<ExpertReviewHistory | null>(null);
+  const [learnerContext, setLearnerContext] = useState<ExpertLearnerReviewContext | null>(null);
 
   const partialMessage = reviewDetail?.artifactStatus?.aiDraftFeedback?.message ?? 'Some review data is still being prepared.';
-  const localDraft = reviewRequestId ? getReviewDraft(reviewRequestId) : null;
 
   const applyDraft = useCallback((draft: DraftCandidate | null) => {
     if (!draft) return;
@@ -135,6 +148,8 @@ export default function WritingReviewWorkspace() {
     setCriterionComments(draft.criterionComments);
     setFinalComment(draft.finalComment);
     setAnchoredComments(draft.anchoredComments);
+    setScratchpad(draft.scratchpad ?? '');
+    setChecklist(draft.checklistItems?.length > 0 ? draft.checklistItems : DEFAULT_CHECKLIST);
     setDraftVersion(draft.version);
     setLastSavedAt(draft.updatedAt);
   }, []);
@@ -151,15 +166,25 @@ export default function WritingReviewWorkspace() {
         setCriterionComments({});
         setFinalComment('');
         setAnchoredComments([]);
+        setScratchpad('');
+        setChecklist(DEFAULT_CHECKLIST);
         setDraftVersion(undefined);
         setLastSavedAt(null);
         setIsDirty(false);
         const detail = await fetchWritingReviewDetail(reviewRequestId);
         if (cancelled) return;
+        const [history, context] = await Promise.all([
+          fetchExpertReviewHistory(reviewRequestId),
+          fetchExpertLearnerReviewContext(detail.learnerId),
+        ]);
+        if (cancelled) return;
         setReviewDetail(detail);
+        setReviewHistory(history);
+        setLearnerContext(context);
         setSlaSeconds(Math.max(0, Math.floor((new Date(detail.slaDue).getTime() - Date.now()) / 1000)));
 
-        const latestDraft = pickLatestDraft(localDraft, toDraftSnapshot(reviewRequestId, detail.existingDraft));
+        const localDraftSnapshot = getReviewDraft(reviewRequestId);
+        const latestDraft = pickLatestDraft(localDraftSnapshot, toDraftSnapshot(reviewRequestId, detail.existingDraft));
         applyDraft(latestDraft);
         setIsInitialized(true);
         setPageStatus(detail.artifactStatus?.aiDraftFeedback?.state && detail.artifactStatus.aiDraftFeedback.state !== 'completed' ? 'partial' : 'success');
@@ -172,7 +197,7 @@ export default function WritingReviewWorkspace() {
       }
     })();
     return () => { cancelled = true; };
-  }, [applyDraft, localDraft, reloadToken, reviewRequestId]);
+  }, [applyDraft, getReviewDraft, reloadToken, reviewRequestId]);
 
   useEffect(() => {
     if (!reviewRequestId || !isInitialized) return;
@@ -182,9 +207,11 @@ export default function WritingReviewWorkspace() {
       finalComment,
       anchoredComments,
       timestampComments: [],
+      scratchpad,
+      checklistItems: checklist,
       version: draftVersion,
     });
-  }, [anchoredComments, criterionComments, draftVersion, finalComment, isInitialized, reviewRequestId, scores, upsertReviewDraft]);
+  }, [anchoredComments, checklist, criterionComments, draftVersion, finalComment, isInitialized, reviewRequestId, scratchpad, scores, upsertReviewDraft]);
 
   useEffect(() => {
     const handleBeforeUnload = (event: BeforeUnloadEvent) => {
@@ -204,6 +231,8 @@ export default function WritingReviewWorkspace() {
       criterionComments,
       finalComment,
       comments: anchoredComments,
+      scratchpad,
+      checklistItems: checklist,
       savedAt: new Date().toISOString(),
       version: draftVersion,
     };
@@ -218,6 +247,8 @@ export default function WritingReviewWorkspace() {
       finalComment: savedDraft.finalComment,
       anchoredComments: savedDraft.comments as AnchoredComment[],
       timestampComments: [],
+      scratchpad: savedDraft.scratchpad ?? '',
+      checklistItems: savedDraft.checklistItems ?? DEFAULT_CHECKLIST,
       version: savedDraft.version,
       updatedAt: savedDraft.savedAt,
     });
@@ -226,7 +257,7 @@ export default function WritingReviewWorkspace() {
     }
     analytics.track('review_draft_saved', { reviewRequestId });
     return savedDraft;
-  }, [anchoredComments, criterionComments, draftVersion, finalComment, reviewRequestId, scores, upsertReviewDraft]);
+  }, [anchoredComments, checklist, criterionComments, draftVersion, finalComment, reviewRequestId, scratchpad, scores, upsertReviewDraft]);
 
   const handleSaveDraft = useCallback(async () => {
     setIsSaving(true);
@@ -307,11 +338,12 @@ export default function WritingReviewWorkspace() {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if ((event.ctrlKey || event.metaKey) && event.key === 's') {
+      const normalizedKey = event.key.toLowerCase();
+      if ((event.ctrlKey || event.metaKey) && normalizedKey === 's') {
         event.preventDefault();
         void handleSaveDraft();
       }
-      if ((event.ctrlKey || event.metaKey) && event.key === 'Enter') {
+      if ((event.ctrlKey || event.metaKey) && normalizedKey === 'enter') {
         event.preventDefault();
         void handleSubmit();
       }
@@ -447,6 +479,11 @@ export default function WritingReviewWorkspace() {
                 caseNotes={reviewDetail?.caseNotes ?? ''}
                 scratchpad={scratchpad}
                 onScratchpadChange={(value) => { setScratchpad(value); setIsDirty(true); }}
+                checklist={checklist}
+                onChecklistChange={(id, checked) => {
+                  setChecklist((current) => current.map((item) => item.id === id ? { ...item, checked } : item));
+                  setIsDirty(true);
+                }}
                 activeTab={caseNotesTab}
                 onTabChange={setCaseNotesTab}
               />
@@ -478,6 +515,61 @@ export default function WritingReviewWorkspace() {
           </div>
 
           <div className="flex-1 overflow-y-auto p-4 space-y-4">
+            {learnerContext && (
+              <div className="rounded-xl border border-gray-200 bg-white p-3">
+                <div className="flex items-start justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-navy">{learnerContext.name}</p>
+                    <p className="text-xs text-muted capitalize">{learnerContext.profession.replace(/_/g, ' ')} • Goal {learnerContext.goalScore}</p>
+                  </div>
+                  <Badge variant="info">{learnerContext.reviewsInScope} in scope</Badge>
+                </div>
+                <div className="mt-3 flex flex-wrap gap-3 text-xs text-muted">
+                  <span>{learnerContext.examDate ? `Exam ${new Date(learnerContext.examDate).toLocaleDateString()}` : 'Exam date not set'}</span>
+                  {learnerContext.subTestScores.length > 0 ? <span>{learnerContext.subTestScores.map((item) => `${item.subTest}:${item.latestScore ?? '-'}`).join(' • ')}</span> : null}
+                </div>
+                {learnerContext.priorReviews[0] ? (
+                  <div className="mt-3 rounded-lg bg-slate-50 p-3">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Latest prior expert feedback</p>
+                    <p className="mt-1 text-sm text-navy">{learnerContext.priorReviews[0].overallComment}</p>
+                  </div>
+                ) : null}
+              </div>
+            )}
+
+            {reviewDetail?.aiSuggestedScores && Object.keys(reviewDetail.aiSuggestedScores).length > 0 && (
+              <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
+                <p className="text-sm font-semibold text-blue-900">AI Reference Scores</p>
+                <p className="mt-1 text-xs text-blue-700">Visible by default as advisory guidance only. These are not the final expert scores.</p>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {CRITERIA.map(({ key, label }) => (
+                    <div key={`ai-${key}`} className="rounded-lg bg-white px-3 py-2 text-sm text-navy">
+                      <span className="font-medium">{label}</span>
+                      <span className="ml-2 text-blue-700">{reviewDetail.aiSuggestedScores?.[key] ?? '-'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {reviewHistory && (
+              <div className="rounded-xl border border-gray-200 bg-white p-3">
+                <div className="flex items-center justify-between gap-3">
+                  <p className="text-sm font-semibold text-navy">Review History</p>
+                  <span className="text-xs text-muted">{reviewHistory.draftVersionCount} draft version(s)</span>
+                </div>
+                <div className="mt-3 space-y-2">
+                  {reviewHistory.entries.slice(-4).reverse().map((entry) => (
+                    <div key={`${entry.timestamp}-${entry.action}`} className="rounded-lg bg-slate-50 px-3 py-2 text-xs text-slate-600">
+                      <p className="font-medium text-slate-900">{entry.action.replace(/_/g, ' ')}</p>
+                      <p>{entry.actorName ?? 'System'} • {new Date(entry.timestamp).toLocaleString()}</p>
+                      {entry.details ? <p className="mt-1">{entry.details}</p> : null}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {CRITERIA.map(({ key, label }) => (
               <div key={key} className={`p-3 bg-white border rounded-md ${validationErrors.has(key) ? 'border-red-400 ring-1 ring-red-200' : 'border-gray-200'}`}>
                 <Select

@@ -1,15 +1,17 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using OetLearner.Api.Services;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
-public class ExpertFlowsTests : IClassFixture<TestWebApplicationFactory>
+[Collection("AuthFlows")]
+public class ExpertFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFactory>
 {
-    private readonly TestWebApplicationFactory _factory;
+    private readonly FirstPartyAuthTestWebApplicationFactory _factory;
 
-    public ExpertFlowsTests(TestWebApplicationFactory factory)
+    public ExpertFlowsTests(FirstPartyAuthTestWebApplicationFactory factory)
     {
         _factory = factory;
     }
@@ -18,6 +20,20 @@ public class ExpertFlowsTests : IClassFixture<TestWebApplicationFactory>
     public async Task ExpertMe_ReturnsExpertProfile()
     {
         using var client = CreateExpertClient(_factory);
+
+        var response = await client.GetAsync("/v1/expert/me");
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("expert-001", json.RootElement.GetProperty("userId").GetString());
+        Assert.Equal("expert", json.RootElement.GetProperty("role").GetString());
+    }
+
+    [Fact]
+    public async Task ExpertMe_ReturnsExpertProfile_WithSeededJwtSignIn()
+    {
+        using var factory = new FirstPartyAuthTestWebApplicationFactory();
+        using var client = CreateExpertClient(factory);
 
         var response = await client.GetAsync("/v1/expert/me");
         response.EnsureSuccessStatusCode();
@@ -44,9 +60,39 @@ public class ExpertFlowsTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
-    public async Task ExpertCanClaimAndReleaseReview()
+    public async Task ExpertDashboard_ReturnsOperationalSummary()
+    {
+        using var client = CreateExpertClient(_factory);
+
+        var response = await client.GetAsync("/v1/expert/dashboard");
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(json.RootElement.GetProperty("activeAssignedReviews").GetInt32() >= 0);
+        Assert.True(json.RootElement.GetProperty("savedDraftCount").GetInt32() >= 0);
+        Assert.True(json.RootElement.GetProperty("recentActivity").GetArrayLength() >= 1);
+        Assert.True(json.RootElement.GetProperty("assignedReviews").GetArrayLength() >= 0);
+        Assert.False(string.IsNullOrWhiteSpace(json.RootElement.GetProperty("generatedAt").GetString()));
+    }
+
+    [Fact]
+    public async Task ExpertDashboard_UsesBearerToken_WhenDevelopmentAuthIsEnabled()
     {
         using var factory = new TestWebApplicationFactory();
+        using var client = factory.CreateAuthenticatedClient("expert@oet-prep.dev", "Password123!", expectedRole: "expert");
+
+        var response = await client.GetAsync("/v1/expert/dashboard");
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(json.RootElement.GetProperty("activeAssignedReviews").GetInt32() >= 0);
+        Assert.False(string.IsNullOrWhiteSpace(json.RootElement.GetProperty("generatedAt").GetString()));
+    }
+
+    [Fact]
+    public async Task ExpertCanClaimAndReleaseReview()
+    {
+        using var factory = new FirstPartyAuthTestWebApplicationFactory();
         using var client = CreateExpertClient(factory);
 
         var claimResponse = await client.PostAsync("/v1/expert/queue/review-queue-001/claim", content: null);
@@ -89,6 +135,21 @@ public class ExpertFlowsTests : IClassFixture<TestWebApplicationFactory>
 
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.True(json.RootElement.GetArrayLength() >= 1);
+    }
+
+    [Fact]
+    public async Task ExpertCalibrationCaseDetail_ReturnsBenchmarkWorkspaceData()
+    {
+        using var client = CreateExpertClient(_factory);
+
+        var response = await client.GetAsync("/v1/expert/calibration/cases/cal-001");
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("cal-001", json.RootElement.GetProperty("id").GetString());
+        Assert.True(json.RootElement.GetProperty("artifacts").GetArrayLength() >= 1);
+        Assert.True(json.RootElement.GetProperty("benchmarkRubric").GetArrayLength() >= 1);
+        Assert.True(json.RootElement.GetProperty("referenceNotes").GetArrayLength() >= 1);
     }
 
     [Fact]
@@ -153,9 +214,72 @@ public class ExpertFlowsTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
+    public async Task ExpertLearners_ReturnsAssignedOnlyDirectory()
+    {
+        using var client = CreateExpertClient(_factory);
+
+        var response = await client.GetAsync("/v1/expert/learners");
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(json.RootElement.GetProperty("totalCount").GetInt32() >= 1);
+        var first = json.RootElement.GetProperty("items")[0];
+        Assert.False(string.IsNullOrWhiteSpace(first.GetProperty("id").GetString()));
+        Assert.False(string.IsNullOrWhiteSpace(first.GetProperty("name").GetString()));
+        Assert.True(first.GetProperty("reviewsInScope").GetInt32() >= 1);
+    }
+
+    [Fact]
+    public async Task ExpertQueueFilterMetadata_ReturnsBackedFilterSets()
+    {
+        using var client = CreateExpertClient(_factory);
+
+        var response = await client.GetAsync("/v1/expert/queue/filters/metadata");
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(json.RootElement.GetProperty("types").GetArrayLength() >= 2);
+        Assert.True(json.RootElement.GetProperty("professions").GetArrayLength() >= 1);
+        Assert.True(json.RootElement.GetProperty("assignmentStates").GetArrayLength() >= 1);
+    }
+
+    [Fact]
+    public async Task ExpertReviewHistory_ReturnsTimelineForAssignedReview()
+    {
+        using var factory = new FirstPartyAuthTestWebApplicationFactory();
+        using var client = CreateExpertClient(factory);
+
+        var claimResponse = await client.PostAsync("/v1/expert/queue/review-queue-002/claim", content: null);
+        claimResponse.EnsureSuccessStatusCode();
+
+        var response = await client.GetAsync("/v1/expert/reviews/review-queue-002/history");
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("review-queue-002", json.RootElement.GetProperty("reviewRequestId").GetString());
+        Assert.True(json.RootElement.GetProperty("draftVersionCount").GetInt32() >= 0);
+        Assert.True(json.RootElement.GetProperty("entries").GetArrayLength() >= 1);
+    }
+
+    [Fact]
+    public async Task ExpertLearnerReviewContext_ReturnsScopedSignals()
+    {
+        using var client = CreateExpertClient(_factory);
+
+        var response = await client.GetAsync("/v1/expert/learners/mock-user-001/review-context");
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal("mock-user-001", json.RootElement.GetProperty("id").GetString());
+        Assert.True(json.RootElement.GetProperty("reviewsInScope").GetInt32() >= 1);
+        Assert.True(json.RootElement.GetProperty("subTestScores").GetArrayLength() >= 0);
+        Assert.True(json.RootElement.GetProperty("priorReviews").GetArrayLength() >= 0);
+    }
+
+    [Fact]
     public async Task ExpertWritingReviewBundle_RequiresClaimAndReturnsDetail()
     {
-        using var factory = new TestWebApplicationFactory();
+        using var factory = new FirstPartyAuthTestWebApplicationFactory();
         using var client = CreateExpertClient(factory);
 
         var forbiddenResponse = await client.GetAsync("/v1/expert/reviews/review-queue-002/writing");
@@ -170,6 +294,7 @@ public class ExpertFlowsTests : IClassFixture<TestWebApplicationFactory>
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("review-queue-002", json.RootElement.GetProperty("id").GetString());
         Assert.False(string.IsNullOrWhiteSpace(json.RootElement.GetProperty("learnerResponse").GetString()));
+        Assert.True(json.RootElement.GetProperty("aiSuggestedScores").EnumerateObject().Any());
         Assert.True(json.RootElement.GetProperty("permissions").GetProperty("canSubmit").GetBoolean());
     }
 
@@ -183,9 +308,26 @@ public class ExpertFlowsTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
+    public async Task ExpertSpeakingAudio_ReturnsAudioStreamAfterClaim()
+    {
+        using var factory = new FirstPartyAuthTestWebApplicationFactory();
+        using var client = CreateExpertClient(factory);
+
+        var claimResponse = await client.PostAsync("/v1/expert/queue/review-queue-001/claim", content: null);
+        claimResponse.EnsureSuccessStatusCode();
+
+        var response = await client.GetAsync("/v1/expert/reviews/review-queue-001/speaking/audio");
+        response.EnsureSuccessStatusCode();
+
+        Assert.NotNull(response.Content.Headers.ContentType);
+        Assert.StartsWith("audio/", response.Content.Headers.ContentType!.MediaType, StringComparison.OrdinalIgnoreCase);
+        Assert.True((await response.Content.ReadAsByteArrayAsync()).Length > 0);
+    }
+
+    [Fact]
     public async Task ExpertDraftSaveAndSubmit_WritingFlow()
     {
-        using var factory = new TestWebApplicationFactory();
+        using var factory = new FirstPartyAuthTestWebApplicationFactory();
         using var client = CreateExpertClient(factory);
 
         var claimResponse = await client.PostAsync("/v1/expert/queue/review-queue-002/claim", content: null);
@@ -196,13 +338,21 @@ public class ExpertFlowsTests : IClassFixture<TestWebApplicationFactory>
             scores = new Dictionary<string, int> { ["purpose"] = 5, ["content"] = 5, ["conciseness"] = 4, ["genre"] = 4, ["organization"] = 5, ["language"] = 4 },
             criterionComments = new Dictionary<string, string> { ["purpose"] = "Excellent clarity." },
             finalComment = "Strong submission overall.",
-            anchoredComments = new[] { new { text = "Tighten this point.", startOffset = 5, endOffset = 18 } }
+            anchoredComments = new[] { new { text = "Tighten this point.", startOffset = 5, endOffset = 18 } },
+            scratchpad = "Check tone against discharge intent.",
+            checklistItems = new[]
+            {
+                new { id = "purpose", label = "Purpose is explicit in opening.", @checked = true },
+                new { id = "content", label = "All clinically relevant facts are represented.", @checked = false }
+            }
         });
         draftResponse.EnsureSuccessStatusCode();
 
         using var draftJson = JsonDocument.Parse(await draftResponse.Content.ReadAsStringAsync());
         var version = draftJson.RootElement.GetProperty("version").GetInt32();
         Assert.False(string.IsNullOrWhiteSpace(draftJson.RootElement.GetProperty("savedAt").GetString()));
+        Assert.Equal("Check tone against discharge intent.", draftJson.RootElement.GetProperty("scratchpad").GetString());
+        Assert.Equal(2, draftJson.RootElement.GetProperty("checklistItems").GetArrayLength());
 
         var submitResponse = await client.PostAsJsonAsync("/v1/expert/reviews/review-queue-002/writing/submit", new
         {
@@ -217,7 +367,7 @@ public class ExpertFlowsTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task ExpertSubmitRejectsIncompleteRubric()
     {
-        using var factory = new TestWebApplicationFactory();
+        using var factory = new FirstPartyAuthTestWebApplicationFactory();
         using var client = CreateExpertClient(factory);
 
         var claimResponse = await client.PostAsync("/v1/expert/queue/review-queue-002/claim", content: null);
@@ -251,7 +401,8 @@ public class ExpertFlowsTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task LearnerCannotAccessExpertEndpoints()
     {
-        using var learnerClient = new TestWebApplicationFactory().CreateClient();
+        using var factory = new FirstPartyAuthTestWebApplicationFactory();
+        using var learnerClient = factory.CreateAuthenticatedClient(SeedData.LearnerEmail, SeedData.LocalSeedPassword, expectedRole: "learner");
         var response = await learnerClient.GetAsync("/v1/expert/me");
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
@@ -266,11 +417,10 @@ public class ExpertFlowsTests : IClassFixture<TestWebApplicationFactory>
 
     private static HttpClient CreateExpertClient(TestWebApplicationFactory factory, string expertId = "expert-001")
     {
-        var client = factory.CreateClient();
-        client.DefaultRequestHeaders.Add("X-Debug-UserId", expertId);
-        client.DefaultRequestHeaders.Add("X-Debug-Role", "expert");
-        client.DefaultRequestHeaders.Add("X-Debug-Email", $"{expertId}@example.test");
-        client.DefaultRequestHeaders.Add("X-Debug-Name", "Expert Reviewer");
-        return client;
+        var email = string.Equals(expertId, "expert-unauthorised", StringComparison.Ordinal)
+            ? SeedData.ExpertSecondaryEmail
+            : SeedData.ExpertEmail;
+        return factory.CreateAuthenticatedClient(email, SeedData.LocalSeedPassword, expectedRole: "expert");
     }
+
 }

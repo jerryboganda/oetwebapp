@@ -3,8 +3,8 @@
 import { AppShell } from '@/components/layout/app-shell';
 import { NavItem } from '@/components/layout/sidebar';
 import { 
+  LayoutDashboard,
   Library, 
-  FilePlus2, 
   ListTree, 
   Target, 
   Cpu, 
@@ -13,13 +13,11 @@ import {
   Users, 
   CreditCard, 
   Flag, 
-  ShieldCheck, 
-  Lock 
+  ShieldCheck 
 } from 'lucide-react';
-import { usePathname } from 'next/navigation';
-import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 
 const adminNavItems: NavItem[] = [
+  { href: '/admin', label: 'Operations', icon: <LayoutDashboard className="w-5 h-5" />, exact: true },
   { href: '/admin/content', label: 'Content Library', icon: <Library className="w-5 h-5" />, matchPrefix: '/admin/content' },
   { href: '/admin/taxonomy', label: 'Profession Taxonomy', icon: <ListTree className="w-5 h-5" />, matchPrefix: '/admin/taxonomy' },
   { href: '/admin/criteria', label: 'Rubrics & Criteria', icon: <Target className="w-5 h-5" />, matchPrefix: '/admin/criteria' },
@@ -33,34 +31,11 @@ const adminNavItems: NavItem[] = [
 ];
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
-  const { role, isAuthenticated, isLoading } = useAdminAuth();
-
-  if (isLoading) {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-gray-50">
-        <div className="flex flex-col items-center gap-4 text-gray-500 font-sans">
-          <Lock className="w-8 h-8 animate-pulse text-primary" />
-          <p>Verifying Admin Credentials...</p>
-        </div>
-        <div className="hidden">{children}</div>
-      </div>
-    );
-  }
-
-  if (!isAuthenticated || role !== 'admin') {
-    return (
-      <div className="flex h-screen w-full items-center justify-center bg-gray-50 text-red-600 font-sans">
-        <p>Access Denied. You do not have permission to view this console.</p>
-        <div className="hidden">{children}</div>
-      </div>
-    );
-  }
-
   return (
     <AppShell 
       navItems={adminNavItems} 
       mobileNavItems={adminNavItems} 
+      requiredRole="admin"
     >
       {children}
     </AppShell>

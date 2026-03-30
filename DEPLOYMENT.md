@@ -53,15 +53,35 @@ Minimum values you must set correctly:
 - `CHECKOUT_BASE_URL`
 - `CORS_ALLOWED_ORIGINS`
 - `POSTGRES_PASSWORD`
-- Either `AUTH_AUTHORITY`, or all of `AUTH_ISSUER`, `AUTH_AUDIENCE`, and `AUTH_SIGNING_KEY`
+- `AUTHTOKENS__ISSUER`
+- `AUTHTOKENS__AUDIENCE`
+- `AUTHTOKENS__ACCESSTOKENSIGNINGKEY`
+- `AUTHTOKENS__REFRESHTOKENSIGNINGKEY`
+- `AUTHTOKENS__ACCESSTOKENLIFETIME`
+- `AUTHTOKENS__REFRESHTOKENLIFETIME`
+- `AUTHTOKENS__OTPLIFETIME`
+- `AUTHTOKENS__AUTHENTICATORISSUER`
+- `BREVO__ENABLED`
+- `BREVO__APIKEY`
+- `BREVO__FROMEMAIL`
+- `BREVO__EMAILVERIFICATIONTEMPLATEID`
+- `BREVO__PASSWORDRESETTEMPLATEID`
+- `SMTP__HOST`
+- `SMTP__USERNAME`
+- `SMTP__PASSWORD`
 
 Notes:
 
 - `CHECKOUT_BASE_URL` should point at your frontend billing route or external payment handoff page.
 - `PUBLIC_API_BASE_URL` must be the final public HTTPS API URL because the backend returns absolute upload/audio links.
+- The API now uses first-party JWTs issued by the backend, so there is no Firebase, mock auth, or third-party JWT authority to configure for production.
+- `AUTHTOKENS__ACCESSTOKENSIGNINGKEY` and `AUTHTOKENS__REFRESHTOKENSIGNINGKEY` should be different random secrets, each at least 32 characters long.
+- Brevo SMTP relay is the recommended production email path for this release. Set `SMTP__HOST=smtp-relay.brevo.com`, `SMTP__PORT=587`, `SMTP__ENABLESSL=true`, `SMTP__USERNAME` to the Brevo login shown in the Brevo console, and `SMTP__PASSWORD` to the Brevo SMTP key.
+- If you want to use Brevo transactional templates through the API instead, enable `BREVO__ENABLED=true` and populate `BREVO__APIKEY`, `BREVO__FROMEMAIL`, `BREVO__EMAILVERIFICATIONTEMPLATEID`, and `BREVO__PASSWORDRESETTEMPLATEID`.
+- `BREVO__WEBHOOKSECRET` should match the shared secret you configure on the Brevo webhook endpoint if you later wire webhook processing.
+- `SMTP__USERNAME` and `SMTP__PASSWORD` are required for production SMTP relay delivery.
 - `SEED_DEMO_DATA` should stay `false` in production.
-- `NEXT_PUBLIC_ENABLE_MOCK_AUTH=true` is only for local development. Do not enable it in production.
-- For the built-in .NET auth flow, configure `BOOTSTRAP_EXPERT_EMAIL`, `BOOTSTRAP_EXPERT_PASSWORD`, and `BOOTSTRAP_EXPERT_DISPLAY_NAME` so the initial expert account can sign in and receive JWTs from `/v1/auth/login`.
+- `AUTH__USEDEVELOPMENTAUTH` is only for local development and should remain `false` in production.
 
 ## 3. Build and start the stack
 
@@ -136,6 +156,34 @@ docker compose --env-file .env.production -f docker-compose.production.yml up -d
 
 ## Troubleshooting
 
-- If the API exits on startup, check JWT configuration first. The app now fails fast when production auth settings are incomplete.
+- If the API exits on startup, check the first-party auth and SMTP settings first. The app fails fast when production settings are incomplete.
+- If the API exits on startup after enabling Brevo API mode, check `BREVO__APIKEY`, `BREVO__FROMEMAIL`, and the required template IDs first. If you are using Brevo SMTP relay, check `SMTP__HOST`, `SMTP__USERNAME`, `SMTP__PASSWORD`, `SMTP__FROMEMAIL`, and `SMTP__ENABLESSL=true`.
 - If browser uploads fail, confirm `PUBLIC_API_BASE_URL` is correct and that Nginx Proxy Manager can reach `oet-api:8080`.
 - If the frontend cannot call the API, confirm `NEXT_PUBLIC_API_BASE_URL` matches the public API host and `CORS_ALLOWED_ORIGINS` includes the frontend host.
+
+## Docker Desktop local deployment
+
+If you want to run the full stack locally on Docker Desktop with built-in demo accounts, use the desktop compose file:
+
+```powershell
+docker compose -f docker-compose.desktop.yml up -d --build
+```
+
+Local test URLs:
+
+- Frontend: `http://localhost:3000`
+- Backend health: `http://localhost:5198/health`
+- Backend liveness: `http://localhost:5198/health/live`
+- Backend readiness: `http://localhost:5198/health/ready`
+- Swagger: `http://localhost:5198/swagger`
+
+Seeded local accounts:
+
+- Learner: `learner@oet-prep.dev` / `Password123!`
+- Expert: `expert@oet-prep.dev` / `Password123!`
+- Admin: `admin@oet-prep.dev` / `Password123!`
+
+Notes:
+
+- The desktop stack uses development auth, so the backend accepts the seeded local accounts immediately.
+- The frontend is built against `http://localhost:5198`, so it can be opened directly in your browser on the host machine.

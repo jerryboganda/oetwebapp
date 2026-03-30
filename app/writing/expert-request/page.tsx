@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { AppShell } from '@/components/layout/app-shell';
+import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -74,19 +74,19 @@ export default function WritingExpertReviewRequest() {
 
   if (loading) {
     return (
-      <AppShell pageTitle="Request Expert Review">
-        <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
+      <LearnerDashboardShell pageTitle="Request Expert Review">
+        <div className="space-y-6">
           <Skeleton className="h-24 rounded-2xl" />
           <Skeleton className="h-40 rounded-2xl" />
           <Skeleton className="h-32 rounded-2xl" />
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
   if (isSuccess) {
     return (
-      <AppShell pageTitle="Request Submitted">
+      <LearnerDashboardShell pageTitle="Request Submitted">
         <div className="flex items-center justify-center min-h-[60vh] p-4">
           <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
             <Card className="p-8 max-w-md w-full text-center">
@@ -97,12 +97,12 @@ export default function WritingExpertReviewRequest() {
             </Card>
           </motion.div>
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
   return (
-    <AppShell pageTitle="Request Expert Review">
+    <LearnerDashboardShell pageTitle="Request Expert Review">
       {/* Sticky header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-30 px-4 sm:px-6 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
@@ -111,7 +111,7 @@ export default function WritingExpertReviewRequest() {
         </div>
       </header>
 
-      <main className="max-w-3xl mx-auto px-4 sm:px-6 py-8">
+      <main className="py-8">
         {/* Context Banner */}
         <div className="bg-navy text-white rounded-2xl p-6 mb-8 shadow-md relative overflow-hidden">
           <div className="absolute top-0 right-0 w-32 h-32 bg-white/5 rounded-full -mr-16 -mt-16" />
@@ -195,6 +195,6 @@ export default function WritingExpertReviewRequest() {
           </Button>
         </form>
       </main>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }

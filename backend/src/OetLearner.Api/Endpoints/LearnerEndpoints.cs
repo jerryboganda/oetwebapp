@@ -30,6 +30,7 @@ public static class LearnerEndpoints
         goals.MapPost("/submit", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.SubmitGoalsAsync(http.UserId(), ct)));
 
         v1.MapGet("/settings", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSettingsAsync(http.UserId(), ct)));
+        v1.MapGet("/settings/{section}", async (HttpContext http, string section, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSettingsSectionAsync(http.UserId(), section, ct)));
         v1.MapPatch("/settings/profile", async (HttpContext http, PatchSectionRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.PatchSettingsSectionAsync(http.UserId(), "profile", request, ct)));
         v1.MapPatch("/settings/goals", async (HttpContext http, PatchSectionRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.PatchSettingsSectionAsync(http.UserId(), "goals", request, ct)));
         v1.MapPatch("/settings/notifications", async (HttpContext http, PatchSectionRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.PatchSettingsSectionAsync(http.UserId(), "notifications", request, ct)));
@@ -87,6 +88,11 @@ public static class LearnerEndpoints
         speaking.MapGet("/attempts/{attemptId}/processing", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingProcessingAsync(http.UserId(), attemptId, ct)));
         speaking.MapGet("/evaluations/{evaluationId}/summary", async (HttpContext http, string evaluationId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingEvaluationSummaryAsync(http.UserId(), evaluationId, ct)));
         speaking.MapGet("/evaluations/{evaluationId}/review", async (HttpContext http, string evaluationId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSpeakingReviewAsync(http.UserId(), evaluationId, ct)));
+        speaking.MapGet("/evaluations/{evaluationId}/audio", async (HttpContext http, string evaluationId, LearnerService service, CancellationToken ct) =>
+        {
+            var file = await service.GetSpeakingEvaluationAudioAsync(http.UserId(), evaluationId, ct);
+            return Results.File(file.Stream, file.ContentType, enableRangeProcessing: true);
+        });
         speaking.MapPost("/device-checks", (DeviceCheckRequest request, LearnerService service) => Results.Ok(service.SaveDeviceCheck(request)));
 
         var reading = v1.MapGroup("/reading");
@@ -108,6 +114,7 @@ public static class LearnerEndpoints
         listening.MapPatch("/attempts/{attemptId}/heartbeat", async (HttpContext http, string attemptId, HeartbeatRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.HeartbeatAttemptAsync(http.UserId(), attemptId, request, ct)));
         listening.MapPost("/attempts/{attemptId}/submit", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.SubmitListeningAttemptAsync(http.UserId(), attemptId, ct)));
         listening.MapGet("/evaluations/{evaluationId}", async (HttpContext http, string evaluationId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetListeningEvaluationAsync(http.UserId(), evaluationId, ct)));
+        listening.MapGet("/drills/{drillId}", async (string drillId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetListeningDrillAsync(drillId, ct)));
 
         v1.MapGet("/mocks", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetMocksAsync(http.UserId(), ct)));
         v1.MapGet("/mocks/options", (LearnerService service, CancellationToken ct) => Results.Ok(service.GetMockOptionsAsync(ct)));
@@ -124,7 +131,14 @@ public static class LearnerEndpoints
 
         var billing = v1.MapGroup("/billing");
         billing.MapGet("/summary", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingSummaryAsync(http.UserId(), ct)));
+        billing.MapGet("/plans", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingPlansAsync(http.UserId(), ct)));
+        billing.MapGet("/change-preview", async (HttpContext http, [FromQuery] string targetPlanId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingChangePreviewAsync(http.UserId(), targetPlanId, ct)));
         billing.MapGet("/invoices", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetInvoicesAsync(http.UserId(), ct)));
+        billing.MapGet("/invoices/{invoiceId}/download", async (HttpContext http, string invoiceId, LearnerService service, CancellationToken ct) =>
+        {
+            var file = await service.GetInvoiceDownloadAsync(http.UserId(), invoiceId, ct);
+            return Results.File(file.Stream, file.ContentType, fileDownloadName: file.FileName);
+        });
         billing.MapGet("/review-options", (LearnerService service) => Results.Ok(service.GetReviewOptions()));
         billing.MapGet("/extras", (LearnerService service) => Results.Ok(service.GetExtras()));
         billing.MapPost("/checkout-sessions", async (HttpContext http, CheckoutSessionCreateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateCheckoutSessionAsync(http.UserId(), request, ct)));
@@ -133,7 +147,6 @@ public static class LearnerEndpoints
     }
 
     private static string UserId(this HttpContext httpContext)
-        => httpContext.User.FindFirstValue("user_id")
-           ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+        => httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
            ?? throw new InvalidOperationException("Authenticated user id is required.");
 }

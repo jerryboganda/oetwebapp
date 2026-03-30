@@ -1,20 +1,21 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using OetLearner.Api.Services;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
-public class AdminFlowsTests : IClassFixture<TestWebApplicationFactory>
+[Collection("AuthFlows")]
+public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFactory>
 {
     private readonly HttpClient _client;
 
-    public AdminFlowsTests(TestWebApplicationFactory factory)
+    public AdminFlowsTests(FirstPartyAuthTestWebApplicationFactory factory)
     {
-        _client = factory.CreateClient();
-        _client.DefaultRequestHeaders.Add("X-Debug-UserId", "admin-user-001");
-        _client.DefaultRequestHeaders.Add("X-Debug-Role", "admin");
-        _client.DefaultRequestHeaders.Add("X-Debug-Name", "Admin User");
+        _client = factory.CreateAuthenticatedClient(SeedData.AdminEmail, SeedData.LocalSeedPassword, expectedRole: "admin");
     }
 
     // ── Content ────────────────────────────────
@@ -23,6 +24,20 @@ public class AdminFlowsTests : IClassFixture<TestWebApplicationFactory>
     public async Task AdminContent_ListReturnsSeededItems()
     {
         var response = await _client.GetAsync("/v1/admin/content");
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(json.RootElement.GetProperty("total").GetInt32() >= 1);
+        Assert.True(json.RootElement.GetProperty("items").GetArrayLength() >= 1);
+    }
+
+    [Fact]
+    public async Task AdminContent_ListReturnsSeededItems_WithSeededJwtSignIn()
+    {
+        using var factory = new FirstPartyAuthTestWebApplicationFactory();
+        using var client = factory.CreateAuthenticatedClient(SeedData.AdminEmail, SeedData.LocalSeedPassword, expectedRole: "admin");
+
+        var response = await client.GetAsync("/v1/admin/content");
         response.EnsureSuccessStatusCode();
 
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
@@ -94,6 +109,20 @@ public class AdminFlowsTests : IClassFixture<TestWebApplicationFactory>
         Assert.True(json.RootElement.GetArrayLength() >= 1);
     }
 
+    [Fact]
+    public async Task AdminDashboard_ReturnsOperationalSummary()
+    {
+        var response = await _client.GetAsync("/v1/admin/dashboard");
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(json.RootElement.TryGetProperty("generatedAt", out _));
+        Assert.True(json.RootElement.TryGetProperty("contentHealth", out _));
+        Assert.True(json.RootElement.TryGetProperty("reviewOps", out _));
+        Assert.True(json.RootElement.TryGetProperty("billingRisk", out _));
+        Assert.True(json.RootElement.TryGetProperty("quality", out _));
+    }
+
     // ── Criteria ───────────────────────────────
 
     [Fact]
@@ -112,6 +141,36 @@ public class AdminFlowsTests : IClassFixture<TestWebApplicationFactory>
 
         using var createJson = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
         Assert.False(string.IsNullOrWhiteSpace(createJson.RootElement.GetProperty("id").GetString()));
+    }
+
+    [Fact]
+    public async Task AdminCriteria_StatusIsPersistedAndFilterable()
+    {
+        var createResponse = await _client.PostAsJsonAsync("/v1/admin/criteria", new
+        {
+            name = "Archived Criterion",
+            subtestCode = "writing",
+            weight = 9,
+            description = "Archive me after creation"
+        });
+        createResponse.EnsureSuccessStatusCode();
+
+        using var createJson = JsonDocument.Parse(await createResponse.Content.ReadAsStringAsync());
+        var criterionId = createJson.RootElement.GetProperty("id").GetString()!;
+
+        var updateResponse = await _client.PutAsJsonAsync($"/v1/admin/criteria/{criterionId}", new
+        {
+            status = "archived"
+        });
+        updateResponse.EnsureSuccessStatusCode();
+
+        var archivedResponse = await _client.GetAsync("/v1/admin/criteria?status=archived");
+        archivedResponse.EnsureSuccessStatusCode();
+
+        using var archivedJson = JsonDocument.Parse(await archivedResponse.Content.ReadAsStringAsync());
+        Assert.Contains(archivedJson.RootElement.EnumerateArray(), item =>
+            item.GetProperty("id").GetString() == criterionId &&
+            item.GetProperty("status").GetString() == "archived");
     }
 
     // ── AI Config ──────────────────────────────
@@ -201,6 +260,17 @@ public class AdminFlowsTests : IClassFixture<TestWebApplicationFactory>
         Assert.True(json.RootElement.GetProperty("total").GetInt32() >= 4);
     }
 
+    [Fact]
+    public async Task AdminAuditLogs_ExportReturnsCsv()
+    {
+        var response = await _client.GetAsync("/v1/admin/audit-logs/export");
+        response.EnsureSuccessStatusCode();
+
+        var csv = await response.Content.ReadAsStringAsync();
+        Assert.Contains("Id,Timestamp,Actor,Action,ResourceType,ResourceId,Details", csv);
+        Assert.Contains("aud-", csv, StringComparison.OrdinalIgnoreCase);
+    }
+
     // ── Users ──────────────────────────────────
 
     [Fact]
@@ -217,6 +287,76 @@ public class AdminFlowsTests : IClassFixture<TestWebApplicationFactory>
 
         using var detailJson = JsonDocument.Parse(await detailResponse.Content.ReadAsStringAsync());
         Assert.Equal("mock-user-001", detailJson.RootElement.GetProperty("id").GetString());
+    }
+
+    [Fact]
+    public async Task AdminUsers_InviteAndTriggerPasswordReset()
+    {
+        var email = $"invited-admin-{Guid.NewGuid():N}@oet-prep.dev";
+        var inviteResponse = await _client.PostAsJsonAsync("/v1/admin/users/invite", new
+        {
+            name = "Invited Admin",
+            email,
+            role = "admin"
+        });
+        inviteResponse.EnsureSuccessStatusCode();
+
+        using var inviteJson = JsonDocument.Parse(await inviteResponse.Content.ReadAsStringAsync());
+        var userId = inviteJson.RootElement.GetProperty("id").GetString()!;
+        Assert.Equal("admin", inviteJson.RootElement.GetProperty("role").GetString());
+        Assert.Equal(email, inviteJson.RootElement.GetProperty("email").GetString());
+        Assert.True(inviteJson.RootElement.TryGetProperty("invitation", out _));
+
+        var resetResponse = await _client.PostAsync($"/v1/admin/users/{userId}/password-reset", null);
+        resetResponse.EnsureSuccessStatusCode();
+
+        using var resetJson = JsonDocument.Parse(await resetResponse.Content.ReadAsStringAsync());
+        Assert.Equal("reset_password", resetJson.RootElement.GetProperty("purpose").GetString());
+        Assert.Equal(userId, resetJson.RootElement.GetProperty("userId").GetString());
+    }
+
+    [Fact]
+    public async Task AdminUsers_DeleteAndRestoreLearnerAccount()
+    {
+        var deleteResponse = await _client.PostAsJsonAsync("/v1/admin/users/mock-user-001/delete", new
+        {
+            reason = "testing delete lifecycle"
+        });
+        deleteResponse.EnsureSuccessStatusCode();
+
+        using var deleteJson = JsonDocument.Parse(await deleteResponse.Content.ReadAsStringAsync());
+        Assert.Equal("deleted", deleteJson.RootElement.GetProperty("status").GetString());
+
+        var deletedDetailResponse = await _client.GetAsync("/v1/admin/users/mock-user-001");
+        deletedDetailResponse.EnsureSuccessStatusCode();
+        using var deletedDetailJson = JsonDocument.Parse(await deletedDetailResponse.Content.ReadAsStringAsync());
+        Assert.Equal("deleted", deletedDetailJson.RootElement.GetProperty("status").GetString());
+        Assert.True(deletedDetailJson.RootElement.GetProperty("availableActions").GetProperty("canRestore").GetBoolean());
+
+        var restoreResponse = await _client.PostAsJsonAsync("/v1/admin/users/mock-user-001/restore", new
+        {
+            reason = "testing restore lifecycle"
+        });
+        restoreResponse.EnsureSuccessStatusCode();
+
+        using var restoreJson = JsonDocument.Parse(await restoreResponse.Content.ReadAsStringAsync());
+        Assert.Equal("active", restoreJson.RootElement.GetProperty("status").GetString());
+
+        var listResponse = await _client.GetAsync("/v1/admin/users?status=active");
+        listResponse.EnsureSuccessStatusCode();
+    }
+
+    [Fact]
+    public async Task AdminUsers_StatusUpdateRejectsUnknownValues()
+    {
+        var response = await _client.PutAsJsonAsync("/v1/admin/users/mock-user-001/status", new
+        {
+            status = "paused",
+            reason = "testing"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal("invalid_user_status", await ReadErrorCodeAsync(response));
     }
 
     // ── Billing ────────────────────────────────
@@ -256,6 +396,9 @@ public class AdminFlowsTests : IClassFixture<TestWebApplicationFactory>
         Assert.True(json.RootElement.TryGetProperty("aiHumanAgreement", out _));
         Assert.True(json.RootElement.TryGetProperty("reviewSLA", out _));
         Assert.True(json.RootElement.TryGetProperty("featureAdoption", out _));
+        Assert.True(json.RootElement.TryGetProperty("filters", out _));
+        Assert.True(json.RootElement.TryGetProperty("freshness", out _));
+        Assert.True(json.RootElement.TryGetProperty("trendSeries", out _));
     }
 
     // ── Auth Guard ─────────────────────────────
@@ -263,11 +406,19 @@ public class AdminFlowsTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task AdminEndpoints_RejectNonAdminRole()
     {
-        var client = new TestWebApplicationFactory().CreateClient();
-        client.DefaultRequestHeaders.Add("X-Debug-UserId", "mock-user-001");
-        client.DefaultRequestHeaders.Add("X-Debug-Role", "learner");
+        using var factory = new FirstPartyAuthTestWebApplicationFactory();
+        using var client = factory.CreateAuthenticatedClient(SeedData.LearnerEmail, SeedData.LocalSeedPassword, expectedRole: "learner");
 
         var response = await client.GetAsync("/v1/admin/content");
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
+
+    private static async Task<string?> ReadErrorCodeAsync(HttpResponseMessage response)
+    {
+        using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        return document.RootElement.TryGetProperty("code", out var codeElement)
+            ? codeElement.GetString()
+            : null;
+    }
+
 }

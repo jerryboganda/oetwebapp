@@ -1,126 +1,282 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from 'react';
 import {
-  clearStoredAuthSession,
-  fetchCurrentAuthUser,
-  getStoredAuthUser,
-  getStoredAccessToken,
-  isApiError,
-  loginWithPassword,
-  setStoredAuthSession,
-  type AuthUser,
-} from '@/lib/api';
-
-const IS_DEV = process.env.NODE_ENV === 'development';
-const ENABLE_MOCK_AUTH = process.env.NEXT_PUBLIC_ENABLE_MOCK_AUTH === 'true';
+  beginAuthenticatorSetup as beginAuthenticatorSetupRequest,
+  completeMfaChallenge as completeMfaChallengeRequest,
+  completeRecoveryChallenge as completeRecoveryChallengeRequest,
+  confirmAuthenticatorSetup as confirmAuthenticatorSetupRequest,
+  getPendingMfaChallenge,
+  registerLearner as registerLearnerRequest,
+  restoreSession,
+  sendEmailVerificationOtp as sendEmailVerificationOtpRequest,
+  signIn as signInWithBackend,
+  signOut as signOutFromBackend,
+  verifyEmailOtp as verifyEmailOtpRequest,
+} from '@/lib/auth-client';
+import type {
+  AuthSession,
+  AuthenticatorSetup,
+  CurrentUser,
+  OtpChallenge,
+  PendingMfaChallenge,
+  RegisterLearnerInput,
+  SignInResult,
+  UserRole,
+} from '@/lib/types/auth';
+import { initializeAnalyticsTransport } from '@/lib/analytics';
+import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 interface AuthState {
-  user: AuthUser | null;
+  session: AuthSession | null;
+  user: CurrentUser | null;
   loading: boolean;
   error: string | null;
+  pendingMfaChallenge: PendingMfaChallenge | null;
 }
 
 interface AuthContextValue extends AuthState {
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (_email: string, _password: string) => Promise<void>;
+  role: UserRole | null;
+  isAuthenticated: boolean;
+  signIn: (email: string, password: string, rememberMe?: boolean) => Promise<SignInResult>;
+  signUp: (input: RegisterLearnerInput) => Promise<AuthSession>;
   signOut: () => Promise<void>;
-  mockSignIn: () => void;
-  refreshUser: () => Promise<void>;
+  refreshSession: () => Promise<AuthSession | null>;
+  sendVerificationOtp: () => Promise<OtpChallenge>;
+  verifyEmailOtp: (code: string) => Promise<CurrentUser>;
+  beginAuthenticatorSetup: () => Promise<AuthenticatorSetup>;
+  confirmAuthenticatorSetup: (code: string) => Promise<CurrentUser>;
+  completeMfaChallenge: (code: string) => Promise<AuthSession>;
+  completeRecoveryChallenge: (recoveryCode: string) => Promise<AuthSession>;
+  clearError: () => void;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-const MOCK_USER: AuthUser = {
-  userId: 'mock-user-001',
-  email: 'learner@oet-prep.dev',
-  displayName: 'Faisal Maqsood',
-  role: 'learner',
-  isActive: true,
-};
+function toMessage(error: unknown): string {
+  if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
+    return error.message;
+  }
+
+  return 'Authentication request failed.';
+}
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [state, setState] = useState<AuthState>(() => {
-    const token = getStoredAccessToken();
-    const cachedUser = getStoredAuthUser();
-
-    if (IS_DEV && ENABLE_MOCK_AUTH && !token) {
-      return { user: MOCK_USER, loading: false, error: null };
-    }
-
-    return {
-      user: cachedUser,
-      loading: !!token,
-      error: null,
-    };
+  const [state, setState] = useState<AuthState>({
+    session: null,
+    user: null,
+    loading: true,
+    error: null,
+    pendingMfaChallenge: null,
   });
 
-  const refreshUser = useCallback(async () => {
-    const token = getStoredAccessToken();
+  useEffect(() => {
+    let cancelled = false;
 
-    if (!token) {
-      return;
-    }
+    const hydrate = async () => {
+      try {
+        const session = await restoreSession();
+        if (cancelled) {
+          return;
+        }
 
-    setState((current) => ({ ...current, loading: true, error: null }));
-    try {
-      const user = await fetchCurrentAuthUser();
-      setStoredAuthSession(token, user);
-      setState({ user, loading: false, error: null });
-    } catch (error) {
-      clearStoredAuthSession();
-      setState({ user: null, loading: false, error: isApiError(error) ? error.userMessage : 'Unable to restore your session.' });
-    }
+        setState({
+          session,
+          user: session?.currentUser ?? null,
+          loading: false,
+          error: null,
+          pendingMfaChallenge: getPendingMfaChallenge(),
+        });
+      } catch (error) {
+        if (cancelled) {
+          return;
+        }
+
+        setState({
+          session: null,
+          user: null,
+          loading: false,
+          error: toMessage(error),
+          pendingMfaChallenge: getPendingMfaChallenge(),
+        });
+      }
+    };
+
+    void hydrate();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
-    if (!getStoredAccessToken()) {
-      return;
+    if (state.session) {
+      initializeAnalyticsTransport();
     }
+  }, [state.session]);
 
-    const timer = window.setTimeout(() => {
-      void refreshUser();
-    }, 0);
+  const value = useMemo<AuthContextValue>(() => ({
+    ...state,
+    role: state.user?.role ?? null,
+    isAuthenticated: !!state.user,
+    async signIn(email, password, rememberMe = true) {
+      setState((current) => ({ ...current, loading: true, error: null }));
 
-    return () => window.clearTimeout(timer);
-  }, [refreshUser]);
+      try {
+        const result = await signInWithBackend({ email, password, rememberMe });
 
-  const signIn = useCallback(async (email: string, password: string) => {
-    if (IS_DEV && ENABLE_MOCK_AUTH) {
-      setState({ user: MOCK_USER, loading: false, error: null });
-      return;
-    }
+        if (result.status === 'authenticated') {
+          setState({
+            session: result.session,
+            user: result.session.currentUser,
+            loading: false,
+            error: null,
+            pendingMfaChallenge: null,
+          });
+        } else {
+          setState({
+            session: null,
+            user: null,
+            loading: false,
+            error: null,
+            pendingMfaChallenge: result.challenge,
+          });
+        }
 
-    setState((current) => ({ ...current, loading: true, error: null }));
-    try {
-      const session = await loginWithPassword(email, password);
-      setStoredAuthSession(session.accessToken, session.user);
-      setState({ user: session.user, loading: false, error: null });
-    } catch (error) {
-      setState({ user: null, loading: false, error: isApiError(error) ? error.userMessage : 'Unable to sign in.' });
-      throw error;
-    }
-  }, []);
+        return result;
+      } catch (error) {
+        setState((current) => ({
+          ...current,
+          loading: false,
+          error: toMessage(error),
+        }));
+        throw error;
+      }
+    },
+    async signUp(input) {
+      setState((current) => ({ ...current, loading: true, error: null }));
 
-  const signUp = useCallback(async () => {
-    throw new Error('Self-service sign-up is not available in this build.');
-  }, []);
+      try {
+        const session = await registerLearnerRequest(input);
+        setState({
+          session,
+          user: session.currentUser,
+          loading: false,
+          error: null,
+          pendingMfaChallenge: null,
+        });
+        return session;
+      } catch (error) {
+        setState((current) => ({
+          ...current,
+          loading: false,
+          error: toMessage(error),
+        }));
+        throw error;
+      }
+    },
+    async signOut() {
+      setState((current) => ({ ...current, loading: true, error: null }));
 
-  const signOut = useCallback(async () => {
-    clearStoredAuthSession();
-    setState({ user: null, loading: false, error: null });
-  }, []);
+      try {
+        await signOutFromBackend();
+      } finally {
+        setState({
+          session: null,
+          user: null,
+          loading: false,
+          error: null,
+          pendingMfaChallenge: null,
+        });
+      }
+    },
+    async refreshSession() {
+      setState((current) => ({ ...current, loading: true, error: null }));
 
-  const mockSignIn = useCallback(() => {
-    if (!IS_DEV || !ENABLE_MOCK_AUTH) {
-      return;
-    }
+      try {
+        const session = await restoreSession();
+        setState({
+          session,
+          user: session?.currentUser ?? null,
+          loading: false,
+          error: null,
+          pendingMfaChallenge: getPendingMfaChallenge(),
+        });
+        return session;
+      } catch (error) {
+        setState({
+          session: null,
+          user: null,
+          loading: false,
+          error: toMessage(error),
+          pendingMfaChallenge: getPendingMfaChallenge(),
+        });
+        throw error;
+      }
+    },
+    async sendVerificationOtp() {
+      const email = state.user?.email;
+      if (!email) {
+        throw new Error('An authenticated user email is required.');
+      }
 
-    setState({ user: MOCK_USER, loading: false, error: null });
-  }, []);
+      return sendEmailVerificationOtpRequest(email);
+    },
+    async verifyEmailOtp(code) {
+      const email = state.user?.email;
+      if (!email) {
+        throw new Error('An authenticated user email is required.');
+      }
+
+      const currentUser = await verifyEmailOtpRequest(email, code);
+      setState((current) => ({
+        ...current,
+        user: currentUser,
+        session: current.session ? { ...current.session, currentUser } : null,
+        error: null,
+      }));
+      return currentUser;
+    },
+    async beginAuthenticatorSetup() {
+      return beginAuthenticatorSetupRequest();
+    },
+    async confirmAuthenticatorSetup(code) {
+      const currentUser = await confirmAuthenticatorSetupRequest(code);
+      setState((current) => ({
+        ...current,
+        user: currentUser,
+        session: current.session ? { ...current.session, currentUser } : null,
+        error: null,
+      }));
+      return currentUser;
+    },
+    async completeMfaChallenge(code) {
+      const session = await completeMfaChallengeRequest(code);
+      setState({
+        session,
+        user: session.currentUser,
+        loading: false,
+        error: null,
+        pendingMfaChallenge: null,
+      });
+      return session;
+    },
+    async completeRecoveryChallenge(recoveryCode) {
+      const session = await completeRecoveryChallengeRequest(recoveryCode);
+      setState({
+        session,
+        user: session.currentUser,
+        loading: false,
+        error: null,
+        pendingMfaChallenge: null,
+      });
+      return session;
+    },
+    clearError() {
+      setState((current) => ({ ...current, error: null }));
+    },
+  }), [state]);
 
   return (
-    <AuthContext.Provider value={{ ...state, signIn, signUp, signOut, mockSignIn, refreshUser }}>
+    <AuthContext.Provider value={value}>
       {children}
     </AuthContext.Provider>
   );
@@ -131,5 +287,6 @@ export function useAuth() {
   if (!context) {
     throw new Error('useAuth must be used within AuthProvider');
   }
+
   return context;
 }

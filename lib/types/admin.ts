@@ -1,0 +1,323 @@
+export interface AdminDashboardData {
+  generatedAt: string;
+  freshness: {
+    contentUpdatedAt: string | null;
+    auditUpdatedAt: string | null;
+    reviewUpdatedAt: string | null;
+    qualityWindow: string;
+  };
+  contentHealth: {
+    published: number;
+    drafts: number;
+    archived: number;
+    staleDrafts: number;
+  };
+  reviewOps: {
+    backlog: number;
+    overdue: number;
+    failedReviews: number;
+    failedJobs: number;
+    inProgress: number;
+  };
+  billingRisk: {
+    pendingInvoices: number;
+    failedInvoices: number;
+    legacyPlans: number;
+    activeSubscribers: number;
+  };
+  flags: {
+    total: number;
+    enabled: number;
+    liveExperiments: number;
+    recentChanges: number;
+  };
+  quality: {
+    agreementRate: number;
+    avgReviewHours: number;
+    riskCases: number;
+    evaluationCount: number;
+  };
+}
+
+export interface AdminContentRow {
+  id: string;
+  title: string;
+  type: string;
+  profession: string;
+  status: 'draft' | 'published' | 'archived';
+  updatedAt: string;
+  author: string;
+  revisionCount: number;
+}
+
+export interface AdminContentDetail {
+  id: string;
+  title: string;
+  contentType: string;
+  subtestCode: string;
+  professionId: string;
+  difficulty: string;
+  estimatedDurationMinutes: number;
+  status: 'draft' | 'published' | 'archived';
+  description: string;
+  caseNotes: string;
+  modelAnswer: string;
+  criteriaFocus: string[];
+  revisions: Array<{
+    id: string;
+    revisionNumber: number;
+    state: string;
+    changeNote: string;
+    createdBy: string;
+    createdAt: string;
+  }>;
+}
+
+export interface AdminContentImpact {
+  contentId: string;
+  title: string;
+  status: string;
+  usage: {
+    attemptCount: number;
+    evaluationCount: number;
+    studyPlanReferences: number;
+    activeAttempts: number;
+  };
+  safeToArchive: boolean;
+  safeToDelete: boolean;
+}
+
+export interface AdminRevisionRow {
+  id: string;
+  contentId: string;
+  date: string;
+  author: string;
+  state: string;
+  note: string;
+}
+
+export interface AdminTaxonomyNode {
+  id: string;
+  label: string;
+  slug: string;
+  type: 'profession' | 'category';
+  status: 'active' | 'archived';
+  contentCount: number;
+}
+
+export interface AdminTaxonomyImpact {
+  professionId: string;
+  label: string;
+  status: string;
+  usage: {
+    contentCount: number;
+    learnerCount: number;
+    goalCount: number;
+  };
+  safeToArchive: boolean;
+}
+
+export interface AdminCriterion {
+  id: string;
+  name: string;
+  type: string;
+  weight: number;
+  status: 'active' | 'archived';
+  description: string;
+}
+
+export interface AdminAIConfig {
+  id: string;
+  model: string;
+  provider: string;
+  taskType: string;
+  status: 'active' | 'testing' | 'deprecated';
+  accuracy: number;
+  confidenceThreshold: number;
+  routingRule: string;
+  experimentFlag: string;
+  promptLabel: string;
+}
+
+export interface AdminFlag {
+  id: string;
+  name: string;
+  key: string;
+  enabled: boolean;
+  type: string;
+  rolloutPercentage: number;
+  description: string;
+  owner: string;
+}
+
+export interface AdminAuditLogRow {
+  id: string;
+  timestamp: string;
+  actor: string;
+  action: string;
+  resource: string;
+  details: string;
+}
+
+export interface AdminAuditLogDetail {
+  id: string;
+  timestamp: string;
+  actorId: string;
+  actorName: string;
+  action: string;
+  resourceType: string;
+  resourceId: string;
+  details: string;
+}
+
+export interface AdminUserRow {
+  id: string;
+  name: string;
+  email: string;
+  role: 'learner' | 'expert' | 'admin';
+  status: 'active' | 'suspended' | 'deleted';
+  lastLogin: string | null;
+}
+
+export interface AdminUserDetail {
+  id: string;
+  name: string;
+  email: string;
+  role: 'learner' | 'expert' | 'admin';
+  status: 'active' | 'suspended' | 'deleted';
+  lastLogin: string | null;
+  createdAt: string | null;
+  authAccountId: string | null;
+  profession?: string | null;
+  specialties?: string[];
+  tasksCompleted?: number;
+  tasksGraded?: number;
+  creditBalance?: number;
+  availableActions: {
+    canSuspend: boolean;
+    canDelete: boolean;
+    canRestore: boolean;
+    canAdjustCredits: boolean;
+    canTriggerPasswordReset: boolean;
+  };
+}
+
+export interface AdminUsersPageData {
+  total: number;
+  page: number;
+  pageSize: number;
+  items: AdminUserRow[];
+}
+
+export interface AdminInvitationResult {
+  id: string;
+  email: string;
+  role: string;
+  invitation: {
+    purpose: string;
+    deliveryChannel: string;
+    destinationHint: string;
+    expiresAt: string;
+    retryAfterSeconds: number;
+  };
+}
+
+export interface AdminBillingPlan {
+  id: string;
+  name: string;
+  price: number;
+  interval: string;
+  activeSubscribers: number;
+  status: string;
+}
+
+export interface AdminBillingInvoice {
+  id: string;
+  userId: string;
+  userName: string;
+  amount: number;
+  currency: string;
+  status: string;
+  date: string;
+  plan: string;
+}
+
+export interface AdminReviewOpsSummary {
+  backlog: number;
+  overdue: number;
+  slaRisk: number;
+  statusDistribution: {
+    pending: number;
+    inProgress: number;
+    completed: number;
+  };
+}
+
+export interface AdminReviewQueueItem {
+  id: string;
+  taskId: string;
+  learnerId: string;
+  learnerName: string;
+  assignedExpertId: string | null;
+  status: 'pending' | 'in_progress' | 'completed';
+  assignedAt: string;
+  subtestCode: string;
+  priority: 'high' | 'normal' | 'low';
+}
+
+export interface AdminReviewFailures {
+  summary: {
+    failedReviewCount: number;
+    stuckReviewCount: number;
+    failedJobCount: number;
+  };
+  failedReviews: Array<{
+    id: string;
+    attemptId: string;
+    subtestCode: string;
+    state: string;
+    createdAt: string;
+    completedAt: string | null;
+  }>;
+  stuckReviews: Array<{
+    id: string;
+    attemptId: string;
+    subtestCode: string;
+    state: string;
+    createdAt: string;
+    completedAt: string | null;
+  }>;
+  failedJobs: Array<{
+    id: string;
+    type: string;
+    attemptId: string | null;
+    state: string;
+    reason: string;
+    message: string;
+    retryCount: number;
+    createdAt: string;
+  }>;
+}
+
+export interface AdminQualityPoint {
+  label: string;
+  value: number;
+}
+
+export interface AdminQualityAnalytics {
+  aiHumanAgreement: { value: number; trend: number };
+  appealsRate: { value: number; trend: number };
+  avgReviewTime: { value: number; unit: string };
+  contentPerformance: { publishedCount: number; activeContent: number };
+  reviewSLA: { metPercent: number; avgTurnaround: string };
+  featureAdoption: { activeUsers: number; adoptionRate: number };
+  riskCases: { count: number; severity: string };
+  filters: { timeRange: string; subtest: string; profession: string };
+  freshness: { generatedAt: string; evaluationSampleCount: number; reviewSampleCount: number; windowDays: number };
+  trendSeries: {
+    agreement: AdminQualityPoint[];
+    appeals: AdminQualityPoint[];
+    reviewTime: AdminQualityPoint[];
+    riskCases: AdminQualityPoint[];
+  };
+}

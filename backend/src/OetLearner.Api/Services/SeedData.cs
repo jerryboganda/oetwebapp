@@ -1,3 +1,5 @@
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
@@ -7,96 +9,464 @@ namespace OetLearner.Api.Services;
 
 public static class SeedData
 {
+    private static readonly SemaphoreSlim DemoMediaSeedLock = new(1, 1);
+
+    public const string LocalSeedPassword = "Password123!";
+    public const string LearnerAuthAccountId = "auth_learner_local_001";
+    public const string ExpertAuthAccountId = "auth_expert_local_001";
+    public const string ExpertSecondaryAuthAccountId = "auth_expert_local_002";
+    public const string AdminAuthAccountId = "auth_admin_local_001";
+    public const string LearnerEmail = "learner@oet-prep.dev";
+    public const string ExpertEmail = "expert@oet-prep.dev";
+    public const string ExpertSecondaryEmail = "expert-unauthorised@oet-prep.dev";
+    public const string AdminEmail = "admin@oet-prep.dev";
+
     public static async Task EnsureReferenceDataAsync(LearnerDbContext db, CancellationToken cancellationToken = default)
     {
-        if (await db.Professions.AnyAsync(cancellationToken))
+        var hasChanges = false;
+
+        if (!await db.Professions.AnyAsync(cancellationToken))
         {
-            return;
+            SeedReferenceData(db);
+            hasChanges = true;
         }
 
-        SeedReferenceData(db);
-        await db.SaveChangesAsync(cancellationToken);
+        if (!await db.SignupExamTypeCatalog.AnyAsync(cancellationToken))
+        {
+            SeedSignupCatalog(db);
+            hasChanges = true;
+        }
+
+        if (hasChanges)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
     }
 
     public static async Task EnsureDemoDataAsync(LearnerDbContext db, CancellationToken cancellationToken = default)
     {
-        if (await db.Users.AnyAsync(x => x.Id == "mock-user-001", cancellationToken))
+        if (!await db.Users.AnyAsync(x => x.Id == "mock-user-001", cancellationToken))
         {
-            return;
+            SeedDemoUser(db);
+            await db.SaveChangesAsync(cancellationToken);
         }
 
-        SeedDemoUser(db);
+        EnsureLocalAuthAccounts(db);
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public static async Task EnsureBootstrapAuthAsync(LearnerDbContext db, BootstrapOptions options, CancellationToken cancellationToken = default)
+    public static async Task EnsureDemoOperationalStateAsync(LearnerDbContext db, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(options.ExpertEmail) || string.IsNullOrWhiteSpace(options.ExpertPassword))
+        var now = DateTimeOffset.UtcNow;
+        var demoReviewIds = new[] { "review-001", "review-queue-001", "review-queue-002" };
+
+        var reviewRequests = await db.ReviewRequests
+            .Where(reviewRequest => demoReviewIds.Contains(reviewRequest.Id))
+            .ToDictionaryAsync(reviewRequest => reviewRequest.Id, cancellationToken);
+
+        UpsertReviewRequest(
+            db,
+            reviewRequests,
+            id: "review-001",
+            attemptId: "wa-001",
+            subtestCode: "writing",
+            state: ReviewRequestState.Completed,
+            turnaroundOption: "standard",
+            focusAreas: ["conciseness", "genre"],
+            learnerNotes: "Please focus on conciseness and layout.",
+            paymentSource: "credits",
+            priceSnapshot: 1m,
+            createdAt: now.AddDays(-3),
+            completedAt: now.AddDays(-1),
+            eligibilitySnapshot: new { canRequestReview = true, reasonCodes = Array.Empty<string>() });
+
+        UpsertReviewRequest(
+            db,
+            reviewRequests,
+            id: "review-queue-001",
+            attemptId: "sa-001",
+            subtestCode: "speaking",
+            state: ReviewRequestState.InReview,
+            turnaroundOption: "express",
+            focusAreas: ["fluency"],
+            learnerNotes: "Please focus on flow and clarity.",
+            paymentSource: "credits",
+            priceSnapshot: 2m,
+            createdAt: now.AddHours(-8),
+            completedAt: null,
+            eligibilitySnapshot: new { canRequestReview = true, reasonCodes = Array.Empty<string>() });
+
+        UpsertReviewRequest(
+            db,
+            reviewRequests,
+            id: "review-queue-002",
+            attemptId: "wa-001",
+            subtestCode: "writing",
+            state: ReviewRequestState.InReview,
+            turnaroundOption: "standard",
+            focusAreas: ["content", "language"],
+            learnerNotes: "Please focus on clinical relevance and language control.",
+            paymentSource: "credits",
+            priceSnapshot: 1m,
+            createdAt: now.AddHours(-6),
+            completedAt: null,
+            eligibilitySnapshot: new { canRequestReview = true, reasonCodes = Array.Empty<string>() });
+
+        var existingAssignments = await db.ExpertReviewAssignments
+            .Where(assignment => demoReviewIds.Contains(assignment.ReviewRequestId))
+            .ToListAsync(cancellationToken);
+        if (existingAssignments.Count > 0)
+        {
+            db.ExpertReviewAssignments.RemoveRange(existingAssignments);
+        }
+
+        db.ExpertReviewAssignments.AddRange(
+            new ExpertReviewAssignment
+            {
+                Id = "era-001",
+                ReviewRequestId = "review-001",
+                AssignedReviewerId = "expert-001",
+                AssignedAt = now.AddDays(-2),
+                ClaimState = ExpertAssignmentState.Released,
+                ReleasedAt = now.AddDays(-1),
+                ReasonCode = "submitted"
+            },
+            new ExpertReviewAssignment
+            {
+                Id = "era-queue-001",
+                ReviewRequestId = "review-queue-001",
+                AssignedReviewerId = "expert-001",
+                AssignedAt = now.AddHours(-7),
+                ClaimState = ExpertAssignmentState.Claimed
+            },
+            new ExpertReviewAssignment
+            {
+                Id = "era-queue-002",
+                ReviewRequestId = "review-queue-002",
+                AssignedReviewerId = "expert-001",
+                AssignedAt = now.AddHours(-5),
+                ClaimState = ExpertAssignmentState.Claimed
+            });
+
+        var existingDrafts = await db.ExpertReviewDrafts
+            .Where(draft => demoReviewIds.Contains(draft.ReviewRequestId))
+            .ToListAsync(cancellationToken);
+        if (existingDrafts.Count > 0)
+        {
+            db.ExpertReviewDrafts.RemoveRange(existingDrafts);
+        }
+
+        db.ExpertReviewDrafts.AddRange(
+            new ExpertReviewDraft
+            {
+                Id = "erd-001",
+                ReviewRequestId = "review-001",
+                ReviewerId = "expert-001",
+                Version = 1,
+                State = "submitted",
+                RubricEntriesJson = JsonSupport.Serialize(new Dictionary<string, int>
+                {
+                    ["purpose"] = 4, ["content"] = 5, ["conciseness"] = 3, ["genre"] = 4, ["organization"] = 4, ["language"] = 4
+                }),
+                CriterionCommentsJson = JsonSupport.Serialize(new Dictionary<string, string>
+                {
+                    ["purpose"] = "Clear opening statement.",
+                    ["content"] = "All key details are relevant.",
+                    ["conciseness"] = "Some extraneous clinical detail remains.",
+                    ["genre"] = "Appropriate register.",
+                    ["organization"] = "Well structured.",
+                    ["language"] = "Minor grammatical issues."
+                }),
+                FinalCommentDraft = "Clear improvement in structure and clinical filtering.",
+                ScratchpadJson = JsonSupport.Serialize("Double-check whether the safety-net advice is explicit enough for community follow-up."),
+                ChecklistItemsJson = JsonSupport.Serialize(new[]
+                {
+                    new { id = "purpose", label = "Purpose is explicit in the opening lines.", @checked = true },
+                    new { id = "content", label = "Only clinically relevant post-operative facts remain.", @checked = true },
+                    new { id = "safety-net", label = "Follow-up and escalation advice are obvious to the receiving clinician.", @checked = false }
+                }),
+                DraftSavedAt = now.AddDays(-1)
+            },
+            new ExpertReviewDraft
+            {
+                Id = "erd-queue-002",
+                ReviewRequestId = "review-queue-002",
+                ReviewerId = "expert-001",
+                Version = 2,
+                State = "saved",
+                RubricEntriesJson = JsonSupport.Serialize(new Dictionary<string, int>
+                {
+                    ["purpose"] = 4, ["content"] = 4, ["conciseness"] = 3, ["genre"] = 4, ["organization"] = 4, ["language"] = 3
+                }),
+                CriterionCommentsJson = JsonSupport.Serialize(new Dictionary<string, string>
+                {
+                    ["content"] = "The main referral reason is clear, but a few details still compete with the urgent follow-up request.",
+                    ["language"] = "Expression is mostly controlled, with a couple of phrasing choices worth smoothing before submission."
+                }),
+                FinalCommentDraft = "Promising draft. Tighten the referral request and reduce lower-value history so the receiving clinician sees the action sooner.",
+                ScratchpadJson = JsonSupport.Serialize("Re-check whether the urgent follow-up request appears early enough for the reader."),
+                ChecklistItemsJson = JsonSupport.Serialize(new[]
+                {
+                    new { id = "purpose", label = "Referral purpose is immediately obvious.", @checked = true },
+                    new { id = "content", label = "Only details that change clinical follow-up are retained.", @checked = false },
+                    new { id = "closing", label = "Closing request clearly tells the receiving clinician what action is needed next.", @checked = false }
+                }),
+                DraftSavedAt = now.AddMinutes(-90)
+            });
+
+        var existingAuditEvents = await db.AuditEvents
+            .Where(auditEvent => auditEvent.ResourceType == "ExpertReview" && auditEvent.ResourceId != null && demoReviewIds.Contains(auditEvent.ResourceId))
+            .ToListAsync(cancellationToken);
+        if (existingAuditEvents.Count > 0)
+        {
+            db.AuditEvents.RemoveRange(existingAuditEvents);
+        }
+
+        db.AuditEvents.AddRange(
+            new AuditEvent
+            {
+                Id = "aud-exp-demo-001",
+                OccurredAt = now.AddDays(-1),
+                ActorId = "expert-001",
+                ActorName = "Expert Reviewer",
+                Action = "Submitted Writing Review",
+                ResourceType = "ExpertReview",
+                ResourceId = "review-001",
+                Details = "Clear improvement in structure and clinical filtering."
+            },
+            new AuditEvent
+            {
+                Id = "aud-exp-demo-002",
+                OccurredAt = now.AddHours(-7),
+                ActorId = "expert-001",
+                ActorName = "Expert Reviewer",
+                Action = "Claimed Review",
+                ResourceType = "ExpertReview",
+                ResourceId = "review-queue-001",
+                Details = "Speaking review claimed from the expert queue."
+            },
+            new AuditEvent
+            {
+                Id = "aud-exp-demo-003",
+                OccurredAt = now.AddHours(-5),
+                ActorId = "expert-001",
+                ActorName = "Expert Reviewer",
+                Action = "Claimed Review",
+                ResourceType = "ExpertReview",
+                ResourceId = "review-queue-002",
+                Details = "Writing review claimed from the expert queue."
+            },
+            new AuditEvent
+            {
+                Id = "aud-exp-demo-004",
+                OccurredAt = now.AddMinutes(-90),
+                ActorId = "expert-001",
+                ActorName = "Expert Reviewer",
+                Action = "Saved Review Draft",
+                ResourceType = "ExpertReview",
+                ResourceId = "review-queue-002",
+                Details = "Expert review draft saved."
+            });
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public static async Task EnsureDemoMediaAsync(
+        LearnerDbContext db,
+        IWebHostEnvironment environment,
+        StorageOptions storageOptions,
+        CancellationToken cancellationToken = default)
+    {
+        const string speakingAttemptId = "sa-001";
+        const string demoAudioStorageKey = "audio/sa-001.wav";
+        const string demoAudioContentType = "audio/wav";
+
+        var attempt = await db.Attempts.FirstOrDefaultAsync(x => x.Id == speakingAttemptId, cancellationToken);
+        if (attempt is null)
         {
             return;
         }
 
-        var email = options.ExpertEmail.Trim().ToLowerInvariant();
-        var expertId = "expert-001";
-        var displayName = string.IsNullOrWhiteSpace(options.ExpertDisplayName)
-            ? "Expert Reviewer"
-            : options.ExpertDisplayName.Trim();
-
-        var expert = await db.ExpertUsers.FirstOrDefaultAsync(candidate => candidate.Id == expertId, cancellationToken);
-        if (expert is null)
+        var hasChanges = false;
+        if (!string.Equals(attempt.AudioObjectKey, demoAudioStorageKey, StringComparison.Ordinal))
         {
-            expert = new ExpertUser
+            attempt.AudioObjectKey = demoAudioStorageKey;
+            hasChanges = true;
+        }
+
+        var metadata = JsonSupport.Deserialize(attempt.AudioMetadataJson, new Dictionary<string, object?>());
+        if (!metadata.TryGetValue("contentType", out var contentType) || !string.Equals(contentType?.ToString(), demoAudioContentType, StringComparison.OrdinalIgnoreCase))
+        {
+            metadata["contentType"] = demoAudioContentType;
+            attempt.AudioMetadataJson = JsonSupport.Serialize(metadata);
+            hasChanges = true;
+        }
+
+        if (hasChanges)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        var fullPath = ResolveStoragePath(environment, storageOptions, demoAudioStorageKey);
+        await DemoMediaSeedLock.WaitAsync(cancellationToken);
+        try
+        {
+            if (File.Exists(fullPath))
             {
-                Id = expertId,
-                DisplayName = displayName,
-                Email = email,
-                CreatedAt = DateTimeOffset.UtcNow,
-                Timezone = "UTC",
-                IsActive = true
-            };
-            db.ExpertUsers.Add(expert);
-        }
-        else
-        {
-            expert.DisplayName = displayName;
-            expert.Email = email;
-            expert.IsActive = true;
-        }
+                return;
+            }
 
-        var account = await db.AuthAccounts.FirstOrDefaultAsync(candidate => candidate.Email == email || (candidate.SubjectId == expertId && candidate.Role == "expert"), cancellationToken);
-        var passwordHash = AuthService.HashPassword(options.ExpertPassword);
-
-        if (account is null)
-        {
-            db.AuthAccounts.Add(new AuthAccount
-            {
-                Id = $"auth-{Guid.NewGuid():N}",
-                SubjectId = expertId,
-                Role = "expert",
-                Email = email,
-                DisplayName = displayName,
-                PasswordHash = passwordHash,
-                IsActive = true,
-                CreatedAt = DateTimeOffset.UtcNow
-            });
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
+            await File.WriteAllBytesAsync(fullPath, BuildDemoWaveFile(), cancellationToken);
         }
-        else
+        finally
         {
-            account.SubjectId = expertId;
-            account.Role = "expert";
-            account.Email = email;
-            account.DisplayName = displayName;
-            account.PasswordHash = passwordHash;
-            account.IsActive = true;
+            DemoMediaSeedLock.Release();
         }
-
-        await db.SaveChangesAsync(cancellationToken);
     }
 
     private static void SeedDemoUser(LearnerDbContext db)
     {
         SeedDemoUserCore(db);
         SeedDemoUserData(db);
+    }
+
+    private static void UpsertReviewRequest(
+        LearnerDbContext db,
+        IDictionary<string, ReviewRequest> reviewRequests,
+        string id,
+        string attemptId,
+        string subtestCode,
+        ReviewRequestState state,
+        string turnaroundOption,
+        IReadOnlyList<string> focusAreas,
+        string learnerNotes,
+        string paymentSource,
+        decimal priceSnapshot,
+        DateTimeOffset createdAt,
+        DateTimeOffset? completedAt,
+        object eligibilitySnapshot)
+    {
+        if (!reviewRequests.TryGetValue(id, out var reviewRequest))
+        {
+            reviewRequest = new ReviewRequest
+            {
+                Id = id
+            };
+            db.ReviewRequests.Add(reviewRequest);
+            reviewRequests[id] = reviewRequest;
+        }
+
+        reviewRequest.AttemptId = attemptId;
+        reviewRequest.SubtestCode = subtestCode;
+        reviewRequest.State = state;
+        reviewRequest.TurnaroundOption = turnaroundOption;
+        reviewRequest.FocusAreasJson = JsonSupport.Serialize(focusAreas);
+        reviewRequest.LearnerNotes = learnerNotes;
+        reviewRequest.PaymentSource = paymentSource;
+        reviewRequest.PriceSnapshot = priceSnapshot;
+        reviewRequest.CreatedAt = createdAt;
+        reviewRequest.CompletedAt = completedAt;
+        reviewRequest.EligibilitySnapshotJson = JsonSupport.Serialize(eligibilitySnapshot);
+    }
+
+    private static void EnsureLocalAuthAccounts(LearnerDbContext db)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var passwordHasher = new PasswordHasher<ApplicationUserAccount>();
+
+        var learner = db.Users.Single(x => x.Id == "mock-user-001");
+        var expert = db.ExpertUsers.Single(x => x.Id == "expert-001");
+        var secondaryExpert = db.ExpertUsers.SingleOrDefault(x => x.Id == "expert-unauthorised");
+        if (secondaryExpert is null)
+        {
+            secondaryExpert = new ExpertUser
+            {
+                Id = "expert-unauthorised",
+                Role = ApplicationUserRoles.Expert,
+                DisplayName = "Expert Reviewer Two",
+                Email = ExpertSecondaryEmail,
+                SpecialtiesJson = JsonSupport.Serialize(new[] { "nursing" }),
+                Timezone = "Australia/Sydney",
+                IsActive = true,
+                CreatedAt = now.AddMonths(-4)
+            };
+            db.ExpertUsers.Add(secondaryExpert);
+        }
+
+        var learnerAccount = UpsertLocalAuthAccount(
+            db,
+            passwordHasher,
+            LearnerAuthAccountId,
+            LearnerEmail,
+            ApplicationUserRoles.Learner,
+            now.AddMonths(-3));
+        learner.AuthAccountId = learnerAccount.Id;
+        learner.Email = learnerAccount.Email;
+
+        var expertAccount = UpsertLocalAuthAccount(
+            db,
+            passwordHasher,
+            ExpertAuthAccountId,
+            ExpertEmail,
+            ApplicationUserRoles.Expert,
+            now.AddMonths(-6));
+        expert.AuthAccountId = expertAccount.Id;
+        expert.Email = expertAccount.Email;
+
+        var secondaryExpertAccount = UpsertLocalAuthAccount(
+            db,
+            passwordHasher,
+            ExpertSecondaryAuthAccountId,
+            ExpertSecondaryEmail,
+            ApplicationUserRoles.Expert,
+            now.AddMonths(-4));
+        secondaryExpert.AuthAccountId = secondaryExpertAccount.Id;
+        secondaryExpert.Email = secondaryExpertAccount.Email;
+
+        var adminAccount = UpsertLocalAuthAccount(
+            db,
+            passwordHasher,
+            AdminAuthAccountId,
+            AdminEmail,
+            ApplicationUserRoles.Admin,
+            now.AddMonths(-6));
+
+        foreach (var auditEvent in db.AuditEvents.Where(x => x.ActorId == "admin-user-001" && x.ActorAuthAccountId != adminAccount.Id))
+        {
+            auditEvent.ActorAuthAccountId = adminAccount.Id;
+        }
+    }
+
+    private static ApplicationUserAccount UpsertLocalAuthAccount(
+        LearnerDbContext db,
+        PasswordHasher<ApplicationUserAccount> passwordHasher,
+        string accountId,
+        string email,
+        string role,
+        DateTimeOffset createdAt)
+    {
+        var normalizedEmail = email.ToUpperInvariant();
+        var account = db.ApplicationUserAccounts
+            .SingleOrDefault(x => x.Id == accountId || x.NormalizedEmail == normalizedEmail);
+
+        if (account is null)
+        {
+            account = new ApplicationUserAccount
+            {
+                Id = accountId,
+                CreatedAt = createdAt
+            };
+            db.ApplicationUserAccounts.Add(account);
+        }
+
+        account.Email = email;
+        account.NormalizedEmail = normalizedEmail;
+        account.Role = role;
+        account.EmailVerifiedAt ??= createdAt;
+        account.UpdatedAt = DateTimeOffset.UtcNow;
+        account.PasswordHash = passwordHasher.HashPassword(account, LocalSeedPassword);
+        return account;
     }
 
     private static void SeedDemoUserCore(LearnerDbContext db)
@@ -194,7 +564,8 @@ public static class SeedData
             new ProfessionReference { Id = "medicine", Code = "medicine", Label = "Medicine", Status = "active", SortOrder = 2 },
             new ProfessionReference { Id = "dentistry", Code = "dentistry", Label = "Dentistry", Status = "active", SortOrder = 3 },
             new ProfessionReference { Id = "pharmacy", Code = "pharmacy", Label = "Pharmacy", Status = "active", SortOrder = 4 },
-            new ProfessionReference { Id = "physiotherapy", Code = "physiotherapy", Label = "Physiotherapy", Status = "active", SortOrder = 5 }
+            new ProfessionReference { Id = "physiotherapy", Code = "physiotherapy", Label = "Physiotherapy", Status = "active", SortOrder = 5 },
+            new ProfessionReference { Id = "academic-english", Code = "academic-english", Label = "Academic / General English", Status = "active", SortOrder = 6 }
         );
 
         db.Subtests.AddRange(
@@ -205,16 +576,16 @@ public static class SeedData
         );
 
         db.Criteria.AddRange(
-            new CriterionReference { Id = "cri-purpose", SubtestCode = "writing", Code = "purpose", Label = "Purpose", Description = "How clearly the purpose of the letter is conveyed.", SortOrder = 1 },
-            new CriterionReference { Id = "cri-content", SubtestCode = "writing", Code = "content", Label = "Content", Description = "Relevance and completeness of clinical content.", SortOrder = 2 },
-            new CriterionReference { Id = "cri-conciseness", SubtestCode = "writing", Code = "conciseness", Label = "Conciseness & Clarity", Description = "Clarity of writing without unnecessary detail.", SortOrder = 3 },
-            new CriterionReference { Id = "cri-genre", SubtestCode = "writing", Code = "genre", Label = "Genre & Style", Description = "Appropriate register and professional tone.", SortOrder = 4 },
-            new CriterionReference { Id = "cri-organization", SubtestCode = "writing", Code = "organization", Label = "Organisation & Layout", Description = "Logical structure and formatting.", SortOrder = 5 },
-            new CriterionReference { Id = "cri-language", SubtestCode = "writing", Code = "language", Label = "Language", Description = "Accuracy and range of grammar and vocabulary.", SortOrder = 6 },
-            new CriterionReference { Id = "cri-intelligibility", SubtestCode = "speaking", Code = "intelligibility", Label = "Intelligibility", Description = "Pronunciation, stress, and clarity.", SortOrder = 1 },
-            new CriterionReference { Id = "cri-fluency", SubtestCode = "speaking", Code = "fluency", Label = "Fluency", Description = "Smoothness, pacing, and hesitation control.", SortOrder = 2 },
-            new CriterionReference { Id = "cri-appropriateness", SubtestCode = "speaking", Code = "appropriateness", Label = "Appropriateness of Language", Description = "Suitability of professional vocabulary and tone.", SortOrder = 3 },
-            new CriterionReference { Id = "cri-grammar-expression", SubtestCode = "speaking", Code = "grammar_expression", Label = "Resources of Grammar and Expression", Description = "Range and accuracy of spoken language.", SortOrder = 4 }
+            new CriterionReference { Id = "cri-purpose", SubtestCode = "writing", Code = "purpose", Label = "Purpose", Description = "How clearly the purpose of the letter is conveyed.", Status = "active", SortOrder = 1 },
+            new CriterionReference { Id = "cri-content", SubtestCode = "writing", Code = "content", Label = "Content", Description = "Relevance and completeness of clinical content.", Status = "active", SortOrder = 2 },
+            new CriterionReference { Id = "cri-conciseness", SubtestCode = "writing", Code = "conciseness", Label = "Conciseness & Clarity", Description = "Clarity of writing without unnecessary detail.", Status = "active", SortOrder = 3 },
+            new CriterionReference { Id = "cri-genre", SubtestCode = "writing", Code = "genre", Label = "Genre & Style", Description = "Appropriate register and professional tone.", Status = "active", SortOrder = 4 },
+            new CriterionReference { Id = "cri-organization", SubtestCode = "writing", Code = "organization", Label = "Organisation & Layout", Description = "Logical structure and formatting.", Status = "active", SortOrder = 5 },
+            new CriterionReference { Id = "cri-language", SubtestCode = "writing", Code = "language", Label = "Language", Description = "Accuracy and range of grammar and vocabulary.", Status = "active", SortOrder = 6 },
+            new CriterionReference { Id = "cri-intelligibility", SubtestCode = "speaking", Code = "intelligibility", Label = "Intelligibility", Description = "Pronunciation, stress, and clarity.", Status = "active", SortOrder = 1 },
+            new CriterionReference { Id = "cri-fluency", SubtestCode = "speaking", Code = "fluency", Label = "Fluency", Description = "Smoothness, pacing, and hesitation control.", Status = "active", SortOrder = 2 },
+            new CriterionReference { Id = "cri-appropriateness", SubtestCode = "speaking", Code = "appropriateness", Label = "Appropriateness of Language", Description = "Suitability of professional vocabulary and tone.", Status = "active", SortOrder = 3 },
+            new CriterionReference { Id = "cri-grammar-expression", SubtestCode = "speaking", Code = "grammar_expression", Label = "Resources of Grammar and Expression", Description = "Range and accuracy of spoken language.", Status = "active", SortOrder = 4 }
         );
 
         db.ContentItems.AddRange(
@@ -441,7 +812,8 @@ public static class SeedData
                 ElapsedSeconds = 1200,
                 DeviceType = "desktop",
                 AudioUploadState = UploadState.Uploaded,
-                AudioObjectKey = "audio/sa-001.webm",
+                AudioObjectKey = "audio/sa-001.wav",
+                AudioMetadataJson = JsonSupport.Serialize(new Dictionary<string, object?> { ["contentType"] = "audio/wav" }),
                 TranscriptJson = JsonSupport.Serialize(new object[]
                 {
                     new { id = "tl-1", speaker = "nurse", text = "Good evening, I'm handing over the care of Mr James Wheeler in bed 4.", startTime = 0, endTime = 8, markers = (object[]?)null },
@@ -807,6 +1179,13 @@ public static class SeedData
                 ["language"] = "Minor grammatical issues."
             }),
             FinalCommentDraft = "Clear improvement in structure and clinical filtering.",
+            ScratchpadJson = JsonSupport.Serialize("Double-check whether the safety-net advice is explicit enough for community follow-up."),
+            ChecklistItemsJson = JsonSupport.Serialize(new[]
+            {
+                new { id = "purpose", label = "Purpose is explicit in the opening lines.", @checked = true },
+                new { id = "content", label = "Only clinically relevant post-operative facts remain.", @checked = true },
+                new { id = "safety-net", label = "Follow-up and escalation advice are obvious to the receiving clinician.", @checked = false }
+            }),
             DraftSavedAt = now.AddDays(-1)
         });
 
@@ -818,6 +1197,27 @@ public static class SeedData
                 ProfessionId = "nursing",
                 Title = "Writing Calibration - Referral Letter",
                 BenchmarkLabel = "Benchmark A",
+                CaseArtifactsJson = JsonSupport.Serialize(new[]
+                {
+                    new { kind = "case_notes", title = "Case Notes", content = "Post-operative referral after laparoscopic cholecystectomy with persistent abdominal pain, mild wound ooze, and delayed recovery." },
+                    new { kind = "learner_response", title = "Candidate Response", content = "Dear Dr Patel, thank you for reviewing Mrs Khan, who now has worsening abdominal pain and concerns about wound healing after surgery." },
+                    new { kind = "benchmark_focus", title = "Benchmark Focus", content = "This case rewards concise referral purpose, careful filtering of low-value detail, and a clinically useful closing request." }
+                }),
+                ReferenceRubricJson = JsonSupport.Serialize(new[]
+                {
+                    new { criterion = "purpose", benchmarkScore = 4, rationale = "Referral purpose is established immediately." },
+                    new { criterion = "content", benchmarkScore = 5, rationale = "The strongest benchmark keeps only information that changes follow-up urgency." },
+                    new { criterion = "conciseness", benchmarkScore = 3, rationale = "A few extra procedural details reduce efficiency." },
+                    new { criterion = "genre", benchmarkScore = 4, rationale = "Professional referral register is sustained." },
+                    new { criterion = "organization", benchmarkScore = 4, rationale = "Information flows from reason for referral to current concerns and request." },
+                    new { criterion = "language", benchmarkScore = 4, rationale = "Minor slips remain, but overall control is strong." }
+                }),
+                ReferenceNotesJson = JsonSupport.Serialize(new[]
+                {
+                    "Benchmark prioritises reason for referral, current complication, and required follow-up action in the opening half.",
+                    "Lower-value surgical history should stay compressed unless it changes the receiving clinician's decision.",
+                    "Language quality matters, but information selection is the main differentiator in this case."
+                }),
                 BenchmarkScore = 4,
                 Difficulty = "medium",
                 Status = CalibrationCaseStatus.Completed,
@@ -830,6 +1230,26 @@ public static class SeedData
                 ProfessionId = "medicine",
                 Title = "Speaking Calibration - Handover",
                 BenchmarkLabel = "Benchmark B",
+                CaseArtifactsJson = JsonSupport.Serialize(new[]
+                {
+                    new { kind = "role_card", title = "Role Card", content = "You are handing over a patient with escalating post-operative pain and new abnormal observations to the on-call doctor." },
+                    new { kind = "candidate_transcript", title = "Candidate Transcript", content = "Doctor, I am calling about a patient whose pain has worsened despite analgesia. I need your review of the escalation plan and monitoring priorities." },
+                    new { kind = "benchmark_focus", title = "Benchmark Focus", content = "The benchmark rewards clear escalation language, prioritisation, and confident, clinically safe handover structure." }
+                }),
+                ReferenceRubricJson = JsonSupport.Serialize(new[]
+                {
+                    new { criterion = "intelligibility", benchmarkScore = 5, rationale = "Speech is consistently easy to follow." },
+                    new { criterion = "fluency", benchmarkScore = 5, rationale = "The benchmark delivery stays steady with minimal hesitation." },
+                    new { criterion = "appropriateness", benchmarkScore = 4, rationale = "Register is professional with one slightly abrupt reassurance phrase." },
+                    new { criterion = "grammar", benchmarkScore = 5, rationale = "Grammar stays controlled throughout the handover." },
+                    new { criterion = "clinicalCommunication", benchmarkScore = 5, rationale = "Prioritisation, escalation, and safety-netting are explicit." }
+                }),
+                ReferenceNotesJson = JsonSupport.Serialize(new[]
+                {
+                    "Benchmark opens with a concise summary before the detailed escalation points.",
+                    "Full marks require explicit prioritisation and a clear follow-up request.",
+                    "Minor warmth or phrasing issues are acceptable if the handover remains clinically safe and well organised."
+                }),
                 BenchmarkScore = 5,
                 Difficulty = "medium",
                 Status = CalibrationCaseStatus.Pending,
@@ -932,5 +1352,198 @@ public static class SeedData
             new ContentRevision { Id = "rev-w01-2", ContentItemId = "writing-referral-01", RevisionNumber = 2, State = "published", ChangeNote = "Published after QA review", SnapshotJson = "{}", CreatedBy = "Admin", CreatedAt = now.AddDays(-28) }
         );
 
+    }
+
+    private static void SeedSignupCatalog(LearnerDbContext db)
+    {
+        db.SignupExamTypeCatalog.AddRange(
+            new SignupExamTypeCatalog
+            {
+                Id = "oet",
+                Label = "OET",
+                Code = "OET",
+                Description = "Occupational English Test preparation and enrollment.",
+                SortOrder = 1,
+                IsActive = true
+            },
+            new SignupExamTypeCatalog
+            {
+                Id = "ielts",
+                Label = "IELTS",
+                Code = "IELTS",
+                Description = "IELTS preparation and session enrollment.",
+                SortOrder = 2,
+                IsActive = true
+            });
+
+        db.SignupProfessionCatalog.AddRange(
+            new SignupProfessionCatalog
+            {
+                Id = "nursing",
+                Label = "Nursing",
+                CountryTargetsJson = JsonSupport.Serialize(new[] { "Australia", "New Zealand" }),
+                ExamTypeIdsJson = JsonSupport.Serialize(new[] { "oet" }),
+                Description = "Registered nurse and clinical nursing candidates.",
+                SortOrder = 1,
+                IsActive = true
+            },
+            new SignupProfessionCatalog
+            {
+                Id = "medicine",
+                Label = "Medicine",
+                CountryTargetsJson = JsonSupport.Serialize(new[] { "United Kingdom", "Australia" }),
+                ExamTypeIdsJson = JsonSupport.Serialize(new[] { "oet" }),
+                Description = "Doctors and physicians preparing for healthcare pathways.",
+                SortOrder = 2,
+                IsActive = true
+            },
+            new SignupProfessionCatalog
+            {
+                Id = "pharmacy",
+                Label = "Pharmacy",
+                CountryTargetsJson = JsonSupport.Serialize(new[] { "Ireland", "Australia" }),
+                ExamTypeIdsJson = JsonSupport.Serialize(new[] { "oet" }),
+                Description = "Pharmacists and pharmacy practice candidates.",
+                SortOrder = 3,
+                IsActive = true
+            },
+            new SignupProfessionCatalog
+            {
+                Id = "dentistry",
+                Label = "Dentistry",
+                CountryTargetsJson = JsonSupport.Serialize(new[] { "United Kingdom", "New Zealand" }),
+                ExamTypeIdsJson = JsonSupport.Serialize(new[] { "oet" }),
+                Description = "Dental professionals and dentistry applicants.",
+                SortOrder = 4,
+                IsActive = true
+            },
+            new SignupProfessionCatalog
+            {
+                Id = "academic-english",
+                Label = "Academic / General English",
+                CountryTargetsJson = JsonSupport.Serialize(new[] { "Canada", "United Kingdom", "Australia" }),
+                ExamTypeIdsJson = JsonSupport.Serialize(new[] { "ielts" }),
+                Description = "General academic and migration IELTS candidates.",
+                SortOrder = 5,
+                IsActive = true
+            });
+
+        db.SignupSessionCatalog.AddRange(
+            new SignupSessionCatalog
+            {
+                Id = "session-oet-nursing-apr",
+                Name = "OET Nursing April Cohort",
+                ExamTypeId = "oet",
+                ProfessionIdsJson = JsonSupport.Serialize(new[] { "nursing" }),
+                PriceLabel = "$299",
+                StartDate = "2026-04-06",
+                EndDate = "2026-06-28",
+                DeliveryMode = "online",
+                Capacity = 40,
+                SeatsRemaining = 11,
+                SortOrder = 1,
+                IsActive = true
+            },
+            new SignupSessionCatalog
+            {
+                Id = "session-oet-medicine-may",
+                Name = "OET Medicine Intensive",
+                ExamTypeId = "oet",
+                ProfessionIdsJson = JsonSupport.Serialize(new[] { "medicine", "dentistry", "pharmacy" }),
+                PriceLabel = "$349",
+                StartDate = "2026-05-11",
+                EndDate = "2026-07-05",
+                DeliveryMode = "hybrid",
+                Capacity = 32,
+                SeatsRemaining = 9,
+                SortOrder = 2,
+                IsActive = true
+            },
+            new SignupSessionCatalog
+            {
+                Id = "session-ielts-foundation-apr",
+                Name = "IELTS Foundation Sprint",
+                ExamTypeId = "ielts",
+                ProfessionIdsJson = JsonSupport.Serialize(new[] { "academic-english" }),
+                PriceLabel = "$199",
+                StartDate = "2026-04-20",
+                EndDate = "2026-06-01",
+                DeliveryMode = "online",
+                Capacity = 60,
+                SeatsRemaining = 21,
+                SortOrder = 3,
+                IsActive = true
+            },
+            new SignupSessionCatalog
+            {
+                Id = "session-ielts-weekend-may",
+                Name = "IELTS Weekend Cohort",
+                ExamTypeId = "ielts",
+                ProfessionIdsJson = JsonSupport.Serialize(new[] { "academic-english" }),
+                PriceLabel = "$239",
+                StartDate = "2026-05-23",
+                EndDate = "2026-07-19",
+                DeliveryMode = "online",
+                Capacity = 45,
+                SeatsRemaining = 0,
+                SortOrder = 4,
+                IsActive = true
+            });
+    }
+
+    private static string ResolveStoragePath(IWebHostEnvironment environment, StorageOptions options, string storageKey)
+    {
+        var rootPath = Path.GetFullPath(
+            Path.IsPathRooted(options.LocalRootPath)
+                ? options.LocalRootPath
+                : Path.Combine(environment.ContentRootPath, options.LocalRootPath));
+
+        var normalizedKey = storageKey
+            .Replace('\\', Path.DirectorySeparatorChar)
+            .Replace('/', Path.DirectorySeparatorChar)
+            .TrimStart(Path.DirectorySeparatorChar);
+
+        return Path.Combine(rootPath, normalizedKey);
+    }
+
+    private static byte[] BuildDemoWaveFile()
+    {
+        const int sampleRate = 16_000;
+        const short channels = 1;
+        const short bitsPerSample = 16;
+        const double durationSeconds = 1.2;
+        const double frequencyHz = 440;
+        const double amplitude = 0.2;
+
+        var sampleCount = (int)(sampleRate * durationSeconds);
+        var blockAlign = (short)(channels * (bitsPerSample / 8));
+        var byteRate = sampleRate * blockAlign;
+        var dataLength = sampleCount * blockAlign;
+
+        using var stream = new MemoryStream(44 + dataLength);
+        using var writer = new BinaryWriter(stream);
+
+        writer.Write("RIFF"u8.ToArray());
+        writer.Write(36 + dataLength);
+        writer.Write("WAVE"u8.ToArray());
+        writer.Write("fmt "u8.ToArray());
+        writer.Write(16);
+        writer.Write((short)1);
+        writer.Write(channels);
+        writer.Write(sampleRate);
+        writer.Write(byteRate);
+        writer.Write(blockAlign);
+        writer.Write(bitsPerSample);
+        writer.Write("data"u8.ToArray());
+        writer.Write(dataLength);
+
+        for (var index = 0; index < sampleCount; index++)
+        {
+            var sample = (short)(Math.Sin(2 * Math.PI * frequencyHz * index / sampleRate) * short.MaxValue * amplitude);
+            writer.Write(sample);
+        }
+
+        writer.Flush();
+        return stream.ToArray();
     }
 }

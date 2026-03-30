@@ -6,6 +6,8 @@ using OetLearner.Api.Domain;
 
 namespace OetLearner.Api.Services;
 
+public sealed record GeneratedDownloadFile(Stream Stream, string ContentType, string FileName);
+
 public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger, MediaStorageService mediaStorage, PlatformLinkService platformLinks)
 {
     public async Task<object> GetMeAsync(string userId, CancellationToken cancellationToken)
@@ -276,13 +278,45 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
         return SettingsDto(settings, goal);
     }
 
+    public async Task<object> GetSettingsSectionAsync(string userId, string section, CancellationToken cancellationToken)
+    {
+        var user = await EnsureUserAsync(userId, cancellationToken);
+        var settings = await db.Settings.FirstAsync(x => x.UserId == userId, cancellationToken);
+        var goal = await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken);
+        var profileValues = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.ProfileJson, new Dictionary<string, object?>());
+        profileValues["displayName"] = user.DisplayName;
+        profileValues["email"] = user.Email;
+        profileValues["professionId"] = goal.ProfessionId ?? user.ActiveProfessionId;
+
+        var studyValues = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.StudyJson, new Dictionary<string, object?>());
+        studyValues["targetExamDate"] = goal.TargetExamDate;
+        studyValues["studyHoursPerWeek"] = goal.StudyHoursPerWeek;
+        studyValues["targetCountry"] = goal.TargetCountry;
+        studyValues["professionId"] = goal.ProfessionId ?? user.ActiveProfessionId;
+
+        return section.ToLowerInvariant() switch
+        {
+            "profile" => new { section = "profile", values = profileValues },
+            "notifications" => new { section = "notifications", values = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.NotificationsJson, new Dictionary<string, object?>()) },
+            "privacy" => new { section = "privacy", values = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.PrivacyJson, new Dictionary<string, object?>()) },
+            "accessibility" => new { section = "accessibility", values = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.AccessibilityJson, new Dictionary<string, object?>()) },
+            "audio" => new { section = "audio", values = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.AudioJson, new Dictionary<string, object?>()) },
+            "study" => new { section = "study", values = studyValues },
+            "goals" => new { section = "goals", values = GoalSettingsDto(await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken)) },
+            _ => throw ApiException.Validation(
+                "unknown_settings_section",
+                $"Unknown settings section '{section}'.",
+                [new ApiFieldError("section", "unknown_section", "Choose a supported settings section.")])
+        };
+    }
+
     public async Task<object> PatchSettingsSectionAsync(string userId, string section, PatchSectionRequest request, CancellationToken cancellationToken)
     {
-        await EnsureUserAsync(userId, cancellationToken);
+        var user = await EnsureUserAsync(userId, cancellationToken);
         var settings = await db.Settings.FirstAsync(x => x.UserId == userId, cancellationToken);
+        var goal = await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken);
         if (section.Equals("goals", StringComparison.OrdinalIgnoreCase))
         {
-            var goal = await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken);
             ApplyGoalSettingsPatch(goal, request.Values);
             goal.UpdatedAt = DateTimeOffset.UtcNow;
             await RecordEventAsync(userId, "settings_changed", new { userId, section = "goals" }, cancellationToken);
@@ -291,14 +325,104 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
             return new { section = "goals", values = GoalSettingsDto(goal) };
         }
 
+        if (section.Equals("profile", StringComparison.OrdinalIgnoreCase))
+        {
+            var mergedProfile = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.ProfileJson, new Dictionary<string, object?>());
+            foreach (var (key, value) in request.Values)
+            {
+                mergedProfile[key] = value;
+            }
+
+            if (request.Values.TryGetValue("displayName", out var displayName))
+            {
+                user.DisplayName = ReadString(displayName) ?? user.DisplayName;
+            }
+
+            if (request.Values.TryGetValue("email", out var email))
+            {
+                user.Email = ReadString(email) ?? user.Email;
+            }
+
+            if (request.Values.TryGetValue("professionId", out var professionId))
+            {
+                var normalizedProfession = ReadString(professionId) ?? goal.ProfessionId ?? user.ActiveProfessionId;
+                if (!string.IsNullOrWhiteSpace(normalizedProfession))
+                {
+                    goal.ProfessionId = normalizedProfession;
+                    user.ActiveProfessionId = normalizedProfession;
+                    mergedProfile["professionId"] = normalizedProfession;
+                }
+            }
+
+            settings.ProfileJson = JsonSupport.Serialize(mergedProfile);
+            goal.UpdatedAt = DateTimeOffset.UtcNow;
+            await RecordEventAsync(userId, "settings_changed", new { userId, section = "profile" }, cancellationToken);
+            LogAudit(userId, "Updated", "Settings", "profile", "Updated learner profile settings");
+            await db.SaveChangesAsync(cancellationToken);
+            return new
+            {
+                section = "profile",
+                values = new Dictionary<string, object?>(mergedProfile)
+                {
+                    ["displayName"] = user.DisplayName,
+                    ["email"] = user.Email,
+                    ["professionId"] = goal.ProfessionId ?? user.ActiveProfessionId
+                }
+            };
+        }
+
+        if (section.Equals("study", StringComparison.OrdinalIgnoreCase))
+        {
+            var studyValues = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.StudyJson, new Dictionary<string, object?>());
+            foreach (var (key, value) in request.Values)
+            {
+                studyValues[key] = value;
+            }
+
+            if (request.Values.TryGetValue("targetExamDate", out var targetExamDate))
+            {
+                goal.TargetExamDate = ReadDateOnly(targetExamDate) ?? goal.TargetExamDate;
+            }
+
+            if (request.Values.TryGetValue("studyHoursPerWeek", out var studyHoursPerWeek))
+            {
+                goal.StudyHoursPerWeek = ReadInt(studyHoursPerWeek) ?? goal.StudyHoursPerWeek;
+            }
+
+            if (request.Values.TryGetValue("targetCountry", out var targetCountry))
+            {
+                goal.TargetCountry = ReadString(targetCountry) ?? goal.TargetCountry;
+            }
+
+            if (request.Values.TryGetValue("professionId", out var studyProfessionId))
+            {
+                var normalizedProfession = ReadString(studyProfessionId) ?? goal.ProfessionId ?? user.ActiveProfessionId;
+                if (!string.IsNullOrWhiteSpace(normalizedProfession))
+                {
+                    goal.ProfessionId = normalizedProfession;
+                    user.ActiveProfessionId = normalizedProfession;
+                    studyValues["professionId"] = normalizedProfession;
+                }
+            }
+
+            settings.StudyJson = JsonSupport.Serialize(studyValues);
+            goal.UpdatedAt = DateTimeOffset.UtcNow;
+            await RecordEventAsync(userId, "settings_changed", new { userId, section = "study" }, cancellationToken);
+            LogAudit(userId, "Updated", "Settings", "study", "Updated study settings");
+            await db.SaveChangesAsync(cancellationToken);
+            studyValues["targetExamDate"] = goal.TargetExamDate;
+            studyValues["studyHoursPerWeek"] = goal.StudyHoursPerWeek;
+            studyValues["targetCountry"] = goal.TargetCountry;
+            studyValues["professionId"] = goal.ProfessionId ?? user.ActiveProfessionId;
+            return new { section = "study", values = studyValues };
+        }
+
         var merged = section.ToLowerInvariant() switch
         {
-            "profile" => settings.ProfileJson = MergeJsonSection(settings.ProfileJson, request.Values),
             "notifications" => settings.NotificationsJson = MergeJsonSection(settings.NotificationsJson, request.Values),
             "privacy" => settings.PrivacyJson = MergeJsonSection(settings.PrivacyJson, request.Values),
             "accessibility" => settings.AccessibilityJson = MergeJsonSection(settings.AccessibilityJson, request.Values),
             "audio" => settings.AudioJson = MergeJsonSection(settings.AudioJson, request.Values),
-            "study" => settings.StudyJson = MergeJsonSection(settings.StudyJson, request.Values),
             _ => throw ApiException.Validation(
                 "unknown_settings_section",
                 $"Unknown settings section '{section}'.",
@@ -753,7 +877,12 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
                 averageTurnaroundHours,
                 creditsConsumed = reviews.Count(x => string.Equals(x.PaymentSource, "credits", StringComparison.OrdinalIgnoreCase))
             },
-            totals = new { completedAttempts = submissions.Count, completedEvaluations = evaluations.Count }
+            totals = new { completedAttempts = submissions.Count, completedEvaluations = evaluations.Count },
+            freshness = new
+            {
+                generatedAt = DateTimeOffset.UtcNow,
+                usesFallbackSeries = evaluations.Count == 0
+            }
         };
     }
 
@@ -784,9 +913,9 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
                 canRequestReview,
                 actions = new
                 {
-                    reopenFeedbackRoute = eval?.Id is null ? null : AttemptFeedbackRoute(attempt.SubtestCode, eval.Id),
-                    compareRoute = $"/app/history?compare={attempt.Id}",
-                    requestReviewRoute = canRequestReview ? $"/app/reviews?attemptId={attempt.Id}" : null
+                    reopenFeedbackRoute = $"/app/submissions/{attempt.Id}",
+                    compareRoute = $"/app/submissions/compare?leftId={attempt.Id}",
+                    requestReviewRoute = canRequestReview ? $"/app/submissions/{attempt.Id}?requestReview=1" : null
                 }
             });
         }
@@ -800,10 +929,29 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
         var attempts = await db.Attempts
             .Where(x => x.UserId == userId)
             .OrderByDescending(x => x.SubmittedAt)
-            .Take(2)
             .ToListAsync(cancellationToken);
         var left = leftId is not null ? await GetAttemptOwnedByUserAsync(userId, leftId, cancellationToken) : attempts.ElementAtOrDefault(0);
-        var right = rightId is not null ? await GetAttemptOwnedByUserAsync(userId, rightId, cancellationToken) : attempts.ElementAtOrDefault(1);
+        Attempt? right = null;
+        if (rightId is not null)
+        {
+            right = await GetAttemptOwnedByUserAsync(userId, rightId, cancellationToken);
+        }
+        else if (left is not null)
+        {
+            right = attempts
+                .Where(candidate => candidate.Id != left.Id)
+                .Where(candidate =>
+                    (!string.IsNullOrWhiteSpace(left.ComparisonGroupId) && string.Equals(candidate.ComparisonGroupId, left.ComparisonGroupId, StringComparison.Ordinal))
+                    || (candidate.SubtestCode == left.SubtestCode && candidate.ContentId == left.ContentId)
+                    || (!string.IsNullOrWhiteSpace(left.ParentAttemptId) && candidate.Id == left.ParentAttemptId)
+                    || (!string.IsNullOrWhiteSpace(candidate.ParentAttemptId) && candidate.ParentAttemptId == left.Id))
+                .OrderByDescending(candidate => candidate.SubmittedAt ?? candidate.StartedAt)
+                .FirstOrDefault();
+        }
+        else
+        {
+            right = attempts.Skip(1).FirstOrDefault();
+        }
 
         if (left is null || right is null)
         {
@@ -1527,8 +1675,26 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
             summary = await GetSpeakingEvaluationSummaryAsync(userId, evaluationId, cancellationToken),
             transcript = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(attempt.TranscriptJson, []),
             analysis = JsonSupport.Deserialize<Dictionary<string, object?>>(attempt.AnalysisJson, new Dictionary<string, object?>()),
-            feedbackItems = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(evaluation.FeedbackItemsJson, [])
+            feedbackItems = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(evaluation.FeedbackItemsJson, []),
+            audioAvailable = !string.IsNullOrWhiteSpace(attempt.AudioObjectKey),
+            audioUrl = string.IsNullOrWhiteSpace(attempt.AudioObjectKey)
+                ? null
+                : platformLinks.BuildApiUrl($"/v1/speaking/evaluations/{Uri.EscapeDataString(evaluationId)}/audio")
         };
+    }
+
+    public async Task<StoredMediaFile> GetSpeakingEvaluationAudioAsync(string userId, string evaluationId, CancellationToken cancellationToken)
+    {
+        var evaluation = await GetEvaluationOwnedByUserAsync(userId, evaluationId, cancellationToken);
+        var attempt = await db.Attempts.FirstAsync(x => x.Id == evaluation.AttemptId, cancellationToken);
+        if (string.IsNullOrWhiteSpace(attempt.AudioObjectKey))
+        {
+            throw ApiException.NotFound("audio_not_found", "No uploaded audio is available for this speaking evaluation.");
+        }
+
+        var metadata = JsonSupport.Deserialize(attempt.AudioMetadataJson, new Dictionary<string, object?>());
+        var contentType = metadata.TryGetValue("contentType", out var value) ? value?.ToString() : null;
+        return mediaStorage.OpenRead(attempt.AudioObjectKey, contentType);
     }
 
     public object SaveDeviceCheck(DeviceCheckRequest request) => new
@@ -1588,17 +1754,17 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
             intro = "Listening practice emphasises accurate capture of numbers, frequencies, and changes in plan.",
             partCollections = new[]
             {
-                new { id = "listening-practice", title = "Practice sets", route = "/app/listening/task/lt-001" }
+                new { id = "listening-practice", title = "Practice sets", route = "/app/listening/player/lt-001" }
             },
             transcriptBackedReview = new
             {
                 title = "Transcript-backed review",
-                route = "/app/listening/task/lt-001",
+                route = "/app/listening/review/lt-001",
                 availableAfterAttempt = true
             },
             distractorDrills = new[]
             {
-                new { id = "listening-distractor-1", title = "Frequency distractor drill", route = "/app/listening/task/lt-001" }
+                new { id = "listening-drill-distractor_confusion", title = "Frequency distractor drill", route = "/app/listening/drills/listening-drill-distractor_confusion" }
             },
             mockSets = new[]
             {
@@ -1618,6 +1784,7 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
     public async Task<object> UpdateListeningAnswersAsync(string userId, string attemptId, AnswersUpdateRequest request, CancellationToken cancellationToken) => await UpdateAnswersAsync(userId, attemptId, request, cancellationToken);
     public async Task<object> SubmitListeningAttemptAsync(string userId, string attemptId, CancellationToken cancellationToken) => await SubmitObjectiveAttemptAsync(userId, attemptId, "listening", cancellationToken);
     public async Task<object> GetListeningEvaluationAsync(string userId, string evaluationId, CancellationToken cancellationToken) => await GetObjectiveEvaluationAsync(userId, evaluationId, cancellationToken);
+    public Task<object> GetListeningDrillAsync(string drillId, CancellationToken cancellationToken) => Task.FromResult(BuildListeningDrill(drillId));
 
     public async Task<object> GetMocksAsync(string userId, CancellationToken cancellationToken)
     {
@@ -1631,11 +1798,15 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
             {
                 fullMocks = new[]
                 {
-                    new { id = "full-exam", title = "Full OET Mock", mode = "exam", route = "/app/mocks" }
+                    new { id = "full-practice", title = "Full OET Mock", mode = "practice", route = "/app/mocks/setup?type=full&mode=practice" },
+                    new { id = "full-exam", title = "Full OET Mock", mode = "exam", route = "/app/mocks/setup?type=full&mode=exam" }
                 },
                 subTestMocks = new[]
                 {
-                    new { id = "writing-only", title = "Writing-only Mock", subtest = "writing", route = "/app/mocks" }
+                    new { id = "reading-only", title = "Reading-only Mock", subtest = "reading", route = "/app/mocks/setup?type=sub&subtest=reading" },
+                    new { id = "listening-only", title = "Listening-only Mock", subtest = "listening", route = "/app/mocks/setup?type=sub&subtest=listening" },
+                    new { id = "writing-only", title = "Writing-only Mock", subtest = "writing", route = "/app/mocks/setup?type=sub&subtest=writing" },
+                    new { id = "speaking-only", title = "Speaking-only Mock", subtest = "speaking", route = "/app/mocks/setup?type=sub&subtest=speaking" }
                 }
             },
             purchasedMockReviews = new
@@ -1660,9 +1831,9 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
     {
         options = new object[]
         {
-            new { id = "full-practice", title = "Full OET Mock", type = "full", subType = (string?)null, mode = "practice", includeReview = false, strictTimer = false },
-            new { id = "full-exam", title = "Full OET Mock", type = "full", subType = (string?)null, mode = "exam", includeReview = false, strictTimer = true },
-            new { id = "writing-only", title = "Writing-only Mock", type = "sub", subType = "writing", mode = "exam", includeReview = true, strictTimer = true }
+            new { id = "full-practice", title = "Full OET Mock", type = "full", subType = (string?)null, mode = "practice", includeReview = false, strictTimer = false, reviewSelection = "none" },
+            new { id = "full-exam", title = "Full OET Mock", type = "full", subType = (string?)null, mode = "exam", includeReview = false, strictTimer = true, reviewSelection = "none" },
+            new { id = "writing-only", title = "Writing-only Mock", type = "sub", subType = "writing", mode = "exam", includeReview = true, strictTimer = true, reviewSelection = "current_subtest" }
         }
     };
 
@@ -1670,24 +1841,56 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
     {
         await EnsureUserAsync(userId, cancellationToken);
         var id = $"mock-attempt-{Guid.NewGuid():N}";
+        var reviewSelection = NormalizeMockReviewSelection(request.MockType, request.SubType, request.IncludeReview, request.ReviewSelection);
+        var config = new
+        {
+            mockType = request.MockType,
+            subType = request.SubType,
+            mode = request.Mode,
+            profession = request.Profession,
+            includeReview = request.IncludeReview,
+            strictTimer = request.StrictTimer,
+            reviewSelection
+        };
         var attempt = new MockAttempt
         {
             Id = id,
             UserId = userId,
-            ConfigJson = JsonSupport.Serialize(request),
+            ConfigJson = JsonSupport.Serialize(config),
             State = AttemptState.InProgress,
             StartedAt = DateTimeOffset.UtcNow
         };
         db.MockAttempts.Add(attempt);
-        await RecordEventAsync(userId, "mock_started", new { mockAttemptId = attempt.Id, type = request.MockType, subType = request.SubType, mode = request.Mode }, cancellationToken);
+        await RecordEventAsync(userId, "mock_started", new { mockAttemptId = attempt.Id, type = request.MockType, subType = request.SubType, mode = request.Mode, reviewSelection }, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
-        return new { mockAttemptId = attempt.Id, state = ToApiState(attempt.State), config = request };
+        return new
+        {
+            mockAttemptId = attempt.Id,
+            state = ToApiState(attempt.State),
+            config,
+            sectionStates = MockAttemptSections(attempt.Id, config),
+            resumeRoute = $"/app/mocks/player/{attempt.Id}",
+            reportRoute = (string?)null
+        };
     }
 
     public async Task<object> GetMockAttemptAsync(string userId, string mockAttemptId, CancellationToken cancellationToken)
     {
         var attempt = await GetMockAttemptOwnedByUserAsync(userId, mockAttemptId, cancellationToken);
-        return new { mockAttemptId = attempt.Id, state = ToApiState(attempt.State), startedAt = attempt.StartedAt, submittedAt = attempt.SubmittedAt, completedAt = attempt.CompletedAt, config = JsonSupport.Deserialize<Dictionary<string, object?>>(attempt.ConfigJson, new Dictionary<string, object?>()), reportId = attempt.ReportId };
+        var config = JsonSupport.Deserialize<Dictionary<string, object?>>(attempt.ConfigJson, new Dictionary<string, object?>());
+        return new
+        {
+            mockAttemptId = attempt.Id,
+            state = ToApiState(attempt.State),
+            startedAt = attempt.StartedAt,
+            submittedAt = attempt.SubmittedAt,
+            completedAt = attempt.CompletedAt,
+            config,
+            sectionStates = MockAttemptSections(attempt.Id, config),
+            resumeRoute = $"/app/mocks/player/{attempt.Id}",
+            reportRoute = attempt.ReportId is null ? null : $"/app/mocks/report/{attempt.ReportId}",
+            reportId = attempt.ReportId
+        };
     }
 
     public async Task<object> SubmitMockAttemptAsync(string userId, string mockAttemptId, CancellationToken cancellationToken)
@@ -1877,7 +2080,66 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
             startedAt = subscription.StartedAt,
             changedAt = subscription.ChangedAt,
             price = new { amount = subscription.PriceAmount, currency = subscription.Currency, interval = subscription.Interval },
-            wallet = new { walletId = wallet.Id, creditBalance = wallet.CreditBalance, ledgerSummary = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(wallet.LedgerSummaryJson, []) }
+            wallet = new { walletId = wallet.Id, creditBalance = wallet.CreditBalance, ledgerSummary = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(wallet.LedgerSummaryJson, []) },
+            entitlements = new
+            {
+                productiveSkillReviewsEnabled = true,
+                supportedReviewSubtests = new[] { "writing", "speaking" },
+                invoiceDownloadsAvailable = true
+            }
+        };
+    }
+
+    public async Task<object> GetBillingPlansAsync(string userId, CancellationToken cancellationToken)
+    {
+        await EnsureUserAsync(userId, cancellationToken);
+        var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
+        var plans = BillingPlanCatalog();
+        var currentPlan = plans.FirstOrDefault(plan => string.Equals(plan.PlanId, subscription.PlanId, StringComparison.Ordinal)) ?? plans[0];
+        return new
+        {
+            currentPlanId = subscription.PlanId,
+            items = plans.Select(plan => new
+            {
+                planId = plan.PlanId,
+                label = plan.Label,
+                tier = plan.Tier,
+                description = plan.Description,
+                price = new { amount = plan.Amount, currency = subscription.Currency, interval = subscription.Interval },
+                reviewCredits = plan.ReviewCredits,
+                mockReportsIncluded = true,
+                canChangeTo = !string.Equals(plan.PlanId, subscription.PlanId, StringComparison.Ordinal),
+                changeDirection = string.Equals(plan.PlanId, subscription.PlanId, StringComparison.Ordinal) ? "current" : ComparePlanTier(plan.Tier, currentPlan.Tier),
+                badge = plan.Badge
+            })
+        };
+    }
+
+    public async Task<object> GetBillingChangePreviewAsync(string userId, string targetPlanId, CancellationToken cancellationToken)
+    {
+        await EnsureUserAsync(userId, cancellationToken);
+        var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
+        var currentPlan = BillingPlanCatalog().FirstOrDefault(plan => string.Equals(plan.PlanId, subscription.PlanId, StringComparison.Ordinal)) ?? BillingPlanCatalog()[0];
+        var targetPlan = BillingPlanCatalog().FirstOrDefault(plan => string.Equals(plan.PlanId, targetPlanId, StringComparison.Ordinal))
+            ?? throw ApiException.Validation(
+                "unknown_plan",
+                $"Unknown billing plan '{targetPlanId}'.",
+                [new ApiFieldError("targetPlanId", "unknown", "Choose a supported billing plan.")]);
+
+        var delta = targetPlan.Amount - currentPlan.Amount;
+        var direction = delta >= 0 ? "upgrade" : "downgrade";
+        return new
+        {
+            currentPlanId = currentPlan.PlanId,
+            targetPlanId = targetPlan.PlanId,
+            direction,
+            proratedAmount = Math.Round(Math.Abs(delta) / 2m, 2),
+            effectiveAt = subscription.NextRenewalAt,
+            summary = direction == "upgrade"
+                ? $"Switching to {targetPlan.Label} increases your monthly plan by {Math.Abs(delta):0.00} {subscription.Currency}."
+                : $"Switching to {targetPlan.Label} lowers your monthly plan by {Math.Abs(delta):0.00} {subscription.Currency}.",
+            currentCreditsIncluded = currentPlan.ReviewCredits,
+            targetCreditsIncluded = targetPlan.ReviewCredits
         };
     }
 
@@ -1887,9 +2149,37 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
         var invoices = await db.Invoices.Where(x => x.UserId == userId).OrderByDescending(x => x.IssuedAt).ToListAsync(cancellationToken);
         return new
         {
-            items = invoices.Select(x => new { invoiceId = x.Id, date = x.IssuedAt, amount = x.Amount, currency = x.Currency, status = x.Status, description = x.Description }),
+            items = invoices.Select(x => new
+            {
+                invoiceId = x.Id,
+                date = x.IssuedAt,
+                amount = x.Amount,
+                currency = x.Currency,
+                status = x.Status,
+                description = x.Description,
+                downloadUrl = platformLinks.BuildApiUrl($"/v1/billing/invoices/{Uri.EscapeDataString(x.Id)}/download")
+            }),
             nextCursor = (string?)null
         };
+    }
+
+    public async Task<GeneratedDownloadFile> GetInvoiceDownloadAsync(string userId, string invoiceId, CancellationToken cancellationToken)
+    {
+        await EnsureUserAsync(userId, cancellationToken);
+        var invoice = await db.Invoices.FirstOrDefaultAsync(x => x.UserId == userId && x.Id == invoiceId, cancellationToken)
+            ?? throw ApiException.NotFound("invoice_not_found", "Invoice not found.");
+
+        var content = string.Join(Environment.NewLine, new[]
+        {
+            "OET Prep Invoice",
+            $"Invoice ID: {invoice.Id}",
+            $"Issued At: {invoice.IssuedAt:yyyy-MM-dd HH:mm:ss zzz}",
+            $"Status: {invoice.Status}",
+            $"Amount: {invoice.Amount:0.00} {invoice.Currency}",
+            $"Description: {invoice.Description}"
+        });
+        var bytes = System.Text.Encoding.UTF8.GetBytes(content);
+        return new GeneratedDownloadFile(new MemoryStream(bytes), "text/plain", $"{invoice.Id}.txt");
     }
 
     public object GetReviewOptions() => new
@@ -1922,7 +2212,8 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
             }
         }
 
-        if (!string.Equals(request.ProductType, "review_credits", StringComparison.OrdinalIgnoreCase))
+        var normalizedProductType = (request.ProductType ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalizedProductType is not ("review_credits" or "plan_upgrade" or "plan_downgrade"))
         {
             throw ApiException.Validation(
                 "unsupported_checkout_product",
@@ -1938,16 +2229,25 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
                 [new ApiFieldError("quantity", "invalid", "Choose a checkout quantity greater than zero.")]);
         }
 
+        if (normalizedProductType is "plan_upgrade" or "plan_downgrade" && string.IsNullOrWhiteSpace(request.PriceId))
+        {
+            throw ApiException.Validation(
+                "target_plan_required",
+                "A target plan id is required for plan changes.",
+                [new ApiFieldError("priceId", "required", "Choose the plan you want to switch to.")]);
+        }
+
         var checkoutSessionId = $"checkout-{Guid.NewGuid():N}";
         object response = new
         {
             checkoutSessionId,
-            productType = request.ProductType,
+            productType = normalizedProductType,
             quantity = request.Quantity,
-            checkoutUrl = platformLinks.BuildCheckoutUrl(checkoutSessionId, request.ProductType, request.Quantity),
+            targetPlanId = request.PriceId,
+            checkoutUrl = platformLinks.BuildCheckoutUrl(checkoutSessionId, normalizedProductType, request.Quantity),
             state = "created"
         };
-        await RecordEventAsync(userId, "subscription_changed", new { productType = request.ProductType, quantity = request.Quantity }, cancellationToken);
+        await RecordEventAsync(userId, "subscription_changed", new { productType = normalizedProductType, quantity = request.Quantity, targetPlanId = request.PriceId }, cancellationToken);
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
             await SaveIdempotentResponseAsync("checkout-session", request.IdempotencyKey, response, cancellationToken);
@@ -2671,6 +2971,188 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
         _ => code
     };
 
+    private sealed record BillingPlanDefinition(
+        string PlanId,
+        string Label,
+        string Tier,
+        string Description,
+        decimal Amount,
+        int ReviewCredits,
+        string Badge);
+
+    private static IReadOnlyList<BillingPlanDefinition> BillingPlanCatalog() =>
+    [
+        new(
+            "starter-monthly",
+            "Starter Monthly",
+            "starter",
+            "Core OET practice with AI evaluation and learner analytics.",
+            0m,
+            0,
+            "Current default"),
+        new(
+            "premium-monthly",
+            "Premium Monthly",
+            "premium",
+            "Adds productive-skill review capacity and richer mock support for active preparation.",
+            49.99m,
+            3,
+            "Most popular"),
+        new(
+            "intensive-monthly",
+            "Intensive Monthly",
+            "intensive",
+            "Higher review capacity for repeated writing and speaking feedback before the exam window.",
+            79.99m,
+            6,
+            "Fast-track")
+    ];
+
+    private static int BillingPlanTierRank(string tier) => tier.ToLowerInvariant() switch
+    {
+        "starter" => 0,
+        "premium" => 1,
+        "intensive" => 2,
+        _ => 0
+    };
+
+    private static string ComparePlanTier(string targetTier, string currentTier)
+    {
+        var delta = BillingPlanTierRank(targetTier) - BillingPlanTierRank(currentTier);
+        return delta switch
+        {
+            > 0 => "upgrade",
+            < 0 => "downgrade",
+            _ => "current"
+        };
+    }
+
+    private static string NormalizeMockReviewSelection(string mockType, string? subType, bool includeReview, string? reviewSelection)
+    {
+        var normalizedMockType = (mockType ?? string.Empty).Trim().ToLowerInvariant();
+        var normalizedSubType = (subType ?? string.Empty).Trim().ToLowerInvariant();
+        var requestedSelection = (reviewSelection ?? string.Empty).Trim().ToLowerInvariant();
+
+        if (normalizedMockType == "full")
+        {
+            var allowed = new HashSet<string>(StringComparer.Ordinal)
+            {
+                "none",
+                "writing",
+                "speaking",
+                "writing_and_speaking"
+            };
+
+            if (allowed.Contains(requestedSelection))
+            {
+                return requestedSelection;
+            }
+
+            return includeReview ? "writing_and_speaking" : "none";
+        }
+
+        var productiveSubtest = normalizedSubType is "writing" or "speaking";
+        if (!productiveSubtest)
+        {
+            return "none";
+        }
+
+        return requestedSelection == "current_subtest"
+            ? "current_subtest"
+            : includeReview ? "current_subtest" : "none";
+    }
+
+    private static object[] MockAttemptSections(string attemptId, object configSource)
+    {
+        var config = JsonSupport.Deserialize<Dictionary<string, object?>>(JsonSupport.Serialize(configSource), new Dictionary<string, object?>());
+        var mockType = ReadString(config.GetValueOrDefault("mockType")) ?? "full";
+        var subType = ReadString(config.GetValueOrDefault("subType"));
+        var reviewSelection = ReadString(config.GetValueOrDefault("reviewSelection")) ?? "none";
+
+        IEnumerable<string> subtests = string.Equals(mockType, "full", StringComparison.OrdinalIgnoreCase)
+            ? ["reading", "listening", "writing", "speaking"]
+            : string.IsNullOrWhiteSpace(subType) ? ["reading"] : [subType];
+
+        return subtests.Select(subtest => new
+        {
+            id = subtest,
+            title = $"{ToDisplaySubtest(subtest)} section",
+            state = "ready",
+            reviewAvailable = subtest is "writing" or "speaking",
+            reviewSelected = reviewSelection == "writing_and_speaking"
+                || (reviewSelection == "writing" && subtest == "writing")
+                || (reviewSelection == "speaking" && subtest == "speaking")
+                || (reviewSelection == "current_subtest" && string.Equals(subtest, subType, StringComparison.OrdinalIgnoreCase)),
+            launchRoute = $"/app/mocks/player/{attemptId}?section={Uri.EscapeDataString(subtest)}"
+        }).ToArray<object>();
+    }
+
+    private static object BuildListeningDrill(string drillId)
+    {
+        var normalizedId = (drillId ?? string.Empty).Trim().ToLowerInvariant();
+        var detail = normalizedId switch
+        {
+            "listening-drill-distractor_confusion" => new
+            {
+                drillId = normalizedId,
+                title = "Distractor Control Drill",
+                focusLabel = "Speaker intent and change-of-plan control",
+                description = "Use short consultation clips to separate what was suggested first from what was finally agreed.",
+                errorType = "distractor_confusion",
+                estimatedMinutes = 12,
+                highlights = new[]
+                {
+                    "Track corrected instructions instead of the first option you hear.",
+                    "Notice when a clinician rules out a medication or follow-up plan.",
+                    "Review transcript evidence only after you commit to an answer."
+                }
+            },
+            "listening-drill-numbers_and_frequencies" => new
+            {
+                drillId = normalizedId,
+                title = "Numbers and Frequencies Drill",
+                focusLabel = "Medication, dosage, and appointment precision",
+                description = "Practise capturing exact numbers, timings, and dosage language in fast clinical audio.",
+                errorType = "numbers_and_frequencies",
+                estimatedMinutes = 10,
+                highlights = new[]
+                {
+                    "Distinguish similar-sounding numbers before replaying.",
+                    "Lock onto frequency phrases such as once daily and every second day.",
+                    "Use replay snippets to verify quantities, not whole conversations."
+                }
+            },
+            _ => new
+            {
+                drillId = string.IsNullOrWhiteSpace(normalizedId) ? "listening-drill-detail_capture" : normalizedId,
+                title = "Exact Detail Capture Drill",
+                focusLabel = "Referral detail and key-clue accuracy",
+                description = "Rebuild listening accuracy by isolating the exact clinical detail that changed the answer.",
+                errorType = "detail_capture",
+                estimatedMinutes = 11,
+                highlights = new[]
+                {
+                    "Identify which detail actually answers the question.",
+                    "Separate symptoms, plans, and history without blending them.",
+                    "Review the transcript clue that justified the correct answer."
+                }
+            }
+        };
+
+        return new
+        {
+            detail.drillId,
+            detail.title,
+            detail.focusLabel,
+            detail.description,
+            detail.errorType,
+            detail.estimatedMinutes,
+            detail.highlights,
+            launchRoute = $"/app/listening/player/lt-001?drill={Uri.EscapeDataString(detail.drillId)}",
+            reviewRoute = $"/app/listening/review/lt-001?drill={Uri.EscapeDataString(detail.drillId)}"
+        };
+    }
+
     private static int DiagnosticSubtestOrder(string? code) => code?.ToLowerInvariant() switch
     {
         "writing" => 0,
@@ -2746,12 +3228,15 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
             .Select(cluster => JsonSupport.Deserialize<Dictionary<string, object?>>(JsonSupport.Serialize(cluster), new Dictionary<string, object?>()))
             .FirstOrDefault();
         var errorType = firstCluster?.GetValueOrDefault("errorType")?.ToString() ?? (subtest == "listening" ? "distractor_confusion" : "detail_capture");
+        var listeningDrillId = $"listening-drill-{errorType}";
         return new
         {
-            id = $"{subtest}-drill-{errorType}",
+            id = subtest == "listening" ? listeningDrillId : $"{subtest}-drill-{errorType}",
             title = subtest == "listening" ? "Listening distractor drill" : "Reading exact-detail drill",
             rationale = $"Focus next on {ObjectiveErrorTypeLabel(errorType).ToLowerInvariant()} to strengthen your {ToDisplaySubtest(subtest)} accuracy.",
-            route = subtest == "listening" ? "/app/listening/task/lt-001" : "/app/reading/task/rt-001"
+            route = subtest == "listening"
+                ? $"/app/listening/drills/{Uri.EscapeDataString(listeningDrillId)}"
+                : "/app/reading/task/rt-001"
         };
     }
 

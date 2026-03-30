@@ -29,7 +29,15 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<MockReport> MockReports => Set<MockReport>();
     public DbSet<AnalyticsEventRecord> AnalyticsEvents => Set<AnalyticsEventRecord>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
-    public DbSet<AuthAccount> AuthAccounts => Set<AuthAccount>();
+    public DbSet<ApplicationUserAccount> ApplicationUserAccounts => Set<ApplicationUserAccount>();
+    public DbSet<RefreshTokenRecord> RefreshTokenRecords => Set<RefreshTokenRecord>();
+    public DbSet<EmailOtpChallenge> EmailOtpChallenges => Set<EmailOtpChallenge>();
+    public DbSet<MfaRecoveryCode> MfaRecoveryCodes => Set<MfaRecoveryCode>();
+    public DbSet<ExternalIdentityLink> ExternalIdentityLinks => Set<ExternalIdentityLink>();
+    public DbSet<LearnerRegistrationProfile> LearnerRegistrationProfiles => Set<LearnerRegistrationProfile>();
+    public DbSet<SignupExamTypeCatalog> SignupExamTypeCatalog => Set<SignupExamTypeCatalog>();
+    public DbSet<SignupProfessionCatalog> SignupProfessionCatalog => Set<SignupProfessionCatalog>();
+    public DbSet<SignupSessionCatalog> SignupSessionCatalog => Set<SignupSessionCatalog>();
 
     // Expert Console entities
     public DbSet<ExpertUser> ExpertUsers => Set<ExpertUser>();
@@ -59,8 +67,17 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<Invoice>().HasIndex(x => new { x.UserId, x.IssuedAt });
         modelBuilder.Entity<AnalyticsEventRecord>().HasIndex(x => new { x.UserId, x.EventName, x.OccurredAt });
         modelBuilder.Entity<IdempotencyRecord>().HasIndex(x => new { x.Scope, x.Key }).IsUnique();
-        modelBuilder.Entity<AuthAccount>().HasIndex(x => x.Email).IsUnique();
-        modelBuilder.Entity<AuthAccount>().HasIndex(x => new { x.SubjectId, x.Role }).IsUnique();
+        modelBuilder.Entity<ApplicationUserAccount>().HasIndex(x => new { x.NormalizedEmail, x.Role });
+        modelBuilder.Entity<ApplicationUserAccount>().HasIndex(x => x.DeletedAt);
+        modelBuilder.Entity<RefreshTokenRecord>().HasIndex(x => new { x.ApplicationUserAccountId, x.ExpiresAt });
+        modelBuilder.Entity<EmailOtpChallenge>().HasIndex(x => new { x.ApplicationUserAccountId, x.Purpose, x.ExpiresAt });
+        modelBuilder.Entity<MfaRecoveryCode>().HasIndex(x => x.ApplicationUserAccountId);
+        modelBuilder.Entity<ExternalIdentityLink>().HasIndex(x => new { x.ApplicationUserAccountId, x.Provider });
+        modelBuilder.Entity<LearnerRegistrationProfile>().HasIndex(x => x.ApplicationUserAccountId).IsUnique();
+        modelBuilder.Entity<LearnerRegistrationProfile>().HasIndex(x => x.LearnerUserId).IsUnique();
+        modelBuilder.Entity<SignupExamTypeCatalog>().HasIndex(x => new { x.IsActive, x.SortOrder });
+        modelBuilder.Entity<SignupProfessionCatalog>().HasIndex(x => new { x.IsActive, x.SortOrder });
+        modelBuilder.Entity<SignupSessionCatalog>().HasIndex(x => new { x.IsActive, x.SortOrder });
 
         // Learner lookup indexes (frequently queried by UserId)
         modelBuilder.Entity<LearnerGoal>().HasIndex(x => x.UserId);

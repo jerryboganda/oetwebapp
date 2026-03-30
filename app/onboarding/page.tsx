@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import { BookOpen, BarChart3, Target, ArrowRight, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { Button, Stepper } from '@/components/ui';
-import { AppShell } from '@/components/layout';
+import { LearnerDashboardShell } from '@/components/layout';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { completeOnboarding, fetchOnboardingState, startOnboarding } from '@/lib/api';
 
@@ -114,14 +114,14 @@ export default function OnboardingPage() {
 
   if (loading) {
     return (
-      <AppShell pageTitle="Getting Started" distractionFree>
+      <LearnerDashboardShell pageTitle="Getting Started" distractionFree>
         <div className="flex flex-1 items-center justify-center p-8 text-sm text-muted">Loading onboarding...</div>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
   return (
-    <AppShell pageTitle="Getting Started" distractionFree>
+    <LearnerDashboardShell pageTitle="Getting Started" distractionFree>
       <div className="flex-1 flex items-center justify-center p-4 md:p-8">
         <div className="w-full max-w-2xl space-y-8">
           {/* Stepper */}
@@ -181,6 +181,6 @@ export default function OnboardingPage() {
           </div>
         </div>
       </div>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }

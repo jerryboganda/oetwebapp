@@ -103,9 +103,17 @@ public record AdminFlagUpdateRequest(
 
 // ── Users ──
 
+public record AdminUserInviteRequest(
+    string Name,
+    string Email,
+    string Role,
+    string? ProfessionId);
+
 public record AdminUserStatusRequest(string Status, string? Reason);
 
 public record AdminUserCreditsRequest(int Amount, string? Reason);
+
+public record AdminUserLifecycleRequest(string? Reason);
 
 // ── Billing ──
 
@@ -117,3 +125,14 @@ public record AdminBillingPlanCreateRequest(
 // ── Review Ops ──
 
 public record AdminReviewAssignRequest(string ExpertId, string? Reason);
+
+public record AdminReviewCancelRequest(string Reason);
+
+public record AdminReviewReopenRequest(string? Reason);
+
+// ── Bulk Actions ──
+
+public record AdminBulkActionRequest(
+    string Action,
+    string[] ContentIds,
+    bool DryRun = false);

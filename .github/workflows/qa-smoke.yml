@@ -1,0 +1,69 @@
+name: QA Smoke
+
+on:
+  push:
+    branches:
+      - main
+      - master
+  pull_request:
+
+concurrency:
+  group: qa-smoke-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  qa-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Set up .NET SDK
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium firefox webkit
+
+      - name: Run backend tests
+        run: dotnet test backend/OetLearner.sln --configuration Release --no-logo
+
+      - name: Build local smoke stack
+        run: docker compose -f docker-compose.desktop.yml up -d --build
+
+      - name: Verify stack readiness
+        run: node ./scripts/qa/assert-local-stack.mjs
+
+      - name: Run Playwright smoke suite
+        run: npm run test:e2e:smoke
+
+      - name: Capture docker logs
+        if: always()
+        run: |
+          mkdir -p output/playwright
+          docker compose -f docker-compose.desktop.yml logs --no-color > output/playwright/docker-compose.log
+
+      - name: Upload Playwright artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-smoke-artifacts
+          path: |
+            output/playwright/
+          if-no-files-found: ignore
+
+      - name: Shut down smoke stack
+        if: always()
+        run: docker compose -f docker-compose.desktop.yml down -v

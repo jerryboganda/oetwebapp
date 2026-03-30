@@ -23,12 +23,13 @@ import {
   Send,
   Clock
 } from 'lucide-react';
-import { AppShell } from '@/components/layout/app-shell';
+import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchTrendData, fetchCompletionData, fetchSubmissionVolume } from '@/lib/api';
-import type { TrendPoint } from '@/lib/mock-data';
+import { fetchTrendData, fetchCompletionData, fetchSubmissionVolume, fetchProgressEvidenceSummary } from '@/lib/api';
+import type { ProgressEvidenceSummary, TrendPoint } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
 import { InlineAlert } from '@/components/ui/alert';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 
 type CompletionPoint = { day: string; completed: number };
 type VolumePoint = { week: string; submissions: number };
@@ -38,6 +39,7 @@ export default function ProgressDashboard() {
   const [trendData, setTrendData] = useState<TrendPoint[]>([]);
   const [completionData, setCompletionData] = useState<CompletionPoint[]>([]);
   const [volumeData, setVolumeData] = useState<VolumePoint[]>([]);
+  const [progressSummary, setProgressSummary] = useState<ProgressEvidenceSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -47,11 +49,13 @@ export default function ProgressDashboard() {
       fetchTrendData(),
       fetchCompletionData(),
       fetchSubmissionVolume(),
+      fetchProgressEvidenceSummary(),
     ]).then((results) => {
-      const [trendResult, completionResult, volumeResult] = results;
+      const [trendResult, completionResult, volumeResult, summaryResult] = results;
       if (trendResult.status === 'fulfilled') setTrendData(trendResult.value);
       if (completionResult.status === 'fulfilled') setCompletionData(completionResult.value as CompletionPoint[]);
       if (volumeResult.status === 'fulfilled') setVolumeData(volumeResult.value as VolumePoint[]);
+      if (summaryResult.status === 'fulfilled') setProgressSummary(summaryResult.value);
 
       const anyFailed = results.some(r => r.status === 'rejected');
       const allFailed = results.every(r => r.status === 'rejected');
@@ -65,13 +69,30 @@ export default function ProgressDashboard() {
     });
   }, []);
 
+  const completedLast7 = completionData.reduce((sum, point) => sum + point.completed, 0);
+  const averageTurnaroundLabel = progressSummary?.reviewUsage.averageTurnaroundHours
+    ? `${progressSummary.reviewUsage.averageTurnaroundHours}h avg`
+    : 'Pending';
+
   return (
-    <AppShell
+    <LearnerDashboardShell
       pageTitle="Progress Dashboard"
       subtitle="Track your performance and activity over time"
       backHref="/"
     >
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+      <div className="space-y-8">
+        <LearnerPageHero
+          eyebrow="Evidence Check"
+          icon={TrendingUp}
+          accent="primary"
+          title="See whether recent effort is turning into better evidence"
+          description="Use this page to connect score movement, completed work, and review throughput before you choose the next focus."
+          highlights={[
+            { icon: Activity, label: 'Trend coverage', value: trendData.length ? `${trendData.length} checkpoints` : 'Loading...' },
+            { icon: CheckCircle2, label: 'Completed work', value: completionData.length ? `${completedLast7} tasks` : 'Loading...' },
+            { icon: Clock, label: 'Review speed', value: averageTurnaroundLabel },
+          ]}
+        />
 
         {loading && (
           <div className="space-y-6">
@@ -93,6 +114,12 @@ export default function ProgressDashboard() {
               animate={{ opacity: 1, y: 0 }}
               className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm"
             >
+              <LearnerSurfaceSectionHeader
+                eyebrow="Sub-test Performance Trend"
+                title="See score movement across all skills"
+                description="This chart should make the learner’s cross-subtest trajectory easy to read before they drill into detail."
+                className="mb-6"
+              />
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
                   <TrendingUp className="w-5 h-5 text-blue-600" />
@@ -126,6 +153,12 @@ export default function ProgressDashboard() {
               transition={{ delay: 0.1 }}
               className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm"
             >
+              <LearnerSurfaceSectionHeader
+                eyebrow="Criterion Trend"
+                title="Filter deeper without losing the main story"
+                description="Writing and speaking criterion filters should feel like a detailed continuation of the learner’s progress narrative."
+                className="mb-6"
+              />
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center shrink-0">
@@ -178,6 +211,12 @@ export default function ProgressDashboard() {
                 transition={{ delay: 0.2 }}
                 className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm"
               >
+                <LearnerSurfaceSectionHeader
+                  eyebrow="Completion Trend"
+                  title="Keep task completion visible"
+                  description="Progress is not only score movement; it is also whether the learner is actually completing planned work."
+                  className="mb-6"
+                />
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
                     <CheckCircle2 className="w-5 h-5 text-green-600" />
@@ -213,6 +252,12 @@ export default function ProgressDashboard() {
                 transition={{ delay: 0.3 }}
                 className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm"
               >
+                <LearnerSurfaceSectionHeader
+                  eyebrow="Submission Volume"
+                  title="Make writing and speaking effort visible"
+                  description="Submission volume should reinforce how much evidence the learner has created, not sit as an isolated stat."
+                  className="mb-6"
+                />
                 <div className="flex items-center gap-3 mb-6">
                   <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
                     <Send className="w-5 h-5 text-amber-600" />
@@ -243,6 +288,13 @@ export default function ProgressDashboard() {
               transition={{ delay: 0.4 }}
               className="bg-navy rounded-[32px] p-6 sm:p-8 text-white shadow-lg relative overflow-hidden"
             >
+              <div className="mb-6 relative z-10">
+                <p className="text-xs font-black uppercase tracking-widest text-white/60 mb-2">Expert Review Turnaround</p>
+                <h2 className="text-xl font-black text-white">Keep human-feedback timing visible</h2>
+                <p className="text-sm text-white/70 mt-1">
+                  Expert review should feel like part of the same learner system, with clear operational expectations.
+                </p>
+              </div>
               <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
               <div className="relative z-10 flex items-center gap-3">
                 <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
@@ -256,61 +308,20 @@ export default function ProgressDashboard() {
               <div className="mt-6 bg-white/10 rounded-2xl p-5 border border-white/10 inline-block">
                 <h3 className="text-xs font-bold text-white/70 uppercase tracking-widest mb-1">Avg Turnaround</h3>
                 <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-black">24.5</span>
+                  <span className="text-4xl font-black">{progressSummary?.reviewUsage.averageTurnaroundHours ?? 'Pending'}</span>
                   <span className="text-sm font-bold text-white/70">hours</span>
                 </div>
               </div>
+              <p className="mt-4 text-xs text-white/60">
+                {progressSummary?.freshness.usesFallbackSeries
+                  ? 'Review timing is still based on limited data and will sharpen after more requests complete.'
+                  : `Updated ${new Date(progressSummary?.freshness.generatedAt ?? new Date().toISOString()).toLocaleString()}.`}
+              </p>
             </motion.section>
           </>
         )}
 
       </div>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }
-
-// --- Mock Data ---
-const subTestTrendData = [
-  { date: 'Week 1', reading: 65, listening: 60, writing: 50, speaking: 55 },
-  { date: 'Week 2', reading: 70, listening: 65, writing: 55, speaking: 60 },
-  { date: 'Week 3', reading: 75, listening: 70, writing: 55, speaking: 65 },
-  { date: 'Week 4', reading: 80, listening: 75, writing: 60, speaking: 70 },
-  { date: 'Week 5', reading: 85, listening: 80, writing: 65, speaking: 70 },
-];
-
-const criterionTrendData = [
-  { date: 'Week 1', conciseness: 40, grammar: 60, vocabulary: 55 },
-  { date: 'Week 2', conciseness: 45, grammar: 65, vocabulary: 60 },
-  { date: 'Week 3', conciseness: 45, grammar: 70, vocabulary: 65 },
-  { date: 'Week 4', conciseness: 55, grammar: 75, vocabulary: 70 },
-  { date: 'Week 5', conciseness: 60, grammar: 75, vocabulary: 75 },
-];
-
-const completionTrendData = [
-  { date: 'Mon', completed: 2 },
-  { date: 'Tue', completed: 5 },
-  { date: 'Wed', completed: 3 },
-  { date: 'Thu', completed: 6 },
-  { date: 'Fri', completed: 4 },
-  { date: 'Sat', completed: 8 },
-  { date: 'Sun', completed: 7 },
-];
-
-const submissionVolumeData = [
-  { week: 'Week 1', submissions: 3 },
-  { week: 'Week 2', submissions: 5 },
-  { week: 'Week 3', submissions: 4 },
-  { week: 'Week 4', submissions: 8 },
-  { week: 'Week 5', submissions: 6 },
-];
-
-const reviewData = {
-  hasReviews: true,
-  usage: [
-    { month: 'Aug', used: 1, available: 3 },
-    { month: 'Sep', used: 2, available: 2 },
-    { month: 'Oct', used: 3, available: 1 },
-  ],
-  avgTurnaroundHours: 24.5
-};
-

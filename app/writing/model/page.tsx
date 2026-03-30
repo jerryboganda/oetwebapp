@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { AppShell } from '@/components/layout/app-shell';
+import { LearnerDashboardShell } from '@/components/layout';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -34,19 +34,19 @@ export default function ModelAnswerExplainer() {
 
   if (loading) {
     return (
-      <AppShell pageTitle="Model Answer Explainer">
-        <div className="max-w-5xl mx-auto px-4 py-8 space-y-6">
+      <LearnerDashboardShell pageTitle="Model Answer Explainer">
+        <div className="space-y-6">
           <Skeleton className="h-32 rounded-2xl" />
           {[1, 2, 3].map(i => <Skeleton key={i} className="h-48 rounded-2xl" />)}
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
-  if (!model) return <AppShell pageTitle="Not Found"><div className="p-10 text-center text-muted">Model answer not found.</div></AppShell>;
+  if (!model) return <LearnerDashboardShell pageTitle="Not Found"><div className="p-10 text-center text-muted">Model answer not found.</div></LearnerDashboardShell>;
 
   return (
-    <AppShell pageTitle="Model Answer Explainer">
+    <LearnerDashboardShell pageTitle="Model Answer Explainer">
       {/* Sticky header */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-20 px-4 sm:px-6 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
@@ -63,7 +63,7 @@ export default function ModelAnswerExplainer() {
         </div>
       </header>
 
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <main className="py-8">
         {/* Intro Banner */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-gradient-to-br from-navy to-primary/80 rounded-2xl p-6 sm:p-8 mb-8 text-white shadow-md">
           <h2 className="text-2xl font-bold mb-3">Why this is a strong response</h2>
@@ -129,6 +129,6 @@ export default function ModelAnswerExplainer() {
           ))}
         </div>
       </main>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { AppShell } from '@/components/layout';
+import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
@@ -16,7 +16,9 @@ import {
   Clock,
   ArrowRight,
   ShieldCheck,
+  Activity,
 } from 'lucide-react';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 
 const SUB_TESTS = [
   {
@@ -76,7 +78,9 @@ export default function DiagnosticIntroPage() {
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const subTests = useMemo(() => {
@@ -110,9 +114,8 @@ export default function DiagnosticIntroPage() {
   };
 
   return (
-    <AppShell pageTitle="Diagnostic Assessment">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-8">
-        {/* Trust notice */}
+    <LearnerDashboardShell pageTitle="Diagnostic Assessment">
+      <div className="space-y-8">
         <InlineAlert variant="info" className="border-primary/20 bg-primary/5">
           <div className="flex items-start gap-3">
             <ShieldCheck className="w-5 h-5 text-primary shrink-0 mt-0.5" />
@@ -126,71 +129,81 @@ export default function DiagnosticIntroPage() {
           </div>
         </InlineAlert>
 
-         {error && <InlineAlert variant="error">{error}</InlineAlert>}
+        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-         {/* Hero section */}
-         <div className="text-center space-y-3">
-          <h1 className="text-2xl sm:text-3xl font-bold text-navy">
-            Let&apos;s Find Your Starting Point
-          </h1>
-          <p className="text-sm text-muted max-w-lg mx-auto">
-            Complete a short diagnostic across all four OET sub-tests. The results will be used to
-            create a personalised study plan tailored to your strengths and weaknesses.
-          </p>
-          <div className="flex items-center justify-center gap-2 text-sm font-semibold text-navy">
-            <Clock className="w-4 h-4 text-primary" />
-            Estimated total time: {totalDuration}
+        <LearnerPageHero
+          eyebrow="Starting Point"
+          icon={Activity}
+          accent="primary"
+          title="Build your baseline before the study plan starts"
+          description="Use the diagnostic to map your current level across all four sub-tests before the app starts prioritising practice."
+          highlights={[
+            { icon: Clock, label: 'Estimated time', value: totalDuration },
+            { icon: Activity, label: 'Sub-tests', value: `${subTests.length} included` },
+            { icon: ShieldCheck, label: 'Result type', value: 'AI estimate only' },
+          ]}
+        />
+
+        <section>
+          <LearnerSurfaceSectionHeader
+            eyebrow="Diagnostic Scope"
+            title="See exactly what the diagnostic covers"
+            description="Each sub-test card explains the task type and timing before the learner begins."
+            className="mb-4"
+          />
+          <div className="grid gap-4 sm:grid-cols-2">
+            {subTests.map((sub) => {
+              const Icon = sub.icon;
+              return (
+                <Card key={sub.name} className="flex items-start gap-4">
+                  <div
+                    className={`w-12 h-12 rounded-xl ${sub.bg} ${sub.color} flex items-center justify-center shrink-0`}
+                  >
+                    <Icon className="w-6 h-6" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-bold text-navy">{sub.name}</p>
+                    <p className="text-xs text-muted mt-0.5">{sub.description}</p>
+                    <p className="text-xs font-semibold text-navy mt-1 flex items-center gap-1">
+                      <Clock className="w-3 h-3 text-muted" />
+                      {sub.duration}
+                    </p>
+                  </div>
+                </Card>
+              );
+            })}
           </div>
-        </div>
+        </section>
 
-        {/* Sub-test cards */}
-        <div className="grid gap-4 sm:grid-cols-2">
-          {subTests.map((sub) => {
-            const Icon = sub.icon;
-            return (
-              <Card key={sub.name} className="flex items-start gap-4">
-                <div
-                  className={`w-12 h-12 rounded-xl ${sub.bg} ${sub.color} flex items-center justify-center shrink-0`}
-                >
-                  <Icon className="w-6 h-6" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-bold text-navy">{sub.name}</p>
-                  <p className="text-xs text-muted mt-0.5">{sub.description}</p>
-                  <p className="text-xs font-semibold text-navy mt-1 flex items-center gap-1">
-                    <Clock className="w-3 h-3 text-muted" />
-                    {sub.duration}
-                  </p>
-                </div>
-              </Card>
-            );
-          })}
-        </div>
+        <section>
+          <LearnerSurfaceSectionHeader
+            eyebrow="Before You Begin"
+            title="Know the flow before you commit"
+            description="This page should answer what the diagnostic is, how it behaves, and what the learner gets afterward."
+            className="mb-4"
+          />
+          <Card className="bg-gray-50/50 border-gray-200">
+            <ul className="space-y-2 text-xs text-muted">
+              <li className="flex items-start gap-2">
+                <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-px">1</span>
+                You can complete sub-tests in <strong className="text-navy">any order</strong> and take breaks between them.
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-px">2</span>
+                Your progress is <strong className="text-navy">saved automatically</strong> so you can resume later.
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-px">3</span>
+                For the Speaking task, you&apos;ll need <strong className="text-navy">microphone access</strong> in a quiet environment.
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-px">4</span>
+                Results are generated by AI and will be ready when you complete all sections.
+              </li>
+            </ul>
+          </Card>
+        </section>
 
-        {/* Key info */}
-        <Card className="bg-gray-50/50 border-gray-200">
-          <h3 className="text-sm font-bold text-navy mb-3">Before You Begin</h3>
-          <ul className="space-y-2 text-xs text-muted">
-            <li className="flex items-start gap-2">
-              <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-px">1</span>
-              You can complete sub-tests in <strong className="text-navy">any order</strong> and take breaks between them.
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-px">2</span>
-              Your progress is <strong className="text-navy">saved automatically</strong> — you can resume later.
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-px">3</span>
-              For the Speaking task, you&apos;ll need <strong className="text-navy">microphone access</strong> in a quiet environment.
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-px">4</span>
-              Results are generated by AI and will be ready when you complete all sections.
-            </li>
-          </ul>
-        </Card>
-
-        {/* Start CTA */}
         <div className="sticky bottom-4 z-10 flex justify-center">
           <Button
             size="lg"
@@ -203,6 +216,6 @@ export default function DiagnosticIntroPage() {
           </Button>
         </div>
       </div>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }

@@ -1,203 +1,257 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { useDeferredValue, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent } from '@/components/ui/card';
+import { ChevronLeft, ChevronRight, FileText, History, Plus, Search } from 'lucide-react';
+import { AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
+import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
+import { EmptyState } from '@/components/ui/empty-error';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
+import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/form-controls';
-import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { EmptyState } from '@/components/ui/empty-error';
-import { Toast } from '@/components/ui/alert';
-import { Plus, Search, FileText, History } from 'lucide-react';
-import { mockContentLibrary, type AdminContentItem } from '@/lib/mock-admin-data';
-import { analytics } from '@/lib/analytics';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import { getAdminContentLibraryData } from '@/lib/admin';
+import type { AdminContentRow } from '@/lib/types/admin';
 
-export default function AdminContentLibrary() {
-  const { isAuthenticated, role } = useAdminAuth();
+type PageStatus = 'loading' | 'success' | 'empty' | 'error';
+const PAGE_SIZE = 25;
+
+export default function AdminContentLibraryPage() {
   const router = useRouter();
-  const [data, setData] = useState<AdminContentItem[]>([]);
-  const [pageStatus, setPageStatus] = useState<'loading' | 'success' | 'error' | 'empty'>('loading');
-  const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>({});
+  const { isAuthenticated, role } = useAdminAuth();
+  const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
+  const [rows, setRows] = useState<AdminContentRow[]>([]);
+  const [total, setTotal] = useState(0);
+  const [page, setPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState('');
+  const [filters, setFilters] = useState<Record<string, string[]>>({});
+  const [reloadNonce, setReloadNonce] = useState(0);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
 
+  const deferredSearchQuery = useDeferredValue(searchQuery.trim());
+  const selectedType = filters.type?.[0];
+  const selectedProfession = filters.profession?.[0];
+  const selectedStatus = filters.status?.[0];
+
   useEffect(() => {
-    const load = async () => {
+    let cancelled = false;
+
+    async function load() {
       setPageStatus('loading');
-      await new Promise(resolve => setTimeout(resolve, 400));
-      const sorted = [...mockContentLibrary].sort(
-        (a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
-      );
-      setData(sorted);
-      setPageStatus(sorted.length > 0 ? 'success' : 'empty');
-    };
+      try {
+        const result = await getAdminContentLibraryData({
+          page,
+          pageSize: PAGE_SIZE,
+          search: deferredSearchQuery || undefined,
+          type: selectedType,
+          profession: selectedProfession,
+          status: selectedStatus,
+        });
+        if (cancelled) return;
+        if (result.items.length === 0 && result.total > 0 && page > 1) {
+          setPage((current) => Math.max(1, current - 1));
+          return;
+        }
+        setRows(result.items);
+        setTotal(result.total);
+        setPageStatus(result.items.length > 0 ? 'success' : 'empty');
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setPageStatus('error');
+          setToast({ variant: 'error', message: 'Failed to load content library.' });
+        }
+      }
+    }
+
     load();
-  }, []);
+    return () => {
+      cancelled = true;
+    };
+  }, [deferredSearchQuery, page, reloadNonce, selectedProfession, selectedStatus, selectedType]);
 
   const filterGroups: FilterGroup[] = [
     {
       id: 'type',
       label: 'Type',
       options: [
-        { id: 'Writing Task', label: 'Writing' },
-        { id: 'Speaking Roleplay', label: 'Speaking' },
-        { id: 'Reading Part A', label: 'Reading' },
-        { id: 'Listening Part C', label: 'Listening' },
+        { id: 'writing_task', label: 'Writing' },
+        { id: 'speaking_task', label: 'Speaking' },
+        { id: 'reading_task', label: 'Reading' },
+        { id: 'listening_task', label: 'Listening' },
       ],
     },
     {
       id: 'profession',
       label: 'Profession',
       options: [
-        { id: 'Medicine', label: 'Medicine' },
-        { id: 'Nursing', label: 'Nursing' },
-        { id: 'Dentistry', label: 'Dentistry' },
-        { id: 'All', label: 'All Professions' },
+        { id: 'medicine', label: 'Medicine' },
+        { id: 'nursing', label: 'Nursing' },
+        { id: 'dentistry', label: 'Dentistry' },
+        { id: 'pharmacy', label: 'Pharmacy' },
+        { id: 'physiotherapy', label: 'Physiotherapy' },
       ],
     },
     {
       id: 'status',
       label: 'Status',
       options: [
-        { id: 'published', label: 'Published' },
         { id: 'draft', label: 'Draft' },
+        { id: 'published', label: 'Published' },
         { id: 'archived', label: 'Archived' },
       ],
-    }
+    },
   ];
 
-  const handleFilterChange = (groupId: string, optionId: string) => {
-    setSelectedFilters(prev => {
-      const current = prev[groupId] || [];
-      const updated = current.includes(optionId)
-        ? current.filter(id => id !== optionId)
-        : [...current, optionId];
-      return { ...prev, [groupId]: updated };
-    });
-  };
-
-  const clearFilters = () => {
-    setSelectedFilters({});
-    setSearchQuery('');
-  };
-
-  const filteredData = useMemo(() => {
-    return data.filter(item => {
-      if (selectedFilters.type?.length && !selectedFilters.type.includes(item.type)) return false;
-      if (selectedFilters.profession?.length && !selectedFilters.profession.includes(item.profession)) return false;
-      if (selectedFilters.status?.length && !selectedFilters.status.includes(item.status)) return false;
-      if (searchQuery) {
-        const q = searchQuery.toLowerCase();
-        return item.title.toLowerCase().includes(q) || item.id.toLowerCase().includes(q) || item.author.toLowerCase().includes(q);
-      }
-      return true;
-    });
-  }, [data, selectedFilters, searchQuery]);
-
-  const columns: Column<AdminContentItem>[] = [
+  const columns: Column<AdminContentRow>[] = [
     { key: 'id', header: 'ID', render: (row) => <span className="font-mono text-xs">{row.id}</span> },
-    { 
-      key: 'title', 
-      header: 'Title', 
+    {
+      key: 'title',
+      header: 'Title',
       render: (row) => (
-        <span 
-          className="font-medium text-primary cursor-pointer hover:underline"
-          onClick={() => { analytics.track('admin_content_updated', { contentId: row.id }); router.push(`/admin/content/${row.id}`); }}
-        >
+        <button className="text-left font-medium text-blue-600 hover:underline" onClick={() => router.push(`/admin/content/${row.id}`)}>
           {row.title}
-        </span>
-      )
+        </button>
+      ),
     },
-    { key: 'type', header: 'Type', render: (row) => <span>{row.type}</span> },
-    { key: 'profession', header: 'Profession', render: (row) => <span>{row.profession}</span> },
-    { key: 'author', header: 'Author', render: (row) => <span className="text-muted text-sm">{row.author}</span> },
-    { 
-      key: 'status', 
-      header: 'Status', 
-      render: (row) => {
-        const variant = row.status === 'published' ? 'success' : row.status === 'archived' ? 'muted' : 'warning';
-        return <Badge variant={variant as any} className="capitalize">{row.status}</Badge>;
-      }
-    },
-    { 
-      key: 'revisions', 
-      header: 'Revisions', 
+    { key: 'type', header: 'Type', render: (row) => <span className="capitalize">{row.type.replace('_', ' ')}</span> },
+    { key: 'profession', header: 'Profession', render: (row) => <span className="capitalize">{row.profession || 'All'}</span> },
+    { key: 'author', header: 'Author', render: (row) => <span className="text-slate-500">{row.author}</span> },
+    {
+      key: 'status',
+      header: 'Status',
       render: (row) => (
-        <span className="flex items-center gap-1 text-muted text-xs">
-          <History className="w-3.5 h-3.5" /> {row.revisionCount}
-        </span>
-      )
+        <Badge variant={row.status === 'published' ? 'success' : row.status === 'archived' ? 'muted' : 'warning'}>
+          {row.status}
+        </Badge>
+      ),
     },
-    { key: 'updatedAt', header: 'Last Updated', render: (row) => <span className="text-muted text-xs">{new Date(row.updatedAt).toLocaleDateString()}</span> },
+    {
+      key: 'revisions',
+      header: 'Revisions',
+      render: (row) => (
+        <button
+          className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"
+          onClick={() => router.push(`/admin/content/${row.id}/revisions`)}
+        >
+          <History className="h-3.5 w-3.5" />
+          {row.revisionCount}
+        </button>
+      ),
+    },
+    { key: 'updatedAt', header: 'Updated', render: (row) => <span className="text-xs text-slate-500">{new Date(row.updatedAt).toLocaleString()}</span> },
   ];
+
+  function handleFilterChange(groupId: string, optionId: string) {
+    setPage(1);
+    setFilters((current) => {
+      return {
+        ...current,
+        [groupId]: current[groupId]?.[0] === optionId ? [] : [optionId],
+      };
+    });
+  }
+
+  const hasPreviousPage = page > 1;
+  const hasNextPage = page * PAGE_SIZE < total;
+  const visibleStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
+  const visibleEnd = total === 0 ? 0 : Math.min(page * PAGE_SIZE, total);
 
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-8" role="main" aria-label="Content Library">
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-navy tracking-tight">Content Library</h1>
-          <p className="text-sm text-muted mt-1">Manage tasks, practice materials, and model answers.</p>
-        </div>
-        <Button onClick={() => router.push('/admin/content/new')} className="gap-2">
-          <Plus className="w-4 h-4" /> New Content
-        </Button>
-      </div>
+    <div className="max-w-7xl space-y-6">
+      {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
+
+      <AdminPageHeader
+        title="Content Library"
+        description="Manage the live OET content catalog, editorial revisions, and publish-ready practice material."
+        actions={
+          <Button onClick={() => router.push('/admin/content/new')} className="gap-2">
+            <Plus className="h-4 w-4" /> New Content
+          </Button>
+        }
+      />
 
       <AsyncStateWrapper
         status={pageStatus}
-        onRetry={() => window.location.reload()}
+        onRetry={() => setReloadNonce((current) => current + 1)}
         emptyContent={
           <EmptyState
-            icon={<FileText className="w-12 h-12 text-muted" />}
-            title="No Content Items"
-            description="Create your first content item to get started."
+            icon={<FileText className="h-10 w-10 text-slate-400" />}
+            title="No content items yet"
+            description="Create the first publishable content item to start the library."
             action={{ label: 'Create Content', onClick: () => router.push('/admin/content/new') }}
           />
         }
       >
-        <div className="bg-surface p-4 rounded-xl border border-gray-200/60 shadow-sm space-y-3">
-          <div className="relative max-w-sm">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-muted" />
-            <Input
-              placeholder="Search by title, ID, or author..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="pl-9"
-            />
+        <AdminSectionPanel title="Filters" description="Filter by subtest, profession, or publication state.">
+          <div className="max-w-sm">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                placeholder="Search title, ID, or author"
+                value={searchQuery}
+                onChange={(event) => {
+                  setSearchQuery(event.target.value);
+                  setPage(1);
+                }}
+                className="pl-9"
+              />
+            </div>
           </div>
-          <FilterBar 
+          <FilterBar
             groups={filterGroups}
-            selected={selectedFilters}
+            selected={filters}
             onChange={handleFilterChange}
-            onClear={clearFilters}
+            onClear={() => {
+              setFilters({});
+              setSearchQuery('');
+              setPage(1);
+            }}
           />
-        </div>
+        </AdminSectionPanel>
 
-        <Card padding="none" className="overflow-hidden">
-          <CardContent className="p-0">
-            {filteredData.length === 0 ? (
-              <EmptyState
-                icon={<Search className="w-12 h-12 text-muted" />}
-                title="No Matching Content"
-                description="Try adjusting your search or filters."
-                action={{ label: 'Clear Filters', onClick: clearFilters }}
-              />
-            ) : (
-              <DataTable 
-                data={filteredData}
-                columns={columns}
-                keyExtractor={(item) => item.id}
-              />
-            )}
-          </CardContent>
-        </Card>
+        <AdminSectionPanel
+          title="Content Items"
+          description={`Every visible row is backed by the live admin content endpoint. Showing ${visibleStart}-${visibleEnd} of ${total}.`}
+        >
+          {rows.length === 0 ? (
+            <EmptyState
+              icon={<Search className="h-10 w-10 text-slate-400" />}
+              title="No matching content"
+              description="Adjust your search or filters to find a content item."
+              action={{
+                label: 'Clear Filters',
+                onClick: () => {
+                  setFilters({});
+                  setSearchQuery('');
+                  setPage(1);
+                },
+              }}
+            />
+          ) : (
+            <div className="space-y-4">
+              <DataTable columns={columns} data={rows} keyExtractor={(row) => row.id} />
+              <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+                <p>
+                  Page {page} of {Math.max(1, Math.ceil(total / PAGE_SIZE))}
+                </p>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={!hasPreviousPage}>
+                    <ChevronLeft className="h-4 w-4" /> Previous
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setPage((current) => current + 1)} disabled={!hasNextPage}>
+                    Next <ChevronRight className="h-4 w-4" />
+                  </Button>
+                </div>
+              </div>
+            </div>
+          )}
+        </AdminSectionPanel>
       </AsyncStateWrapper>
     </div>
   );

@@ -3,7 +3,12 @@
  * Import this at the app entry point to fail fast on missing config.
  */
 
-const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+function requireEnv(name: string, value: string | undefined): string {
+  if (!value || value.trim() === '') {
+    throw new Error(`Missing required environment variable: ${name}`);
+  }
+  return value;
+}
 
 function optionalEnv(name: string, fallback: string): string {
   return process.env[name] || fallback;
@@ -11,8 +16,8 @@ function optionalEnv(name: string, fallback: string): string {
 
 export const env = {
   // API
-  apiBaseUrl: optionalEnv('NEXT_PUBLIC_API_BASE_URL', 'http://localhost:5198').replace(/\/$/, ''),
-
-  // Feature flags
-  enableMockAuth: IS_PRODUCTION ? false : process.env.NEXT_PUBLIC_ENABLE_MOCK_AUTH === 'true',
+  apiBaseUrl:
+    process.env.NODE_ENV === 'production'
+      ? requireEnv('NEXT_PUBLIC_API_BASE_URL', process.env.NEXT_PUBLIC_API_BASE_URL).replace(/\/$/, '')
+      : optionalEnv('NEXT_PUBLIC_API_BASE_URL', 'http://localhost:5198').replace(/\/$/, ''),
 } as const;

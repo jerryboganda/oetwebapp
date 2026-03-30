@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   FileText,
@@ -16,10 +16,14 @@ import {
   Check
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { AppShell } from '@/components/layout/app-shell';
+import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { createMockSession } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+
+type ReviewSelection = 'none' | 'writing' | 'speaking' | 'writing_and_speaking' | 'current_subtest';
+type MockType = 'full' | 'sub';
+type MockSubType = 'reading' | 'listening' | 'writing' | 'speaking';
 
 const PROFESSIONS = [
   'Medicine', 'Nursing', 'Pharmacy', 'Dentistry', 'Dietetics',
@@ -27,17 +31,45 @@ const PROFESSIONS = [
   'Speech Pathology', 'Veterinary Science'
 ];
 
+function buildReviewOptions(mockType: MockType, subType: MockSubType) {
+  if (mockType === 'full') {
+    return [
+      { id: 'none' as const, label: 'No Review', description: 'Run the mock without productive-skill review add-ons.' },
+      { id: 'writing' as const, label: 'Writing Only', description: 'Attach expert review to the Writing section only.' },
+      { id: 'speaking' as const, label: 'Speaking Only', description: 'Attach expert review to the Speaking section only.' },
+      { id: 'writing_and_speaking' as const, label: 'Writing + Speaking', description: 'Add review to both productive skills in the full mock.' },
+    ];
+  }
+
+  if (subType === 'writing' || subType === 'speaking') {
+    return [
+      { id: 'none' as const, label: 'No Review', description: 'Keep this sub-test mock AI-evaluated only.' },
+      { id: 'current_subtest' as const, label: 'Review Current Sub-test', description: 'Use one review credit on this productive-skill mock.' },
+    ];
+  }
+
+  return [
+    { id: 'none' as const, label: 'No Review', description: 'Expert review is not offered for Reading or Listening mocks.' },
+  ];
+}
+
+function normalizeReviewSelection(mockType: MockType, subType: MockSubType, selection: ReviewSelection): ReviewSelection {
+  return buildReviewOptions(mockType, subType).some((option) => option.id === selection) ? selection : 'none';
+}
+
 export default function MockSetup() {
   const router = useRouter();
 
-  const [mockType, setMockType] = useState<'full' | 'sub'>('full');
-  const [subType, setSubType] = useState<'reading' | 'listening' | 'writing' | 'speaking'>('reading');
+  const [mockType, setMockType] = useState<MockType>('full');
+  const [subType, setSubType] = useState<MockSubType>('reading');
   const [mode, setMode] = useState<'practice' | 'exam'>('exam');
   const [profession, setProfession] = useState('Medicine');
   const [strictTimer, setStrictTimer] = useState(true);
-  const [includeReview, setIncludeReview] = useState(false);
+  const [reviewSelection, setReviewSelection] = useState<ReviewSelection>('none');
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+  const reviewOptions = useMemo(() => buildReviewOptions(mockType, subType), [mockType, subType]);
+  const selectedReviewSelection = normalizeReviewSelection(mockType, subType, reviewSelection);
 
   const handleModeChange = (newMode: 'practice' | 'exam') => {
     setMode(newMode);
@@ -46,16 +78,29 @@ export default function MockSetup() {
 
   const showProfession = mockType === 'full' || (mockType === 'sub' && (subType === 'writing' || subType === 'speaking'));
 
+  const handleMockTypeChange = (nextType: MockType) => {
+    setMockType(nextType);
+    setReviewSelection((current) => normalizeReviewSelection(nextType, subType, current));
+  };
+
+  const handleSubTypeChange = (nextSubType: MockSubType) => {
+    setSubType(nextSubType);
+    setReviewSelection((current) => normalizeReviewSelection(mockType, nextSubType, current));
+  };
+
   const handleStart = async () => {
     setStarting(true);
+    setStartError(null);
     try {
       const result = await createMockSession({
         type: mockType,
         subType: mockType === 'sub' ? subType : undefined,
         mode,
-        profession
+        profession,
+        strictTimer,
+        reviewSelection: selectedReviewSelection,
       });
-      analytics.track('mock_started', { mockType, mode });
+      analytics.track('mock_started', { mockType, mode, reviewSelection: selectedReviewSelection });
       router.push(`/mocks/player/${result.sessionId}`);
     } catch {
       setStartError('Failed to start mock session. Please try again.');
@@ -64,8 +109,8 @@ export default function MockSetup() {
   };
 
   return (
-    <AppShell pageTitle="Configure Mock" subtitle="Set up your practice environment" backHref="/mocks">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 pb-24">
+    <LearnerDashboardShell pageTitle="Configure Mock" subtitle="Set up your practice environment" backHref="/mocks">
+      <div className="space-y-8 pb-24">
 
         {/* 1. Mock Type Selection */}
         <section className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm">
@@ -77,7 +122,7 @@ export default function MockSetup() {
             ].map(({ id, icon: Icon, label, desc }) => (
               <button
                 key={id}
-                onClick={() => setMockType(id as 'full' | 'sub')}
+                onClick={() => handleMockTypeChange(id as MockType)}
                 className={`p-5 rounded-2xl border-2 text-left transition-all ${
                   mockType === id ? 'border-primary bg-primary/5 ring-4 ring-primary/10' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                 }`}
@@ -107,7 +152,7 @@ export default function MockSetup() {
                     ].map((st) => (
                       <button
                         key={st.id}
-                        onClick={() => setSubType(st.id as typeof subType)}
+                        onClick={() => handleSubTypeChange(st.id as MockSubType)}
                         className={`py-3 px-4 rounded-xl border flex flex-col items-center gap-2 transition-colors ${
                           subType === st.id ? 'bg-primary text-white border-primary' : 'bg-surface text-muted border-gray-200 hover:bg-gray-50'
                         }`}
@@ -212,30 +257,32 @@ export default function MockSetup() {
           <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-6">
             {showProfession ? '4.' : '3.'} Add-ons
           </h2>
-          <div className="flex items-start sm:items-center justify-between gap-4">
+          <div className="space-y-4">
             <div className="pr-4">
-              <h3 className="text-sm font-bold text-navy">Include Expert Review</h3>
-              <p className="text-xs text-muted mt-1">Have an OET expert grade your Writing and Speaking responses with detailed feedback.</p>
-              <div className="mt-2 inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-amber-100 text-amber-800 text-[10px] font-black uppercase tracking-widest">
-                Requires 1 Review Credit
-              </div>
+              <h3 className="text-sm font-bold text-navy">Productive-skill review selection</h3>
+              <p className="text-xs text-muted mt-1">Review add-ons apply only to Writing and Speaking because those are the OET productive skills that benefit from human review.</p>
             </div>
-            <button
-              onClick={() => setIncludeReview(!includeReview)}
-              className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                includeReview ? 'bg-amber-500' : 'bg-gray-200'
-              }`}
-              role="switch"
-              aria-checked={includeReview}
-            >
-              <span className="sr-only">Include expert review</span>
-              <span
-                aria-hidden="true"
-                className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                  includeReview ? 'translate-x-5' : 'translate-x-0'
-                }`}
-              />
-            </button>
+            <div className="grid gap-3 sm:grid-cols-2">
+              {reviewOptions.map((option) => (
+                <button
+                  key={option.id}
+                  onClick={() => setReviewSelection(option.id)}
+                  className={`rounded-2xl border p-4 text-left transition-colors ${
+                    selectedReviewSelection === option.id
+                      ? 'border-amber-400 bg-amber-50'
+                      : 'border-gray-200 bg-white hover:border-gray-300'
+                  }`}
+                >
+                  <p className="text-sm font-bold text-navy">{option.label}</p>
+                  <p className="mt-2 text-xs leading-5 text-muted">{option.description}</p>
+                </button>
+              ))}
+            </div>
+            {selectedReviewSelection !== 'none' ? (
+              <div className="inline-flex items-center gap-1.5 rounded-md bg-amber-100 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-amber-800">
+                Uses review credits on productive skills only
+              </div>
+            ) : null}
           </div>
         </section>
 
@@ -258,7 +305,6 @@ export default function MockSetup() {
         </div>
 
       </div>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }
-

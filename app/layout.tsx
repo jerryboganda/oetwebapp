@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
+import { AuthGuard } from '@/components/auth/auth-guard';
 import { AuthProvider } from '@/contexts/auth-context';
 import './globals.css';
 
@@ -32,7 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
     <html lang="en" className={inter.variable}>
       <body className="font-sans antialiased min-h-screen bg-background-light" suppressHydrationWarning>
         <AuthProvider>
-          {children}
+          <AuthGuard>{children}</AuthGuard>
         </AuthProvider>
       </body>
     </html>

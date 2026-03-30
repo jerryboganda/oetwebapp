@@ -1,7 +1,5 @@
-/**
- * Stub analytics service — logs to console in dev.
- * Replace with real analytics provider (Mixpanel, GA4, etc.) when ready.
- */
+import { ensureFreshAccessToken } from './auth-client';
+import { env } from './env';
 
 type EventProperties = Record<string, string | number | boolean | null | undefined>;
 
@@ -32,12 +30,16 @@ const TRACKED_EVENTS = [
   'content_view',
   // Expert Console events
   'review_queue_viewed',
+  'expert_dashboard_viewed',
+  'expert_learners_viewed',
   'review_started',
   'review_draft_saved',
   'review_submitted',
   'calibration_viewed',
   'calibration_case_started',
   'calibration_case_completed',
+  'expert_calibration_case_viewed',
+  'expert_calibration_case_submitted',
   'expert_schedule_saved',
   'expert_metrics_viewed',
   'learner_profile_viewed',
@@ -60,22 +62,54 @@ const TRACKED_EVENTS = [
 
 export type AnalyticsEvent = typeof TRACKED_EVENTS[number];
 
-type AnalyticsProvider = (event: string, properties?: EventProperties) => void;
+type AnalyticsProvider = (event: string, properties?: EventProperties) => Promise<void> | void;
 
 const MAX_BUFFER_SIZE = 1000;
+const ANALYTICS_EVENTS_PATH = '/v1/analytics/events';
 
 class AnalyticsService {
   private enabled = true;
   private provider: AnalyticsProvider | null = null;
   private buffer: Array<{ event: AnalyticsEvent; properties: EventProperties }> = [];
+  private transportInitialized = false;
 
   setProvider(provider: AnalyticsProvider) {
     this.provider = provider;
     // Flush buffered events
     for (const entry of this.buffer) {
-      provider(entry.event, entry.properties);
+      void Promise.resolve(provider(entry.event, entry.properties)).catch(() => undefined);
     }
     this.buffer = [];
+  }
+
+  initializeBrowserTransport() {
+    if (this.transportInitialized || typeof window === 'undefined') {
+      return;
+    }
+
+    this.transportInitialized = true;
+    this.setProvider(async (event, properties) => {
+      const accessToken = await ensureFreshAccessToken();
+      if (!accessToken) {
+        return;
+      }
+
+      const response = await fetch(`${env.apiBaseUrl}${ANALYTICS_EVENTS_PATH}`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          eventName: event,
+          properties,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Analytics event submission failed with status ${response.status}.`);
+      }
+    });
   }
 
   track(event: AnalyticsEvent, properties?: EventProperties) {
@@ -88,23 +122,18 @@ class AnalyticsService {
     };
 
     if (this.provider) {
-      this.provider(event, enriched);
+      void Promise.resolve(this.provider(event, enriched)).catch(() => undefined);
     } else {
       // Buffer events until a provider is set
       if (this.buffer.length < MAX_BUFFER_SIZE) {
         this.buffer.push({ event, properties: enriched });
       }
     }
-
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[Analytics] ${event}`, enriched);
-    }
   }
 
   identify(userId: string, traits?: EventProperties) {
-    if (process.env.NODE_ENV === 'development') {
-      console.log(`[Analytics] identify`, { userId, ...traits });
-    }
+    void userId;
+    void traits;
   }
 
   disable() { this.enabled = false; }
@@ -112,3 +141,7 @@ class AnalyticsService {
 }
 
 export const analytics = new AnalyticsService();
+
+export function initializeAnalyticsTransport() {
+  analytics.initializeBrowserTransport();
+}

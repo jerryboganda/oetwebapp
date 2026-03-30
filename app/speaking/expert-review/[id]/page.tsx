@@ -8,7 +8,7 @@ import {
   Target, Loader2, ArrowRight, Sparkles,
 } from 'lucide-react';
 import Link from 'next/link';
-import { AppShell } from '@/components/layout/app-shell';
+import { LearnerDashboardShell } from '@/components/layout';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -70,7 +70,7 @@ function ExpertReviewRequestContent() {
 
   if (isSuccess) {
     return (
-      <AppShell pageTitle="Request Submitted">
+      <LearnerDashboardShell pageTitle="Request Submitted">
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
           <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="max-w-md w-full">
             <div className="w-24 h-24 bg-green-50 rounded-3xl flex items-center justify-center mx-auto mb-8">
@@ -87,35 +87,35 @@ function ExpertReviewRequestContent() {
             </Link>
           </motion.div>
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
   if (loading) {
     return (
-      <AppShell pageTitle="Expert Review Request">
-        <div className="max-w-3xl mx-auto p-6 space-y-6">
+      <LearnerDashboardShell pageTitle="Expert Review Request">
+        <div className="space-y-6">
           <Skeleton className="h-32 rounded-xl" />
           <Skeleton className="h-48 rounded-xl" />
           <Skeleton className="h-32 rounded-xl" />
           <Skeleton className="h-48 rounded-xl" />
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
   if (error) {
     return (
-      <AppShell pageTitle="Expert Review Request">
-        <div className="max-w-3xl mx-auto p-6">
+      <LearnerDashboardShell pageTitle="Expert Review Request">
+        <div>
           <InlineAlert variant="error">{error}</InlineAlert>
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
   return (
-    <AppShell pageTitle="Expert Review Request">
+    <LearnerDashboardShell pageTitle="Expert Review Request">
       <main className="flex-1 p-6">
         <form onSubmit={handleSubmit} className="max-w-3xl mx-auto space-y-8">
 
@@ -249,18 +249,18 @@ function ExpertReviewRequestContent() {
           )}
         </form>
       </main>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }
 
 export default function ExpertReviewRequest() {
   return (
     <Suspense fallback={
-      <AppShell pageTitle="Expert Review Request">
+      <LearnerDashboardShell pageTitle="Expert Review Request">
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     }>
       <ExpertReviewRequestContent />
     </Suspense>

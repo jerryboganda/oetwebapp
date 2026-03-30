@@ -35,12 +35,35 @@ public sealed class ExpertQueueQueryRequest
     public int? PageSize { get; init; }
 }
 
+public sealed class ExpertLearnersQueryRequest
+{
+    [FromQuery(Name = "search")]
+    public string? Search { get; init; }
+
+    [FromQuery(Name = "profession")]
+    public string? Profession { get; init; }
+
+    [FromQuery(Name = "subTest")]
+    public string? SubTest { get; init; }
+
+    [FromQuery(Name = "relevance")]
+    public string? Relevance { get; init; }
+
+    [FromQuery(Name = "page")]
+    public int? Page { get; init; }
+
+    [FromQuery(Name = "pageSize")]
+    public int? PageSize { get; init; }
+}
+
 public record ExpertDraftSaveRequest(
     Dictionary<string, int> Scores,
     Dictionary<string, string> CriterionComments,
     string FinalComment,
     List<ExpertAnchoredCommentDto>? AnchoredComments,
     List<ExpertTimestampCommentDto>? TimestampComments,
+    string? Scratchpad,
+    List<ExpertChecklistItemDto>? ChecklistItems,
     int? Version);
 
 public record ExpertReviewSubmitRequest(
@@ -79,3 +102,8 @@ public record ExpertTimestampCommentDto(
     double TimestampStart,
     double? TimestampEnd,
     string? CreatedAt);
+
+public record ExpertChecklistItemDto(
+    string Id,
+    string Label,
+    bool Checked);

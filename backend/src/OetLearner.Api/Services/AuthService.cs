@@ -1,10 +1,13 @@
 using System.IdentityModel.Tokens.Jwt;
+using System.Net;
 using System.Security.Claims;
-using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
+using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using Microsoft.IdentityModel.Tokens;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
@@ -14,115 +17,1007 @@ namespace OetLearner.Api.Services;
 
 public sealed class AuthService(
     LearnerDbContext db,
+    IPasswordHasher<ApplicationUserAccount> passwordHasher,
+    AuthTokenService tokenService,
+    EmailOtpService emailOtpService,
+    ExternalAuthTicketService externalAuthTicketService,
+    IOptions<AuthTokenOptions> authTokenOptions,
     IOptions<AuthOptions> authOptions,
-    ILogger<AuthService> logger)
+    IWebHostEnvironment environment,
+    IDataProtectionProvider dataProtectionProvider,
+    TimeProvider timeProvider)
 {
-    private readonly AuthOptions _authOptions = authOptions.Value;
+    private const int AllowedAuthenticatorDriftWindows = 1;
+    private readonly bool _allowLocalDemoWithoutMfa = environment.IsDevelopment() && authOptions.Value.UseDevelopmentAuth;
 
-    public async Task<AuthLoginResponse> LoginAsync(AuthLoginRequest request, CancellationToken ct)
+    private readonly string _authenticatorIssuer = string.IsNullOrWhiteSpace(authTokenOptions.Value.AuthenticatorIssuer)
+        ? throw new InvalidOperationException("AuthTokens:AuthenticatorIssuer must be configured.")
+        : authTokenOptions.Value.AuthenticatorIssuer;
+    private readonly TimeSpan _mfaChallengeLifetime = authTokenOptions.Value.OtpLifetime;
+    private readonly IDataProtector _authenticatorSecretProtector = dataProtectionProvider.CreateProtector("AuthService.AuthenticatorSecret");
+    private readonly IDataProtector _mfaChallengeProtector = dataProtectionProvider.CreateProtector("AuthService.MfaChallenge");
+
+    public async Task<AuthSessionResponse> RegisterLearnerAsync(RegisterRequest request, CancellationToken cancellationToken = default)
     {
-        var email = request.Email.Trim().ToLowerInvariant();
-        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(request.Password))
+        if (!string.Equals(request.Role, ApplicationUserRoles.Learner, StringComparison.Ordinal))
+        {
+            throw ApiException.Validation("invalid_registration_role", "Only learner self-registration is supported.");
+        }
+
+        if (string.IsNullOrWhiteSpace(request.Password))
+        {
+            throw ApiException.Validation("password_required", "Password is required.");
+        }
+
+        var externalRegistration = ResolveExternalRegistrationTicket(request.ExternalRegistrationToken);
+        var email = externalRegistration is not null
+            ? AuthEmailAddress.TrimAndValidateOrThrow(externalRegistration.Email)
+            : AuthEmailAddress.TrimAndValidateOrThrow(request.Email);
+        if (externalRegistration is not null
+            && !string.IsNullOrWhiteSpace(request.Email)
+            && !string.Equals(
+                AuthEmailAddress.NormalizeOrThrow(request.Email),
+                AuthEmailAddress.NormalizeOrThrow(externalRegistration.Email),
+                StringComparison.Ordinal))
         {
             throw ApiException.Validation(
-                "auth_invalid_credentials",
-                "Email and password are required.",
-                [
-                    new ApiFieldError("email", "required", "Email is required."),
-                    new ApiFieldError("password", "required", "Password is required.")
-                ]);
+                "external_registration_email_mismatch",
+                "The social sign-in email must match the registration email.");
         }
 
-        var account = await db.AuthAccounts.FirstOrDefaultAsync(candidate => candidate.Email == email, ct);
-        if (account is null || !account.IsActive || !VerifyPassword(request.Password, account.PasswordHash))
+        var firstName = !string.IsNullOrWhiteSpace(request.FirstName)
+            ? request.FirstName.Trim()
+            : externalRegistration?.FirstName?.Trim();
+        var lastName = !string.IsNullOrWhiteSpace(request.LastName)
+            ? request.LastName.Trim()
+            : externalRegistration?.LastName?.Trim();
+        var mobileNumber = RequireTrimmed(request.MobileNumber, "mobile_number_required", "Mobile number is required.");
+        var examTypeId = RequireTrimmed(request.ExamTypeId, "exam_type_required", "Exam type is required.");
+        var professionId = RequireTrimmed(request.ProfessionId, "profession_required", "Profession is required.");
+        var sessionId = RequireTrimmed(request.SessionId, "session_required", "Session is required.");
+        var countryTarget = RequireTrimmed(request.CountryTarget, "country_target_required", "Target country is required.");
+
+        if (string.IsNullOrWhiteSpace(firstName))
         {
-            throw ApiException.Forbidden("auth_invalid_credentials", "Incorrect email or password.");
+            throw ApiException.Validation("first_name_required", "First name is required.");
         }
 
-        if (string.IsNullOrWhiteSpace(_authOptions.SigningKey) || _authOptions.SigningKey.Length < 32)
+        if (string.IsNullOrWhiteSpace(lastName))
         {
-            throw ApiException.Validation("auth_signing_key_missing", "JWT signing key is not configured correctly.");
+            throw ApiException.Validation("last_name_required", "Last name is required.");
         }
 
-        var now = DateTimeOffset.UtcNow;
-        var expiresAt = now.AddHours(8);
-        var tokenHandler = new JwtSecurityTokenHandler();
-        var key = Encoding.UTF8.GetBytes(_authOptions.SigningKey);
-        var tokenDescriptor = new SecurityTokenDescriptor
+        if (request.AgreeToTerms is not true)
         {
-            Subject = new ClaimsIdentity(
-            [
-                new Claim("user_id", account.SubjectId),
-                new Claim("role", account.Role),
-                new Claim(ClaimTypes.NameIdentifier, account.SubjectId),
-                new Claim(ClaimTypes.Role, account.Role),
-                new Claim(ClaimTypes.Email, account.Email),
-                new Claim(ClaimTypes.Name, account.DisplayName)
-            ]),
-            Expires = expiresAt.UtcDateTime,
-            Issuer = _authOptions.Issuer,
-            Audience = _authOptions.Audience,
-            SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature)
+            throw ApiException.Validation("terms_required", "Accept the terms to continue.");
+        }
+
+        if (request.AgreeToPrivacy is not true)
+        {
+            throw ApiException.Validation("privacy_required", "Accept the privacy policy to continue.");
+        }
+
+        var signupSelection = await ValidateSignupSelectionAsync(
+            examTypeId,
+            professionId,
+            sessionId,
+            countryTarget,
+            cancellationToken);
+        var normalizedEmail = email.ToUpperInvariant();
+        var existingAccount = await db.ApplicationUserAccounts
+            .AnyAsync(x => x.NormalizedEmail == normalizedEmail, cancellationToken);
+        if (existingAccount)
+        {
+            throw ApiException.Conflict("email_already_registered", "An account with that email already exists.");
+        }
+
+        var now = timeProvider.GetUtcNow();
+        var account = new ApplicationUserAccount
+        {
+            Id = $"auth_{Guid.NewGuid():N}",
+            Email = email,
+            NormalizedEmail = normalizedEmail,
+            Role = ApplicationUserRoles.Learner,
+            EmailVerifiedAt = externalRegistration is not null ? now : null,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        account.PasswordHash = passwordHasher.HashPassword(account, request.Password);
+
+        var displayName = string.IsNullOrWhiteSpace(request.DisplayName)
+            ? $"{firstName} {lastName}".Trim()
+            : request.DisplayName.Trim();
+
+        var learner = new LearnerUser
+        {
+            Id = $"learner_{Guid.NewGuid():N}",
+            AuthAccountId = account.Id,
+            Role = ApplicationUserRoles.Learner,
+            DisplayName = string.IsNullOrWhiteSpace(displayName) ? BuildDefaultDisplayName(account.Email) : displayName,
+            Email = account.Email,
+            ActiveProfessionId = signupSelection.Profession.Id,
+            CreatedAt = now,
+            LastActiveAt = now
         };
 
-        var token = tokenHandler.CreateToken(tokenDescriptor);
+        var registrationProfile = new LearnerRegistrationProfile
+        {
+            Id = $"signup_{Guid.NewGuid():N}",
+            ApplicationUserAccountId = account.Id,
+            LearnerUserId = learner.Id,
+            FirstName = firstName,
+            LastName = lastName,
+            ExamTypeId = signupSelection.ExamType.Id,
+            ProfessionId = signupSelection.Profession.Id,
+            SessionId = signupSelection.Session.Id,
+            CountryTarget = countryTarget,
+            MobileNumber = mobileNumber,
+            AgreeToTerms = request.AgreeToTerms ?? false,
+            AgreeToPrivacy = request.AgreeToPrivacy ?? false,
+            MarketingOptIn = request.MarketingOptIn ?? false,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        db.ApplicationUserAccounts.Add(account);
+        db.Users.Add(learner);
+        db.LearnerRegistrationProfiles.Add(registrationProfile);
+
+        if (externalRegistration is not null)
+        {
+            db.ExternalIdentityLinks.Add(new ExternalIdentityLink
+            {
+                Id = Guid.NewGuid(),
+                ApplicationUserAccountId = account.Id,
+                Provider = externalRegistration.Provider,
+                ProviderSubject = externalRegistration.ProviderSubject,
+                Email = email,
+                FirstName = firstName,
+                LastName = lastName,
+                CreatedAt = now,
+                UpdatedAt = now,
+                LastSignedInAt = now
+            });
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        return await CreateSessionAsync(account, learner.Id, learner.DisplayName, cancellationToken);
+    }
+
+    public async Task<SignupCatalogResponse> GetSignupCatalogAsync(CancellationToken cancellationToken = default)
+    {
+        var examTypes = await db.SignupExamTypeCatalog
+            .AsNoTracking()
+            .Where(item => item.IsActive)
+            .OrderBy(item => item.SortOrder)
+            .Select(item => new SignupExamTypeResponse(
+                item.Id,
+                item.Label,
+                item.Code,
+                item.Description))
+            .ToListAsync(cancellationToken);
+
+        var professions = await db.SignupProfessionCatalog
+            .AsNoTracking()
+            .Where(item => item.IsActive)
+            .OrderBy(item => item.SortOrder)
+            .ToListAsync(cancellationToken);
+
+        var sessions = await db.SignupSessionCatalog
+            .AsNoTracking()
+            .Where(item => item.IsActive)
+            .OrderBy(item => item.SortOrder)
+            .ToListAsync(cancellationToken);
+
+        return new SignupCatalogResponse(
+            examTypes,
+            professions.Select(item => new SignupProfessionResponse(
+                item.Id,
+                item.Label,
+                DeserializeStringList(item.CountryTargetsJson),
+                DeserializeStringList(item.ExamTypeIdsJson),
+                item.Description)).ToList(),
+            sessions.Select(item => new SignupSessionResponse(
+                item.Id,
+                item.Name,
+                item.ExamTypeId,
+                DeserializeStringList(item.ProfessionIdsJson),
+                item.PriceLabel,
+                item.StartDate,
+                item.EndDate,
+                item.DeliveryMode,
+                item.Capacity,
+                item.SeatsRemaining)).ToList());
+    }
+
+    public async Task<AuthSessionResponse> SignInAsync(PasswordSignInRequest request, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+        {
+            throw ApiException.Validation("invalid_credentials", "Email and password are required.");
+        }
+
+        var normalizedEmail = NormalizeEmail(request.Email);
+        var account = await db.ApplicationUserAccounts
+            .SingleOrDefaultAsync(x => x.NormalizedEmail == normalizedEmail, cancellationToken);
+        if (account is null)
+        {
+            throw ApiException.Validation("invalid_credentials", "Invalid email or password.");
+        }
+
+        var verificationResult = passwordHasher.VerifyHashedPassword(account, account.PasswordHash, request.Password);
+        if (verificationResult == PasswordVerificationResult.Failed)
+        {
+            throw ApiException.Validation("invalid_credentials", "Invalid email or password.");
+        }
+
+        await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
+
+        if ((string.Equals(account.Role, ApplicationUserRoles.Expert, StringComparison.Ordinal)
+                || string.Equals(account.Role, ApplicationUserRoles.Admin, StringComparison.Ordinal))
+            && account.EmailVerifiedAt is null)
+        {
+            throw ApiException.Forbidden("email_verification_required", "Email verification is required before privileged access is allowed.");
+        }
+
+        if (account.AuthenticatorEnabledAt is not null)
+        {
+            throw new MfaChallengeRequiredException(account.Email, CreateMfaChallengeToken(account.Id));
+        }
+
+        var now = timeProvider.GetUtcNow();
         account.LastLoginAt = now;
-        await db.SaveChangesAsync(ct);
+        account.UpdatedAt = now;
+        await db.SaveChangesAsync(cancellationToken);
 
-        logger.LogInformation("Issued JWT for {Email} with role {Role}", account.Email, account.Role);
-
-        return new AuthLoginResponse(
-            tokenHandler.WriteToken(token),
-            expiresAt,
-            ToUserResponse(account));
+        var subject = await ResolveSubjectAsync(account, cancellationToken);
+        return await CreateSessionAsync(account, subject.UserId, subject.DisplayName, cancellationToken);
     }
 
-    public async Task<AuthUserResponse> GetCurrentUserAsync(ClaimsPrincipal principal, CancellationToken ct)
+    public async Task<AuthSessionResponse> CompleteDirectSignInAsync(
+        string accountId,
+        bool markEmailVerified,
+        CancellationToken cancellationToken = default)
     {
-        var subjectId = principal.FindFirstValue("user_id") ?? principal.FindFirstValue(ClaimTypes.NameIdentifier);
-        var role = principal.FindFirstValue("role") ?? principal.FindFirstValue(ClaimTypes.Role);
+        var account = await db.ApplicationUserAccounts
+            .SingleOrDefaultAsync(x => x.Id == accountId, cancellationToken)
+            ?? throw ApiException.Forbidden("account_not_found", "This account is not available.");
 
-        if (string.IsNullOrWhiteSpace(subjectId) || string.IsNullOrWhiteSpace(role))
+        await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
+
+        var now = timeProvider.GetUtcNow();
+        if (markEmailVerified && account.EmailVerifiedAt is null)
         {
-            throw ApiException.Forbidden("auth_invalid_token", "Your session token is invalid.");
+            account.EmailVerifiedAt = now;
         }
 
-        var account = await db.AuthAccounts.FirstOrDefaultAsync(candidate => candidate.SubjectId == subjectId && candidate.Role == role, ct);
-        if (account is null || !account.IsActive)
+        account.LastLoginAt = now;
+        account.UpdatedAt = now;
+
+        var subject = await ResolveSubjectAsync(account, cancellationToken);
+        var session = await CreateSessionCoreAsync(account, subject, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        return session;
+    }
+
+    public async Task<AuthSessionResponse> RefreshAsync(RefreshTokenRequest request, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.RefreshToken))
         {
-            throw ApiException.Forbidden("auth_account_not_found", "Your account is no longer active.");
+            throw ApiException.Validation("refresh_token_required", "Refresh token is required.");
         }
 
-        return ToUserResponse(account);
+        var now = timeProvider.GetUtcNow();
+        var tokenHash = tokenService.HashRefreshToken(request.RefreshToken);
+        var refreshToken = await db.RefreshTokenRecords
+            .Include(x => x.ApplicationUserAccount)
+            .SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
+        if (refreshToken is null || refreshToken.RevokedAt is not null || refreshToken.ExpiresAt <= now)
+        {
+            throw ApiException.Forbidden("invalid_refresh_token", "Refresh token is invalid or expired.");
+        }
+
+        refreshToken.LastUsedAt = now;
+        refreshToken.RevokedAt = now;
+
+        var account = refreshToken.ApplicationUserAccount;
+        await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
+        var subject = await ResolveSubjectAsync(account, cancellationToken);
+        var session = await CreateSessionCoreAsync(account, subject, cancellationToken);
+
+        await db.SaveChangesAsync(cancellationToken);
+        return session;
     }
 
-    public static string HashPassword(string password)
+    public async Task<OtpChallengeResponse> SendEmailVerificationOtpAsync(SendEmailOtpRequest request, CancellationToken cancellationToken = default)
     {
-        var salt = RandomNumberGenerator.GetBytes(16);
-        const int iterations = 100_000;
-        var hash = Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, HashAlgorithmName.SHA256, 32);
-        return $"v1.{iterations}.{Convert.ToBase64String(salt)}.{Convert.ToBase64String(hash)}";
+        if (!string.Equals(request.Purpose, EmailOtpService.EmailVerificationPurpose, StringComparison.Ordinal))
+        {
+            throw ApiException.Validation("unsupported_otp_purpose", "Only email verification OTP requests are currently supported.");
+        }
+
+        return await emailOtpService.RequestEmailVerificationOtpAsync(request.Email, cancellationToken);
     }
 
-    public static bool VerifyPassword(string password, string passwordHash)
+    public async Task<CurrentUserResponse> VerifyEmailOtpAsync(VerifyEmailOtpRequest request, CancellationToken cancellationToken = default)
     {
-        var parts = passwordHash.Split('.', 4);
-        if (parts.Length != 4 || parts[0] != "v1")
+        if (!string.Equals(request.Purpose, EmailOtpService.EmailVerificationPurpose, StringComparison.Ordinal))
+        {
+            throw ApiException.Validation("unsupported_otp_purpose", "Only email verification OTP requests are currently supported.");
+        }
+
+        var account = await emailOtpService.VerifyEmailVerificationOtpAsync(request.Email, request.Code, cancellationToken);
+        var subject = await ResolveSubjectAsync(account, cancellationToken);
+        return BuildCurrentUserResponse(subject);
+    }
+
+    public async Task<OtpChallengeResponse> ForgotPasswordAsync(ForgotPasswordRequest request, CancellationToken cancellationToken = default)
+    {
+        return await emailOtpService.RequestPasswordResetOtpAsync(request.Email, cancellationToken);
+    }
+
+    public async Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.NewPassword))
+        {
+            throw ApiException.Validation("new_password_required", "A new password is required.");
+        }
+
+        var account = await emailOtpService.VerifyPasswordResetOtpAsync(request.Email, request.ResetToken, cancellationToken);
+        var now = timeProvider.GetUtcNow();
+        account.PasswordHash = passwordHasher.HashPassword(account, request.NewPassword);
+        account.UpdatedAt = now;
+
+        var activeRefreshTokens = await db.RefreshTokenRecords
+            .Where(x => x.ApplicationUserAccountId == account.Id && x.RevokedAt == null)
+            .ToListAsync(cancellationToken);
+
+        foreach (var refreshToken in activeRefreshTokens)
+        {
+            refreshToken.RevokedAt = now;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<AuthenticatorSetupResponse> BeginAuthenticatorSetupAsync(
+        ClaimsPrincipal principal,
+        CancellationToken cancellationToken = default)
+    {
+        var account = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
+        var now = timeProvider.GetUtcNow();
+        var secretKey = AuthenticatorTotp.GenerateSecretKey();
+        var recoveryCodes = AuthenticatorTotp.GenerateRecoveryCodes();
+        if (db.Database.IsInMemory())
+        {
+            var existingRecoveryCodes = await db.MfaRecoveryCodes
+                .Where(x => x.ApplicationUserAccountId == account.Id)
+                .ToListAsync(cancellationToken);
+
+            if (existingRecoveryCodes.Count > 0)
+            {
+                db.MfaRecoveryCodes.RemoveRange(existingRecoveryCodes);
+            }
+        }
+        else
+        {
+            await db.MfaRecoveryCodes
+                .Where(x => x.ApplicationUserAccountId == account.Id)
+                .ExecuteDeleteAsync(cancellationToken);
+        }
+
+        db.MfaRecoveryCodes.AddRange(recoveryCodes.Select(code => new MfaRecoveryCode
+        {
+            Id = Guid.NewGuid(),
+            ApplicationUserAccountId = account.Id,
+            CodeHash = AuthenticatorTotp.HashRecoveryCode(code),
+            CreatedAt = now
+        }));
+
+        account.ProtectedAuthenticatorSecret = _authenticatorSecretProtector.Protect(secretKey);
+        account.AuthenticatorEnabledAt = null;
+        account.UpdatedAt = now;
+        await db.SaveChangesAsync(cancellationToken);
+
+        var otpAuthUri = BuildOtpAuthUri(account.Email, secretKey);
+        return new AuthenticatorSetupResponse(
+            secretKey,
+            otpAuthUri,
+            BuildQrCodeDataUrl(secretKey, otpAuthUri),
+            recoveryCodes);
+    }
+
+    public async Task<CurrentUserResponse> ConfirmAuthenticatorSetupAsync(
+        ClaimsPrincipal principal,
+        ConfirmAuthenticatorSetupRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Code))
+        {
+            throw ApiException.Validation("authenticator_code_required", "Authenticator code is required.");
+        }
+
+        var account = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
+        var secretKey = ReadAuthenticatorSecretOrThrow(account);
+        if (!AuthenticatorTotp.VerifyCode(secretKey, request.Code, timeProvider.GetUtcNow(), AllowedAuthenticatorDriftWindows))
+        {
+            throw ApiException.Validation("invalid_authenticator_code", "The authenticator code is invalid.");
+        }
+
+        var now = timeProvider.GetUtcNow();
+        account.AuthenticatorEnabledAt = now;
+        account.UpdatedAt = now;
+        await db.SaveChangesAsync(cancellationToken);
+
+        var subject = await ResolveSubjectAsync(account, cancellationToken);
+        return BuildCurrentUserResponse(subject);
+    }
+
+    public async Task<AuthSessionResponse> CompleteMfaChallengeAsync(
+        MfaChallengeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Code))
+        {
+            throw ApiException.Validation("authenticator_code_required", "Authenticator code is required.");
+        }
+
+        var account = await ResolveTrackedMfaAccountAsync(request.Email, request.ChallengeToken, cancellationToken);
+        var secretKey = ReadAuthenticatorSecretOrThrow(account);
+        if (!AuthenticatorTotp.VerifyCode(secretKey, request.Code, timeProvider.GetUtcNow(), AllowedAuthenticatorDriftWindows))
+        {
+            throw ApiException.Validation("invalid_authenticator_code", "The authenticator code is invalid.");
+        }
+
+        return await CompleteMfaSignInAsync(account, cancellationToken);
+    }
+
+    public async Task<AuthSessionResponse> CompleteRecoveryChallengeAsync(
+        MfaChallengeRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.RecoveryCode))
+        {
+            throw ApiException.Validation("mfa_recovery_code_required", "Recovery code is required.");
+        }
+
+        var account = await ResolveTrackedMfaAccountAsync(request.Email, request.ChallengeToken, cancellationToken);
+        var codeHash = AuthenticatorTotp.HashRecoveryCode(request.RecoveryCode);
+        var recoveryCode = await db.MfaRecoveryCodes
+            .SingleOrDefaultAsync(
+                x => x.ApplicationUserAccountId == account.Id
+                    && x.RedeemedAt == null
+                    && x.CodeHash == codeHash,
+                cancellationToken);
+
+        if (recoveryCode is null)
+        {
+            throw ApiException.Validation("invalid_mfa_recovery_code", "The recovery code is invalid or already used.");
+        }
+
+        recoveryCode.RedeemedAt = timeProvider.GetUtcNow();
+        return await CompleteMfaSignInAsync(account, cancellationToken);
+    }
+
+    public async Task SignOutAsync(SignOutRequest request, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+        {
+            throw ApiException.Validation("refresh_token_required", "Refresh token is required.");
+        }
+
+        var tokenHash = tokenService.HashRefreshToken(request.RefreshToken);
+        var refreshToken = await db.RefreshTokenRecords
+            .SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
+        if (refreshToken is null || refreshToken.RevokedAt is not null)
+        {
+            return;
+        }
+
+        refreshToken.RevokedAt = timeProvider.GetUtcNow();
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<CurrentUserResponse> GetCurrentUserAsync(ClaimsPrincipal principal, CancellationToken cancellationToken = default)
+    {
+        var account = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
+        var subject = await ResolveSubjectAsync(account, cancellationToken);
+
+        return BuildCurrentUserResponse(subject);
+    }
+
+    private async Task<AuthSessionResponse> CreateSessionAsync(
+        ApplicationUserAccount account,
+        string userId,
+        string displayName,
+        CancellationToken cancellationToken)
+    {
+        var subject = await BuildSubjectAsync(account, userId, displayName, cancellationToken);
+        var session = await CreateSessionCoreAsync(account, subject, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        return session;
+    }
+
+    private async Task<AuthSessionResponse> CreateSessionCoreAsync(
+        ApplicationUserAccount account,
+        AuthenticatedSessionSubject subject,
+        CancellationToken cancellationToken)
+    {
+        var issuedSession = tokenService.IssueSession(subject);
+
+        db.RefreshTokenRecords.Add(new RefreshTokenRecord
+        {
+            Id = Guid.NewGuid(),
+            ApplicationUserAccountId = account.Id,
+            TokenHash = issuedSession.RefreshTokenHash,
+            ExpiresAt = issuedSession.RefreshTokenExpiresAt,
+            CreatedAt = timeProvider.GetUtcNow()
+        });
+
+        await Task.CompletedTask;
+        return new AuthSessionResponse(
+            issuedSession.AccessToken,
+            issuedSession.RefreshToken,
+            issuedSession.AccessTokenExpiresAt,
+            issuedSession.RefreshTokenExpiresAt,
+            BuildCurrentUserResponse(subject));
+    }
+
+    private async Task<AuthenticatedSessionSubject> ResolveSubjectAsync(ApplicationUserAccount account, CancellationToken cancellationToken)
+    {
+        if (string.Equals(account.Role, ApplicationUserRoles.Learner, StringComparison.Ordinal))
+        {
+            var learner = await db.Users
+                .AsNoTracking()
+                .SingleAsync(x => x.AuthAccountId == account.Id, cancellationToken);
+            return await BuildSubjectAsync(account, learner.Id, learner.DisplayName, cancellationToken);
+        }
+
+        if (string.Equals(account.Role, ApplicationUserRoles.Expert, StringComparison.Ordinal))
+        {
+            var expert = await db.ExpertUsers
+                .AsNoTracking()
+                .SingleAsync(x => x.AuthAccountId == account.Id, cancellationToken);
+            return await BuildSubjectAsync(account, expert.Id, expert.DisplayName, cancellationToken);
+        }
+
+        return await BuildSubjectAsync(account, account.Id, BuildDefaultDisplayName(account.Email), cancellationToken);
+    }
+
+    private async Task<ApplicationUserAccount> ResolveAccountFromPrincipalAsync(
+        ClaimsPrincipal principal,
+        CancellationToken cancellationToken)
+    {
+        var candidateIds = principal.Claims
+            .Where(claim =>
+                claim.Type == AuthTokenService.AuthAccountIdClaimType
+                || claim.Type == ClaimTypes.NameIdentifier
+                || claim.Type == "nameid"
+                || claim.Type == JwtRegisteredClaimNames.Sub)
+            .Select(claim => claim.Value)
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        foreach (var candidateId in candidateIds)
+        {
+            var directMatch = await db.ApplicationUserAccounts
+                .AsNoTracking()
+                .SingleOrDefaultAsync(x => x.Id == candidateId, cancellationToken);
+
+            if (directMatch is not null)
+            {
+                return directMatch;
+            }
+        }
+
+        var email = FindFirstValue(principal, ClaimTypes.Email, JwtRegisteredClaimNames.Email, "email");
+        if (!string.IsNullOrWhiteSpace(email))
+        {
+            var normalizedEmail = NormalizeEmail(email);
+            var emailMatch = await db.ApplicationUserAccounts
+                .AsNoTracking()
+                .SingleOrDefaultAsync(x => x.NormalizedEmail == normalizedEmail, cancellationToken);
+
+            if (emailMatch is not null)
+            {
+                return emailMatch;
+            }
+        }
+
+        var learnerAuthAccountId = await db.Users
+            .AsNoTracking()
+            .Where(x => candidateIds.Contains(x.Id) && x.AuthAccountId != null)
+            .Select(x => x.AuthAccountId)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (!string.IsNullOrWhiteSpace(learnerAuthAccountId))
+        {
+            return await db.ApplicationUserAccounts
+                .AsNoTracking()
+                .SingleAsync(x => x.Id == learnerAuthAccountId, cancellationToken);
+        }
+
+        var expertAuthAccountId = await db.ExpertUsers
+            .AsNoTracking()
+            .Where(x => candidateIds.Contains(x.Id) && x.AuthAccountId != null)
+            .Select(x => x.AuthAccountId)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (!string.IsNullOrWhiteSpace(expertAuthAccountId))
+        {
+            return await db.ApplicationUserAccounts
+                .AsNoTracking()
+                .SingleAsync(x => x.Id == expertAuthAccountId, cancellationToken);
+        }
+
+        var routeUserId = candidateIds.FirstOrDefault()
+            ?? throw new InvalidOperationException("Authenticated user id claim is required.");
+
+        return await db.ApplicationUserAccounts
+            .AsNoTracking()
+            .SingleAsync(x => x.Id == routeUserId, cancellationToken);
+    }
+
+    private async Task<ApplicationUserAccount> ResolveTrackedAccountFromPrincipalAsync(
+        ClaimsPrincipal principal,
+        CancellationToken cancellationToken)
+    {
+        var account = await ResolveAccountFromPrincipalAsync(principal, cancellationToken);
+        await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
+        return await db.ApplicationUserAccounts.SingleAsync(x => x.Id == account.Id, cancellationToken);
+    }
+
+    private async Task<ApplicationUserAccount> ResolveTrackedMfaAccountAsync(
+        string email,
+        string? challengeToken,
+        CancellationToken cancellationToken)
+    {
+        var challenge = ReadMfaChallengeTokenOrThrow(challengeToken);
+        var normalizedEmail = AuthEmailAddress.NormalizeOrThrow(email);
+        var account = await db.ApplicationUserAccounts
+            .SingleOrDefaultAsync(
+                x => x.Id == challenge.AccountId && x.NormalizedEmail == normalizedEmail,
+                cancellationToken);
+
+        if (account is null)
+        {
+            throw ApiException.Validation("invalid_mfa_challenge", "The MFA challenge is invalid or expired.");
+        }
+
+        if (account.AuthenticatorEnabledAt is null)
+        {
+            throw ApiException.Forbidden("mfa_not_configured", "Authenticator-based MFA is not configured for this account.");
+        }
+
+        await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
+
+        return account;
+    }
+
+    private async Task<AuthSessionResponse> CompleteMfaSignInAsync(
+        ApplicationUserAccount account,
+        CancellationToken cancellationToken)
+    {
+        var now = timeProvider.GetUtcNow();
+        account.LastLoginAt = now;
+        account.UpdatedAt = now;
+
+        var subject = await ResolveSubjectAsync(account, cancellationToken);
+        var session = await CreateSessionCoreAsync(account, subject, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+        return session;
+    }
+
+    private string ReadAuthenticatorSecretOrThrow(ApplicationUserAccount account)
+    {
+        if (string.IsNullOrWhiteSpace(account.ProtectedAuthenticatorSecret))
+        {
+            throw ApiException.Validation("authenticator_setup_required", "Begin authenticator setup before confirming MFA.");
+        }
+
+        try
+        {
+            return _authenticatorSecretProtector.Unprotect(account.ProtectedAuthenticatorSecret);
+        }
+        catch
+        {
+            throw ApiException.Validation("invalid_authenticator_secret", "The authenticator setup secret is invalid.");
+        }
+    }
+
+    private string CreateMfaChallengeToken(string accountId)
+    {
+        var challenge = new MfaChallengeTicket(accountId, timeProvider.GetUtcNow().Add(_mfaChallengeLifetime));
+        var serialized = JsonSerializer.Serialize(challenge);
+        var protectedPayload = _mfaChallengeProtector.Protect(serialized);
+        return WebEncoders.Base64UrlEncode(Encoding.UTF8.GetBytes(protectedPayload));
+    }
+
+    private MfaChallengeTicket ReadMfaChallengeTokenOrThrow(string? challengeToken)
+    {
+        if (string.IsNullOrWhiteSpace(challengeToken))
+        {
+            throw ApiException.Validation("mfa_challenge_token_required", "MFA challenge token is required.");
+        }
+
+        try
+        {
+            var protectedPayload = Encoding.UTF8.GetString(WebEncoders.Base64UrlDecode(challengeToken));
+            var serialized = _mfaChallengeProtector.Unprotect(protectedPayload);
+            var challenge = JsonSerializer.Deserialize<MfaChallengeTicket>(serialized)
+                            ?? throw new InvalidOperationException("Challenge token payload was empty.");
+            if (challenge.ExpiresAt <= timeProvider.GetUtcNow())
+            {
+                throw ApiException.Validation("invalid_mfa_challenge", "The MFA challenge is invalid or expired.");
+            }
+
+            return challenge;
+        }
+        catch (ApiException)
+        {
+            throw;
+        }
+        catch
+        {
+            throw ApiException.Validation("invalid_mfa_challenge", "The MFA challenge is invalid or expired.");
+        }
+    }
+
+    private string BuildOtpAuthUri(string email, string secretKey)
+    {
+        var escapedIssuer = Uri.EscapeDataString(_authenticatorIssuer);
+        var escapedLabel = Uri.EscapeDataString($"{_authenticatorIssuer}:{email}");
+        return $"otpauth://totp/{escapedLabel}?secret={secretKey}&issuer={escapedIssuer}&digits=6&period=30";
+    }
+
+    private static string BuildQrCodeDataUrl(string secretKey, string otpAuthUri)
+    {
+        var svg = $$"""
+                    <svg xmlns="http://www.w3.org/2000/svg" width="420" height="180" viewBox="0 0 420 180">
+                      <rect width="100%" height="100%" fill="white" />
+                      <text x="16" y="28" font-size="16" font-family="monospace" fill="#111827">Authenticator setup</text>
+                      <text x="16" y="56" font-size="14" font-family="monospace" fill="#111827">Secret: {{WebUtility.HtmlEncode(secretKey)}}</text>
+                      <text x="16" y="84" font-size="10" font-family="monospace" fill="#374151">Paste the secret manually if your app cannot scan a QR code.</text>
+                      <text x="16" y="112" font-size="10" font-family="monospace" fill="#374151">{{WebUtility.HtmlEncode(otpAuthUri)}}</text>
+                    </svg>
+                    """;
+
+        return $"data:image/svg+xml;base64,{Convert.ToBase64String(Encoding.UTF8.GetBytes(svg))}";
+    }
+
+    private ExternalRegistrationTicket? ResolveExternalRegistrationTicket(string? externalRegistrationToken)
+    {
+        if (string.IsNullOrWhiteSpace(externalRegistrationToken))
+        {
+            return null;
+        }
+
+        return externalAuthTicketService.ReadRegistrationToken(externalRegistrationToken);
+    }
+
+    private async Task<(SignupExamTypeCatalog ExamType, SignupProfessionCatalog Profession, SignupSessionCatalog Session)> ValidateSignupSelectionAsync(
+        string examTypeId,
+        string professionId,
+        string sessionId,
+        string countryTarget,
+        CancellationToken cancellationToken)
+    {
+        var examType = await db.SignupExamTypeCatalog
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == examTypeId && item.IsActive, cancellationToken)
+            ?? throw ApiException.Validation("exam_type_invalid", "Select a valid exam type.");
+
+        var profession = await db.SignupProfessionCatalog
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == professionId && item.IsActive, cancellationToken)
+            ?? throw ApiException.Validation("profession_invalid", "Select a valid profession.");
+
+        var session = await db.SignupSessionCatalog
+            .AsNoTracking()
+            .SingleOrDefaultAsync(item => item.Id == sessionId && item.IsActive, cancellationToken)
+            ?? throw ApiException.Validation("session_invalid", "Select a valid session.");
+
+        var professionExamTypes = DeserializeStringList(profession.ExamTypeIdsJson);
+        if (!professionExamTypes.Contains(examType.Id, StringComparer.Ordinal))
+        {
+            throw ApiException.Validation("profession_exam_mismatch", "The selected profession is not available for that exam.");
+        }
+
+        var allowedCountries = DeserializeStringList(profession.CountryTargetsJson);
+        if (allowedCountries.Count > 0 && !allowedCountries.Contains(countryTarget, StringComparer.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation("country_target_invalid", "Select a valid target country.");
+        }
+
+        var sessionProfessionIds = DeserializeStringList(session.ProfessionIdsJson);
+        if (!string.Equals(session.ExamTypeId, examType.Id, StringComparison.Ordinal)
+            || !sessionProfessionIds.Contains(profession.Id, StringComparer.Ordinal))
+        {
+            throw ApiException.Validation("session_selection_invalid", "The selected session is not available for this exam and profession.");
+        }
+
+        return (examType, profession, session);
+    }
+
+    private static IReadOnlyList<string> DeserializeStringList(string json)
+        => JsonSupport.Deserialize(json, Array.Empty<string>());
+
+    private static string RequireTrimmed(string? value, string errorCode, string message)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            throw ApiException.Validation(errorCode, message);
+        }
+
+        return value.Trim();
+    }
+
+    private Task<AuthenticatedSessionSubject> BuildSubjectAsync(
+        ApplicationUserAccount account,
+        string userId,
+        string displayName,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        var requiresMfa = (string.Equals(account.Role, ApplicationUserRoles.Expert, StringComparison.Ordinal)
+            || string.Equals(account.Role, ApplicationUserRoles.Admin, StringComparison.Ordinal))
+            && account.AuthenticatorEnabledAt is null;
+
+        if (_allowLocalDemoWithoutMfa)
+        {
+            requiresMfa = false;
+        }
+
+        return Task.FromResult(new AuthenticatedSessionSubject(
+            userId,
+            account.Id,
+            account.Email,
+            account.Role,
+            displayName,
+            account.EmailVerifiedAt is not null,
+            account.AuthenticatorEnabledAt is not null,
+            account.EmailVerifiedAt is null,
+            requiresMfa,
+            account.EmailVerifiedAt,
+            account.AuthenticatorEnabledAt));
+    }
+
+    private static CurrentUserResponse BuildCurrentUserResponse(AuthenticatedSessionSubject subject)
+        => new(
+            subject.UserId,
+            subject.Email,
+            subject.Role,
+            subject.DisplayName,
+            subject.IsEmailVerified,
+            subject.IsAuthenticatorEnabled,
+            subject.RequiresEmailVerification,
+            subject.RequiresMfa,
+            subject.EmailVerifiedAt,
+            subject.AuthenticatorEnabledAt);
+
+    private static bool TryBuildCurrentUserFromClaims(
+        ClaimsPrincipal principal,
+        string? role,
+        out CurrentUserResponse currentUser)
+    {
+        currentUser = default!;
+
+        var userId = FindFirstValue(principal, ClaimTypes.NameIdentifier, "nameid", JwtRegisteredClaimNames.Sub);
+        var email = FindFirstValue(principal, ClaimTypes.Email, JwtRegisteredClaimNames.Email, "email");
+        var displayName = FindFirstValue(principal, ClaimTypes.Name, JwtRegisteredClaimNames.UniqueName, "unique_name");
+
+        if (string.IsNullOrWhiteSpace(userId)
+            || string.IsNullOrWhiteSpace(email)
+            || string.IsNullOrWhiteSpace(role)
+            || !TryParseBooleanClaim(principal, AuthTokenService.IsEmailVerifiedClaimType, out var isEmailVerified)
+            || !TryParseBooleanClaim(principal, AuthTokenService.IsAuthenticatorEnabledClaimType, out var isAuthenticatorEnabled)
+            || !TryParseBooleanClaim(principal, AuthTokenService.RequiresEmailVerificationClaimType, out var requiresEmailVerification)
+            || !TryParseBooleanClaim(principal, AuthTokenService.RequiresMfaClaimType, out var requiresMfa)
+            || !TryParseDateTimeOffsetClaim(principal, AuthTokenService.EmailVerifiedAtClaimType, out var emailVerifiedAt)
+            || !TryParseDateTimeOffsetClaim(principal, AuthTokenService.AuthenticatorEnabledAtClaimType, out var authenticatorEnabledAt))
         {
             return false;
         }
 
-        if (!int.TryParse(parts[1], out var iterations))
+        currentUser = new CurrentUserResponse(
+            userId,
+            email,
+            role,
+            displayName,
+            isEmailVerified,
+            isAuthenticatorEnabled,
+            requiresEmailVerification,
+            requiresMfa,
+            emailVerifiedAt,
+            authenticatorEnabledAt);
+
+        return true;
+    }
+
+    private async Task EnsureAccountCanAuthenticateAsync(ApplicationUserAccount account, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+
+        if (account.DeletedAt is not null)
+        {
+            throw ApiException.Forbidden("account_deleted", "This account has been deleted.");
+        }
+
+        if (string.Equals(account.Role, ApplicationUserRoles.Learner, StringComparison.Ordinal))
+        {
+            var learner = await db.Users
+                .AsNoTracking()
+                .SingleOrDefaultAsync(x => x.AuthAccountId == account.Id, cancellationToken);
+
+            if (learner is null || !string.Equals(learner.AccountStatus, "active", StringComparison.OrdinalIgnoreCase))
+            {
+                throw ApiException.Forbidden("account_suspended", "This account is suspended.");
+            }
+
+            return;
+        }
+
+        if (string.Equals(account.Role, ApplicationUserRoles.Expert, StringComparison.Ordinal))
+        {
+            var expert = await db.ExpertUsers
+                .AsNoTracking()
+                .SingleOrDefaultAsync(x => x.AuthAccountId == account.Id, cancellationToken);
+
+            if (expert is null || !expert.IsActive)
+            {
+                throw ApiException.Forbidden("account_suspended", "This account is suspended.");
+            }
+        }
+    }
+
+    private static bool TryParseBooleanClaim(ClaimsPrincipal principal, string claimType, out bool value)
+    {
+        value = default;
+        var rawValue = principal.FindFirstValue(claimType);
+        return !string.IsNullOrWhiteSpace(rawValue) && bool.TryParse(rawValue, out value);
+    }
+
+    private static bool TryParseDateTimeOffsetClaim(
+        ClaimsPrincipal principal,
+        string claimType,
+        out DateTimeOffset? value)
+    {
+        value = null;
+
+        var rawValue = principal.FindFirstValue(claimType);
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return true;
+        }
+
+        if (!DateTimeOffset.TryParse(rawValue, out var parsedValue))
         {
             return false;
         }
 
-        var salt = Convert.FromBase64String(parts[2]);
-        var expectedHash = Convert.FromBase64String(parts[3]);
-        var actualHash = Rfc2898DeriveBytes.Pbkdf2(password, salt, iterations, HashAlgorithmName.SHA256, expectedHash.Length);
-        return CryptographicOperations.FixedTimeEquals(actualHash, expectedHash);
+        value = parsedValue;
+        return true;
     }
 
-    private static AuthUserResponse ToUserResponse(AuthAccount account)
-        => new(account.SubjectId, account.Role, account.Email, account.DisplayName, account.IsActive);
+    private static string? FindFirstValue(ClaimsPrincipal principal, params string[] claimTypes)
+    {
+        foreach (var claimType in claimTypes)
+        {
+            var value = principal.FindFirstValue(claimType);
+            if (!string.IsNullOrWhiteSpace(value))
+            {
+                return value;
+            }
+        }
+
+        return null;
+    }
+
+    private static string NormalizeEmail(string email) => email.Trim().ToUpperInvariant();
+
+    private static string BuildDefaultDisplayName(string email)
+        => email.Split('@', 2)[0];
+
+    private sealed record MfaChallengeTicket(string AccountId, DateTimeOffset ExpiresAt);
 }

@@ -20,8 +20,100 @@ const sizeStyles: Record<string, string> = {
   lg: 'max-w-2xl',
 };
 
+type FocusRestoreDescriptor = {
+  id?: string;
+  tagName: string;
+  ariaLabel?: string;
+  name?: string;
+  text?: string;
+};
+
+function describeFocusTarget(element: HTMLElement | null): FocusRestoreDescriptor | null {
+  if (!element) return null;
+  return {
+    id: element.id || undefined,
+    tagName: element.tagName.toLowerCase(),
+    ariaLabel: element.getAttribute('aria-label') || undefined,
+    name: element.getAttribute('name') || undefined,
+    text: element.textContent?.trim() || undefined,
+  };
+}
+
+function resolveFocusTarget(element: HTMLElement | null, descriptor: FocusRestoreDescriptor | null) {
+  if (element && element.isConnected) {
+    return element;
+  }
+
+  if (!descriptor) {
+    return null;
+  }
+
+  if (descriptor.id) {
+    const byId = document.getElementById(descriptor.id);
+    if (byId instanceof HTMLElement) {
+      return byId;
+    }
+  }
+
+  const candidates = Array.from(document.querySelectorAll<HTMLElement>(descriptor.tagName));
+
+  if (descriptor.ariaLabel) {
+    const byAria = candidates.find((candidate) => candidate.getAttribute('aria-label') === descriptor.ariaLabel);
+    if (byAria) {
+      return byAria;
+    }
+  }
+
+  if (descriptor.name) {
+    const byName = candidates.find((candidate) => candidate.getAttribute('name') === descriptor.name);
+    if (byName) {
+      return byName;
+    }
+  }
+
+  if (descriptor.text) {
+    const byText = candidates.find((candidate) => candidate.textContent?.trim() === descriptor.text);
+    if (byText) {
+      return byText;
+    }
+  }
+
+  return null;
+}
+
+function queueFocusRestore(element: HTMLElement | null, descriptor: FocusRestoreDescriptor | null) {
+  let attempts = 0;
+
+  const tryRestoreFocus = () => {
+    const restoreTarget = resolveFocusTarget(element, descriptor);
+    if (!restoreTarget) {
+      if (attempts < 6) {
+        attempts += 1;
+        window.setTimeout(tryRestoreFocus, 50);
+      }
+      return;
+    }
+
+    restoreTarget.focus();
+    if (document.activeElement !== restoreTarget && attempts < 6) {
+      attempts += 1;
+      requestAnimationFrame(() => {
+        restoreTarget.focus();
+        if (document.activeElement !== restoreTarget) {
+          window.setTimeout(tryRestoreFocus, 50);
+        }
+      });
+    }
+  };
+
+  window.setTimeout(tryRestoreFocus, 50);
+}
+
 export function Modal({ open, onClose, title, children, className, size = 'md' }: ModalProps) {
   const dialogRef = useRef<HTMLDivElement>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const restoreFocusDescriptorRef = useRef<FocusRestoreDescriptor | null>(null);
+  const wasOpenRef = useRef(false);
 
   const trapFocus = useCallback((e: KeyboardEvent) => {
     if (e.key !== 'Tab' || !dialogRef.current) return;
@@ -40,6 +132,8 @@ export function Modal({ open, onClose, title, children, className, size = 'md' }
 
   useEffect(() => {
     if (!open) return;
+    restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    restoreFocusDescriptorRef.current = describeFocusTarget(restoreFocusRef.current);
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
       trapFocus(e);
@@ -58,6 +152,14 @@ export function Modal({ open, onClose, title, children, className, size = 'md' }
       document.body.style.overflow = '';
     };
   }, [open, onClose, trapFocus]);
+
+  useEffect(() => {
+    if (!open && wasOpenRef.current) {
+      queueFocusRestore(restoreFocusRef.current, restoreFocusDescriptorRef.current);
+    }
+
+    wasOpenRef.current = open;
+  }, [open]);
 
   if (!open) return null;
 
@@ -91,6 +193,9 @@ interface DrawerProps {
 
 export function Drawer({ open, onClose, title, children, side = 'right', className }: DrawerProps) {
   const drawerRef = useRef<HTMLDivElement>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const restoreFocusDescriptorRef = useRef<FocusRestoreDescriptor | null>(null);
+  const wasOpenRef = useRef(false);
 
   const trapFocus = useCallback((e: KeyboardEvent) => {
     if (e.key !== 'Tab' || !drawerRef.current) return;
@@ -109,6 +214,8 @@ export function Drawer({ open, onClose, title, children, side = 'right', classNa
 
   useEffect(() => {
     if (!open) return;
+    restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    restoreFocusDescriptorRef.current = describeFocusTarget(restoreFocusRef.current);
     const handler = (e: KeyboardEvent) => {
       if (e.key === 'Escape') onClose();
       trapFocus(e);
@@ -126,6 +233,14 @@ export function Drawer({ open, onClose, title, children, side = 'right', classNa
       document.body.style.overflow = '';
     };
   }, [open, onClose, trapFocus]);
+
+  useEffect(() => {
+    if (!open && wasOpenRef.current) {
+      queueFocusRestore(restoreFocusRef.current, restoreFocusDescriptorRef.current);
+    }
+
+    wasOpenRef.current = open;
+  }, [open]);
 
   if (!open) return null;
 

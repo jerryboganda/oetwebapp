@@ -7,28 +7,35 @@ import { FilterBar, FilterGroup } from '@/components/ui/filter-bar';
 import { ConfidenceBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { ReviewRequest } from '@/lib/types/expert';
+import { ExpertQueueFilterMetadata, ReviewRequest } from '@/lib/types/expert';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { EmptyState } from '@/components/ui/empty-error';
 import { InlineAlert, Toast } from '@/components/ui/alert';
-import { claimReview, fetchReviewQueue, isApiError, releaseReview } from '@/lib/api';
+import { claimReview, fetchExpertQueueFilterMetadata, fetchReviewQueue, isApiError, releaseReview } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { RefreshCw, Search, Inbox, Unlock } from 'lucide-react';
+import { ExpertFreshnessBadge, ExpertMetricCard } from '@/components/domain/expert-surface';
 
 type AsyncStatus = 'loading' | 'error' | 'empty' | 'success';
 
 const FILTER_KEYS = ['type', 'profession', 'priority', 'status', 'confidence', 'assignment', 'overdue'] as const;
 const PAGE_SIZE = 25;
 
-const FILTER_GROUPS: FilterGroup[] = [
-  { id: 'type', label: 'Sub-test', options: [{ id: 'writing', label: 'Writing' }, { id: 'speaking', label: 'Speaking' }] },
-  { id: 'profession', label: 'Profession', options: [{ id: 'medicine', label: 'Medicine' }, { id: 'nursing', label: 'Nursing' }, { id: 'dentistry', label: 'Dentistry' }, { id: 'pharmacy', label: 'Pharmacy' }, { id: 'physiotherapy', label: 'Physiotherapy' }] },
-  { id: 'priority', label: 'Priority', options: [{ id: 'high', label: 'High' }, { id: 'normal', label: 'Normal' }, { id: 'low', label: 'Low' }] },
-  { id: 'status', label: 'Status', options: [{ id: 'queued', label: 'Queued' }, { id: 'assigned', label: 'Assigned' }, { id: 'in_progress', label: 'In Progress' }] },
-  { id: 'confidence', label: 'AI Confidence', options: [{ id: 'high', label: 'High' }, { id: 'medium', label: 'Medium' }, { id: 'low', label: 'Low' }, { id: 'unknown', label: 'Unknown' }] },
-  { id: 'assignment', label: 'Assignment', options: [{ id: 'assigned', label: 'Assigned' }, { id: 'unassigned', label: 'Unassigned' }] },
-  { id: 'overdue', label: 'Overdue', options: [{ id: 'true', label: 'Only Overdue' }] },
-];
+function toLabel(value: string) {
+  return value.replace(/_/g, ' ').replace(/\b\w/g, (match) => match.toUpperCase());
+}
+
+function buildFilterGroups(metadata: ExpertQueueFilterMetadata | null): FilterGroup[] {
+  return [
+    { id: 'type', label: 'Sub-test', options: (metadata?.types ?? ['writing', 'speaking']).map((value) => ({ id: value, label: toLabel(value) })) },
+    { id: 'profession', label: 'Profession', options: (metadata?.professions ?? []).map((value) => ({ id: value, label: toLabel(value) })) },
+    { id: 'priority', label: 'Priority', options: (metadata?.priorities ?? ['high', 'normal']).map((value) => ({ id: value, label: toLabel(value) })) },
+    { id: 'status', label: 'Status', options: (metadata?.statuses ?? ['queued', 'assigned', 'in_progress', 'overdue']).map((value) => ({ id: value, label: toLabel(value) })) },
+    { id: 'confidence', label: 'AI Confidence', options: (metadata?.confidenceBands ?? ['high', 'medium', 'low', 'unknown']).map((value) => ({ id: value, label: toLabel(value) })) },
+    { id: 'assignment', label: 'Assignment', options: (metadata?.assignmentStates ?? ['assigned', 'unassigned']).map((value) => ({ id: value, label: toLabel(value) })) },
+    { id: 'overdue', label: 'Overdue', options: [{ id: 'true', label: 'Only Overdue' }] },
+  ];
+}
 
 function parseFilters(searchParams: URLSearchParams | null): Record<string, string[]> {
   const initial: Record<string, string[]> = {};
@@ -53,11 +60,13 @@ export default function ReviewQueuePage() {
   const [searchQuery, setSearchQuery] = useState(() => searchParams?.get('search') ?? '');
   const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>(() => parseFilters(searchParams));
   const [lastRefreshed, setLastRefreshed] = useState<string | null>(null);
+  const [lastUpdatedAt, setLastUpdatedAt] = useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isRowActionPending, setIsRowActionPending] = useState<string | null>(null);
   const [showStaleWarning, setShowStaleWarning] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(() => Math.max(1, Number(searchParams?.get('page') ?? '1')));
+  const [metadata, setMetadata] = useState<ExpertQueueFilterMetadata | null>(null);
 
   useEffect(() => {
     setSelectedFilters(parseFilters(searchParams));
@@ -81,6 +90,24 @@ export default function ReviewQueuePage() {
     const query = params.toString();
     router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
   }, [pathname, router]);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const response = await fetchExpertQueueFilterMetadata();
+        if (!cancelled) {
+          setMetadata(response);
+        }
+      } catch {
+        // Queue can still render with fallback labels if metadata fetch fails.
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     const timeout = window.setTimeout(() => {
@@ -112,6 +139,7 @@ export default function ReviewQueuePage() {
       setData(response.items);
       setTotalCount(response.totalCount);
       setStatus(response.items.length === 0 ? 'empty' : 'success');
+      setLastUpdatedAt(response.lastUpdatedAt);
       setLastRefreshed(new Date(response.lastUpdatedAt).toLocaleTimeString());
       setShowStaleWarning(false);
     } catch (error) {
@@ -188,6 +216,10 @@ export default function ReviewQueuePage() {
   }, [loadQueue]);
 
   const hasActiveFilters = Object.values(selectedFilters).some((values) => values.length > 0) || !!searchQuery.trim();
+  const filterGroups = useMemo(() => buildFilterGroups(metadata), [metadata]);
+  const overdueCount = useMemo(() => data.filter((item) => item.isOverdue).length, [data]);
+  const assignedCount = useMemo(() => data.filter((item) => item.assignmentState === 'claimed' || item.assignmentState === 'assigned').length, [data]);
+  const draftReadyCount = useMemo(() => data.filter((item) => item.status === 'in_progress').length, [data]);
 
   const columns: Column<ReviewRequest>[] = [
     { key: 'id', header: 'Review ID', render: (row) => <span className="font-mono text-xs">{row.id}</span> },
@@ -231,7 +263,7 @@ export default function ReviewQueuePage() {
               disabled={pending || !(row.availableActions?.canOpen || row.availableActions?.canClaim)}
               aria-label={row.availableActions?.canClaim ? `Claim and review ${row.id}` : `Open ${row.id}`}
             >
-              {pending ? 'Working…' : row.availableActions?.canClaim ? 'Claim & Review' : 'Open'}
+                        {pending ? 'Working...' : row.availableActions?.canClaim ? 'Claim & Review' : 'Open'}
             </Button>
             {row.availableActions?.canRelease && (
               <Button
@@ -260,11 +292,20 @@ export default function ReviewQueuePage() {
           <p className="text-sm text-muted mt-1">Manage and prioritise pending learner submissions. {totalCount > 0 ? `${totalCount} review${totalCount === 1 ? '' : 's'} available.` : 'No active reviews loaded.'}</p>
         </div>
         <div className="flex items-center gap-3">
-          {lastRefreshed && <span className="text-xs text-muted">Last updated: {lastRefreshed}</span>}
+          <ExpertFreshnessBadge value={lastUpdatedAt} />
+          <Button variant="outline" onClick={() => router.push('/expert/learners')} className="bg-surface" aria-label="Open assigned learners">
+            Learners
+          </Button>
           <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing} className="bg-surface" aria-label="Refresh queue">
             <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
           </Button>
         </div>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+        <ExpertMetricCard label="Visible Queue Items" value={totalCount} hint="Results after your current filters." icon={<Inbox className="h-5 w-5" />} />
+        <ExpertMetricCard label="Assigned / Claimed" value={assignedCount} hint="Items already in owned workflow scope on this page." tone={assignedCount > 0 ? 'default' : 'success'} icon={<Unlock className="h-5 w-5" />} />
+        <ExpertMetricCard label="Overdue In View" value={overdueCount} hint={`${draftReadyCount} in-progress item(s) currently visible.`} tone={overdueCount > 0 ? 'danger' : 'success'} icon={<RefreshCw className="h-5 w-5" />} />
       </div>
 
       <InlineAlert variant="info" title="Ownership" action={<span className="text-xs">Claim a shared review before entering the workspace.</span>}>
@@ -289,7 +330,7 @@ export default function ReviewQueuePage() {
             aria-label="Search reviews"
           />
         </div>
-        <FilterBar groups={FILTER_GROUPS} selected={selectedFilters} onChange={handleFilterChange} onClear={clearFilters} />
+        <FilterBar groups={filterGroups} selected={selectedFilters} onChange={handleFilterChange} onClear={clearFilters} />
       </div>
 
       <AsyncStateWrapper

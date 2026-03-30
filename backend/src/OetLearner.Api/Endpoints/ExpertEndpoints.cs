@@ -17,9 +17,15 @@ public static class ExpertEndpoints
         expert.MapGet("/me", async (HttpContext http, ExpertService service, CancellationToken ct)
             => Results.Ok(await service.GetMeAsync(http.ExpertId(), ct)));
 
+        expert.MapGet("/dashboard", async (HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetDashboardAsync(http.ExpertId(), ct)));
+
         // Queue
         expert.MapGet("/queue", async ([AsParameters] ExpertQueueQueryRequest request, HttpContext http, ExpertService service, CancellationToken ct)
             => Results.Ok(await service.GetQueueAsync(http.ExpertId(), request, ct)));
+
+        expert.MapGet("/queue/filters/metadata", async (HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetQueueFilterMetadataAsync(http.ExpertId(), ct)));
 
         expert.MapPost("/queue/{reviewRequestId}/claim", async (string reviewRequestId, HttpContext http, ExpertService service, CancellationToken ct)
             => Results.Ok(await service.ClaimReviewAsync(reviewRequestId, http.ExpertId(), ct)))
@@ -61,13 +67,27 @@ public static class ExpertEndpoints
             => Results.Ok(await service.RequestReworkAsync(reviewRequestId, http.ExpertId(), request, ct)))
             .RequireRateLimiting("PerUserWrite");
 
+        expert.MapGet("/learners", async ([AsParameters] ExpertLearnersQueryRequest request, HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetLearnersAsync(http.ExpertId(), request, ct)));
+
         // Learner profile
         expert.MapGet("/learners/{learnerId}", async (string learnerId, HttpContext http, ExpertService service, CancellationToken ct)
             => Results.Ok(await service.GetLearnerProfileAsync(learnerId, http.ExpertId(), ct)));
 
+        // Learner review-context (lightweight)
+        expert.MapGet("/learners/{learnerId}/review-context", async (string learnerId, HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetLearnerReviewContextAsync(learnerId, http.ExpertId(), ct)));
+
+        // Review history
+        expert.MapGet("/reviews/{reviewRequestId}/history", async (string reviewRequestId, HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetReviewHistoryAsync(reviewRequestId, http.ExpertId(), ct)));
+
         // Calibration
         expert.MapGet("/calibration/cases", async (HttpContext http, ExpertService service, CancellationToken ct)
             => Results.Ok(await service.GetCalibrationCasesAsync(http.ExpertId(), ct)));
+
+        expert.MapGet("/calibration/cases/{caseId}", async (string caseId, HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetCalibrationCaseDetailAsync(caseId, http.ExpertId(), ct)));
 
         expert.MapGet("/calibration/notes", async (HttpContext http, ExpertService service, CancellationToken ct)
             => Results.Ok(await service.GetCalibrationNotesAsync(http.ExpertId(), ct)));
@@ -92,7 +112,6 @@ public static class ExpertEndpoints
     }
 
     private static string ExpertId(this HttpContext httpContext)
-        => httpContext.User.FindFirstValue("user_id")
-           ?? httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
+        => httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
            ?? throw new InvalidOperationException("Authenticated expert id is required.");
 }

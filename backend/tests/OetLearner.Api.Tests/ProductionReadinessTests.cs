@@ -1,10 +1,23 @@
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
+using OetLearner.Api.Services;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
+[CollectionDefinition("ProductionReadiness", DisableParallelization = true)]
+public sealed class ProductionReadinessCollectionDefinitionMarker
+{
+}
+
+[Collection("ProductionReadiness")]
 public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
 {
     private readonly TestWebApplicationFactory _factory;
@@ -12,6 +25,131 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
     public ProductionReadinessTests(TestWebApplicationFactory factory)
     {
         _factory = factory;
+    }
+
+    [Fact]
+    public async Task App_BootsWithFirstPartyTokenConfiguration_InProduction()
+    {
+        using var factory = CreateProductionFactory();
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/health/live");
+        response.EnsureSuccessStatusCode();
+
+        var options = factory.Services.GetRequiredService<IOptions<AuthTokenOptions>>().Value;
+        Assert.Equal("https://api.example.test", options.Issuer);
+        Assert.Equal("oet-learner-web", options.Audience);
+        Assert.Equal(TimeSpan.FromMinutes(15), options.AccessTokenLifetime);
+        Assert.Equal(TimeSpan.FromDays(30), options.RefreshTokenLifetime);
+        Assert.Equal(TimeSpan.FromMinutes(10), options.OtpLifetime);
+        Assert.Equal("OET Learner", options.AuthenticatorIssuer);
+    }
+
+    [Fact]
+    public async Task App_BootsWithBrevoConfiguration_InProduction()
+    {
+        using var factory = CreateProductionFactory(settings =>
+        {
+            settings["Brevo:Enabled"] = "true";
+            settings["Brevo:ApiKey"] = "brevo-api-key-123";
+            settings["Brevo:BaseUrl"] = "https://api.brevo.com/v3";
+            settings["Brevo:FromEmail"] = "no-reply@example.test";
+            settings["Brevo:FromName"] = "OET Learner";
+            settings["Brevo:EmailVerificationTemplateId"] = "123";
+            settings["Brevo:PasswordResetTemplateId"] = "124";
+            settings["Smtp:Enabled"] = "false";
+        });
+
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/health/live");
+        response.EnsureSuccessStatusCode();
+
+        var sender = factory.Services.GetRequiredService<IEmailSender>();
+        Assert.Equal("BrevoEmailSender", sender.GetType().Name);
+    }
+
+    [Fact]
+    public async Task App_BootsWithBrevoSmtpRelayConfiguration_InProduction()
+    {
+        using var factory = CreateProductionFactory(settings =>
+        {
+            settings["Brevo:Enabled"] = "false";
+            settings["Smtp:Enabled"] = "true";
+            settings["Smtp:Host"] = "smtp-relay.brevo.com";
+            settings["Smtp:Port"] = "587";
+            settings["Smtp:EnableSsl"] = "true";
+            settings["Smtp:Username"] = "brevo-login@example.test";
+            settings["Smtp:Password"] = "brevo-smtp-key-placeholder";
+            settings["Smtp:FromEmail"] = "no-reply@example.test";
+        });
+
+        using var client = factory.CreateClient();
+
+        var response = await client.GetAsync("/health/live");
+        response.EnsureSuccessStatusCode();
+
+        var sender = factory.Services.GetRequiredService<IEmailSender>();
+        Assert.Equal("SmtpEmailSender", sender.GetType().Name);
+    }
+
+    [Fact]
+    public void App_FailsFastInProduction_WhenTokenSecretIsMissing()
+    {
+        using var factory = CreateProductionFactory(settings =>
+        {
+            settings.Remove("AuthTokens:AccessTokenSigningKey");
+        });
+
+        var exception = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
+        Assert.Contains("AuthTokens", exception.ToString(), StringComparison.Ordinal);
+        Assert.Contains("AccessTokenSigningKey", exception.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void App_FailsFastInProduction_WhenTokenExpiriesAreMissing()
+    {
+        using var factory = CreateProductionFactory(settings =>
+        {
+            settings["AuthTokens:AccessTokenLifetime"] = "00:00:00";
+            settings["AuthTokens:RefreshTokenLifetime"] = "00:00:00";
+            settings["AuthTokens:OtpLifetime"] = "00:00:00";
+        });
+
+        var exception = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
+        Assert.Contains("AuthTokens", exception.ToString(), StringComparison.Ordinal);
+        Assert.Contains("AccessTokenLifetime", exception.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void App_FailsFastInProduction_WhenSmtpConfigIsMissing()
+    {
+        using var factory = CreateProductionFactory(settings =>
+        {
+            settings["Smtp:Enabled"] = "false";
+            settings.Remove("Smtp:Host");
+        });
+
+        var exception = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
+        Assert.Contains("Smtp", exception.ToString(), StringComparison.Ordinal);
+        Assert.Contains("FromEmail", exception.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void App_FailsFastInProduction_WhenBrevoConfigIsMissing()
+    {
+        using var factory = CreateProductionFactory(settings =>
+        {
+            settings["Brevo:Enabled"] = "true";
+            settings.Remove("Brevo:ApiKey");
+            settings.Remove("Brevo:EmailVerificationTemplateId");
+            settings.Remove("Brevo:PasswordResetTemplateId");
+            settings["Smtp:Enabled"] = "false";
+        });
+
+        var exception = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
+        Assert.Contains("Brevo", exception.ToString(), StringComparison.Ordinal);
+        Assert.Contains("EmailVerificationTemplateId", exception.ToString(), StringComparison.Ordinal);
     }
 
     [Fact]
@@ -164,5 +302,82 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
         }
 
         throw new TimeoutException($"Timed out waiting for {description}.");
+    }
+
+    private static ProductionAuthWebApplicationFactory CreateProductionFactory(Action<Dictionary<string, string?>>? configure = null)
+    {
+        var settings = new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:DefaultConnection"] = $"InMemory:oet-learner-production-tests-{Guid.NewGuid():N}",
+            ["Auth:UseDevelopmentAuth"] = "false",
+            ["Bootstrap:AutoMigrate"] = "false",
+            ["Bootstrap:SeedDemoData"] = "false",
+            ["Platform:PublicApiBaseUrl"] = "https://api.example.test",
+            ["Platform:FallbackEmailDomain"] = "example.test",
+            ["Billing:CheckoutBaseUrl"] = "https://app.example.test/billing/checkout",
+            ["Proxy:TrustForwardHeaders"] = "true",
+            ["Proxy:EnforceHttps"] = "false",
+            ["AuthTokens:Issuer"] = "https://api.example.test",
+            ["AuthTokens:Audience"] = "oet-learner-web",
+            ["AuthTokens:AccessTokenSigningKey"] = "local-access-token-signing-key-1234567890",
+            ["AuthTokens:RefreshTokenSigningKey"] = "local-refresh-token-signing-key-1234567890",
+            ["AuthTokens:AccessTokenLifetime"] = "00:15:00",
+            ["AuthTokens:RefreshTokenLifetime"] = "30.00:00:00",
+            ["AuthTokens:OtpLifetime"] = "00:10:00",
+            ["AuthTokens:AuthenticatorIssuer"] = "OET Learner",
+            ["Smtp:Enabled"] = "true",
+            ["Smtp:Host"] = "smtp-relay.brevo.com",
+            ["Smtp:Port"] = "587",
+            ["Smtp:EnableSsl"] = "true",
+            ["Smtp:Username"] = "brevo-login@example.test",
+            ["Smtp:Password"] = "brevo-smtp-key-placeholder",
+            ["Smtp:FromEmail"] = "no-reply@example.test",
+            ["Smtp:FromName"] = "OET Learner"
+        };
+
+        configure?.Invoke(settings);
+        return new ProductionAuthWebApplicationFactory(settings);
+    }
+
+    private sealed class ProductionAuthWebApplicationFactory : WebApplicationFactory<Program>
+    {
+        private readonly Dictionary<string, string?> _previousValues;
+
+        public ProductionAuthWebApplicationFactory(Dictionary<string, string?> settings)
+        {
+            _previousValues = settings.ToDictionary(
+                entry => ToEnvironmentVariableName(entry.Key),
+                entry => Environment.GetEnvironmentVariable(ToEnvironmentVariableName(entry.Key)));
+
+            foreach (var (key, value) in settings)
+            {
+                Environment.SetEnvironmentVariable(ToEnvironmentVariableName(key), value);
+            }
+        }
+
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            builder.UseEnvironment("Production");
+        }
+
+        protected override void Dispose(bool disposing)
+        {
+            base.Dispose(disposing);
+
+            if (!disposing)
+            {
+                return;
+            }
+
+            foreach (var (key, value) in _previousValues)
+            {
+                Environment.SetEnvironmentVariable(key, value);
+            }
+        }
+
+        private static string ToEnvironmentVariableName(string configurationKey)
+        {
+            return configurationKey.Replace(":", "__", StringComparison.Ordinal);
+        }
     }
 }

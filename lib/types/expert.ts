@@ -46,6 +46,12 @@ export interface ExpertArtifactState {
   message?: string | null;
 }
 
+export interface ExpertChecklistItem {
+  id: string;
+  label: string;
+  checked: boolean;
+}
+
 export type WritingCriterionKey = 'purpose' | 'content' | 'conciseness' | 'genre' | 'organization' | 'language';
 
 export type SpeakingCriterionKey = 'intelligibility' | 'fluency' | 'appropriateness' | 'grammar' | 'clinicalCommunication';
@@ -145,6 +151,8 @@ export interface ExpertSavedDraft {
   finalComment: string;
   anchoredComments: AnchoredComment[];
   timestampComments: TimestampComment[];
+  scratchpad: string;
+  checklistItems: ExpertChecklistItem[];
   savedAt: string;
 }
 
@@ -154,6 +162,8 @@ export interface ReviewDraft {
   criterionComments: Record<string, string>;
   finalComment: string;
   comments: AnchoredComment[] | TimestampComment[];
+  scratchpad?: string;
+  checklistItems?: ExpertChecklistItem[];
   savedAt: string;
   version?: number;
 }
@@ -168,6 +178,38 @@ export interface CalibrationCase {
   reviewerScore?: number;
   status: 'pending' | 'completed';
   createdAt: string;
+}
+
+export interface CalibrationArtifact {
+  kind: string;
+  title: string;
+  content: string;
+}
+
+export interface CalibrationRubricEntry {
+  criterion: string;
+  benchmarkScore: number;
+  rationale: string;
+}
+
+export interface CalibrationSubmission {
+  reviewerId: string;
+  reviewerName: string;
+  reviewerScore: number;
+  alignmentScore: number;
+  disagreementSummary: string;
+  notes: string;
+  submittedScores: Record<string, number>;
+  submittedAt: string;
+}
+
+export interface CalibrationCaseDetail extends CalibrationCase {
+  benchmarkLabel: string;
+  difficulty: string;
+  artifacts: CalibrationArtifact[];
+  benchmarkRubric: CalibrationRubricEntry[];
+  referenceNotes: string[];
+  existingSubmission?: CalibrationSubmission | null;
 }
 
 export interface CalibrationNote {
@@ -190,6 +232,45 @@ export interface ExpertMetrics {
 export interface ExpertCompletionData {
   day: string;
   count: number;
+}
+
+export interface ExpertDashboardAvailability {
+  timezone: string;
+  todayKey: string;
+  activeToday: boolean;
+  todayWindow?: string | null;
+  lastUpdatedAt?: string | null;
+}
+
+export interface ExpertDashboardActivity {
+  timestamp: string;
+  type: string;
+  title: string;
+  description?: string | null;
+  route?: string | null;
+}
+
+export interface ExpertDashboardData {
+  metrics: ExpertMetrics;
+  activeAssignedReviews: number;
+  overdueAssignedReviews: number;
+  savedDraftCount: number;
+  calibrationDueCount: number;
+  assignedLearnerCount: number;
+  generatedAt: string;
+  availability: ExpertDashboardAvailability;
+  assignedReviews: ReviewRequest[];
+  resumeDrafts: ReviewRequest[];
+  recentActivity: ExpertDashboardActivity[];
+}
+
+export interface ExpertQueueFilterMetadata {
+  types: string[];
+  professions: string[];
+  priorities: string[];
+  statuses: string[];
+  confidenceBands: string[];
+  assignmentStates: string[];
 }
 
 export interface ExpertScheduleDay {
@@ -234,4 +315,53 @@ export interface LearnerProfileExpanded extends LearnerProfile {
   subTestScores: SubTestScore[];
   priorReviews: PriorReview[];
   visibilityScope?: string;
+}
+
+export interface ExpertLearnerReviewContext {
+  id: string;
+  name: string;
+  profession: Profession;
+  goalScore: string;
+  examDate?: string;
+  reviewsInScope: number;
+  subTestScores: SubTestScore[];
+  priorReviews: PriorReview[];
+}
+
+export interface ExpertLearnerListItem {
+  id: string;
+  name: string;
+  profession: Profession;
+  goalScore: string;
+  examDate?: string;
+  reviewsInScope: number;
+  subTests: string[];
+  lastReviewId: string;
+  lastReviewType: string;
+  lastReviewState: string;
+  lastReviewAt: string;
+}
+
+export interface ExpertLearnerDirectoryResponse {
+  items: ExpertLearnerListItem[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+  lastUpdatedAt: string;
+}
+
+export interface ExpertReviewHistoryEntry {
+  timestamp: string;
+  action: string;
+  actorName?: string | null;
+  details?: string | null;
+}
+
+export interface ExpertReviewHistory {
+  reviewRequestId: string;
+  state: string;
+  createdAt: string;
+  completedAt?: string | null;
+  draftVersionCount: number;
+  entries: ExpertReviewHistoryEntry[];
 }

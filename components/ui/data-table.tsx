@@ -52,6 +52,7 @@ export function DataTable<T>({ columns, data, keyExtractor, onRowClick, emptyMes
           {data.map((row, idx) => (
             <tr
               key={keyExtractor(row, idx)}
+              data-row-key={keyExtractor(row, idx)}
               onClick={() => onRowClick?.(row)}
               onKeyDown={(e) => { if (onRowClick && (e.key === 'Enter' || e.key === ' ')) { e.preventDefault(); onRowClick(row); } }}
               tabIndex={onRowClick ? 0 : undefined}

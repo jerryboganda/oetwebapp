@@ -72,6 +72,7 @@ public record MockAttemptCreateRequest(
     string Mode,
     string Profession,
     bool IncludeReview,
-    bool StrictTimer);
+    bool StrictTimer,
+    string? ReviewSelection = null);
 
 public record RevisionSubmitRequest(string Content, string? IdempotencyKey);

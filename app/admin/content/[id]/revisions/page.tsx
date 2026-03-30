@@ -1,107 +1,115 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter, useParams } from 'next/navigation';
-import { Card, CardContent } from '@/components/ui/card';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { Button } from '@/components/ui/button';
-import { ArrowLeft, RotateCcw, History } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
+import { ArrowLeft, RotateCcw } from 'lucide-react';
+import { AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { EmptyState } from '@/components/ui/empty-error';
+import { DataTable, type Column } from '@/components/ui/data-table';
 import { Toast } from '@/components/ui/alert';
-import { mockContentRevisions, type AdminContentRevision } from '@/lib/mock-admin-data';
-import { analytics } from '@/lib/analytics';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-error';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import { getAdminContentRevisionData } from '@/lib/admin';
+import { restoreAdminContentRevision } from '@/lib/api';
+import type { AdminRevisionRow } from '@/lib/types/admin';
 
-export default function ContentRevisionsPage() {
-  const { isAuthenticated, role } = useAdminAuth();
+type PageStatus = 'loading' | 'success' | 'empty' | 'error';
+
+export default function AdminContentRevisionsPage() {
+  const params = useParams<{ id: string }>();
   const router = useRouter();
-  const params = useParams();
-  const id = params?.id as string;
-  const [pageStatus, setPageStatus] = useState<'loading' | 'success' | 'empty'>('loading');
-  const [revisions, setRevisions] = useState<AdminContentRevision[]>([]);
+  const { isAuthenticated, role } = useAdminAuth();
+  const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
+  const [revisions, setRevisions] = useState<AdminRevisionRow[]>([]);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
 
   useEffect(() => {
-    const load = async () => {
+    let cancelled = false;
+    async function load() {
       setPageStatus('loading');
-      await new Promise(resolve => setTimeout(resolve, 300));
-      const data = mockContentRevisions.filter(r => r.contentId === id || id);
-      setRevisions(data);
-      setPageStatus(data.length > 0 ? 'success' : 'empty');
-    };
-    load();
-  }, [id]);
-
-  if (!isAuthenticated || role !== 'admin') return null;
-
-  const handleRestore = (revisionId: string) => {
-    analytics.track('admin_revision_restored', { contentId: id, revisionId });
-    setToast({ variant: 'success', message: `Revision ${revisionId} restored as new latest version.` });
-  };
-
-  const columns: Column<AdminContentRevision>[] = [
-    { key: 'id', header: 'Version', render: (row) => <span className="font-mono font-bold text-navy">{row.id}</span> },
-    { key: 'date', header: 'Date', render: (row) => <span className="text-muted">{new Date(row.date).toLocaleString()}</span> },
-    { key: 'author', header: 'Author', render: (row) => <span>{row.author}</span> },
-    { 
-      key: 'state', 
-      header: 'State', 
-      render: (row) => {
-        const variant = row.state === 'published' ? 'success' : row.state === 'archived' ? 'muted' : 'warning';
-        return <Badge variant={variant as any} className="capitalize">{row.state}</Badge>;
+      try {
+        const items = await getAdminContentRevisionData(params.id);
+        if (cancelled) return;
+        setRevisions(items);
+        setPageStatus(items.length > 0 ? 'success' : 'empty');
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setPageStatus('error');
+          setToast({ variant: 'error', message: 'Failed to load revisions.' });
+        }
       }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [params.id]);
+
+  async function handleRestore(revisionId: string) {
+    try {
+      await restoreAdminContentRevision(params.id, revisionId);
+      setToast({ variant: 'success', message: 'Revision restored successfully.' });
+      const items = await getAdminContentRevisionData(params.id);
+      setRevisions(items);
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: 'Unable to restore that revision.' });
+    }
+  }
+
+  const columns: Column<AdminRevisionRow>[] = [
+    { key: 'id', header: 'Revision', render: (row) => <span className="font-mono text-xs">{row.id}</span> },
+    { key: 'date', header: 'Date', render: (row) => <span>{new Date(row.date).toLocaleString()}</span> },
+    { key: 'author', header: 'Author', render: (row) => <span>{row.author}</span> },
+    {
+      key: 'state',
+      header: 'State',
+      render: (row) => (
+        <Badge variant={row.state === 'published' ? 'success' : row.state === 'restored' ? 'warning' : 'muted'}>
+          {row.state}
+        </Badge>
+      ),
     },
-    { key: 'note', header: 'Change Note', render: (row) => <span className="text-sm text-gray-600">{row.note}</span> },
+    { key: 'note', header: 'Change Note', render: (row) => <span className="text-slate-500">{row.note}</span> },
     {
       key: 'actions',
       header: '',
       render: (row) => (
-        <div className="flex justify-end gap-2">
-          <Button variant="ghost" size="sm" className="text-primary hover:bg-primary/5">View Diff</Button>
-          <Button variant="outline" size="sm" className="gap-1" onClick={() => handleRestore(row.id)}>
-            <RotateCcw className="w-3.5 h-3.5" /> Restore
-          </Button>
-        </div>
-      )
-    }
+        <Button variant="outline" size="sm" onClick={() => handleRestore(row.id)} className="gap-2">
+          <RotateCcw className="h-4 w-4" /> Restore
+        </Button>
+      ),
+    },
   ];
 
-  return (
-    <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-6" role="main" aria-label="Revision History">
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
+  if (!isAuthenticated || role !== 'admin') return null;
 
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="sm" onClick={() => router.back()} className="px-2">
-          <ArrowLeft className="w-5 h-5" />
-        </Button>
-        <div>
-          <h1 className="text-2xl font-bold text-navy tracking-tight">Revision History</h1>
-          <p className="text-sm text-muted mt-1">Content ID: <span className="font-mono">{id}</span></p>
-        </div>
-      </div>
+  return (
+    <div className="max-w-5xl space-y-6">
+      {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
+
+      <AdminPageHeader
+        title="Revision History"
+        description="Review the saved content history and restore a previous editorial state when needed."
+        actions={
+          <Button variant="outline" onClick={() => router.push(`/admin/content/${params.id}`)} className="gap-2">
+            <ArrowLeft className="h-4 w-4" /> Back to Content
+          </Button>
+        }
+      />
 
       <AsyncStateWrapper
         status={pageStatus}
         onRetry={() => window.location.reload()}
-        emptyContent={
-          <EmptyState
-            icon={<History className="w-12 h-12 text-muted" />}
-            title="No Revisions Yet"
-            description="Revision history will appear after the first save or publish."
-          />
-        }
+        emptyContent={<EmptyState title="No revisions found" description="This content item has not accumulated revision history yet." />}
       >
-        <Card padding="none" className="overflow-hidden mt-6">
-          <CardContent className="p-0">
-            <DataTable 
-              data={revisions}
-              columns={columns}
-              keyExtractor={(item) => item.id}
-            />
-          </CardContent>
-        </Card>
+        <AdminSectionPanel title="Saved Revisions" description="Every restore action is persisted and audited in the backend.">
+          <DataTable columns={columns} data={revisions} keyExtractor={(row) => row.id} />
+        </AdminSectionPanel>
       </AsyncStateWrapper>
     </div>
   );

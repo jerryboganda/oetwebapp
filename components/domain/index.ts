@@ -16,3 +16,4 @@ export { BetterPhraseCard } from './better-phrase-card';
 export { MockReportSummary } from './mock-report-summary';
 export { ReviewRequestDrawer } from './review-request-drawer';
 export { AudioPlayerWaveform } from './audio-player-waveform';
+export { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceMetaRow, LearnerSurfaceSectionHeader } from './learner-surface';

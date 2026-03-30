@@ -7,7 +7,7 @@ import {
   ChevronRight, Info, RefreshCw, BarChart3,
 } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { AppShell } from '@/components/layout/app-shell';
+import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
@@ -171,8 +171,8 @@ function MicEnvironmentCheckContent() {
   };
 
   return (
-    <AppShell pageTitle="Readiness Check">
-      <div className="max-w-3xl mx-auto space-y-6">
+    <LearnerDashboardShell pageTitle="Readiness Check">
+      <div className="space-y-6">
 
         <InlineAlert variant="info">
           These checks ensure the AI can accurately transcribe and evaluate your speech. If you encounter issues, check your device settings or try a different microphone.
@@ -316,18 +316,18 @@ function MicEnvironmentCheckContent() {
           </div>
 
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
   );
 }
 
 export default function MicEnvironmentCheck() {
   return (
     <Suspense fallback={
-      <AppShell pageTitle="Readiness Check">
+      <LearnerDashboardShell pageTitle="Readiness Check">
         <div className="flex items-center justify-center py-20">
           <RefreshCw className="w-8 h-8 text-primary animate-spin" />
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     }>
       <MicEnvironmentCheckContent />
     </Suspense>

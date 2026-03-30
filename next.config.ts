@@ -1,5 +1,15 @@
 import type {NextConfig} from 'next';
 
+function getOrigin(value: string | undefined, fallback: string): string {
+  try {
+    return new URL(value ?? fallback).origin;
+  } catch {
+    return new URL(fallback).origin;
+  }
+}
+
+const apiOrigin = getOrigin(process.env.NEXT_PUBLIC_API_BASE_URL, 'http://localhost:5198');
+
 const nextConfig: NextConfig = {
   reactStrictMode: true,
   eslint: {
@@ -25,12 +35,13 @@ const nextConfig: NextConfig = {
             key: 'Content-Security-Policy',
             value: [
               "default-src 'self'",
-              "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://apis.google.com https://*.firebaseio.com",
+              "script-src 'self' 'unsafe-inline' 'unsafe-eval'",
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com",
               "img-src 'self' data: blob:",
-              "connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com wss://*.firebaseio.com",
-              "frame-src 'self' https://*.firebaseapp.com",
+              `connect-src 'self' blob: ${apiOrigin} https://*.googleapis.com`,
+              `media-src 'self' blob: ${apiOrigin}`,
+              "frame-src 'self'",
               "object-src 'none'",
               "base-uri 'self'",
               "form-action 'self'",

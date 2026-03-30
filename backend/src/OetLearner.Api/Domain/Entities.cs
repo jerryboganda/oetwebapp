@@ -1,15 +1,20 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.EntityFrameworkCore;
 
 namespace OetLearner.Api.Domain;
 
+[Index(nameof(AuthAccountId), IsUnique = true)]
 public class LearnerUser
 {
     [Key]
     [MaxLength(64)]
     public string Id { get; set; } = default!;
 
+    [MaxLength(64)]
+    public string? AuthAccountId { get; set; }
+
     [MaxLength(32)]
-    public string Role { get; set; } = "learner";
+    public string Role { get; set; } = ApplicationUserRoles.Learner;
 
     [MaxLength(128)]
     public string DisplayName { get; set; } = default!;
@@ -36,6 +41,11 @@ public class LearnerUser
     public DateTimeOffset? OnboardingCompletedAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset LastActiveAt { get; set; }
+
+    [MaxLength(32)]
+    public string AccountStatus { get; set; } = "active";
+
+    public ApplicationUserAccount? AuthAccount { get; set; }
 }
 
 public class LearnerGoal
@@ -131,6 +141,9 @@ public class CriterionReference
 
     [MaxLength(512)]
     public string Description { get; set; } = default!;
+
+    [MaxLength(16)]
+    public string Status { get; set; } = "active";
 
     public int SortOrder { get; set; }
 }

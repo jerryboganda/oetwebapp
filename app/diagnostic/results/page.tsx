@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { AppShell } from '@/components/layout';
+import { LearnerDashboardShell } from '@/components/layout';
 import { AsyncStateWrapper } from '@/components/state';
 import { ReadinessMeter } from '@/components/domain/readiness-meter';
 import { WeakestLinkCard } from '@/components/domain/weakest-link-card';
@@ -82,8 +82,8 @@ export default function DiagnosticResultsPage() {
     loading ? 'loading' : error ? 'error' : isPartial ? 'partial' : 'success';
 
   return (
-    <AppShell pageTitle="Diagnostic Results">
-      <div className="max-w-4xl mx-auto px-4 sm:px-6 py-8 space-y-8">
+    <LearnerDashboardShell pageTitle="Diagnostic Results">
+      <div className="space-y-8">
         <AsyncStateWrapper
           status={status}
           onRetry={load}
@@ -242,6 +242,6 @@ export default function DiagnosticResultsPage() {
           </div>
         </AsyncStateWrapper>
       </div>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }

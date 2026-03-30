@@ -1,15 +1,20 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.EntityFrameworkCore;
 
 namespace OetLearner.Api.Domain;
 
+[Index(nameof(AuthAccountId), IsUnique = true)]
 public class ExpertUser
 {
     [Key]
     [MaxLength(64)]
     public string Id { get; set; } = default!;
 
+    [MaxLength(64)]
+    public string? AuthAccountId { get; set; }
+
     [MaxLength(32)]
-    public string Role { get; set; } = "expert";
+    public string Role { get; set; } = ApplicationUserRoles.Expert;
 
     [MaxLength(128)]
     public string DisplayName { get; set; } = default!;
@@ -25,6 +30,8 @@ public class ExpertUser
     public bool IsActive { get; set; } = true;
 
     public DateTimeOffset CreatedAt { get; set; }
+
+    public ApplicationUserAccount? AuthAccount { get; set; }
 }
 
 public class ExpertReviewAssignment
@@ -82,7 +89,14 @@ public class ExpertReviewDraft
 
     public string FinalCommentDraft { get; set; } = string.Empty;
 
+    public string ScratchpadJson { get; set; } = "\"\"";
+
+    public string ChecklistItemsJson { get; set; } = "[]";
+
     public DateTimeOffset DraftSavedAt { get; set; }
+
+    [MaxLength(64)]
+    public string? AutosaveErrorState { get; set; }
 }
 
 public class ExpertCalibrationCase

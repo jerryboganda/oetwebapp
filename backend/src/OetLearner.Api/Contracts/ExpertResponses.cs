@@ -76,7 +76,14 @@ public sealed record ExpertDraftResponse(
     string FinalComment,
     IReadOnlyList<ExpertAnchoredCommentResponse> AnchoredComments,
     IReadOnlyList<ExpertTimestampCommentResponse> TimestampComments,
+    string Scratchpad,
+    IReadOnlyList<ExpertChecklistItemResponse> ChecklistItems,
     DateTimeOffset SavedAt);
+
+public sealed record ExpertChecklistItemResponse(
+    string Id,
+    string Label,
+    bool Checked);
 
 public sealed record ExpertTranscriptLineResponse(
     string Id,
@@ -199,3 +206,136 @@ public sealed record ExpertMetricsResponse(
     IReadOnlyList<ExpertCompletionPointResponse> CompletionData,
     int Days,
     DateTimeOffset GeneratedAt);
+
+public sealed record ExpertQueueFilterMetadataResponse(
+    IReadOnlyList<string> Types,
+    IReadOnlyList<string> Professions,
+    IReadOnlyList<string> Priorities,
+    IReadOnlyList<string> Statuses,
+    IReadOnlyList<string> ConfidenceBands,
+    IReadOnlyList<string> AssignmentStates);
+
+public sealed record ExpertReviewHistoryEntryResponse(
+    DateTimeOffset Timestamp,
+    string Action,
+    string? ActorName,
+    string? Details);
+
+public sealed record ExpertReviewHistoryResponse(
+    string ReviewRequestId,
+    string State,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset? CompletedAt,
+    int DraftVersionCount,
+    IReadOnlyList<ExpertReviewHistoryEntryResponse> Entries);
+
+public sealed record ExpertLearnerReviewContextResponse(
+    string Id,
+    string Name,
+    string Profession,
+    string GoalScore,
+    DateTimeOffset? ExamDate,
+    int ReviewsInScope,
+    IReadOnlyList<ExpertLearnerSubtestScoreResponse> SubTestScores,
+    IReadOnlyList<ExpertPriorReviewResponse> PriorReviews);
+
+public sealed record ExpertLearnerListItemResponse(
+    string Id,
+    string Name,
+    string Profession,
+    string GoalScore,
+    DateTimeOffset? ExamDate,
+    int ReviewsInScope,
+    IReadOnlyList<string> SubTests,
+    string LastReviewId,
+    string LastReviewType,
+    string LastReviewState,
+    DateTimeOffset LastReviewAt);
+
+public sealed record ExpertLearnerDirectoryResponse(
+    IReadOnlyList<ExpertLearnerListItemResponse> Items,
+    int TotalCount,
+    int Page,
+    int PageSize,
+    DateTimeOffset LastUpdatedAt);
+
+public sealed record ExpertDashboardAvailabilityResponse(
+    string Timezone,
+    string TodayKey,
+    bool ActiveToday,
+    string? TodayWindow,
+    DateTimeOffset? LastUpdatedAt);
+
+public sealed record ExpertDashboardActivityResponse(
+    DateTimeOffset Timestamp,
+    string Type,
+    string Title,
+    string? Description,
+    string? Route);
+
+public sealed record ExpertDashboardResponse(
+    ExpertMetricsSummaryResponse Metrics,
+    int ActiveAssignedReviews,
+    int OverdueAssignedReviews,
+    int SavedDraftCount,
+    int CalibrationDueCount,
+    int AssignedLearnerCount,
+    DateTimeOffset GeneratedAt,
+    ExpertDashboardAvailabilityResponse Availability,
+    IReadOnlyList<ExpertQueueItemResponse> AssignedReviews,
+    IReadOnlyList<ExpertQueueItemResponse> ResumeDrafts,
+    IReadOnlyList<ExpertDashboardActivityResponse> RecentActivity);
+
+public sealed record ExpertCalibrationCaseSummaryResponse(
+    string Id,
+    string Title,
+    string Profession,
+    string SubTest,
+    string Type,
+    int BenchmarkScore,
+    int? ReviewerScore,
+    string Status,
+    DateTimeOffset CreatedAt);
+
+public sealed record ExpertCalibrationNoteResponse(
+    string Id,
+    string Type,
+    string Message,
+    string? CaseId,
+    DateTimeOffset CreatedAt);
+
+public sealed record ExpertCalibrationArtifactResponse(
+    string Kind,
+    string Title,
+    string Content);
+
+public sealed record ExpertCalibrationRubricEntryResponse(
+    string Criterion,
+    int BenchmarkScore,
+    string Rationale);
+
+public sealed record ExpertCalibrationSubmissionResponse(
+    string ReviewerId,
+    string ReviewerName,
+    int ReviewerScore,
+    double AlignmentScore,
+    string DisagreementSummary,
+    string Notes,
+    Dictionary<string, int> SubmittedScores,
+    DateTimeOffset SubmittedAt);
+
+public sealed record ExpertCalibrationCaseDetailResponse(
+    string Id,
+    string Title,
+    string Profession,
+    string SubTest,
+    string Type,
+    string BenchmarkLabel,
+    int BenchmarkScore,
+    string Difficulty,
+    string Status,
+    DateTimeOffset CreatedAt,
+    IReadOnlyList<ExpertCalibrationArtifactResponse> Artifacts,
+    IReadOnlyList<ExpertCalibrationRubricEntryResponse> BenchmarkRubric,
+    IReadOnlyList<string> ReferenceNotes,
+    ExpertCalibrationSubmissionResponse? ExistingSubmission);

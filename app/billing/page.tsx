@@ -1,190 +1,344 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
 import {
-  CreditCard,
-  Calendar,
-  Star,
-  FileText,
-  Download,
-  ArrowUpCircle,
   ArrowDownCircle,
-  PlusCircle,
-  CheckCircle2
+  ArrowUpCircle,
+  CheckCircle2,
+  CreditCard,
+  Download,
+  FileText,
+  Receipt,
+  ShoppingCart,
+  Sparkles,
 } from 'lucide-react';
-import { AppShell } from '@/components/layout/app-shell';
+import { LearnerDashboardShell } from '@/components/layout';
+import { Button } from '@/components/ui/button';
+import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchBilling } from '@/lib/api';
-import type { BillingData } from '@/lib/mock-data';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
+import {
+  createBillingCheckoutSession,
+  downloadInvoice,
+  fetchBilling,
+  fetchBillingChangePreview,
+} from '@/lib/api';
+import type { BillingChangePreview, BillingData } from '@/lib/mock-data';
 
-export default function Billing() {
+export default function BillingPage() {
   const [data, setData] = useState<BillingData | null>(null);
-  const [error, setError] = useState('');
+  const [preview, setPreview] = useState<BillingChangePreview | null>(null);
+  const [previewPlanId, setPreviewPlanId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [busyKey, setBusyKey] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [success, setSuccess] = useState<string | null>(null);
 
   useEffect(() => {
     analytics.track('content_view', { page: 'billing' });
     fetchBilling()
-      .then(setData)
-      .catch(() => setError('Could not load billing data.'));
+      .then((result) => setData(result))
+      .catch((err) => setError(err instanceof Error ? err.message : 'Could not load billing data.'))
+      .finally(() => setLoading(false));
   }, []);
 
-  if (error) {
+  const upgradePlans = useMemo(
+    () => (data?.plans ?? []).filter((plan) => plan.changeDirection === 'upgrade'),
+    [data],
+  );
+  const downgradePlans = useMemo(
+    () => (data?.plans ?? []).filter((plan) => plan.changeDirection === 'downgrade'),
+    [data],
+  );
+
+  const openCheckout = async (productType: 'review_credits' | 'plan_upgrade' | 'plan_downgrade', quantity: number, priceId?: string | null) => {
+    setBusyKey(`${productType}:${priceId ?? quantity}`);
+    setError(null);
+    setSuccess(null);
+    try {
+      const response = await createBillingCheckoutSession({ productType, quantity, priceId });
+      window.open(response.checkoutUrl, '_blank', 'noopener,noreferrer');
+      setSuccess('Checkout session created. Finish payment in the new tab.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not start checkout.');
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const loadPreview = async (planId: string) => {
+    setBusyKey(`preview:${planId}`);
+    setError(null);
+    setSuccess(null);
+    try {
+      const result = await fetchBillingChangePreview(planId);
+      setPreview(result);
+      setPreviewPlanId(planId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load the plan-change preview.');
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  const handleDownloadInvoice = async (invoiceId: string) => {
+    setBusyKey(`invoice:${invoiceId}`);
+    setError(null);
+    setSuccess(null);
+    try {
+      const objectUrl = await downloadInvoice(invoiceId);
+      const anchor = document.createElement('a');
+      anchor.href = objectUrl;
+      anchor.download = `${invoiceId}.txt`;
+      anchor.click();
+      URL.revokeObjectURL(objectUrl);
+      setSuccess('Invoice download started.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not download that invoice.');
+    } finally {
+      setBusyKey(null);
+    }
+  };
+
+  if (loading) {
     return (
-      <AppShell pageTitle="Billing" backHref="/">
-        <div className="max-w-3xl mx-auto px-4 py-24 text-center text-muted">{error}</div>
-      </AppShell>
+      <LearnerDashboardShell pageTitle="Billing" backHref="/">
+        <div className="space-y-6">
+          {[1, 2, 3].map((item) => <Skeleton key={item} className="h-40 rounded-[24px]" />)}
+        </div>
+      </LearnerDashboardShell>
     );
   }
 
   if (!data) {
     return (
-      <AppShell pageTitle="Billing" backHref="/">
-        <div className="max-w-3xl mx-auto px-4 py-8 space-y-6">
-          {[1, 2, 3].map(i => (
-            <Skeleton key={i} className="h-32 rounded-2xl" />
-          ))}
+      <LearnerDashboardShell pageTitle="Billing" backHref="/">
+        <div>
+          <InlineAlert variant="error">{error ?? 'Billing data could not be loaded.'}</InlineAlert>
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
   return (
-    <AppShell
-      pageTitle="Billing"
-      subtitle="Manage your subscription, credits, and invoices"
-      backHref="/"
-    >
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <LearnerDashboardShell pageTitle="Billing" subtitle="Manage plans, credits, invoices, and learner entitlements." backHref="/">
+      <div className="space-y-8">
+        <LearnerPageHero
+          eyebrow="Billing Focus"
+          icon={CreditCard}
+          accent="navy"
+          title="See what changes before you spend or switch plans"
+          description="Use this page to review entitlements, pricing changes, and credit impact before you open checkout."
+          highlights={[
+            { icon: CreditCard, label: 'Current plan', value: data.currentPlan },
+            { icon: Sparkles, label: 'Review credits', value: `${data.reviewCredits} available` },
+            { icon: Receipt, label: 'Next renewal', value: new Date(data.nextRenewal).toLocaleDateString() },
+          ]}
+        />
 
-        {/* 1. Subscription Status */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm"
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6 mb-8">
+        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+        {success ? <InlineAlert variant="success">{success}</InlineAlert> : null}
+
+        <section className="grid gap-6 lg:grid-cols-[1.3fr_0.9fr]">
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-[32px] border border-gray-200 bg-surface p-6 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-muted">Current Plan</p>
+                <h2 className="mt-2 text-2xl font-black text-navy">{data.currentPlan}</h2>
+                <p className="mt-1 text-sm text-muted">{data.price} / {data.interval}</p>
+              </div>
+              <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-widest text-emerald-700">
+                <CheckCircle2 className="h-4 w-4" />
+                {data.status}
+              </span>
+            </div>
+
+            <div className="mt-6 grid gap-4 sm:grid-cols-3">
+              <div className="rounded-2xl border border-gray-100 bg-background-light p-4">
+                <p className="text-xs font-black uppercase tracking-widest text-muted">Next Renewal</p>
+                <p className="mt-2 text-sm font-bold text-navy">{new Date(data.nextRenewal).toLocaleDateString()}</p>
+              </div>
+              <div className="rounded-2xl border border-gray-100 bg-background-light p-4">
+                <p className="text-xs font-black uppercase tracking-widest text-muted">Review Coverage</p>
+                <p className="mt-2 text-sm font-bold text-navy">{data.entitlements.supportedReviewSubtests.join(' + ') || 'None'}</p>
+              </div>
+              <div className="rounded-2xl border border-gray-100 bg-background-light p-4">
+                <p className="text-xs font-black uppercase tracking-widest text-muted">Invoices</p>
+                <p className="mt-2 text-sm font-bold text-navy">{data.entitlements.invoiceDownloadsAvailable ? 'Downloads available' : 'Unavailable'}</p>
+              </div>
+            </div>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04 }} className="rounded-[32px] border border-indigo-100 bg-indigo-50 p-6 shadow-sm">
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-blue-100 flex items-center justify-center shrink-0 mt-1">
-                <CreditCard className="w-6 h-6 text-blue-600" />
+              <div className="rounded-2xl bg-indigo-600 p-3 text-white shadow-sm">
+                <Sparkles className="h-5 w-5" />
               </div>
               <div>
-                <div className="flex items-center gap-2 mb-1">
-                  <h2 className="text-xl font-black text-navy">{data.currentPlan}</h2>
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest bg-green-100 text-green-700">
-                    <CheckCircle2 className="w-3 h-3" /> {data.status}
-                  </span>
-                </div>
-                <div className="flex items-baseline gap-1">
-                  <span className="text-2xl font-black text-navy">{data.price}</span>
-                  <span className="text-sm font-medium text-muted">/{data.interval}</span>
-                </div>
+                <p className="text-xs font-black uppercase tracking-widest text-indigo-700/70">Productive Skill Reviews</p>
+                <h2 className="mt-2 text-xl font-black text-indigo-950">Entitlements stay aligned with the OET business model</h2>
+                <p className="mt-2 text-sm leading-6 text-indigo-900/80">
+                  Human review is available only for Writing and Speaking. Reading and Listening stay AI-evaluated and transcript-backed.
+                </p>
               </div>
             </div>
-            <div className="bg-background-light rounded-2xl p-4 border border-gray-100 sm:text-right">
-              <div className="flex items-center sm:justify-end gap-1.5 text-xs font-bold text-muted uppercase tracking-widest mb-1">
-                <Calendar className="w-3.5 h-3.5" /> Next Renewal
-              </div>
-              <div className="text-base font-black text-navy">{data.nextRenewal}</div>
-            </div>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-3 pt-6 border-t border-gray-100">
-            <button
-              disabled
-              title="Plan changes are coming soon"
-              aria-label="Upgrade Plan (coming soon)"
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-navy text-white text-sm font-bold rounded-xl opacity-50 cursor-not-allowed"
-            >
-              <ArrowUpCircle className="w-4 h-4" /> Upgrade Plan
-            </button>
-            <button
-              disabled
-              title="Plan changes are coming soon"
-              aria-label="Downgrade Plan (coming soon)"
-              className="flex-1 flex items-center justify-center gap-2 px-4 py-3 bg-white border border-gray-200 text-navy text-sm font-bold rounded-xl opacity-50 cursor-not-allowed"
-            >
-              <ArrowDownCircle className="w-4 h-4" /> Downgrade Plan
-            </button>
-          </div>
-        </motion.section>
+          </motion.div>
+        </section>
 
-        {/* 2. Review Credits */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-          className="bg-gradient-to-br from-indigo-50 to-purple-50 rounded-[32px] border border-indigo-100 p-6 sm:p-8 shadow-sm"
-        >
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-6">
-            <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-indigo-600 flex items-center justify-center shrink-0 mt-1 shadow-md shadow-indigo-200">
-                <Star className="w-6 h-6 text-white fill-white/20" />
-              </div>
-              <div>
-                <h2 className="text-sm font-black text-indigo-900/60 uppercase tracking-widest mb-1">Available Credits</h2>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-black text-indigo-900">{data.reviewCredits}</span>
-                  <span className="text-sm font-bold text-indigo-900/60">Expert Reviews</span>
-                </div>
-              </div>
-            </div>
-            <button
-              disabled
-              title="Credit purchases coming soon"
-              aria-label="Purchase Extra Credits (coming soon)"
-              className="w-full sm:w-auto flex items-center justify-center gap-2 px-6 py-3 bg-white border border-indigo-200 text-indigo-700 text-sm font-bold rounded-xl opacity-50 cursor-not-allowed shadow-sm"
-            >
-              <PlusCircle className="w-4 h-4" /> Purchase Extras
-            </button>
-          </div>
-        </motion.section>
+        <section>
+          <LearnerSurfaceSectionHeader
+            eyebrow="Plans"
+            title="Preview a plan change before you commit"
+            description="Upgrade and downgrade actions should explain the proration, included review capacity, and effective date before checkout opens."
+            className="mb-4"
+          />
 
-        {/* 3. Invoices */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
-        >
-          <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-4 px-2">Invoices</h2>
-          {data.invoices.length > 0 ? (
-            <div className="bg-surface rounded-[32px] border border-gray-200 shadow-sm overflow-hidden">
-              <div className="divide-y divide-gray-100">
-                {data.invoices.map((invoice) => (
-                  <div key={invoice.id} className="flex items-center justify-between p-4 sm:p-6 hover:bg-background-light transition-colors">
-                    <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center shrink-0">
-                        <FileText className="w-5 h-5 text-muted" />
-                      </div>
-                      <div>
-                        <div className="text-sm font-bold text-navy">{invoice.date}</div>
-                        <div className="text-xs font-medium text-muted">{invoice.amount} · {invoice.id}</div>
-                      </div>
+          <div className="grid gap-4 lg:grid-cols-3">
+            {data.plans.map((plan, index) => {
+              const isCurrent = plan.changeDirection === 'current';
+              const isPreviewing = previewPlanId === plan.id && preview;
+              return (
+                <motion.div
+                  key={plan.id}
+                  initial={{ opacity: 0, y: 16 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                  className={`rounded-[28px] border p-5 shadow-sm ${isCurrent ? 'border-navy bg-navy text-white' : 'border-gray-200 bg-surface'}`}
+                >
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className={`text-xs font-black uppercase tracking-widest ${isCurrent ? 'text-white/70' : 'text-muted'}`}>{plan.badge || plan.tier}</p>
+                      <h3 className={`mt-2 text-xl font-black ${isCurrent ? 'text-white' : 'text-navy'}`}>{plan.label}</h3>
+                      <p className={`mt-2 text-sm leading-6 ${isCurrent ? 'text-white/80' : 'text-muted'}`}>{plan.description}</p>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <span className="hidden sm:inline-flex items-center px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-widest bg-green-100 text-green-700">
-                        {invoice.status}
-                      </span>
-                      <button className="p-2 text-muted hover:text-navy hover:bg-gray-100 rounded-lg transition-colors" aria-label="Download Invoice">
-                        <Download className="w-5 h-5" />
-                      </button>
-                    </div>
+                    {plan.changeDirection === 'upgrade' ? <ArrowUpCircle className="h-5 w-5 text-emerald-500" /> : null}
+                    {plan.changeDirection === 'downgrade' ? <ArrowDownCircle className="h-5 w-5 text-amber-500" /> : null}
                   </div>
-                ))}
-              </div>
-            </div>
-          ) : (
-            <div className="bg-surface rounded-[32px] border border-gray-200 p-8 text-center shadow-sm">
-              <div className="w-12 h-12 rounded-full bg-background-light flex items-center justify-center mx-auto mb-3">
-                <FileText className="w-6 h-6 text-muted" />
-              </div>
-              <h3 className="text-sm font-bold text-navy mb-1">No invoices yet</h3>
-              <p className="text-xs text-muted">Your billing history will appear here once you have an active subscription.</p>
-            </div>
-          )}
-        </motion.section>
 
+                  <div className="mt-5 rounded-2xl border border-white/10 bg-white/5 p-4 text-sm">
+                    <p className={`font-black ${isCurrent ? 'text-white' : 'text-navy'}`}>{plan.price} / {plan.interval}</p>
+                    <p className={`mt-1 ${isCurrent ? 'text-white/70' : 'text-muted'}`}>{plan.reviewCredits} review credits included</p>
+                  </div>
+
+                  {!isCurrent ? (
+                    <div className="mt-5 space-y-3">
+                      <Button
+                        variant="outline"
+                        fullWidth
+                        loading={busyKey === `preview:${plan.id}`}
+                        onClick={() => loadPreview(plan.id)}
+                      >
+                        Preview {plan.changeDirection}
+                      </Button>
+
+                      {isPreviewing ? (
+                        <div className="rounded-2xl border border-gray-200 bg-background-light p-4 text-sm text-muted">
+                          <p className="font-bold text-navy">{preview.summary}</p>
+                          <p className="mt-2">Prorated charge: {preview.proratedAmount}</p>
+                          <p className="mt-1">Effective date: {new Date(preview.effectiveAt).toLocaleDateString()}</p>
+                          <Button
+                            className="mt-4"
+                            fullWidth
+                            loading={busyKey === `${plan.changeDirection}:${plan.id}`}
+                            onClick={() => openCheckout(plan.changeDirection === 'upgrade' ? 'plan_upgrade' : 'plan_downgrade', 1, plan.id)}
+                          >
+                            Continue to checkout
+                          </Button>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
+                </motion.div>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
+          <div>
+            <LearnerSurfaceSectionHeader
+              eyebrow="Extras"
+              title="Purchase review credits with clear product boundaries"
+              description="Extras only increase productive-skill review capacity. They do not affect Reading or Listening scoring."
+              className="mb-4"
+            />
+
+            <div className="space-y-4">
+              {data.extras.map((extra) => (
+                <div key={extra.id} className="rounded-[24px] border border-gray-200 bg-surface p-5 shadow-sm">
+                  <div className="flex items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-widest text-muted">Review credit pack</p>
+                      <h3 className="mt-2 text-lg font-black text-navy">{extra.quantity} review credits</h3>
+                      <p className="mt-2 text-sm text-muted">{extra.description}</p>
+                    </div>
+                    <div className="rounded-2xl bg-background-light px-4 py-3 text-sm font-black text-navy">{extra.price}</div>
+                  </div>
+                  <Button
+                    className="mt-4"
+                    fullWidth
+                    loading={busyKey === `review_credits:${extra.quantity}`}
+                    onClick={() => openCheckout('review_credits', extra.quantity)}
+                  >
+                    <ShoppingCart className="h-4 w-4" />
+                    Purchase extras
+                  </Button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <LearnerSurfaceSectionHeader
+              eyebrow="Invoices"
+              title="Keep billing evidence downloadable"
+              description="Each invoice should be visible, dated, and immediately downloadable without a dead button."
+              className="mb-4"
+            />
+
+            <div className="overflow-hidden rounded-[28px] border border-gray-200 bg-surface shadow-sm">
+              {data.invoices.length === 0 ? (
+                <div className="p-8 text-center text-sm text-muted">No invoices yet. Billing history will appear here after the first paid plan or credit purchase.</div>
+              ) : (
+                <div className="divide-y divide-gray-100">
+                  {data.invoices.map((invoice) => (
+                    <div key={invoice.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-4">
+                        <div className="rounded-2xl bg-background-light p-3 text-muted">
+                          <FileText className="h-5 w-5" />
+                        </div>
+                        <div>
+                          <p className="text-sm font-black text-navy">{new Date(invoice.date).toLocaleDateString()}</p>
+                          <p className="text-sm text-muted">{invoice.amount} · {invoice.id}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-black uppercase tracking-widest text-emerald-700">{invoice.status}</span>
+                        <Button
+                          variant="outline"
+                          loading={busyKey === `invoice:${invoice.id}`}
+                          onClick={() => handleDownloadInvoice(invoice.id)}
+                        >
+                          <Download className="h-4 w-4" />
+                          Download invoice
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+
+        {(upgradePlans.length === 0 && downgradePlans.length === 0) ? (
+          <div className="rounded-[24px] border border-gray-200 bg-surface p-5 text-sm text-muted shadow-sm">
+            Plan changes are not available for the current learner subscription state yet.
+          </div>
+        ) : null}
       </div>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }

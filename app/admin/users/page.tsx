@@ -1,74 +1,93 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
-import { FilterBar, FilterGroup } from '@/components/ui/filter-bar';
-import { DataTable, Column } from '@/components/ui/data-table';
-import { mockUsers, AdminUser } from '@/lib/mock-admin-data';
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
+import { MailPlus, Search, Users } from 'lucide-react';
+import { AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
+import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
+import { DataTable, type Column } from '@/components/ui/data-table';
+import { EmptyState } from '@/components/ui/empty-error';
+import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
+import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { Modal } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/form-controls';
-import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { EmptyState } from '@/components/ui/empty-error';
-import { Toast } from '@/components/ui/alert';
-import { Users, Search } from 'lucide-react';
-import { analytics } from '@/lib/analytics';
-import Link from 'next/link';
+import { Modal } from '@/components/ui/modal';
+import { inviteAdminUser } from '@/lib/api';
+import { getAdminUsersPageData } from '@/lib/admin';
+import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import type { AdminUserRow } from '@/lib/types/admin';
+
+type PageStatus = 'loading' | 'success' | 'empty' | 'error';
+type ToastState = { variant: 'success' | 'error'; message: string } | null;
+
+interface InviteFormState {
+  name: string;
+  email: string;
+  role: 'learner' | 'expert' | 'admin';
+  professionId: string;
+}
+
+const defaultInviteForm: InviteFormState = {
+  name: '',
+  email: '',
+  role: 'learner',
+  professionId: 'nursing',
+};
 
 export default function UsersPage() {
   const { isAuthenticated, role } = useAdminAuth();
-  const [activeFilters, setActiveFilters] = useState<Record<string, string[]>>({ role: [], status: [] });
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
+  const [filters, setFilters] = useState<Record<string, string[]>>({ role: [], status: [] });
   const [searchQuery, setSearchQuery] = useState('');
-  const [pageStatus, setPageStatus] = useState<'loading' | 'success' | 'empty'>('loading');
-  const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [total, setTotal] = useState(0);
+  const [users, setUsers] = useState<AdminUserRow[]>([]);
+  const [inviteForm, setInviteForm] = useState<InviteFormState>(defaultInviteForm);
+  const [isInviteOpen, setIsInviteOpen] = useState(false);
+  const [isInviting, setIsInviting] = useState(false);
+  const [toast, setToast] = useState<ToastState>(null);
+
+  const selectedRole = filters.role?.[0];
+  const selectedStatus = filters.status?.[0];
 
   useEffect(() => {
-    const load = async () => {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      setPageStatus(mockUsers.length > 0 ? 'success' : 'empty');
-    };
-    load();
-  }, []);
+    let cancelled = false;
 
-  const columns: Column<AdminUser>[] = [
-    {
-      key: 'name',
-      header: 'Name',
-      render: (item) => (
-        <div>
-          <Link href={`/admin/users/${item.id}`} className="font-medium text-blue-600 hover:underline">
-            {item.name}
-          </Link>
-          <div className="text-sm text-slate-500">{item.email}</div>
-        </div>
-      ),
-    },
-    {
-      key: 'role',
-      header: 'Role',
-      render: (item) => (
-        <Badge variant={item.role === 'admin' ? 'danger' : item.role === 'expert' ? 'warning' : 'default'} className="capitalize">
-          {item.role}
-        </Badge>
-      ),
-    },
-    {
-      key: 'lastLogin',
-      header: 'Last Login',
-      render: (item) => <div className="text-slate-600">{new Date(item.lastLogin).toLocaleDateString()}</div>,
-    },
-    {
-      key: 'status',
-      header: 'Status',
-      render: (item) => (
-        <Badge variant={item.status === 'active' ? 'success' : 'muted'}>
-          {item.status.charAt(0).toUpperCase() + item.status.slice(1)}
-        </Badge>
-      ),
-    },
-  ];
+    async function loadUsers() {
+      setPageStatus('loading');
+      try {
+        const result = await getAdminUsersPageData({
+          role: selectedRole,
+          status: selectedStatus,
+          search: searchQuery || undefined,
+          page,
+          pageSize,
+        });
+
+        if (cancelled) return;
+
+        setUsers(result.items);
+        setTotal(result.total);
+        setPage(result.page);
+        setPageSize(result.pageSize);
+        setPageStatus(result.total > 0 ? 'success' : 'empty');
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setPageStatus('error');
+          setToast({ variant: 'error', message: 'Unable to load users right now.' });
+        }
+      }
+    }
+
+    const handle = window.setTimeout(loadUsers, 200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(handle);
+    };
+  }, [page, pageSize, selectedRole, selectedStatus, searchQuery]);
 
   const filterGroups: FilterGroup[] = [
     {
@@ -86,113 +105,237 @@ export default function UsersPage() {
       options: [
         { id: 'active', label: 'Active' },
         { id: 'suspended', label: 'Suspended' },
+        { id: 'deleted', label: 'Deleted' },
       ],
     },
   ];
 
-  const handleFilterChange = (groupId: string, optionId: string) => {
-    setActiveFilters((prev) => {
-      const current = prev[groupId] || [];
-      const updated = current.includes(optionId)
-        ? current.filter((id) => id !== optionId)
-        : [...current, optionId];
-      return { ...prev, [groupId]: updated };
-    });
-  };
+  const roleCounts = useMemo(() => ({
+    learners: users.filter((user) => user.role === 'learner').length,
+    experts: users.filter((user) => user.role === 'expert').length,
+    admins: users.filter((user) => user.role === 'admin').length,
+  }), [users]);
 
-  const filteredData = useMemo(() => {
-    const q = searchQuery.toLowerCase();
-    return mockUsers.filter((item) => {
-      const matchesSearch = !q || item.name.toLowerCase().includes(q) || item.email.toLowerCase().includes(q) || item.id.toLowerCase().includes(q);
-      const matchesRole = activeFilters.role.length === 0 || activeFilters.role.includes(item.role);
-      const matchesStatus = activeFilters.status.length === 0 || activeFilters.status.includes(item.status);
-      return matchesSearch && matchesRole && matchesStatus;
-    });
-  }, [searchQuery, activeFilters]);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const pageStart = total === 0 ? 0 : ((page - 1) * pageSize) + 1;
+  const pageEnd = total === 0 ? 0 : Math.min(total, page * pageSize);
 
-  const handleInvite = () => {
+  const columns: Column<AdminUserRow>[] = useMemo(
+    () => [
+      {
+        key: 'name',
+        header: 'User',
+        render: (user) => (
+          <div className="space-y-1">
+            <Link href={`/admin/users/${user.id}`} className="font-medium text-blue-600 hover:underline">
+              {user.name}
+            </Link>
+            <p className="text-sm text-slate-500">{user.email}</p>
+          </div>
+        ),
+      },
+      {
+        key: 'role',
+        header: 'Role',
+        render: (user) => (
+          <Badge variant={user.role === 'admin' ? 'danger' : user.role === 'expert' ? 'warning' : 'default'}>
+            {user.role}
+          </Badge>
+        ),
+      },
+      {
+        key: 'status',
+        header: 'Status',
+        render: (user) => (
+          <Badge variant={user.status === 'active' ? 'success' : user.status === 'deleted' ? 'danger' : 'muted'}>
+            {user.status}
+          </Badge>
+        ),
+      },
+      {
+        key: 'lastLogin',
+        header: 'Last Login',
+        render: (user) => (
+          <span className="text-sm text-slate-500">
+            {user.lastLogin ? new Date(user.lastLogin).toLocaleString() : 'Never'}
+          </span>
+        ),
+      },
+    ],
+    [],
+  );
+
+  function handleFilterChange(groupId: string, optionId: string) {
+    setPage(1);
+    setFilters((current) => ({
+      ...current,
+      [groupId]: current[groupId]?.includes(optionId) ? [] : [optionId],
+    }));
+  }
+
+  async function reloadUsers() {
+    const result = await getAdminUsersPageData({
+      role: selectedRole,
+      status: selectedStatus,
+      search: searchQuery || undefined,
+      page,
+      pageSize,
+    });
+    setUsers(result.items);
+    setTotal(result.total);
+    setPage(result.page);
+    setPageSize(result.pageSize);
+    setPageStatus(result.total > 0 ? 'success' : 'empty');
+  }
+
+  async function handleInviteUser() {
+    setIsInviting(true);
     try {
-      analytics.track('admin_user_role_changed', { action: 'invite' });
-      setIsModalOpen(false);
-      setToast({ variant: 'success', message: 'Invitation sent successfully.' });
-    } catch {
-      setToast({ variant: 'error', message: 'Failed to send invitation.' });
+      const result = await inviteAdminUser({
+        name: inviteForm.name,
+        email: inviteForm.email,
+        role: inviteForm.role,
+        professionId: inviteForm.role === 'admin' ? undefined : inviteForm.professionId,
+      });
+
+      await reloadUsers();
+      setIsInviteOpen(false);
+      setInviteForm(defaultInviteForm);
+      setToast({
+        variant: 'success',
+        message: `Invitation sent to ${result.email}. Setup expires ${new Date(result.invitation.expiresAt).toLocaleString()}.`,
+      });
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: 'Unable to send this invitation.' });
+    } finally {
+      setIsInviting(false);
     }
-  };
+  }
 
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto" role="main" aria-label="User Management">
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
+    <div className="max-w-7xl space-y-6">
+      {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">User Management</h1>
-          <p className="text-sm text-slate-500 mt-1">Manage learners, experts, and administrative accounts.</p>
-        </div>
-        <Button onClick={() => setIsModalOpen(true)}>Invite User</Button>
-      </div>
+      <AdminPageHeader
+        title="User Operations"
+        description="Manage learner, expert, and admin accounts with real invite, access, and status controls."
+        actions={
+          <Button onClick={() => setIsInviteOpen(true)} className="gap-2">
+            <MailPlus className="h-4 w-4" />
+            Invite User
+          </Button>
+        }
+      />
 
       <AsyncStateWrapper
         status={pageStatus}
         onRetry={() => window.location.reload()}
         emptyContent={
           <EmptyState
-            icon={<Users className="w-12 h-12 text-muted" />}
-            title="No Users Yet"
-            description="Invite your first user to get started."
-            action={{ label: 'Invite User', onClick: () => setIsModalOpen(true) }}
+            icon={<Users className="h-10 w-10 text-slate-400" />}
+            title="No users found"
+            description="Invite the first learner, expert, or admin account to start operating the platform."
+            action={{ label: 'Invite User', onClick: () => setIsInviteOpen(true) }}
           />
         }
       >
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200">
-          <div className="p-4 border-b border-slate-200 flex flex-col sm:flex-row gap-4">
-            <div className="relative flex-1">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 z-10" />
-              <Input
-                placeholder="Search by name, email, or ID..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-10"
-              />
+        <div className="grid gap-4 md:grid-cols-3">
+          <AdminSectionPanel title="Learners" description="Accounts currently visible in the active filter window.">
+            <p className="text-2xl font-semibold text-slate-900">{roleCounts.learners}</p>
+          </AdminSectionPanel>
+          <AdminSectionPanel title="Experts" description="Operational reviewer accounts in the current result set.">
+            <p className="text-2xl font-semibold text-slate-900">{roleCounts.experts}</p>
+          </AdminSectionPanel>
+          <AdminSectionPanel title="Admins" description="Administrative accounts visible to this query.">
+            <p className="text-2xl font-semibold text-slate-900">{roleCounts.admins}</p>
+          </AdminSectionPanel>
+        </div>
+
+        <AdminSectionPanel title="Directory" description="This directory is powered by the live admin users endpoint with real role and status filtering.">
+          <div className="max-w-sm">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input placeholder="Search by name, email, or ID" value={searchQuery} onChange={(event) => { setPage(1); setSearchQuery(event.target.value); }} className="pl-9" />
             </div>
           </div>
-          <FilterBar
-            groups={filterGroups}
-            selected={activeFilters}
-            onChange={handleFilterChange}
-            className="border-b border-slate-200 p-4"
-          />
-          {filteredData.length === 0 ? (
-            <EmptyState
-              icon={<Users className="w-12 h-12 text-muted" />}
-              title="No Matching Users"
-              description="Adjust your search or filters."
-              action={{ label: 'Clear Filters', onClick: () => { setSearchQuery(''); setActiveFilters({ role: [], status: [] }); } }}
-            />
-          ) : (
-            <DataTable columns={columns} data={filteredData} keyExtractor={(item) => item.id} />
-          )}
-        </div>
+          <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => { setPage(1); setFilters({ role: [], status: [] }); setSearchQuery(''); }} />
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="text-sm text-slate-500">
+              Showing {pageStart}-{pageEnd} of {total} users
+            </div>
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
+              <div className="min-w-36">
+                <Select
+                  label="Rows per page"
+                  value={String(pageSize)}
+                  onChange={(event) => { setPage(1); setPageSize(Number(event.target.value)); }}
+                  options={[
+                    { value: '10', label: '10' },
+                    { value: '20', label: '20' },
+                    { value: '50', label: '50' },
+                  ]}
+                />
+              </div>
+              <div className="flex items-center gap-2 pt-5 md:pt-0">
+                <Button variant="outline" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>
+                  Previous
+                </Button>
+                <span className="text-sm text-slate-500">
+                  Page {page} of {totalPages}
+                </span>
+                <Button variant="outline" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>
+                  Next
+                </Button>
+              </div>
+            </div>
+          </div>
+          <DataTable columns={columns} data={users} keyExtractor={(user) => user.id} />
+        </AdminSectionPanel>
       </AsyncStateWrapper>
 
-      <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)} title="Invite New User">
-        <div className="space-y-4 py-4">
-          <Input label="Full Name" placeholder="e.g., Dr. John Doe" />
-          <Input label="Email Address" type="email" placeholder="john.doe@example.com" />
+      <Modal open={isInviteOpen} onClose={() => setIsInviteOpen(false)} title="Invite User">
+        <div className="space-y-4 py-2">
+          <Input label="Full Name" value={inviteForm.name} onChange={(event) => setInviteForm((current) => ({ ...current, name: event.target.value }))} />
+          <Input label="Email Address" type="email" value={inviteForm.email} onChange={(event) => setInviteForm((current) => ({ ...current, email: event.target.value }))} />
           <Select
             label="Role"
+            value={inviteForm.role}
+            onChange={(event) => setInviteForm((current) => ({ ...current, role: event.target.value as InviteFormState['role'] }))}
             options={[
               { value: 'learner', label: 'Learner' },
               { value: 'expert', label: 'Expert' },
               { value: 'admin', label: 'Admin' },
             ]}
           />
-          <p className="text-sm text-slate-500 mt-2">An invitation email will be sent with instructions to set up their password.</p>
-          <div className="flex justify-end gap-3 pt-4 border-t border-slate-100 mt-6">
-            <Button variant="outline" onClick={() => setIsModalOpen(false)}>Cancel</Button>
-            <Button onClick={handleInvite}>Send Invite</Button>
+          {inviteForm.role !== 'admin' ? (
+            <Select
+              label={inviteForm.role === 'expert' ? 'Primary Specialty' : 'Profession'}
+              value={inviteForm.professionId}
+              onChange={(event) => setInviteForm((current) => ({ ...current, professionId: event.target.value }))}
+              options={[
+                { value: 'nursing', label: 'Nursing' },
+                { value: 'medicine', label: 'Medicine' },
+                { value: 'dentistry', label: 'Dentistry' },
+                { value: 'pharmacy', label: 'Pharmacy' },
+                { value: 'physiotherapy', label: 'Physiotherapy' },
+              ]}
+            />
+          ) : null}
+
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
+            The backend will create the account, send a setup challenge, and log the invitation in audit history.
+          </div>
+
+          <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+            <Button variant="outline" onClick={() => setIsInviteOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleInviteUser} loading={isInviting}>
+              Send Invite
+            </Button>
           </div>
         </div>
       </Modal>

@@ -1,45 +1,64 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
-import { Card, CardContent } from '@/components/ui/card';
+import { useEffect, useState } from 'react';
+import { Edit2, ListTree, Plus } from 'lucide-react';
+import { AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
+import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
+import { EmptyState } from '@/components/ui/empty-error';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
+import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { EmptyState } from '@/components/ui/empty-error';
-import { Toast } from '@/components/ui/alert';
-import { Plus, Edit2, ListTree } from 'lucide-react';
-import { mockTaxonomy, type AdminTaxonomyNode } from '@/lib/mock-admin-data';
-import { analytics } from '@/lib/analytics';
+import { Input, Select, Textarea } from '@/components/ui/form-controls';
+import { Modal } from '@/components/ui/modal';
+import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import { getAdminTaxonomyData, getAdminTaxonomyImpactData } from '@/lib/admin';
+import { archiveAdminTaxonomy, createAdminTaxonomy, updateAdminTaxonomy } from '@/lib/api';
+import type { AdminTaxonomyImpact, AdminTaxonomyNode } from '@/lib/types/admin';
+
+type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 
 export default function AdminTaxonomyPage() {
   const { isAuthenticated, role } = useAdminAuth();
-  const [data, setData] = useState<AdminTaxonomyNode[]>([]);
-  const [pageStatus, setPageStatus] = useState<'loading' | 'success' | 'empty'>('loading');
-  const [selectedFilters, setSelectedFilters] = useState<Record<string, string[]>>({});
+  const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
+  const [nodes, setNodes] = useState<AdminTaxonomyNode[]>([]);
+  const [filters, setFilters] = useState<Record<string, string[]>>({});
+  const [reloadNonce, setReloadNonce] = useState(0);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingNode, setEditingNode] = useState<AdminTaxonomyNode | null>(null);
+  const [impact, setImpact] = useState<AdminTaxonomyImpact | null>(null);
+  const [form, setForm] = useState({ label: '', code: '', status: 'active', description: '' });
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
+  const selectedStatus = filters.status?.[0];
 
   useEffect(() => {
-    const load = async () => {
-      setPageStatus('loading');
-      await new Promise(resolve => setTimeout(resolve, 300));
-      setData(mockTaxonomy);
-      setPageStatus(mockTaxonomy.length > 0 ? 'success' : 'empty');
+    let cancelled = false;
+
+    async function bootstrapTaxonomy() {
+      try {
+        setPageStatus('loading');
+        const items = await getAdminTaxonomyData({ status: selectedStatus });
+        if (cancelled) return;
+
+        setNodes(items);
+        setPageStatus(items.length > 0 ? 'success' : 'empty');
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setPageStatus('error');
+          setToast({ variant: 'error', message: 'Unable to load taxonomy.' });
+        }
+      }
+    }
+
+    void bootstrapTaxonomy();
+    return () => {
+      cancelled = true;
     };
-    load();
-  }, []);
+  }, [reloadNonce, selectedStatus]);
 
   const filterGroups: FilterGroup[] = [
-    {
-      id: 'type',
-      label: 'Type',
-      options: [
-        { id: 'profession', label: 'Profession' },
-        { id: 'category', label: 'Category' },
-      ],
-    },
     {
       id: 'status',
       label: 'Status',
@@ -50,97 +69,156 @@ export default function AdminTaxonomyPage() {
     },
   ];
 
-  const handleFilterChange = (groupId: string, optionId: string) => {
-    setSelectedFilters(prev => {
-      const current = prev[groupId] || [];
-      const updated = current.includes(optionId) ? current.filter(id => id !== optionId) : [...current, optionId];
-      return { ...prev, [groupId]: updated };
-    });
-  };
-
-  const clearFilters = () => setSelectedFilters({});
-
-  const filteredData = data.filter(item => {
-    if (selectedFilters.type?.length && !selectedFilters.type.includes(item.type)) return false;
-    if (selectedFilters.status?.length && !selectedFilters.status.includes(item.status)) return false;
-    return true;
-  });
-
   const columns: Column<AdminTaxonomyNode>[] = [
-    { key: 'label', header: 'Profession / Category', render: (row) => <span className="font-semibold text-navy">{row.label}</span> },
-    { key: 'slug', header: 'Slug', render: (row) => <span className="font-mono text-xs text-muted">{row.slug}</span> },
-    { key: 'type', header: 'Type', render: (row) => <span className="capitalize">{row.type}</span> },
-    { key: 'count', header: 'Linked Content', render: (row) => <span className="font-medium">{row.contentCount} items</span> },
-    { 
-      key: 'status', 
-      header: 'Status', 
-      render: (row) => {
-        const variant = row.status === 'active' ? 'success' : 'muted';
-        return <Badge variant={variant} className="capitalize">{row.status}</Badge>;
-      }
+    { key: 'label', header: 'Label', render: (row) => <span className="font-medium text-slate-900">{row.label}</span> },
+    { key: 'slug', header: 'Code', render: (row) => <span className="font-mono text-xs text-slate-500">{row.slug}</span> },
+    { key: 'contentCount', header: 'Linked Content', render: (row) => <span>{row.contentCount}</span> },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (row) => <Badge variant={row.status === 'active' ? 'success' : 'muted'}>{row.status}</Badge>,
     },
     {
       key: 'actions',
       header: '',
       render: (row) => (
-        <div className="flex justify-end">
-          <Button variant="ghost" size="sm" className="px-2 text-muted hover:text-navy" onClick={() => {
-            analytics.track('admin_taxonomy_changed', { nodeId: row.id, action: 'edit' });
-            setToast({ variant: 'success', message: `Editing ${row.label}...` });
-          }}>
-            <Edit2 className="w-4 h-4" />
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" onClick={() => void openEditor(row)} className="gap-2">
+            <Edit2 className="h-4 w-4" /> Edit
           </Button>
+          {row.status === 'active' ? (
+            <Button variant="outline" size="sm" onClick={() => void archiveNode(row)} className="text-rose-600">
+              Archive
+            </Button>
+          ) : null}
         </div>
-      )
-    }
+      ),
+    },
   ];
+
+  function handleFilterChange(groupId: string, optionId: string) {
+    setFilters((current) => {
+      return {
+        ...current,
+        [groupId]: current[groupId]?.[0] === optionId ? [] : [optionId],
+      };
+    });
+  }
+
+  async function openEditor(node?: AdminTaxonomyNode) {
+    setEditingNode(node ?? null);
+    setImpact(node ? await getAdminTaxonomyImpactData(node.id) : null);
+    setForm({
+      label: node?.label ?? '',
+      code: node?.slug ?? '',
+      status: node?.status ?? 'active',
+      description: '',
+    });
+    setModalOpen(true);
+  }
+
+  async function archiveNode(node: AdminTaxonomyNode) {
+    try {
+      const impactSummary = await getAdminTaxonomyImpactData(node.id);
+      if (!impactSummary.safeToArchive) {
+        setToast({
+          variant: 'error',
+          message: `${node.label} still has ${impactSummary.usage.contentCount} linked content items and cannot be archived safely.`,
+        });
+        return;
+      }
+      await archiveAdminTaxonomy(node.id);
+      setToast({ variant: 'success', message: `${node.label} archived.` });
+      setReloadNonce((current) => current + 1);
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: `Unable to archive ${node.label}.` });
+    }
+  }
+
+  async function submitNode() {
+    try {
+      if (editingNode) {
+        await updateAdminTaxonomy(editingNode.id, { label: form.label, code: form.code, status: form.status });
+        setToast({ variant: 'success', message: `${form.label} updated.` });
+      } else {
+        await createAdminTaxonomy({ label: form.label, code: form.code });
+        setToast({ variant: 'success', message: `${form.label} created.` });
+      }
+      setModalOpen(false);
+      setReloadNonce((current) => current + 1);
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: 'Unable to save taxonomy changes.' });
+    }
+  }
 
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <div className="max-w-6xl mx-auto p-4 md:p-8 space-y-8" role="main" aria-label="Profession Taxonomy">
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
+    <div className="max-w-6xl space-y-6">
+      {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-navy tracking-tight">Profession Taxonomy</h1>
-          <p className="text-sm text-muted mt-1">Manage standard professions and categories used across the platform.</p>
-        </div>
-        <Button className="gap-2">
-          <Plus className="w-4 h-4" /> Add Node
-        </Button>
-      </div>
+      <AdminPageHeader
+        title="Profession Taxonomy"
+        description="Manage the professions that drive OET content targeting, learner goals, and downstream analytics."
+        actions={
+          <Button onClick={() => void openEditor()} className="gap-2">
+            <Plus className="h-4 w-4" /> Add Profession
+          </Button>
+        }
+      />
 
       <AsyncStateWrapper
         status={pageStatus}
-        onRetry={() => window.location.reload()}
-        emptyContent={
-          <EmptyState
-            icon={<ListTree className="w-12 h-12 text-muted" />}
-            title="No Taxonomy Entries"
-            description="Create your first profession or category entry."
-          />
-        }
+        onRetry={() => setReloadNonce((current) => current + 1)}
+        emptyContent={<EmptyState icon={<ListTree className="h-10 w-10 text-slate-400" />} title="No taxonomy entries" description="Add your first profession to start structuring content." />}
       >
-        <div className="bg-surface p-4 rounded-xl border border-gray-200/60 shadow-sm">
-          <FilterBar
-            groups={filterGroups}
-            selected={selectedFilters}
-            onChange={handleFilterChange}
-            onClear={clearFilters}
-          />
-        </div>
+        <AdminSectionPanel title="Filters" description="Review active vs archived taxonomy nodes.">
+          <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({})} />
+        </AdminSectionPanel>
 
-        <Card padding="none" className="overflow-hidden">
-          <CardContent className="p-0">
-            <DataTable 
-              data={filteredData}
-              columns={columns}
-              keyExtractor={(item) => item.id}
-            />
-          </CardContent>
-        </Card>
+        <AdminSectionPanel title="Professions" description="Create, update, and archive professions with live impact checks before change.">
+          <DataTable columns={columns} data={nodes} keyExtractor={(row) => row.id} />
+        </AdminSectionPanel>
       </AsyncStateWrapper>
+
+      <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingNode ? `Edit ${editingNode.label}` : 'Add Profession'}>
+        <div className="space-y-4">
+          <Input label="Label" value={form.label} onChange={(event) => setForm((current) => ({ ...current, label: event.target.value }))} />
+          <Input label="Code" value={form.code} onChange={(event) => setForm((current) => ({ ...current, code: event.target.value }))} />
+          {editingNode ? (
+            <Select
+              label="Status"
+              value={form.status}
+              onChange={(event) => setForm((current) => ({ ...current, status: event.target.value }))}
+              options={[
+                { value: 'active', label: 'Active' },
+                { value: 'archived', label: 'Archived' },
+              ]}
+            />
+          ) : null}
+          <Textarea
+            label="Operational Notes"
+            value={form.description}
+            onChange={(event) => setForm((current) => ({ ...current, description: event.target.value }))}
+            hint="Reserved for taxonomy governance notes."
+          />
+          {impact ? (
+            <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
+              <p className="font-medium text-slate-900">Impact preview</p>
+              <p>Linked content: {impact.usage.contentCount}</p>
+              <p>Linked learners: {impact.usage.learnerCount}</p>
+              <p>Goal references: {impact.usage.goalCount}</p>
+              <p>{impact.safeToArchive ? 'Safe to archive when needed.' : 'Not safe to archive yet.'}</p>
+            </div>
+          ) : null}
+          <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+            <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
+            <Button onClick={() => void submitNode()}>{editingNode ? 'Save Changes' : 'Create Profession'}</Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

@@ -16,7 +16,7 @@ import {
   Loader2
 } from 'lucide-react';
 import Link from 'next/link';
-import { AppShell } from '@/components/layout/app-shell';
+import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchListeningResult } from '@/lib/api';
@@ -56,33 +56,33 @@ function ListeningResultsContent() {
 
   if (loading) {
     return (
-      <AppShell pageTitle="Listening Results" backHref="/listening">
-        <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
+      <LearnerDashboardShell pageTitle="Listening Results" backHref="/listening">
+        <div className="space-y-6">
           <Skeleton className="h-64 rounded-[32px]" />
           <Skeleton className="h-32 rounded-[24px]" />
           <Skeleton className="h-48 rounded-[24px]" />
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
   if (!result) {
     return (
-      <AppShell pageTitle="Listening Results" backHref="/listening">
+      <LearnerDashboardShell pageTitle="Listening Results" backHref="/listening">
         <div className="flex-1 flex flex-col items-center justify-center p-8 text-center gap-4">
           <AlertCircle className="w-12 h-12 text-rose-500" />
           <h2 className="text-xl font-black text-navy">Result not found</h2>
           <Link href="/listening"><Button variant="ghost">Back to Listening</Button></Link>
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
   const percentage = Math.round((result.score / result.total) * 100);
 
   return (
-    <AppShell pageTitle="Listening Results" subtitle={result.title} backHref="/listening">
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8 pb-24">
+    <LearnerDashboardShell pageTitle="Listening Results" subtitle={result.title} backHref="/listening">
+      <div className="space-y-8 pb-24">
 
         {/* Score Overview */}
         <motion.section
@@ -131,17 +131,17 @@ function ListeningResultsContent() {
             transition={{ delay: 0.1 }}
           >
             <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-4">Recommended Next Step</h2>
-            <Link href={`/listening/drills/${result.recommendedDrill}`} className="block bg-indigo-50 rounded-[24px] border border-indigo-100 p-6 hover:shadow-md hover:border-indigo-200 transition-all group">
+            <Link href={`/listening/drills/${result.recommendedDrill.id}`} className="block bg-indigo-50 rounded-[24px] border border-indigo-100 p-6 hover:shadow-md hover:border-indigo-200 transition-all group">
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 rounded-2xl bg-indigo-100 flex items-center justify-center shrink-0">
                   <Target className="w-6 h-6 text-indigo-600" />
                 </div>
                 <div className="flex-1">
                   <h3 className="text-lg font-black text-indigo-900 mb-1 group-hover:text-indigo-700 transition-colors">
-                    Distractor Drill Practice
+                    {result.recommendedDrill.title}
                   </h3>
                   <p className="text-sm text-indigo-700/80 mb-4 leading-relaxed">
-                    Practice identifying common distractor patterns to improve your accuracy.
+                    {result.recommendedDrill.description}
                   </p>
                   <span className="inline-flex items-center gap-2 text-sm font-bold text-indigo-600 bg-white px-4 py-2 rounded-xl shadow-sm group-hover:bg-indigo-600 group-hover:text-white transition-colors">
                     Start Drill <ArrowRight className="w-4 h-4" />
@@ -264,18 +264,18 @@ function ListeningResultsContent() {
         </motion.section>
 
       </div>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }
 
 export default function ListeningResults() {
   return (
     <Suspense fallback={
-      <AppShell pageTitle="Listening Results" backHref="/listening">
+      <LearnerDashboardShell pageTitle="Listening Results" backHref="/listening">
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     }>
       <ListeningResultsContent />
     </Suspense>

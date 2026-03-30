@@ -1,0 +1,392 @@
+'use client';
+
+import { useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { ArrowLeft, CheckCircle, History, Save } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Checkbox, Input, Select, Textarea } from '@/components/ui/form-controls';
+import { Tabs, TabPanel } from '@/components/ui/tabs';
+import { Toast } from '@/components/ui/alert';
+import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
+import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import { createAdminContent, publishAdminContent, updateAdminContent } from '@/lib/api';
+import { getAdminContentDetailData, getAdminContentImpactData, getAdminCriteriaData } from '@/lib/admin';
+import type { AdminContentImpact, AdminCriterion } from '@/lib/types/admin';
+
+type PageStatus = 'loading' | 'success' | 'error';
+
+interface AdminContentEditorProps {
+  contentId?: string;
+}
+
+interface FormState {
+  title: string;
+  contentType: string;
+  subtestCode: string;
+  professionId: string;
+  difficulty: string;
+  estimatedDurationMinutes: string;
+  description: string;
+  caseNotes: string;
+  modelAnswer: string;
+  criteriaFocus: string[];
+}
+
+const defaultFormState: FormState = {
+  title: '',
+  contentType: 'writing_task',
+  subtestCode: 'writing',
+  professionId: 'nursing',
+  difficulty: 'medium',
+  estimatedDurationMinutes: '45',
+  description: '',
+  caseNotes: '',
+  modelAnswer: '',
+  criteriaFocus: [],
+};
+
+export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
+  const router = useRouter();
+  const { isAuthenticated, role } = useAdminAuth();
+  const [pageStatus, setPageStatus] = useState<PageStatus>(contentId ? 'loading' : 'success');
+  const [activeTab, setActiveTab] = useState('metadata');
+  const [form, setForm] = useState<FormState>(defaultFormState);
+  const [criteriaOptions, setCriteriaOptions] = useState<AdminCriterion[]>([]);
+  const [impact, setImpact] = useState<AdminContentImpact | null>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
+
+  const isNew = !contentId;
+
+  useEffect(() => {
+    if (!contentId) return;
+    const currentContentId = contentId;
+
+    let cancelled = false;
+    async function load() {
+      setPageStatus('loading');
+      try {
+        const [detail, impactSummary] = await Promise.all([
+          getAdminContentDetailData(currentContentId),
+          getAdminContentImpactData(currentContentId),
+        ]);
+
+        if (cancelled) return;
+
+        setForm({
+          title: detail.title,
+          contentType: detail.contentType,
+          subtestCode: detail.subtestCode,
+          professionId: detail.professionId || 'nursing',
+          difficulty: detail.difficulty,
+          estimatedDurationMinutes: String(detail.estimatedDurationMinutes),
+          description: detail.description,
+          caseNotes: detail.caseNotes,
+          modelAnswer: detail.modelAnswer,
+          criteriaFocus: detail.criteriaFocus,
+        });
+        setImpact(impactSummary);
+        setPageStatus('success');
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setPageStatus('error');
+          setToast({ variant: 'error', message: 'Failed to load content details.' });
+        }
+      }
+    }
+
+    load();
+    return () => {
+      cancelled = true;
+    };
+  }, [contentId]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadCriteria() {
+      try {
+        const items = await getAdminCriteriaData({ subtest: form.subtestCode, status: 'active' });
+        if (!cancelled) {
+          setCriteriaOptions(items);
+        }
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setCriteriaOptions([]);
+        }
+      }
+    }
+
+    loadCriteria();
+    return () => {
+      cancelled = true;
+    };
+  }, [form.subtestCode]);
+
+  const tabs = useMemo(
+    () => [
+      { id: 'metadata', label: 'Metadata & Content' },
+      { id: 'criteria', label: 'Criteria Mapping' },
+      { id: 'rubric', label: 'Model Answer & Rubric' },
+    ],
+    [],
+  );
+
+  function updateField<K extends keyof FormState>(key: K, value: FormState[K]) {
+    setForm((current) => ({ ...current, [key]: value }));
+  }
+
+  function toggleCriterion(criterionId: string) {
+    setForm((current) => ({
+      ...current,
+      criteriaFocus: current.criteriaFocus.includes(criterionId)
+        ? current.criteriaFocus.filter((id) => id !== criterionId)
+        : [...current.criteriaFocus, criterionId],
+    }));
+  }
+
+  async function saveContent(publishAfterSave: boolean) {
+    setIsSaving(true);
+    try {
+      const payload = {
+        title: form.title,
+        contentType: form.contentType,
+        subtestCode: form.subtestCode,
+        professionId: form.professionId,
+        difficulty: form.difficulty,
+        estimatedDurationMinutes: Number(form.estimatedDurationMinutes || 45),
+        description: form.description,
+        caseNotes: form.caseNotes,
+        modelAnswer: form.modelAnswer,
+        criteriaFocus: JSON.stringify(form.criteriaFocus),
+      };
+
+      let resolvedContentId = contentId;
+      if (isNew) {
+        const created = await createAdminContent(payload);
+        resolvedContentId = created.id as string;
+      } else if (contentId) {
+        await updateAdminContent(contentId, payload);
+      }
+
+      if (publishAfterSave && resolvedContentId) {
+        await publishAdminContent(resolvedContentId);
+      }
+
+      setToast({
+        variant: 'success',
+        message: publishAfterSave ? 'Content saved and published.' : 'Draft saved successfully.',
+      });
+
+      if (resolvedContentId && resolvedContentId !== contentId) {
+        router.replace(`/admin/content/${resolvedContentId}`);
+      } else if (resolvedContentId) {
+        const impactSummary = await getAdminContentImpactData(resolvedContentId);
+        setImpact(impactSummary);
+      }
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: 'Unable to save content right now.' });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  if (!isAuthenticated || role !== 'admin') return null;
+
+  return (
+    <div className="max-w-6xl space-y-6">
+      {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
+
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+        <div className="flex items-start gap-3">
+          <Button variant="ghost" size="sm" onClick={() => router.back()} className="mt-1 px-2">
+            <ArrowLeft className="h-4 w-4" />
+          </Button>
+          <div className="space-y-1">
+            <h1 className="text-2xl font-semibold text-slate-900">
+              {isNew ? 'Create Content' : `Edit ${form.title || contentId}`}
+            </h1>
+            <p className="text-sm text-slate-500">
+              Build OET practice content with real metadata, live rubric criteria, and a publishable revision trail.
+            </p>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {!isNew && contentId ? (
+            <Button variant="outline" onClick={() => router.push(`/admin/content/${contentId}/revisions`)} className="gap-2">
+              <History className="h-4 w-4" /> Revisions
+            </Button>
+          ) : null}
+          <Button variant="outline" onClick={() => saveContent(false)} loading={isSaving} className="gap-2">
+            <Save className="h-4 w-4" /> Save Draft
+          </Button>
+          <Button onClick={() => saveContent(true)} loading={isSaving} className="gap-2">
+            <CheckCircle className="h-4 w-4" /> Publish
+          </Button>
+        </div>
+      </div>
+
+      <AsyncStateWrapper status={pageStatus} onRetry={() => window.location.reload()}>
+        {impact ? (
+          <Card>
+            <CardContent className="grid gap-4 p-5 md:grid-cols-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Attempts</p>
+                <p className="text-lg font-semibold text-slate-900">{impact.usage.attemptCount}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Evaluations</p>
+                <p className="text-lg font-semibold text-slate-900">{impact.usage.evaluationCount}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Study Plan References</p>
+                <p className="text-lg font-semibold text-slate-900">{impact.usage.studyPlanReferences}</p>
+              </div>
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Archive Safety</p>
+                <p className="text-lg font-semibold text-slate-900">{impact.safeToArchive ? 'Safe' : 'Live usage'}</p>
+              </div>
+            </CardContent>
+          </Card>
+        ) : null}
+
+        <div className="rounded-xl border border-slate-200 bg-white px-2 pt-2">
+          <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} className="border-none" />
+        </div>
+
+        <TabPanel id="metadata" activeTab={activeTab}>
+          <Card>
+            <CardHeader>
+              <CardTitle>Core Content Metadata</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <Input label="Content Title" value={form.title} onChange={(event) => updateField('title', event.target.value)} />
+              <div className="grid gap-4 md:grid-cols-2">
+                <Select
+                  label="Content Type"
+                  value={form.contentType}
+                  onChange={(event) => updateField('contentType', event.target.value)}
+                  options={[
+                    { value: 'writing_task', label: 'Writing Task' },
+                    { value: 'speaking_task', label: 'Speaking Task' },
+                    { value: 'reading_task', label: 'Reading Task' },
+                    { value: 'listening_task', label: 'Listening Task' },
+                  ]}
+                />
+                <Select
+                  label="Subtest"
+                  value={form.subtestCode}
+                  onChange={(event) => updateField('subtestCode', event.target.value)}
+                  options={[
+                    { value: 'writing', label: 'Writing' },
+                    { value: 'speaking', label: 'Speaking' },
+                    { value: 'reading', label: 'Reading' },
+                    { value: 'listening', label: 'Listening' },
+                  ]}
+                />
+              </div>
+              <div className="grid gap-4 md:grid-cols-3">
+                <Select
+                  label="Profession"
+                  value={form.professionId}
+                  onChange={(event) => updateField('professionId', event.target.value)}
+                  options={[
+                    { value: 'nursing', label: 'Nursing' },
+                    { value: 'medicine', label: 'Medicine' },
+                    { value: 'dentistry', label: 'Dentistry' },
+                    { value: 'pharmacy', label: 'Pharmacy' },
+                    { value: 'physiotherapy', label: 'Physiotherapy' },
+                  ]}
+                />
+                <Select
+                  label="Difficulty"
+                  value={form.difficulty}
+                  onChange={(event) => updateField('difficulty', event.target.value)}
+                  options={[
+                    { value: 'easy', label: 'Easy' },
+                    { value: 'medium', label: 'Medium' },
+                    { value: 'hard', label: 'Hard' },
+                  ]}
+                />
+                <Input
+                  label="Estimated Minutes"
+                  type="number"
+                  min={5}
+                  max={240}
+                  value={form.estimatedDurationMinutes}
+                  onChange={(event) => updateField('estimatedDurationMinutes', event.target.value)}
+                />
+              </div>
+              <Textarea
+                label="Learner-Facing Description"
+                value={form.description}
+                onChange={(event) => updateField('description', event.target.value)}
+                className="min-h-[120px]"
+              />
+              <Textarea
+                label="Case Notes / Prompt"
+                value={form.caseNotes}
+                onChange={(event) => updateField('caseNotes', event.target.value)}
+                className="min-h-[220px]"
+              />
+            </CardContent>
+          </Card>
+        </TabPanel>
+
+        <TabPanel id="criteria" activeTab={activeTab}>
+          <Card>
+            <CardHeader>
+              <CardTitle>Criteria Mapping</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-sm text-slate-500">
+                Criteria are loaded live from the rubric library for the selected subtest. Only active criteria appear here.
+              </p>
+              {criteriaOptions.length === 0 ? (
+                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-sm text-slate-500">
+                  No active criteria are available for this subtest yet.
+                </div>
+              ) : (
+                <div className="grid gap-3 md:grid-cols-2">
+                  {criteriaOptions.map((criterion) => (
+                    <div key={criterion.id} className="rounded-xl border border-slate-200 p-4">
+                      <Checkbox
+                        checked={form.criteriaFocus.includes(criterion.id)}
+                        onChange={() => toggleCriterion(criterion.id)}
+                        label={`${criterion.name} (${criterion.weight})`}
+                      />
+                      <p className="mt-2 text-sm text-slate-500">{criterion.description}</p>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </TabPanel>
+
+        <TabPanel id="rubric" activeTab={activeTab}>
+          <Card>
+            <CardHeader>
+              <CardTitle>Model Answer & Internal Notes</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-5">
+              <Textarea
+                label="Model Answer JSON / Reference Text"
+                value={form.modelAnswer}
+                onChange={(event) => updateField('modelAnswer', event.target.value)}
+                className="min-h-[240px]"
+              />
+              <p className="text-sm text-slate-500">
+                Use structured JSON when the content type already expects it, or plain reference prose while editorial work is in progress.
+              </p>
+            </CardContent>
+          </Card>
+        </TabPanel>
+      </AsyncStateWrapper>
+    </div>
+  );
+}

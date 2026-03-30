@@ -111,6 +111,9 @@ public class AuditEvent
     [MaxLength(64)]
     public string ActorId { get; set; } = default!;
 
+    [MaxLength(64)]
+    public string? ActorAuthAccountId { get; set; }
+
     [MaxLength(128)]
     public string ActorName { get; set; } = default!;
 
@@ -125,6 +128,8 @@ public class AuditEvent
 
     [MaxLength(1024)]
     public string? Details { get; set; }
+
+    public ApplicationUserAccount? ActorAuthAccount { get; set; }
 }
 
 /// <summary>Subscription plan definition for billing administration.</summary>

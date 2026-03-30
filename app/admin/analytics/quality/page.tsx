@@ -1,38 +1,64 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
-import { mockQualityAnalytics } from '@/lib/mock-admin-data';
-import { Select } from '@/components/ui/form-controls';
-import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, BarChart3, CheckCircle2, Clock, FileText, Users } from 'lucide-react';
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { AdminFreshnessBadge, AdminMetricCard, AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { Toast } from '@/components/ui/alert';
-import { TrendingUp, TrendingDown, Clock, FileText, CheckCircle2, Users, AlertTriangle, BarChart3 } from 'lucide-react';
-import { analytics } from '@/lib/analytics';
+import { EmptyState } from '@/components/ui/empty-error';
+import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
+import { Select } from '@/components/ui/form-controls';
+import { getAdminQualityAnalyticsData } from '@/lib/admin';
+import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import type { AdminQualityAnalytics } from '@/lib/types/admin';
+
+type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 
 export default function QualityAnalyticsPage() {
   const { isAuthenticated, role } = useAdminAuth();
-  const [pageStatus, setPageStatus] = useState<'loading' | 'success'>('loading');
-  const [timeRange, setTimeRange] = useState('7d');
-  const [segmentFilters, setSegmentFilters] = useState<Record<string, string[]>>({});
-  const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
-  const [lastRefreshed] = useState(() => new Date());
+  const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
+  const [timeRange, setTimeRange] = useState('30d');
+  const [filters, setFilters] = useState<Record<string, string[]>>({ subtest: [], profession: [] });
+  const [analytics, setAnalytics] = useState<AdminQualityAnalytics | null>(null);
+
+  const selectedSubtest = filters.subtest?.[0];
+  const selectedProfession = filters.profession?.[0];
 
   useEffect(() => {
-    const load = async () => {
-      await new Promise(resolve => setTimeout(resolve, 300));
-      setPageStatus('success');
-      analytics.track('admin_quality_analytics_viewed', {});
-    };
-    load();
-  }, []);
+    let cancelled = false;
 
-  const data = mockQualityAnalytics;
+    async function loadAnalytics() {
+      setPageStatus('loading');
+      try {
+        const result = await getAdminQualityAnalyticsData({
+          timeRange,
+          subtest: selectedSubtest,
+          profession: selectedProfession,
+        });
+
+        if (cancelled) return;
+
+        setAnalytics(result);
+        const totalSamples = result.freshness.evaluationSampleCount + result.freshness.reviewSampleCount;
+        setPageStatus(totalSamples > 0 ? 'success' : 'empty');
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setPageStatus('error');
+        }
+      }
+    }
+
+    loadAnalytics();
+    return () => {
+      cancelled = true;
+    };
+  }, [timeRange, selectedSubtest, selectedProfession]);
 
   const filterGroups: FilterGroup[] = [
     {
       id: 'subtest',
-      label: 'Sub-test',
+      label: 'Subtest',
       options: [
         { id: 'writing', label: 'Writing' },
         { id: 'speaking', label: 'Speaking' },
@@ -47,142 +73,157 @@ export default function QualityAnalyticsPage() {
         { id: 'medicine', label: 'Medicine' },
         { id: 'nursing', label: 'Nursing' },
         { id: 'dentistry', label: 'Dentistry' },
+        { id: 'pharmacy', label: 'Pharmacy' },
+        { id: 'physiotherapy', label: 'Physiotherapy' },
       ],
     },
   ];
 
-  const handleTimeRangeChange = (value: string) => {
-    setTimeRange(value);
-    analytics.track('admin_quality_analytics_viewed', { timeRange: value });
-    const label = value === '7d' ? 'Last 7 Days' : value === '30d' ? 'Last 30 Days' : 'Year to Date';
-    setToast({ variant: 'success', message: `Analytics view updated to ${label}.` });
-  };
+  const rateChartData = useMemo(() => {
+    if (!analytics) return [];
 
-  const handleFilterChange = (groupId: string, optionId: string) => {
-    setSegmentFilters(prev => {
-      const current = prev[groupId] || [];
-      const updated = current.includes(optionId) ? current.filter(id => id !== optionId) : [...current, optionId];
-      return { ...prev, [groupId]: updated };
+    const points = new Map<string, { label: string; agreement?: number; appeals?: number }>();
+    analytics.trendSeries.agreement.forEach((point) => {
+      points.set(point.label, { ...(points.get(point.label) ?? { label: point.label }), agreement: point.value });
     });
-  };
+    analytics.trendSeries.appeals.forEach((point) => {
+      points.set(point.label, { ...(points.get(point.label) ?? { label: point.label }), appeals: point.value });
+    });
+
+    return [...points.values()];
+  }, [analytics]);
+
+  const operationsChartData = useMemo(() => {
+    if (!analytics) return [];
+
+    const points = new Map<string, { label: string; reviewTime?: number; riskCases?: number }>();
+    analytics.trendSeries.reviewTime.forEach((point) => {
+      points.set(point.label, { ...(points.get(point.label) ?? { label: point.label }), reviewTime: point.value });
+    });
+    analytics.trendSeries.riskCases.forEach((point) => {
+      points.set(point.label, { ...(points.get(point.label) ?? { label: point.label }), riskCases: point.value });
+    });
+
+    return [...points.values()];
+  }, [analytics]);
+
+  function handleFilterChange(groupId: string, optionId: string) {
+    setFilters((current) => ({
+      ...current,
+      [groupId]: current[groupId]?.includes(optionId) ? [] : [optionId],
+    }));
+  }
 
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto" role="main" aria-label="Quality Analytics">
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-semibold text-slate-900">Quality Analytics</h1>
-          <p className="text-sm text-slate-500 mt-1">Review AI grading accuracy vs Human expert divergence.</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <span className="text-xs text-slate-400" aria-label="Data freshness">Data as of {lastRefreshed.toLocaleTimeString()}</span>
-          <Select
-            label=""
-            value={timeRange}
-            onChange={(e) => handleTimeRangeChange(e.target.value)}
-            options={[
-              { value: '7d', label: 'Last 7 Days' },
-              { value: '30d', label: 'Last 30 Days' },
-              { value: 'ytd', label: 'Year to Date' },
-            ]}
+    <div className="max-w-7xl space-y-6">
+      <AdminPageHeader
+        title="Quality Analytics"
+        description="Track grading agreement, appeals, turnaround, and risk signals from the live quality analytics service."
+        meta={analytics ? `Window ${analytics.freshness.windowDays} days` : undefined}
+        actions={
+          <div className="flex items-center gap-3">
+            <AdminFreshnessBadge value={analytics?.freshness.generatedAt} />
+            <div className="w-44">
+              <Select
+                label=""
+                value={timeRange}
+                onChange={(event) => setTimeRange(event.target.value)}
+                options={[
+                  { value: '7d', label: 'Last 7 Days' },
+                  { value: '30d', label: 'Last 30 Days' },
+                  { value: 'ytd', label: 'Year to Date' },
+                ]}
+              />
+            </div>
+          </div>
+        }
+      />
+
+      <div className="rounded-xl border border-slate-200 bg-white p-4">
+        <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ subtest: [], profession: [] })} />
+      </div>
+
+      <AsyncStateWrapper
+        status={pageStatus}
+        onRetry={() => window.location.reload()}
+        emptyContent={
+          <EmptyState
+            icon={<BarChart3 className="h-10 w-10 text-slate-400" />}
+            title="No quality analytics are available for this filter set"
+            description="Try a broader time range or clear the current subtest and profession filters."
           />
-        </div>
-      </div>
-      <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-4">
-        <FilterBar groups={filterGroups} selected={segmentFilters} onChange={handleFilterChange} onClear={() => setSegmentFilters({})} />
-      </div>
+        }
+      >
+        {analytics ? (
+          <>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <AdminMetricCard label="AI-Human Agreement" value={`${analytics.aiHumanAgreement.value}%`} hint={`${analytics.aiHumanAgreement.trend >= 0 ? '+' : ''}${analytics.aiHumanAgreement.trend}% vs prior window`} icon={<CheckCircle2 className="h-5 w-5" />} tone={analytics.aiHumanAgreement.trend >= 0 ? 'success' : 'warning'} />
+              <AdminMetricCard label="Appeals Rate" value={`${analytics.appealsRate.value}%`} hint={`${analytics.appealsRate.trend >= 0 ? '+' : ''}${analytics.appealsRate.trend}% vs prior window`} icon={<AlertTriangle className="h-5 w-5" />} tone={analytics.appealsRate.trend <= 0 ? 'success' : 'warning'} />
+              <AdminMetricCard label="Avg Review Time" value={`${analytics.avgReviewTime.value} ${analytics.avgReviewTime.unit}`} hint={`SLA met ${analytics.reviewSLA.metPercent}%`} icon={<Clock className="h-5 w-5" />} />
+              <AdminMetricCard label="Risk Cases" value={analytics.riskCases.count} hint={`Severity ${analytics.riskCases.severity}`} icon={<AlertTriangle className="h-5 w-5" />} tone={analytics.riskCases.count > 0 ? 'warning' : 'default'} />
+            </div>
 
-      <AsyncStateWrapper status={pageStatus} onRetry={() => window.location.reload()}>
-        {/* Primary KPIs row */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <div className="flex items-center gap-2 mb-2">
-              <CheckCircle2 className="w-4 h-4 text-slate-400" />
-              <h3 className="text-sm font-medium text-slate-500">AI-Human Agreement</h3>
+            <div className="grid gap-4 md:grid-cols-3">
+              <AdminMetricCard label="Published Content" value={analytics.contentPerformance.publishedCount} icon={<FileText className="h-5 w-5" />} />
+              <AdminMetricCard label="Active Content" value={analytics.contentPerformance.activeContent} icon={<FileText className="h-5 w-5" />} />
+              <AdminMetricCard label="Feature Adoption" value={`${analytics.featureAdoption.adoptionRate}%`} hint={`${analytics.featureAdoption.activeUsers} active users`} icon={<Users className="h-5 w-5" />} />
             </div>
-            <div className="text-3xl font-semibold text-slate-900 mb-1">{data.aiHumanAgreement.value}%</div>
-            <div className={`text-sm font-medium flex items-center gap-1 ${data.aiHumanAgreement.trend > 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {data.aiHumanAgreement.trend > 0 ? <TrendingUp className="w-3.5 h-3.5" /> : <TrendingDown className="w-3.5 h-3.5" />}
-              {data.aiHumanAgreement.trend > 0 ? '+' : ''}{data.aiHumanAgreement.trend}% from last period
-            </div>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <div className="flex items-center gap-2 mb-2">
-              <AlertTriangle className="w-4 h-4 text-slate-400" />
-              <h3 className="text-sm font-medium text-slate-500">Appeals Rate</h3>
-            </div>
-            <div className="text-3xl font-semibold text-slate-900 mb-1">{data.appealsRate.value}%</div>
-            <div className={`text-sm font-medium flex items-center gap-1 ${data.appealsRate.trend < 0 ? 'text-green-600' : 'text-red-600'}`}>
-              {data.appealsRate.trend < 0 ? <TrendingDown className="w-3.5 h-3.5" /> : <TrendingUp className="w-3.5 h-3.5" />}
-              {data.appealsRate.trend > 0 ? '+' : ''}{data.appealsRate.trend}% from last period
-            </div>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6">
-            <div className="flex items-center gap-2 mb-2">
-              <Clock className="w-4 h-4 text-slate-400" />
-              <h3 className="text-sm font-medium text-slate-500">Avg Review Time</h3>
-            </div>
-            <div className="text-3xl font-semibold text-slate-900 mb-1">{data.avgReviewTime.value}{data.avgReviewTime.unit === 'min' ? 'm' : data.avgReviewTime.unit}</div>
-            <div className="text-sm text-slate-500 font-medium">Stable</div>
-          </div>
-        </div>
 
-        {/* Extended KPIs row — §4.12 */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center">
-              <FileText className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-lg font-semibold text-slate-900">{data.contentPerformance.avgScore}/9</div>
-              <div className="text-sm text-slate-500">Content Avg Score</div>
-              <div className="text-xs text-slate-400">Top: {data.contentPerformance.topContent}</div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-lg bg-green-50 text-green-600 flex items-center justify-center">
-              <CheckCircle2 className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-lg font-semibold text-slate-900">{data.reviewSLA.metPercent}%</div>
-              <div className="text-sm text-slate-500">Review SLA Met</div>
-              <div className="text-xs text-slate-400">Avg turnaround: {data.reviewSLA.avgTurnaround}</div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-lg bg-purple-50 text-purple-600 flex items-center justify-center">
-              <Users className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-lg font-semibold text-slate-900">{data.featureAdoption.adoptionRate}%</div>
-              <div className="text-sm text-slate-500">Feature Adoption</div>
-              <div className="text-xs text-slate-400">{data.featureAdoption.activeUsers.toLocaleString()} active users</div>
-            </div>
-          </div>
-          <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 flex items-center gap-4">
-            <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
-              <AlertTriangle className="w-5 h-5" />
-            </div>
-            <div>
-              <div className="text-lg font-semibold text-slate-900">{data.riskCases.count}</div>
-              <div className="text-sm text-slate-500">Risk Cases</div>
-              <div className="text-xs text-slate-400">Severity: {data.riskCases.severity}</div>
-            </div>
-          </div>
-        </div>
+            <div className="grid gap-6 xl:grid-cols-2">
+              <AdminSectionPanel title="Quality Rates Trend" description="Agreement and appeals trends from the current analytics window.">
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={rateChartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis dataKey="label" stroke="#64748b" fontSize={12} />
+                      <YAxis stroke="#64748b" fontSize={12} />
+                      <Tooltip />
+                      <Legend />
+                      <Line type="monotone" dataKey="agreement" name="Agreement" stroke="#2563eb" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="appeals" name="Appeals" stroke="#dc2626" strokeWidth={2} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </AdminSectionPanel>
 
-        {/* Chart placeholder */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-8 text-center flex flex-col items-center justify-center min-h-[300px]">
-          <div className="w-16 h-16 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-4">
-            <BarChart3 className="w-8 h-8" />
-          </div>
-          <h3 className="text-lg font-medium text-slate-900">Divergence Trend Chart</h3>
-          <p className="text-sm text-slate-500 mt-2 max-w-sm">
-            A charting library would be integrated here to visualize AI-human divergence trends over time.
-          </p>
-        </div>
+              <AdminSectionPanel title="Operations Trend" description="Review time and risk case trend lines from the live analytics response.">
+                <div className="h-80">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={operationsChartData}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                      <XAxis dataKey="label" stroke="#64748b" fontSize={12} />
+                      <YAxis stroke="#64748b" fontSize={12} />
+                      <Tooltip />
+                      <Legend />
+                      <Line type="monotone" dataKey="reviewTime" name="Review Time" stroke="#f59e0b" strokeWidth={2} dot={false} />
+                      <Line type="monotone" dataKey="riskCases" name="Risk Cases" stroke="#7c3aed" strokeWidth={2} dot={false} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </div>
+              </AdminSectionPanel>
+            </div>
+
+            <AdminSectionPanel title="Sample Coverage" description="Quality analytics are only as trustworthy as the evidence window behind them.">
+              <div className="grid gap-4 md:grid-cols-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Evaluation Samples</p>
+                  <p className="text-xl font-semibold text-slate-900">{analytics.freshness.evaluationSampleCount}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Review Samples</p>
+                  <p className="text-xl font-semibold text-slate-900">{analytics.freshness.reviewSampleCount}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Applied Filters</p>
+                  <p className="text-sm text-slate-600">Subtest: {analytics.filters.subtest}</p>
+                  <p className="text-sm text-slate-600">Profession: {analytics.filters.profession}</p>
+                </div>
+              </div>
+            </AdminSectionPanel>
+          </>
+        ) : null}
       </AsyncStateWrapper>
     </div>
   );

@@ -1,0 +1,16 @@
+Use these URLs to test:
+
+Frontend: http://localhost:3000
+Sign in: http://localhost:3000/sign-in
+Learner home: http://localhost:3000/
+Expert console: http://localhost:3000/expert
+Admin console: http://localhost:3000/admin
+API health: http://localhost:5198/health
+API live: http://localhost:5198/health/live
+API ready: http://localhost:5198/health/ready
+Swagger: http://localhost:5198/swagger
+Local test users:
+
+Learner: learner@oet-prep.dev / Password123!
+Expert: expert@oet-prep.dev / Password123!
+Admin: admin@oet-prep.dev / Password123!

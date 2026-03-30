@@ -27,6 +27,7 @@ export interface NavItem {
   label: string;
   icon: React.ReactNode;
   matchPrefix?: string;
+  exact?: boolean;
 }
 
 export interface ShellUserSummary {
@@ -57,6 +58,7 @@ export const mobileNavItems: NavItem[] = [
 
 function isActive(pathname: string | null, item: NavItem): boolean {
   if (!pathname) return false;
+  if (item.exact) return pathname === item.href;
   if (item.href === '/') return pathname === '/';
   return pathname.startsWith(item.matchPrefix ?? item.href);
 }
@@ -69,6 +71,11 @@ export function Sidebar({ className, items = mainNavItems, userSummary }: { clas
   const displayName = userSummary?.displayName ?? user?.displayName ?? 'User';
   const initials = displayName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
   const email = userSummary?.email ?? user?.email ?? '';
+
+  const handleSignOut = async () => {
+    await signOut();
+    router.push('/sign-in');
+  };
 
   return (
     <aside className={cn('hidden lg:flex flex-col w-64 bg-surface border-r border-border shrink-0 sticky top-0 h-screen', className)}>
@@ -135,13 +142,10 @@ export function Sidebar({ className, items = mainNavItems, userSummary }: { clas
         {/* User Profile Snippet */}
         <button
           type="button"
-          onClick={async () => {
-            await signOut();
-            router.push('/login');
-          }}
-          className="w-full flex items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors group text-left"
+          className="flex w-full items-center gap-3 px-2 py-2 rounded-lg hover:bg-gray-100 cursor-pointer transition-colors group text-left"
+          onClick={() => void handleSignOut()}
         >
-          <div className="w-9 h-9 rounded-full bg-primary/20 flex items-center justify-center text-primary font-bold text-sm shrink-0 border border-primary/10 group-hover:bg-primary/30 transition-colors">
+          <div className="w-9 h-9 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-700 font-bold text-sm shrink-0 border border-indigo-200 group-hover:bg-indigo-100 transition-colors">
             {initials}
           </div>
           <div className="flex flex-col overflow-hidden">

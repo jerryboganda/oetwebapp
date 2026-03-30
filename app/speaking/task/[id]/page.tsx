@@ -1,12 +1,12 @@
 'use client';
 
-import { useState, useEffect, useRef, Suspense } from 'react';
+import { useState, useEffect, useRef, Suspense, useCallback } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Mic, Square, RotateCcw, CheckCircle2, AlertCircle,
   FileText, Edit3, ChevronUp, ChevronDown,
-  Wifi, WifiOff, Bot, User, ShieldCheck, Loader2, Play, Pause,
+  Wifi, WifiOff, User, ShieldCheck, Loader2, Play, Pause,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
@@ -26,7 +26,9 @@ function LiveSpeakingTaskContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const id = params?.id as string;
-  const mode = (searchParams?.get('mode') as TaskMode) || 'ai';
+  const requestedMode = (searchParams?.get('mode') as TaskMode) || 'self';
+  const aiUnavailable = requestedMode === 'ai';
+  const mode: Exclude<TaskMode, 'ai'> = requestedMode === 'ai' ? 'self' : requestedMode;
 
   // --- Card State ---
   const [card, setCard] = useState<RoleCard | null>(null);
@@ -42,13 +44,11 @@ function LiveSpeakingTaskContent() {
   // --- State ---
   const [recordingState, setRecordingState] = useState<RecordingState>('idle');
   const recordingStateRef = useRef<RecordingState>('idle');
-  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('connecting');
+  const [connectionStatus] = useState<ConnectionStatus>('connected');
   const [showRoleCard, setShowRoleCard] = useState(false);
   const [showNotes, setShowNotes] = useState(false);
   const [showStopConfirm, setShowStopConfirm] = useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
-  const [transcript, setTranscript] = useState<{ role: 'user' | 'ai', text: string }[]>([]);
-  const [isAiThinking, setIsAiThinking] = useState(false);
   const [audioLevels, setAudioLevels] = useState<number[]>([10, 10, 10, 10, 10]);
 
   // --- Refs ---
@@ -60,6 +60,13 @@ function LiveSpeakingTaskContent() {
   const animationFrameRef = useRef<number | null>(null);
 
   const streamRef = useRef<MediaStream | null>(null);
+  const stopDialogRef = useRef<HTMLDivElement | null>(null);
+  const submitDialogRef = useRef<HTMLDivElement | null>(null);
+  const stopPrimaryActionRef = useRef<HTMLButtonElement | null>(null);
+  const submitPrimaryActionRef = useRef<HTMLButtonElement | null>(null);
+  const stopTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const submitTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
 
   // --- Timer ---
   useEffect(() => {
@@ -68,6 +75,29 @@ function LiveSpeakingTaskContent() {
 
   const buildRecordingBlob = () =>
     new Blob(audioChunksRef.current, { type: mediaRecorderRef.current?.mimeType || 'audio/webm' });
+
+  const trapDialogFocus = useCallback((event: KeyboardEvent, dialog: HTMLDivElement | null) => {
+    if (event.key !== 'Tab' || !dialog) return;
+
+    const focusable = dialog.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+    );
+
+    if (focusable.length === 0) return;
+
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+
+    if (event.shiftKey) {
+      if (document.activeElement === first) {
+        event.preventDefault();
+        last.focus();
+      }
+    } else if (document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }, []);
 
   const stopRecorderAsync = async () => {
     const recorder = mediaRecorderRef.current;
@@ -136,49 +166,58 @@ function LiveSpeakingTaskContent() {
     return source;
   };
 
-  // --- Backend-compatible AI mode fallback ---
-  const startAiSession = async () => {
-    if (mode !== 'ai') {
-      setConnectionStatus('connected');
-      return;
-    }
-
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      const audioContext = new AudioContext();
-      audioContextRef.current = audioContext;
-      mediaRecorderRef.current = new MediaRecorder(stream);
-      audioChunksRef.current = [];
-      mediaRecorderRef.current.ondataavailable = (e) => {
-        if (e.data.size > 0) {
-          audioChunksRef.current.push(e.data);
-        }
-      };
-      mediaRecorderRef.current.start(100);
-      setupVisualizer(stream, audioContext);
-      setTranscript([
-        { role: 'ai', text: card?.brief ?? 'The patient is ready. Start the consultation when you are ready.' },
-      ]);
-      setConnectionStatus('connected');
-      setIsAiThinking(false);
-      setRecordingState('recording');
-    } catch (err) {
-      console.error('Failed to initialize AI fallback session:', err);
-      setConnectionStatus('error');
-    }
-  };
-
   useEffect(() => {
     return () => {
       cleanupAudio();
     };
   }, []);
 
+  useEffect(() => {
+    const activeDialogRef = showStopConfirm ? stopDialogRef : showSubmitConfirm ? submitDialogRef : null;
+    const activePrimaryRef = showStopConfirm ? stopPrimaryActionRef : showSubmitConfirm ? submitPrimaryActionRef : null;
+    const activeTriggerRef = showStopConfirm ? stopTriggerRef : showSubmitConfirm ? submitTriggerRef : null;
+
+    if (!activeDialogRef || !activePrimaryRef) {
+      return;
+    }
+
+    const fallbackTrigger = activeTriggerRef?.current ?? null;
+    restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : fallbackTrigger;
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        if (showStopConfirm) {
+          setShowStopConfirm(false);
+        }
+        if (showSubmitConfirm) {
+          setShowSubmitConfirm(false);
+        }
+        return;
+      }
+
+      trapDialogFocus(event, activeDialogRef.current);
+    };
+
+    document.addEventListener('keydown', handleKeyDown);
+    requestAnimationFrame(() => activePrimaryRef.current?.focus());
+
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+
+      const restoreTarget = restoreFocusRef.current;
+      if (restoreTarget) {
+        window.setTimeout(() => {
+          restoreTarget.focus();
+          if (document.activeElement !== restoreTarget) {
+            requestAnimationFrame(() => restoreTarget.focus());
+          }
+        }, 50);
+      }
+    };
+  }, [showStopConfirm, showSubmitConfirm, trapDialogFocus]);
+
   // --- Local Recording Controls (Self/Exam Mode) ---
   const handleStartRecording = async () => {
-    if (mode === 'ai') return;
-    
     if (recordingState === 'paused' && mediaRecorderRef.current) {
       mediaRecorderRef.current.resume();
       setRecordingState('recording');
@@ -258,12 +297,11 @@ function LiveSpeakingTaskContent() {
       <header className="bg-black/40 backdrop-blur-md border-b border-white/10 px-6 py-4 flex items-center justify-between z-20">
         <div className="flex items-center gap-4">
           <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${
-            mode === 'ai' ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' :
             mode === 'self' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
             'bg-amber-500/20 text-amber-400 border border-amber-500/30'
           }`}>
-            {mode === 'ai' ? <Bot className="w-3 h-3" /> : mode === 'self' ? <User className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3" />}
-            {mode === 'ai' ? 'AI Interlocutor' : mode === 'self' ? 'Self Practice' : 'Exam Simulation'}
+            {mode === 'self' ? <User className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3" />}
+            {aiUnavailable ? 'Guided Self Practice' : mode === 'self' ? 'Self Practice' : 'Exam Simulation'}
           </div>
           <div className="h-4 w-px bg-white/10" />
           <div className="flex items-center gap-2 text-white/60">
@@ -290,7 +328,7 @@ function LiveSpeakingTaskContent() {
         {/* Background Atmosphere */}
         <div className="absolute inset-0 overflow-hidden pointer-events-none">
           <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full blur-[120px] transition-all duration-1000 ${
-            recordingState === 'recording' ? (isAiThinking ? 'bg-blue-500/10' : 'bg-red-500/10') : 
+            recordingState === 'recording' ? 'bg-red-500/10' : 
             recordingState === 'paused' ? 'bg-amber-500/10' : 'bg-gray-500/5'
           }`} />
         </div>
@@ -353,17 +391,14 @@ function LiveSpeakingTaskContent() {
 
           <div className="text-center max-w-md">
             <h2 className="text-xl font-bold mb-2">
-              {mode === 'ai' ? (
-                recordingState === 'idle' ? "Ready to start roleplay" :
-                isAiThinking ? "Patient is thinking..." : "Patient is listening..."
-              ) : 
-               recordingState === 'idle' ? "Ready to record" :
+              {recordingState === 'idle' ? "Ready to record" :
                recordingState === 'paused' ? "Recording paused" :
                "Recording your response..."}
             </h2>
             <p className="text-sm text-white/40 leading-relaxed">
-              {mode === 'ai' ? "Speak naturally as the nurse. The patient will respond to your questions and concerns." : 
-               "Complete the tasks on your role card. Your recording will be saved for review."}
+              {aiUnavailable
+                ? 'Live AI patient mode is not available in this build yet, so this session is running as guided self-practice with recording and transcript review.'
+                : 'Complete the tasks on your role card. Your recording will be saved for review.'}
             </p>
           </div>
           
@@ -371,8 +406,9 @@ function LiveSpeakingTaskContent() {
           <div className="flex items-center gap-4 mt-4">
             {recordingState === 'idle' ? (
               <button
-                onClick={mode === 'ai' ? startAiSession : handleStartRecording}
+                onClick={handleStartRecording}
                 className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-all shadow-lg shadow-red-500/20"
+                aria-label="Start recording"
               >
                 <Mic className="w-6 h-6 text-white" />
               </button>
@@ -380,13 +416,15 @@ function LiveSpeakingTaskContent() {
               <button
                 onClick={handleStartRecording}
                 className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-all shadow-lg shadow-red-500/20"
+                aria-label="Resume recording"
               >
                 <Play className="w-6 h-6 text-white ml-1" />
               </button>
-            ) : recordingState === 'recording' && mode !== 'ai' ? (
+            ) : recordingState === 'recording' ? (
               <button
                 onClick={handlePauseRecording}
                 className="w-16 h-16 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all"
+                aria-label="Pause recording"
               >
                 <Pause className="w-6 h-6 text-white" />
               </button>
@@ -469,7 +507,9 @@ function LiveSpeakingTaskContent() {
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <button 
             onClick={handleStop}
+            ref={stopTriggerRef}
             className="flex flex-col items-center gap-2 group"
+            aria-label="Cancel task"
           >
             <div className="w-14 h-14 rounded-full border border-white/10 flex items-center justify-center group-hover:bg-white/5 transition-all">
               <RotateCcw className="w-6 h-6 text-white/40 group-hover:text-white" />
@@ -481,8 +521,9 @@ function LiveSpeakingTaskContent() {
             <Button
               size="lg"
               onClick={handleSubmit}
-              disabled={recordingState === 'idle' && mode !== 'ai'}
+              disabled={recordingState === 'idle'}
               className="px-12 py-4 bg-white text-black hover:bg-gray-200 rounded-2xl font-black text-lg shadow-[0_0_30px_rgba(255,255,255,0.1)]"
+              ref={submitTriggerRef}
             >
               Submit Recording
             </Button>
@@ -508,17 +549,21 @@ function LiveSpeakingTaskContent() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
+              ref={stopDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="speaking-stop-dialog-title"
               className="relative bg-zinc-900 border border-white/10 rounded-[32px] p-8 max-w-md w-full shadow-2xl"
             >
               <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mb-6">
                 <AlertCircle className="w-8 h-8 text-red-500" />
               </div>
-              <h3 className="text-2xl font-black mb-2">Stop Practice?</h3>
+              <h3 id="speaking-stop-dialog-title" className="text-2xl font-black mb-2">Stop Practice?</h3>
               <p className="text-white/60 text-sm leading-relaxed mb-8">
                 Your current recording will be discarded. You will need to start the task again from the beginning.
               </p>
               <div className="flex flex-col gap-3">
-                <Button variant="destructive" fullWidth onClick={confirmStop} className="py-4 rounded-2xl font-black">
+                <Button ref={stopPrimaryActionRef} variant="destructive" fullWidth onClick={confirmStop} className="py-4 rounded-2xl font-black">
                   Yes, Discard and Exit
                 </Button>
                 <Button variant="ghost" fullWidth onClick={() => setShowStopConfirm(false)} className="py-4 rounded-2xl text-white bg-white/5 hover:bg-white/10">
@@ -542,17 +587,21 @@ function LiveSpeakingTaskContent() {
               initial={{ opacity: 0, scale: 0.9 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.9 }}
+              ref={submitDialogRef}
+              role="dialog"
+              aria-modal="true"
+              aria-labelledby="speaking-submit-dialog-title"
               className="relative bg-zinc-900 border border-white/10 rounded-[32px] p-8 max-w-md w-full shadow-2xl"
             >
               <div className="w-16 h-16 bg-green-500/10 rounded-2xl flex items-center justify-center mb-6">
                 <CheckCircle2 className="w-8 h-8 text-green-500" />
               </div>
-              <h3 className="text-2xl font-black mb-2">Finish Task?</h3>
+              <h3 id="speaking-submit-dialog-title" className="text-2xl font-black mb-2">Finish Task?</h3>
               <p className="text-white/60 text-sm leading-relaxed mb-8">
                 Are you ready to submit your recording for evaluation? You won&apos;t be able to make changes after this.
               </p>
               <div className="flex flex-col gap-3">
-                <Button fullWidth onClick={confirmSubmit} className="py-4 rounded-2xl font-black">
+                <Button ref={submitPrimaryActionRef} fullWidth onClick={confirmSubmit} className="py-4 rounded-2xl font-black">
                   Submit for Evaluation
                 </Button>
                 <Button variant="ghost" fullWidth onClick={() => setShowSubmitConfirm(false)} className="py-4 rounded-2xl text-white bg-white/5 hover:bg-white/10">

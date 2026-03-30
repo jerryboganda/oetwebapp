@@ -1,162 +1,379 @@
 'use client';
 
-import { useState } from 'react';
-import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
-import { mockUsers } from '@/lib/mock-admin-data';
+import Link from 'next/link';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useParams } from 'next/navigation';
+import { ArrowLeft, Coins, Mail, Shield, User as UserIcon, UserLock } from 'lucide-react';
+import { AdminMetricCard, AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
+import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
+import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Toast } from '@/components/ui/alert';
-import { analytics } from '@/lib/analytics';
-import Link from 'next/link';
-import { ArrowLeft, User as UserIcon, Mail, Calendar, Shield, Activity, FileText } from 'lucide-react';
-import { notFound } from 'next/navigation';
-import { use } from 'react';
+import { Input } from '@/components/ui/form-controls';
+import { Modal } from '@/components/ui/modal';
+import { adjustAdminUserCredits, deleteAdminUser, restoreAdminUser, triggerAdminUserPasswordReset, updateAdminUserStatus } from '@/lib/api';
+import { getAdminUserDetailData } from '@/lib/admin';
+import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import type { AdminUserDetail } from '@/lib/types/admin';
 
-export default function UserDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params);
+type PageStatus = 'loading' | 'success' | 'error';
+type ToastState = { variant: 'success' | 'error'; message: string } | null;
+
+export default function UserDetailPage() {
+  const params = useParams<{ id: string }>();
+  const userId = params?.id;
   const { isAuthenticated, role } = useAdminAuth();
-  const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
+  const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
+  const [user, setUser] = useState<AdminUserDetail | null>(null);
+  const [toast, setToast] = useState<ToastState>(null);
+  const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
+  const [isLifecycleModalOpen, setIsLifecycleModalOpen] = useState(false);
+  const [lifecycleAction, setLifecycleAction] = useState<'delete' | 'restore' | null>(null);
+  const [creditAmount, setCreditAmount] = useState('0');
+  const [creditReason, setCreditReason] = useState('');
+  const [lifecycleReason, setLifecycleReason] = useState('');
+  const [isMutating, setIsMutating] = useState(false);
+  const adjustCreditsButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!userId) return;
+    let cancelled = false;
+
+    async function loadUser() {
+      setPageStatus('loading');
+      try {
+        const detail = await getAdminUserDetailData(userId);
+        if (cancelled) return;
+
+        setUser(detail);
+        setPageStatus('success');
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setPageStatus('error');
+          setToast({ variant: 'error', message: 'Unable to load this user profile.' });
+        }
+      }
+    }
+
+    loadUser();
+    return () => {
+      cancelled = true;
+    };
+  }, [userId]);
+
+  const closeCreditModal = useCallback(() => {
+    setIsCreditModalOpen(false);
+    window.setTimeout(() => {
+      adjustCreditsButtonRef.current?.focus();
+      if (document.activeElement !== adjustCreditsButtonRef.current) {
+        requestAnimationFrame(() => adjustCreditsButtonRef.current?.focus());
+      }
+    }, 50);
+  }, []);
+
+  async function reloadUser() {
+    if (!userId) return;
+    const detail = await getAdminUserDetailData(userId);
+    setUser(detail);
+    setPageStatus('success');
+  }
+
+  async function handlePasswordReset() {
+    if (!user) return;
+    setIsMutating(true);
+    try {
+      await triggerAdminUserPasswordReset(user.id);
+      setToast({ variant: 'success', message: `Password reset initiated for ${user.email}.` });
+      await reloadUser();
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: 'Unable to trigger a password reset.' });
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function handleToggleStatus() {
+    if (!user) return;
+    setIsMutating(true);
+    try {
+      const nextStatus = user.status === 'active' ? 'suspended' : 'active';
+      await updateAdminUserStatus(user.id, {
+        status: nextStatus,
+        reason: `Changed by admin from user detail view (${user.status} -> ${nextStatus})`,
+      });
+      await reloadUser();
+      setToast({ variant: 'success', message: `Account ${nextStatus === 'active' ? 'reactivated' : 'suspended'} successfully.` });
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: 'Unable to update account status.' });
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  function openLifecycleModal(action: 'delete' | 'restore') {
+    setLifecycleAction(action);
+    setLifecycleReason('');
+    setIsLifecycleModalOpen(true);
+  }
+
+  function closeLifecycleModal() {
+    setIsLifecycleModalOpen(false);
+    setLifecycleAction(null);
+    setLifecycleReason('');
+  }
+
+  async function handleLifecycleAction() {
+    if (!user || !lifecycleAction) return;
+
+    setIsMutating(true);
+    try {
+      const payload = lifecycleReason.trim().length > 0 ? { reason: lifecycleReason.trim() } : undefined;
+      if (lifecycleAction === 'delete') {
+        await deleteAdminUser(user.id, payload);
+      } else {
+        await restoreAdminUser(user.id, payload);
+      }
+
+      await reloadUser();
+      closeLifecycleModal();
+      setToast({
+        variant: 'success',
+        message: lifecycleAction === 'delete'
+          ? 'Account deleted successfully.'
+          : 'Account restored successfully.',
+      });
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: lifecycleAction === 'delete' ? 'Unable to delete this account.' : 'Unable to restore this account.' });
+    } finally {
+      setIsMutating(false);
+    }
+  }
+
+  async function handleAdjustCredits() {
+    if (!user) return;
+    setIsMutating(true);
+    try {
+      await adjustAdminUserCredits(user.id, {
+        amount: Number(creditAmount || 0),
+        reason: creditReason || undefined,
+      });
+      await reloadUser();
+      closeCreditModal();
+      setCreditAmount('0');
+      setCreditReason('');
+      setToast({ variant: 'success', message: 'Credit balance updated successfully.' });
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: 'Unable to adjust credits for this user.' });
+    } finally {
+      setIsMutating(false);
+    }
+  }
 
   if (!isAuthenticated || role !== 'admin') return null;
 
-  const user = mockUsers.find(u => u.id === resolvedParams?.id);
-
-  if (!user) {
-    notFound();
-  }
-
-  const handleResetPassword = () => {
-    try {
-      analytics.track('admin_user_role_changed', { userId: user.id, action: 'reset_password' });
-      setToast({ variant: 'success', message: `Password reset email sent to ${user.email}.` });
-    } catch {
-      setToast({ variant: 'error', message: 'Failed to send password reset.' });
-    }
-  };
-
-  const handleToggleStatus = () => {
-    const action = user.status === 'active' ? 'suspend' : 'reactivate';
-    try {
-      analytics.track('admin_user_role_changed', { userId: user.id, action });
-      setToast({ variant: 'success', message: `Account ${action === 'suspend' ? 'suspended' : 'reactivated'} successfully.` });
-    } catch {
-      setToast({ variant: 'error', message: `Failed to ${action} account.` });
-    }
-  };
-
   return (
-    <div className="space-y-6 max-w-5xl mx-auto" role="main" aria-label={`User Detail: ${user.name}`}>
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
+    <div className="max-w-6xl space-y-6">
+      {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <div>
-        <Link href="/admin/users" className="text-sm text-slate-500 hover:text-blue-600 flex items-center gap-2 w-fit mb-4">
-          <ArrowLeft className="w-4 h-4" />
-          Back to Users
-        </Link>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-slate-900">{user.name}</h1>
-            <p className="text-sm text-slate-500 mt-1 font-mono">{user.id}</p>
-          </div>
-          <div className="flex gap-3">
-            <Button variant="outline" onClick={handleResetPassword}>
-              Reset Password
-            </Button>
-            <Button
-              variant={user.status === 'active' ? 'destructive' : 'primary'}
-              onClick={handleToggleStatus}
-            >
-              {user.status === 'active' ? 'Suspend Account' : 'Reactivate Account'}
-            </Button>
-          </div>
-        </div>
-      </div>
+      <Link href="/admin/users" className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-blue-600">
+        <ArrowLeft className="h-4 w-4" />
+        Back to users
+      </Link>
 
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-        {/* Profile Card */}
-        <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 md:col-span-1 h-fit">
-          <div className="flex flex-col items-center text-center">
-            <div className="w-24 h-24 bg-blue-50 text-blue-600 rounded-full flex items-center justify-center mb-4">
-              <UserIcon className="w-10 h-10" />
-            </div>
-            <h2 className="text-lg font-medium text-slate-900">{user.name}</h2>
-            <Badge variant={user.role === 'admin' ? 'danger' : user.role === 'expert' ? 'warning' : 'default'} className="mt-2 capitalize">
-              {user.role}
-            </Badge>
-            <Badge variant={user.status === 'active' ? 'success' : 'muted'} className="mt-2">
-              {user.status.charAt(0).toUpperCase() + user.status.slice(1)}
-            </Badge>
-          </div>
+      <AsyncStateWrapper status={pageStatus} onRetry={() => window.location.reload()}>
+        {user ? (
+          <>
+            <AdminPageHeader
+              title={user.name}
+              description="This operational profile is driven by the live admin user detail endpoint. Actions below mutate real account state and produce audit events."
+              meta={user.id}
+              actions={
+                <>
+                  {user.availableActions.canTriggerPasswordReset ? (
+                    <Button variant="outline" onClick={handlePasswordReset} loading={isMutating}>
+                      Reset Password
+                    </Button>
+                  ) : null}
+                  {user.availableActions.canAdjustCredits ? (
+                    <Button ref={adjustCreditsButtonRef} variant="outline" onClick={() => setIsCreditModalOpen(true)}>
+                      Adjust Credits
+                    </Button>
+                  ) : null}
+                  {user.availableActions.canSuspend ? (
+                    <Button variant={user.status === 'active' ? 'destructive' : 'primary'} onClick={handleToggleStatus} loading={isMutating}>
+                      {user.status === 'active' ? 'Suspend Account' : 'Reactivate Account'}
+                    </Button>
+                  ) : null}
+                  {user.availableActions.canDelete ? (
+                    <Button variant="destructive" onClick={() => openLifecycleModal('delete')} loading={isMutating}>
+                      Delete Account
+                    </Button>
+                  ) : null}
+                  {user.availableActions.canRestore ? (
+                    <Button onClick={() => openLifecycleModal('restore')} loading={isMutating}>
+                      Restore Account
+                    </Button>
+                  ) : null}
+                </>
+              }
+            />
 
-          <div className="mt-8 space-y-4">
-            <div className="flex items-center gap-3 text-sm">
-              <Mail className="w-4 h-4 text-slate-400" />
-              <span className="text-slate-600">{user.email}</span>
-            </div>
-            <div className="flex items-center gap-3 text-sm">
-              <Calendar className="w-4 h-4 text-slate-400" />
-              <span className="text-slate-600">Joined Jan 15, 2026</span>
-            </div>
-            <div className="flex items-center gap-3 text-sm">
-              <Activity className="w-4 h-4 text-slate-400" />
-              <span className="text-slate-600">Last login: {new Date(user.lastLogin).toLocaleDateString()}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Details Area */}
-        <div className="md:col-span-2 space-y-6">
-          {/* Stats */}
-          <div className="grid grid-cols-2 gap-4">
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-              <div className="w-12 h-12 rounded-lg bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                <FileText className="w-6 h-6" />
-              </div>
-              <div>
-                <div className="text-2xl font-semibold text-slate-900">
-                  {user.role === 'expert' ? '142' : '12'}
-                </div>
-                <div className="text-sm text-slate-500">
-                  {user.role === 'expert' ? 'Tasks Graded' : 'Tasks Completed'}
-                </div>
-              </div>
-            </div>
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-sm flex items-center gap-4">
-              <div className="w-12 h-12 rounded-lg bg-teal-50 text-teal-600 flex items-center justify-center">
-                <Shield className="w-6 h-6" />
-              </div>
-              <div>
-                <div className="text-2xl font-semibold text-slate-900">
-                  {user.role === 'expert' ? '98.5%' : 'N/A'}
-                </div>
-                <div className="text-sm text-slate-500">
-                  {user.role === 'expert' ? 'Agreement Rate' : 'Avg Score'}
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Recent Activity */}
-          <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
-            <div className="px-6 py-4 border-b border-slate-200 bg-slate-50/50">
-              <h3 className="font-medium text-slate-900">Recent Activity</h3>
-            </div>
-            <div className="divide-y divide-slate-100">
-              {[1, 2, 3].map((i) => (
-                <div key={i} className="px-6 py-4 flex items-center justify-between hover:bg-slate-50 transition-colors">
-                  <div>
-                    <div className="text-sm font-medium text-slate-900">
-                      {user.role === 'expert' ? 'Graded Writing Task' : 'Completed Speaking Task'}
-                    </div>
-                    <div className="text-xs text-slate-500 mt-1">CNT-00{i} • Cardiology</div>
+            <div className="grid gap-6 lg:grid-cols-[280px,1fr]">
+              <AdminSectionPanel title="Identity" description="Primary account identity and role context.">
+                <div className="flex flex-col items-center gap-4 text-center">
+                  <div className="flex h-20 w-20 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                    <UserIcon className="h-8 w-8" />
                   </div>
-                  <div className="text-xs text-slate-500">{i} days ago</div>
+                  <div className="space-y-2">
+                    <p className="text-lg font-semibold text-slate-900">{user.name}</p>
+                    <div className="flex flex-wrap items-center justify-center gap-2">
+                      <Badge variant={user.role === 'admin' ? 'danger' : user.role === 'expert' ? 'warning' : 'default'}>
+                        {user.role}
+                      </Badge>
+                      <Badge variant={user.status === 'active' ? 'success' : user.status === 'deleted' ? 'danger' : 'muted'}>
+                        {user.status}
+                      </Badge>
+                    </div>
+                  </div>
+                  <div className="w-full space-y-3 text-left text-sm text-slate-500">
+                    <div className="flex items-start gap-3">
+                      <Mail className="mt-0.5 h-4 w-4 text-slate-400" />
+                      <span>{user.email}</span>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <UserLock className="mt-0.5 h-4 w-4 text-slate-400" />
+                      <span>{user.authAccountId ?? 'No linked auth account'}</span>
+                    </div>
+                    <div className="flex items-start gap-3">
+                      <Shield className="mt-0.5 h-4 w-4 text-slate-400" />
+                      <span>{user.createdAt ? `Created ${new Date(user.createdAt).toLocaleString()}` : 'Creation date unavailable'}</span>
+                    </div>
+                  </div>
                 </div>
-              ))}
+              </AdminSectionPanel>
+
+              <div className="space-y-6">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <AdminMetricCard
+                    label={user.role === 'expert' ? 'Tasks Graded' : 'Tasks Completed'}
+                    value={user.role === 'expert' ? user.tasksGraded ?? 0 : user.tasksCompleted ?? 0}
+                    icon={<Shield className="h-5 w-5" />}
+                  />
+                  <AdminMetricCard
+                    label="Credit Balance"
+                    value={user.creditBalance ?? 0}
+                    icon={<Coins className="h-5 w-5" />}
+                    tone={(user.creditBalance ?? 0) > 0 ? 'success' : 'default'}
+                  />
+                  <AdminMetricCard
+                    label="Last Login"
+                    value={user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}
+                    icon={<UserLock className="h-5 w-5" />}
+                  />
+                </div>
+
+                <AdminSectionPanel title="Operational Context" description="Only data the backend currently knows about this user is shown here.">
+                  <div className="grid gap-4 md:grid-cols-2">
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Profession</p>
+                      <p className="text-sm text-slate-600">{user.profession ?? 'Not assigned'}</p>
+                    </div>
+                    <div className="space-y-2">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Specialties</p>
+                      <div className="flex flex-wrap gap-2">
+                        {user.specialties && user.specialties.length > 0 ? (
+                          user.specialties.map((specialty) => (
+                            <Badge key={specialty} variant="info">
+                              {specialty}
+                            </Badge>
+                          ))
+                        ) : (
+                          <span className="text-sm text-slate-500">No specialties recorded</span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </AdminSectionPanel>
+
+                <AdminSectionPanel title="Access Controls" description="Actions hidden here are not available in the current backend account model.">
+                  <div className="grid gap-3 md:grid-cols-4">
+                    <div className="rounded-xl border border-slate-200 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Suspend / Reactivate</p>
+                      <p className="mt-2 text-sm text-slate-600">{user.availableActions.canSuspend ? 'Supported' : 'Not supported for this account type'}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Delete / Restore</p>
+                      <p className="mt-2 text-sm text-slate-600">{user.availableActions.canDelete || user.availableActions.canRestore ? 'Supported' : 'Not supported for this account type'}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Credit Adjustment</p>
+                      <p className="mt-2 text-sm text-slate-600">{user.availableActions.canAdjustCredits ? 'Supported' : 'Not applicable for this account type'}</p>
+                    </div>
+                    <div className="rounded-xl border border-slate-200 p-4">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Password Reset</p>
+                      <p className="mt-2 text-sm text-slate-600">{user.availableActions.canTriggerPasswordReset ? 'Supported' : 'No linked auth account available'}</p>
+                    </div>
+                  </div>
+                </AdminSectionPanel>
+              </div>
             </div>
+          </>
+        ) : null}
+      </AsyncStateWrapper>
+
+      <Modal open={isCreditModalOpen} onClose={closeCreditModal} title="Adjust Credits">
+        <div className="space-y-4 py-2">
+          <Input
+            label="Credit Adjustment"
+            type="number"
+            value={creditAmount}
+            onChange={(event) => setCreditAmount(event.target.value)}
+            hint="Use a negative number to remove credits when the current balance allows it."
+          />
+          <Input label="Reason" value={creditReason} onChange={(event) => setCreditReason(event.target.value)} />
+          <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+            <Button variant="outline" onClick={() => setIsCreditModalOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={handleAdjustCredits} loading={isMutating}>
+              Save Adjustment
+            </Button>
           </div>
         </div>
-      </div>
+      </Modal>
+
+      <Modal
+        open={isLifecycleModalOpen}
+        onClose={closeLifecycleModal}
+        title={lifecycleAction === 'delete' ? 'Delete Account' : 'Restore Account'}
+      >
+        <div className="space-y-4 py-2">
+          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+            {lifecycleAction === 'delete'
+              ? 'Deleting the account removes it from active operation, blocks sign-in, and can be reversed later from this screen.'
+              : 'Restoring the account removes the deleted marker and returns it to active operation.'}
+          </div>
+          <Input
+            label="Reason"
+            value={lifecycleReason}
+            onChange={(event) => setLifecycleReason(event.target.value)}
+            hint="Optional, but helpful for the audit trail."
+          />
+          <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+            <Button variant="outline" onClick={closeLifecycleModal}>
+              Cancel
+            </Button>
+            <Button variant={lifecycleAction === 'delete' ? 'destructive' : 'primary'} onClick={handleLifecycleAction} loading={isMutating}>
+              {lifecycleAction === 'delete' ? 'Delete Account' : 'Restore Account'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

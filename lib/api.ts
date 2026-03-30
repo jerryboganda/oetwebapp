@@ -1,3 +1,5 @@
+import { ensureFreshAccessToken } from './auth-client';
+import { env } from './env';
 import type {
   UserProfile,
   StudyPlanTask,
@@ -16,11 +18,20 @@ import type {
   ReadingResult,
   ListeningTask,
   ListeningResult,
+  ListeningDrill,
+  ListeningReview,
+  MockConfig,
   MockReport,
+  MockSession,
   ReadinessData,
+  ProgressEvidenceSummary,
   TrendPoint,
   Submission,
+  SubmissionComparison,
+  SubmissionDetail,
   BillingData,
+  BillingChangePreview,
+  Invoice,
   TurnaroundOption,
   FocusArea,
   DiagnosticSession,
@@ -28,12 +39,21 @@ import type {
   CriterionFeedback,
   Confidence,
   SubTest,
+  SettingsSectionData,
+  SettingsSectionId,
+  SpeakingTranscriptReview,
 } from './mock-data';
 import type {
+  CalibrationCaseDetail,
   CalibrationCase,
   CalibrationNote,
+  ExpertDashboardData,
   ExpertMe,
   ExpertMetrics,
+  ExpertLearnerDirectoryResponse,
+  ExpertLearnerReviewContext,
+  ExpertQueueFilterMetadata,
+  ExpertReviewHistory,
   ExpertSchedule,
   LearnerProfileExpanded,
   ReviewDraft,
@@ -43,20 +63,8 @@ import type {
   WritingReviewDetail,
 } from './types/expert';
 
-const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:5198').replace(/\/$/, '');
-const ENABLE_MOCK_AUTH = process.env.NEXT_PUBLIC_ENABLE_MOCK_AUTH === 'true';
-const AUTH_TOKEN_KEY = 'oet_access_token';
-const AUTH_USER_KEY = 'oet_auth_user';
-
+const API_BASE_URL = env.apiBaseUrl;
 type ApiRecord = Record<string, any>;
-
-export interface AuthUser {
-  userId: string;
-  role: 'learner' | 'expert' | 'admin';
-  email: string;
-  displayName: string;
-  isActive: boolean;
-}
 
 function isBrowser() {
   return typeof window !== 'undefined';
@@ -121,6 +129,30 @@ function scoreRangeDisplay(value: string | null | undefined): string {
   return (value ?? '').replace(/-/g, '–');
 }
 
+function formatCurrency(amount: number | string | null | undefined, currency = 'AUD'): string {
+  const numericAmount = Number(amount ?? 0);
+  return new Intl.NumberFormat('en-AU', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+  }).format(Number.isFinite(numericAmount) ? numericAmount : 0);
+}
+
+function toBillingStatus(value: string | null | undefined): Invoice['status'] {
+  const normalized = (value ?? '').toLowerCase();
+  if (normalized === 'pending') return 'Pending';
+  if (normalized === 'failed') return 'Failed';
+  return 'Paid';
+}
+
+function normalizeWaveformPeaks(value: unknown): number[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((entry) => Number(entry))
+    .filter((entry) => Number.isFinite(entry))
+    .map((entry) => Math.max(6, Math.min(100, Math.round(entry))));
+}
+
 function parseCriterionScore(scoreRange: string | null | undefined): number {
   if (!scoreRange) return 0;
   const match = scoreRange.match(/(\d+)(?:-(\d+))?/);
@@ -173,96 +205,26 @@ function resolveApiUrl(pathOrUrl: string): string {
   return `${API_BASE_URL}${pathOrUrl.startsWith('/') ? pathOrUrl : `/${pathOrUrl}`}`;
 }
 
-function getMockAuthHeaders(path: string): HeadersInit | undefined {
-  if (typeof window === 'undefined') {
-    return undefined;
-  }
-
-  // Only allow mock auth in development - never in production
-  if (process.env.NODE_ENV !== 'development') {
-    return undefined;
-  }
-
-  const useMockAuth = ENABLE_MOCK_AUTH;
-  if (!useMockAuth) {
-    return undefined;
-  }
-
-  const normalizedPath = path.startsWith('/') ? path : `/${path}`;
-
-  if (normalizedPath.startsWith('/v1/admin/')) {
-    return {
-      'X-Debug-UserId': 'admin-user-001',
-      'X-Debug-Role': 'admin',
-      'X-Debug-Email': 'admin@oet-prep.dev',
-      'X-Debug-Name': 'Admin User',
-    };
-  }
-
-  if (normalizedPath.startsWith('/v1/expert/')) {
-    return {
-      'X-Debug-UserId': 'expert-001',
-      'X-Debug-Role': 'expert',
-      'X-Debug-Email': 'expert@oet-prep.dev',
-      'X-Debug-Name': 'Expert Reviewer',
-    };
-  }
-
-  return {
-    'X-Debug-UserId': 'mock-user-001',
-    'X-Debug-Role': 'learner',
-    'X-Debug-Email': 'learner@oet-prep.dev',
-    'X-Debug-Name': 'Faisal Maqsood',
-  };
-}
-
 async function getHeaders(path: string, extra?: HeadersInit, options?: { json?: boolean }): Promise<HeadersInit> {
   const headers = new Headers(extra);
   if (options?.json ?? true) {
     headers.set('Content-Type', 'application/json');
   }
 
-  const debugHeaders = getMockAuthHeaders(path);
-  if (debugHeaders) {
-    Object.entries(debugHeaders).forEach(([key, value]) => headers.set(key, value));
-  }
-
-  const token = getStoredAccessToken();
-  if (token) {
-    headers.set('Authorization', `Bearer ${token}`);
-  } else if (process.env.NODE_ENV !== 'development' && !debugHeaders) {
-    console.error('[API] No auth token available for production request to', path);
+  try {
+    const token = await ensureFreshAccessToken();
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    } else if (process.env.NODE_ENV !== 'development') {
+      console.error('[API] No auth token available for production request to', path);
+    }
+  } catch (err) {
+    if (process.env.NODE_ENV !== 'development') {
+      console.error('[API] Failed to retrieve auth token:', err);
+    }
   }
 
   return headers;
-}
-
-export function getStoredAccessToken(): string | null {
-  if (!isBrowser()) return null;
-  return window.localStorage.getItem(AUTH_TOKEN_KEY);
-}
-
-export function getStoredAuthUser(): AuthUser | null {
-  if (!isBrowser()) return null;
-  const raw = window.localStorage.getItem(AUTH_USER_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as AuthUser;
-  } catch {
-    return null;
-  }
-}
-
-export function setStoredAuthSession(accessToken: string, user: AuthUser) {
-  if (!isBrowser()) return;
-  window.localStorage.setItem(AUTH_TOKEN_KEY, accessToken);
-  window.localStorage.setItem(AUTH_USER_KEY, JSON.stringify(user));
-}
-
-export function clearStoredAuthSession() {
-  if (!isBrowser()) return;
-  window.localStorage.removeItem(AUTH_TOKEN_KEY);
-  window.localStorage.removeItem(AUTH_USER_KEY);
 }
 
 /** Typed API error with status, error code, retryable flag, and user-friendly message. */
@@ -334,9 +296,6 @@ async function apiRequest<T = any>(path: string, init?: RequestInit): Promise<T>
         }
 
         const apiError = new ApiError(response.status, code, message, retryable, fieldErrors);
-        if (response.status === 401) {
-          clearStoredAuthSession();
-        }
 
         // Retry on 5xx/408/429, but not on 4xx client errors
         if (retryable && attempt < MAX_RETRIES) {
@@ -573,6 +532,107 @@ function mockSubtestColors(name: string) {
   }
 }
 
+function toSpeakingEvaluationRouteId(value: string): string | null {
+  if (!value) return null;
+  if (value.startsWith('se-')) return value;
+  if (value.startsWith('sa-')) return `se-${value.slice(3)}`;
+  return null;
+}
+
+function rewriteLegacyLearnerRoute(pathname: string, search: string, hash: string): string {
+  if (pathname === '/dashboard') return `/${search}${hash}`.replace(/\/\?/, '/?');
+  if (pathname === '/history') return `/submissions${search}${hash}`;
+  if (pathname === '/reviews') return `/submissions${search}${hash}`;
+  if (pathname === '/speaking/tasks') return `/speaking/selection${search}${hash}`;
+
+  if (pathname.startsWith('/speaking/review/')) {
+    const legacyId = pathname.slice('/speaking/review/'.length);
+    const evaluationId = toSpeakingEvaluationRouteId(legacyId);
+    if (evaluationId) {
+      return `/speaking/phrasing/${evaluationId}${search}${hash}`;
+    }
+    return `/speaking/selection${search}${hash}`;
+  }
+
+  if (pathname.startsWith('/speaking/result/')) {
+    const evaluationId = pathname.slice('/speaking/result/'.length);
+    return `/speaking/results/${evaluationId}${search}${hash}`;
+  }
+
+  if (pathname.startsWith('/speaking/attempt/')) {
+    const legacyId = pathname.slice('/speaking/attempt/'.length);
+    const evaluationId = toSpeakingEvaluationRouteId(legacyId);
+    if (evaluationId) {
+      return `/speaking/results/${evaluationId}${search}${hash}`;
+    }
+    return `/speaking/selection${search}${hash}`;
+  }
+
+  if (pathname === '/writing/tasks') {
+    return `/writing/library${search}${hash}`;
+  }
+
+  if (pathname.startsWith('/writing/tasks/')) {
+    const taskId = pathname.slice('/writing/tasks/'.length);
+    const params = new URLSearchParams(search);
+    params.set('taskId', taskId);
+    const nextSearch = params.toString();
+    return `/writing/player${nextSearch ? `?${nextSearch}` : ''}${hash}`;
+  }
+
+  if (pathname.startsWith('/reading/task/')) {
+    const taskOrEvaluationId = pathname.slice('/reading/task/'.length);
+    if (taskOrEvaluationId.startsWith('rt-')) {
+      return `/reading/player/${taskOrEvaluationId}${search}${hash}`;
+    }
+    return `/reading${search}${hash}`;
+  }
+
+  if (pathname.startsWith('/listening/task/')) {
+    const taskOrEvaluationId = pathname.slice('/listening/task/'.length);
+    if (taskOrEvaluationId.startsWith('lt-')) {
+      return `/listening/player/${taskOrEvaluationId}${search}${hash}`;
+    }
+    return `/listening${search}${hash}`;
+  }
+
+  return `${pathname}${search}${hash}`;
+}
+
+function normalizeAppRoute(route: string) {
+  const withoutAppPrefix = route === '/app'
+    ? '/'
+    : route.startsWith('/app/')
+      ? route.replace('/app', '')
+      : route;
+
+  if (!withoutAppPrefix.startsWith('/')) {
+    return withoutAppPrefix;
+  }
+
+  const parsed = new URL(withoutAppPrefix, 'http://localhost');
+  return rewriteLegacyLearnerRoute(parsed.pathname, parsed.search, parsed.hash);
+}
+
+function normalizeRouteValues<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((item) => normalizeRouteValues(item)) as T;
+  }
+
+  if (value && typeof value === 'object') {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, nestedValue]) => {
+        if (typeof nestedValue === 'string' && (nestedValue.startsWith('/app') || key.toLowerCase().includes('route') || key.toLowerCase().includes('href'))) {
+          return [key, normalizeAppRoute(nestedValue)];
+        }
+        return [key, normalizeRouteValues(nestedValue)];
+      }),
+    ) as T;
+  }
+
+  return value;
+}
+
 export async function fetchUserProfile(): Promise<UserProfile> {
   const bootstrap = await apiRequest<ApiRecord>('/v1/me/bootstrap');
   const user = bootstrap.user;
@@ -625,8 +685,21 @@ export async function fetchDiagnosticOverview(): Promise<ApiRecord> {
   return apiRequest<ApiRecord>('/v1/diagnostic/overview');
 }
 
+export async function fetchDashboardHome(): Promise<ApiRecord> {
+  const data = await apiRequest<ApiRecord>('/v1/learner/dashboard');
+  return normalizeRouteValues(data);
+}
+
 export async function fetchSettingsData(): Promise<ApiRecord> {
   return apiRequest<ApiRecord>('/v1/settings');
+}
+
+export async function fetchSettingsSection(section: SettingsSectionId): Promise<SettingsSectionData> {
+  const data = await apiRequest<ApiRecord>(`/v1/settings/${section}`);
+  return {
+    section,
+    values: normalizeRouteValues(data.values ?? {}),
+  };
 }
 
 export async function updateSettingsSection(section: 'profile' | 'goals' | 'notifications' | 'privacy' | 'accessibility' | 'audio' | 'study', values: Record<string, unknown>): Promise<ApiRecord> {
@@ -637,11 +710,28 @@ export async function updateSettingsSection(section: 'profile' | 'goals' | 'noti
 }
 
 export async function fetchReadingHome(): Promise<ApiRecord> {
-  return apiRequest<ApiRecord>('/v1/reading/home');
+  const data = await apiRequest<ApiRecord>('/v1/reading/home');
+  return normalizeRouteValues(data);
 }
 
 export async function fetchListeningHome(): Promise<ApiRecord> {
-  return apiRequest<ApiRecord>('/v1/listening/home');
+  const data = await apiRequest<ApiRecord>('/v1/listening/home');
+  return normalizeRouteValues(data);
+}
+
+export async function fetchWritingHome(): Promise<ApiRecord> {
+  const data = await apiRequest<ApiRecord>('/v1/writing/home');
+  return normalizeRouteValues(data);
+}
+
+export async function fetchSpeakingHome(): Promise<ApiRecord> {
+  const data = await apiRequest<ApiRecord>('/v1/speaking/home');
+  return normalizeRouteValues(data);
+}
+
+export async function fetchMocksHome(): Promise<ApiRecord> {
+  const data = await apiRequest<ApiRecord>('/v1/mocks');
+  return normalizeRouteValues(data);
 }
 
 export async function postSpeakingDeviceCheck(payload: { microphoneGranted: boolean; networkStable: boolean; deviceType?: string; }): Promise<ApiRecord> {
@@ -909,7 +999,7 @@ export async function fetchSpeakingResult(resultId: string): Promise<SpeakingRes
   };
 }
 
-export async function fetchTranscript(resultId: string): Promise<{ title: string; date: string; duration: number; transcript: TranscriptLine[] }> {
+export async function fetchTranscript(resultId: string): Promise<SpeakingTranscriptReview> {
   const review = await apiRequest<ApiRecord>(`/v1/speaking/evaluations/${resultId}/review`);
   const transcript = (review.transcript ?? []).map((line: ApiRecord) => ({
     id: line.id,
@@ -932,6 +1022,9 @@ export async function fetchTranscript(resultId: string): Promise<{ title: string
     date: review.summary?.generatedAt ? new Date(review.summary.generatedAt).toISOString().slice(0, 10) : new Date().toISOString().slice(0, 10),
     duration: transcript[transcript.length - 1]?.endTime ?? 0,
     transcript,
+    audioAvailable: Boolean(review.audioAvailable),
+    audioUrl: review.audioUrl ?? undefined,
+    waveformPeaks: normalizeWaveformPeaks(review.analysis?.waveformPeaks),
   };
 }
 
@@ -1055,8 +1148,11 @@ export async function fetchListeningTask(taskId: string): Promise<ListeningTask>
   return {
     id: task.contentId,
     title: task.title,
-    audioSrc: task.audioUrl ?? '/audio/placeholder.mp3',
+    audioSrc: task.audioUrl ?? '',
     duration: task.durationSeconds ?? task.estimatedDurationMinutes * 60,
+    audioAvailable: Boolean(task.audioUrl),
+    audioUnavailableReason: task.audioUrl ? undefined : 'Audio for this listening task is not available yet. Please use transcript-backed review instead.',
+    transcriptPolicy: task.transcriptPolicy ?? 'per_item_post_attempt',
     questions: (task.questions ?? []).map((question: ApiRecord) => ({
       id: question.id,
       number: question.number,
@@ -1093,6 +1189,8 @@ export async function fetchListeningResult(taskId: string): Promise<ListeningRes
   const questions = (task.questions ?? []).map((question: ApiRecord, index: number) => {
     const userAnswer = answers[question.id] ?? '';
     const isCorrect = String(userAnswer).trim().toLowerCase() === String(question.correctAnswer).trim().toLowerCase();
+    const itemReview = (evaluation.itemReview ?? []).find((item: ApiRecord) => item.questionId === question.id);
+    const transcript = itemReview?.transcript ?? null;
     return {
       id: `lrq-${index + 1}`,
       number: question.number,
@@ -1100,12 +1198,14 @@ export async function fetchListeningResult(taskId: string): Promise<ListeningRes
       userAnswer,
       correctAnswer: question.correctAnswer,
       isCorrect,
-      explanation: question.explanation ?? (isCorrect ? 'Correct.' : 'Review the transcript clue and distractor pattern.'),
-      allowTranscriptReveal: Boolean(question.allowTranscriptReveal),
-      transcriptExcerpt: question.transcriptExcerpt ?? undefined,
-      distractorExplanation: question.distractorExplanation ?? undefined,
+      explanation: itemReview?.explanation ?? question.explanation ?? (isCorrect ? 'Correct.' : 'Review the transcript clue and distractor pattern.'),
+      allowTranscriptReveal: Boolean(transcript?.allowed),
+      transcriptExcerpt: transcript?.excerpt ?? question.transcriptExcerpt ?? undefined,
+      distractorExplanation: transcript?.distractorExplanation ?? question.distractorExplanation ?? undefined,
     };
   });
+
+  const recommendedNextDrill = evaluation.recommendedNextDrill ?? {};
 
   return {
     id: taskId,
@@ -1113,12 +1213,62 @@ export async function fetchListeningResult(taskId: string): Promise<ListeningRes
     score: questions.filter((question: ListeningResult['questions'][number]) => question.isCorrect).length,
     total: questions.length,
     questions,
-    recommendedDrill: { id: 'drill-001', title: 'Number & Frequency Detection Drill', description: 'Practice identifying exact counts, times, and quantities in clinical audio.' },
+    recommendedDrill: {
+      id: recommendedNextDrill.id ?? 'listening-drill-detail_capture',
+      title: recommendedNextDrill.title ?? 'Exact Detail Capture Drill',
+      description: recommendedNextDrill.rationale ?? 'Practise the listening error type that appeared most often in this result.',
+    },
+  };
+}
+
+export async function fetchListeningDrill(drillId: string): Promise<ListeningDrill> {
+  const drill = normalizeRouteValues(await apiRequest<ApiRecord>(`/v1/listening/drills/${drillId}`));
+  return {
+    id: drill.drillId,
+    title: drill.title,
+    focusLabel: drill.focusLabel,
+    description: drill.description,
+    errorType: drill.errorType,
+    estimatedMinutes: Number(drill.estimatedMinutes ?? 10),
+    highlights: drill.highlights ?? [],
+    launchRoute: drill.launchRoute,
+    reviewRoute: drill.reviewRoute,
+  };
+}
+
+export async function fetchListeningReview(taskId: string): Promise<ListeningReview> {
+  const evaluationId = await latestEvaluationIdForContent(taskId, 'listening');
+  if (!evaluationId) {
+    throw new Error('Complete a listening task before opening transcript-backed review.');
+  }
+
+  const evaluation = await apiRequest<ApiRecord>(`/v1/listening/evaluations/${evaluationId}`);
+  return {
+    id: taskId,
+    title: evaluation.title ?? 'Listening transcript-backed review',
+    transcriptPolicy: evaluation.transcriptAccess?.policy ?? 'per_item_post_attempt',
+    recommendedDrill: evaluation.recommendedNextDrill
+      ? {
+          id: evaluation.recommendedNextDrill.id,
+          title: evaluation.recommendedNextDrill.title,
+          description: evaluation.recommendedNextDrill.rationale ?? 'Continue with the recommended drill.',
+        }
+      : undefined,
+    questions: (evaluation.itemReview ?? []).map((item: ApiRecord, index: number) => ({
+      id: item.questionId ?? `listening-review-${index + 1}`,
+      number: Number(item.number ?? index + 1),
+      text: item.prompt ?? '',
+      learnerAnswer: item.learnerAnswer ?? '',
+      correctAnswer: item.correctAnswer ?? '',
+      explanation: item.explanation ?? '',
+      transcriptExcerpt: item.transcript?.excerpt ?? undefined,
+      distractorExplanation: item.transcript?.distractorExplanation ?? undefined,
+    })),
   };
 }
 
 export async function fetchMockReports(): Promise<MockReport[]> {
-  const data = await apiRequest<ApiRecord>('/v1/mocks');
+  const data = await fetchMocksHome();
   return (data.reports ?? []).map((report: ApiRecord) => mapMockReport(report));
 }
 
@@ -1146,12 +1296,71 @@ function mapMockReport(report: ApiRecord): MockReport {
   };
 }
 
-export async function createMockSession(config: { type: 'full' | 'sub'; subType?: string; mode: 'practice' | 'exam'; profession: string; }): Promise<{ sessionId: string }> {
-  const response = await apiRequest<ApiRecord>('/v1/mock-attempts', {
+function mapMockSession(session: ApiRecord): MockSession {
+  const config = session.config ?? {};
+  return {
+    sessionId: session.mockAttemptId,
+    state: session.state,
+    resumeRoute: session.resumeRoute ?? `/mocks/player/${session.mockAttemptId}`,
+    reportRoute: session.reportRoute ?? null,
+    reportId: session.reportId ?? null,
+    config: {
+      id: session.mockAttemptId,
+      title: config.mockType === 'full'
+        ? 'Full OET Mock'
+        : `${titleCase(config.subType ?? 'subtest')} Mock`,
+      type: config.mockType === 'sub' ? 'sub' : 'full',
+      subType: config.subType ? toSubTest(config.subType) : undefined,
+      mode: config.mode === 'practice' ? 'practice' : 'exam',
+      profession: titleCase(config.profession ?? 'medicine'),
+      strictTimer: Boolean(config.strictTimer),
+      includeReview: Boolean(config.includeReview),
+      reviewSelection: config.reviewSelection ?? 'none',
+    },
+    sectionStates: (session.sectionStates ?? []).map((section: ApiRecord) => ({
+      id: section.id,
+      title: section.title,
+      state: section.state,
+      reviewAvailable: Boolean(section.reviewAvailable),
+      reviewSelected: Boolean(section.reviewSelected),
+      launchRoute: section.launchRoute,
+    })),
+  };
+}
+
+export async function createMockSession(config: {
+  type: 'full' | 'sub';
+  subType?: string;
+  mode: 'practice' | 'exam';
+  profession: string;
+  strictTimer: boolean;
+  reviewSelection: MockConfig['reviewSelection'];
+}): Promise<MockSession> {
+  const response = normalizeRouteValues(await apiRequest<ApiRecord>('/v1/mock-attempts', {
     method: 'POST',
-    body: JSON.stringify({ mockType: config.type, subType: config.subType ?? null, mode: config.mode, profession: config.profession, includeReview: false, strictTimer: config.mode === 'exam' }),
+    body: JSON.stringify({
+      mockType: config.type,
+      subType: config.subType ?? null,
+      mode: config.mode,
+      profession: config.profession,
+      strictTimer: config.strictTimer,
+      includeReview: config.reviewSelection !== 'none',
+      reviewSelection: config.reviewSelection,
+    }),
+  }));
+  return mapMockSession(response);
+}
+
+export async function fetchMockSession(sessionId: string): Promise<MockSession> {
+  const response = normalizeRouteValues(await apiRequest<ApiRecord>(`/v1/mock-attempts/${sessionId}`));
+  return mapMockSession(response);
+}
+
+export async function submitMockSession(sessionId: string): Promise<{ sessionId: string; state: string }> {
+  const response = await apiRequest<ApiRecord>(`/v1/mock-attempts/${sessionId}/submit`, {
+    method: 'POST',
   });
-  return { sessionId: response.mockAttemptId };
+  return { sessionId, state: response.state ?? 'queued' };
 }
 
 export async function fetchReadiness(): Promise<ReadinessData> {
@@ -1200,35 +1409,202 @@ export async function fetchSubmissionVolume(): Promise<{ week: string; submissio
   return progress.submissionVolume ?? [];
 }
 
+export async function fetchProgressEvidenceSummary(): Promise<ProgressEvidenceSummary> {
+  const progress = await apiRequest<ApiRecord>('/v1/progress');
+  return {
+    reviewUsage: {
+      totalRequests: Number(progress.reviewUsage?.totalRequests ?? 0),
+      completedRequests: Number(progress.reviewUsage?.completedRequests ?? 0),
+      averageTurnaroundHours: progress.reviewUsage?.averageTurnaroundHours ?? null,
+      creditsConsumed: Number(progress.reviewUsage?.creditsConsumed ?? 0),
+    },
+    freshness: {
+      generatedAt: progress.freshness?.generatedAt ?? new Date().toISOString(),
+      usesFallbackSeries: Boolean(progress.freshness?.usesFallbackSeries),
+    },
+  };
+}
+
 export async function fetchSubmissions(): Promise<Submission[]> {
   const response = await apiRequest<{ items: ApiRecord[] }>('/v1/submissions');
   return response.items.map((item) => ({
     id: item.submissionId,
+    contentId: item.contentId,
     taskName: item.taskName,
     subTest: toSubTest(item.subtest),
     attemptDate: item.attemptDate,
     scoreEstimate: scoreRangeDisplay(item.scoreEstimate ?? ''),
     reviewStatus: toReviewStatus(item.reviewStatus),
+    evaluationId: item.evaluationId ?? undefined,
+    state: item.state ?? undefined,
+    comparisonGroupId: item.comparisonGroupId ?? null,
+    canRequestReview: Boolean(item.canRequestReview),
+    actions: {
+      reopenFeedbackRoute: item.actions?.reopenFeedbackRoute ?? null,
+      compareRoute: item.actions?.compareRoute ?? null,
+      requestReviewRoute: item.actions?.requestReviewRoute ?? null,
+    },
   }));
 }
 
+export async function fetchSubmissionDetail(submissionId: string): Promise<SubmissionDetail> {
+  const submissions = await fetchSubmissions();
+  const submission = submissions.find((item) => item.id === submissionId || item.evaluationId === submissionId);
+  if (!submission) {
+    throw new Error('Submission not found.');
+  }
+
+  const baseDetail: SubmissionDetail = {
+    submission,
+    evidenceSummary: {
+      title: submission.taskName,
+      scoreLabel: submission.scoreEstimate || 'Pending',
+      stateLabel: titleCase(submission.state ?? 'completed'),
+      reviewLabel: titleCase(submission.reviewStatus.replace(/_/g, ' ')),
+      nextActionLabel: submission.canRequestReview ? 'Request review' : 'Review current evidence',
+    },
+    strengths: [],
+    issues: [],
+  };
+
+  if (!submission.evaluationId) {
+    return baseDetail;
+  }
+
+  if (submission.subTest === 'Writing') {
+    const result = await fetchWritingResult(submission.evaluationId);
+    return {
+      ...baseDetail,
+      strengths: result.topStrengths,
+      issues: result.topIssues,
+      criteria: result.criteria,
+    };
+  }
+
+  if (submission.subTest === 'Speaking') {
+    const [result, transcript] = await Promise.all([
+      fetchSpeakingResult(submission.evaluationId),
+      fetchTranscript(submission.evaluationId),
+    ]);
+    return {
+      ...baseDetail,
+      strengths: result.strengths,
+      issues: result.improvements,
+      transcript: transcript.transcript,
+    };
+  }
+
+  if (submission.subTest === 'Reading') {
+    const result = await fetchReadingResult(submission.contentId);
+    return {
+      ...baseDetail,
+      strengths: [`${result.score}/${result.totalQuestions} questions answered correctly.`],
+      issues: result.errorClusters.filter((cluster) => cluster.count > 0).map((cluster) => `${cluster.type}: ${cluster.count} items to review.`),
+      questionReview: result.items.map((item) => ({
+        id: item.id,
+        number: item.number,
+        text: item.text,
+        learnerAnswer: item.userAnswer,
+        correctAnswer: item.correctAnswer,
+        isCorrect: item.isCorrect,
+        explanation: item.explanation,
+      })),
+    };
+  }
+
+  const result = await fetchListeningResult(submission.contentId);
+  return {
+    ...baseDetail,
+    strengths: [`${result.score}/${result.total} listening items captured correctly.`],
+    issues: result.questions.filter((question) => !question.isCorrect).map((question) => question.distractorExplanation ?? question.explanation),
+    questionReview: result.questions.map((question) => ({
+      id: question.id,
+      number: question.number,
+      text: question.text,
+      learnerAnswer: question.userAnswer,
+      correctAnswer: question.correctAnswer,
+      isCorrect: question.isCorrect,
+      explanation: question.explanation,
+      transcriptExcerpt: question.transcriptExcerpt,
+      distractorExplanation: question.distractorExplanation,
+    })),
+  };
+}
+
+export async function fetchSubmissionComparison(leftId?: string, rightId?: string): Promise<SubmissionComparison> {
+  const params = new URLSearchParams();
+  if (leftId) params.set('leftId', leftId);
+  if (rightId) params.set('rightId', rightId);
+  const response = await apiRequest<ApiRecord>(`/v1/submissions/compare?${params.toString()}`);
+  return {
+    canCompare: Boolean(response.canCompare),
+    reason: response.reason ?? undefined,
+    summary: response.summary ?? undefined,
+    comparisonGroupId: response.comparisonGroupId ?? null,
+    left: response.left
+      ? {
+          attemptId: response.left.attemptId,
+          evaluationId: response.left.evaluationId ?? undefined,
+          scoreRange: scoreRangeDisplay(response.left.scoreRange ?? ''),
+          subtest: toSubTest(response.left.subtest),
+        }
+      : undefined,
+    right: response.right
+      ? {
+          attemptId: response.right.attemptId,
+          evaluationId: response.right.evaluationId ?? undefined,
+          scoreRange: scoreRangeDisplay(response.right.scoreRange ?? ''),
+          subtest: toSubTest(response.right.subtest),
+        }
+      : undefined,
+  };
+}
+
 export async function fetchBilling(): Promise<BillingData> {
-  const [summary, invoices] = await Promise.all([
+  const [summary, invoices, plans, extras] = await Promise.all([
     apiRequest<ApiRecord>('/v1/billing/summary'),
     apiRequest<ApiRecord>('/v1/billing/invoices'),
+    apiRequest<ApiRecord>('/v1/billing/plans'),
+    apiRequest<ApiRecord>('/v1/billing/extras'),
   ]);
   return {
     currentPlan: titleCase(summary.planId),
+    currentPlanId: summary.planId,
     price: `$${Number(summary.price.amount).toFixed(2)}`,
     interval: summary.price.interval,
     status: titleCase(summary.status),
     nextRenewal: summary.nextRenewalAt,
     reviewCredits: summary.wallet.creditBalance,
+    entitlements: {
+      productiveSkillReviewsEnabled: Boolean(summary.entitlements?.productiveSkillReviewsEnabled),
+      supportedReviewSubtests: summary.entitlements?.supportedReviewSubtests ?? [],
+      invoiceDownloadsAvailable: Boolean(summary.entitlements?.invoiceDownloadsAvailable),
+    },
+    plans: (plans.items ?? []).map((plan: ApiRecord) => ({
+      id: plan.planId,
+      label: plan.label,
+      tier: titleCase(plan.tier),
+      description: plan.description,
+      price: formatCurrency(plan.price?.amount, plan.price?.currency),
+      interval: plan.price?.interval ?? 'month',
+      reviewCredits: Number(plan.reviewCredits ?? 0),
+      canChangeTo: Boolean(plan.canChangeTo),
+      changeDirection: plan.changeDirection ?? 'current',
+      badge: plan.badge ?? '',
+    })),
+    extras: (extras.items ?? []).map((extra: ApiRecord) => ({
+      id: extra.id,
+      quantity: Number(extra.quantity ?? 0),
+      price: formatCurrency(extra.price, extra.currency),
+      description: extra.description,
+    })),
     invoices: (invoices.items ?? []).map((invoice: ApiRecord) => ({
       id: invoice.invoiceId,
       date: invoice.date,
-      amount: `$${Number(invoice.amount).toFixed(2)}`,
-      status: titleCase(invoice.status) as BillingData['invoices'][number]['status'],
+      amount: formatCurrency(invoice.amount, invoice.currency),
+      status: toBillingStatus(invoice.status),
+      currency: invoice.currency,
+      downloadUrl: invoice.downloadUrl,
     })),
   };
 }
@@ -1240,6 +1616,44 @@ export async function purchaseReviewCredits(count: number): Promise<{ success: b
     body: JSON.stringify({ productType: 'review_credits', quantity: count, priceId: null, idempotencyKey: crypto.randomUUID?.() ?? String(Date.now()) }),
   });
   return { success: true, newBalance: billing.reviewCredits + count };
+}
+
+export async function fetchBillingChangePreview(targetPlanId: string): Promise<BillingChangePreview> {
+  const preview = await apiRequest<ApiRecord>(`/v1/billing/change-preview?targetPlanId=${encodeURIComponent(targetPlanId)}`);
+  return {
+    currentPlanId: preview.currentPlanId,
+    targetPlanId: preview.targetPlanId,
+    direction: preview.direction,
+    proratedAmount: formatCurrency(preview.proratedAmount),
+    effectiveAt: preview.effectiveAt,
+    summary: preview.summary,
+    currentCreditsIncluded: Number(preview.currentCreditsIncluded ?? 0),
+    targetCreditsIncluded: Number(preview.targetCreditsIncluded ?? 0),
+  };
+}
+
+export async function createBillingCheckoutSession(input: {
+  productType: 'review_credits' | 'plan_upgrade' | 'plan_downgrade';
+  quantity: number;
+  priceId?: string | null;
+}): Promise<{ checkoutUrl: string; checkoutSessionId: string }> {
+  const response = await apiRequest<ApiRecord>('/v1/billing/checkout-sessions', {
+    method: 'POST',
+    body: JSON.stringify({
+      productType: input.productType,
+      quantity: input.quantity,
+      priceId: input.priceId ?? null,
+      idempotencyKey: crypto.randomUUID?.() ?? String(Date.now()),
+    }),
+  });
+  return {
+    checkoutUrl: response.checkoutUrl,
+    checkoutSessionId: response.checkoutSessionId,
+  };
+}
+
+export async function downloadInvoice(invoiceId: string): Promise<string> {
+  return fetchAuthorizedObjectUrl(`/v1/billing/invoices/${encodeURIComponent(invoiceId)}/download`);
 }
 
 export async function fetchTurnaroundOptions(): Promise<TurnaroundOption[]> {
@@ -1346,23 +1760,14 @@ export async function fetchDiagnosticResults(): Promise<DiagnosticResult[]> {
   }));
 }
 
-// ─── Auth API ───
-
-export async function loginWithPassword(email: string, password: string): Promise<{ accessToken: string; expiresAt: string; user: AuthUser }> {
-  return apiRequest('/v1/auth/login', {
-    method: 'POST',
-    body: JSON.stringify({ email, password }),
-  });
-}
-
-export async function fetchCurrentAuthUser(): Promise<AuthUser> {
-  return apiRequest<AuthUser>('/v1/auth/me');
-}
-
 // ─── Expert Console API ───
 
 export async function fetchExpertMe(): Promise<ExpertMe> {
   return apiRequest<ExpertMe>('/v1/expert/me');
+}
+
+export async function fetchExpertDashboard(): Promise<ExpertDashboardData> {
+  return apiRequest<ExpertDashboardData>('/v1/expert/dashboard');
 }
 
 export async function fetchReviewQueue(params?: {
@@ -1392,6 +1797,10 @@ export async function fetchReviewQueue(params?: {
   return apiRequest<ReviewQueueResponse>(`/v1/expert/queue${query ? `?${query}` : ''}`);
 }
 
+export async function fetchExpertQueueFilterMetadata(): Promise<ExpertQueueFilterMetadata> {
+  return apiRequest<ExpertQueueFilterMetadata>('/v1/expert/queue/filters/metadata');
+}
+
 export async function fetchExpertMetrics(days?: number): Promise<{ metrics: ExpertMetrics; completionData: { day: string; count: number }[]; days: number; generatedAt: string }> {
   const query = days ? `?days=${days}` : '';
   return apiRequest(`/v1/expert/metrics${query}`);
@@ -1412,12 +1821,39 @@ export async function fetchCalibrationCases(): Promise<CalibrationCase[]> {
   return apiRequest<CalibrationCase[]>('/v1/expert/calibration/cases');
 }
 
+export async function fetchCalibrationCaseDetail(caseId: string): Promise<CalibrationCaseDetail> {
+  return apiRequest<CalibrationCaseDetail>(`/v1/expert/calibration/cases/${encodeURIComponent(caseId)}`);
+}
+
 export async function fetchCalibrationNotes(): Promise<CalibrationNote[]> {
   return apiRequest<CalibrationNote[]>('/v1/expert/calibration/notes');
 }
 
+export async function fetchExpertLearners(params?: {
+  search?: string;
+  profession?: string;
+  subTest?: string;
+  relevance?: string;
+  page?: number;
+  pageSize?: number;
+}): Promise<ExpertLearnerDirectoryResponse> {
+  const queryParams = new URLSearchParams();
+  if (params?.search?.trim()) queryParams.set('search', params.search.trim());
+  if (params?.profession) queryParams.set('profession', params.profession);
+  if (params?.subTest) queryParams.set('subTest', params.subTest);
+  if (params?.relevance) queryParams.set('relevance', params.relevance);
+  if (params?.page) queryParams.set('page', String(params.page));
+  if (params?.pageSize) queryParams.set('pageSize', String(params.pageSize));
+  const query = queryParams.toString();
+  return apiRequest<ExpertLearnerDirectoryResponse>(`/v1/expert/learners${query ? `?${query}` : ''}`);
+}
+
 export async function fetchLearnerProfile(learnerId: string): Promise<LearnerProfileExpanded> {
   return apiRequest<LearnerProfileExpanded>(`/v1/expert/learners/${encodeURIComponent(learnerId)}`);
+}
+
+export async function fetchExpertLearnerReviewContext(learnerId: string): Promise<ExpertLearnerReviewContext> {
+  return apiRequest<ExpertLearnerReviewContext>(`/v1/expert/learners/${encodeURIComponent(learnerId)}/review-context`);
 }
 
 export async function fetchWritingReviewDetail(reviewRequestId: string): Promise<WritingReviewDetail> {
@@ -1426,6 +1862,10 @@ export async function fetchWritingReviewDetail(reviewRequestId: string): Promise
 
 export async function fetchSpeakingReviewDetail(reviewRequestId: string): Promise<SpeakingReviewDetail> {
   return apiRequest<SpeakingReviewDetail>(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/speaking`);
+}
+
+export async function fetchExpertReviewHistory(reviewRequestId: string): Promise<ExpertReviewHistory> {
+  return apiRequest<ExpertReviewHistory>(`/v1/expert/reviews/${encodeURIComponent(reviewRequestId)}/history`);
 }
 
 export async function saveDraftReview(draft: ReviewDraft): Promise<ReviewDraft> {
@@ -1439,6 +1879,8 @@ export async function saveDraftReview(draft: ReviewDraft): Promise<ReviewDraft> 
     finalComment: string;
     anchoredComments: ReviewDraft['comments'];
     timestampComments: ReviewDraft['comments'];
+    scratchpad: string;
+    checklistItems: { id: string; label: string; checked: boolean }[];
     savedAt: string;
   }>(`/v1/expert/reviews/${encodeURIComponent(draft.reviewRequestId)}/draft`, {
     method: 'PUT',
@@ -1448,6 +1890,8 @@ export async function saveDraftReview(draft: ReviewDraft): Promise<ReviewDraft> 
       finalComment: draft.finalComment,
       anchoredComments: hasTimestampComments ? undefined : comments,
       timestampComments: hasTimestampComments ? comments : undefined,
+      scratchpad: draft.scratchpad,
+      checklistItems: draft.checklistItems,
       version: draft.version,
     }),
   });
@@ -1458,6 +1902,8 @@ export async function saveDraftReview(draft: ReviewDraft): Promise<ReviewDraft> 
     criterionComments: response.criterionComments,
     finalComment: response.finalComment,
     comments: hasTimestampComments ? response.timestampComments : response.anchoredComments,
+    scratchpad: response.scratchpad,
+    checklistItems: response.checklistItems,
     savedAt: response.savedAt,
     version: response.version,
   };
@@ -1511,6 +1957,10 @@ export async function fetchAdminContent(params?: { type?: string; profession?: s
   if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
   const q = qs.toString();
   return apiRequest(`/v1/admin/content${q ? `?${q}` : ''}`);
+}
+
+export async function fetchAdminDashboard() {
+  return apiRequest('/v1/admin/dashboard');
 }
 
 export async function fetchAdminContentDetail(contentId: string) {
@@ -1573,7 +2023,7 @@ export async function createAdminCriterion(payload: { name: string; subtestCode:
   return apiRequest('/v1/admin/criteria', { method: 'POST', body: JSON.stringify(payload) });
 }
 
-export async function updateAdminCriterion(criterionId: string, payload: { name?: string; description?: string; weight?: number }) {
+export async function updateAdminCriterion(criterionId: string, payload: { name?: string; description?: string; weight?: number; status?: string }) {
   return apiRequest(`/v1/admin/criteria/${encodeURIComponent(criterionId)}`, { method: 'PUT', body: JSON.stringify(payload) });
 }
 
@@ -1614,6 +2064,28 @@ export async function fetchAdminAuditLogs(params?: { action?: string; actor?: st
   return apiRequest(`/v1/admin/audit-logs${q ? `?${q}` : ''}`);
 }
 
+export async function exportAdminAuditLogs(params?: { action?: string; actor?: string; search?: string }) {
+  const qs = new URLSearchParams();
+  if (params?.action) qs.set('action', params.action);
+  if (params?.actor) qs.set('actor', params.actor);
+  if (params?.search) qs.set('search', params.search);
+
+  const path = `/v1/admin/audit-logs/export${qs.toString() ? `?${qs.toString()}` : ''}`;
+  const response = await fetch(resolveApiUrl(path), {
+    method: 'GET',
+    headers: await getHeaders(path, undefined, { json: false }),
+  });
+
+  if (!response.ok) {
+    throw new ApiError(response.status, 'audit_export_failed', 'Failed to export audit logs.', response.status >= 500);
+  }
+
+  return {
+    blob: await response.blob(),
+    fileName: response.headers.get('content-disposition')?.match(/filename="?([^"]+)"?/)?.[1] ?? 'audit-logs.csv',
+  };
+}
+
 export async function fetchAdminUsers(params?: { role?: string; status?: string; search?: string; page?: number; pageSize?: number }) {
   const qs = new URLSearchParams();
   if (params?.role) qs.set('role', params.role);
@@ -1629,12 +2101,28 @@ export async function fetchAdminUserDetail(userId: string) {
   return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}`);
 }
 
+export async function inviteAdminUser(payload: { name: string; email: string; role: string; professionId?: string }) {
+  return apiRequest('/v1/admin/users/invite', { method: 'POST', body: JSON.stringify(payload) });
+}
+
 export async function updateAdminUserStatus(userId: string, payload: { status: string; reason?: string }) {
   return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/status`, { method: 'PUT', body: JSON.stringify(payload) });
 }
 
+export async function deleteAdminUser(userId: string, payload?: { reason?: string }) {
+  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/delete`, { method: 'POST', body: JSON.stringify(payload ?? {}) });
+}
+
+export async function restoreAdminUser(userId: string, payload?: { reason?: string }) {
+  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/restore`, { method: 'POST', body: JSON.stringify(payload ?? {}) });
+}
+
 export async function adjustAdminUserCredits(userId: string, payload: { amount: number; reason?: string }) {
   return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/credits`, { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function triggerAdminUserPasswordReset(userId: string) {
+  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/password-reset`, { method: 'POST' });
 }
 
 export async function fetchAdminBillingPlans(params?: { status?: string }) {
@@ -1672,10 +2160,51 @@ export async function assignAdminReview(reviewRequestId: string, payload: { expe
   return apiRequest(`/v1/admin/review-ops/${encodeURIComponent(reviewRequestId)}/assign`, { method: 'POST', body: JSON.stringify(payload) });
 }
 
-export async function fetchAdminQualityAnalytics(params?: { timeRange?: string; subtest?: string }) {
+export async function fetchAdminQualityAnalytics(params?: { timeRange?: string; subtest?: string; profession?: string }) {
   const qs = new URLSearchParams();
   if (params?.timeRange) qs.set('timeRange', params.timeRange);
   if (params?.subtest) qs.set('subtest', params.subtest);
+  if (params?.profession) qs.set('profession', params.profession);
   const q = qs.toString();
   return apiRequest(`/v1/admin/quality-analytics${q ? `?${q}` : ''}`);
+}
+
+export async function bulkAdminContentAction(payload: { action: string; contentIds: string[]; dryRun?: boolean }) {
+  return apiRequest('/v1/admin/content/bulk-action', { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function fetchAdminContentImpact(contentId: string) {
+  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}/impact`);
+}
+
+export async function fetchAdminTaxonomyImpact(professionId: string) {
+  return apiRequest(`/v1/admin/taxonomy/${encodeURIComponent(professionId)}/impact`);
+}
+
+export async function activateAdminAIConfig(configId: string) {
+  return apiRequest(`/v1/admin/ai-config/${encodeURIComponent(configId)}/activate`, { method: 'POST' });
+}
+
+export async function activateAdminFlag(flagId: string) {
+  return apiRequest(`/v1/admin/flags/${encodeURIComponent(flagId)}/activate`, { method: 'POST' });
+}
+
+export async function deactivateAdminFlag(flagId: string) {
+  return apiRequest(`/v1/admin/flags/${encodeURIComponent(flagId)}/deactivate`, { method: 'POST' });
+}
+
+export async function cancelAdminReview(reviewRequestId: string, payload: { reason: string }) {
+  return apiRequest(`/v1/admin/review-ops/${encodeURIComponent(reviewRequestId)}/cancel`, { method: 'POST', body: JSON.stringify(payload) });
+}
+
+export async function reopenAdminReview(reviewRequestId: string, payload?: { reason?: string }) {
+  return apiRequest(`/v1/admin/review-ops/${encodeURIComponent(reviewRequestId)}/reopen`, { method: 'POST', body: JSON.stringify(payload ?? {}) });
+}
+
+export async function fetchAdminReviewFailures() {
+  return apiRequest('/v1/admin/review-ops/failures');
+}
+
+export async function fetchAdminAuditLogDetail(eventId: string) {
+  return apiRequest(`/v1/admin/audit-logs/${encodeURIComponent(eventId)}`);
 }

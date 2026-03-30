@@ -5,6 +5,7 @@ interface ProgressBarProps {
   value: number; // 0-100
   max?: number;
   label?: string;
+  ariaLabel?: string;
   showValue?: boolean;
   size?: 'sm' | 'md';
   color?: 'primary' | 'success' | 'warning' | 'danger';
@@ -18,7 +19,7 @@ const colorStyles: Record<string, string> = {
   danger: 'bg-red-500',
 };
 
-export function ProgressBar({ value, max = 100, label, showValue, size = 'sm', color = 'primary', className }: ProgressBarProps) {
+export function ProgressBar({ value, max = 100, label, ariaLabel, showValue, size = 'sm', color = 'primary', className }: ProgressBarProps) {
   const pct = Math.min(100, Math.max(0, (value / max) * 100));
   return (
     <div className={cn('w-full', className)}>
@@ -28,7 +29,14 @@ export function ProgressBar({ value, max = 100, label, showValue, size = 'sm', c
           {showValue && <span className="text-muted">{Math.round(pct)}%</span>}
         </div>
       )}
-      <div className={cn('w-full bg-gray-100 rounded-full overflow-hidden shadow-inner', size === 'sm' ? 'h-2' : 'h-3')} role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={label}>
+      <div
+        className={cn('w-full bg-gray-100 rounded-full overflow-hidden shadow-inner', size === 'sm' ? 'h-2' : 'h-3')}
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-label={ariaLabel ?? label}
+      >
         <div className={cn('h-full rounded-full transition-all duration-700 ease-out', colorStyles[color])} style={{ width: `${pct}%` }} />
       </div>
     </div>

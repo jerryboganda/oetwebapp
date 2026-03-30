@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { motion } from 'motion/react';
 import {
-  FileText, Edit3, Play, Info, Mic, Bot, User, ShieldCheck,
+  FileText, Edit3, Play, Info, Mic, User, ShieldCheck,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { SpeakingRoleCard } from '@/components/domain/speaking-role-card';
@@ -28,7 +28,7 @@ export default function RoleCardPreview() {
   const [card, setCard] = useState<RoleCard | null>(null);
   const [loading, setLoading] = useState(true);
   const [notes, setNotes] = useState('');
-  const [selectedMode, setSelectedMode] = useState<TaskMode>('ai');
+  const [selectedMode, setSelectedMode] = useState<TaskMode>('self');
   const [prepRunning, setPrepRunning] = useState(true);
 
   useEffect(() => {
@@ -142,8 +142,7 @@ export default function RoleCardPreview() {
                 <h4 className="text-xs font-bold text-muted uppercase tracking-widest">Practice Mode</h4>
                 <div className="grid grid-cols-3 gap-2">
                   {([
-                    { id: 'ai', label: 'AI Patient', icon: Bot, color: 'text-blue-600', bg: 'bg-blue-50' },
-                    { id: 'self', label: 'Self-Practice', icon: User, color: 'text-purple-600', bg: 'bg-purple-50' },
+                    { id: 'self', label: 'Guided Self-Practice', icon: User, color: 'text-purple-600', bg: 'bg-purple-50' },
                     { id: 'exam', label: 'Simulation', icon: ShieldCheck, color: 'text-amber-600', bg: 'bg-amber-50' },
                   ] as const).map((m) => (
                     <button
@@ -165,11 +164,9 @@ export default function RoleCardPreview() {
               </div>
 
               <InlineAlert variant="info">
-                {selectedMode === 'ai'
-                  ? 'The AI will play the patient role and respond to you.'
-                  : selectedMode === 'self'
-                    ? 'Record yourself performing the task. No AI feedback during session.'
-                    : 'Strict exam conditions. 5-minute timer with no feedback.'}
+                {selectedMode === 'self'
+                  ? 'Use guided self-practice with local recording and transcript review after the task.'
+                  : 'Strict exam conditions. 5-minute timer with no feedback.'}
               </InlineAlert>
 
               <Button fullWidth size="lg" onClick={handleStartTask}>

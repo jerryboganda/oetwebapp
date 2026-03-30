@@ -6,6 +6,7 @@ import { motion } from 'motion/react';
 import { Play, Pause, Volume2, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell } from '@/components/layout/app-shell';
+import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchListeningTask, submitListeningAnswers } from '@/lib/api';
@@ -25,6 +26,7 @@ function PlayerContent() {
   const searchParams = useSearchParams();
   const id = params?.id as string;
   const mode = (searchParams?.get('mode') as 'practice' | 'exam') || 'practice';
+  const drillId = searchParams?.get('drill');
   const isExam = mode === 'exam';
 
   const audioRef = useRef<HTMLAudioElement>(null);
@@ -64,6 +66,7 @@ function PlayerContent() {
   };
 
   const startTask = () => {
+    if (!task?.audioAvailable) return;
     setHasStarted(true);
     if (audioRef.current) audioRef.current.play().catch(console.error);
   };
@@ -124,16 +127,18 @@ function PlayerContent() {
   return (
     <AppShell pageTitle={task.title} distractionFree>
       {/* Hidden Audio Element */}
-      <audio
-        ref={audioRef}
-        src={task.audioSrc}
-        onTimeUpdate={() => audioRef.current && setProgress(audioRef.current.currentTime)}
-        onLoadedMetadata={() => audioRef.current && setDuration(audioRef.current.duration)}
-        onPlay={() => setIsPlaying(true)}
-        onPause={() => setIsPlaying(false)}
-        onEnded={() => setIsPlaying(false)}
-        preload="metadata"
-      />
+      {task.audioAvailable ? (
+        <audio
+          ref={audioRef}
+          src={task.audioSrc}
+          onTimeUpdate={() => audioRef.current && setProgress(audioRef.current.currentTime)}
+          onLoadedMetadata={() => audioRef.current && setDuration(audioRef.current.duration)}
+          onPlay={() => setIsPlaying(true)}
+          onPause={() => setIsPlaying(false)}
+          onEnded={() => setIsPlaying(false)}
+          preload="metadata"
+        />
+      ) : null}
 
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24">
         {!hasStarted ? (
@@ -146,6 +151,9 @@ function PlayerContent() {
               <Volume2 className="w-10 h-10 text-blue-500" />
             </div>
             <h2 className="text-2xl font-black text-navy mb-4">Ready to start?</h2>
+            {drillId ? (
+              <p className="mb-4 text-sm text-muted">This launch came from a focused drill route, so use the audio to practise the error pattern before returning to results.</p>
+            ) : null}
             <div className="bg-gray-50 rounded-2xl p-6 mb-8 text-left space-y-4 max-w-lg mx-auto">
               <h3 className="text-sm font-black text-muted uppercase tracking-widest">Instructions</h3>
               <ul className="space-y-3 text-sm text-gray-600">
@@ -170,7 +178,12 @@ function PlayerContent() {
                 )}
               </ul>
             </div>
-            <Button size="lg" onClick={startTask} className="gap-2">
+            {!task.audioAvailable ? (
+              <InlineAlert variant="warning" className="mx-auto mb-6 max-w-lg text-left">
+                {task.audioUnavailableReason ?? 'Audio is not available for this task yet.'} Use transcript-backed review instead until the media asset is published.
+              </InlineAlert>
+            ) : null}
+            <Button size="lg" onClick={startTask} disabled={!task.audioAvailable} className="gap-2">
               <Play className="w-5 h-5" /> Start Audio &amp; Task
             </Button>
           </motion.div>
@@ -223,31 +236,48 @@ function PlayerContent() {
                     <span className="text-xs font-black text-muted uppercase tracking-widest block mb-2">Question {q.number}</span>
                     {q.text}
                   </h3>
-                  <div className="space-y-3">
-                    {(q.options || []).map((opt, idx) => {
-                      const isSelected = answers[q.id] === opt;
-                      return (
-                        <button
-                          key={idx}
-                          onClick={() => handleAnswerChange(q.id, opt)}
-                          className={`w-full text-left p-4 sm:p-5 rounded-xl border-2 transition-all ${
-                            isSelected
-                              ? 'border-primary bg-primary/5 text-primary font-medium'
-                              : 'border-gray-100 hover:border-gray-200 text-gray-700 hover:bg-gray-50'
-                          }`}
-                        >
-                          <div className="flex items-center gap-4">
-                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
-                              isSelected ? 'border-primary' : 'border-gray-300'
-                            }`}>
-                              {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-primary" />}
+                  {q.options && q.options.length > 0 ? (
+                    <div className="space-y-3">
+                      {q.options.map((opt, idx) => {
+                        const isSelected = answers[q.id] === opt;
+                        return (
+                          <button
+                            key={idx}
+                            onClick={() => handleAnswerChange(q.id, opt)}
+                            className={`w-full text-left p-4 sm:p-5 rounded-xl border-2 transition-all ${
+                              isSelected
+                                ? 'border-primary bg-primary/5 text-primary font-medium'
+                                : 'border-gray-100 hover:border-gray-200 text-gray-700 hover:bg-gray-50'
+                            }`}
+                          >
+                            <div className="flex items-center gap-4">
+                              <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 transition-colors ${
+                                isSelected ? 'border-primary' : 'border-gray-300'
+                              }`}>
+                                {isSelected && <div className="w-2.5 h-2.5 rounded-full bg-primary" />}
+                              </div>
+                              <span className="leading-relaxed">{opt}</span>
                             </div>
-                            <span className="leading-relaxed">{opt}</span>
-                          </div>
-                        </button>
-                      );
-                    })}
-                  </div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      <label htmlFor={`listening-answer-${q.id}`} className="text-xs font-black text-muted uppercase tracking-widest">
+                        Your answer
+                      </label>
+                      <input
+                        id={`listening-answer-${q.id}`}
+                        type="text"
+                        value={answers[q.id] ?? ''}
+                        onChange={(event) => handleAnswerChange(q.id, event.target.value)}
+                        placeholder="Type your answer here..."
+                        className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-base text-navy outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
+                        aria-label={`Answer for question ${q.number}`}
+                      />
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

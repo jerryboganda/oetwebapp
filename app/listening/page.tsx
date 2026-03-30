@@ -2,16 +2,16 @@
 
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { Headphones, ArrowRight, Clock, Target, Volume2, FileText, Sparkles } from 'lucide-react';
+import { ArrowRight, Clock, FileText, Headphones, Sparkles, Target, Volume2 } from 'lucide-react';
 import Link from 'next/link';
-import { AppShell } from '@/components/layout/app-shell';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { fetchListeningHome, fetchMockReports } from '@/lib/api';
 import type { MockReport } from '@/lib/mock-data';
+import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
+import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 
 interface ListeningHomeTask {
   contentId: string;
@@ -22,6 +22,7 @@ interface ListeningHomeTask {
 }
 
 export default function ListeningHome() {
+  const [home, setHome] = useState<Record<string, any> | null>(null);
   const [tasks, setTasks] = useState<ListeningHomeTask[]>([]);
   const [mockReports, setMockReports] = useState<MockReport[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,9 +34,10 @@ export default function ListeningHome() {
 
     (async () => {
       try {
-        const [home, reports] = await Promise.all([fetchListeningHome(), fetchMockReports()]);
+        const [listeningHome, reports] = await Promise.all([fetchListeningHome(), fetchMockReports()]);
         if (cancelled) return;
-        setTasks((home.featuredTasks ?? []) as ListeningHomeTask[]);
+        setHome(listeningHome);
+        setTasks((listeningHome.featuredTasks ?? []) as ListeningHomeTask[]);
         setMockReports(reports);
       } catch (err) {
         if (!cancelled) {
@@ -48,147 +50,179 @@ export default function ListeningHome() {
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  return (
-    <AppShell pageTitle="Listening" subtitle="Strengthen audio comprehension, exact detail capture, and distractor control.">
-      <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10 pb-20">
-        <section className="bg-surface rounded-[28px] border border-gray-200 p-6 sm:p-8 shadow-sm">
-          <div className="flex items-start gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-              <Headphones className="w-7 h-7" />
-            </div>
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-black text-navy">Listening Practice Center</h1>
-              <p className="text-sm text-muted mt-2 max-w-2xl">
-                Practise consultation audio, sharpen detail capture, and review mock evidence without relying on hard-coded placeholder flows.
-              </p>
-            </div>
-          </div>
-        </section>
+  const mockRoute = home?.mockSets?.[0]?.route ?? '/mocks';
+  const transcriptRoute = home?.transcriptBackedReview?.route ?? '/listening';
+  const drillRoute = home?.distractorDrills?.[0]?.route ?? '/listening';
 
-        {error && <InlineAlert variant="error">{error}</InlineAlert>}
+  const distractorCard: LearnerSurfaceCardModel = {
+    kind: 'insight',
+    sourceType: 'frontend_insight',
+    accent: 'rose',
+    eyebrow: 'Distractor Focus',
+    eyebrowIcon: Target,
+    title: 'Build more reliable listening discrimination',
+    description: 'Train yourself to capture exact changes in plan, frequencies, and clinical detail instead of approximate impressions.',
+    metaItems: [
+      { icon: Headphones, label: 'Consultation audio' },
+      { icon: Clock, label: 'Post-attempt review' },
+    ],
+  };
+
+  const transcriptCard: LearnerSurfaceCardModel = {
+    kind: 'navigation',
+    sourceType: 'backend_summary',
+    accent: 'amber',
+    eyebrow: 'Recommended Next Step',
+    eyebrowIcon: Sparkles,
+    title: home?.transcriptBackedReview?.title ?? 'Review transcript-backed evidence',
+    description: home?.accessPolicyHints?.rationale ?? 'Use transcript-backed review after an attempt so you can diagnose distractor patterns with real evidence instead of replaying blindly.',
+    metaItems: [
+      { icon: Clock, label: 'Timed flow' },
+      { icon: FileText, label: 'Report included' },
+    ],
+    primaryAction: {
+      label: 'Open Transcript Review',
+      href: transcriptRoute,
+    },
+    secondaryAction: {
+      label: 'Open Mock Center',
+      href: mockRoute,
+      variant: 'outline',
+    },
+  };
+
+  return (
+    <LearnerDashboardShell pageTitle="Listening" subtitle="Strengthen audio comprehension, exact detail capture, and distractor control.">
+      <div className="space-y-10 pb-20">
+        <LearnerPageHero
+          eyebrow="Module Focus"
+          icon={Headphones}
+          accent="indigo"
+          title="Train listening accuracy before you test it under pressure"
+          description={home?.intro ?? 'Use this workspace to tighten detail capture, review distractors with evidence, and move into transcript-backed follow-up when it helps.'}
+          highlights={[
+            { icon: Volume2, label: 'Featured tasks', value: tasks.length ? `${tasks.length} ready now` : 'Loading...' },
+            { icon: Target, label: 'Drill paths', value: `${home?.distractorDrills?.length ?? 0} available` },
+            { icon: FileText, label: 'Transcript review', value: home?.transcriptBackedReview ? 'Available after attempts' : 'Open after a task' },
+          ]}
+        />
+
+        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
         <section>
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h2 className="text-sm font-black text-muted uppercase tracking-widest">Practice Tasks</h2>
-              <p className="text-sm text-muted mt-1">Backend-backed listening tasks with stable media metadata.</p>
-            </div>
-          </div>
+          <LearnerSurfaceSectionHeader
+            eyebrow="Practice Tasks"
+            title="Open a listening task with a clear outcome"
+            description="Each card tells you what you are practising, how long it should take, and what type of audio scenario you are entering."
+            className="mb-5"
+          />
 
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {[1, 2].map((i) => <Skeleton key={i} className="h-48 rounded-[24px]" />)}
+              {[1, 2].map((i) => <Skeleton key={i} className="h-56 rounded-[24px]" />)}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {tasks.map((task, index) => (
-                <motion.div
-                  key={task.contentId}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.08 }}
-                >
-                  <Link href={`/listening/player/${task.contentId}`} className="block h-full">
-                    <Card className="h-full p-6 hover:shadow-md hover:border-primary/30 transition-all group cursor-pointer">
-                      <div className="flex items-start justify-between gap-4 mb-5">
-                        <div>
-                          <h3 className="text-lg font-black text-navy group-hover:text-primary transition-colors">{task.title}</h3>
-                          <p className="text-xs font-bold uppercase tracking-widest text-muted mt-1">
-                            {task.scenarioType ? task.scenarioType.replace(/_/g, ' ') : 'Listening Task'}
-                          </p>
-                        </div>
-                        <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center shrink-0">
-                          <Volume2 className="w-5 h-5" />
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4 text-xs font-bold text-muted mb-6">
-                        <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {task.estimatedDurationMinutes} mins</span>
-                        <span className="px-2 py-1 rounded-md bg-gray-100 text-gray-700">{task.difficulty}</span>
-                      </div>
-                      <div className="inline-flex items-center gap-2 text-sm font-bold text-primary group-hover:gap-3 transition-all">
-                        Start Task <ArrowRight className="w-4 h-4" />
-                      </div>
-                    </Card>
-                  </Link>
-                </motion.div>
-              ))}
+              {tasks.map((task, index) => {
+                const taskCard: LearnerSurfaceCardModel = {
+                  kind: 'task',
+                  sourceType: 'backend_task',
+                  accent: 'indigo',
+                  eyebrow: task.scenarioType ? task.scenarioType.replace(/_/g, ' ') : 'Listening Task',
+                  eyebrowIcon: Volume2,
+                  title: task.title,
+                  description: 'Use this task to practise exact detail capture before switching into mock or transcript-backed review.',
+                  metaItems: [
+                    { icon: Clock, label: `${task.estimatedDurationMinutes} mins` },
+                    { label: task.difficulty },
+                  ],
+                  primaryAction: {
+                    label: 'Start Task',
+                    href: `/listening/player/${task.contentId}`,
+                  },
+                };
+
+                return (
+                  <motion.div
+                    key={task.contentId}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.08 }}
+                  >
+                    <LearnerSurfaceCard card={taskCard} />
+                  </motion.div>
+                );
+              })}
             </div>
           )}
         </section>
 
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <Card className="p-6 sm:p-8">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-rose-50 text-rose-600 flex items-center justify-center">
-                <Target className="w-5 h-5" />
-              </div>
-              <h2 className="text-lg font-black text-navy">Distractor Focus</h2>
-            </div>
+          <LearnerSurfaceCard card={distractorCard}>
             <ul className="space-y-3 text-sm text-navy/80">
               <li>Listen for exact frequencies, not approximate impressions.</li>
               <li>Separate the patient&apos;s concern from the clinician&apos;s recommendation.</li>
               <li>Use transcript-backed review after errors instead of replaying blindly.</li>
             </ul>
-          </Card>
-
-          <Card className="p-6 sm:p-8">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-                <Sparkles className="w-5 h-5" />
-              </div>
-              <h2 className="text-lg font-black text-navy">Recommended Next Step</h2>
+            <div className="mt-6">
+              <Link href={drillRoute} className="inline-flex items-center gap-2 text-sm font-bold text-primary hover:underline">
+                Open distractor drill <ArrowRight className="h-4 w-4" />
+              </Link>
             </div>
-            <p className="text-sm text-muted leading-relaxed mb-6">
-              Start one listening task, then review the latest mock report to see whether your distractor handling is improving over time.
-            </p>
-            <Button onClick={() => window.location.assign('/mocks')}>
-              Open Mock Center <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-          </Card>
+          </LearnerSurfaceCard>
+
+          <LearnerSurfaceCard card={transcriptCard} />
         </section>
 
         <section>
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h2 className="text-sm font-black text-muted uppercase tracking-widest">Recent Mock Reports</h2>
-              <p className="text-sm text-muted mt-1">Check listening impact inside full OET mock performance.</p>
-            </div>
-            <Link href="/mocks" className="text-sm font-bold text-primary hover:underline">Open Mock Center</Link>
-          </div>
+          <LearnerSurfaceSectionHeader
+            eyebrow="Recent Mock Reports"
+            title="Track listening impact inside full mocks"
+            description="These reports help you see whether distractor control is improving when listening sits inside the full exam load."
+            action={<Link href="/mocks" className="text-sm font-bold text-primary hover:underline">Open Mock Center</Link>}
+            className="mb-5"
+          />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {mockReports.slice(0, 2).map((report, index) => (
-              <motion.div
-                key={report.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15 + index * 0.08 }}
-              >
-                <Link href={`/mocks/report/${report.id}`} className="block h-full">
-                  <Card className="h-full p-6 hover:shadow-md hover:border-primary/30 transition-all group cursor-pointer">
-                    <div className="flex items-start justify-between gap-4 mb-4">
-                      <div>
-                        <h3 className="text-lg font-black text-navy group-hover:text-primary transition-colors">{report.title}</h3>
-                        <p className="text-xs text-muted mt-1">{report.date}</p>
-                      </div>
-                      <div className="w-10 h-10 rounded-xl bg-gray-50 text-gray-600 flex items-center justify-center shrink-0">
-                        <FileText className="w-5 h-5" />
-                      </div>
-                    </div>
-                    <p className="text-sm text-muted leading-relaxed mb-5">{report.summary}</p>
-                    <div className="text-sm font-bold text-primary inline-flex items-center gap-2 group-hover:gap-3 transition-all">
-                      View Report <ArrowRight className="w-4 h-4" />
-                    </div>
-                  </Card>
-                </Link>
-              </motion.div>
-            ))}
+            {mockReports.slice(0, 2).map((report, index) => {
+              const reportCard: LearnerSurfaceCardModel = {
+                kind: 'evidence',
+                sourceType: 'backend_summary',
+                accent: 'slate',
+                eyebrow: 'Mock Evidence',
+                eyebrowIcon: FileText,
+                title: report.title,
+                description: report.summary,
+                metaItems: [
+                  { label: report.date },
+                  { label: report.overallScore },
+                ],
+                primaryAction: {
+                  label: 'View Report',
+                  href: `/mocks/report/${report.id}`,
+                  variant: 'outline',
+                },
+              };
+
+              return (
+                <motion.div
+                  key={report.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.15 + index * 0.08 }}
+                >
+                  <LearnerSurfaceCard card={reportCard} />
+                </motion.div>
+              );
+            })}
           </div>
         </section>
       </div>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }

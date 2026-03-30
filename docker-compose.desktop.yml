@@ -1,0 +1,80 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    container_name: oet-desktop-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: oet_learner_dev
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    volumes:
+      - oet_desktop_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d oet_learner_dev"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  learner-api:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: oet-desktop-api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=oet_learner_dev;Username=postgres;Password=postgres
+      Auth__UseDevelopmentAuth: "false"
+      Bootstrap__AutoMigrate: "true"
+      Bootstrap__SeedDemoData: "true"
+      Platform__PublicApiBaseUrl: http://localhost:5198
+      Platform__PublicWebBaseUrl: http://localhost:3000
+      ExternalAuth__Google__Enabled: ${EXTERNAL_AUTH_GOOGLE_ENABLED:-false}
+      ExternalAuth__Google__ClientId: ${EXTERNAL_AUTH_GOOGLE_CLIENT_ID:-}
+      ExternalAuth__Google__ClientSecret: ${EXTERNAL_AUTH_GOOGLE_CLIENT_SECRET:-}
+      ExternalAuth__Facebook__Enabled: ${EXTERNAL_AUTH_FACEBOOK_ENABLED:-false}
+      ExternalAuth__Facebook__ClientId: ${EXTERNAL_AUTH_FACEBOOK_CLIENT_ID:-}
+      ExternalAuth__Facebook__ClientSecret: ${EXTERNAL_AUTH_FACEBOOK_CLIENT_SECRET:-}
+      ExternalAuth__LinkedIn__Enabled: ${EXTERNAL_AUTH_LINKEDIN_ENABLED:-false}
+      ExternalAuth__LinkedIn__ClientId: ${EXTERNAL_AUTH_LINKEDIN_CLIENT_ID:-}
+      ExternalAuth__LinkedIn__ClientSecret: ${EXTERNAL_AUTH_LINKEDIN_CLIENT_SECRET:-}
+      Billing__CheckoutBaseUrl: http://localhost:3000/billing/checkout
+      Proxy__TrustForwardHeaders: "false"
+      Proxy__EnforceHttps: "false"
+      Features__EnableSwagger: "true"
+      Storage__LocalRootPath: /var/opt/oet-learner/storage
+    volumes:
+      - oet_desktop_storage:/var/opt/oet-learner/storage
+    ports:
+      - "5198:8080"
+
+  web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE_URL: /api/backend
+        APP_URL: http://localhost:3000
+    container_name: oet-desktop-web
+    restart: unless-stopped
+    depends_on:
+      learner-api:
+        condition: service_started
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+      NEXT_PUBLIC_API_BASE_URL: /api/backend
+      API_PROXY_TARGET_URL: http://learner-api:8080
+      APP_URL: http://localhost:3000
+      GEMINI_API_KEY: ""
+    ports:
+      - "3000:3000"
+
+volumes:
+  oet_desktop_postgres_data:
+  oet_desktop_storage:

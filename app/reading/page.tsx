@@ -2,16 +2,17 @@
 
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { BookOpen, ArrowRight, Clock, Target, Lightbulb, FileText, TrendingUp } from 'lucide-react';
+import { ArrowRight, BookOpen, Clock, FileText, Lightbulb, Target, TrendingUp } from 'lucide-react';
 import Link from 'next/link';
-import { AppShell } from '@/components/layout/app-shell';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
+import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
-import { fetchReadingHome, fetchMockReports } from '@/lib/api';
+import { fetchMockReports, fetchReadingHome } from '@/lib/api';
 import type { MockReport } from '@/lib/mock-data';
+import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
+import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 
 interface ReadingHomeTask {
   contentId: string;
@@ -22,6 +23,7 @@ interface ReadingHomeTask {
 }
 
 export default function ReadingHome() {
+  const [home, setHome] = useState<Record<string, any> | null>(null);
   const [tasks, setTasks] = useState<ReadingHomeTask[]>([]);
   const [mockReports, setMockReports] = useState<MockReport[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,9 +35,10 @@ export default function ReadingHome() {
 
     (async () => {
       try {
-        const [home, reports] = await Promise.all([fetchReadingHome(), fetchMockReports()]);
+        const [readingHome, reports] = await Promise.all([fetchReadingHome(), fetchMockReports()]);
         if (cancelled) return;
-        setTasks((home.featuredTasks ?? []) as ReadingHomeTask[]);
+        setHome(readingHome);
+        setTasks((readingHome.featuredTasks ?? []) as ReadingHomeTask[]);
         setMockReports(reports);
       } catch (err) {
         if (!cancelled) {
@@ -48,149 +51,167 @@ export default function ReadingHome() {
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  return (
-    <AppShell pageTitle="Reading">
-      <main className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-10">
-        <section className="bg-surface rounded-[28px] border border-gray-200 p-6 sm:p-8 shadow-sm">
-          <div className="flex items-start gap-4">
-            <div className="w-14 h-14 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-              <BookOpen className="w-7 h-7" />
-            </div>
-            <div>
-              <h1 className="text-2xl sm:text-3xl font-black text-navy">Reading Practice Center</h1>
-              <p className="text-sm text-muted mt-2 max-w-2xl">
-                Build speed, detail extraction, and inference control with OET-style reading tasks and mock checkpoints.
-              </p>
-            </div>
-          </div>
-        </section>
+  const mockRoute = home?.mockSets?.[0]?.route ?? '/mocks';
 
-        {error && <InlineAlert variant="error">{error}</InlineAlert>}
+  const strategyCard: LearnerSurfaceCardModel = {
+    kind: 'insight',
+    sourceType: 'frontend_insight',
+    accent: 'amber',
+    eyebrow: 'Strategy Focus',
+    eyebrowIcon: Lightbulb,
+    title: 'Build reliable detail extraction',
+    description: 'Use one focused reading block to improve exact scanning, then validate the gain under timed mock pressure.',
+    metaItems: [
+      { icon: Target, label: 'Inference control' },
+      { icon: Clock, label: 'Timed reading' },
+    ],
+  };
+
+  const nextStepCard: LearnerSurfaceCardModel = {
+    kind: 'navigation',
+    sourceType: 'backend_summary',
+    accent: 'indigo',
+    eyebrow: 'Recommended Next Step',
+    eyebrowIcon: TrendingUp,
+    title: 'Move from practice to timed evidence',
+    description: 'After one focused reading task, enter mock setup to confirm whether your detail extraction holds up under exam pressure.',
+    metaItems: [
+      { icon: Clock, label: 'Timed flow' },
+      { icon: FileText, label: 'Report included' },
+    ],
+    primaryAction: {
+      label: 'Enter Mock Setup',
+      href: mockRoute,
+    },
+  };
+
+  return (
+    <LearnerDashboardShell pageTitle="Reading">
+      <main className="space-y-10">
+        <LearnerPageHero
+          eyebrow="Module Focus"
+          icon={BookOpen}
+          accent="blue"
+          title="Build reading accuracy before you validate it in mocks"
+          description={home?.intro ?? 'Use this workspace to sharpen detail extraction, keep timing visible, and check whether gains hold up in mock conditions.'}
+          highlights={[
+            { icon: Target, label: 'Featured tasks', value: tasks.length ? `${tasks.length} ready now` : 'Loading...' },
+            { icon: FileText, label: 'Mock reports', value: mockReports.length ? `${mockReports.length} available` : 'No reports yet' },
+            { icon: TrendingUp, label: 'Mock routes', value: home?.mockSets?.length ? `${home.mockSets.length} ready` : 'Mock setup ready' },
+          ]}
+        />
+
+        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
         <section>
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h2 className="text-sm font-black text-muted uppercase tracking-widest">Practice Tasks</h2>
-              <p className="text-sm text-muted mt-1">Backend-driven reading tasks ready to start now.</p>
-            </div>
-          </div>
+          <LearnerSurfaceSectionHeader
+            eyebrow="Practice Tasks"
+            title="Start with backend-backed reading work"
+            description="Each task shows the skill shape, timing signal, and direct next action."
+            className="mb-5"
+          />
 
           {loading ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {[1, 2].map((i) => <Skeleton key={i} className="h-48 rounded-[24px]" />)}
+              {[1, 2].map((i) => <Skeleton key={i} className="h-56 rounded-[24px]" />)}
             </div>
           ) : (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {tasks.map((task, index) => (
-                <motion.div
-                  key={task.contentId}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: index * 0.08 }}
-                >
-                  <Link href={`/reading/player/${task.contentId}`} className="block h-full">
-                    <Card className="h-full p-6 hover:shadow-md hover:border-primary/30 transition-all group cursor-pointer">
-                      <div className="flex items-start justify-between gap-4 mb-5">
-                        <div>
-                          <h3 className="text-lg font-black text-navy group-hover:text-primary transition-colors">
-                            {task.title}
-                          </h3>
-                          <p className="text-xs font-bold uppercase tracking-widest text-muted mt-1">
-                            {task.scenarioType ? task.scenarioType.replace(/_/g, ' ') : 'Reading Task'}
-                          </p>
-                        </div>
-                        <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
-                          <Target className="w-5 h-5" />
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-4 text-xs font-bold text-muted mb-6">
-                        <span className="flex items-center gap-1"><Clock className="w-3 h-3" /> {task.estimatedDurationMinutes} mins</span>
-                        <span className="px-2 py-1 rounded-md bg-gray-100 text-gray-700">{task.difficulty}</span>
-                      </div>
-                      <div className="inline-flex items-center gap-2 text-sm font-bold text-primary group-hover:gap-3 transition-all">
-                        Start Task <ArrowRight className="w-4 h-4" />
-                      </div>
-                    </Card>
-                  </Link>
-                </motion.div>
-              ))}
+              {tasks.map((task, index) => {
+                const practiceCard: LearnerSurfaceCardModel = {
+                  kind: 'task',
+                  sourceType: 'backend_task',
+                  accent: 'blue',
+                  eyebrow: task.scenarioType ? task.scenarioType.replace(/_/g, ' ') : 'Reading Task',
+                  eyebrowIcon: Target,
+                  title: task.title,
+                  description: 'Open this task to practise fast detail extraction and clinically accurate answer selection.',
+                  metaItems: [
+                    { icon: Clock, label: `${task.estimatedDurationMinutes} mins` },
+                    { label: task.difficulty },
+                  ],
+                  primaryAction: {
+                    label: 'Start Task',
+                    href: `/reading/player/${task.contentId}`,
+                  },
+                };
+
+                return (
+                  <motion.div
+                    key={task.contentId}
+                    initial={{ opacity: 0, y: 20 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.08 }}
+                  >
+                    <LearnerSurfaceCard card={practiceCard} />
+                  </motion.div>
+                );
+              })}
             </div>
           )}
         </section>
 
         <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <Card className="p-6 sm:p-8">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-600 flex items-center justify-center">
-                <Lightbulb className="w-5 h-5" />
-              </div>
-              <h2 className="text-lg font-black text-navy">Strategy Focus</h2>
-            </div>
+          <LearnerSurfaceCard card={strategyCard}>
             <ul className="space-y-3 text-sm text-navy/80">
               <li>Prioritise exact detail extraction before making inference choices.</li>
               <li>Underline numbers, ranges, and named concepts while reading Part C.</li>
               <li>Review wrong answers immediately to identify distractor patterns.</li>
             </ul>
-          </Card>
+          </LearnerSurfaceCard>
 
-          <Card className="p-6 sm:p-8">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-600 flex items-center justify-center">
-                <TrendingUp className="w-5 h-5" />
-              </div>
-              <h2 className="text-lg font-black text-navy">Recommended Next Step</h2>
-            </div>
-            <p className="text-sm text-muted leading-relaxed mb-6">
-              After one focused reading task, enter a mock setup to measure whether your detail extraction skills hold under timed pressure.
-            </p>
-            <Button onClick={() => window.location.assign('/mocks/setup')}>
-              Enter Mock Setup <ArrowRight className="w-4 h-4 ml-2" />
-            </Button>
-          </Card>
+          <LearnerSurfaceCard card={nextStepCard} />
         </section>
 
         <section>
-          <div className="flex items-center justify-between mb-5">
-            <div>
-              <h2 className="text-sm font-black text-muted uppercase tracking-widest">Recent Mock Reports</h2>
-              <p className="text-sm text-muted mt-1">Use full-mock evidence to validate your reading progress.</p>
-            </div>
-            <Link href="/mocks" className="text-sm font-bold text-primary hover:underline">Open Mock Center</Link>
-          </div>
+          <LearnerSurfaceSectionHeader
+            eyebrow="Recent Mock Reports"
+            title="Use mock evidence to validate progress"
+            description="Full-mock feedback shows whether reading gains are transferring under cross-subtest pressure."
+            action={<Link href="/mocks" className="text-sm font-bold text-primary hover:underline">Open Mock Center</Link>}
+            className="mb-5"
+          />
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {mockReports.slice(0, 2).map((report, index) => (
-              <motion.div
-                key={report.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.15 + index * 0.08 }}
-              >
-                <Link href={`/mocks/report/${report.id}`} className="block h-full">
-                  <Card className="h-full p-6 hover:shadow-md hover:border-primary/30 transition-all group cursor-pointer">
-                    <div className="flex items-start justify-between gap-4 mb-4">
-                      <div>
-                        <h3 className="text-lg font-black text-navy group-hover:text-primary transition-colors">{report.title}</h3>
-                        <p className="text-xs text-muted mt-1">{report.date}</p>
-                      </div>
-                      <div className="w-10 h-10 rounded-xl bg-gray-50 text-gray-600 flex items-center justify-center shrink-0">
-                        <FileText className="w-5 h-5" />
-                      </div>
-                    </div>
-                    <p className="text-sm text-muted leading-relaxed mb-5">{report.summary}</p>
-                    <div className="text-sm font-bold text-primary inline-flex items-center gap-2 group-hover:gap-3 transition-all">
-                      View Report <ArrowRight className="w-4 h-4" />
-                    </div>
-                  </Card>
-                </Link>
-              </motion.div>
-            ))}
+            {mockReports.slice(0, 2).map((report, index) => {
+              const reportCard: LearnerSurfaceCardModel = {
+                kind: 'evidence',
+                sourceType: 'backend_summary',
+                accent: 'slate',
+                eyebrow: 'Mock Evidence',
+                eyebrowIcon: FileText,
+                title: report.title,
+                description: report.summary,
+                metaItems: [
+                  { label: report.date },
+                  { label: report.overallScore },
+                ],
+                primaryAction: {
+                  label: 'View Report',
+                  href: `/mocks/report/${report.id}`,
+                  variant: 'outline',
+                },
+              };
+
+              return (
+                <motion.div
+                  key={report.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: 0.15 + index * 0.08 }}
+                >
+                  <LearnerSurfaceCard card={reportCard} />
+                </motion.div>
+              );
+            })}
           </div>
         </section>
       </main>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }
