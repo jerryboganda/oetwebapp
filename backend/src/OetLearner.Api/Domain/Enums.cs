@@ -72,7 +72,9 @@ public enum JobType
     SpeakingEvaluation,
     StudyPlanRegeneration,
     MockReportGeneration,
-    ReviewCompletion
+    ReviewCompletion,
+    NotificationFanout,
+    NotificationDigestDispatch
 }
 
 public enum ConfidenceBand

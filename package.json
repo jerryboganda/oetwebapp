@@ -25,6 +25,7 @@
   "dependencies": {
     "@google/genai": "^1.17.0",
     "@hookform/resolvers": "^5.2.1",
+    "@microsoft/signalr": "^10.0.0",
     "@radix-ui/react-popover": "^1.1.15",
     "@tabler/icons-react": "^3.41.0",
     "autoprefixer": "^10.4.21",

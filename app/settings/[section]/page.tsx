@@ -39,6 +39,7 @@ import {
   type LucideIcon,
 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
+import { NotificationPreferencesPanel } from '@/components/layout/notification-preferences-panel';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -839,6 +840,14 @@ export default function LearnerSettingsSectionPage() {
       return;
     }
 
+    if (section === 'notifications') {
+      setLoading(false);
+      setData(null);
+      setError(null);
+      analytics.track('content_view', { page: 'settings-section', section });
+      return;
+    }
+
     let cancelled = false;
     analytics.track('content_view', { page: 'settings-section', section });
 
@@ -917,6 +926,24 @@ export default function LearnerSettingsSectionPage() {
 
         {!loading && error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
         {!loading && successMessage ? <InlineAlert variant="success">{successMessage}</InlineAlert> : null}
+
+        {!loading && section === 'notifications' && config ? (
+          <>
+            <SettingsSectionHelperCard
+              accent={config.accent}
+              helperBadge={config.helperBadge}
+              icon={config.icon}
+              title={config.helperCardTitle}
+              body={config.helperCardBody}
+              configuredFieldCount={config.fields.length}
+              totalFieldCount={config.fields.length}
+            />
+
+            <NotificationPreferencesPanel
+              description="These controls now use the shared notification service for learners, experts, and admins while preserving learner compatibility settings during rollout."
+            />
+          </>
+        ) : null}
 
         {!loading && data && config ? (
           <>

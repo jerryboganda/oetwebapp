@@ -1,24 +1,19 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-const DEFAULT_PROXY_TARGET = 'http://localhost:5198';
-
-function resolveProxyTarget(pathSegments: string[], searchParams: URLSearchParams): string {
-  const baseUrl = (process.env.API_PROXY_TARGET_URL ?? DEFAULT_PROXY_TARGET).replace(/\/$/, '');
-  const path = pathSegments.join('/');
-  const search = searchParams.toString();
-  return `${baseUrl}/${path}${search ? `?${search}` : ''}`;
-}
+import { resolveProxyTarget, sanitizeProxyHeaders } from '../../../../lib/backend-proxy';
 
 async function proxyRequest(request: Request, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
-  const targetUrl = resolveProxyTarget(path, new URL(request.url).searchParams);
-  const headers = new Headers(request.headers);
 
-  headers.delete('host');
-  headers.delete('connection');
-  headers.delete('content-length');
-  headers.delete('expect');
+  let targetUrl: string;
+  try {
+    targetUrl = resolveProxyTarget(path, new URL(request.url).searchParams, process.env.API_PROXY_TARGET_URL);
+  } catch {
+    return new Response('Invalid proxy path', { status: 400 });
+  }
+
+  const headers = sanitizeProxyHeaders(request.headers);
 
   const body = request.method === 'GET' || request.method === 'HEAD'
     ? undefined

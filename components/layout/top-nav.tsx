@@ -1,11 +1,12 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { BriefcaseMedical, Bell, Menu, X } from 'lucide-react';
+import { BriefcaseMedical, Menu, X } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { mainNavItems, type NavItem, type ShellUserSummary } from './sidebar';
 import { usePathname } from 'next/navigation';
+import { NotificationCenter } from './notification-center';
 
 interface TopNavProps {
   pageTitle?: string;
@@ -60,13 +61,7 @@ export function TopNav({ pageTitle, className, actions, items = mainNavItems, us
 
         <div className="flex items-center gap-3">
           {actions}
-          <button
-            className="p-2 text-muted hover:text-navy transition-colors rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
-            aria-label="Notifications"
-            type="button"
-          >
-            <Bell className="w-5 h-5" aria-hidden="true" />
-          </button>
+          <NotificationCenter />
           <div className="w-9 h-9 rounded-full bg-primary/10 flex items-center justify-center text-primary font-bold text-sm">
             {initials}
           </div>

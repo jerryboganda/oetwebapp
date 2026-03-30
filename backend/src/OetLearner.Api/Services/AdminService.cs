@@ -12,7 +12,8 @@ public class AdminService(
     LearnerDbContext db,
     EmailOtpService emailOtpService,
     IPasswordHasher<ApplicationUserAccount> passwordHasher,
-    TimeProvider timeProvider)
+    TimeProvider timeProvider,
+    NotificationService notifications)
 {
     private const string ActiveUserStatus = "active";
     private const string SuspendedUserStatus = "suspended";
@@ -50,6 +51,24 @@ public class AdminService(
         });
         await db.SaveChangesAsync(ct);
     }
+
+    private Task NotifyAdminsAsync(
+        NotificationEventKey eventKey,
+        string entityType,
+        string entityId,
+        string versionOrDateBucket,
+        string message,
+        CancellationToken ct)
+        => notifications.CreateForAdminsAsync(
+            eventKey,
+            entityType,
+            entityId,
+            versionOrDateBucket,
+            new Dictionary<string, object?>
+            {
+                ["message"] = message
+            },
+            ct);
 
     private sealed record AdminUserTarget(
         string Id,
@@ -686,8 +705,8 @@ public class AdminService(
         AdminAIConfigCreateRequest request, CancellationToken ct)
     {
         var id = $"AIC-{Guid.NewGuid():N}"[..12];
-
-        db.AIConfigVersions.Add(new AIConfigVersion
+        var createdAt = DateTimeOffset.UtcNow;
+        var config = new AIConfigVersion
         {
             Id = id,
             Model = request.Model,
@@ -702,11 +721,19 @@ public class AdminService(
             ExperimentFlag = request.ExperimentFlag ?? "",
             PromptLabel = request.PromptLabel ?? "",
             CreatedBy = adminName,
-            CreatedAt = DateTimeOffset.UtcNow
-        });
+            CreatedAt = createdAt
+        };
+        db.AIConfigVersions.Add(config);
         await db.SaveChangesAsync(ct);
 
         await LogAuditAsync(adminId, adminName, "Created", "AIConfig", id, $"Created AI config: {request.Model}", ct);
+        await NotifyAdminsAsync(
+            NotificationEventKey.AdminAiConfigChanged,
+            "ai_config",
+            id,
+            createdAt.UtcDateTime.Ticks.ToString(),
+            $"AI config {config.Model} for {config.TaskType} was created.",
+            ct);
         return new { id, status = "testing" };
     }
 
@@ -725,9 +752,17 @@ public class AdminService(
         if (request.RoutingRule is not null) a.RoutingRule = request.RoutingRule;
         if (request.ExperimentFlag is not null) a.ExperimentFlag = request.ExperimentFlag;
         if (request.PromptLabel is not null) a.PromptLabel = request.PromptLabel;
+        var updatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
 
         await LogAuditAsync(adminId, adminName, "Updated", "AIConfig", configId, $"Updated AI config: {a.Model}", ct);
+        await NotifyAdminsAsync(
+            NotificationEventKey.AdminAiConfigChanged,
+            "ai_config",
+            configId,
+            updatedAt.UtcDateTime.Ticks.ToString(),
+            $"AI config {a.Model} for {a.TaskType} was updated.",
+            ct);
         return new { id = configId, status = a.Status.ToString().ToLowerInvariant() };
     }
 
@@ -770,7 +805,7 @@ public class AdminService(
         var id = $"FLG-{Guid.NewGuid():N}"[..12];
         var now = DateTimeOffset.UtcNow;
 
-        db.FeatureFlags.Add(new FeatureFlag
+        var flag = new FeatureFlag
         {
             Id = id,
             Name = request.Name,
@@ -784,10 +819,18 @@ public class AdminService(
             Owner = request.Owner,
             CreatedAt = now,
             UpdatedAt = now
-        });
+        };
+        db.FeatureFlags.Add(flag);
         await db.SaveChangesAsync(ct);
 
         await LogAuditAsync(adminId, adminName, "Created", "Flag", id, $"Created flag: {request.Name}", ct);
+        await NotifyAdminsAsync(
+            NotificationEventKey.AdminFeatureFlagChanged,
+            "feature_flag",
+            id,
+            now.UtcDateTime.Ticks.ToString(),
+            $"Feature flag {flag.Name} was created.",
+            ct);
         return new { id, enabled = request.Enabled };
     }
 
@@ -809,6 +852,13 @@ public class AdminService(
 
         var action = request.Enabled.HasValue ? (request.Enabled.Value ? "Enabled" : "Disabled") : "Updated";
         await LogAuditAsync(adminId, adminName, action, "Flag", flagId, $"{action} flag: {f.Name}", ct);
+        await NotifyAdminsAsync(
+            NotificationEventKey.AdminFeatureFlagChanged,
+            "feature_flag",
+            flagId,
+            f.UpdatedAt.UtcDateTime.Ticks.ToString(),
+            $"Feature flag {f.Name} was {action.ToLowerInvariant()}.",
+            ct);
         return new { id = flagId, enabled = f.Enabled };
     }
 
@@ -1211,6 +1261,13 @@ public class AdminService(
             await db.SaveChangesAsync(ct);
             await LogAuditAsync(adminId, adminName, requestedStatus == ActiveUserStatus ? "Reactivated User" : "Suspended User",
                 "User", userId, $"Status changed to {requestedStatus}" + (request.Reason != null ? $": {request.Reason}" : ""), ct);
+            await NotifyAdminsAsync(
+                NotificationEventKey.AdminUserLifecycleAction,
+                "user",
+                userId,
+                DateTimeOffset.UtcNow.UtcDateTime.Ticks.ToString(),
+                $"Expert {expert.DisplayName} status changed to {requestedStatus}.",
+                ct);
             return new { id = userId, status = requestedStatus };
         }
 
@@ -1226,6 +1283,24 @@ public class AdminService(
             await db.SaveChangesAsync(ct);
             await LogAuditAsync(adminId, adminName, requestedStatus == ActiveUserStatus ? "Reactivated User" : "Suspended User",
                 "User", userId, $"Status changed to {requestedStatus}" + (request.Reason != null ? $": {request.Reason}" : ""), ct);
+            await notifications.CreateForLearnerAsync(
+                NotificationEventKey.LearnerAccountStatusChanged,
+                learner.Id,
+                "user",
+                userId,
+                DateTimeOffset.UtcNow.UtcDateTime.Ticks.ToString(),
+                new Dictionary<string, object?>
+                {
+                    ["message"] = $"Your account status changed to {requestedStatus}."
+                },
+                ct);
+            await NotifyAdminsAsync(
+                NotificationEventKey.AdminUserLifecycleAction,
+                "user",
+                userId,
+                DateTimeOffset.UtcNow.UtcDateTime.Ticks.ToString(),
+                $"Learner {learner.DisplayName} status changed to {requestedStatus}.",
+                ct);
             return new { id = userId, status = requestedStatus };
         }
 
@@ -1384,18 +1459,43 @@ public class AdminService(
     public async Task<object> AdjustUserCreditsAsync(string adminId, string adminName,
         string userId, AdminUserCreditsRequest request, CancellationToken ct)
     {
+        for (var attemptNumber = 0; attemptNumber < 2; attemptNumber++)
+        {
+            try
+            {
+                return await AdjustUserCreditsCoreAsync(adminId, adminName, userId, request, ct);
+            }
+            catch (DbUpdateConcurrencyException) when (attemptNumber == 0)
+            {
+                db.ChangeTracker.Clear();
+            }
+        }
+
+        throw ApiException.Conflict(
+            "wallet_update_conflict",
+            "The user's credit balance changed while the adjustment was being applied. Please retry.");
+    }
+
+    private async Task<object> AdjustUserCreditsCoreAsync(string adminId, string adminName,
+        string userId, AdminUserCreditsRequest request, CancellationToken ct)
+    {
         var target = await ResolveUserTargetAsync(userId, ct);
         if (target.Status == DeletedUserStatus)
         {
             throw ApiException.Validation("account_deleted", "Deleted accounts cannot be adjusted.");
         }
 
+        var learner = await db.Users.FirstOrDefaultAsync(u => u.Id == userId, ct);
+        if (learner is null)
+        {
+            throw ApiException.NotFound("user_not_found", "User not found.");
+        }
+
+        db.Entry(learner).Property(x => x.AccountStatus).IsModified = true;
+
         var wallet = await db.Wallets.FirstOrDefaultAsync(w => w.UserId == userId, ct);
         if (wallet is null)
         {
-            if (!await db.Users.AnyAsync(u => u.Id == userId, ct))
-                throw ApiException.NotFound("user_not_found", "User not found.");
-
             wallet = new Wallet { Id = Guid.NewGuid().ToString(), UserId = userId, CreditBalance = 0, LastUpdatedAt = DateTimeOffset.UtcNow };
             db.Wallets.Add(wallet);
         }
@@ -1621,6 +1721,26 @@ public class AdminService(
     public async Task<object> AssignReviewAsync(string adminId, string adminName,
         string reviewRequestId, AdminReviewAssignRequest request, CancellationToken ct)
     {
+        for (var attemptNumber = 0; attemptNumber < 2; attemptNumber++)
+        {
+            try
+            {
+                return await AssignReviewCoreAsync(adminId, adminName, reviewRequestId, request, ct);
+            }
+            catch (DbUpdateConcurrencyException) when (attemptNumber == 0)
+            {
+                db.ChangeTracker.Clear();
+            }
+        }
+
+        throw ApiException.Conflict(
+            "review_assignment_conflict",
+            "The review was assigned at the same time as your request. Refresh the queue and try again.");
+    }
+
+    private async Task<object> AssignReviewCoreAsync(string adminId, string adminName,
+        string reviewRequestId, AdminReviewAssignRequest request, CancellationToken ct)
+    {
         await using var tx = await BeginTransactionIfNeededAsync(ct);
 
         var review = await db.ReviewRequests.FirstOrDefaultAsync(r => r.Id == reviewRequestId, ct)
@@ -1628,6 +1748,7 @@ public class AdminService(
 
         var assignment = await db.ExpertReviewAssignments
             .FirstOrDefaultAsync(a => a.ReviewRequestId == reviewRequestId, ct);
+        var previousExpertId = assignment?.AssignedReviewerId;
 
         if (assignment is null)
         {
@@ -1655,6 +1776,30 @@ public class AdminService(
 
         await LogAuditAsync(adminId, adminName, "Assigned Review", "ReviewRequest", reviewRequestId,
             $"Assigned to expert {request.ExpertId}" + (request.Reason != null ? $": {request.Reason}" : ""), ct);
+        var notificationKey = string.IsNullOrWhiteSpace(previousExpertId) || string.Equals(previousExpertId, request.ExpertId, StringComparison.Ordinal)
+            ? NotificationEventKey.ExpertReviewAssigned
+            : NotificationEventKey.ExpertReviewReassigned;
+        await notifications.CreateForExpertAsync(
+            notificationKey,
+            request.ExpertId,
+            "review_request",
+            reviewRequestId,
+            (assignment.AssignedAt ?? DateTimeOffset.UtcNow).UtcDateTime.Ticks.ToString(),
+            new Dictionary<string, object?>
+            {
+                ["reviewRequestId"] = reviewRequestId,
+                ["message"] = notificationKey == NotificationEventKey.ExpertReviewAssigned
+                    ? $"A {review.SubtestCode} review was assigned to you."
+                    : $"Review {reviewRequestId} was reassigned to you by admin review ops."
+            },
+            ct);
+        await NotifyAdminsAsync(
+            NotificationEventKey.AdminReviewOpsAction,
+            "review_request",
+            reviewRequestId,
+            (assignment.AssignedAt ?? DateTimeOffset.UtcNow).UtcDateTime.Ticks.ToString(),
+            $"Review {reviewRequestId} was assigned to expert {request.ExpertId}.",
+            ct);
         await CommitIfOwnedAsync(tx, ct);
         return new { id = reviewRequestId, assignedTo = request.ExpertId };
     }
@@ -1809,6 +1954,13 @@ public class AdminService(
 
         await LogAuditAsync(adminId, adminName, "Activated", "AIConfig", configId,
             $"Activated AI config: {config.Model} for {config.TaskType}", ct);
+        await NotifyAdminsAsync(
+            NotificationEventKey.AdminAiConfigChanged,
+            "ai_config",
+            configId,
+            DateTimeOffset.UtcNow.UtcDateTime.Ticks.ToString(),
+            $"AI config {config.Model} for {config.TaskType} was activated.",
+            ct);
         return new { id = configId, status = "active" };
     }
 
@@ -1826,6 +1978,13 @@ public class AdminService(
         await db.SaveChangesAsync(ct);
 
         await LogAuditAsync(adminId, adminName, "Activated", "Flag", flagId, $"Activated flag: {flag.Name}", ct);
+        await NotifyAdminsAsync(
+            NotificationEventKey.AdminFeatureFlagChanged,
+            "feature_flag",
+            flagId,
+            flag.UpdatedAt.UtcDateTime.Ticks.ToString(),
+            $"Feature flag {flag.Name} was activated.",
+            ct);
         return new { id = flagId, enabled = true };
     }
 
@@ -1839,6 +1998,13 @@ public class AdminService(
         await db.SaveChangesAsync(ct);
 
         await LogAuditAsync(adminId, adminName, "Deactivated", "Flag", flagId, $"Deactivated flag: {flag.Name}", ct);
+        await NotifyAdminsAsync(
+            NotificationEventKey.AdminFeatureFlagChanged,
+            "feature_flag",
+            flagId,
+            flag.UpdatedAt.UtcDateTime.Ticks.ToString(),
+            $"Feature flag {flag.Name} was deactivated.",
+            ct);
         return new { id = flagId, enabled = false };
     }
 

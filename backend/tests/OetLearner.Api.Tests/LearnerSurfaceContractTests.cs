@@ -11,6 +11,7 @@ public class LearnerSurfaceContractTests : IClassFixture<TestWebApplicationFacto
     public LearnerSurfaceContractTests(TestWebApplicationFactory factory)
     {
         _factory = factory;
+        _factory.EnsureLearnerProfileAsync("mock-user-001", "mock-user-001@example.test", "mock-user-001").GetAwaiter().GetResult();
         _client = factory.CreateClient();
     }
 
@@ -117,7 +118,7 @@ public class LearnerSurfaceContractTests : IClassFixture<TestWebApplicationFacto
     [Fact]
     public async Task NewLearner_MockAndBillingSurfacesHydrateWithoutExistingData()
     {
-        using var client = CreateClientForUser("surface-new-user");
+        using var client = await CreateClientForUserAsync("surface-new-user");
 
         var mocksResponse = await client.GetAsync("/v1/mocks");
         mocksResponse.EnsureSuccessStatusCode();
@@ -131,8 +132,9 @@ public class LearnerSurfaceContractTests : IClassFixture<TestWebApplicationFacto
         Assert.Equal(0, wallet.GetProperty("creditBalance").GetInt32());
     }
 
-    private HttpClient CreateClientForUser(string userId)
+    private async Task<HttpClient> CreateClientForUserAsync(string userId)
     {
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
         client.DefaultRequestHeaders.Add("X-Debug-Email", $"{userId}@example.test");

@@ -9,6 +9,11 @@ function getOrigin(value: string | undefined, fallback: string): string {
 }
 
 const apiOrigin = getOrigin(process.env.NEXT_PUBLIC_API_BASE_URL, 'http://localhost:5198');
+const apiWebSocketOrigin = apiOrigin.startsWith('https://')
+  ? `wss://${apiOrigin.slice('https://'.length)}`
+  : apiOrigin.startsWith('http://')
+    ? `ws://${apiOrigin.slice('http://'.length)}`
+    : apiOrigin;
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
@@ -39,7 +44,7 @@ const nextConfig: NextConfig = {
               "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
               "font-src 'self' https://fonts.gstatic.com",
               "img-src 'self' data: blob:",
-              `connect-src 'self' blob: ${apiOrigin} https://*.googleapis.com`,
+              `connect-src 'self' blob: ${apiOrigin} ${apiWebSocketOrigin} https://*.googleapis.com`,
               `media-src 'self' blob: ${apiOrigin}`,
               "frame-src 'self'",
               "object-src 'none'",

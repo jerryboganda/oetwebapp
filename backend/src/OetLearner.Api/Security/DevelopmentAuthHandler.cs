@@ -1,6 +1,7 @@
 using System.Security.Claims;
 using System.Text.Encodings.Web;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Services;
 
@@ -9,12 +10,18 @@ namespace OetLearner.Api.Security;
 public class DevelopmentAuthHandler(
     IOptionsMonitor<AuthenticationSchemeOptions> options,
     ILoggerFactory logger,
-    UrlEncoder encoder) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
+    UrlEncoder encoder,
+    IHostEnvironment environment) : AuthenticationHandler<AuthenticationSchemeOptions>(options, logger, encoder)
 {
     public const string SchemeName = "Development";
 
     protected override Task<AuthenticateResult> HandleAuthenticateAsync()
     {
+        if (!environment.IsDevelopment())
+        {
+            return Task.FromResult(AuthenticateResult.Fail("Debug authentication is only allowed in development."));
+        }
+
         var userId = Request.Headers["X-Debug-UserId"].FirstOrDefault() ?? "mock-user-001";
         var role = Request.Headers["X-Debug-Role"].FirstOrDefault() ?? "learner";
         var email = Request.Headers["X-Debug-Email"].FirstOrDefault() ?? "learner@oet-prep.dev";

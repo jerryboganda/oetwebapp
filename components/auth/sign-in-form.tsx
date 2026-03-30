@@ -8,13 +8,13 @@ import {
   IconBrandGoogle,
   IconBrandLinkedin,
 } from '@tabler/icons-react';
-import { useAuth } from '@/contexts/auth-context';
-import { resolveAuthenticatedDestination } from '@/lib/auth-routes';
-import { buildExternalAuthStartHref } from '@/lib/auth-client';
-import { AUTH_ROUTES, getAuthFlowLinks } from '@/lib/auth/routes';
 import AuthModeSwitch from '@/components/auth/auth-mode-switch';
 import { AuthScreenShell } from '@/components/auth/auth-screen-shell';
 import { PasswordField } from '@/components/auth/password-field';
+import { useAuth } from '@/contexts/auth-context';
+import { buildExternalAuthStartHref } from '@/lib/auth-client';
+import { resolveAuthenticatedDestination } from '@/lib/auth-routes';
+import { AUTH_ROUTES, getAuthFlowLinks } from '@/lib/auth/routes';
 import styles from '@/components/auth/auth-screen-shell.module.scss';
 
 interface SignInFormProps {
@@ -66,23 +66,26 @@ export function SignInForm({ nextHref, initialEmail, externalError }: SignInForm
   const [error, setError] = useState<string | null>(resolveExternalErrorMessage(externalError));
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const socials = useMemo(() => ([
-    {
-      href: buildExternalAuthStartHref('facebook', nextHref),
-      label: 'Sign in with Facebook',
-      icon: <IconBrandFacebook size={18} />,
-    },
-    {
-      href: buildExternalAuthStartHref('google', nextHref),
-      label: 'Sign in with Google',
-      icon: <IconBrandGoogle size={18} />,
-    },
-    {
-      href: buildExternalAuthStartHref('linkedin', nextHref),
-      label: 'Sign in with LinkedIn',
-      icon: <IconBrandLinkedin size={18} />,
-    },
-  ]), [nextHref]);
+  const socials = useMemo(
+    () => [
+      {
+        href: buildExternalAuthStartHref('facebook', nextHref),
+        label: 'Sign in with Facebook',
+        icon: <IconBrandFacebook size={18} />,
+      },
+      {
+        href: buildExternalAuthStartHref('google', nextHref),
+        label: 'Sign in with Google',
+        icon: <IconBrandGoogle size={18} />,
+      },
+      {
+        href: buildExternalAuthStartHref('linkedin', nextHref),
+        label: 'Sign in with LinkedIn',
+        icon: <IconBrandLinkedin size={18} />,
+      },
+    ],
+    [nextHref],
+  );
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -141,15 +144,18 @@ export function SignInForm({ nextHref, initialEmail, externalError }: SignInForm
         <AuthModeSwitch mode="signIn" />
 
         <div className={styles.field}>
-          <label htmlFor="username">Email address</label>
+          <label htmlFor="email">Email address</label>
           <input
-            id="username"
+            id="email"
+            name="email"
             type="email"
             className={styles.input}
-            placeholder="Enter your email address"
+            placeholder="name@example.com"
             value={email}
             onChange={(event) => setEmail(event.target.value)}
             autoComplete="email"
+            inputMode="email"
+            spellCheck={false}
             required
           />
           <p className={styles.fieldHint}>
@@ -160,6 +166,7 @@ export function SignInForm({ nextHref, initialEmail, externalError }: SignInForm
         <div className={styles.signInPasswordField}>
           <PasswordField
             id="password"
+            name="password"
             label="Password"
             placeholder="Enter your password"
             value={password}
@@ -196,7 +203,7 @@ export function SignInForm({ nextHref, initialEmail, externalError }: SignInForm
           type="submit"
           disabled={isSubmitting}
         >
-          {isSubmitting ? 'Submitting...' : 'Submit'}
+          {isSubmitting ? 'Signing In…' : 'Sign In'}
         </button>
       </form>
     </AuthScreenShell>

@@ -18,7 +18,7 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           id={inputId}
           className={cn(
-            'px-3 py-2 text-sm border rounded-lg bg-surface text-navy placeholder:text-muted/50 transition-all duration-200',
+            'rounded-lg border bg-surface px-3 py-2 text-sm text-navy placeholder:text-muted/50 transition-[border-color,box-shadow,color,background-color] duration-200',
             'focus:outline-none focus:ring-4 focus:ring-primary/20 focus:border-primary',
             error ? 'border-red-400 focus:ring-red-400/20' : 'border-gray-300 hover:border-gray-400',
             className,
@@ -52,7 +52,7 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           ref={ref}
           id={inputId}
           className={cn(
-            'px-3 py-2 text-sm border rounded-lg bg-surface text-navy placeholder:text-muted/50 transition-all duration-200 resize-y min-h-[80px]',
+            'min-h-[80px] resize-y rounded-lg border bg-surface px-3 py-2 text-sm text-navy placeholder:text-muted/50 transition-[border-color,box-shadow,color,background-color] duration-200',
             'focus:outline-none focus:ring-4 focus:ring-primary/20 focus:border-primary',
             error ? 'border-red-400 focus:ring-red-400/20' : 'border-gray-300 hover:border-gray-400',
             className,
@@ -88,7 +88,7 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
           ref={ref}
           id={inputId}
           className={cn(
-            'px-3 py-2 text-sm border rounded-lg bg-surface text-navy transition-all duration-200 appearance-none',
+            'appearance-none rounded-lg border bg-surface px-3 py-2 text-sm text-navy transition-[border-color,box-shadow,color,background-color] duration-200',
             'focus:outline-none focus:ring-4 focus:ring-primary/20 focus:border-primary',
             error ? 'border-red-400 focus:ring-red-400/20' : 'border-gray-300 hover:border-gray-400',
             className,

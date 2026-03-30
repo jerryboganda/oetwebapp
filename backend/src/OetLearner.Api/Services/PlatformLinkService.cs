@@ -20,6 +20,17 @@ public sealed class PlatformLinkService(IOptions<PlatformOptions> platformOption
         return new Uri(new Uri(EnsureTrailingSlash(_platform.PublicApiBaseUrl), UriKind.Absolute), normalizedPath.TrimStart('/')).ToString();
     }
 
+    public string BuildWebUrl(string relativePath)
+    {
+        var normalizedPath = NormalizeRelativePath(relativePath);
+        if (string.IsNullOrWhiteSpace(_platform.PublicWebBaseUrl))
+        {
+            return normalizedPath;
+        }
+
+        return new Uri(new Uri(EnsureTrailingSlash(_platform.PublicWebBaseUrl), UriKind.Absolute), normalizedPath.TrimStart('/')).ToString();
+    }
+
     public string BuildCheckoutUrl(string sessionId, string productType, int quantity)
     {
         if (string.IsNullOrWhiteSpace(_billing.CheckoutBaseUrl))

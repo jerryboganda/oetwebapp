@@ -18,10 +18,10 @@ export async function signInThroughUi(page: Page, role: SeededRole) {
   const account = seededAccounts[role];
 
   await page.goto('/sign-in');
-  await expect(page.getByRole('heading', { name: /access your workspace/i })).toBeVisible();
+  await expect(page.getByRole('heading', { name: /login to your account|access your workspace/i })).toBeVisible();
 
-  await page.getByLabel('Email').fill(account.email);
-  await page.locator('#sign-in-password').fill(account.password);
+  await page.getByLabel(/email/i).fill(account.email);
+  await page.getByLabel(/^password$/i).fill(account.password);
   await page.locator('form').getByRole('button', { name: /^sign in$/i }).click();
 
   if (role === 'learner') {

@@ -52,7 +52,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         {
             try
             {
-                await ExecuteJobAsync(db, job, cancellationToken);
+                await ExecuteJobAsync(scope.ServiceProvider, db, job, cancellationToken);
                 job.State = AsyncState.Completed;
                 job.StatusReasonCode = "completed";
                 job.StatusMessage = "Job completed successfully.";
@@ -81,6 +81,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                     job.StatusReasonCode = "processing_failed";
                     job.StatusMessage = $"Failed after {maxRetries} attempts: {ex.Message}";
                     job.RetryAfterMs = 0;
+                    await EmitFailureNotificationsAsync(scope.ServiceProvider, db, job, ex, cancellationToken);
                 }
             }
 
@@ -88,32 +89,39 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         }
     }
 
-    private static async Task ExecuteJobAsync(LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)
+    private static async Task ExecuteJobAsync(IServiceProvider services, LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)
     {
+        var notifications = services.GetRequiredService<NotificationService>();
         switch (job.Type)
         {
             case JobType.WritingEvaluation:
-                await CompleteWritingEvaluationAsync(db, job, cancellationToken);
+                await CompleteWritingEvaluationAsync(db, notifications, job, cancellationToken);
                 break;
             case JobType.SpeakingTranscription:
                 await CompleteSpeakingTranscriptionAsync(db, job, cancellationToken);
                 break;
             case JobType.SpeakingEvaluation:
-                await CompleteSpeakingEvaluationAsync(db, job, cancellationToken);
+                await CompleteSpeakingEvaluationAsync(db, notifications, job, cancellationToken);
                 break;
             case JobType.StudyPlanRegeneration:
-                await CompleteStudyPlanRegenerationAsync(db, job, cancellationToken);
+                await CompleteStudyPlanRegenerationAsync(db, notifications, job, cancellationToken);
                 break;
             case JobType.MockReportGeneration:
-                await CompleteMockReportGenerationAsync(db, job, cancellationToken);
+                await CompleteMockReportGenerationAsync(db, notifications, job, cancellationToken);
                 break;
             case JobType.ReviewCompletion:
-                await CompleteReviewRequestAsync(db, job, cancellationToken);
+                await CompleteReviewRequestAsync(db, notifications, job, cancellationToken);
+                break;
+            case JobType.NotificationFanout:
+                await notifications.ProcessFanoutAsync(job, cancellationToken);
+                break;
+            case JobType.NotificationDigestDispatch:
+                await notifications.ProcessDigestDispatchAsync(job, cancellationToken);
                 break;
         }
     }
 
-    private static async Task CompleteWritingEvaluationAsync(LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)
+    private static async Task CompleteWritingEvaluationAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(job.AttemptId)) return;
 
@@ -174,9 +182,33 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             OccurredAt = DateTimeOffset.UtcNow
         });
 
-        await RefreshReadinessAsync(db, attempt.UserId, cancellationToken);
+        var readiness = await RefreshReadinessAsync(db, attempt.UserId, cancellationToken);
         await LearnerWorkflowCoordinator.UpdateDiagnosticProgressAsync(db, attempt, AttemptState.Completed, cancellationToken);
         await LearnerWorkflowCoordinator.QueueStudyPlanRegenerationAsync(db, attempt.UserId, cancellationToken);
+        var evaluationVersion = (evaluation.GeneratedAt ?? DateTimeOffset.UtcNow).UtcDateTime.Ticks.ToString();
+        await notifications.CreateForLearnerAsync(
+            NotificationEventKey.LearnerEvaluationCompleted,
+            attempt.UserId,
+            "attempt",
+            attempt.Id,
+            evaluationVersion,
+            new Dictionary<string, object?>
+            {
+                ["attemptId"] = attempt.Id,
+                ["subtest"] = "writing"
+            },
+            cancellationToken);
+        await notifications.CreateForLearnerAsync(
+            NotificationEventKey.LearnerReadinessUpdated,
+            attempt.UserId,
+            "readiness_snapshot",
+            readiness.Id,
+            readiness.Version.ToString(),
+            new Dictionary<string, object?>
+            {
+                ["message"] = "Your readiness snapshot was recalculated after the latest writing evaluation."
+            },
+            cancellationToken);
     }
 
     private static async Task CompleteSpeakingTranscriptionAsync(LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)
@@ -190,7 +222,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         });
     }
 
-    private static async Task CompleteSpeakingEvaluationAsync(LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)
+    private static async Task CompleteSpeakingEvaluationAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(job.AttemptId)) return;
 
@@ -249,12 +281,36 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             OccurredAt = DateTimeOffset.UtcNow
         });
 
-        await RefreshReadinessAsync(db, attempt.UserId, cancellationToken);
+        var readiness = await RefreshReadinessAsync(db, attempt.UserId, cancellationToken);
         await LearnerWorkflowCoordinator.UpdateDiagnosticProgressAsync(db, attempt, AttemptState.Completed, cancellationToken);
         await LearnerWorkflowCoordinator.QueueStudyPlanRegenerationAsync(db, attempt.UserId, cancellationToken);
+        var evaluationVersion = (evaluation.GeneratedAt ?? DateTimeOffset.UtcNow).UtcDateTime.Ticks.ToString();
+        await notifications.CreateForLearnerAsync(
+            NotificationEventKey.LearnerEvaluationCompleted,
+            attempt.UserId,
+            "attempt",
+            attempt.Id,
+            evaluationVersion,
+            new Dictionary<string, object?>
+            {
+                ["attemptId"] = attempt.Id,
+                ["subtest"] = "speaking"
+            },
+            cancellationToken);
+        await notifications.CreateForLearnerAsync(
+            NotificationEventKey.LearnerReadinessUpdated,
+            attempt.UserId,
+            "readiness_snapshot",
+            readiness.Id,
+            readiness.Version.ToString(),
+            new Dictionary<string, object?>
+            {
+                ["message"] = "Your readiness snapshot was recalculated after the latest speaking evaluation."
+            },
+            cancellationToken);
     }
 
-    private static async Task CompleteStudyPlanRegenerationAsync(LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)
+    private static async Task CompleteStudyPlanRegenerationAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(job.ResourceId)) return;
         var plan = await db.StudyPlans.FirstAsync(x => x.Id == job.ResourceId, cancellationToken);
@@ -269,9 +325,21 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         {
             item.DueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
         }
+
+        await notifications.CreateForLearnerAsync(
+            NotificationEventKey.LearnerStudyPlanRegenerated,
+            plan.UserId,
+            "study_plan",
+            plan.Id,
+            plan.Version.ToString(),
+            new Dictionary<string, object?>
+            {
+                ["message"] = plan.Checkpoint
+            },
+            cancellationToken);
     }
 
-    private static async Task CompleteMockReportGenerationAsync(LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)
+    private static async Task CompleteMockReportGenerationAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(job.ResourceId)) return;
         var mockAttempt = await db.MockAttempts.FirstAsync(x => x.Id == job.ResourceId, cancellationToken);
@@ -313,9 +381,21 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             PayloadJson = JsonSupport.Serialize(new { mockAttemptId = mockAttempt.Id, reportId }),
             OccurredAt = DateTimeOffset.UtcNow
         });
+
+        await notifications.CreateForLearnerAsync(
+            NotificationEventKey.LearnerMockReportReady,
+            mockAttempt.UserId,
+            "mock_attempt",
+            mockAttempt.Id,
+            reportId,
+            new Dictionary<string, object?>
+            {
+                ["mockAttemptId"] = mockAttempt.Id
+            },
+            cancellationToken);
     }
 
-    private static async Task CompleteReviewRequestAsync(LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)
+    private static async Task CompleteReviewRequestAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(job.ResourceId)) return;
         var request = await db.ReviewRequests.FirstAsync(x => x.Id == job.ResourceId, cancellationToken);
@@ -339,12 +419,23 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             });
 
             // Trigger study plan regeneration after expert review completes
-            await RefreshReadinessAsync(db, attempt.UserId, cancellationToken);
+            var readiness = await RefreshReadinessAsync(db, attempt.UserId, cancellationToken);
             await LearnerWorkflowCoordinator.QueueStudyPlanRegenerationAsync(db, attempt.UserId, cancellationToken);
+            await notifications.CreateForLearnerAsync(
+                NotificationEventKey.LearnerReadinessUpdated,
+                attempt.UserId,
+                "readiness_snapshot",
+                readiness.Id,
+                readiness.Version.ToString(),
+                new Dictionary<string, object?>
+                {
+                    ["message"] = "Your readiness snapshot was updated after expert review feedback was applied."
+                },
+                cancellationToken);
         }
     }
 
-    private static async Task RefreshReadinessAsync(LearnerDbContext db, string userId, CancellationToken cancellationToken)
+    private static async Task<ReadinessSnapshot> RefreshReadinessAsync(LearnerDbContext db, string userId, CancellationToken cancellationToken)
     {
         var snapshot = await db.ReadinessSnapshots.FirstAsync(x => x.UserId == userId, cancellationToken);
         var payload = JsonSupport.Deserialize(snapshot.PayloadJson, new Dictionary<string, object?>());
@@ -352,5 +443,53 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         snapshot.PayloadJson = JsonSupport.Serialize(payload);
         snapshot.ComputedAt = DateTimeOffset.UtcNow;
         snapshot.Version += 1;
+        return snapshot;
+    }
+
+    private static async Task EmitFailureNotificationsAsync(IServiceProvider services, LearnerDbContext db, BackgroundJobItem job, Exception ex, CancellationToken cancellationToken)
+    {
+        var notifications = services.GetRequiredService<NotificationService>();
+        var failureVersion = $"{job.Id}:{job.RetryCount}";
+
+        if (job.Type is JobType.WritingEvaluation or JobType.SpeakingEvaluation)
+        {
+            if (!string.IsNullOrWhiteSpace(job.AttemptId))
+            {
+                var attempt = await db.Attempts
+                    .AsNoTracking()
+                    .FirstOrDefaultAsync(existingAttempt => existingAttempt.Id == job.AttemptId, cancellationToken);
+                if (attempt is not null)
+                {
+                    await notifications.CreateForLearnerAsync(
+                        NotificationEventKey.LearnerEvaluationFailed,
+                        attempt.UserId,
+                        "attempt",
+                        attempt.Id,
+                        failureVersion,
+                        new Dictionary<string, object?>
+                        {
+                            ["attemptId"] = attempt.Id,
+                            ["subtest"] = attempt.SubtestCode,
+                            ["message"] = $"We could not finish your {attempt.SubtestCode} evaluation automatically. Please try again shortly."
+                        },
+                        cancellationToken);
+                }
+            }
+        }
+
+        var adminAlertKey = job.Type is JobType.NotificationFanout or JobType.NotificationDigestDispatch
+            ? NotificationEventKey.AdminNotificationDeliveryFailureAlert
+            : NotificationEventKey.AdminStuckJobAlert;
+
+        await notifications.CreateForAdminsAsync(
+            adminAlertKey,
+            "background_job",
+            job.Id,
+            failureVersion,
+            new Dictionary<string, object?>
+            {
+                ["message"] = $"Background job {job.Id} ({job.Type}) failed after {job.RetryCount} attempts: {ex.Message}"
+            },
+            cancellationToken);
     }
 }

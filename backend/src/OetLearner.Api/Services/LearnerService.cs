@@ -8,7 +8,7 @@ namespace OetLearner.Api.Services;
 
 public sealed record GeneratedDownloadFile(Stream Stream, string ContentType, string FileName);
 
-public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger, MediaStorageService mediaStorage, PlatformLinkService platformLinks)
+public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorage, PlatformLinkService platformLinks, NotificationService notifications)
 {
     public async Task<object> GetMeAsync(string userId, CancellationToken cancellationToken)
     {
@@ -1971,7 +1971,26 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
 
     public async Task<object> CreateReviewRequestAsync(string userId, ReviewRequestCreateRequest request, CancellationToken cancellationToken)
     {
-        await EnsureUserAsync(userId, cancellationToken);
+        for (var attemptNumber = 0; attemptNumber < 2; attemptNumber++)
+        {
+            try
+            {
+                return await CreateReviewRequestCoreAsync(userId, request, cancellationToken);
+            }
+            catch (DbUpdateConcurrencyException) when (attemptNumber == 0)
+            {
+                db.ChangeTracker.Clear();
+            }
+        }
+
+        throw ApiException.Conflict(
+            "wallet_update_conflict",
+            "Your review credits were updated at the same time as this request. Please try again.");
+    }
+
+    private async Task<object> CreateReviewRequestCoreAsync(string userId, ReviewRequestCreateRequest request, CancellationToken cancellationToken)
+    {
+        var user = await EnsureUserAsync(userId, cancellationToken);
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
             var cached = await GetIdempotentResponseAsync("review-request", request.IdempotencyKey, cancellationToken);
@@ -1982,11 +2001,7 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
         }
 
         var attempt = await GetAttemptOwnedByUserAsync(userId, request.AttemptId, cancellationToken);
-        var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId, cancellationToken);
         var cost = request.TurnaroundOption == "express" ? 2 : 1;
-        var state = request.PaymentSource == "credits" && wallet.CreditBalance >= cost
-            ? ReviewRequestState.Queued
-            : ReviewRequestState.AwaitingPayment;
 
         if (attempt.SubtestCode is not ("writing" or "speaking") || attempt.State != AttemptState.Completed)
         {
@@ -2004,7 +2019,10 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
                 [new ApiFieldError("subtest", "mismatch", "Use the same subtest as the selected attempt.")]);
         }
 
-        if (string.Equals(request.PaymentSource, "credits", StringComparison.OrdinalIgnoreCase) && wallet.CreditBalance < cost)
+        var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId, cancellationToken);
+        var paymentByCredits = string.Equals(request.PaymentSource, "credits", StringComparison.OrdinalIgnoreCase);
+
+        if (paymentByCredits && wallet.CreditBalance < cost)
         {
             throw ApiException.Validation(
                 "insufficient_credits",
@@ -2012,11 +2030,17 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
                 [new ApiFieldError("paymentSource", "insufficient_credits", "Buy more credits or choose a different payment flow.")]);
         }
 
-        if (request.PaymentSource == "credits" && wallet.CreditBalance >= cost)
+        if (paymentByCredits)
         {
             wallet.CreditBalance -= cost;
             wallet.LastUpdatedAt = DateTimeOffset.UtcNow;
         }
+
+        db.Entry(user).Property(x => x.AccountStatus).IsModified = true;
+
+        var state = paymentByCredits
+            ? ReviewRequestState.Queued
+            : ReviewRequestState.AwaitingPayment;
 
         var review = new ReviewRequest
         {
@@ -2043,6 +2067,34 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
         }
 
         await db.SaveChangesAsync(cancellationToken);
+        await notifications.CreateForLearnerAsync(
+            NotificationEventKey.LearnerReviewRequested,
+            userId,
+            "review_request",
+            review.Id,
+            review.CreatedAt.UtcDateTime.Ticks.ToString(),
+            new Dictionary<string, object?>
+            {
+                ["attemptId"] = review.AttemptId,
+                ["reviewRequestId"] = review.Id,
+                ["subtest"] = review.SubtestCode,
+                ["message"] = paymentByCredits
+                    ? "Your expert review request is queued and we will notify you when feedback is ready."
+                    : "Your expert review request was created and will move ahead once payment is confirmed."
+            },
+            cancellationToken);
+        await notifications.CreateForAdminsAsync(
+            NotificationEventKey.AdminReviewOpsAction,
+            "review_request",
+            review.Id,
+            review.CreatedAt.UtcDateTime.Ticks.ToString(),
+            new Dictionary<string, object?>
+            {
+                ["reviewRequestId"] = review.Id,
+                ["attemptId"] = review.AttemptId,
+                ["message"] = $"Learner {user.DisplayName} requested a {review.SubtestCode} expert review with {review.TurnaroundOption} turnaround."
+            },
+            cancellationToken);
         return await GetReviewRequestAsync(userId, review.Id, cancellationToken);
     }
 
@@ -2259,43 +2311,16 @@ public class LearnerService(LearnerDbContext db, ILogger<LearnerService> logger,
     private async Task<LearnerUser> EnsureUserAsync(string userId, CancellationToken cancellationToken)
     {
         var user = await db.Users.FirstOrDefaultAsync(x => x.Id == userId, cancellationToken);
-        if (user is not null)
+        if (user is null)
         {
-            return user;
+            throw ApiException.Forbidden("learner_profile_not_found", "Learner profile not found.");
         }
 
-        logger.LogInformation("Creating learner shell for new user {UserId}", userId);
-        user = new LearnerUser
+        if (!string.Equals(user.AccountStatus, "active", StringComparison.OrdinalIgnoreCase))
         {
-            Id = userId,
-            Role = "learner",
-            DisplayName = "Learner",
-            Email = platformLinks.BuildFallbackEmail(userId),
-            Timezone = "UTC",
-            Locale = "en-AU",
-            ActiveProfessionId = "nursing",
-            CreatedAt = DateTimeOffset.UtcNow,
-            LastActiveAt = DateTimeOffset.UtcNow
-        };
-        var planId = $"plan-{Guid.NewGuid():N}";
-        db.Users.Add(user);
-        db.Goals.Add(new LearnerGoal
-        {
-            Id = Guid.NewGuid(),
-            UserId = userId,
-            ProfessionId = "nursing",
-            StudyHoursPerWeek = 6,
-            WeakSubtestsJson = "[]",
-            DraftStateJson = "{}",
-            UpdatedAt = DateTimeOffset.UtcNow
-        });
-        db.Settings.Add(new LearnerSettings { Id = Guid.NewGuid(), UserId = userId });
-        db.StudyPlans.Add(new StudyPlan { Id = planId, UserId = userId, GeneratedAt = DateTimeOffset.UtcNow, Checkpoint = "Complete onboarding and goals", WeakSkillFocus = "Diagnostic pending" });
-        db.ReadinessSnapshots.Add(new ReadinessSnapshot { Id = $"rs-{Guid.NewGuid():N}", UserId = userId, ComputedAt = DateTimeOffset.UtcNow, PayloadJson = JsonSupport.Serialize(new { targetDate = (string?)null, weeksRemaining = 0, overallRisk = "moderate", recommendedStudyHours = 6, weakestLink = "Diagnostic pending", subTests = Array.Empty<object>(), blockers = new[] { new { id = 1, title = "Complete a diagnostic", description = "The first readiness snapshot becomes more reliable once diagnostic evidence exists." } }, evidence = new { mocksCompleted = 0, practiceQuestions = 0, expertReviews = 0, recentTrend = "Insufficient data", lastUpdated = DateTimeOffset.UtcNow } }) });
-        db.Subscriptions.Add(new Subscription { Id = $"sub-{Guid.NewGuid():N}", UserId = userId, PlanId = "starter-monthly", Status = SubscriptionStatus.Trial, NextRenewalAt = DateTimeOffset.UtcNow.AddDays(14), StartedAt = DateTimeOffset.UtcNow, ChangedAt = DateTimeOffset.UtcNow, PriceAmount = 0m });
-        db.Wallets.Add(new Wallet { Id = $"wallet-{Guid.NewGuid():N}", UserId = userId, CreditBalance = 0, LastUpdatedAt = DateTimeOffset.UtcNow, LedgerSummaryJson = "[]" });
-        user.CurrentPlanId = planId;
-        await db.SaveChangesAsync(cancellationToken);
+            throw ApiException.Forbidden("account_suspended", "This learner account is not available.");
+        }
+
         return user;
     }
 

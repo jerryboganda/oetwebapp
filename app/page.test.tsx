@@ -22,6 +22,7 @@ vi.mock('motion/react', () => ({
       <div {...props}>{children}</div>
     ),
   },
+  useReducedMotion: () => false,
 }));
 
 vi.mock('@/components/layout', () => ({

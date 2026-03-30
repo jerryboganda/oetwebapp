@@ -1,22 +1,20 @@
 'use client';
 
-import { cn } from '@/lib/utils';
+import { Suspense, type ReactNode, useContext } from 'react';
 import { AuthGuard } from '@/components/auth/auth-guard';
-import { TopNav } from './top-nav';
-import { Sidebar, BottomNav, type NavItem, type ShellUserSummary } from './sidebar';
-import { Suspense, type ReactNode } from 'react';
+import { AuthContext, AuthProvider } from '@/contexts/auth-context';
+import { NotificationCenterProvider } from '@/contexts/notification-center-context';
 import type { UserRole } from '@/lib/types/auth';
+import { cn } from '@/lib/utils';
+import { BottomNav, type NavItem, type ShellUserSummary, Sidebar } from './sidebar';
+import { TopNav } from './top-nav';
 
 export interface AppShellProps {
   children: ReactNode;
   pageTitle?: string;
-  /** Optional subtitle shown below the page title (reserved for future use) */
   subtitle?: string;
-  /** Optional back navigation href (reserved for future use) */
   backHref?: string;
-  /** Hides sidebar/nav for full-screen task modes (writing, speaking, etc.) */
   distractionFree?: boolean;
-  /** Extra actions to render in the top nav bar */
   navActions?: ReactNode;
   className?: string;
   navItems?: NavItem[];
@@ -49,21 +47,46 @@ export function AppShell({
   requireAuth = true,
   requiredRole,
 }: AppShellProps) {
+  const authContext = useContext(AuthContext);
+  const hasAuthProvider = authContext !== null;
+
   const shell = distractionFree ? (
     <div className="min-h-screen flex flex-col bg-background-light">
-      <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:rounded-lg focus:shadow-lg">Skip to content</a>
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:rounded-lg focus:shadow-lg"
+      >
+        Skip to content
+      </a>
       <TopNav pageTitle={pageTitle} actions={navActions} items={navItems} userSummary={userSummary} />
       <main id="main-content" className={cn('flex-1 flex flex-col', className)}>
         {children}
       </main>
     </div>
   ) : (
-    <div className="flex flex-col lg:flex-row min-h-screen bg-background-light">
-      <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:rounded-lg focus:shadow-lg">Skip to content</a>
-      <TopNav className="lg:hidden" pageTitle={pageTitle} actions={navActions} items={mobileNavItems ?? navItems} userSummary={userSummary} />
+    <div className="flex min-h-screen flex-col bg-background-light lg:flex-row">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:rounded-lg focus:shadow-lg"
+      >
+        Skip to content
+      </a>
+      <TopNav
+        className="lg:hidden"
+        pageTitle={pageTitle}
+        actions={navActions}
+        items={mobileNavItems ?? navItems}
+        userSummary={userSummary}
+      />
       <Sidebar items={navItems} userSummary={userSummary} />
-      <div className="flex flex-1 flex-col min-w-0">
-        <TopNav className="hidden lg:flex" pageTitle={pageTitle} actions={navActions} items={navItems} userSummary={userSummary} />
+      <div className="flex min-w-0 flex-1 flex-col">
+        <TopNav
+          className="hidden lg:flex"
+          pageTitle={pageTitle}
+          actions={navActions}
+          items={navItems}
+          userSummary={userSummary}
+        />
         <main id="main-content" className={cn('flex-1 overflow-y-auto pb-20 lg:pb-0', className)}>
           {children}
         </main>
@@ -72,9 +95,15 @@ export function AppShell({
     </div>
   );
 
-  return requireAuth ? (
+  const shellWithNotifications = requireAuth
+    ? <NotificationCenterProvider>{shell}</NotificationCenterProvider>
+    : shell;
+
+  const content = requireAuth ? (
     <Suspense fallback={<ShellFallback />}>
-      <AuthGuard requiredRole={requiredRole}>{shell}</AuthGuard>
+      <AuthGuard requiredRole={requiredRole}>{shellWithNotifications}</AuthGuard>
     </Suspense>
-  ) : shell;
+  ) : shellWithNotifications;
+
+  return requireAuth && !hasAuthProvider ? <AuthProvider>{content}</AuthProvider> : content;
 }

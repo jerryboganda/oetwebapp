@@ -35,7 +35,7 @@ var enforceHttps = builder.Configuration.GetValue<bool?>("Proxy:EnforceHttps") ?
 var externalAuthEnabled = externalAuthOptions.Google.Enabled || externalAuthOptions.Facebook.Enabled || externalAuthOptions.LinkedIn.Enabled;
 var corsOrigins = (builder.Configuration["Cors:AllowedOriginsCsv"]
                    ?? (builder.Environment.IsDevelopment()
-                       ? "http://localhost:3000,https://localhost:3000,http://127.0.0.1:3000,https://127.0.0.1:3000,http://localhost:3007,https://localhost:3007,http://127.0.0.1:3007,https://127.0.0.1:3007"
+                       ? "http://localhost:3000,https://localhost:3000,http://127.0.0.1:3000,https://127.0.0.1:3000,http://localhost:3001,https://localhost:3001,http://127.0.0.1:3001,https://127.0.0.1:3001,http://localhost:3002,https://localhost:3002,http://127.0.0.1:3002,https://127.0.0.1:3002,http://localhost:3007,https://localhost:3007,http://127.0.0.1:3007,https://127.0.0.1:3007"
                        : string.Empty))
     .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
 
@@ -147,7 +147,11 @@ builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection("Sto
 builder.Services.Configure<PlatformOptions>(builder.Configuration.GetSection("Platform"));
 builder.Services.Configure<BillingOptions>(builder.Configuration.GetSection("Billing"));
 builder.Services.Configure<ExternalAuthOptions>(builder.Configuration.GetSection(ExternalAuthOptions.SectionName));
+builder.Services.Configure<WebPushOptions>(builder.Configuration.GetSection(WebPushOptions.SectionName));
+builder.Services.Configure<NotificationProofHarnessOptions>(builder.Configuration.GetSection(NotificationProofHarnessOptions.SectionName));
 builder.Services.AddSingleton(TimeProvider.System);
+builder.Services.AddSignalR();
+builder.Services.AddSingleton<IWebPushDispatcher, WebPushDispatcher>();
 builder.Services.AddSingleton<IPasswordHasher<ApplicationUserAccount>, PasswordHasher<ApplicationUserAccount>>();
 builder.Services.AddSingleton<AuthTokenService>();
 builder.Services.AddHttpClient<IExternalIdentityProviderClient, ExternalIdentityProviderClient>();
@@ -179,8 +183,9 @@ if (corsOrigins.Length > 0)
         {
             policy
                 .WithOrigins(corsOrigins)
-                .WithHeaders("Authorization", "Content-Type", "X-Idempotency-Key", "X-Correlation-Id", "Accept")
-                .WithMethods("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS");
+                .AllowAnyHeader()
+                .WithMethods("GET", "POST", "PATCH", "PUT", "DELETE", "OPTIONS")
+                .AllowCredentials();
         });
     });
 }
@@ -248,6 +253,17 @@ void ConfigureJwtBearer(JwtBearerOptions options)
 
     options.Events = new JwtBearerEvents
     {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"].FirstOrDefault();
+            if (!string.IsNullOrWhiteSpace(accessToken)
+                && context.HttpContext.Request.Path.StartsWithSegments("/v1/notifications/hub"))
+            {
+                context.Token = accessToken;
+            }
+
+            return Task.CompletedTask;
+        },
         OnTokenValidated = async context =>
         {
             var principal = context.Principal;
@@ -352,6 +368,7 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddScoped<LearnerService>();
 builder.Services.AddScoped<ExpertService>();
 builder.Services.AddScoped<AdminService>();
+builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<AnalyticsIngestionService>();
 builder.Services.AddSingleton<PlatformLinkService>();
 builder.Services.AddSingleton<MediaStorageService>();
@@ -540,9 +557,11 @@ app.MapGet("/health", async (LearnerDbContext db, CancellationToken ct) =>
 
 app.MapAuthEndpoints();
 app.MapAnalyticsEndpoints();
+app.MapNotificationEndpoints();
 app.MapLearnerEndpoints();
 app.MapExpertEndpoints();
 app.MapAdminEndpoints();
+app.MapHub<NotificationHub>("/v1/notifications/hub").RequireAuthorization();
 
 await using (var scope = app.Services.CreateAsyncScope())
 {

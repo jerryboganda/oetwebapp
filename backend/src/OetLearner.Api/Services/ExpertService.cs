@@ -7,7 +7,7 @@ using OetLearner.Api.Domain;
 
 namespace OetLearner.Api.Services;
 
-public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, MediaStorageService mediaStorage, PlatformLinkService platformLinks)
+public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, MediaStorageService mediaStorage, PlatformLinkService platformLinks, NotificationService notifications)
 {
     private static readonly string[] WritingCriteria = ["purpose", "content", "conciseness", "genre", "organization", "language"];
     private static readonly string[] SpeakingCriteria = ["intelligibility", "fluency", "appropriateness", "grammar", "clinicalCommunication"];
@@ -376,91 +376,145 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
 
     public async Task<object> ClaimReviewAsync(string reviewRequestId, string reviewerId, CancellationToken ct)
     {
-        var expert = await EnsureExpertAsync(reviewerId, ct);
-
-        var reviewRequest = await db.ReviewRequests.FirstOrDefaultAsync(rr => rr.Id == reviewRequestId, ct)
-            ?? throw ApiException.NotFound("review_request_not_found", "The requested review does not exist.");
-
-        if (reviewRequest.State is ReviewRequestState.Completed or ReviewRequestState.Cancelled or ReviewRequestState.Failed)
+        for (var attemptNumber = 0; attemptNumber < 2; attemptNumber++)
         {
-            throw ApiException.Conflict("review_not_claimable", "Only active reviews can be claimed.");
-        }
-
-        var assignment = await GetActiveAssignmentAsync(reviewRequestId, tracked: true, ct);
-
-        // If already InReview, only the currently assigned reviewer can re-claim
-        if (reviewRequest.State == ReviewRequestState.InReview)
-        {
-            if (assignment is not null && !string.Equals(assignment.AssignedReviewerId, reviewerId, StringComparison.Ordinal))
+            try
             {
-                throw ApiException.Conflict("review_already_claimed", "This review is already assigned to another reviewer.");
+                var expert = await EnsureExpertAsync(reviewerId, ct);
+                db.Entry(expert).Property(x => x.IsActive).IsModified = true;
+
+                var reviewRequest = await db.ReviewRequests.FirstOrDefaultAsync(rr => rr.Id == reviewRequestId, ct)
+                    ?? throw ApiException.NotFound("review_request_not_found", "The requested review does not exist.");
+
+                if (reviewRequest.State is ReviewRequestState.Completed or ReviewRequestState.Cancelled or ReviewRequestState.Failed)
+                {
+                    throw ApiException.Conflict("review_not_claimable", "Only active reviews can be claimed.");
+                }
+
+                var assignment = await GetActiveAssignmentAsync(reviewRequestId, tracked: true, ct);
+
+                // If already InReview, only the currently assigned reviewer can re-claim
+                if (reviewRequest.State == ReviewRequestState.InReview)
+                {
+                    if (assignment is not null && !string.Equals(assignment.AssignedReviewerId, reviewerId, StringComparison.Ordinal))
+                    {
+                        throw ApiException.Conflict("review_already_claimed", "This review is already assigned to another reviewer.");
+                    }
+                }
+                else if (assignment is not null && !string.Equals(assignment.AssignedReviewerId, reviewerId, StringComparison.Ordinal))
+                {
+                    throw ApiException.Conflict("review_already_claimed", "This review is already assigned to another reviewer.");
+                }
+
+                if (assignment is null)
+                {
+                    assignment = new ExpertReviewAssignment
+                    {
+                        Id = $"era-{Guid.NewGuid():N}",
+                        ReviewRequestId = reviewRequestId,
+                        AssignedReviewerId = reviewerId,
+                        AssignedAt = DateTimeOffset.UtcNow,
+                        ClaimState = ExpertAssignmentState.Claimed
+                    };
+                    db.ExpertReviewAssignments.Add(assignment);
+                }
+                else
+                {
+                    assignment.AssignedReviewerId = reviewerId;
+                    assignment.AssignedAt ??= DateTimeOffset.UtcNow;
+                    assignment.ClaimState = ExpertAssignmentState.Claimed;
+                    assignment.ReleasedAt = null;
+                    assignment.ReasonCode = null;
+                }
+
+                reviewRequest.State = ReviewRequestState.InReview;
+                reviewRequest.CompletedAt = null;
+
+                await LogExpertAuditAsync(reviewerId, expert.DisplayName, "Claimed Review", reviewRequestId, "Review claimed from the expert queue.", ct);
+                await RecordExpertEventAsync(reviewerId, "expert_review_claimed", new { reviewRequestId }, ct);
+                await db.SaveChangesAsync(ct);
+                await notifications.CreateForExpertAsync(
+                    NotificationEventKey.ExpertReviewClaimed,
+                    reviewerId,
+                    "review_request",
+                    reviewRequestId,
+                    (assignment.AssignedAt ?? DateTimeOffset.UtcNow).UtcDateTime.Ticks.ToString(),
+                    new Dictionary<string, object?>
+                    {
+                        ["reviewRequestId"] = reviewRequestId,
+                        ["message"] = "You claimed this review from the expert queue."
+                    },
+                    ct);
+
+                logger.LogInformation("Expert {ReviewerId} claimed review {ReviewRequestId}", reviewerId, reviewRequestId);
+                return new { claimed = true, reviewRequestId };
+            }
+            catch (DbUpdateConcurrencyException) when (attemptNumber == 0)
+            {
+                db.ChangeTracker.Clear();
             }
         }
-        else if (assignment is not null && !string.Equals(assignment.AssignedReviewerId, reviewerId, StringComparison.Ordinal))
-        {
-            throw ApiException.Conflict("review_already_claimed", "This review is already assigned to another reviewer.");
-        }
 
-        if (assignment is null)
-        {
-            assignment = new ExpertReviewAssignment
-            {
-                Id = $"era-{Guid.NewGuid():N}",
-                ReviewRequestId = reviewRequestId,
-                AssignedReviewerId = reviewerId,
-                AssignedAt = DateTimeOffset.UtcNow,
-                ClaimState = ExpertAssignmentState.Claimed
-            };
-            db.ExpertReviewAssignments.Add(assignment);
-        }
-        else
-        {
-            assignment.AssignedReviewerId = reviewerId;
-            assignment.AssignedAt ??= DateTimeOffset.UtcNow;
-            assignment.ClaimState = ExpertAssignmentState.Claimed;
-            assignment.ReleasedAt = null;
-            assignment.ReasonCode = null;
-        }
-
-        reviewRequest.State = ReviewRequestState.InReview;
-        reviewRequest.CompletedAt = null;
-
-        await LogExpertAuditAsync(reviewerId, expert.DisplayName, "Claimed Review", reviewRequestId, "Review claimed from the expert queue.", ct);
-        await RecordExpertEventAsync(reviewerId, "expert_review_claimed", new { reviewRequestId }, ct);
-        await db.SaveChangesAsync(ct);
-
-        logger.LogInformation("Expert {ReviewerId} claimed review {ReviewRequestId}", reviewerId, reviewRequestId);
-        return new { claimed = true, reviewRequestId };
+        throw ApiException.Conflict(
+            "review_claim_conflict",
+            "The review was claimed at the same time as your request. Refresh the queue and try again.");
     }
 
     public async Task<object> ReleaseReviewAsync(string reviewRequestId, string reviewerId, CancellationToken ct)
     {
-        var expert = await EnsureExpertAsync(reviewerId, ct);
-
-        var reviewRequest = await db.ReviewRequests.FirstOrDefaultAsync(rr => rr.Id == reviewRequestId, ct)
-            ?? throw ApiException.NotFound("review_request_not_found", "The requested review does not exist.");
-
-        var assignment = await GetActiveAssignmentAsync(reviewRequestId, tracked: true, ct);
-        if (assignment is null || !string.Equals(assignment.AssignedReviewerId, reviewerId, StringComparison.Ordinal))
+        for (var attemptNumber = 0; attemptNumber < 2; attemptNumber++)
         {
-            throw ApiException.Forbidden("review_not_owned", "You can only release reviews currently assigned to you.");
+            try
+            {
+                var expert = await EnsureExpertAsync(reviewerId, ct);
+                db.Entry(expert).Property(x => x.IsActive).IsModified = true;
+
+                var reviewRequest = await db.ReviewRequests.FirstOrDefaultAsync(rr => rr.Id == reviewRequestId, ct)
+                    ?? throw ApiException.NotFound("review_request_not_found", "The requested review does not exist.");
+
+                var assignment = await GetActiveAssignmentAsync(reviewRequestId, tracked: true, ct);
+                if (assignment is null || !string.Equals(assignment.AssignedReviewerId, reviewerId, StringComparison.Ordinal))
+                {
+                    throw ApiException.Forbidden("review_not_owned", "You can only release reviews currently assigned to you.");
+                }
+
+                assignment.ClaimState = ExpertAssignmentState.Released;
+                assignment.ReleasedAt = DateTimeOffset.UtcNow;
+                assignment.ReasonCode = "released";
+
+                if (reviewRequest.State != ReviewRequestState.Completed)
+                {
+                    reviewRequest.State = ReviewRequestState.Queued;
+                    reviewRequest.CompletedAt = null;
+                }
+
+                await LogExpertAuditAsync(reviewerId, expert.DisplayName, "Released Review", reviewRequestId, "Review released back to the queue.", ct);
+                await RecordExpertEventAsync(reviewerId, "expert_review_released", new { reviewRequestId }, ct);
+                await db.SaveChangesAsync(ct);
+                await notifications.CreateForExpertAsync(
+                    NotificationEventKey.ExpertReviewReleased,
+                    reviewerId,
+                    "review_request",
+                    reviewRequestId,
+                    (assignment.ReleasedAt ?? DateTimeOffset.UtcNow).UtcDateTime.Ticks.ToString(),
+                    new Dictionary<string, object?>
+                    {
+                        ["reviewRequestId"] = reviewRequestId,
+                        ["message"] = "You released this review back to the shared queue."
+                    },
+                    ct);
+
+                return new { released = true, reviewRequestId };
+            }
+            catch (DbUpdateConcurrencyException) when (attemptNumber == 0)
+            {
+                db.ChangeTracker.Clear();
+            }
         }
 
-        assignment.ClaimState = ExpertAssignmentState.Released;
-        assignment.ReleasedAt = DateTimeOffset.UtcNow;
-        assignment.ReasonCode = "released";
-
-        if (reviewRequest.State != ReviewRequestState.Completed)
-        {
-            reviewRequest.State = ReviewRequestState.Queued;
-            reviewRequest.CompletedAt = null;
-        }
-
-        await LogExpertAuditAsync(reviewerId, expert.DisplayName, "Released Review", reviewRequestId, "Review released back to the queue.", ct);
-        await RecordExpertEventAsync(reviewerId, "expert_review_released", new { reviewRequestId }, ct);
-        await db.SaveChangesAsync(ct);
-
-        return new { released = true, reviewRequestId };
+        throw ApiException.Conflict(
+            "review_release_conflict",
+            "The review changed while it was being released. Refresh the queue and try again.");
     }
 
     public async Task<ExpertWritingReviewBundleResponse> GetWritingReviewBundleAsync(string reviewRequestId, string reviewerId, CancellationToken ct)
@@ -662,6 +716,31 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         await LogExpertAuditAsync(reviewerId, context.Expert.DisplayName, "Requested Review Rework", reviewRequestId, reason, ct);
         await RecordExpertEventAsync(reviewerId, "expert_review_rework_requested", new { reviewRequestId, reason }, ct);
         await db.SaveChangesAsync(ct);
+        await notifications.CreateForLearnerAsync(
+            NotificationEventKey.LearnerReviewReworkRequested,
+            context.Attempt.UserId,
+            "review_request",
+            reviewRequestId,
+            (context.ActiveAssignment.ReleasedAt ?? DateTimeOffset.UtcNow).UtcDateTime.Ticks.ToString(),
+            new Dictionary<string, object?>
+            {
+                ["attemptId"] = context.Attempt.Id,
+                ["reviewRequestId"] = reviewRequestId,
+                ["subtest"] = context.ReviewRequest.SubtestCode,
+                ["message"] = $"Your reviewer requested follow-up work before finalising the {context.ReviewRequest.SubtestCode} review: {reason}"
+            },
+            ct);
+        await notifications.CreateForAdminsAsync(
+            NotificationEventKey.AdminReviewOpsAction,
+            "review_request",
+            reviewRequestId,
+            (context.ActiveAssignment.ReleasedAt ?? DateTimeOffset.UtcNow).UtcDateTime.Ticks.ToString(),
+            new Dictionary<string, object?>
+            {
+                ["reviewRequestId"] = reviewRequestId,
+                ["message"] = $"Expert {context.Expert.DisplayName} requested rework on review {reviewRequestId}: {reason}"
+            },
+            ct);
 
         return new { success = true, reviewRequestId };
     }
@@ -1290,26 +1369,35 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         await LogExpertAuditAsync(reviewerId, context.Expert.DisplayName, auditAction, context.ReviewRequest.Id, draft.FinalCommentDraft, ct);
         await RecordExpertEventAsync(reviewerId, analyticsEvent, new { reviewRequestId = context.ReviewRequest.Id, version = draft.Version }, ct);
         await db.SaveChangesAsync(ct);
+        await notifications.CreateForLearnerAsync(
+            NotificationEventKey.LearnerReviewCompleted,
+            context.Attempt.UserId,
+            "review_request",
+            context.ReviewRequest.Id,
+            (context.ReviewRequest.CompletedAt ?? DateTimeOffset.UtcNow).UtcDateTime.Ticks.ToString(),
+            new Dictionary<string, object?>
+            {
+                ["attemptId"] = context.Attempt.Id,
+                ["reviewRequestId"] = context.ReviewRequest.Id,
+                ["subtest"] = context.ReviewRequest.SubtestCode,
+                ["message"] = $"Your {context.ReviewRequest.SubtestCode} expert review is now ready."
+            },
+            ct);
     }
 
     private async Task<ExpertUser> EnsureExpertAsync(string reviewerId, CancellationToken ct)
     {
         var expert = await db.ExpertUsers.FirstOrDefaultAsync(existingExpert => existingExpert.Id == reviewerId, ct);
-        if (expert is not null)
+        if (expert is null)
         {
-            return expert;
+            throw ApiException.Forbidden("expert_profile_not_found", "Expert profile not found.");
         }
 
-        expert = new ExpertUser
+        if (!expert.IsActive)
         {
-            Id = reviewerId,
-            DisplayName = reviewerId,
-            Email = platformLinks.BuildFallbackEmail(reviewerId),
-            CreatedAt = DateTimeOffset.UtcNow
-        };
+            throw ApiException.Forbidden("account_suspended", "This expert account is not available.");
+        }
 
-        db.ExpertUsers.Add(expert);
-        await db.SaveChangesAsync(ct);
         return expert;
     }
 
@@ -1660,18 +1748,15 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
     }
 
     private static DateTimeOffset CalculateSlaDueAt(ReviewRequest reviewRequest)
-    {
-        return reviewRequest.CreatedAt.AddHours(string.Equals(reviewRequest.TurnaroundOption, "express", StringComparison.OrdinalIgnoreCase) ? 24 : 48);
-    }
+        => reviewRequest.CreatedAt.AddHours(string.Equals(reviewRequest.TurnaroundOption, "express", StringComparison.OrdinalIgnoreCase) ? 24 : 48);
 
     private static bool IsOverdue(ReviewRequest reviewRequest, DateTimeOffset now)
-    {
-        return reviewRequest.State != ReviewRequestState.Completed && CalculateSlaDueAt(reviewRequest) <= now;
-    }
+        => reviewRequest.State != ReviewRequestState.Completed && CalculateSlaDueAt(reviewRequest) <= now;
 
     private static string MapSlaState(ReviewRequest reviewRequest, DateTimeOffset now)
     {
         var slaDue = CalculateSlaDueAt(reviewRequest);
+
         if (reviewRequest.State == ReviewRequestState.Completed)
         {
             return (reviewRequest.CompletedAt ?? now) <= slaDue ? "completed_on_time" : "completed_late";

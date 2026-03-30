@@ -2,6 +2,7 @@
 
 import { AppShell } from '@/components/layout/app-shell';
 import { NavItem } from '@/components/layout/sidebar';
+import { AuthProvider } from '@/contexts/auth-context';
 import { LayoutDashboard, Inbox, CheckCircle, BarChart3, CalendarClock, Users } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useExpertAuth } from '@/lib/hooks/use-expert-auth';
@@ -15,10 +16,10 @@ const expertNavItems: NavItem[] = [
   { href: '/expert/learners', label: 'Learners', icon: <Users className="w-5 h-5" />, matchPrefix: '/expert/learners' },
 ];
 
-export default function ExpertLayout({ children }: { children: React.ReactNode }) {
+function ExpertLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { expert } = useExpertAuth();
-  
+
   // Hide nav for specific review workspaces
   const isReviewWorkspace = pathname?.includes('/expert/review/') ?? false;
 
@@ -32,12 +33,20 @@ export default function ExpertLayout({ children }: { children: React.ReactNode }
 
   return (
     <AppShell 
-      navItems={expertNavItems} 
-      mobileNavItems={expertNavItems} 
+      navItems={expertNavItems}
+      mobileNavItems={expertNavItems}
       userSummary={{ displayName: expert?.displayName, email: expert?.email }}
       requiredRole="expert"
     >
       {children}
     </AppShell>
+  );
+}
+
+export default function ExpertLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <AuthProvider>
+      <ExpertLayoutContent>{children}</ExpertLayoutContent>
+    </AuthProvider>
   );
 }

@@ -1,5 +1,6 @@
 import { expect, type APIRequestContext } from '@playwright/test';
-import { seededAccounts, type SeededRole } from './auth';
+import type { SeededRole } from './auth';
+import { bootstrapSessionForRole } from './auth-bootstrap';
 
 const apiBaseURL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:5198').replace(/\/$/, '');
 
@@ -55,18 +56,7 @@ async function expectOkResponse(
 }
 
 export async function signInApi(request: APIRequestContext, role: SeededRole) {
-  const account = seededAccounts[role];
-  const response = await request.post(`${apiBaseURL}/v1/auth/sign-in`, {
-    headers: { 'Content-Type': 'application/json' },
-    data: {
-      email: account.email,
-      password: account.password,
-      rememberMe: true,
-    },
-  });
-
-  await expectOkResponse(response, `Expected API sign-in to succeed for ${role}`);
-  return response.json() as Promise<AuthSessionResponse>;
+  return bootstrapSessionForRole(request, role) as Promise<AuthSessionResponse>;
 }
 
 export async function authHeadersForRole(request: APIRequestContext, role: SeededRole) {

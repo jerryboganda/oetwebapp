@@ -155,7 +155,7 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task SpeakingUploadPipeline_StoresBinary_AndStreamsItToExperts()
     {
-        using var learner = CreateLearnerClient("audio-owner");
+        using var learner = await CreateLearnerClientAsync("audio-owner");
         var attemptId = await CreateSpeakingAttemptAsync(learner, "practice");
 
         var uploadSessionResponse = await learner.PostAsync($"/v1/speaking/attempts/{attemptId}/audio/upload-session", content: null);
@@ -219,7 +219,7 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
         using var reviewJson = JsonDocument.Parse(await reviewResponse.Content.ReadAsStringAsync());
         var reviewRequestId = reviewJson.RootElement.GetProperty("reviewRequestId").GetString()!;
 
-        using var expert = CreateExpertClient("expert-audio-reviewer");
+        using var expert = await CreateExpertClientAsync("expert-audio-reviewer");
         var claimResponse = await expert.PostAsync($"/v1/expert/queue/{reviewRequestId}/claim", content: null);
         claimResponse.EnsureSuccessStatusCode();
 
@@ -233,7 +233,7 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task CheckoutSession_UsesConfiguredProductionCheckoutBaseUrl()
     {
-        using var learner = CreateLearnerClient("checkout-user");
+        using var learner = await CreateLearnerClientAsync("checkout-user");
 
         var response = await learner.PostAsJsonAsync("/v1/billing/checkout-sessions", new
         {
@@ -252,8 +252,9 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
         Assert.Contains("quantity=3", checkoutUrl, StringComparison.Ordinal);
     }
 
-    private HttpClient CreateLearnerClient(string userId)
+    private async Task<HttpClient> CreateLearnerClientAsync(string userId)
     {
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
         client.DefaultRequestHeaders.Add("X-Debug-Role", "learner");
@@ -262,8 +263,9 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
         return client;
     }
 
-    private HttpClient CreateExpertClient(string userId)
+    private async Task<HttpClient> CreateExpertClientAsync(string userId)
     {
+        await _factory.EnsureExpertProfileAsync(userId, $"{userId}@example.test", userId);
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
         client.DefaultRequestHeaders.Add("X-Debug-Role", "expert");

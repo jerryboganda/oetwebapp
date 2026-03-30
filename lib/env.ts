@@ -20,4 +20,5 @@ export const env = {
     process.env.NODE_ENV === 'production'
       ? requireEnv('NEXT_PUBLIC_API_BASE_URL', process.env.NEXT_PUBLIC_API_BASE_URL).replace(/\/$/, '')
       : optionalEnv('NEXT_PUBLIC_API_BASE_URL', 'http://localhost:5198').replace(/\/$/, ''),
+  webPushPublicKey: process.env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY?.trim() || '',
 } as const;

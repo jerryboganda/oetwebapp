@@ -2,9 +2,13 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
+using OetLearner.Api.Data;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Tests.Infrastructure;
@@ -131,6 +135,187 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
         }
 
         return client;
+    }
+
+    public async Task EnsureLearnerProfileAsync(string userId, string email, string displayName)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var learner = await db.Users.FirstOrDefaultAsync(x => x.Id == userId);
+        if (learner is null)
+        {
+            db.Users.Add(new LearnerUser
+            {
+                Id = userId,
+                DisplayName = displayName,
+                Email = email,
+                Timezone = "UTC",
+                Locale = "en-AU",
+                ActiveProfessionId = "medicine",
+                CreatedAt = now,
+                LastActiveAt = now,
+                AccountStatus = "active"
+            });
+        }
+        else
+        {
+            learner.DisplayName = displayName;
+            learner.Email = email;
+            learner.Timezone = "UTC";
+            learner.Locale = "en-AU";
+            learner.ActiveProfessionId ??= "medicine";
+            learner.LastActiveAt = now;
+            learner.AccountStatus = "active";
+        }
+
+        if (!await db.Goals.AnyAsync(x => x.UserId == userId))
+        {
+            db.Goals.Add(new LearnerGoal
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                ProfessionId = "medicine",
+                WeakSubtestsJson = "[]",
+                DraftStateJson = "{}",
+                UpdatedAt = now
+            });
+        }
+
+        if (!await db.Settings.AnyAsync(x => x.UserId == userId))
+        {
+            db.Settings.Add(new LearnerSettings
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId
+            });
+        }
+
+        if (!await db.Wallets.AnyAsync(x => x.UserId == userId))
+        {
+            db.Wallets.Add(new Wallet
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                UserId = userId,
+                CreditBalance = 0,
+                LedgerSummaryJson = "[]",
+                LastUpdatedAt = now
+            });
+        }
+
+        if (!await db.ReadinessSnapshots.AnyAsync(x => x.UserId == userId))
+        {
+            db.ReadinessSnapshots.Add(new ReadinessSnapshot
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                UserId = userId,
+                ComputedAt = now,
+                Version = 1,
+                PayloadJson = JsonSupport.Serialize(new
+                {
+                    targetDate = DateOnly.FromDateTime(DateTime.UtcNow.AddMonths(3)).ToString("yyyy-MM-dd"),
+                    weeksRemaining = 12,
+                    overallRisk = "moderate",
+                    recommendedStudyHours = 12,
+                    weakestLink = "Writing - Conciseness & Clarity",
+                    subTests = new[]
+                    {
+                        new { id = "rd-w", name = "Writing", readiness = 62, target = 80, status = "Needs attention", isWeakest = true },
+                        new { id = "rd-s", name = "Speaking", readiness = 68, target = 80, status = "On track", isWeakest = false },
+                        new { id = "rd-r", name = "Reading", readiness = 82, target = 80, status = "Target met", isWeakest = false },
+                        new { id = "rd-l", name = "Listening", readiness = 76, target = 80, status = "Almost there", isWeakest = false }
+                    },
+                    blockers = new[]
+                    {
+                        new { id = 1, title = "Writing conciseness remains below threshold", description = "Recent writing evidence shows extra detail that weakens GP-focused communication." },
+                        new { id = 2, title = "Speaking fluency markers still appear", description = "Filler words and soft starts reduce handover authority." }
+                    },
+                    evidence = new { mocksCompleted = 2, practiceQuestions = 48, expertReviews = 1, recentTrend = "Improving", lastUpdated = now }
+                })
+            });
+        }
+
+        if (!await db.StudyPlans.AnyAsync(x => x.UserId == userId))
+        {
+            var planId = Guid.NewGuid().ToString("N");
+            db.StudyPlans.Add(new StudyPlan
+            {
+                Id = planId,
+                UserId = userId,
+                Version = 1,
+                GeneratedAt = now,
+                State = AsyncState.Completed,
+                Checkpoint = "Initial plan",
+                WeakSkillFocus = "Writing conciseness and speaking fluency"
+            });
+
+            db.StudyPlanItems.Add(new StudyPlanItem
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                StudyPlanId = planId,
+                Title = "Writing task focused on discharge summaries",
+                SubtestCode = "writing",
+                DurationMinutes = 45,
+                Rationale = "Practice concise patient handover language.",
+                DueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1)),
+                Status = StudyPlanItemStatus.NotStarted,
+                Section = "writing",
+                ContentId = "wt-001",
+                ItemType = "practice"
+            });
+        }
+
+        if (!await db.Subscriptions.AnyAsync(x => x.UserId == userId))
+        {
+            db.Subscriptions.Add(new Subscription
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                UserId = userId,
+                PlanId = "starter-monthly",
+                Status = SubscriptionStatus.Active,
+                NextRenewalAt = now.AddMonths(1),
+                StartedAt = now,
+                ChangedAt = now,
+                PriceAmount = 0m,
+                Currency = "AUD",
+                Interval = "monthly"
+            });
+        }
+
+        await db.SaveChangesAsync();
+    }
+
+    public async Task EnsureExpertProfileAsync(string userId, string email, string displayName)
+    {
+        await using var scope = Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        var expert = await db.ExpertUsers.FirstOrDefaultAsync(x => x.Id == userId);
+        if (expert is null)
+        {
+            db.ExpertUsers.Add(new ExpertUser
+            {
+                Id = userId,
+                DisplayName = displayName,
+                Email = email,
+                Timezone = "UTC",
+                IsActive = true,
+                CreatedAt = now
+            });
+        }
+        else
+        {
+            expert.DisplayName = displayName;
+            expert.Email = email;
+            expert.Timezone = "UTC";
+            expert.IsActive = true;
+        }
+
+        await db.SaveChangesAsync();
     }
 
     protected override void Dispose(bool disposing)

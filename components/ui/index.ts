@@ -1,6 +1,7 @@
 // UI Primitives barrel export
 export { Button, type ButtonProps } from './button';
 export { Card, CardHeader, CardTitle, CardContent, CardFooter, type CardProps } from './card';
+export { CardLink } from './card-link';
 export { Badge, StatusBadge, ScoreRangeBadge, ConfidenceBadge, CriterionChip, type BadgeProps, type StatusType, type ConfidenceLevel } from './badge';
 export { Tabs, TabPanel, type Tab } from './tabs';
 export { Accordion } from './accordion';

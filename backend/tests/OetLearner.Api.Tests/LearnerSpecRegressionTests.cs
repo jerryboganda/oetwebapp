@@ -18,7 +18,7 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
     [Fact]
     public async Task SettingsAggregate_ExposesGoalsSection_ForInitialHydrate()
     {
-        using var client = CreateClientForUser("settings-user");
+        using var client = await CreateClientForUserAsync("settings-user");
 
         var response = await client.GetAsync("/v1/settings");
         response.EnsureSuccessStatusCode();
@@ -32,7 +32,7 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
     [Fact]
     public async Task SettingsSectionEndpoints_ExposeConcreteLearnerSections()
     {
-        using var client = CreateClientForUser("settings-section-user");
+        using var client = await CreateClientForUserAsync("settings-section-user");
 
         var profileResponse = await client.GetAsync("/v1/settings/profile");
         profileResponse.EnsureSuccessStatusCode();
@@ -50,7 +50,7 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
     [Fact]
     public async Task MockAttemptCreation_PersistsReviewSelectionAndLaunchRoutes()
     {
-        using var client = CreateClientForUser("mock-route-user");
+        using var client = await CreateClientForUserAsync("mock-route-user");
 
         var response = await client.PostAsJsonAsync("/v1/mock-attempts", new
         {
@@ -78,7 +78,7 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
     [Fact]
     public async Task BillingPlansAndListeningDrills_ExposeLearnerContracts()
     {
-        using var client = CreateClientForUser("billing-contract-user");
+        using var client = await CreateClientForUserAsync("billing-contract-user");
 
         var plansResponse = await client.GetAsync("/v1/billing/plans");
         plansResponse.EnsureSuccessStatusCode();
@@ -101,10 +101,10 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
     [Fact]
     public async Task LearnerOwnedAttempt_CannotBeFetchedByAnotherUser()
     {
-        using var ownerClient = CreateClientForUser("attempt-owner");
+        using var ownerClient = await CreateClientForUserAsync("attempt-owner");
         var attemptId = await CreateWritingAttemptAsync(ownerClient, "practice");
 
-        using var otherClient = CreateClientForUser("attempt-intruder");
+        using var otherClient = await CreateClientForUserAsync("attempt-intruder");
         var response = await otherClient.GetAsync($"/v1/writing/attempts/{attemptId}");
 
         Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
@@ -113,7 +113,7 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
     [Fact]
     public async Task WritingDraftPatch_RejectsStaleDraftVersion_WithStructuredConflict()
     {
-        using var client = CreateClientForUser("draft-version-user");
+        using var client = await CreateClientForUserAsync("draft-version-user");
         var attemptId = await CreateWritingAttemptAsync(client, "practice");
 
         var firstPatch = await client.PatchAsJsonAsync($"/v1/writing/attempts/{attemptId}/draft", new
@@ -145,7 +145,7 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
     [Fact]
     public async Task DiagnosticFlow_CompletesAcrossAllSubtests_AndProducesScopedResults()
     {
-        using var client = CreateClientForUser("diagnostic-user");
+        using var client = await CreateClientForUserAsync("diagnostic-user");
 
         var createDiagnosticResponse = await client.PostAsync("/v1/diagnostic/attempts", content: null);
         createDiagnosticResponse.EnsureSuccessStatusCode();
@@ -246,7 +246,7 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
     [Fact]
     public async Task CompletedEvaluation_RegeneratesTheStudyPlan()
     {
-        using var client = CreateClientForUser("study-plan-user");
+        using var client = await CreateClientForUserAsync("study-plan-user");
 
         var initialPlanResponse = await client.GetAsync("/v1/study-plan");
         initialPlanResponse.EnsureSuccessStatusCode();
@@ -285,8 +285,9 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
             "study plan regeneration to complete");
     }
 
-    private HttpClient CreateClientForUser(string userId)
+    private async Task<HttpClient> CreateClientForUserAsync(string userId)
     {
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
         var client = _factory.CreateClient();
         client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
         client.DefaultRequestHeaders.Add("X-Debug-Email", $"{userId}@example.test");

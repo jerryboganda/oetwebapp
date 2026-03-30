@@ -38,6 +38,12 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<SignupExamTypeCatalog> SignupExamTypeCatalog => Set<SignupExamTypeCatalog>();
     public DbSet<SignupProfessionCatalog> SignupProfessionCatalog => Set<SignupProfessionCatalog>();
     public DbSet<SignupSessionCatalog> SignupSessionCatalog => Set<SignupSessionCatalog>();
+    public DbSet<NotificationEvent> NotificationEvents => Set<NotificationEvent>();
+    public DbSet<NotificationInboxItem> NotificationInboxItems => Set<NotificationInboxItem>();
+    public DbSet<NotificationPreference> NotificationPreferences => Set<NotificationPreference>();
+    public DbSet<NotificationPolicyOverride> NotificationPolicyOverrides => Set<NotificationPolicyOverride>();
+    public DbSet<NotificationDeliveryAttempt> NotificationDeliveryAttempts => Set<NotificationDeliveryAttempt>();
+    public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
 
     // Expert Console entities
     public DbSet<ExpertUser> ExpertUsers => Set<ExpertUser>();
@@ -78,12 +84,19 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<SignupExamTypeCatalog>().HasIndex(x => new { x.IsActive, x.SortOrder });
         modelBuilder.Entity<SignupProfessionCatalog>().HasIndex(x => new { x.IsActive, x.SortOrder });
         modelBuilder.Entity<SignupSessionCatalog>().HasIndex(x => new { x.IsActive, x.SortOrder });
+        modelBuilder.Entity<NotificationEvent>().Property(x => x.EventKey).HasMaxLength(128);
+        modelBuilder.Entity<NotificationInboxItem>().Property(x => x.EventKey).HasMaxLength(128);
+        modelBuilder.Entity<NotificationPolicyOverride>().Property(x => x.EventKey).HasMaxLength(128);
 
         // Learner lookup indexes (frequently queried by UserId)
         modelBuilder.Entity<LearnerGoal>().HasIndex(x => x.UserId);
         modelBuilder.Entity<LearnerSettings>().HasIndex(x => x.UserId);
         modelBuilder.Entity<Subscription>().HasIndex(x => x.UserId);
+        modelBuilder.Entity<LearnerUser>().Property(x => x.AccountStatus).IsConcurrencyToken();
+        modelBuilder.Entity<ExpertUser>().Property(x => x.IsActive).IsConcurrencyToken();
+        modelBuilder.Entity<Wallet>().Property(x => x.LastUpdatedAt).IsConcurrencyToken();
         modelBuilder.Entity<Wallet>().HasIndex(x => x.UserId);
+        modelBuilder.Entity<ReviewRequest>().Property(x => x.State).IsConcurrencyToken();
         modelBuilder.Entity<StudyPlan>().HasIndex(x => x.UserId);
         modelBuilder.Entity<ReadinessSnapshot>().HasIndex(x => x.UserId);
         modelBuilder.Entity<DiagnosticSession>().HasIndex(x => new { x.UserId, x.State });
@@ -105,5 +118,9 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<AuditEvent>().HasIndex(x => x.OccurredAt);
         modelBuilder.Entity<AuditEvent>().HasIndex(x => x.ActorId);
         modelBuilder.Entity<AuditEvent>().HasIndex(x => new { x.ResourceType, x.ResourceId });
+        modelBuilder.Entity<NotificationPreference>().HasIndex(x => x.AuthAccountId).IsUnique();
+        modelBuilder.Entity<NotificationPolicyOverride>().HasIndex(x => new { x.AudienceRole, x.EventKey }).IsUnique();
+        modelBuilder.Entity<NotificationDeliveryAttempt>().HasIndex(x => new { x.NotificationEventId, x.Channel, x.AttemptedAt });
+        modelBuilder.Entity<PushSubscription>().HasIndex(x => x.Endpoint).IsUnique();
     }
 }
