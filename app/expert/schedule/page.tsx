@@ -1,14 +1,21 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Checkbox, Select } from '@/components/ui/form-controls';
-import { Toast } from '@/components/ui/alert';
+import { useEffect, useMemo, useState } from 'react';
+import { AlertTriangle, CalendarClock, Globe2, Sparkles, ShieldCheck } from 'lucide-react';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import type { ExpertSchedule, ExpertScheduleDay } from '@/lib/types/expert';
+import { Toast } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { Checkbox, Select } from '@/components/ui/form-controls';
+import {
+  ExpertRouteHero,
+  ExpertRouteSectionHeader,
+  ExpertRouteSummaryCard,
+  ExpertRouteWorkspace,
+} from '@/components/domain/expert-route-surface';
 import { fetchExpertSchedule, isApiError, saveExpertSchedule } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import type { ExpertSchedule, ExpertScheduleDay } from '@/lib/types/expert';
 
 type AsyncStatus = 'loading' | 'error' | 'success';
 
@@ -104,82 +111,139 @@ export default function SchedulePage() {
     }
   };
 
-  return (
-    <div className="max-w-4xl mx-auto p-4 md:p-8 space-y-6" role="main" aria-label="Schedule Management">
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
+  const activeDays = useMemo(() => schedule ? DAY_ORDER.filter((day) => schedule.days[day].active).length : 0, [schedule]);
+  const timeWindow = useMemo(() => {
+    if (!schedule) return 'Loading...';
+    const firstActive = DAY_ORDER.find((day) => schedule.days[day].active);
+    const lastActive = [...DAY_ORDER].reverse().find((day) => schedule.days[day].active);
+    if (!firstActive || !lastActive) return 'No active days';
+    return `${schedule.days[firstActive].start} - ${schedule.days[lastActive].end}`;
+  }, [schedule]);
 
-      <div className="flex items-center justify-between gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-bold text-navy">Schedule / Availability</h1>
-          <p className="text-muted text-sm mt-1">Manage your regular review working hours and the timezone used for SLA calculations.</p>
-        </div>
-        {schedule?.lastUpdatedAt && <p className="text-xs text-muted">Last updated: {new Date(schedule.lastUpdatedAt).toLocaleString()}</p>}
-      </div>
+  return (
+    <ExpertRouteWorkspace role="main" aria-label="Schedule Management">
+      {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
       <AsyncStateWrapper status={pageStatus} onRetry={() => setReloadToken((current) => current + 1)} errorMessage={errorMessage ?? undefined}>
-        <Card>
-          <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-wrap gap-3">
-            <div>
-              <h3 className="font-semibold text-navy">Weekly Availability</h3>
-            </div>
-            <div className="w-64">
-              <Select
-                label="Timezone"
-                options={TIMEZONE_OPTIONS}
-                value={schedule?.timezone ?? 'UTC'}
-                onChange={(event) => schedule && setSchedule({ ...schedule, timezone: event.target.value })}
-                aria-label="Select timezone"
-              />
-            </div>
+        <div className="space-y-6">
+          <ExpertRouteHero
+            eyebrow="Availability"
+            icon={Sparkles}
+            accent="primary"
+            title="Schedule / Availability"
+            description="Manage your regular review working hours and the timezone used for SLA calculations from a learner-style workspace."
+            highlights={[
+              { icon: Globe2, label: 'Timezone', value: schedule?.timezone ?? 'UTC' },
+              { icon: CalendarClock, label: 'Active days', value: String(activeDays) },
+              { icon: ShieldCheck, label: 'Working window', value: timeWindow },
+            ]}
+            aside={schedule?.lastUpdatedAt ? <span className="text-xs text-slate-500">Last updated: {new Date(schedule.lastUpdatedAt).toLocaleString()}</span> : undefined}
+          />
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <ExpertRouteSummaryCard
+              label="Timezone"
+              value={schedule?.timezone ?? 'UTC'}
+              hint="Used for review SLAs and scheduling."
+              accent="primary"
+              icon={Globe2}
+            />
+            <ExpertRouteSummaryCard
+              label="Active Days"
+              value={activeDays}
+              hint="Days currently open for review work."
+              accent="navy"
+              icon={CalendarClock}
+            />
+            <ExpertRouteSummaryCard
+              label="Working Window"
+              value={timeWindow}
+              hint="Derived from the active day range."
+              accent="emerald"
+              icon={ShieldCheck}
+            />
           </div>
-          <CardContent className="p-6 space-y-4">
-            {schedule && DAY_ORDER.map((day) => {
-              const scheduleDay = schedule.days[day];
-              const error = validationErrors[day];
-              return (
-                <div key={day}>
-                  <div className="flex items-center gap-4 py-2 border-b border-gray-100 last:border-0">
-                    <div className="w-32">
-                      <Checkbox
-                        label={day.charAt(0).toUpperCase() + day.slice(1)}
-                        checked={scheduleDay.active}
-                        onChange={(event) => updateDay(day, { active: event.target.checked })}
-                        aria-label={`${day} availability toggle`}
-                      />
+
+          <section className="space-y-4">
+            <ExpertRouteSectionHeader
+              eyebrow="Weekly Availability"
+              title="Schedule controls"
+              description="Manage your regular review working hours and the timezone used for SLA calculations."
+            />
+            <Card className="border-slate-200 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 p-4">
+                <div>
+                  <h3 className="font-semibold text-navy">Weekly Availability</h3>
+                </div>
+                <div className="w-64">
+                  <Select
+                    label="Timezone"
+                    options={TIMEZONE_OPTIONS}
+                    value={schedule?.timezone ?? 'UTC'}
+                    onChange={(event) => schedule && setSchedule({ ...schedule, timezone: event.target.value })}
+                    aria-label="Select timezone"
+                  />
+                </div>
+              </div>
+              <CardContent className="space-y-4 p-6">
+                {schedule ? DAY_ORDER.map((day) => {
+                  const scheduleDay = schedule.days[day];
+                  const error = validationErrors[day];
+                  return (
+                    <div key={day}>
+                      <div className="flex flex-col gap-4 border-b border-gray-100 py-2 last:border-0 md:flex-row md:items-center">
+                        <div className="w-32">
+                          <Checkbox
+                            label={day.charAt(0).toUpperCase() + day.slice(1)}
+                            checked={scheduleDay.active}
+                            onChange={(event) => updateDay(day, { active: event.target.checked })}
+                            aria-label={`${day} availability toggle`}
+                          />
+                        </div>
+                        <div className="flex flex-1 items-center gap-2">
+                          <Select
+                            options={TIME_OPTIONS}
+                            value={scheduleDay.start}
+                            disabled={!scheduleDay.active}
+                            onChange={(event) => updateDay(day, { start: event.target.value })}
+                            aria-label={`${day} start time`}
+                            error={error ? ' ' : undefined}
+                          />
+                          <span className="text-sm text-muted">to</span>
+                          <Select
+                            options={TIME_OPTIONS}
+                            value={scheduleDay.end}
+                            disabled={!scheduleDay.active}
+                            onChange={(event) => updateDay(day, { end: event.target.value })}
+                            aria-label={`${day} end time`}
+                            error={error ? ' ' : undefined}
+                          />
+                        </div>
+                      </div>
+                      {error ? <p className="ml-36 mt-1 text-xs text-red-500">{error}</p> : null}
                     </div>
-                    <div className="flex-1 flex items-center gap-2">
-                      <Select
-                        options={TIME_OPTIONS}
-                        value={scheduleDay.start}
-                        disabled={!scheduleDay.active}
-                        onChange={(event) => updateDay(day, { start: event.target.value })}
-                        aria-label={`${day} start time`}
-                        error={error ? ' ' : undefined}
-                      />
-                      <span className="text-muted text-sm">to</span>
-                      <Select
-                        options={TIME_OPTIONS}
-                        value={scheduleDay.end}
-                        disabled={!scheduleDay.active}
-                        onChange={(event) => updateDay(day, { end: event.target.value })}
-                        aria-label={`${day} end time`}
-                        error={error ? ' ' : undefined}
-                      />
+                  );
+                }) : null}
+
+                {Object.keys(validationErrors).length > 0 ? (
+                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
+                      <p>Fix the highlighted day ranges before saving your availability.</p>
                     </div>
                   </div>
-                  {error && <p className="text-xs text-red-500 ml-36 mt-1">{error}</p>}
-                </div>
-              );
-            })}
+                ) : null}
 
-            <div className="pt-6 flex justify-end">
-              <Button onClick={handleSave} disabled={isSaving} aria-label="Save schedule">
-                {isSaving ? 'Saving...' : 'Save Schedule'}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+                <div className="flex justify-end pt-2">
+                  <Button onClick={handleSave} disabled={isSaving} aria-label="Save schedule">
+                    {isSaving ? 'Saving...' : 'Save Schedule'}
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+        </div>
       </AsyncStateWrapper>
-    </div>
+    </ExpertRouteWorkspace>
   );
 }

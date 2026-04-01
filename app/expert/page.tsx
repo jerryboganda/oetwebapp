@@ -2,20 +2,126 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { CalendarClock, CheckCircle2, FilePenLine, GraduationCap, Inbox, ShieldAlert } from 'lucide-react';
+import {
+  ArrowRight,
+  CalendarClock,
+  CheckCircle2,
+  Clock3,
+  FilePenLine,
+  GraduationCap,
+  Inbox,
+  ShieldAlert,
+  Sparkles,
+  Users,
+} from 'lucide-react';
+import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { EmptyState } from '@/components/ui/empty-error';
 import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-error';
 import { InlineAlert } from '@/components/ui/alert';
-import { ExpertFreshnessBadge, ExpertMetricCard, ExpertPageHeader, ExpertSectionPanel } from '@/components/domain/expert-surface';
+import { analytics } from '@/lib/analytics';
 import { fetchExpertDashboard, isApiError } from '@/lib/api';
 import type { ExpertDashboardData, ReviewRequest } from '@/lib/types/expert';
-import { analytics } from '@/lib/analytics';
 
 type AsyncStatus = 'loading' | 'error' | 'success';
 
 function reviewRoute(review: ReviewRequest) {
   return `/expert/review/${review.type}/${review.id}`;
+}
+
+function toTitleCase(value: string) {
+  return value
+    .replace(/[_-]/g, ' ')
+    .split(' ')
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function formatDateTime(value?: string | null) {
+  if (!value) return 'Not updated yet';
+  return new Intl.DateTimeFormat('en-AU', {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  }).format(new Date(value));
+}
+
+function formatReviewSummary(review: ReviewRequest) {
+  return `${toTitleCase(review.type)} | ${toTitleCase(review.profession)} | ${review.id}`;
+}
+
+function ExpertReviewRow({
+  review,
+  onOpen,
+}: {
+  review: ReviewRequest;
+  onOpen: () => void;
+}) {
+  const statusTone = review.isOverdue
+    ? 'border-rose-200 bg-rose-50 text-rose-700'
+    : review.status === 'in_progress'
+      ? 'border-emerald-200 bg-emerald-50 text-emerald-700'
+      : 'border-slate-200 bg-slate-100 text-slate-600';
+
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className="flex w-full items-start justify-between gap-4 rounded-xl border border-gray-200 bg-surface p-4 text-left transition-[border-color,box-shadow,transform] duration-200 hover:border-primary/40 hover:shadow-sm active:scale-[0.99]"
+    >
+      <div className="space-y-1">
+        <p className="text-sm font-semibold text-navy">{review.learnerName}</p>
+        <p className="text-xs text-muted">{formatReviewSummary(review)}</p>
+        <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
+          <span>SLA {formatDateTime(review.slaDue)}</span>
+          <span>Priority {review.priority}</span>
+          <span>AI {review.aiConfidence}</span>
+        </div>
+      </div>
+      <div className={`rounded-full border px-2.5 py-1 text-xs font-medium ${statusTone}`}>
+        {review.status.replace(/_/g, ' ')}
+      </div>
+    </button>
+  );
+}
+
+function ExpertActivityRow({
+  title,
+  description,
+  timestamp,
+  onOpen,
+}: {
+  title: string;
+  description?: string | null;
+  timestamp: string;
+  onOpen?: () => void;
+}) {
+  return (
+    <li className="rounded-xl border border-gray-200 bg-surface p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div className="space-y-1">
+          <p className="text-sm font-semibold text-navy">{title}</p>
+          {description ? <p className="text-sm text-muted">{description}</p> : null}
+          <p className="text-xs text-muted/80">{formatDateTime(timestamp)}</p>
+        </div>
+        {onOpen ? (
+          <Button variant="ghost" size="sm" onClick={onOpen}>
+            Open
+          </Button>
+        ) : null}
+      </div>
+    </li>
+  );
+}
+
+function EmptyDraftState({ actionLabel, onAction }: { actionLabel: string; onAction: () => void }) {
+  return (
+    <EmptyState
+      title="No saved drafts to resume"
+      description="New draft workspaces will appear here after the first save."
+      action={{ label: actionLabel, onClick: onAction }}
+    />
+  );
 }
 
 export default function ExpertDashboardPage() {
@@ -27,12 +133,14 @@ export default function ExpertDashboardPage() {
 
   useEffect(() => {
     let cancelled = false;
+
     (async () => {
       try {
         setStatus('loading');
         setErrorMessage(null);
         const data = await fetchExpertDashboard();
         if (cancelled) return;
+
         setDashboard(data);
         setStatus('success');
         analytics.track('expert_dashboard_viewed', {
@@ -60,224 +168,283 @@ export default function ExpertDashboardPage() {
     return `${dashboard.availability.todayKey} window: ${dashboard.availability.todayWindow ?? 'set in schedule'}.`;
   }, [dashboard]);
 
+  const heroHighlights = useMemo(() => {
+    if (!dashboard) return [];
+
+    return [
+      {
+        icon: Inbox,
+        label: 'Assigned reviews',
+        value: String(dashboard.activeAssignedReviews),
+      },
+      {
+        icon: ShieldAlert,
+        label: 'Overdue / at risk',
+        value: String(dashboard.overdueAssignedReviews),
+      },
+      {
+        icon: GraduationCap,
+        label: 'Calibration due',
+        value: String(dashboard.calibrationDueCount),
+      },
+    ];
+  }, [dashboard]);
+
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6 p-4 md:p-8" role="main" aria-label="Expert dashboard">
-      <ExpertPageHeader
-        meta="Expert Operations"
-        title="Dashboard"
-        description="Run your expert workflow from one place: active reviews, draft recovery, calibration obligations, and the latest operational activity."
-        actions={
-          <>
-            <Button variant="outline" onClick={() => router.push('/expert/queue')}>
-              Open Queue
-            </Button>
-            <Button onClick={() => router.push('/expert/calibration')}>
-              Open Calibration
-            </Button>
-          </>
-        }
-      />
+    <AsyncStateWrapper
+      status={status}
+      onRetry={() => setReloadToken((current) => current + 1)}
+      errorMessage={errorMessage ?? undefined}
+    >
+      {dashboard ? (
+        <div className="space-y-6">
+            <LearnerPageHero
+              eyebrow="Current Focus"
+              icon={Sparkles}
+              accent="primary"
+              title="Keep owned reviews and exam signals in view"
+              description="Use the dashboard to decide the next action, check readiness evidence, and move without guesswork."
+              highlights={heroHighlights}
+              aside={(
+                <div className="space-y-4 rounded-2xl border border-gray-200 bg-background-light p-4 shadow-sm">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Quick Actions</p>
+                    <p className="mt-1 text-sm text-muted">Jump straight into the highest-priority expert workflows.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Button fullWidth onClick={() => router.push('/expert/queue')}>
+                      Open Queue
+                    </Button>
+                    <Button fullWidth variant="outline" onClick={() => router.push('/expert/calibration')}>
+                      Open Calibration
+                    </Button>
+                  </div>
+                  <div className="flex items-center gap-2 text-xs text-muted">
+                    <Clock3 className="h-4 w-4" />
+                    Updated {formatDateTime(dashboard.generatedAt)}
+                  </div>
+                </div>
+              )}
+            />
 
-      <AsyncStateWrapper
-        status={status}
-        onRetry={() => setReloadToken((current) => current + 1)}
-        errorMessage={errorMessage ?? undefined}
-      >
-        {dashboard && (
-          <>
-            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-              <ExpertMetricCard
-                label="Assigned Reviews"
-                value={dashboard.activeAssignedReviews}
-                hint="Reviews currently in your ownership window."
-                icon={<Inbox className="h-5 w-5" />}
-              />
-              <ExpertMetricCard
-                label="Overdue / At Risk"
-                value={dashboard.overdueAssignedReviews}
-                hint="Reviews already overdue and needing immediate attention."
-                tone={dashboard.overdueAssignedReviews > 0 ? 'danger' : 'success'}
-                icon={<ShieldAlert className="h-5 w-5" />}
-              />
-              <ExpertMetricCard
-                label="Saved Drafts"
-                value={dashboard.savedDraftCount}
-                hint="Draft review workspaces you can resume."
-                tone={dashboard.savedDraftCount > 0 ? 'warning' : 'default'}
-                icon={<FilePenLine className="h-5 w-5" />}
-              />
-              <ExpertMetricCard
-                label="Calibration Due"
-                value={dashboard.calibrationDueCount}
-                hint="Benchmark cases still awaiting your submission."
-                tone={dashboard.calibrationDueCount > 0 ? 'warning' : 'success'}
-                icon={<GraduationCap className="h-5 w-5" />}
-              />
-              <ExpertMetricCard
-                label="SLA Compliance"
-                value={`${dashboard.metrics.averageSlaCompliance}%`}
-                hint={`${dashboard.metrics.totalReviewsCompleted} completed reviews in scope.`}
-                tone={dashboard.metrics.averageSlaCompliance >= 95 ? 'success' : 'default'}
-                icon={<CheckCircle2 className="h-5 w-5" />}
-              />
-            </div>
-
-            <InlineAlert variant="info" title="Privacy scoped learner access">
-              The learner directory and review context panels only expose learners and evidence tied to reviews assigned to you, including historical assignments needed for continuity.
+            <InlineAlert
+              variant="warning"
+              title="Recommended security step"
+              action={(
+                <Button variant="outline" size="sm" onClick={() => router.push('/mfa/setup?next=/expert')}>
+                  Set up MFA
+                </Button>
+              )}
+            >
+              Multi-factor authentication is recommended for privileged access. You can keep working without it, but enabling an authenticator app adds a much stronger layer of account protection.
             </InlineAlert>
 
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.35fr_0.95fr]">
-              <ExpertSectionPanel
-                title="Work To Resume"
-                description="Jump back into owned reviews or saved drafts without going through the full queue."
-                actions={<ExpertFreshnessBadge value={dashboard.generatedAt} />}
-              >
-                {dashboard.resumeDrafts.length === 0 ? (
-                  <EmptyState
-                    title="No saved drafts to resume"
-                    description="New draft workspaces will appear here after the first save."
-                    action={{ label: 'Open Review Queue', onClick: () => router.push('/expert/queue') }}
-                  />
-                ) : (
+            <section className="space-y-4">
+              <LearnerSurfaceSectionHeader
+                eyebrow="Expert workflow"
+                title="Resume what is already in motion"
+                description="Same visual rhythm as the learner dashboard, tuned for expert review work."
+                action={(
+                  <Button variant="ghost" size="sm" onClick={() => router.push('/expert/queue')}>
+                    View Queue <ArrowRight className="h-4 w-4" />
+                  </Button>
+                )}
+              />
+
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <LearnerSurfaceCard
+                  card={{
+                    kind: 'task',
+                    sourceType: 'backend_summary',
+                    eyebrow: 'Recommended Next',
+                    eyebrowIcon: Sparkles,
+                    accent: 'primary',
+                    title: 'Work to Resume',
+                    description: 'Jump back into a saved draft or an owned review without going through the full queue.',
+                    metaItems: [
+                      { icon: FilePenLine, label: `${dashboard.savedDraftCount} saved drafts` },
+                      { icon: Inbox, label: `${dashboard.activeAssignedReviews} assigned reviews` },
+                      { icon: GraduationCap, label: `${dashboard.calibrationDueCount} calibration due` },
+                    ],
+                    primaryAction: {
+                      label: 'Open Review Queue',
+                      href: '/expert/queue',
+                    },
+                    secondaryAction: {
+                      label: 'Open Assigned Queue',
+                      href: '/expert/queue?assignment=assigned',
+                      variant: 'outline',
+                    },
+                  }}
+                >
                   <div className="space-y-3">
-                    {dashboard.resumeDrafts.map((review) => (
-                      <button
-                        key={review.id}
-                        type="button"
-                        onClick={() => router.push(reviewRoute(review))}
-                        className="flex w-full flex-col gap-2 rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-primary/40 hover:shadow-sm"
-                      >
-                        <div className="flex flex-wrap items-center justify-between gap-2">
-                          <div>
-                            <p className="text-sm font-semibold text-slate-900">{review.learnerName}</p>
-                            <p className="text-xs text-slate-500">
-                              {review.type} review | {review.profession.replace(/_/g, ' ')} | {review.id}
-                            </p>
-                          </div>
-                          <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${review.isOverdue ? 'bg-rose-50 text-rose-700' : 'bg-amber-50 text-amber-700'}`}>
-                            {review.isOverdue ? 'Overdue' : 'Draft ready'}
-                          </span>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-4 text-xs text-slate-500">
-                          <span>SLA: {new Date(review.slaDue).toLocaleString()}</span>
-                          <span>AI confidence: {review.aiConfidence}</span>
-                          <span>Status: {review.status.replace(/_/g, ' ')}</span>
-                        </div>
-                      </button>
-                    ))}
+                    {dashboard.resumeDrafts.length === 0 ? (
+                      <EmptyDraftState actionLabel="Open Review Queue" onAction={() => router.push('/expert/queue')} />
+                    ) : (
+                      dashboard.resumeDrafts.map((review) => (
+                        <ExpertReviewRow
+                          key={review.id}
+                          review={review}
+                          onOpen={() => router.push(reviewRoute(review))}
+                        />
+                      ))
+                    )}
                   </div>
+                </LearnerSurfaceCard>
+
+                <LearnerSurfaceCard
+                  card={{
+                    kind: 'status',
+                    sourceType: 'backend_summary',
+                    eyebrow: 'Schedule',
+                    eyebrowIcon: CalendarClock,
+                    accent: 'navy',
+                    title: "Today's Availability",
+                    description: 'Keep operational expectations aligned with the hours you have configured.',
+                    metaItems: [
+                      { icon: Users, label: `${dashboard.assignedLearnerCount} assigned learners` },
+                      { icon: Clock3, label: dashboard.availability.timezone },
+                      { icon: CheckCircle2, label: dashboard.availability.activeToday ? 'Active today' : 'Paused today' },
+                    ],
+                    primaryAction: {
+                      label: 'Update Schedule',
+                      href: '/expert/schedule',
+                    },
+                    secondaryAction: {
+                      label: 'View Metrics',
+                      href: '/expert/metrics',
+                      variant: 'outline',
+                    },
+                  }}
+                >
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <div className="rounded-xl bg-background-light p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Availability</p>
+                      <p className="mt-2 text-sm font-semibold text-navy">{availabilityHint}</p>
+                    </div>
+                    <div className="rounded-xl bg-background-light p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Turnaround</p>
+                      <p className="mt-2 text-lg font-semibold text-navy">{dashboard.metrics.averageTurnaroundHours}h</p>
+                    </div>
+                    <div className="rounded-xl bg-background-light p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">Calibration alignment</p>
+                      <p className="mt-2 text-lg font-semibold text-navy">{dashboard.metrics.averageCalibrationAlignment}%</p>
+                    </div>
+                    <div className="rounded-xl bg-background-light p-3">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted">SLA compliance</p>
+                      <p className="mt-2 text-lg font-semibold text-navy">{dashboard.metrics.averageSlaCompliance}%</p>
+                    </div>
+                  </div>
+                </LearnerSurfaceCard>
+              </div>
+            </section>
+
+            <section className="space-y-4">
+              <LearnerSurfaceSectionHeader
+                eyebrow="Signals"
+                title="Queue and activity stay visible together"
+                description="Expert work is easier to scan when queue health and recent actions are presented in the same rhythm."
+                action={(
+                  <Button variant="ghost" size="sm" onClick={() => router.push('/expert/learners')}>
+                    View Learners <ArrowRight className="h-4 w-4" />
+                  </Button>
                 )}
-              </ExpertSectionPanel>
+              />
 
-              <ExpertSectionPanel
-                title="Today's Availability"
-                description="Keep operational expectations aligned with the hours you have configured."
-                actions={<Button variant="outline" size="sm" onClick={() => router.push('/expert/schedule')}>Update Schedule</Button>}
-              >
-                <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold text-slate-900">{dashboard.availability.timezone}</p>
-                      <p className="text-sm text-slate-500">{availabilityHint}</p>
-                    </div>
-                    <CalendarClock className="h-5 w-5 text-slate-400" />
-                  </div>
-                  <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-slate-500">
-                    <span>Draft count: {dashboard.savedDraftCount}</span>
-                    <span>Assigned learners: {dashboard.assignedLearnerCount}</span>
-                    <ExpertFreshnessBadge value={dashboard.availability.lastUpdatedAt} />
-                  </div>
-                </div>
-
-                <div className="rounded-2xl border border-slate-200 bg-white p-4">
-                  <h3 className="text-sm font-semibold text-slate-900">Operational now</h3>
-                  <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">Turnaround</p>
-                      <p className="mt-2 text-lg font-semibold text-slate-900">{dashboard.metrics.averageTurnaroundHours}h</p>
-                    </div>
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">Calibration Alignment</p>
-                      <p className="mt-2 text-lg font-semibold text-slate-900">{dashboard.metrics.averageCalibrationAlignment}%</p>
-                    </div>
-                  </div>
-                </div>
-              </ExpertSectionPanel>
-            </div>
-
-            <div className="grid grid-cols-1 gap-6 xl:grid-cols-[1.2fr_0.8fr]">
-              <ExpertSectionPanel
-                title="Assigned Review Queue"
-                description="These are the owned reviews that currently define your working set."
-                actions={<Button variant="outline" size="sm" onClick={() => router.push('/expert/queue?assignment=assigned')}>Open Assigned Queue</Button>}
-              >
-                {dashboard.assignedReviews.length === 0 ? (
-                  <EmptyState
-                    title="No assigned reviews"
-                    description="Claim a queued review to start your next expert workspace."
-                    action={{ label: 'Open Queue', onClick: () => router.push('/expert/queue') }}
-                  />
-                ) : (
+              <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+                <LearnerSurfaceCard
+                  card={{
+                    kind: 'navigation',
+                    sourceType: 'backend_summary',
+                    eyebrow: 'Queue',
+                    eyebrowIcon: Inbox,
+                    accent: dashboard.overdueAssignedReviews > 0 ? 'rose' : 'emerald',
+                    title: 'Assigned Review Queue',
+                    description: 'These are the owned reviews that currently define your working set.',
+                    statusLabel: dashboard.overdueAssignedReviews > 0
+                      ? `${dashboard.overdueAssignedReviews} overdue`
+                      : 'On track',
+                    metaItems: [
+                      { icon: ShieldAlert, label: `${dashboard.overdueAssignedReviews} overdue / at risk` },
+                      { icon: CheckCircle2, label: `${dashboard.metrics.totalReviewsCompleted} completed` },
+                      { icon: GraduationCap, label: `${dashboard.calibrationDueCount} calibration due` },
+                    ],
+                    primaryAction: {
+                      label: 'Open Assigned Queue',
+                      href: '/expert/queue?assignment=assigned',
+                    },
+                    secondaryAction: {
+                      label: 'Open Queue',
+                      href: '/expert/queue',
+                      variant: 'outline',
+                    },
+                  }}
+                >
                   <div className="space-y-3">
-                    {dashboard.assignedReviews.map((review) => (
-                      <button
-                        key={review.id}
-                        type="button"
-                        onClick={() => router.push(reviewRoute(review))}
-                        className="flex w-full items-start justify-between gap-4 rounded-2xl border border-slate-200 bg-white p-4 text-left transition hover:border-primary/40 hover:shadow-sm"
-                      >
-                        <div className="space-y-1">
-                          <p className="text-sm font-semibold text-slate-900">{review.learnerName}</p>
-                          <p className="text-xs text-slate-500">
-                            {review.type} | {review.profession.replace(/_/g, ' ')} | {review.id}
-                          </p>
-                          <div className="flex flex-wrap items-center gap-3 text-xs text-slate-500">
-                            <span>SLA due {new Date(review.slaDue).toLocaleString()}</span>
-                            <span>Priority {review.priority}</span>
-                            <span>AI {review.aiConfidence}</span>
-                          </div>
-                        </div>
-                        <div className={`rounded-full px-2.5 py-1 text-xs font-medium ${review.isOverdue ? 'bg-rose-50 text-rose-700' : review.status === 'in_progress' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-600'}`}>
-                          {review.status.replace(/_/g, ' ')}
-                        </div>
-                      </button>
-                    ))}
+                    {dashboard.assignedReviews.length === 0 ? (
+                      <EmptyState
+                        title="No assigned reviews"
+                        description="Claim a queued review to start your next expert workspace."
+                        action={{ label: 'Open Queue', onClick: () => router.push('/expert/queue') }}
+                      />
+                    ) : (
+                      dashboard.assignedReviews.map((review) => (
+                        <ExpertReviewRow
+                          key={review.id}
+                          review={review}
+                          onOpen={() => router.push(reviewRoute(review))}
+                        />
+                      ))
+                    )}
                   </div>
-                )}
-              </ExpertSectionPanel>
+                </LearnerSurfaceCard>
 
-              <ExpertSectionPanel
-                title="Recent Activity"
-                description="Audit-backed expert actions from the latest operational window."
-                actions={<Button variant="outline" size="sm" onClick={() => router.push('/expert/learners')}>Assigned Learners</Button>}
-              >
-                {dashboard.recentActivity.length === 0 ? (
-                  <EmptyState
-                    title="No recent activity yet"
-                    description="Claim or complete work to build your activity timeline."
-                  />
-                ) : (
-                  <ol className="space-y-3">
-                    {dashboard.recentActivity.map((activity) => (
-                      <li key={`${activity.timestamp}-${activity.title}`} className="rounded-2xl border border-slate-200 bg-white p-4">
-                        <div className="flex items-start justify-between gap-3">
-                          <div className="space-y-1">
-                            <p className="text-sm font-semibold text-slate-900">{activity.title}</p>
-                            {activity.description ? <p className="text-sm text-slate-500">{activity.description}</p> : null}
-                            <p className="text-xs text-slate-400">{new Date(activity.timestamp).toLocaleString()}</p>
-                          </div>
-                          {activity.route ? (
-                            <Button variant="ghost" size="sm" onClick={() => router.push(activity.route ?? '/expert')}>
-                              Open
-                            </Button>
-                          ) : null}
-                        </div>
-                      </li>
-                    ))}
-                  </ol>
-                )}
-              </ExpertSectionPanel>
-            </div>
+                <LearnerSurfaceCard
+                  card={{
+                    kind: 'insight',
+                    sourceType: 'backend_summary',
+                    eyebrow: 'Activity',
+                    eyebrowIcon: CheckCircle2,
+                    accent: 'slate',
+                    title: 'Recent Activity',
+                    description: 'Audit-backed expert actions from the latest operational window.',
+                    metaItems: [
+                      { icon: Clock3, label: `Generated ${formatDateTime(dashboard.generatedAt)}` },
+                      { icon: CheckCircle2, label: `${dashboard.metrics.totalReviewsCompleted} reviews completed` },
+                      { icon: Users, label: `${dashboard.assignedLearnerCount} learners in scope` },
+                    ],
+                    primaryAction: {
+                      label: 'Assigned Learners',
+                      href: '/expert/learners',
+                    },
+                    secondaryAction: {
+                      label: 'Open Queue',
+                      href: '/expert/queue',
+                      variant: 'outline',
+                    },
+                  }}
+                >
+                  {dashboard.recentActivity.length === 0 ? (
+                    <EmptyState
+                      title="No recent activity yet"
+                      description="Claim or complete work to build your activity timeline."
+                    />
+                  ) : (
+                    <ol className="space-y-3">
+                      {dashboard.recentActivity.map((activity) => (
+                        <ExpertActivityRow
+                          key={`${activity.timestamp}-${activity.title}`}
+                          title={activity.title}
+                          description={activity.description}
+                          timestamp={activity.timestamp}
+                          onOpen={activity.route ? () => router.push(activity.route ?? '/expert') : undefined}
+                        />
+                      ))}
+                    </ol>
+                  )}
+                </LearnerSurfaceCard>
+              </div>
+            </section>
 
             {dashboard.overdueAssignedReviews > 0 ? (
               <InlineAlert variant="warning" title="Immediate SLA attention recommended">
@@ -288,9 +455,8 @@ export default function ExpertDashboardPage() {
                 No owned reviews are currently overdue. You can use the queue to pick up additional work when ready.
               </InlineAlert>
             )}
-          </>
-        )}
-      </AsyncStateWrapper>
-    </div>
+        </div>
+      ) : null}
+    </AsyncStateWrapper>
   );
 }

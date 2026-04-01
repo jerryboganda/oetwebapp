@@ -1,20 +1,25 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { Card, CardContent } from '@/components/ui/card';
-import { DataTable, Column } from '@/components/ui/data-table';
-import { FilterBar, FilterGroup } from '@/components/ui/filter-bar';
-import { ConfidenceBadge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { ExpertQueueFilterMetadata, ReviewRequest } from '@/lib/types/expert';
+import { Clock3, Inbox, RefreshCw, Search, Sparkles, Unlock, Users } from 'lucide-react';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { EmptyState } from '@/components/ui/empty-error';
 import { InlineAlert, Toast } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { DataTable, type Column } from '@/components/ui/data-table';
+import { EmptyState } from '@/components/ui/empty-error';
+import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
+import {
+  ExpertRouteFreshnessBadge,
+  ExpertRouteHero,
+  ExpertRouteSectionHeader,
+  ExpertRouteSummaryCard,
+  ExpertRouteWorkspace,
+} from '@/components/domain/expert-route-surface';
 import { claimReview, fetchExpertQueueFilterMetadata, fetchReviewQueue, isApiError, releaseReview } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
-import { RefreshCw, Search, Inbox, Unlock } from 'lucide-react';
-import { ExpertFreshnessBadge, ExpertMetricCard } from '@/components/domain/expert-surface';
+import { type ExpertQueueFilterMetadata, type ReviewRequest } from '@/lib/types/expert';
 
 type AsyncStatus = 'loading' | 'error' | 'empty' | 'success';
 
@@ -223,31 +228,42 @@ export default function ReviewQueuePage() {
 
   const columns: Column<ReviewRequest>[] = [
     { key: 'id', header: 'Review ID', render: (row) => <span className="font-mono text-xs">{row.id}</span> },
-    { key: 'learner', header: 'Learner', render: (row) => (
-      <button className="font-medium text-primary hover:underline text-left" onClick={(event) => { event.stopPropagation(); router.push(`/expert/learners/${row.learnerId}`); }} aria-label={`View profile for ${row.learnerName}`}>
-        {row.learnerName}
-      </button>
-    )},
+    {
+      key: 'learner',
+      header: 'Learner',
+      render: (row) => (
+        <button
+          className="text-left font-medium text-primary hover:underline"
+          onClick={(event) => {
+            event.stopPropagation();
+            router.push(`/expert/learners/${row.learnerId}`);
+          }}
+          aria-label={`View profile for ${row.learnerName}`}
+        >
+          {row.learnerName}
+        </button>
+      ),
+    },
     { key: 'profession', header: 'Profession', render: (row) => <span className="capitalize">{row.profession.replace('_', ' ')}</span> },
     { key: 'type', header: 'Sub-test', render: (row) => <span className="capitalize">{row.type}</span> },
-    { key: 'aiConfidence', header: 'AI Confidence', render: (row) => row.aiConfidence === 'unknown' ? <span className="text-muted text-xs">Unknown</span> : <ConfidenceBadge level={row.aiConfidence} /> },
-    { key: 'priority', header: 'Priority', render: (row) => <span className={row.priority === 'high' ? 'text-error font-semibold capitalize' : 'capitalize'}>{row.priority}</span> },
+    { key: 'aiConfidence', header: 'AI Confidence', render: (row) => row.aiConfidence === 'unknown' ? <span className="text-muted text-xs">Unknown</span> : <span className="capitalize">{row.aiConfidence}</span> },
+    { key: 'priority', header: 'Priority', render: (row) => <span className={row.priority === 'high' ? 'font-semibold capitalize text-error' : 'capitalize'}>{row.priority}</span> },
     {
       key: 'slaDue',
       header: 'SLA Due',
       render: (row) => {
         const date = new Date(row.slaDue);
         const formatted = `${date.toISOString().split('T')[0]} ${date.toISOString().split('T')[1].slice(0, 5)}`;
-        return <span className={row.isOverdue ? 'text-error font-bold' : row.slaState === 'at_risk' ? 'text-amber-600 font-semibold' : ''}>{formatted} UTC</span>;
+        return <span className={row.isOverdue ? 'font-bold text-error' : row.slaState === 'at_risk' ? 'font-semibold text-amber-600' : ''}>{formatted} UTC</span>;
       },
     },
-    { key: 'assignedReviewer', header: 'Assigned Reviewer', render: (row) => <span className={row.assignedReviewerName ? 'text-navy' : 'text-muted italic'}>{row.assignedReviewerName ?? 'Unassigned'}</span> },
+    { key: 'assignedReviewer', header: 'Assigned Reviewer', render: (row) => <span className={row.assignedReviewerName ? 'text-navy' : 'italic text-muted'}>{row.assignedReviewerName ?? 'Unassigned'}</span> },
     {
       key: 'status',
       header: 'Status',
       render: (row) => {
         const variant = row.status === 'overdue' ? 'bg-red-100 text-red-800' : row.status === 'assigned' ? 'bg-blue-100 text-blue-800' : row.status === 'in_progress' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-700';
-        return <span className={`inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full ${variant}`}>{row.status.replace('_', ' ')}</span>;
+        return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${variant}`}>{row.status.replace('_', ' ')}</span>;
       },
     },
     {
@@ -259,23 +275,29 @@ export default function ReviewQueuePage() {
           <div className="flex items-center gap-2">
             <Button
               size="sm"
-              onClick={(event) => { event.stopPropagation(); void openReview(row); }}
+              onClick={(event) => {
+                event.stopPropagation();
+                void openReview(row);
+              }}
               disabled={pending || !(row.availableActions?.canOpen || row.availableActions?.canClaim)}
               aria-label={row.availableActions?.canClaim ? `Claim and review ${row.id}` : `Open ${row.id}`}
             >
-                        {pending ? 'Working...' : row.availableActions?.canClaim ? 'Claim & Review' : 'Open'}
+              {pending ? 'Working...' : row.availableActions?.canClaim ? 'Claim & Review' : 'Open'}
             </Button>
-            {row.availableActions?.canRelease && (
+            {row.availableActions?.canRelease ? (
               <Button
                 size="sm"
                 variant="outline"
-                onClick={(event) => { event.stopPropagation(); void handleRelease(row); }}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  void handleRelease(row);
+                }}
                 disabled={pending}
                 aria-label={`Release ${row.id}`}
               >
-                <Unlock className="w-4 h-4 mr-1" /> Release
+                <Unlock className="mr-1 h-4 w-4" /> Release
               </Button>
-            )}
+            ) : null}
           </div>
         );
       },
@@ -283,55 +305,8 @@ export default function ReviewQueuePage() {
   ];
 
   return (
-    <div className="max-w-7xl mx-auto p-4 md:p-8 space-y-6" role="main" aria-label="Review Queue">
-      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-navy tracking-tight">Review Queue</h1>
-          <p className="text-sm text-muted mt-1">Manage and prioritise pending learner submissions. {totalCount > 0 ? `${totalCount} review${totalCount === 1 ? '' : 's'} available.` : 'No active reviews loaded.'}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <ExpertFreshnessBadge value={lastUpdatedAt} />
-          <Button variant="outline" onClick={() => router.push('/expert/learners')} className="bg-surface" aria-label="Open assigned learners">
-            Learners
-          </Button>
-          <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing} className="bg-surface" aria-label="Refresh queue">
-            <RefreshCw className={`w-4 h-4 mr-2 ${isRefreshing ? 'animate-spin' : ''}`} /> Refresh
-          </Button>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-        <ExpertMetricCard label="Visible Queue Items" value={totalCount} hint="Results after your current filters." icon={<Inbox className="h-5 w-5" />} />
-        <ExpertMetricCard label="Assigned / Claimed" value={assignedCount} hint="Items already in owned workflow scope on this page." tone={assignedCount > 0 ? 'default' : 'success'} icon={<Unlock className="h-5 w-5" />} />
-        <ExpertMetricCard label="Overdue In View" value={overdueCount} hint={`${draftReadyCount} in-progress item(s) currently visible.`} tone={overdueCount > 0 ? 'danger' : 'success'} icon={<RefreshCw className="h-5 w-5" />} />
-      </div>
-
-      <InlineAlert variant="info" title="Ownership" action={<span className="text-xs">Claim a shared review before entering the workspace.</span>}>
-        Shared queue items remain locked to the reviewer who claims them first. Release a claimed review if you are handing it back.
-      </InlineAlert>
-
-      {showStaleWarning && status === 'success' && (
-        <InlineAlert variant="warning" dismissible>
-          Queue data may be outdated. Refresh the queue before claiming time-sensitive work.
-        </InlineAlert>
-      )}
-
-      <div className="bg-surface p-4 rounded-xl border border-gray-200/60 shadow-sm space-y-3">
-        <div className="relative max-w-sm">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted" />
-          <input
-            type="text"
-            placeholder="Search by Review ID or Learner Name..."
-            value={searchQuery}
-            onChange={(event) => { setSearchQuery(event.target.value); setPage(1); }}
-            className="w-full pl-9 pr-3 py-2 text-sm border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary/30 bg-white"
-            aria-label="Search reviews"
-          />
-        </div>
-        <FilterBar groups={filterGroups} selected={selectedFilters} onChange={handleFilterChange} onClear={clearFilters} />
-      </div>
+    <ExpertRouteWorkspace role="main" aria-label="Review Queue">
+      {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
       <AsyncStateWrapper
         status={status}
@@ -339,37 +314,139 @@ export default function ReviewQueuePage() {
         errorMessage={errorMsg ?? undefined}
         emptyContent={
           <EmptyState
-            icon={<Inbox className="w-12 h-12 text-muted" />}
+            icon={<Inbox className="h-12 w-12 text-muted" />}
             title={hasActiveFilters ? 'No reviews match the current filters' : 'No reviews in queue'}
             description={hasActiveFilters ? 'Try clearing some filters or broadening your search.' : 'New reviews will appear here when learner requests are ready for expert handling.'}
           />
         }
       >
-        <Card padding="none" className="overflow-hidden">
-          <CardContent className="p-0">
-            <DataTable
-              data={data}
-              columns={columns}
-              keyExtractor={(item) => item.id}
-              emptyMessage="No reviews match the current filters."
-              aria-label="Review queue table"
+        <div className="space-y-6">
+          <ExpertRouteHero
+            eyebrow="Queue Operations"
+            icon={Sparkles}
+            accent="primary"
+            title="Review queue"
+            description="Claim, release, and prioritize pending learner submissions from a learner-style workspace that keeps the next decision in view."
+            highlights={[
+              { icon: Inbox, label: 'Visible queue items', value: String(totalCount) },
+              { icon: Users, label: 'Assigned / claimed', value: String(assignedCount) },
+              { icon: Clock3, label: 'Overdue in view', value: String(overdueCount) },
+            ]}
+            aside={(
+              <div className="space-y-3">
+                <ExpertRouteFreshnessBadge value={lastUpdatedAt} />
+                <div className="flex flex-wrap gap-2">
+                  <Button variant="outline" onClick={() => router.push('/expert/learners')}>
+                    Learners
+                  </Button>
+                  <Button variant="outline" onClick={handleRefresh} disabled={isRefreshing}>
+                    <RefreshCw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </Button>
+                </div>
+              </div>
+            )}
+          />
+
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+            <ExpertRouteSummaryCard
+              label="Visible Queue Items"
+              value={totalCount}
+              hint="Results after your current filters."
+              icon={Inbox}
             />
-          </CardContent>
-        </Card>
-        {totalCount > PAGE_SIZE && (
-          <div className="flex items-center justify-between gap-3 text-sm text-muted">
-            <span>Page {page} of {Math.max(1, Math.ceil(totalCount / PAGE_SIZE))}</span>
-            <div className="flex items-center gap-2">
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
-                Previous
-              </Button>
-              <Button variant="outline" size="sm" disabled={page >= Math.ceil(totalCount / PAGE_SIZE)} onClick={() => setPage((current) => current + 1)}>
-                Next
-              </Button>
-            </div>
+            <ExpertRouteSummaryCard
+              label="Assigned / Claimed"
+              value={assignedCount}
+              hint="Items already in owned workflow scope on this page."
+              accent={assignedCount > 0 ? 'navy' : 'emerald'}
+              icon={Unlock}
+            />
+            <ExpertRouteSummaryCard
+              label="Overdue In View"
+              value={overdueCount}
+              hint={`${draftReadyCount} in-progress item(s) currently visible.`}
+              accent={overdueCount > 0 ? 'amber' : 'emerald'}
+              icon={Clock3}
+            />
           </div>
-        )}
+
+          <InlineAlert variant="info" title="Ownership" action={<span className="text-xs">Claim a shared review before entering the workspace.</span>}>
+            Shared queue items remain locked to the reviewer who claims them first. Release a claimed review if you are handing it back.
+          </InlineAlert>
+
+          {showStaleWarning && status === 'success' ? (
+            <InlineAlert variant="warning" dismissible>
+              Queue data may be outdated. Refresh the queue before claiming time-sensitive work.
+            </InlineAlert>
+          ) : null}
+
+          <section className="space-y-4">
+            <ExpertRouteSectionHeader
+              eyebrow="Queue Controls"
+              title="Find the right work fast"
+              description="Search by review ID or learner name, then narrow the queue with scoped filters."
+              action={hasActiveFilters ? <Button variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Button> : null}
+            />
+
+            <Card className="overflow-hidden border-gray-200 shadow-sm">
+              <CardContent className="space-y-4 p-5">
+                <div className="relative max-w-sm">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+                  <input
+                    type="text"
+                    placeholder="Search by Review ID or Learner Name..."
+                    value={searchQuery}
+                    onChange={(event) => {
+                      setSearchQuery(event.target.value);
+                      setPage(1);
+                    }}
+                    className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    aria-label="Search reviews"
+                  />
+                </div>
+                <FilterBar groups={filterGroups} selected={selectedFilters} onChange={handleFilterChange} onClear={clearFilters} />
+              </CardContent>
+            </Card>
+          </section>
+
+          <section className="space-y-4">
+            <ExpertRouteSectionHeader
+              eyebrow="Queue Table"
+              title="Review queue items"
+              description={totalCount > 0 ? `${totalCount} review${totalCount === 1 ? '' : 's'} available in the current view.` : 'No active reviews loaded.'}
+            />
+
+            <Card padding="none" className="overflow-hidden">
+              <CardContent className="p-0">
+                <DataTable
+                  data={data}
+                  columns={columns}
+                  keyExtractor={(item) => item.id}
+                  emptyMessage="No reviews match the current filters."
+                  aria-label="Review queue table"
+                />
+              </CardContent>
+            </Card>
+
+            {totalCount > PAGE_SIZE ? (
+              <div className="flex items-center justify-between gap-3 text-sm text-muted">
+                <span>
+                  Page {page} of {Math.max(1, Math.ceil(totalCount / PAGE_SIZE))}
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
+                    Previous
+                  </Button>
+                  <Button variant="outline" size="sm" disabled={page >= Math.ceil(totalCount / PAGE_SIZE)} onClick={() => setPage((current) => current + 1)}>
+                    Next
+                  </Button>
+                </div>
+              </div>
+            ) : null}
+          </section>
+        </div>
       </AsyncStateWrapper>
-    </div>
+    </ExpertRouteWorkspace>
   );
 }

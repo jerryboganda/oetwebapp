@@ -1,8 +1,7 @@
 'use client';
 
-import { AppShell } from '@/components/layout/app-shell';
+import { AppShell, ExpertDashboardShell } from '@/components/layout';
 import { NavItem } from '@/components/layout/sidebar';
-import { PrivilegedMfaBanner } from '@/components/auth/privileged-mfa-banner';
 import { AuthProvider } from '@/contexts/auth-context';
 import { LayoutDashboard, Inbox, CheckCircle, BarChart3, CalendarClock, Users } from 'lucide-react';
 import { usePathname } from 'next/navigation';
@@ -17,9 +16,38 @@ const expertNavItems: NavItem[] = [
   { href: '/expert/learners', label: 'Learners', icon: <Users className="w-5 h-5" />, matchPrefix: '/expert/learners' },
 ];
 
+function getExpertPageTitle(pathname: string | null): string | undefined {
+  if (!pathname || pathname === '/expert') {
+    return 'Dashboard';
+  }
+
+  if (pathname.startsWith('/expert/queue')) {
+    return 'Review Queue';
+  }
+
+  if (pathname.startsWith('/expert/calibration')) {
+    return 'Calibration';
+  }
+
+  if (pathname.startsWith('/expert/learners')) {
+    return 'Learners';
+  }
+
+  if (pathname.startsWith('/expert/metrics')) {
+    return 'Metrics';
+  }
+
+  if (pathname.startsWith('/expert/schedule')) {
+    return 'Schedule';
+  }
+
+  return undefined;
+}
+
 function ExpertLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const { expert } = useExpertAuth();
+  const pageTitle = getExpertPageTitle(pathname);
 
   // Hide nav for specific review workspaces
   const isReviewWorkspace = pathname?.includes('/expert/review/') ?? false;
@@ -33,19 +61,15 @@ function ExpertLayoutContent({ children }: { children: React.ReactNode }) {
   }
 
   return (
-    <AppShell 
+    <ExpertDashboardShell
+      pageTitle={pageTitle}
       navItems={expertNavItems}
       mobileNavItems={expertNavItems}
       userSummary={{ displayName: expert?.displayName, email: expert?.email }}
       requiredRole="expert"
     >
-      <>
-        <div className="px-4 pt-4 md:px-8 md:pt-6">
-          <PrivilegedMfaBanner />
-        </div>
-        {children}
-      </>
-    </AppShell>
+      {children}
+    </ExpertDashboardShell>
   );
 }
 

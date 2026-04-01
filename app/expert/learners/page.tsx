@@ -2,15 +2,22 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Users } from 'lucide-react';
+import { CheckCircle2, Clock3, Search, Sparkles, Users } from 'lucide-react';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { EmptyState } from '@/components/ui/empty-error';
 import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-error';
 import { Select } from '@/components/ui/form-controls';
-import { ExpertFreshnessBadge, ExpertPageHeader, ExpertSectionPanel } from '@/components/domain/expert-surface';
+import {
+  ExpertRouteFreshnessBadge,
+  ExpertRouteHero,
+  ExpertRouteSectionHeader,
+  ExpertRouteWorkspace,
+} from '@/components/domain/expert-route-surface';
+import { LearnerSurfaceCard } from '@/components/domain/learner-surface';
 import { fetchExpertLearners, fetchExpertQueueFilterMetadata, isApiError } from '@/lib/api';
-import type { ExpertLearnerDirectoryResponse, ExpertQueueFilterMetadata } from '@/lib/types/expert';
 import { analytics } from '@/lib/analytics';
+import type { ExpertLearnerDirectoryResponse, ExpertQueueFilterMetadata } from '@/lib/types/expert';
 
 type AsyncStatus = 'loading' | 'error' | 'success' | 'empty';
 
@@ -79,113 +86,137 @@ export default function LearnersIndexPage() {
     return [{ value: '', label: 'All sub-tests' }, ...values.map((value) => ({ value, label: value }))];
   }, [metadata?.types]);
 
+  const urgentCount = directory?.items.filter((learner) => learner.lastReviewState === 'overdue' || learner.lastReviewState === 'rework').length ?? 0;
+  const activeCount = directory?.items.filter((learner) => learner.lastReviewState === 'active').length ?? 0;
+
   return (
-    <div className="mx-auto flex max-w-7xl flex-col gap-6 p-4 md:p-8" role="main" aria-label="Assigned learners">
-      <ExpertPageHeader
-        meta="Privacy-scoped Directory"
-        title="Assigned Learners"
-        description="Browse only the learners connected to your current or historical expert reviews. Search by learner, profession, sub-test context, or review-state relevance."
-        actions={directory ? <ExpertFreshnessBadge value={directory.lastUpdatedAt} /> : undefined}
-      />
-
-      <ExpertSectionPanel title="Directory Filters" description="Use the filters below to narrow your learner context without leaving expert scope.">
-        <div className="grid grid-cols-1 gap-3 md:grid-cols-[1.2fr_0.7fr_0.7fr_0.8fr]">
-          <label className="relative block">
-            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-            <input
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
-                setPage(1);
-              }}
-              placeholder="Search learner or review id"
-              className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-9 pr-3 text-sm text-slate-900 outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
-            />
-          </label>
-          <Select
-            value={profession}
-            onChange={(event) => {
-              setProfession(event.target.value);
-              setPage(1);
-            }}
-            options={professionOptions}
-            aria-label="Filter learners by profession"
-          />
-          <Select
-            value={subTest}
-            onChange={(event) => {
-              setSubTest(event.target.value);
-              setPage(1);
-            }}
-            options={subTestOptions}
-            aria-label="Filter learners by sub-test"
-          />
-          <Select
-            value={relevance}
-            onChange={(event) => {
-              setRelevance(event.target.value);
-              setPage(1);
-            }}
-            options={RELEVANCE_OPTIONS}
-            aria-label="Filter learners by review relevance"
-          />
-        </div>
-      </ExpertSectionPanel>
-
+    <ExpertRouteWorkspace role="main" aria-label="Assigned learners">
       <AsyncStateWrapper
         status={status === 'empty' ? 'success' : status}
         onRetry={() => setReloadToken((current) => current + 1)}
         errorMessage={errorMessage ?? undefined}
-      >
-        {status === 'empty' ? (
+        emptyContent={
           <EmptyState
             icon={<Users className="h-12 w-12 text-slate-400" />}
             title="No learners match the current expert scope"
             description="Try broadening the filters or remove one of the relevance constraints."
           />
-        ) : (
-          <ExpertSectionPanel
-            title="Assigned Learner Directory"
-            description={directory ? `${directory.totalCount} learner${directory.totalCount === 1 ? '' : 's'} available in your expert scope.` : 'Loading learner scope.'}
-          >
+        }
+      >
+        <div className="space-y-6">
+          <ExpertRouteHero
+            eyebrow="Privacy-scoped Directory"
+            icon={Sparkles}
+            accent="primary"
+            title="Assigned Learners"
+            description="Browse only the learners connected to your current or historical expert reviews. Search by learner, profession, sub-test context, or review-state relevance."
+            highlights={[
+              { icon: Users, label: 'Learners in scope', value: String(directory?.totalCount ?? 0) },
+              { icon: CheckCircle2, label: 'Active review context', value: String(activeCount) },
+              { icon: Clock3, label: 'Urgent or overdue', value: String(urgentCount) },
+            ]}
+            aside={directory ? <ExpertRouteFreshnessBadge value={directory.lastUpdatedAt} /> : undefined}
+          />
+
+          <section className="space-y-4">
+            <ExpertRouteSectionHeader
+              eyebrow="Directory Filters"
+              title="Narrow learner scope"
+              description="Use the filters below to narrow your learner context without leaving expert scope."
+            />
+            <Card className="border-slate-200 shadow-sm">
+              <CardContent className="space-y-4 p-5">
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-[1.2fr_0.7fr_0.7fr_0.8fr]">
+                  <label className="relative block">
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <input
+                      value={search}
+                      onChange={(event) => {
+                        setSearch(event.target.value);
+                        setPage(1);
+                      }}
+                      placeholder="Search learner or review id"
+                      className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                    />
+                  </label>
+                  <Select
+                    value={profession}
+                    onChange={(event) => {
+                      setProfession(event.target.value);
+                      setPage(1);
+                    }}
+                    options={professionOptions}
+                    aria-label="Filter learners by profession"
+                  />
+                  <Select
+                    value={subTest}
+                    onChange={(event) => {
+                      setSubTest(event.target.value);
+                      setPage(1);
+                    }}
+                    options={subTestOptions}
+                    aria-label="Filter learners by sub-test"
+                  />
+                  <Select
+                    value={relevance}
+                    onChange={(event) => {
+                      setRelevance(event.target.value);
+                      setPage(1);
+                    }}
+                    options={RELEVANCE_OPTIONS}
+                    aria-label="Filter learners by review relevance"
+                  />
+                </div>
+                <div className="flex items-center justify-between gap-3 text-xs text-slate-500">
+                  <span>{directory ? `${directory.totalCount} learner${directory.totalCount === 1 ? '' : 's'} in scope.` : 'Loading learner scope.'}</span>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setSearch('');
+                      setProfession('');
+                      setSubTest('');
+                      setRelevance('');
+                      setPage(1);
+                    }}
+                  >
+                    Clear filters
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </section>
+
+          <section className="space-y-4">
+            <ExpertRouteSectionHeader
+              eyebrow="Assigned Learner Directory"
+              title="Learner cards"
+              description={directory ? `${directory.totalCount} learner${directory.totalCount === 1 ? '' : 's'} available in your expert scope.` : 'Loading learner scope.'}
+            />
+
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
               {directory?.items.map((learner) => (
-                <button
+                <LearnerSurfaceCard
                   key={learner.id}
-                  type="button"
-                  onClick={() => router.push(`/expert/learners/${learner.id}`)}
-                  className="rounded-2xl border border-slate-200 bg-white p-5 text-left transition hover:border-primary/40 hover:shadow-sm"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <h3 className="text-base font-semibold text-slate-900">{learner.name}</h3>
-                      <p className="text-sm text-slate-500">
-                        {learner.profession.replace(/_/g, ' ')} | goal {learner.goalScore}
-                      </p>
-                    </div>
-                    <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-medium text-slate-600">
-                      {learner.reviewsInScope} review{learner.reviewsInScope === 1 ? '' : 's'}
-                    </span>
-                  </div>
-
-                  <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">Sub-tests in scope</p>
-                      <p className="mt-2 text-sm font-medium text-slate-900">{learner.subTests.join(', ')}</p>
-                    </div>
-                    <div className="rounded-xl bg-slate-50 p-3">
-                      <p className="text-xs font-medium uppercase tracking-[0.12em] text-slate-500">Latest review state</p>
-                      <p className="mt-2 text-sm font-medium text-slate-900">{learner.lastReviewState.replace(/_/g, ' ')}</p>
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex flex-wrap items-center gap-4 text-xs text-slate-500">
-                    <span>Last review {learner.lastReviewId}</span>
-                    <span>{learner.lastReviewType}</span>
-                    <span>{new Date(learner.lastReviewAt).toLocaleString()}</span>
-                    <span>{learner.examDate ? `Exam ${new Date(learner.examDate).toLocaleDateString()}` : 'Exam date not set'}</span>
-                  </div>
-                </button>
+                  card={{
+                    kind: 'navigation',
+                    sourceType: 'frontend_navigation',
+                    eyebrow: learner.lastReviewState.replace(/_/g, ' '),
+                    title: learner.name,
+                    description: `${learner.profession.replace(/_/g, ' ')} · goal ${learner.goalScore}`,
+                    accent: learner.lastReviewState === 'overdue' || learner.lastReviewState === 'rework' ? 'amber' : 'primary',
+                    metaItems: [
+                      { label: `${learner.reviewsInScope} review${learner.reviewsInScope === 1 ? '' : 's'} in scope` },
+                      { label: learner.subTests.join(', ') },
+                      { label: learner.examDate ? `Exam ${new Date(learner.examDate).toLocaleDateString()}` : 'Exam date not set' },
+                    ],
+                    statusLabel: learner.lastReviewType,
+                    primaryAction: {
+                      label: 'Open Profile',
+                      href: `/expert/learners/${learner.id}`,
+                    },
+                  }}
+                />
               ))}
             </div>
 
@@ -209,9 +240,9 @@ export default function LearnersIndexPage() {
                 </div>
               </div>
             ) : null}
-          </ExpertSectionPanel>
-        )}
+          </section>
+        </div>
       </AsyncStateWrapper>
-    </div>
+    </ExpertRouteWorkspace>
   );
 }
