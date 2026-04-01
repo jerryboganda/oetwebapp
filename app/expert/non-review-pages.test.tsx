@@ -43,6 +43,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('recharts', () => ({
+  ResponsiveContainer: ({ children }: { children: ReactNode }) => <div data-testid="responsive-chart">{children}</div>,
   BarChart: ({ children }: { children: ReactNode }) => <div data-testid="bar-chart">{children}</div>,
   Bar: () => null,
   CartesianGrid: () => null,
@@ -308,6 +309,8 @@ describe('Expert Non-Review Pages', () => {
     expect(await screen.findByRole('heading', { name: /dashboard signals/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /operational metrics/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/date range filter/i)).toBeInTheDocument();
+    expect(screen.getByTestId('responsive-chart')).toBeInTheDocument();
+    expect(screen.getByTestId('bar-chart')).toBeInTheDocument();
   });
 
   it('renders the schedule page inside the learner-style route surface', async () => {

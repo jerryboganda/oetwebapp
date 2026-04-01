@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
-import { BarChart, Bar, CartesianGrid, Tooltip, XAxis, YAxis } from 'recharts';
+import { useEffect, useState } from 'react';
+import { BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { AlertTriangle, CheckCircle, Clock, Sparkles, TrendingUp } from 'lucide-react';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
@@ -27,8 +27,6 @@ export default function PerformanceMetricsPage() {
   const [retryKey, setRetryKey] = useState(0);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [generatedAt, setGeneratedAt] = useState<string | null>(null);
-  const chartContainerRef = useRef<HTMLDivElement | null>(null);
-  const [chartWidth, setChartWidth] = useState(0);
 
   useEffect(() => {
     let cancelled = false;
@@ -53,21 +51,6 @@ export default function PerformanceMetricsPage() {
     void load();
     return () => { cancelled = true; };
   }, [dateRange, retryKey]);
-
-  useEffect(() => {
-    const element = chartContainerRef.current;
-    if (!element || typeof ResizeObserver === 'undefined') {
-      return;
-    }
-
-    const observer = new ResizeObserver((entries) => {
-      const nextWidth = Math.floor(entries[0]?.contentRect.width ?? 0);
-      setChartWidth(nextWidth > 0 ? nextWidth : 0);
-    });
-
-    observer.observe(element);
-    return () => observer.disconnect();
-  }, []);
 
   const dateRangeOptions = [
     { value: '7', label: 'Last 7 Days' },
@@ -164,9 +147,9 @@ export default function PerformanceMetricsPage() {
             />
             <Card className="border-slate-200 shadow-sm">
               <CardContent className="p-5">
-                <div ref={chartContainerRef} className="h-[300px] min-w-0">
-                  {chartWidth > 0 ? (
-                    <BarChart width={chartWidth} height={300} data={completionData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }} aria-label="Reviews completed bar chart">
+                <div className="h-[300px] w-full min-w-0" role="img" aria-label="Reviews completed bar chart">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={completionData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }} aria-label="Reviews completed bar chart">
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
                       <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} dy={10} />
                       <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} />
@@ -176,9 +159,7 @@ export default function PerformanceMetricsPage() {
                       />
                       <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
                     </BarChart>
-                  ) : (
-                    <div className="h-full rounded-lg bg-slate-50" aria-hidden="true" />
-                  )}
+                  </ResponsiveContainer>
                 </div>
               </CardContent>
             </Card>
