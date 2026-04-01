@@ -266,7 +266,7 @@ export async function persistSessionToStorageState(
   role: SeededRole,
   session: AuthSessionResponse,
 ) {
-  await page.goto('/sign-in');
+  await page.goto('/sign-in', { waitUntil: 'domcontentloaded' });
   await page.evaluate(
     ({ sessionRecord, localKey, sessionKey, challengeKey }) => {
       window.localStorage.setItem(localKey, JSON.stringify(sessionRecord));

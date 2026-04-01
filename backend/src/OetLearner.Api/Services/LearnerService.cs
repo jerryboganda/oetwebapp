@@ -2318,8 +2318,9 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
     {
         await EnsureUserAsync(userId, cancellationToken);
         var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
+        var normalizedSubscriptionPlanId = NormalizeBillingCode(subscription.PlanId);
         var plans = await db.BillingPlans.AsNoTracking()
-            .Where(plan => plan.IsVisible || string.Equals(plan.Code, subscription.PlanId, StringComparison.OrdinalIgnoreCase))
+            .Where(plan => plan.IsVisible || plan.Code.ToLower() == normalizedSubscriptionPlanId)
             .OrderBy(plan => plan.DisplayOrder)
             .ThenBy(plan => plan.Price)
             .ToListAsync(cancellationToken);
@@ -2475,13 +2476,53 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
             },
             collections = new
             {
-                fullMocks = new[]
+                fullMocks = new MockHistoryCard[]
                 {
-                    new { id = "fm-1", title = "Full Mock Test 1", status = latestReport is null ? "available" : "completed", score = latestReport?.GetValueOrDefault("overallScore")?.ToString() ?? "340", date = latestReport?.GetValueOrDefault("date")?.ToString() ?? DateTimeOffset.UtcNow.ToString("MMM dd, yyyy"), duration = "3h 15m", isRecommended = latestReport is null, reason = latestReport is null ? "Complete the first full mock to establish a baseline." : (string?)null },
-                    new { id = "fm-2", title = "Full Mock Test 2", status = "completed", score = "B/B/B/B", date = "Nov 05, 2023", duration = "3h 15m", isRecommended = false, reason = (string?)null },
-                    new { id = "fm-3", title = "Full Mock Test 3", status = "available", score = (string?)null, date = (string?)null, duration = "3h 15m", isRecommended = false, reason = (string?)null },
-                    new { id = "fm-4", title = "Full Mock Test 4", status = "available", score = (string?)null, date = (string?)null, duration = "3h 15m", isRecommended = false, reason = (string?)null },
-                    new { id = "fm-5", title = "Full Mock Test 5", status = "locked", score = (string?)null, date = (string?)null, duration = (string?)null, isRecommended = false, reason = "Complete Mock 4 first" }
+                    new(
+                        "fm-1",
+                        "Full Mock Test 1",
+                        latestReport is null ? "available" : "completed",
+                        latestReport?.GetValueOrDefault("overallScore")?.ToString() ?? "340",
+                        latestReport?.GetValueOrDefault("date")?.ToString() ?? DateTimeOffset.UtcNow.ToString("MMM dd, yyyy"),
+                        "3h 15m",
+                        latestReport is null,
+                        latestReport is null ? "Complete the first full mock to establish a baseline." : null),
+                    new(
+                        "fm-2",
+                        "Full Mock Test 2",
+                        "completed",
+                        "B/B/B/B",
+                        "Nov 05, 2023",
+                        "3h 15m",
+                        false,
+                        null),
+                    new(
+                        "fm-3",
+                        "Full Mock Test 3",
+                        "available",
+                        null,
+                        null,
+                        "3h 15m",
+                        false,
+                        null),
+                    new(
+                        "fm-4",
+                        "Full Mock Test 4",
+                        "available",
+                        null,
+                        null,
+                        "3h 15m",
+                        false,
+                        null),
+                    new(
+                        "fm-5",
+                        "Full Mock Test 5",
+                        "locked",
+                        null,
+                        null,
+                        null,
+                        false,
+                        "Complete Mock 4 first")
                 },
                 subTestMocks = new[]
                 {
@@ -2537,6 +2578,16 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
                 new { id = "current_subtest", label = "Current Sub-test" }
             }
         });
+
+    private sealed record MockHistoryCard(
+        string Id,
+        string Title,
+        string Status,
+        string? Score,
+        string? Date,
+        string? Duration,
+        bool IsRecommended,
+        string? Reason);
 
     #if false
     public object GetExtras() => new
@@ -3674,42 +3725,45 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
 
     private async Task<BillingPlan?> FindBillingPlanAsync(string planCode, CancellationToken cancellationToken)
     {
-        var normalized = (planCode ?? string.Empty).Trim();
+        var normalized = NormalizeBillingCode(planCode);
         if (string.IsNullOrWhiteSpace(normalized))
         {
             return null;
         }
 
         return await db.BillingPlans.AsNoTracking()
-            .FirstOrDefaultAsync(plan => string.Equals(plan.Code, normalized, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(plan.Id, normalized, StringComparison.OrdinalIgnoreCase), cancellationToken);
+            .FirstOrDefaultAsync(plan => plan.Code.ToLower() == normalized
+                || plan.Id.ToLower() == normalized, cancellationToken);
     }
 
     private async Task<BillingAddOn?> FindBillingAddOnAsync(string addOnCode, CancellationToken cancellationToken)
     {
-        var normalized = (addOnCode ?? string.Empty).Trim();
+        var normalized = NormalizeBillingCode(addOnCode);
         if (string.IsNullOrWhiteSpace(normalized))
         {
             return null;
         }
 
         return await db.BillingAddOns.AsNoTracking()
-            .FirstOrDefaultAsync(addOn => string.Equals(addOn.Code, normalized, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(addOn.Id, normalized, StringComparison.OrdinalIgnoreCase), cancellationToken);
+            .FirstOrDefaultAsync(addOn => addOn.Code.ToLower() == normalized
+                || addOn.Id.ToLower() == normalized, cancellationToken);
     }
 
     private async Task<BillingCoupon?> FindBillingCouponAsync(string couponCode, CancellationToken cancellationToken)
     {
-        var normalized = (couponCode ?? string.Empty).Trim();
+        var normalized = NormalizeBillingCode(couponCode);
         if (string.IsNullOrWhiteSpace(normalized))
         {
             return null;
         }
 
         return await db.BillingCoupons.AsNoTracking()
-            .FirstOrDefaultAsync(coupon => string.Equals(coupon.Code, normalized, StringComparison.OrdinalIgnoreCase)
-                || string.Equals(coupon.Id, normalized, StringComparison.OrdinalIgnoreCase), cancellationToken);
+            .FirstOrDefaultAsync(coupon => coupon.Code.ToLower() == normalized
+                || coupon.Id.ToLower() == normalized, cancellationToken);
     }
+
+    private static string NormalizeBillingCode(string? value)
+        => (value ?? string.Empty).Trim().ToLowerInvariant();
 
     private static List<string> NormalizeCodes(IEnumerable<string>? codes)
         => (codes ?? Array.Empty<string>()).Where(code => !string.IsNullOrWhiteSpace(code))

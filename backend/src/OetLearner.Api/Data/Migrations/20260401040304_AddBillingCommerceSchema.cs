@@ -25,6 +25,28 @@ namespace OetLearner.Api.Data.Migrations
                 nullable: false,
                 defaultValue: "");
 
+            migrationBuilder.Sql("""
+                UPDATE "BillingPlans"
+                SET "Code" = 'basic-monthly'
+                WHERE "Id" = 'plan-basic-monthly';
+
+                UPDATE "BillingPlans"
+                SET "Code" = 'premium-monthly'
+                WHERE "Id" = 'plan-premium-monthly';
+
+                UPDATE "BillingPlans"
+                SET "Code" = 'premium-yearly'
+                WHERE "Id" = 'plan-premium-yearly';
+
+                UPDATE "BillingPlans"
+                SET "Code" = 'intensive-monthly'
+                WHERE "Id" = 'plan-intensive-monthly';
+
+                UPDATE "BillingPlans"
+                SET "Code" = 'legacy-trial'
+                WHERE "Id" = 'plan-legacy-trial';
+                """);
+
             migrationBuilder.AddColumn<string>(
                 name: "Description",
                 table: "BillingPlans",

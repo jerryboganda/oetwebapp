@@ -26,7 +26,7 @@ test.describe('Authentication flows @auth @smoke', () => {
     }
 
     const diagnostics = observePage(page);
-    await page.goto('/sign-in');
+    await page.goto('/sign-in', { waitUntil: 'domcontentloaded' });
 
     await page.getByRole('link', { name: /create an account/i }).click();
     await expect(page).toHaveURL(/\/register/);
@@ -73,10 +73,10 @@ test.describe('Authentication flows @auth @smoke', () => {
     await page.goto('/reset-password?email=learner%40oet-prep.dev');
     await page.getByLabel('Reset code').fill('123456');
     await page.getByLabel(/^new password$/i).fill('Password123!');
-    await page.getByLabel(/^confirm new password$/i).fill('Password999!');
+    await page.getByLabel(/^confirm password$/i).fill('Password999!');
     await page.locator('form').getByRole('button', { name: /reset password/i }).click();
 
-    await expect(page.getByText(/passwords do not match\./i)).toBeVisible();
+    await expect(page.getByText(/passwords must match before you continue/i)).toBeVisible();
 
     expectNoSevereClientIssues(diagnostics);
     diagnostics.detach();
@@ -91,7 +91,7 @@ test.describe('Authentication flows @auth @smoke', () => {
     const diagnostics = observePage(page);
     await page.goto('/verify-email');
 
-    await expect(page.getByText(/add an email address to the verification link/i)).toBeVisible();
+    await expect(page.getByText(/a valid email address is required before verification can continue/i)).toBeVisible();
 
     expectNoSevereClientIssues(diagnostics);
     diagnostics.detach();

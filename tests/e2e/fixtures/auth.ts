@@ -17,7 +17,7 @@ export const authStatePaths: Record<SeededRole, string> = {
 export async function signInThroughUi(page: Page, role: SeededRole) {
   const account = seededAccounts[role];
 
-  await page.goto('/sign-in');
+  await page.goto('/sign-in', { waitUntil: 'domcontentloaded' });
   await expect(page.getByRole('heading', { name: /login to your account|access your workspace/i })).toBeVisible();
 
   await page.getByLabel(/email/i).fill(account.email);

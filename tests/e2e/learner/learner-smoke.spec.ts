@@ -18,16 +18,18 @@ const learnerRoutes = [
 ];
 
 test.describe('Learner workspace smoke @learner @smoke', () => {
+  test.describe.configure({ mode: 'serial' });
+
   test('learner dashboard loads and session survives a reload', async ({ page }, testInfo) => {
     if (!testInfo.project.name.includes('learner')) {
       test.skip();
     }
 
     const diagnostics = observePage(page);
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
 
     await expect(page.getByRole('heading', { name: /keep today'?s priorities and exam signals in view/i })).toBeVisible();
-    await page.reload();
+    await page.reload({ waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: /keep today'?s priorities and exam signals in view/i })).toBeVisible();
 
     expectNoSevereClientIssues(diagnostics);
@@ -42,7 +44,7 @@ test.describe('Learner workspace smoke @learner @smoke', () => {
       }
 
       const diagnostics = observePage(page);
-      await page.goto(route.path);
+      await page.goto(route.path, { waitUntil: 'domcontentloaded' });
       const main = page.getByRole('main');
 
       await expect(page).toHaveURL(new RegExp(route.path === '/' ? '/$' : route.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));

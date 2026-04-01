@@ -21,13 +21,15 @@ async function expectNoSeriousAxeViolations(page: Parameters<typeof AxeBuilder>[
 }
 
 test.describe('Accessibility smoke @a11y', () => {
+  test.describe.configure({ mode: 'serial' });
+
   test('sign in screen is keyboard-reachable and free of critical axe violations', async ({ page }, testInfo) => {
     if (!testInfo.project.name.includes('chromium-unauth')) {
       test.skip();
     }
 
     const diagnostics = observePage(page);
-    await page.goto('/sign-in');
+    await page.goto('/sign-in', { waitUntil: 'domcontentloaded' });
 
     const submitButton = page.getByRole('button', { name: /^sign in$/i }).first();
     await tabUntilFocused(page, submitButton);
@@ -45,7 +47,7 @@ test.describe('Accessibility smoke @a11y', () => {
     }
 
     const diagnostics = observePage(page);
-    await page.goto('/');
+    await page.goto('/', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: /keep today'?s priorities and exam signals in view/i })).toBeVisible();
     await expectNoSeriousAxeViolations(page);
 
@@ -60,7 +62,7 @@ test.describe('Accessibility smoke @a11y', () => {
     }
 
     const diagnostics = observePage(page);
-    await page.goto('/settings/profile');
+    await page.goto('/settings/profile', { waitUntil: 'domcontentloaded' });
     await expect(page.getByRole('heading', { name: /keep profile settings clear before you change them/i })).toBeVisible();
     await expectNoSeriousAxeViolations(page);
 
@@ -75,8 +77,8 @@ test.describe('Accessibility smoke @a11y', () => {
     }
 
     const diagnostics = observePage(page);
-    await page.goto('/expert/queue');
-    await expect(page.getByText(/review queue|queue/i).first()).toBeVisible();
+    await page.goto('/expert/queue', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: /review queue/i })).toBeVisible();
     await expectNoSeriousAxeViolations(page);
 
     expectNoSevereClientIssues(diagnostics);
@@ -90,8 +92,8 @@ test.describe('Accessibility smoke @a11y', () => {
     }
 
     const diagnostics = observePage(page);
-    await page.goto('/admin/content');
-    await expect(page.getByText(/content library|content/i).first()).toBeVisible();
+    await page.goto('/admin/content', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: /content library/i })).toBeVisible();
     await expectNoSeriousAxeViolations(page);
 
     expectNoSevereClientIssues(diagnostics);
