@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Edit3, Flag, Plus, Power } from 'lucide-react';
-import { AdminMetricCard, AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
+import { AdminRouteSummaryCard, AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -266,10 +266,10 @@ export default function FlagsPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <div className="max-w-7xl space-y-6">
+    <AdminRouteWorkspace role="main" aria-label="Feature flags">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminPageHeader
+      <AdminRouteSectionHeader
         title="Feature Flags"
         description="Manage production rollouts, experiments, and operational controls with real activate and deactivate actions."
         actions={
@@ -293,16 +293,16 @@ export default function FlagsPage() {
         }
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <AdminMetricCard label="Enabled Flags" value={metrics.enabled} icon={<Power className="h-5 w-5" />} />
-          <AdminMetricCard label="Experiments" value={metrics.experiments} icon={<Flag className="h-5 w-5" />} tone={metrics.experiments > 0 ? 'warning' : 'default'} />
-          <AdminMetricCard label="Operational Controls" value={metrics.operational} icon={<Flag className="h-5 w-5" />} />
-          <AdminMetricCard label="100% Rollout" value={metrics.fullRollout} icon={<Flag className="h-5 w-5" />} />
+          <AdminRouteSummaryCard label="Enabled Flags" value={metrics.enabled} icon={<Power className="h-5 w-5" />} />
+          <AdminRouteSummaryCard label="Experiments" value={metrics.experiments} icon={<Flag className="h-5 w-5" />} tone={metrics.experiments > 0 ? 'warning' : 'default'} />
+          <AdminRouteSummaryCard label="Operational Controls" value={metrics.operational} icon={<Flag className="h-5 w-5" />} />
+          <AdminRouteSummaryCard label="100% Rollout" value={metrics.fullRollout} icon={<Flag className="h-5 w-5" />} />
         </div>
 
-        <AdminSectionPanel title="Rollout Registry" description="All visible enable, disable, and edit controls are backed by the admin feature flag endpoints and audit events.">
+        <AdminRoutePanel title="Rollout Registry" description="All visible enable, disable, and edit controls are backed by the admin feature flag endpoints and audit events.">
           <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ type: [] })} />
           <DataTable columns={columns} data={flags} keyExtractor={(flag) => flag.id} />
-        </AdminSectionPanel>
+        </AdminRoutePanel>
       </AsyncStateWrapper>
 
       <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)} title={form.id ? 'Edit Feature Flag' : 'Create Feature Flag'}>
@@ -349,6 +349,6 @@ export default function FlagsPage() {
           </div>
         </div>
       </Modal>
-    </div>
+    </AdminRouteWorkspace>
   );
 }

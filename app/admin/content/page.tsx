@@ -3,7 +3,7 @@
 import { useDeferredValue, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, FileText, History, Plus, Search } from 'lucide-react';
-import { AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
+import { AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -163,10 +163,10 @@ export default function AdminContentLibraryPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <div className="max-w-7xl space-y-6">
+    <AdminRouteWorkspace role="main" aria-label="Content library">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminPageHeader
+      <AdminRouteSectionHeader
         title="Content Library"
         description="Manage the live OET content catalog, editorial revisions, and publish-ready practice material."
         actions={
@@ -188,7 +188,7 @@ export default function AdminContentLibraryPage() {
           />
         }
       >
-        <AdminSectionPanel title="Filters" description="Filter by subtest, profession, or publication state.">
+        <AdminRoutePanel title="Filters" description="Filter by subtest, profession, or publication state.">
           <div className="max-w-sm">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -213,9 +213,9 @@ export default function AdminContentLibraryPage() {
               setPage(1);
             }}
           />
-        </AdminSectionPanel>
+        </AdminRoutePanel>
 
-        <AdminSectionPanel
+        <AdminRoutePanel
           title="Content Items"
           description={`Every visible row is backed by the live admin content endpoint. Showing ${visibleStart}-${visibleEnd} of ${total}.`}
         >
@@ -251,8 +251,8 @@ export default function AdminContentLibraryPage() {
               </div>
             </div>
           )}
-        </AdminSectionPanel>
+        </AdminRoutePanel>
       </AsyncStateWrapper>
-    </div>
+    </AdminRouteWorkspace>
   );
 }

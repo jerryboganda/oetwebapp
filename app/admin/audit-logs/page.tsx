@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Download, FileText, Search } from 'lucide-react';
-import { AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
+import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -222,10 +222,10 @@ export default function AuditLogsPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <div className="max-w-7xl space-y-6">
+    <AdminRouteWorkspace role="main" aria-label="Audit logs">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminPageHeader
+      <AdminRouteSectionHeader
         title="Audit Logs"
         description="Operational and security events are loaded from the live audit stream, with export and drill-in detail backed by real endpoints."
         actions={
@@ -247,7 +247,7 @@ export default function AuditLogsPage() {
           />
         }
       >
-        <AdminSectionPanel title="Audit Stream" description="Search, filter, and inspect individual events without leaving the admin console.">
+        <AdminRoutePanel title="Audit Stream" description="Search, filter, and inspect individual events without leaving the admin console.">
           <div className="max-w-md">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -256,7 +256,7 @@ export default function AuditLogsPage() {
           </div>
           <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => { setFilters({ action: [], actor: [] }); setSearchQuery(''); }} />
           <DataTable columns={columns} data={rows} keyExtractor={(log) => log.id} onRowClick={handleRowClick} />
-        </AdminSectionPanel>
+        </AdminRoutePanel>
       </AsyncStateWrapper>
 
       <Drawer open={Boolean(selectedLogId)} onClose={handleDrawerClose} title="Audit Event Detail">
@@ -295,6 +295,6 @@ export default function AuditLogsPage() {
           </div>
         )}
       </Drawer>
-    </div>
+    </AdminRouteWorkspace>
   );
 }

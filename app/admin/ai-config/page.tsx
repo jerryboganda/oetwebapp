@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Bot, Cpu, Edit3, PlayCircle, Plus } from 'lucide-react';
-import { AdminMetricCard, AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
+import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -260,10 +260,10 @@ export default function AIConfigPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <div className="max-w-7xl space-y-6">
+    <AdminRouteWorkspace role="main" aria-label="AI evaluation config">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminPageHeader
+      <AdminRouteSectionHeader
         title="AI Evaluation Config"
         description="Control live grading models, routing thresholds, and experiment linkages with real activation rules."
         actions={
@@ -287,16 +287,16 @@ export default function AIConfigPage() {
         }
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <AdminMetricCard label="Active Configs" value={metrics.active} icon={<PlayCircle className="h-5 w-5" />} />
-          <AdminMetricCard label="Testing Configs" value={metrics.testing} icon={<Bot className="h-5 w-5" />} tone={metrics.testing > 0 ? 'warning' : 'default'} />
-          <AdminMetricCard label="Deprecated" value={metrics.deprecated} icon={<Cpu className="h-5 w-5" />} />
-          <AdminMetricCard label="Average Accuracy" value={`${metrics.averageAccuracy}%`} icon={<Cpu className="h-5 w-5" />} />
+          <AdminRouteSummaryCard label="Active Configs" value={metrics.active} icon={<PlayCircle className="h-5 w-5" />} />
+          <AdminRouteSummaryCard label="Testing Configs" value={metrics.testing} icon={<Bot className="h-5 w-5" />} tone={metrics.testing > 0 ? 'warning' : 'default'} />
+          <AdminRouteSummaryCard label="Deprecated" value={metrics.deprecated} icon={<Cpu className="h-5 w-5" />} />
+          <AdminRouteSummaryCard label="Average Accuracy" value={`${metrics.averageAccuracy}%`} icon={<Cpu className="h-5 w-5" />} />
         </div>
 
-        <AdminSectionPanel title="Configuration Registry" description="Live model metadata, thresholds, routing rules, and activation controls all come from the admin AI config endpoints.">
+        <AdminRoutePanel title="Configuration Registry" description="Live model metadata, thresholds, routing rules, and activation controls all come from the admin AI config endpoints.">
           <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ status: [] })} />
           <DataTable columns={columns} data={configs} keyExtractor={(config) => config.id} />
-        </AdminSectionPanel>
+        </AdminRoutePanel>
       </AsyncStateWrapper>
 
       <Modal open={isModalOpen} onClose={() => setIsModalOpen(false)} title={form.id ? 'Edit AI Configuration' : 'New AI Configuration'}>
@@ -368,6 +368,6 @@ export default function AIConfigPage() {
           </div>
         </div>
       </Modal>
-    </div>
+    </AdminRouteWorkspace>
   );
 }

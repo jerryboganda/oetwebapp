@@ -4,7 +4,12 @@ import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'next/navigation';
 import { ArrowLeft, Coins, Mail, Shield, User as UserIcon, UserLock } from 'lucide-react';
-import { AdminMetricCard, AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
+import {
+  AdminRouteSectionHeader,
+  AdminRouteSummaryCard,
+  AdminRoutePanel,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -177,7 +182,7 @@ export default function UserDetailPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <div className="max-w-6xl space-y-6">
+    <AdminRouteWorkspace role="main" aria-label="User operations detail">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
       <Link href="/admin/users" className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-blue-600">
@@ -188,7 +193,7 @@ export default function UserDetailPage() {
       <AsyncStateWrapper status={pageStatus} onRetry={() => window.location.reload()}>
         {user ? (
           <>
-            <AdminPageHeader
+            <AdminRouteSectionHeader
               title={user.name}
               description="This operational profile is driven by the live admin user detail endpoint. Actions below mutate real account state and produce audit events."
               meta={user.id}
@@ -224,7 +229,7 @@ export default function UserDetailPage() {
             />
 
             <div className="grid gap-6 lg:grid-cols-[280px,1fr]">
-              <AdminSectionPanel title="Identity" description="Primary account identity and role context.">
+              <AdminRoutePanel title="Identity" description="Primary account identity and role context.">
                 <div className="flex flex-col items-center gap-4 text-center">
                   <div className="flex h-20 w-20 items-center justify-center rounded-full bg-blue-50 text-blue-600">
                     <UserIcon className="h-8 w-8" />
@@ -255,29 +260,29 @@ export default function UserDetailPage() {
                     </div>
                   </div>
                 </div>
-              </AdminSectionPanel>
+              </AdminRoutePanel>
 
               <div className="space-y-6">
                 <div className="grid gap-4 md:grid-cols-3">
-                  <AdminMetricCard
+                  <AdminRouteSummaryCard
                     label={user.role === 'expert' ? 'Tasks Graded' : 'Tasks Completed'}
                     value={user.role === 'expert' ? user.tasksGraded ?? 0 : user.tasksCompleted ?? 0}
                     icon={<Shield className="h-5 w-5" />}
                   />
-                  <AdminMetricCard
+                  <AdminRouteSummaryCard
                     label="Credit Balance"
                     value={user.creditBalance ?? 0}
                     icon={<Coins className="h-5 w-5" />}
                     tone={(user.creditBalance ?? 0) > 0 ? 'success' : 'default'}
                   />
-                  <AdminMetricCard
+                  <AdminRouteSummaryCard
                     label="Last Login"
                     value={user.lastLogin ? new Date(user.lastLogin).toLocaleDateString() : 'Never'}
                     icon={<UserLock className="h-5 w-5" />}
                   />
                 </div>
 
-                <AdminSectionPanel title="Operational Context" description="Only data the backend currently knows about this user is shown here.">
+                <AdminRoutePanel title="Operational Context" description="Only data the backend currently knows about this user is shown here.">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
                       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Profession</p>
@@ -298,9 +303,9 @@ export default function UserDetailPage() {
                       </div>
                     </div>
                   </div>
-                </AdminSectionPanel>
+                </AdminRoutePanel>
 
-                <AdminSectionPanel title="Access Controls" description="Actions hidden here are not available in the current backend account model.">
+                <AdminRoutePanel title="Access Controls" description="Actions hidden here are not available in the current backend account model.">
                   <div className="grid gap-3 md:grid-cols-4">
                     <div className="rounded-xl border border-slate-200 p-4">
                       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Suspend / Reactivate</p>
@@ -319,7 +324,7 @@ export default function UserDetailPage() {
                       <p className="mt-2 text-sm text-slate-600">{user.availableActions.canTriggerPasswordReset ? 'Supported' : 'No linked auth account available'}</p>
                     </div>
                   </div>
-                </AdminSectionPanel>
+                </AdminRoutePanel>
               </div>
             </div>
           </>
@@ -374,6 +379,6 @@ export default function UserDetailPage() {
           </div>
         </div>
       </Modal>
-    </div>
+    </AdminRouteWorkspace>
   );
 }

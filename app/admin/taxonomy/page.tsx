@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Edit2, ListTree, Plus } from 'lucide-react';
-import { AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
+import { AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -156,10 +156,10 @@ export default function AdminTaxonomyPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <div className="max-w-6xl space-y-6">
+    <AdminRouteWorkspace role="main" aria-label="Profession taxonomy">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminPageHeader
+      <AdminRouteSectionHeader
         title="Profession Taxonomy"
         description="Manage the professions that drive OET content targeting, learner goals, and downstream analytics."
         actions={
@@ -174,13 +174,13 @@ export default function AdminTaxonomyPage() {
         onRetry={() => setReloadNonce((current) => current + 1)}
         emptyContent={<EmptyState icon={<ListTree className="h-10 w-10 text-slate-400" />} title="No taxonomy entries" description="Add your first profession to start structuring content." />}
       >
-        <AdminSectionPanel title="Filters" description="Review active vs archived taxonomy nodes.">
+        <AdminRoutePanel title="Filters" description="Review active vs archived taxonomy nodes.">
           <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({})} />
-        </AdminSectionPanel>
+        </AdminRoutePanel>
 
-        <AdminSectionPanel title="Professions" description="Create, update, and archive professions with live impact checks before change.">
+        <AdminRoutePanel title="Professions" description="Create, update, and archive professions with live impact checks before change.">
           <DataTable columns={columns} data={nodes} keyExtractor={(row) => row.id} />
-        </AdminSectionPanel>
+        </AdminRoutePanel>
       </AsyncStateWrapper>
 
       <Modal open={modalOpen} onClose={() => setModalOpen(false)} title={editingNode ? `Edit ${editingNode.label}` : 'Add Profession'}>
@@ -219,6 +219,6 @@ export default function AdminTaxonomyPage() {
           </div>
         </div>
       </Modal>
-    </div>
+    </AdminRouteWorkspace>
   );
 }

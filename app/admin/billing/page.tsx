@@ -2,7 +2,7 @@
 
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from 'react';
 import { CreditCard, DollarSign, Package, Receipt, Search, Ticket, Users } from 'lucide-react';
-import { AdminMetricCard, AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
+import { AdminRouteSummaryCard, AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -460,7 +460,7 @@ export default function BillingPage() {
       render: (addOn) => (
         <div className="space-y-1 text-slate-600">
           <p>{formatCurrency(addOn.price, addOn.currency)} / {addOn.interval}</p>
-          <p className="text-xs">{addOn.grantCredits} credits · qty step {addOn.quantityStep}</p>
+          <p className="text-xs">{addOn.grantCredits} credits Â· qty step {addOn.quantityStep}</p>
         </div>
       ),
     },
@@ -521,7 +521,7 @@ export default function BillingPage() {
       render: (coupon) => (
         <div className="space-y-1 text-slate-600">
           <p>{coupon.redemptionCount} redemptions</p>
-          <p className="text-xs">{coupon.usageLimitTotal == null ? 'Unlimited' : `${coupon.usageLimitTotal} total`} · {coupon.usageLimitPerUser == null ? 'No per-user limit' : `${coupon.usageLimitPerUser} per user`}</p>
+          <p className="text-xs">{coupon.usageLimitTotal == null ? 'Unlimited' : `${coupon.usageLimitTotal} total`} Â· {coupon.usageLimitPerUser == null ? 'No per-user limit' : `${coupon.usageLimitPerUser} per user`}</p>
         </div>
       ),
     },
@@ -923,10 +923,10 @@ export default function BillingPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <div className="max-w-7xl space-y-6">
+    <AdminRouteWorkspace role="main" aria-label="Billing operations">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminPageHeader
+      <AdminRouteSectionHeader
         title="Billing Operations"
         description="Manage subscription plans, add-ons, coupons, subscriptions, and invoices with live backend data."
         actions={
@@ -960,43 +960,43 @@ export default function BillingPage() {
         }
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-          <AdminMetricCard label="Monthly Revenue" value={formatCurrency(metrics.totalMRR)} icon={<DollarSign className="h-5 w-5" />} />
-          <AdminMetricCard label="Subscribers" value={metrics.totalSubscribers} icon={<Users className="h-5 w-5" />} />
-          <AdminMetricCard label="Active Subscriptions" value={metrics.activeSubscriptions} icon={<Users className="h-5 w-5" />} />
-          <AdminMetricCard label="Active Plans" value={metrics.activePlans} icon={<CreditCard className="h-5 w-5" />} />
-          <AdminMetricCard label="Active Add-ons" value={metrics.activeAddOns} icon={<Package className="h-5 w-5" />} />
-          <AdminMetricCard label="Active Coupons" value={metrics.activeCoupons} icon={<Ticket className="h-5 w-5" />} />
-          <AdminMetricCard label="Failed Invoices" value={metrics.failedInvoices} icon={<Receipt className="h-5 w-5" />} tone={metrics.failedInvoices > 0 ? 'danger' : 'default'} />
+          <AdminRouteSummaryCard label="Monthly Revenue" value={formatCurrency(metrics.totalMRR)} icon={<DollarSign className="h-5 w-5" />} />
+          <AdminRouteSummaryCard label="Subscribers" value={metrics.totalSubscribers} icon={<Users className="h-5 w-5" />} />
+          <AdminRouteSummaryCard label="Active Subscriptions" value={metrics.activeSubscriptions} icon={<Users className="h-5 w-5" />} />
+          <AdminRouteSummaryCard label="Active Plans" value={metrics.activePlans} icon={<CreditCard className="h-5 w-5" />} />
+          <AdminRouteSummaryCard label="Active Add-ons" value={metrics.activeAddOns} icon={<Package className="h-5 w-5" />} />
+          <AdminRouteSummaryCard label="Active Coupons" value={metrics.activeCoupons} icon={<Ticket className="h-5 w-5" />} />
+          <AdminRouteSummaryCard label="Failed Invoices" value={metrics.failedInvoices} icon={<Receipt className="h-5 w-5" />} tone={metrics.failedInvoices > 0 ? 'danger' : 'default'} />
         </div>
 
-        <AdminSectionPanel
+        <AdminRoutePanel
           title="Subscription Plans"
           description="Live plan data from the admin billing plan endpoint."
           actions={<Button variant="outline" size="sm" onClick={() => openPlanEditor()}>Create Plan</Button>}
         >
           <FilterBar groups={planFilterGroups} selected={planFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setPlanFilters, groupId, optionId)} onClear={() => setPlanFilters({ status: [] })} />
           <DataTable columns={planColumns} data={plans} keyExtractor={(plan) => plan.id} />
-        </AdminSectionPanel>
+        </AdminRoutePanel>
 
-        <AdminSectionPanel
+        <AdminRoutePanel
           title="Add-ons"
           description="Manage review-credit packs and other purchasable subscription items."
           actions={<Button variant="outline" size="sm" onClick={() => openAddOnEditor()}>Create Add-on</Button>}
         >
           <FilterBar groups={addOnFilterGroups} selected={addOnFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setAddOnFilters, groupId, optionId)} onClear={() => setAddOnFilters({ status: [] })} />
           <DataTable columns={addOnColumns} data={addOns} keyExtractor={(addOn) => addOn.id} />
-        </AdminSectionPanel>
+        </AdminRoutePanel>
 
-        <AdminSectionPanel
+        <AdminRoutePanel
           title="Coupons"
           description="Create and edit promo codes, limits, validity windows, and scope rules."
           actions={<Button variant="outline" size="sm" onClick={() => openCouponEditor()}>Create Coupon</Button>}
         >
           <FilterBar groups={couponFilterGroups} selected={couponFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setCouponFilters, groupId, optionId)} onClear={() => setCouponFilters({ status: [] })} />
           <DataTable columns={couponColumns} data={coupons} keyExtractor={(coupon) => coupon.id} />
-        </AdminSectionPanel>
+        </AdminRoutePanel>
 
-        <AdminSectionPanel
+        <AdminRoutePanel
           title="Subscriptions"
           description="Read-only visibility into active learner subscriptions and attached items."
         >
@@ -1008,9 +1008,9 @@ export default function BillingPage() {
           </div>
           <FilterBar groups={subscriptionFilterGroups} selected={subscriptionFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setSubscriptionFilters, groupId, optionId)} onClear={() => setSubscriptionFilters({ status: [] })} />
           <DataTable columns={subscriptionColumns} data={subscriptions} keyExtractor={(subscription) => subscription.id} />
-        </AdminSectionPanel>
+        </AdminRoutePanel>
 
-        <AdminSectionPanel
+        <AdminRoutePanel
           title="Coupon Redemptions"
           description="Track which coupons were used and how much discount was granted."
         >
@@ -1022,9 +1022,9 @@ export default function BillingPage() {
           </div>
           <FilterBar groups={redemptionFilterGroups} selected={redemptionFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setRedemptionFilters, groupId, optionId)} onClear={() => setRedemptionFilters({ status: [] })} />
           <DataTable columns={redemptionColumns} data={redemptions} keyExtractor={(redemption) => redemption.id} />
-        </AdminSectionPanel>
+        </AdminRoutePanel>
 
-        <AdminSectionPanel title="Invoices" description="Search and filter real invoice records by status and learner reference.">
+        <AdminRoutePanel title="Invoices" description="Search and filter real invoice records by status and learner reference.">
           <div className="max-w-md">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -1033,7 +1033,7 @@ export default function BillingPage() {
           </div>
           <FilterBar groups={invoiceFilterGroups} selected={invoiceFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setInvoiceFilters, groupId, optionId)} onClear={() => { setInvoiceFilters({ status: [] }); setInvoiceSearch(''); }} />
           <DataTable columns={invoiceColumns} data={invoices} keyExtractor={(invoice) => invoice.id} />
-        </AdminSectionPanel>
+        </AdminRoutePanel>
       </AsyncStateWrapper>
 
       <Modal
@@ -1258,6 +1258,6 @@ export default function BillingPage() {
           </div>
         </div>
       </Modal>
-    </div>
+    </AdminRouteWorkspace>
   );
 }

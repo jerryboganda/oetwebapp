@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { MailPlus, Search, Users } from 'lucide-react';
-import { AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
+import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -216,10 +216,10 @@ export default function UsersPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <div className="max-w-7xl space-y-6">
+    <AdminRouteWorkspace role="main" aria-label="User operations">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminPageHeader
+      <AdminRouteSectionHeader
         title="User Operations"
         description="Manage learner, expert, and admin accounts with real invite, access, and status controls."
         actions={
@@ -243,18 +243,12 @@ export default function UsersPage() {
         }
       >
         <div className="grid gap-4 md:grid-cols-3">
-          <AdminSectionPanel title="Learners" description="Accounts currently visible in the active filter window.">
-            <p className="text-2xl font-semibold text-slate-900">{roleCounts.learners}</p>
-          </AdminSectionPanel>
-          <AdminSectionPanel title="Experts" description="Operational reviewer accounts in the current result set.">
-            <p className="text-2xl font-semibold text-slate-900">{roleCounts.experts}</p>
-          </AdminSectionPanel>
-          <AdminSectionPanel title="Admins" description="Administrative accounts visible to this query.">
-            <p className="text-2xl font-semibold text-slate-900">{roleCounts.admins}</p>
-          </AdminSectionPanel>
+          <AdminRouteSummaryCard label="Learners" value={roleCounts.learners} hint="Accounts currently visible in the active filter window." icon={Users} />
+          <AdminRouteSummaryCard label="Experts" value={roleCounts.experts} hint="Operational reviewer accounts in the current result set." icon={Users} accent="amber" />
+          <AdminRouteSummaryCard label="Admins" value={roleCounts.admins} hint="Administrative accounts visible to this query." icon={Users} accent="rose" />
         </div>
 
-        <AdminSectionPanel title="Directory" description="This directory is powered by the live admin users endpoint with real role and status filtering.">
+        <AdminRoutePanel title="Directory" description="This directory is powered by the live admin users endpoint with real role and status filtering.">
           <div className="max-w-sm">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -293,7 +287,7 @@ export default function UsersPage() {
             </div>
           </div>
           <DataTable columns={columns} data={users} keyExtractor={(user) => user.id} />
-        </AdminSectionPanel>
+        </AdminRoutePanel>
       </AsyncStateWrapper>
 
       <Modal open={isInviteOpen} onClose={() => setIsInviteOpen(false)} title="Invite User">
@@ -339,6 +333,6 @@ export default function UsersPage() {
           </div>
         </div>
       </Modal>
-    </div>
+    </AdminRouteWorkspace>
   );
 }

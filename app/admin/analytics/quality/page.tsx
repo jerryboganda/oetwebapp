@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, BarChart3, CheckCircle2, Clock, FileText, Users } from 'lucide-react';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
-import { AdminFreshnessBadge, AdminMetricCard, AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
+import { AdminRouteFreshnessBadge, AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { EmptyState } from '@/components/ui/empty-error';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
@@ -117,14 +117,14 @@ export default function QualityAnalyticsPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <div className="max-w-7xl space-y-6">
-      <AdminPageHeader
+    <AdminRouteWorkspace role="main" aria-label="Quality analytics">
+      <AdminRouteSectionHeader
         title="Quality Analytics"
         description="Track grading agreement, appeals, turnaround, and risk signals from the live quality analytics service."
         meta={analytics ? `Window ${analytics.freshness.windowDays} days` : undefined}
         actions={
           <div className="flex items-center gap-3">
-            <AdminFreshnessBadge value={analytics?.freshness.generatedAt} />
+            <AdminRouteFreshnessBadge value={analytics?.freshness.generatedAt} />
             <div className="w-44">
               <Select
                 label=""
@@ -159,21 +159,21 @@ export default function QualityAnalyticsPage() {
         {analytics ? (
           <>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <AdminMetricCard label="AI-Human Agreement" value={`${analytics.aiHumanAgreement.value}%`} hint={`${analytics.aiHumanAgreement.trend >= 0 ? '+' : ''}${analytics.aiHumanAgreement.trend}% vs prior window`} icon={<CheckCircle2 className="h-5 w-5" />} tone={analytics.aiHumanAgreement.trend >= 0 ? 'success' : 'warning'} />
-              <AdminMetricCard label="Appeals Rate" value={`${analytics.appealsRate.value}%`} hint={`${analytics.appealsRate.trend >= 0 ? '+' : ''}${analytics.appealsRate.trend}% vs prior window`} icon={<AlertTriangle className="h-5 w-5" />} tone={analytics.appealsRate.trend <= 0 ? 'success' : 'warning'} />
-              <AdminMetricCard label="Avg Review Time" value={`${analytics.avgReviewTime.value} ${analytics.avgReviewTime.unit}`} hint={`SLA met ${analytics.reviewSLA.metPercent}%`} icon={<Clock className="h-5 w-5" />} />
-              <AdminMetricCard label="Risk Cases" value={analytics.riskCases.count} hint={`Severity ${analytics.riskCases.severity}`} icon={<AlertTriangle className="h-5 w-5" />} tone={analytics.riskCases.count > 0 ? 'warning' : 'default'} />
+              <AdminRouteSummaryCard label="AI-Human Agreement" value={`${analytics.aiHumanAgreement.value}%`} hint={`${analytics.aiHumanAgreement.trend >= 0 ? '+' : ''}${analytics.aiHumanAgreement.trend}% vs prior window`} icon={<CheckCircle2 className="h-5 w-5" />} tone={analytics.aiHumanAgreement.trend >= 0 ? 'success' : 'warning'} />
+              <AdminRouteSummaryCard label="Appeals Rate" value={`${analytics.appealsRate.value}%`} hint={`${analytics.appealsRate.trend >= 0 ? '+' : ''}${analytics.appealsRate.trend}% vs prior window`} icon={<AlertTriangle className="h-5 w-5" />} tone={analytics.appealsRate.trend <= 0 ? 'success' : 'warning'} />
+              <AdminRouteSummaryCard label="Avg Review Time" value={`${analytics.avgReviewTime.value} ${analytics.avgReviewTime.unit}`} hint={`SLA met ${analytics.reviewSLA.metPercent}%`} icon={<Clock className="h-5 w-5" />} />
+              <AdminRouteSummaryCard label="Risk Cases" value={analytics.riskCases.count} hint={`Severity ${analytics.riskCases.severity}`} icon={<AlertTriangle className="h-5 w-5" />} tone={analytics.riskCases.count > 0 ? 'warning' : 'default'} />
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
-              <AdminMetricCard label="Published Content" value={analytics.contentPerformance.publishedCount} icon={<FileText className="h-5 w-5" />} />
-              <AdminMetricCard label="Active Content" value={analytics.contentPerformance.activeContent} icon={<FileText className="h-5 w-5" />} />
-              <AdminMetricCard label="Feature Adoption" value={`${analytics.featureAdoption.adoptionRate}%`} hint={`${analytics.featureAdoption.activeUsers} active users`} icon={<Users className="h-5 w-5" />} />
+              <AdminRouteSummaryCard label="Published Content" value={analytics.contentPerformance.publishedCount} icon={<FileText className="h-5 w-5" />} />
+              <AdminRouteSummaryCard label="Active Content" value={analytics.contentPerformance.activeContent} icon={<FileText className="h-5 w-5" />} />
+              <AdminRouteSummaryCard label="Feature Adoption" value={`${analytics.featureAdoption.adoptionRate}%`} hint={`${analytics.featureAdoption.activeUsers} active users`} icon={<Users className="h-5 w-5" />} />
             </div>
 
             <div className="grid gap-6 xl:grid-cols-2">
-              <AdminSectionPanel title="Quality Rates Trend" description="Agreement and appeals trends from the current analytics window.">
-                <div className="h-80">
+              <AdminRoutePanel title="Quality Rates Trend" description="Agreement and appeals trends from the current analytics window.">
+                <div className="h-80 min-h-[20rem]">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={rateChartData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -186,10 +186,10 @@ export default function QualityAnalyticsPage() {
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
-              </AdminSectionPanel>
+              </AdminRoutePanel>
 
-              <AdminSectionPanel title="Operations Trend" description="Review time and risk case trend lines from the live analytics response.">
-                <div className="h-80">
+              <AdminRoutePanel title="Operations Trend" description="Review time and risk case trend lines from the live analytics response.">
+                <div className="h-80 min-h-[20rem]">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={operationsChartData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -202,10 +202,10 @@ export default function QualityAnalyticsPage() {
                     </LineChart>
                   </ResponsiveContainer>
                 </div>
-              </AdminSectionPanel>
+              </AdminRoutePanel>
             </div>
 
-            <AdminSectionPanel title="Sample Coverage" description="Quality analytics are only as trustworthy as the evidence window behind them.">
+            <AdminRoutePanel title="Sample Coverage" description="Quality analytics are only as trustworthy as the evidence window behind them.">
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Evaluation Samples</p>
@@ -221,10 +221,10 @@ export default function QualityAnalyticsPage() {
                   <p className="text-sm text-slate-600">Profession: {analytics.filters.profession}</p>
                 </div>
               </div>
-            </AdminSectionPanel>
+            </AdminRoutePanel>
           </>
         ) : null}
       </AsyncStateWrapper>
-    </div>
+    </AdminRouteWorkspace>
   );
 }

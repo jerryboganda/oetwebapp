@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Bell, Mail, RefreshCw, Send, Siren, Smartphone } from 'lucide-react';
-import { AdminMetricCard, AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
+import { AdminRouteSummaryCard, AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -431,10 +431,10 @@ export default function AdminNotificationsPage() {
   }
 
   return (
-    <div className="max-w-7xl space-y-6">
+    <AdminRouteWorkspace role="main" aria-label="Notifications">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminPageHeader
+      <AdminRouteSectionHeader
         title="Notifications"
         description="Govern learner, expert, and admin notification delivery from one operational surface: global switches, per-event policy, delivery health, test email, and audit visibility."
         actions={(
@@ -457,13 +457,13 @@ export default function AdminNotificationsPage() {
         )}
       >
         <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <AdminMetricCard label="Queued Events" value={health?.queuedEvents ?? 0} icon={<Bell className="h-5 w-5" />} />
-          <AdminMetricCard label="Failed Deliveries (24h)" value={health?.failedDeliveriesLast24Hours ?? 0} icon={<Siren className="h-5 w-5" />} tone={(health?.failedDeliveriesLast24Hours ?? 0) > 0 ? 'danger' : 'default'} />
-          <AdminMetricCard label="Unread Inbox Items" value={health?.unreadInboxItems ?? 0} icon={<Mail className="h-5 w-5" />} />
-          <AdminMetricCard label="Active Push Subscriptions" value={health?.activePushSubscriptions ?? 0} icon={<Smartphone className="h-5 w-5" />} tone={(health?.activePushSubscriptions ?? 0) > 0 ? 'success' : 'default'} />
+          <AdminRouteSummaryCard label="Queued Events" value={health?.queuedEvents ?? 0} icon={<Bell className="h-5 w-5" />} />
+          <AdminRouteSummaryCard label="Failed Deliveries (24h)" value={health?.failedDeliveriesLast24Hours ?? 0} icon={<Siren className="h-5 w-5" />} tone={(health?.failedDeliveriesLast24Hours ?? 0) > 0 ? 'danger' : 'default'} />
+          <AdminRouteSummaryCard label="Unread Inbox Items" value={health?.unreadInboxItems ?? 0} icon={<Mail className="h-5 w-5" />} />
+          <AdminRouteSummaryCard label="Active Push Subscriptions" value={health?.activePushSubscriptions ?? 0} icon={<Smartphone className="h-5 w-5" />} tone={(health?.activePushSubscriptions ?? 0) > 0 ? 'success' : 'default'} />
         </div>
 
-        <AdminSectionPanel title="Global Email Governance" description="These switches suppress email only. In-app delivery remains active even when a role-wide email switch is off.">
+        <AdminRoutePanel title="Global Email Governance" description="These switches suppress email only. In-app delivery remains active even when a role-wide email switch is off.">
           <div className="grid gap-3 md:grid-cols-3">
             {(['learner', 'expert', 'admin'] as NotificationAudienceRole[]).map((audienceRole) => (
               <div key={audienceRole} className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -490,10 +490,10 @@ export default function AdminNotificationsPage() {
               </div>
             ))}
           </div>
-        </AdminSectionPanel>
+        </AdminRoutePanel>
 
         {(['learner', 'expert', 'admin'] as NotificationAudienceRole[]).map((audienceRole) => (
-          <AdminSectionPanel
+          <AdminRoutePanel
             key={audienceRole}
             title={`${audienceRole.charAt(0).toUpperCase()}${audienceRole.slice(1)} Policy Matrix`}
             description={`Per-event channel policy for ${audienceRole} notifications. Email modes are off, immediate, or daily digest.`}
@@ -503,11 +503,11 @@ export default function AdminNotificationsPage() {
               data={policies.filter((row) => row.audienceRole === audienceRole)}
               keyExtractor={(row) => policyKey(row.audienceRole, row.eventKey)}
             />
-          </AdminSectionPanel>
+          </AdminRoutePanel>
         ))}
 
         <div className="grid gap-6 xl:grid-cols-2">
-          <AdminSectionPanel title="Email Preview & Test Send" description="Email rendering stays server-owned in this rollout. Use the catalog preview below and send a real test email without editing HTML.">
+          <AdminRoutePanel title="Email Preview & Test Send" description="Email rendering stays server-owned in this rollout. Use the catalog preview below and send a real test email without editing HTML.">
             <div className="grid gap-4 md:grid-cols-2">
               <Input
                 label="Recipient Email"
@@ -556,9 +556,9 @@ export default function AdminNotificationsPage() {
                 Send Test Email
               </Button>
             </div>
-          </AdminSectionPanel>
+          </AdminRoutePanel>
 
-          <AdminSectionPanel title="Delivery Health" description="Recent delivery attempts and failed queue entries stay visible here so admins can react before notifications silently degrade.">
+          <AdminRoutePanel title="Delivery Health" description="Recent delivery attempts and failed queue entries stay visible here so admins can react before notifications silently degrade.">
             {health?.channels?.length ? (
               <div className="grid gap-3 sm:grid-cols-3">
                 {health.channels.map((channel) => (
@@ -573,28 +573,28 @@ export default function AdminNotificationsPage() {
             ) : (
               <p className="text-sm text-slate-500">No channel telemetry has been recorded yet.</p>
             )}
-          </AdminSectionPanel>
+          </AdminRoutePanel>
         </div>
 
         <div className="grid gap-6 xl:grid-cols-2">
-          <AdminSectionPanel title="Failure Queue" description="Manual visibility into delivery failures and threshold-triggered alert candidates.">
+          <AdminRoutePanel title="Failure Queue" description="Manual visibility into delivery failures and threshold-triggered alert candidates.">
             {health?.failureQueue?.length ? (
               <DataTable columns={failureQueueColumns} data={health.failureQueue} keyExtractor={(row) => `${row.eventId}:${row.channel}:${row.attemptedAt}`} />
             ) : (
               <p className="text-sm text-slate-500">No failed or expired deliveries are currently queued for investigation.</p>
             )}
-          </AdminSectionPanel>
+          </AdminRoutePanel>
 
-          <AdminSectionPanel title="Recent Deliveries" description="Latest delivery attempts across in-app, email, and push channels.">
+          <AdminRoutePanel title="Recent Deliveries" description="Latest delivery attempts across in-app, email, and push channels.">
             {deliveries.length ? (
               <DataTable columns={deliveryColumns} data={deliveries} keyExtractor={(row) => row.id} />
             ) : (
               <p className="text-sm text-slate-500">No delivery attempts have been recorded yet.</p>
             )}
-          </AdminSectionPanel>
+          </AdminRoutePanel>
         </div>
 
-        <AdminSectionPanel title="Policy Change Audit Trail" description="Every policy update is written into the existing admin audit stream. Manual test sends also land in audit logs for traceability.">
+        <AdminRoutePanel title="Policy Change Audit Trail" description="Every policy update is written into the existing admin audit stream. Manual test sends also land in audit logs for traceability.">
           {auditRows.length ? (
             <DataTable
               columns={[
@@ -625,8 +625,8 @@ export default function AdminNotificationsPage() {
           ) : (
             <p className="text-sm text-slate-500">No notification policy audit rows have been recorded yet.</p>
           )}
-        </AdminSectionPanel>
+        </AdminRoutePanel>
       </AsyncStateWrapper>
-    </div>
+    </AdminRouteWorkspace>
   );
 }

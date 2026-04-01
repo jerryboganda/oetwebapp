@@ -1,7 +1,7 @@
 'use client';
 
 import { PrivilegedMfaBanner } from '@/components/auth/privileged-mfa-banner';
-import { AppShell } from '@/components/layout/app-shell';
+import { AdminDashboardShell, AppShell, LearnerWorkspaceContainer } from '@/components/layout';
 import { NavItem } from '@/components/layout/sidebar';
 import { 
   LayoutDashboard,
@@ -17,6 +17,7 @@ import {
   Flag, 
   ShieldCheck 
 } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 
 const adminNavItems: NavItem[] = [
   { href: '/admin', label: 'Operations', icon: <LayoutDashboard className="w-5 h-5" />, exact: true },
@@ -33,19 +34,105 @@ const adminNavItems: NavItem[] = [
   { href: '/admin/audit-logs', label: 'Audit Logs', icon: <ShieldCheck className="w-5 h-5" />, matchPrefix: '/admin/audit-logs' },
 ];
 
-export default function AdminLayout({ children }: { children: React.ReactNode }) {
+function isContentWorkspace(pathname: string | null) {
+  return pathname === '/admin/content/new' || Boolean(pathname?.match(/^\/admin\/content\/[^/]+$/));
+}
+
+function getAdminPageTitle(pathname: string | null) {
+  if (!pathname || pathname === '/admin') {
+    return 'Operations';
+  }
+
+  if (isContentWorkspace(pathname)) {
+    return 'Content Workspace';
+  }
+
+  if (pathname.startsWith('/admin/content/') && pathname.endsWith('/revisions')) {
+    return 'Revision History';
+  }
+
+  if (pathname.startsWith('/admin/content')) {
+    return 'Content Library';
+  }
+
+  if (pathname.startsWith('/admin/taxonomy')) {
+    return 'Profession Taxonomy';
+  }
+
+  if (pathname.startsWith('/admin/criteria')) {
+    return 'Rubrics & Criteria';
+  }
+
+  if (pathname.startsWith('/admin/ai-config')) {
+    return 'AI Eval Config';
+  }
+
+  if (pathname.startsWith('/admin/review-ops')) {
+    return 'Review Ops';
+  }
+
+  if (pathname.startsWith('/admin/notifications')) {
+    return 'Notifications';
+  }
+
+  if (pathname.startsWith('/admin/analytics')) {
+    return 'Quality Analytics';
+  }
+
+  if (pathname.startsWith('/admin/users')) {
+    return 'User Ops';
+  }
+
+  if (pathname.startsWith('/admin/billing')) {
+    return 'Billing Ops';
+  }
+
+  if (pathname.startsWith('/admin/flags')) {
+    return 'Feature Flags';
+  }
+
+  if (pathname.startsWith('/admin/audit-logs')) {
+    return 'Audit Logs';
+  }
+
+  return undefined;
+}
+
+function AdminLayoutContent({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname();
+  const pageTitle = getAdminPageTitle(pathname);
+  const bannerBlock = (
+    <div className="space-y-6">
+      <PrivilegedMfaBanner />
+      {children}
+    </div>
+  );
+
+  if (isContentWorkspace(pathname)) {
+    return (
+      <AppShell
+        distractionFree
+        pageTitle={pageTitle}
+        navItems={adminNavItems}
+        requiredRole="admin"
+      >
+        <LearnerWorkspaceContainer>{bannerBlock}</LearnerWorkspaceContainer>
+      </AppShell>
+    );
+  }
+
   return (
-    <AppShell 
-      navItems={adminNavItems} 
-      mobileNavItems={adminNavItems} 
+    <AdminDashboardShell
+      pageTitle={pageTitle}
+      navItems={adminNavItems}
+      mobileNavItems={adminNavItems}
       requiredRole="admin"
     >
-      <>
-        <div className="px-4 pt-4 md:px-6 md:pt-6">
-          <PrivilegedMfaBanner />
-        </div>
-        {children}
-      </>
-    </AppShell>
+      {bannerBlock}
+    </AdminDashboardShell>
   );
+}
+
+export default function AdminLayout({ children }: { children: React.ReactNode }) {
+  return <AdminLayoutContent>{children}</AdminLayoutContent>;
 }

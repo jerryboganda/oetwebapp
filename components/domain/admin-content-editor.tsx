@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, CheckCircle, History, Save } from 'lucide-react';
+import { AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Checkbox, Input, Select, Textarea } from '@/components/ui/form-controls';
@@ -197,21 +198,20 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <div className="max-w-6xl space-y-6">
+    <AdminRouteWorkspace role="main" aria-label="Content workspace">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+      <div className="space-y-4">
         <div className="flex items-start gap-3">
           <Button variant="ghost" size="sm" onClick={() => router.back()} className="mt-1 px-2">
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <div className="space-y-1">
-            <h1 className="text-2xl font-semibold text-slate-900">
-              {isNew ? 'Create Content' : `Edit ${form.title || contentId}`}
-            </h1>
-            <p className="text-sm text-slate-500">
-              Build OET practice content with real metadata, live rubric criteria, and a publishable revision trail.
-            </p>
+          <div className="min-w-0 flex-1">
+            <AdminRouteSectionHeader
+              title={isNew ? 'Create Content' : `Edit ${form.title || contentId}`}
+              description="Build OET practice content with real metadata, live rubric criteria, and a publishable revision trail."
+              meta={contentId}
+            />
           </div>
         </div>
 
@@ -254,7 +254,7 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
           </Card>
         ) : null}
 
-        <div className="rounded-xl border border-slate-200 bg-white px-2 pt-2">
+        <div className="rounded-2xl border border-slate-200/90 bg-white/95 p-2 shadow-sm">
           <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} className="border-none" />
         </div>
 
@@ -387,6 +387,6 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
           </Card>
         </TabPanel>
       </AsyncStateWrapper>
-    </div>
+    </AdminRouteWorkspace>
   );
 }

@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Edit3, Plus, Target } from 'lucide-react';
-import { AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
+import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -224,10 +224,10 @@ export default function CriteriaPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <div className="max-w-7xl space-y-6">
+    <AdminRouteWorkspace role="main" aria-label="Rubrics and criteria">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminPageHeader
+      <AdminRouteSectionHeader
         title="Rubrics & Criteria"
         description="Manage live scoring criteria for each OET subtest with real weight, status, and editorial descriptions."
         actions={
@@ -254,10 +254,10 @@ export default function CriteriaPage() {
           />
         }
       >
-        <AdminSectionPanel title="Criteria Library" description="Every row below is backed by the live admin criteria endpoint and persists status changes.">
+        <AdminRoutePanel title="Criteria Library" description="Every row below is backed by the live admin criteria endpoint and persists status changes.">
           <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ status: [] })} />
           <DataTable columns={columns} data={criteria} keyExtractor={(criterion) => criterion.id} />
-        </AdminSectionPanel>
+        </AdminRoutePanel>
       </AsyncStateWrapper>
 
       <Modal
@@ -308,6 +308,6 @@ export default function CriteriaPage() {
           </div>
         </div>
       </Modal>
-    </div>
+    </AdminRouteWorkspace>
   );
 }

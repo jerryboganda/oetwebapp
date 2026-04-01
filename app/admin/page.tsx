@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, ArrowRight, BarChart3, CreditCard, FileText, Flag, Inbox } from 'lucide-react';
-import { AdminFreshnessBadge, AdminMetricCard, AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
+import { AlertTriangle, ArrowRight, BarChart3, CreditCard, FileText, Flag, Inbox, Sparkles } from 'lucide-react';
+import { AdminRouteFreshnessBadge, AdminRouteHero, AdminRoutePanel, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
+import { Button } from '@/components/ui/button';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { getAdminDashboardData } from '@/lib/admin';
 import type { AdminDashboardData } from '@/lib/types/admin';
@@ -43,26 +44,52 @@ export default function AdminDashboardPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <div className="max-w-7xl space-y-6">
-      <AdminPageHeader
-        title="Admin Operations"
-        description="Monitor content health, review throughput, billing risk, quality signals, and rollout changes from one operational landing page."
-        meta={dashboard ? `Quality window ${dashboard.freshness.qualityWindow}` : undefined}
-        actions={<AdminFreshnessBadge value={dashboard?.generatedAt} />}
-      />
-
+    <AdminRouteWorkspace role="main" aria-label="Admin operations">
       <AsyncStateWrapper status={pageStatus} onRetry={() => window.location.reload()}>
         {dashboard ? (
           <>
+            <AdminRouteHero
+              eyebrow="Operational Control"
+              icon={Sparkles}
+              accent="navy"
+              title="Keep platform health, review risk, and rollout signals in one place"
+              description="Use the admin console with the same visual hierarchy as the learner dashboard: start from the highest-signal summaries, then move directly into the workstream that needs attention."
+              highlights={[
+                { icon: FileText, label: 'Published content', value: String(dashboard.contentHealth.published) },
+                { icon: Inbox, label: 'Backlog at risk', value: String(dashboard.reviewOps.overdue) },
+                { icon: BarChart3, label: 'Agreement rate', value: `${dashboard.quality.agreementRate}%` },
+              ]}
+              aside={(
+                <div className="space-y-4 rounded-2xl border border-gray-200 bg-background-light p-4 shadow-sm">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Quick Actions</p>
+                    <p className="mt-1 text-sm text-muted">Move straight into the admin areas that typically need action first.</p>
+                  </div>
+                  <div className="space-y-2">
+                    <Button fullWidth asChild>
+                      <Link href="/admin/review-ops">Open Review Ops</Link>
+                    </Button>
+                    <Button fullWidth variant="outline" asChild>
+                      <Link href="/admin/content">Open Content Library</Link>
+                    </Button>
+                  </div>
+                  <div className="space-y-1 text-xs text-muted">
+                    <AdminRouteFreshnessBadge value={dashboard.generatedAt} />
+                    <p>Quality window {dashboard.freshness.qualityWindow}</p>
+                  </div>
+                </div>
+              )}
+            />
+
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <AdminMetricCard label="Published Content" value={dashboard.contentHealth.published} hint={`${dashboard.contentHealth.drafts} drafts still in flight`} icon={<FileText className="h-5 w-5" />} />
-              <AdminMetricCard label="Review Backlog" value={dashboard.reviewOps.backlog} hint={`${dashboard.reviewOps.overdue} already overdue`} icon={<Inbox className="h-5 w-5" />} tone={dashboard.reviewOps.overdue > 0 ? 'warning' : 'default'} />
-              <AdminMetricCard label="Billing Risk" value={dashboard.billingRisk.failedInvoices} hint={`${dashboard.billingRisk.pendingInvoices} pending invoices`} icon={<CreditCard className="h-5 w-5" />} tone={dashboard.billingRisk.failedInvoices > 0 ? 'danger' : 'default'} />
-              <AdminMetricCard label="Agreement Rate" value={`${dashboard.quality.agreementRate}%`} hint={`${dashboard.quality.evaluationCount} evaluations in window`} icon={<BarChart3 className="h-5 w-5" />} />
+              <AdminRouteSummaryCard label="Published Content" value={dashboard.contentHealth.published} hint={`${dashboard.contentHealth.drafts} drafts still in flight`} icon={<FileText className="h-5 w-5" />} />
+              <AdminRouteSummaryCard label="Review Backlog" value={dashboard.reviewOps.backlog} hint={`${dashboard.reviewOps.overdue} already overdue`} icon={<Inbox className="h-5 w-5" />} tone={dashboard.reviewOps.overdue > 0 ? 'warning' : 'default'} />
+              <AdminRouteSummaryCard label="Billing Risk" value={dashboard.billingRisk.failedInvoices} hint={`${dashboard.billingRisk.pendingInvoices} pending invoices`} icon={<CreditCard className="h-5 w-5" />} tone={dashboard.billingRisk.failedInvoices > 0 ? 'danger' : 'default'} />
+              <AdminRouteSummaryCard label="Agreement Rate" value={`${dashboard.quality.agreementRate}%`} hint={`${dashboard.quality.evaluationCount} evaluations in window`} icon={<BarChart3 className="h-5 w-5" />} />
             </div>
 
             <div className="grid gap-6 lg:grid-cols-2">
-              <AdminSectionPanel
+              <AdminRoutePanel
                 title="Content Health"
                 description="Surface stale drafts before they become invisible delivery debt."
                 actions={<Link href="/admin/content" className="text-sm font-medium text-blue-600 hover:underline">Open content library</Link>}
@@ -81,9 +108,9 @@ export default function AdminDashboardPage() {
                     <p className="text-xl font-semibold text-slate-900">{dashboard.contentHealth.staleDrafts}</p>
                   </div>
                 </div>
-              </AdminSectionPanel>
+              </AdminRoutePanel>
 
-              <AdminSectionPanel
+              <AdminRoutePanel
                 title="Review Risk"
                 description="Keep the productive-skill review pipeline honest and visible."
                 actions={<Link href="/admin/review-ops" className="text-sm font-medium text-blue-600 hover:underline">Open review ops</Link>}
@@ -102,26 +129,26 @@ export default function AdminDashboardPage() {
                     <p className="text-xl font-semibold text-slate-900">{dashboard.reviewOps.failedJobs}</p>
                   </div>
                 </div>
-              </AdminSectionPanel>
+              </AdminRoutePanel>
             </div>
 
             <div className="grid gap-6 lg:grid-cols-3">
-              <AdminSectionPanel title="Billing" description="Subscription exposure and legacy plan drag.">
+              <AdminRoutePanel title="Billing" description="Subscription exposure and legacy plan drag.">
                 <p className="text-sm text-slate-500">Legacy plans</p>
                 <p className="text-2xl font-semibold text-slate-900">{dashboard.billingRisk.legacyPlans}</p>
                 <p className="mt-3 text-sm text-slate-500">Active subscribers: {dashboard.billingRisk.activeSubscribers.toLocaleString()}</p>
-              </AdminSectionPanel>
+              </AdminRoutePanel>
 
-              <AdminSectionPanel title="Feature Flags" description="Rollout footprint and recent changes.">
+              <AdminRoutePanel title="Feature Flags" description="Rollout footprint and recent changes.">
                 <p className="text-sm text-slate-500">Enabled / total</p>
                 <p className="text-2xl font-semibold text-slate-900">
                   {dashboard.flags.enabled} / {dashboard.flags.total}
                 </p>
                 <p className="mt-3 text-sm text-slate-500">Live experiments: {dashboard.flags.liveExperiments}</p>
                 <p className="text-sm text-slate-500">Changed in 7 days: {dashboard.flags.recentChanges}</p>
-              </AdminSectionPanel>
+              </AdminRoutePanel>
 
-              <AdminSectionPanel title="Quality Risk" description="Signals that need closer QA review.">
+              <AdminRoutePanel title="Quality Risk" description="Signals that need closer QA review.">
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="mt-1 h-5 w-5 text-amber-500" />
                   <div>
@@ -129,10 +156,10 @@ export default function AdminDashboardPage() {
                     <p className="text-sm text-slate-500">Combined failed jobs and failed review cases in the current operational view.</p>
                   </div>
                 </div>
-              </AdminSectionPanel>
+              </AdminRoutePanel>
             </div>
 
-            <AdminSectionPanel title="Operational Shortcuts" description="Jump straight into the admin workstreams that need action.">
+            <AdminRoutePanel title="Operational Shortcuts" description="Jump straight into the admin workstreams that need action.">
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {[
                   { href: '/admin/content', label: 'Content Library' },
@@ -150,10 +177,10 @@ export default function AdminDashboardPage() {
                   </Link>
                 ))}
               </div>
-            </AdminSectionPanel>
+            </AdminRoutePanel>
           </>
         ) : null}
       </AsyncStateWrapper>
-    </div>
+    </AdminRouteWorkspace>
   );
 }

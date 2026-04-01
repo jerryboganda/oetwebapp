@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { AlertTriangle, CheckCircle2, Clock, Inbox, UserRoundCheck } from 'lucide-react';
-import { AdminMetricCard, AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
+import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -357,10 +357,10 @@ export default function ReviewOpsPage() {
     (summary?.statusDistribution.completed ?? 0);
 
   return (
-    <div className="max-w-7xl space-y-6">
+    <AdminRouteWorkspace role="main" aria-label="Review operations">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminPageHeader
+      <AdminRouteSectionHeader
         title="Review Operations"
         description="Manage productive-skill review queue health, expert assignment, and failure recovery from one operational view."
       />
@@ -378,15 +378,15 @@ export default function ReviewOpsPage() {
       >
         {summary ? (
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <AdminMetricCard label="Backlog" value={summary.backlog} icon={<Inbox className="h-5 w-5" />} />
-            <AdminMetricCard label="Overdue" value={summary.overdue} icon={<AlertTriangle className="h-5 w-5" />} tone={summary.overdue > 0 ? 'danger' : 'default'} />
-            <AdminMetricCard label="SLA Risk" value={summary.slaRisk} icon={<Clock className="h-5 w-5" />} tone={summary.slaRisk > 0 ? 'warning' : 'default'} />
-            <AdminMetricCard label="Completed" value={summary.statusDistribution.completed} icon={<CheckCircle2 className="h-5 w-5" />} tone="success" />
+            <AdminRouteSummaryCard label="Backlog" value={summary.backlog} icon={<Inbox className="h-5 w-5" />} />
+            <AdminRouteSummaryCard label="Overdue" value={summary.overdue} icon={<AlertTriangle className="h-5 w-5" />} tone={summary.overdue > 0 ? 'danger' : 'default'} />
+            <AdminRouteSummaryCard label="SLA Risk" value={summary.slaRisk} icon={<Clock className="h-5 w-5" />} tone={summary.slaRisk > 0 ? 'warning' : 'default'} />
+            <AdminRouteSummaryCard label="Completed" value={summary.statusDistribution.completed} icon={<CheckCircle2 className="h-5 w-5" />} tone="success" />
           </div>
         ) : null}
 
         {summary && totalReviews > 0 ? (
-          <AdminSectionPanel title="Queue Distribution" description="The distribution bar below is computed from live review summary data.">
+          <AdminRoutePanel title="Queue Distribution" description="The distribution bar below is computed from live review summary data.">
             <div className="space-y-3">
               <div className="flex h-3 rounded-full overflow-hidden bg-slate-100">
                 <div className="bg-slate-400" style={{ width: `${(summary.statusDistribution.pending / totalReviews) * 100}%` }} />
@@ -399,39 +399,39 @@ export default function ReviewOpsPage() {
                 <span>Completed: {summary.statusDistribution.completed}</span>
               </div>
             </div>
-          </AdminSectionPanel>
+          </AdminRoutePanel>
         ) : null}
 
-        <AdminSectionPanel title="Live Queue" description="Assign or cancel queued reviews with real backend mutations.">
+        <AdminRoutePanel title="Live Queue" description="Assign or cancel queued reviews with real backend mutations.">
           <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ status: [], priority: [] })} />
           <DataTable columns={queueColumns} data={queue} keyExtractor={(item) => item.id} />
-        </AdminSectionPanel>
+        </AdminRoutePanel>
 
         {failures ? (
           <div className="grid gap-6 xl:grid-cols-3">
-            <AdminSectionPanel title="Failed Reviews" description={`${failures.summary.failedReviewCount} failed review requests currently need recovery.`}>
+            <AdminRoutePanel title="Failed Reviews" description={`${failures.summary.failedReviewCount} failed review requests currently need recovery.`}>
               {failures.failedReviews.length === 0 ? (
                 <p className="text-sm text-slate-500">No failed review requests at the moment.</p>
               ) : (
                 <DataTable columns={failedReviewColumns} data={failures.failedReviews} keyExtractor={(item) => item.id} />
               )}
-            </AdminSectionPanel>
+            </AdminRoutePanel>
 
-            <AdminSectionPanel title="Stuck Reviews" description={`${failures.summary.stuckReviewCount} reviews have been in review too long and may need intervention.`}>
+            <AdminRoutePanel title="Stuck Reviews" description={`${failures.summary.stuckReviewCount} reviews have been in review too long and may need intervention.`}>
               {failures.stuckReviews.length === 0 ? (
                 <p className="text-sm text-slate-500">No stuck reviews detected.</p>
               ) : (
                 <DataTable columns={stuckReviewColumns} data={failures.stuckReviews} keyExtractor={(item) => item.id} />
               )}
-            </AdminSectionPanel>
+            </AdminRoutePanel>
 
-            <AdminSectionPanel title="Failed Jobs" description={`${failures.summary.failedJobCount} background jobs failed in the review pipeline.`}>
+            <AdminRoutePanel title="Failed Jobs" description={`${failures.summary.failedJobCount} background jobs failed in the review pipeline.`}>
               {failures.failedJobs.length === 0 ? (
                 <p className="text-sm text-slate-500">No failed background jobs detected.</p>
               ) : (
                 <DataTable columns={failedJobColumns} data={failures.failedJobs} keyExtractor={(item) => item.id} />
               )}
-            </AdminSectionPanel>
+            </AdminRoutePanel>
           </div>
         ) : null}
       </AsyncStateWrapper>
@@ -472,6 +472,6 @@ export default function ReviewOpsPage() {
           </div>
         </div>
       </Modal>
-    </div>
+    </AdminRouteWorkspace>
   );
 }

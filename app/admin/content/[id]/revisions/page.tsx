@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, RotateCcw } from 'lucide-react';
-import { AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
+import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { Toast } from '@/components/ui/alert';
@@ -89,10 +89,10 @@ export default function AdminContentRevisionsPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <div className="max-w-5xl space-y-6">
+    <AdminRouteWorkspace role="main" aria-label="Revision history">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminPageHeader
+      <AdminRouteSectionHeader
         title="Revision History"
         description="Review the saved content history and restore a previous editorial state when needed."
         actions={
@@ -107,10 +107,10 @@ export default function AdminContentRevisionsPage() {
         onRetry={() => window.location.reload()}
         emptyContent={<EmptyState title="No revisions found" description="This content item has not accumulated revision history yet." />}
       >
-        <AdminSectionPanel title="Saved Revisions" description="Every restore action is persisted and audited in the backend.">
+        <AdminRoutePanel title="Saved Revisions" description="Every restore action is persisted and audited in the backend.">
           <DataTable columns={columns} data={revisions} keyExtractor={(row) => row.id} />
-        </AdminSectionPanel>
+        </AdminRoutePanel>
       </AsyncStateWrapper>
-    </div>
+    </AdminRouteWorkspace>
   );
 }
