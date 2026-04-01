@@ -149,6 +149,14 @@ Back up both named volumes before upgrades or VPS maintenance.
 
 ## 7. Updating the deployment
 
+For a clean redeploy that rebuilds all containers without using Docker's build cache and then prunes unused build/image layers, run:
+
+```bash
+bash ./scripts/deploy-production.sh
+```
+
+That script preserves named volumes, so PostgreSQL data and uploaded learner files remain intact while the application containers are rebuilt.
+
 ```bash
 git pull
 docker compose --env-file .env.production -f docker-compose.production.yml up -d --build

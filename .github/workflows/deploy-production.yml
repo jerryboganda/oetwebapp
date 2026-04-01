@@ -1,0 +1,48 @@
+name: Deploy Production
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check deployment secrets
+        id: secrets
+        shell: bash
+        env:
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_USER: ${{ secrets.VPS_USER }}
+          VPS_SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_APP_DIR: ${{ secrets.VPS_APP_DIR }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+        run: |
+          if [ -n "$VPS_HOST" ] && [ -n "$VPS_USER" ] && [ -n "$VPS_SSH_KEY" ] && [ -n "$VPS_APP_DIR" ]; then
+            echo "enabled=true" >> "$GITHUB_OUTPUT"
+            echo "port=${VPS_PORT:-22}" >> "$GITHUB_OUTPUT"
+          else
+            echo "enabled=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip deploy when secrets are missing
+        if: steps.secrets.outputs.enabled != 'true'
+        run: echo "Production deploy secrets are not configured, so deployment is skipped."
+
+      - name: Deploy over SSH
+        if: steps.secrets.outputs.enabled == 'true'
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          port: ${{ steps.secrets.outputs.port }}
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd "${{ secrets.VPS_APP_DIR }}"
+            git pull --ff-only origin main
+            bash ./scripts/deploy-production.sh
