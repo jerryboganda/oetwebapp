@@ -52,9 +52,12 @@ public enum ContentStatus
 public enum SubscriptionStatus
 {
     Trial,
+    Pending,
     Active,
     PastDue,
-    Cancelled
+    Suspended,
+    Cancelled,
+    Expired
 }
 
 public enum UploadState
@@ -153,6 +156,56 @@ public enum AIConfigStatus
 
 public enum BillingPlanStatus
 {
+    Draft,
     Active,
+    Inactive,
+    Archived,
     Legacy
+}
+
+public enum BillingAddOnStatus
+{
+    Draft,
+    Active,
+    Inactive,
+    Archived
+}
+
+public enum BillingCouponStatus
+{
+    Draft,
+    Active,
+    Inactive,
+    Expired,
+    Exhausted,
+    Archived
+}
+
+public enum BillingDiscountType
+{
+    Percentage,
+    FixedAmount
+}
+
+public enum BillingQuoteStatus
+{
+    Created,
+    Applied,
+    Completed,
+    Expired,
+    Cancelled
+}
+
+public enum BillingRedemptionStatus
+{
+    Reserved,
+    Applied,
+    Voided
+}
+
+public enum SubscriptionItemStatus
+{
+    Active,
+    Cancelled,
+    Expired
 }

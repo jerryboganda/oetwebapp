@@ -139,8 +139,14 @@ public class BillingPlan
     [MaxLength(64)]
     public string Id { get; set; } = default!;
 
+    [MaxLength(64)]
+    public string Code { get; set; } = default!;
+
     [MaxLength(128)]
     public string Name { get; set; } = default!;
+
+    [MaxLength(1024)]
+    public string Description { get; set; } = string.Empty;
 
     public decimal Price { get; set; }
 
@@ -150,9 +156,29 @@ public class BillingPlan
     [MaxLength(16)]
     public string Interval { get; set; } = "month";
 
+    public int DurationMonths { get; set; } = 1;
+
+    public bool IsVisible { get; set; } = true;
+
+    public bool IsRenewable { get; set; } = true;
+
+    public int TrialDays { get; set; }
+
+    public int DisplayOrder { get; set; }
+
+    public int IncludedCredits { get; set; }
+
+    [MaxLength(2048)]
+    public string IncludedSubtestsJson { get; set; } = "[]";
+
+    [MaxLength(2048)]
+    public string EntitlementsJson { get; set; } = "{}";
+
     public int ActiveSubscribers { get; set; }
 
     public BillingPlanStatus Status { get; set; } = BillingPlanStatus.Active;
+
+    public DateTimeOffset? ArchivedAt { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }
 

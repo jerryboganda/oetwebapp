@@ -16,6 +16,7 @@ import {
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
+import { Input } from '@/components/ui/form-controls';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
@@ -24,13 +25,29 @@ import {
   downloadInvoice,
   fetchBilling,
   fetchBillingChangePreview,
+  fetchBillingQuote,
 } from '@/lib/api';
-import type { BillingChangePreview, BillingData } from '@/lib/mock-data';
+import type { BillingChangePreview, BillingData, BillingQuote, BillingProductType } from '@/lib/billing-types';
+
+function formatCurrency(amount: number, currency = 'AUD') {
+  return new Intl.NumberFormat('en-AU', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: 2,
+  }).format(amount);
+}
+
+function prettyProductType(productType: BillingProductType) {
+  return productType.replace(/_/g, ' ');
+}
 
 export default function BillingPage() {
   const [data, setData] = useState<BillingData | null>(null);
   const [preview, setPreview] = useState<BillingChangePreview | null>(null);
   const [previewPlanId, setPreviewPlanId] = useState<string | null>(null);
+  const [quote, setQuote] = useState<BillingQuote | null>(null);
+  const [quoteLabel, setQuoteLabel] = useState<string | null>(null);
+  const [couponCode, setCouponCode] = useState('');
   const [loading, setLoading] = useState(true);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -39,7 +56,10 @@ export default function BillingPage() {
   useEffect(() => {
     analytics.track('content_view', { page: 'billing' });
     fetchBilling()
-      .then((result) => setData(result))
+      .then((result) => {
+        setData(result);
+        setQuote(result.quote);
+      })
       .catch((err) => setError(err instanceof Error ? err.message : 'Could not load billing data.'))
       .finally(() => setLoading(false));
   }, []);
@@ -53,14 +73,36 @@ export default function BillingPage() {
     [data],
   );
 
-  const openCheckout = async (productType: 'review_credits' | 'plan_upgrade' | 'plan_downgrade', quantity: number, priceId?: string | null) => {
-    setBusyKey(`${productType}:${priceId ?? quantity}`);
+  const startCheckout = async (
+    productType: BillingProductType,
+    quantity: number,
+    priceId?: string | null,
+    label?: string,
+  ) => {
+    const coupon = couponCode.trim() || null;
+    const quoteKey = `${productType}:${priceId ?? quantity}`;
+    setBusyKey(quoteKey);
     setError(null);
     setSuccess(null);
     try {
-      const response = await createBillingCheckoutSession({ productType, quantity, priceId });
+      const quoteResponse = await fetchBillingQuote({
+        productType,
+        quantity,
+        priceId,
+        couponCode: coupon,
+      });
+      setQuote(quoteResponse);
+      setQuoteLabel(label ?? prettyProductType(productType));
+
+      const response = await createBillingCheckoutSession({
+        productType,
+        quantity,
+        priceId,
+        couponCode: coupon,
+        quoteId: quoteResponse.quoteId,
+      });
       window.open(response.checkoutUrl, '_blank', 'noopener,noreferrer');
-      setSuccess('Checkout session created. Finish payment in the new tab.');
+      setSuccess(`${label ?? prettyProductType(productType)} checkout opened with a validated quote.`);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not start checkout.');
     } finally {
@@ -134,12 +176,127 @@ export default function BillingPage() {
           highlights={[
             { icon: CreditCard, label: 'Current plan', value: data.currentPlan },
             { icon: Sparkles, label: 'Review credits', value: `${data.reviewCredits} available` },
+            { icon: ShoppingCart, label: 'Active add-ons', value: `${data.activeAddOns.length} attached` },
             { icon: Receipt, label: 'Next renewal', value: new Date(data.nextRenewal).toLocaleDateString() },
           ]}
         />
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
         {success ? <InlineAlert variant="success">{success}</InlineAlert> : null}
+
+        <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-[32px] border border-gray-200 bg-surface p-6 shadow-sm">
+            <div className="flex flex-wrap items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-muted">Validated Checkout</p>
+                <h2 className="mt-2 text-2xl font-black text-navy">Generate a quote before you pay</h2>
+                <p className="mt-2 text-sm text-muted">
+                  Coupon codes, plan switches, and add-on purchases are priced by the server so the checkout handoff stays consistent.
+                </p>
+              </div>
+              <Button variant="outline" onClick={() => { setCouponCode(''); setQuote(null); setQuoteLabel(null); }}>
+                Clear quote
+              </Button>
+            </div>
+
+            <div className="mt-6 grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
+              <Input
+                label="Coupon code"
+                value={couponCode}
+                onChange={(event) => setCouponCode(event.target.value.toUpperCase())}
+                placeholder="WELCOME10"
+                hint="Apply a coupon to the next quote you generate."
+              />
+              <div className="rounded-2xl border border-gray-200 bg-background-light px-4 py-3 text-sm text-muted">
+                Coupons are validated on the server.
+              </div>
+            </div>
+
+            <div className="mt-6 rounded-[24px] border border-dashed border-gray-200 bg-background-light p-5">
+              {quote ? (
+                <div className="space-y-4">
+                  <div className="flex flex-wrap items-start justify-between gap-4">
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-widest text-muted">Last quote</p>
+                      <h3 className="mt-2 text-xl font-black text-navy">{quoteLabel ?? 'Checkout'}</h3>
+                      <p className="mt-1 text-sm text-muted">{quote.summary}</p>
+                    </div>
+                    <span className="rounded-full bg-navy px-3 py-1 text-xs font-black uppercase tracking-widest text-white">
+                      {quote.status}
+                    </span>
+                  </div>
+
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <div className="rounded-2xl border border-gray-200 bg-surface p-4">
+                      <p className="text-xs font-black uppercase tracking-widest text-muted">Subtotal</p>
+                      <p className="mt-2 text-sm font-bold text-navy">{formatCurrency(quote.subtotalAmount, quote.currency)}</p>
+                    </div>
+                    <div className="rounded-2xl border border-gray-200 bg-surface p-4">
+                      <p className="text-xs font-black uppercase tracking-widest text-muted">Discount</p>
+                      <p className="mt-2 text-sm font-bold text-navy">{formatCurrency(quote.discountAmount, quote.currency)}</p>
+                    </div>
+                    <div className="rounded-2xl border border-gray-200 bg-surface p-4">
+                      <p className="text-xs font-black uppercase tracking-widest text-muted">Total</p>
+                      <p className="mt-2 text-sm font-bold text-navy">{formatCurrency(quote.totalAmount, quote.currency)}</p>
+                    </div>
+                  </div>
+
+                  <div className="space-y-2">
+                    {quote.items.map((item) => (
+                      <div key={`${item.code}:${item.kind}`} className="flex items-center justify-between rounded-2xl border border-gray-200 bg-surface px-4 py-3 text-sm">
+                        <div>
+                          <p className="font-bold text-navy">{item.name}</p>
+                          <p className="text-xs uppercase tracking-widest text-muted">{item.kind} · {item.code}</p>
+                        </div>
+                        <p className="font-black text-navy">{formatCurrency(item.amount, item.currency)}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {Object.keys(quote.validation ?? {}).length > 0 ? (
+                    <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                      <p className="font-black uppercase tracking-widest">Validation</p>
+                      <pre className="mt-2 overflow-auto whitespace-pre-wrap text-xs">{JSON.stringify(quote.validation, null, 2)}</pre>
+                    </div>
+                  ) : null}
+                </div>
+              ) : (
+                <div className="text-sm text-muted">
+                  Select a plan or add-on below to calculate a server-validated quote.
+                </div>
+              )}
+            </div>
+          </motion.div>
+
+          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04 }} className="rounded-[32px] border border-indigo-100 bg-indigo-50 p-6 shadow-sm">
+            <div className="flex items-start gap-4">
+              <div className="rounded-2xl bg-indigo-600 p-3 text-white shadow-sm">
+                <Sparkles className="h-5 w-5" />
+              </div>
+              <div>
+                <p className="text-xs font-black uppercase tracking-widest text-indigo-700/70">Active Add-ons</p>
+                <h2 className="mt-2 text-xl font-black text-indigo-950">Current subscription items are visible here</h2>
+                <p className="mt-2 text-sm leading-6 text-indigo-900/80">
+                  Existing subscription items come from the server-backed catalog, so the page can reflect purchased extras without guessing.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              {data.activeAddOns.length > 0 ? data.activeAddOns.map((addOn) => (
+                <span key={addOn.id} className="rounded-full bg-white/80 px-3 py-1 text-xs font-black uppercase tracking-widest text-indigo-900">
+                  {addOn.name} · {addOn.quantity}
+                </span>
+              )) : (
+                <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-black uppercase tracking-widest text-indigo-900">No active add-ons</span>
+              )}
+            </div>
+
+            <div className="mt-6 rounded-2xl border border-white/50 bg-white/70 p-4 text-sm leading-6 text-indigo-950/80">
+              Add-on purchases are routed through the same quote workflow as plan changes, which keeps coupon validation and totals in sync with the backend.
+            </div>
+          </motion.div>
+        </section>
 
         <section className="grid gap-6 lg:grid-cols-[1.3fr_0.9fr]">
           <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-[32px] border border-gray-200 bg-surface p-6 shadow-sm">
@@ -241,8 +398,8 @@ export default function BillingPage() {
                           <Button
                             className="mt-4"
                             fullWidth
-                            loading={busyKey === `${plan.changeDirection}:${plan.id}`}
-                            onClick={() => openCheckout(plan.changeDirection === 'upgrade' ? 'plan_upgrade' : 'plan_downgrade', 1, plan.id)}
+                              loading={busyKey === `${plan.changeDirection}:${plan.code}`}
+                              onClick={() => startCheckout(plan.changeDirection === 'upgrade' ? 'plan_upgrade' : 'plan_downgrade', 1, plan.code, `${plan.label} ${plan.changeDirection}`)}
                           >
                             Continue to checkout
                           </Button>
@@ -266,24 +423,29 @@ export default function BillingPage() {
             />
 
             <div className="space-y-4">
-              {data.extras.map((extra) => (
-                <div key={extra.id} className="rounded-[24px] border border-gray-200 bg-surface p-5 shadow-sm">
+              {data.addOns.map((addOn) => (
+                <div key={addOn.id} className="rounded-[24px] border border-gray-200 bg-surface p-5 shadow-sm">
                   <div className="flex items-start justify-between gap-4">
                     <div>
-                      <p className="text-xs font-black uppercase tracking-widest text-muted">Review credit pack</p>
-                      <h3 className="mt-2 text-lg font-black text-navy">{extra.quantity} review credits</h3>
-                      <p className="mt-2 text-sm text-muted">{extra.description}</p>
+                      <p className="text-xs font-black uppercase tracking-widest text-muted">{addOn.productType.replace(/_/g, ' ')}</p>
+                      <h3 className="mt-2 text-lg font-black text-navy">{addOn.name}</h3>
+                      <p className="mt-2 text-sm text-muted">{addOn.description}</p>
                     </div>
-                    <div className="rounded-2xl bg-background-light px-4 py-3 text-sm font-black text-navy">{extra.price}</div>
+                    <div className="rounded-2xl bg-background-light px-4 py-3 text-sm font-black text-navy">{addOn.price}</div>
+                  </div>
+                  <div className="mt-4 flex flex-wrap gap-2 text-xs font-black uppercase tracking-widest text-muted">
+                    <span className="rounded-full bg-background-light px-3 py-1">{addOn.quantity} credits</span>
+                    <span className="rounded-full bg-background-light px-3 py-1">{addOn.interval}</span>
+                    {addOn.isRecurring ? <span className="rounded-full bg-background-light px-3 py-1">Recurring</span> : null}
                   </div>
                   <Button
                     className="mt-4"
                     fullWidth
-                    loading={busyKey === `review_credits:${extra.quantity}`}
-                    onClick={() => openCheckout('review_credits', extra.quantity)}
+                    loading={busyKey === `addon_purchase:${addOn.code}`}
+                    onClick={() => startCheckout('addon_purchase', addOn.quantity, addOn.code, addOn.name)}
                   >
                     <ShoppingCart className="h-4 w-4" />
-                    Purchase extras
+                    Purchase add-on
                   </Button>
                 </div>
               ))}

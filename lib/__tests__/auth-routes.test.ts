@@ -14,4 +14,17 @@ describe('auth routes', () => {
     expect(resolveAuthenticatedDestination({ role: 'learner', requiresMfa: false, isAuthenticatorEnabled: false } as never, '/reading')).toBe('/reading');
     expect(defaultRouteForRole('admin')).toBe('/admin');
   });
+
+  it('does not force privileged users into MFA setup when the authenticator is not enrolled yet', () => {
+    expect(resolveAuthenticatedDestination({
+      role: 'expert',
+      requiresMfa: true,
+      isAuthenticatorEnabled: false,
+    } as never, null)).toBe('/expert');
+    expect(resolveAuthenticatedDestination({
+      role: 'admin',
+      requiresMfa: true,
+      isAuthenticatorEnabled: false,
+    } as never, '/admin/users')).toBe('/admin/users');
+  });
 });

@@ -452,11 +452,20 @@ app.UseExceptionHandler(handler =>
             return;
         }
 
+        app.Logger.LogError(
+            exception,
+            "Unhandled exception while processing {Method} {Path}. CorrelationId: {CorrelationId}",
+            context.Request.Method,
+            context.Request.Path,
+            correlationId ?? "missing");
+
         context.Response.StatusCode = StatusCodes.Status500InternalServerError;
         var payload = new
         {
             code = "internal_server_error",
-            message = exception?.Message ?? "An unexpected server error occurred.",
+            message = app.Environment.IsDevelopment()
+                ? exception?.Message ?? "An unexpected server error occurred."
+                : "An unexpected server error occurred.",
             retryable = false,
             supportHint = "If this persists, contact support with the correlation ID.",
             correlationId

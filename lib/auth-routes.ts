@@ -44,13 +44,5 @@ export function resolvePostAuthDestination(user: CurrentUser, nextPath?: string 
 }
 
 export function resolveAuthenticatedDestination(user: CurrentUser, nextPath?: string | null): string {
-  if ((user.role === 'expert' || user.role === 'admin') && user.requiresMfa && !user.isAuthenticatorEnabled) {
-    const normalizedNext = nextPath?.trim();
-    const nextQuery = normalizedNext && normalizedNext.startsWith('/')
-      ? `?next=${encodeURIComponent(normalizedNext)}`
-      : '';
-    return `/mfa/setup${nextQuery}`;
-  }
-
   return resolvePostAuthDestination(user, nextPath);
 }

@@ -224,11 +224,25 @@ export interface AdminInvitationResult {
 
 export interface AdminBillingPlan {
   id: string;
+  code?: string;
   name: string;
+  description?: string;
   price: number;
+  currency?: string;
   interval: string;
+  durationMonths?: number;
+  includedCredits?: number;
+  displayOrder?: number;
+  isVisible?: boolean;
+  isRenewable?: boolean;
+  trialDays?: number;
   activeSubscribers: number;
   status: string;
+  includedSubtests?: string[];
+  entitlements?: Record<string, unknown>;
+  archivedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface AdminBillingInvoice {
@@ -240,6 +254,81 @@ export interface AdminBillingInvoice {
   status: string;
   date: string;
   plan: string;
+}
+
+export interface AdminBillingAddOn {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  price: number;
+  currency: string;
+  interval: string;
+  durationDays: number;
+  grantCredits: number;
+  displayOrder: number;
+  isRecurring: boolean;
+  appliesToAllPlans: boolean;
+  isStackable: boolean;
+  quantityStep: number;
+  maxQuantity: number | null;
+  status: string;
+  compatiblePlanCodes: string[];
+  grantEntitlements: Record<string, unknown>;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminBillingCoupon {
+  id: string;
+  code: string;
+  name: string;
+  description: string;
+  discountType: 'percentage' | 'fixed';
+  discountValue: number;
+  currency: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  usageLimitTotal: number | null;
+  usageLimitPerUser: number | null;
+  minimumSubtotal: number | null;
+  isStackable: boolean;
+  status: string;
+  applicablePlanCodes: string[];
+  applicableAddOnCodes: string[];
+  redemptionCount: number;
+  notes: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminBillingSubscription {
+  id: string;
+  userId: string;
+  userName: string;
+  planId: string;
+  planName: string;
+  status: 'pending' | 'trial' | 'active' | 'past_due' | 'suspended' | 'cancelled' | 'expired';
+  nextRenewalAt: string | null;
+  startedAt: string | null;
+  changedAt: string | null;
+  price: number;
+  currency: string;
+  interval: string;
+  addOnCount: number;
+}
+
+export interface AdminBillingCouponRedemption {
+  id: string;
+  couponCode: string;
+  userId: string;
+  quoteId: string | null;
+  checkoutSessionId: string | null;
+  subscriptionId: string | null;
+  discountAmount: number;
+  currency: string;
+  status: 'pending' | 'applied' | 'rejected' | 'reversed';
+  redeemedAt: string;
 }
 
 export interface AdminReviewOpsSummary {

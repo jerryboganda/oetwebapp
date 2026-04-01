@@ -13,7 +13,7 @@ test.describe('Authentication flows @auth @smoke', () => {
     await page.goto('/reading');
 
     await expect(page).toHaveURL(/\/sign-in\?next=%2Freading/);
-    await expect(page.getByRole('heading', { name: /access your workspace/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /login to your account|access your workspace/i })).toBeVisible();
 
     expectNoSevereClientIssues(diagnostics);
     diagnostics.detach();
@@ -28,17 +28,18 @@ test.describe('Authentication flows @auth @smoke', () => {
     const diagnostics = observePage(page);
     await page.goto('/sign-in');
 
-    await page.getByRole('link', { name: /create your account/i }).click();
+    await page.getByRole('link', { name: /create an account/i }).click();
     await expect(page).toHaveURL(/\/register/);
     await expect(page.getByRole('heading', { name: /register your account/i })).toBeVisible();
-    await expect(page.getByLabel(/full name/i)).toBeVisible();
+    await expect(page.getByLabel(/first name/i)).toBeVisible();
+    await expect(page.getByLabel(/last name/i)).toBeVisible();
 
     await page.getByRole('link', { name: /login/i }).click();
-    await expect(page.getByRole('heading', { name: /access your workspace/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /login to your account|access your workspace/i })).toBeVisible();
 
     await page.getByRole('link', { name: /forgot password\?/i }).click();
     await expect(page).toHaveURL(/\/forgot-password/);
-    await expect(page.getByRole('heading', { name: /reset your password/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /find your account/i })).toBeVisible();
 
     expectNoSevereClientIssues(diagnostics);
     diagnostics.detach();
@@ -53,7 +54,7 @@ test.describe('Authentication flows @auth @smoke', () => {
     const diagnostics = observePage(page);
     await page.goto('/forgot-password');
     await page.getByLabel('Email').fill('learner@oet-prep.dev');
-    await page.locator('form').getByRole('button', { name: /send verification otp/i }).click();
+    await page.locator('form').getByRole('button', { name: /send otp/i }).click();
 
     await expect(page).toHaveURL(/\/forgot-password\/verify\?email=learner%40oet-prep\.dev/);
     await expect(page.getByRole('heading', { name: /check your email/i })).toBeVisible();

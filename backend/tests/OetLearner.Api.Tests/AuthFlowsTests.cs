@@ -383,7 +383,7 @@ public class AuthFlowsTests
         signInResponse.EnsureSuccessStatusCode();
         var signInSession = await signInResponse.Content.ReadFromJsonAsync<AuthSessionResponse>(JsonSupport.Options);
         Assert.NotNull(signInSession);
-        Assert.True(signInSession!.CurrentUser.RequiresMfa);
+        Assert.False(signInSession!.CurrentUser.RequiresMfa);
 
         using var beginRequest = new HttpRequestMessage(HttpMethod.Post, "/v1/auth/mfa/authenticator/begin")
         {

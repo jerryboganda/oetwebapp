@@ -30,7 +30,7 @@ describe('SignInPage', () => {
     vi.clearAllMocks();
   });
 
-  it('sends privileged users without an authenticator to MFA setup before console routing', async () => {
+  it('routes privileged users without an authenticator to their console', async () => {
     mockUseAuth.mockReturnValue({
       loading: false,
       isAuthenticated: true,
@@ -45,7 +45,7 @@ describe('SignInPage', () => {
     render(<SignInPage />);
 
     await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith('/mfa/setup');
+      expect(mockReplace).toHaveBeenCalledWith('/expert');
     });
   });
 });

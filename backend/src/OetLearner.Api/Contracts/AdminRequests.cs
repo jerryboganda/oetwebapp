@@ -118,9 +118,112 @@ public record AdminUserLifecycleRequest(string? Reason);
 // ── Billing ──
 
 public record AdminBillingPlanCreateRequest(
+    string Code,
     string Name,
+    string Description,
     decimal Price,
-    string Interval);
+    string Currency,
+    string Interval,
+    int DurationMonths,
+    int IncludedCredits,
+    int DisplayOrder,
+    bool IsVisible,
+    bool IsRenewable,
+    int TrialDays,
+    string? Status = null,
+    string? IncludedSubtestsJson = null,
+    string? EntitlementsJson = null);
+
+public record AdminBillingPlanUpdateRequest(
+    string Code,
+    string Name,
+    string Description,
+    decimal Price,
+    string Currency,
+    string Interval,
+    int DurationMonths,
+    int IncludedCredits,
+    int DisplayOrder,
+    bool IsVisible,
+    bool IsRenewable,
+    int TrialDays,
+    string? Status = null,
+    string? IncludedSubtestsJson = null,
+    string? EntitlementsJson = null);
+
+public record AdminBillingAddOnCreateRequest(
+    string Code,
+    string Name,
+    string Description,
+    decimal Price,
+    string Currency,
+    string Interval,
+    int DurationDays,
+    int GrantCredits,
+    int DisplayOrder,
+    bool IsRecurring,
+    bool AppliesToAllPlans,
+    bool IsStackable,
+    int QuantityStep,
+    int? MaxQuantity,
+    string? Status = null,
+    string? CompatiblePlanCodesJson = null,
+    string? GrantEntitlementsJson = null);
+
+public record AdminBillingAddOnUpdateRequest(
+    string Code,
+    string Name,
+    string Description,
+    decimal Price,
+    string Currency,
+    string Interval,
+    int DurationDays,
+    int GrantCredits,
+    int DisplayOrder,
+    bool IsRecurring,
+    bool AppliesToAllPlans,
+    bool IsStackable,
+    int QuantityStep,
+    int? MaxQuantity,
+    string? Status = null,
+    string? CompatiblePlanCodesJson = null,
+    string? GrantEntitlementsJson = null);
+
+public record AdminBillingCouponCreateRequest(
+    string Code,
+    string Name,
+    string Description,
+    string DiscountType,
+    decimal DiscountValue,
+    string Currency,
+    DateTimeOffset? StartsAt,
+    DateTimeOffset? EndsAt,
+    int? UsageLimitTotal,
+    int? UsageLimitPerUser,
+    decimal? MinimumSubtotal,
+    bool IsStackable,
+    string? Status = null,
+    string? ApplicablePlanCodesJson = null,
+    string? ApplicableAddOnCodesJson = null,
+    string? Notes = null);
+
+public record AdminBillingCouponUpdateRequest(
+    string Code,
+    string Name,
+    string Description,
+    string DiscountType,
+    decimal DiscountValue,
+    string Currency,
+    DateTimeOffset? StartsAt,
+    DateTimeOffset? EndsAt,
+    int? UsageLimitTotal,
+    int? UsageLimitPerUser,
+    decimal? MinimumSubtotal,
+    bool IsStackable,
+    string? Status = null,
+    string? ApplicablePlanCodesJson = null,
+    string? ApplicableAddOnCodesJson = null,
+    string? Notes = null);
 
 // ── Review Ops ──
 

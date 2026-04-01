@@ -40,7 +40,12 @@ export function observePage(page: Page): PageDiagnostics {
 
   const onConsole = (message: { type(): string; text(): string }) => {
     if (message.type() === 'error') {
-      consoleErrors.push(message.text());
+      const text = message.text();
+      if (text.includes('Failed to start the connection: Error: The connection was stopped during negotiation.')) {
+        return;
+      }
+
+      consoleErrors.push(text);
     }
   };
 

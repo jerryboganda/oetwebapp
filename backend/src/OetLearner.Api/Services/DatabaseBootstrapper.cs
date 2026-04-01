@@ -29,6 +29,21 @@ public static class DatabaseBootstrapper
         {
             await db.Database.MigrateAsync(cancellationToken);
         }
+        else if (db.Database.IsRelational())
+        {
+            var pendingMigrations = (await db.Database.GetPendingMigrationsAsync(cancellationToken))
+                .ToArray();
+
+            if (pendingMigrations.Length > 0)
+            {
+                var preview = string.Join(", ", pendingMigrations.Take(5));
+                var suffix = pendingMigrations.Length > 5 ? ", ..." : string.Empty;
+                throw new InvalidOperationException(
+                    "Database has pending EF Core migrations. Apply them before starting the API " +
+                    "or enable Bootstrap:AutoMigrate=true. Pending migrations: " +
+                    $"{preview}{suffix}");
+            }
+        }
 
         await EnsureAdminSchemaCompatibilityAsync(db, cancellationToken);
         await EnsureExpertSchemaCompatibilityAsync(db, cancellationToken);

@@ -31,7 +31,14 @@ public sealed class PlatformLinkService(IOptions<PlatformOptions> platformOption
         return new Uri(new Uri(EnsureTrailingSlash(_platform.PublicWebBaseUrl), UriKind.Absolute), normalizedPath.TrimStart('/')).ToString();
     }
 
-    public string BuildCheckoutUrl(string sessionId, string productType, int quantity)
+    public string BuildCheckoutUrl(
+        string sessionId,
+        string productType,
+        int quantity,
+        string? planId = null,
+        string? couponCode = null,
+        IEnumerable<string>? addOnCodes = null,
+        string? quoteId = null)
     {
         if (string.IsNullOrWhiteSpace(_billing.CheckoutBaseUrl))
         {
@@ -43,7 +50,11 @@ public sealed class PlatformLinkService(IOptions<PlatformOptions> platformOption
         {
             ["sessionId"] = sessionId,
             ["productType"] = productType,
-            ["quantity"] = quantity.ToString()
+            ["quantity"] = quantity.ToString(),
+            ["planId"] = planId,
+            ["couponCode"] = couponCode,
+            ["quoteId"] = quoteId,
+            ["addOnCodes"] = addOnCodes is null ? null : string.Join(',', addOnCodes.Where(code => !string.IsNullOrWhiteSpace(code)))
         };
 
         return QueryHelpers.AddQueryString(baseUrl, query);

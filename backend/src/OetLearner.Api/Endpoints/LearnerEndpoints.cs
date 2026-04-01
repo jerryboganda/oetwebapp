@@ -117,7 +117,7 @@ public static class LearnerEndpoints
         listening.MapGet("/drills/{drillId}", async (string drillId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetListeningDrillAsync(drillId, ct)));
 
         v1.MapGet("/mocks", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetMocksAsync(http.UserId(), ct)));
-        v1.MapGet("/mocks/options", (LearnerService service, CancellationToken ct) => Results.Ok(service.GetMockOptionsAsync(ct)));
+        v1.MapGet("/mocks/options", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetMockOptionsAsync(ct)));
         v1.MapPost("/mock-attempts", async (HttpContext http, MockAttemptCreateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateMockAttemptAsync(http.UserId(), request, ct)));
         v1.MapGet("/mock-attempts/{mockAttemptId}", async (HttpContext http, string mockAttemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetMockAttemptAsync(http.UserId(), mockAttemptId, ct)));
         v1.MapPost("/mock-attempts/{mockAttemptId}/submit", async (HttpContext http, string mockAttemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.SubmitMockAttemptAsync(http.UserId(), mockAttemptId, ct)));
@@ -133,6 +133,22 @@ public static class LearnerEndpoints
         billing.MapGet("/summary", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingSummaryAsync(http.UserId(), ct)));
         billing.MapGet("/plans", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingPlansAsync(http.UserId(), ct)));
         billing.MapGet("/change-preview", async (HttpContext http, [FromQuery] string targetPlanId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBillingChangePreviewAsync(http.UserId(), targetPlanId, ct)));
+        billing.MapGet("/quote", async (HttpContext http,
+            [FromQuery] string productType,
+            [FromQuery] int quantity,
+            [FromQuery] string? priceId,
+            [FromQuery] string? couponCode,
+            [FromQuery] string? addOnCodes,
+            LearnerService service,
+            CancellationToken ct)
+            => Results.Ok(await service.GetBillingQuoteAsync(http.UserId(), new BillingQuoteRequest(
+                productType,
+                quantity,
+                priceId,
+                couponCode,
+                string.IsNullOrWhiteSpace(addOnCodes)
+                    ? null
+                    : addOnCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()), ct)));
         billing.MapGet("/invoices", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetInvoicesAsync(http.UserId(), ct)));
         billing.MapGet("/invoices/{invoiceId}/download", async (HttpContext http, string invoiceId, LearnerService service, CancellationToken ct) =>
         {
@@ -140,7 +156,7 @@ public static class LearnerEndpoints
             return Results.File(file.Stream, file.ContentType, fileDownloadName: file.FileName);
         });
         billing.MapGet("/review-options", (LearnerService service) => Results.Ok(service.GetReviewOptions()));
-        billing.MapGet("/extras", (LearnerService service) => Results.Ok(service.GetExtras()));
+        billing.MapGet("/extras", async (LearnerService service) => Results.Ok(await service.GetBillingExtrasAsync()));
         billing.MapPost("/checkout-sessions", async (HttpContext http, CheckoutSessionCreateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateCheckoutSessionAsync(http.UserId(), request, ct)));
 
         return app;

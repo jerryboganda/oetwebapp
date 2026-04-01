@@ -31,6 +31,18 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
 
         if (!_useFirstPartyAuth)
         {
+            foreach (var key in new[] { "ASPNETCORE_ENVIRONMENT", "DOTNET_ENVIRONMENT" })
+            {
+                _previousEnvironmentValues[key] = Environment.GetEnvironmentVariable(key);
+                Environment.SetEnvironmentVariable(key, "Development");
+            }
+
+            _previousEnvironmentValues["Billing__CheckoutBaseUrl"] = Environment.GetEnvironmentVariable("Billing__CheckoutBaseUrl");
+            Environment.SetEnvironmentVariable("Billing__CheckoutBaseUrl", "https://app.example.test/billing/checkout");
+        }
+
+        if (!_useFirstPartyAuth)
+        {
             return;
         }
 
@@ -273,7 +285,7 @@ public class TestWebApplicationFactory : WebApplicationFactory<Program>
             {
                 Id = Guid.NewGuid().ToString("N"),
                 UserId = userId,
-                PlanId = "starter-monthly",
+                PlanId = "basic-monthly",
                 Status = SubscriptionStatus.Active,
                 NextRenewalAt = now.AddMonths(1),
                 StartedAt = now,

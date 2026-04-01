@@ -2,10 +2,16 @@
   "name": "ai-studio-applet",
   "version": "0.1.0",
   "private": true,
+  "description": "OET Prep desktop shell",
+  "author": "OET Prep",
+  "main": "electron/main.cjs",
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "desktop:dev": "node ./scripts/electron-dev.cjs",
+    "desktop:dist": "node ./scripts/desktop-dist.cjs",
+    "desktop:electron": "electron .",
     "lint": "eslint app components contexts hooks lib next.config.ts postcss.config.mjs vitest.config.ts vitest.setup.ts eslint.config.mjs",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -44,8 +50,53 @@
     "sass": "^1.98.0",
     "tailwind-merge": "^3.3.1",
     "wavesurfer.js": "^7.12.5",
+    "electron-updater": "^6.6.2",
     "zod": "^4.3.6",
     "zustand": "^5.0.12"
+  },
+  "build": {
+    "appId": "com.oetprep.desktop",
+    "productName": "OET Prep",
+    "npmRebuild": false,
+    "buildDependenciesFromSource": false,
+    "directories": {
+      "output": "dist/desktop"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": ".next/standalone",
+        "to": "standalone"
+      },
+      {
+        "from": ".next/static",
+        "to": "standalone/.next/static"
+      },
+      {
+        "from": "public",
+        "to": "standalone/public"
+      }
+    ],
+    "win": {
+      "signAndEditExecutable": false,
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowElevation": true,
+      "allowToChangeInstallationDirectory": true
+    }
   },
   "devDependencies": {
     "@axe-core/playwright": "^4.11.1",
@@ -58,6 +109,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "@vitejs/plugin-react": "^6.0.1",
+    "electron": "^41.1.0",
+    "electron-builder": "^26.8.1",
     "eslint": "9.39.1",
     "eslint-config-next": "16.0.8",
     "jsdom": "^29.0.1",

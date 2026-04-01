@@ -1,7 +1,7 @@
 'use client';
 
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from 'react';
-import { CreditCard, DollarSign, Receipt, Search, Users } from 'lucide-react';
+import { CreditCard, DollarSign, Package, Receipt, Search, Ticket, Users } from 'lucide-react';
 import { AdminMetricCard, AdminPageHeader, AdminSectionPanel } from '@/components/domain/admin-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -10,26 +10,149 @@ import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input, Select } from '@/components/ui/form-controls';
+import { Checkbox, Input, Select, Textarea } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
-import { createAdminBillingPlan } from '@/lib/api';
-import { getAdminBillingInvoiceData, getAdminBillingPlanData } from '@/lib/admin';
+import {
+  createAdminBillingAddOn,
+  createAdminBillingCoupon,
+  createAdminBillingPlan,
+  updateAdminBillingAddOn,
+  updateAdminBillingCoupon,
+  updateAdminBillingPlan,
+} from '@/lib/api';
+import {
+  getAdminBillingAddOnData,
+  getAdminBillingCouponData,
+  getAdminBillingCouponRedemptionData,
+  getAdminBillingInvoiceData,
+  getAdminBillingPlanData,
+  getAdminBillingSubscriptionData,
+} from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
-import type { AdminBillingInvoice, AdminBillingPlan } from '@/lib/types/admin';
+import type {
+  AdminBillingAddOn,
+  AdminBillingCoupon,
+  AdminBillingCouponRedemption,
+  AdminBillingInvoice,
+  AdminBillingPlan,
+  AdminBillingSubscription,
+} from '@/lib/types/admin';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
 interface BillingPlanFormState {
+  code: string;
   name: string;
+  description: string;
   price: string;
+  currency: string;
   interval: string;
+  durationMonths: string;
+  includedCredits: string;
+  displayOrder: string;
+  isVisible: boolean;
+  isRenewable: boolean;
+  trialDays: string;
+  status: string;
+  includedSubtestsText: string;
+  entitlementsJson: string;
+}
+
+interface BillingAddOnFormState {
+  code: string;
+  name: string;
+  description: string;
+  price: string;
+  currency: string;
+  interval: string;
+  durationDays: string;
+  grantCredits: string;
+  displayOrder: string;
+  isRecurring: boolean;
+  appliesToAllPlans: boolean;
+  isStackable: boolean;
+  quantityStep: string;
+  maxQuantity: string;
+  status: string;
+  compatiblePlanCodesText: string;
+  grantEntitlementsJson: string;
+}
+
+interface BillingCouponFormState {
+  code: string;
+  name: string;
+  description: string;
+  discountType: 'percentage' | 'fixed';
+  discountValue: string;
+  currency: string;
+  startsAt: string;
+  endsAt: string;
+  usageLimitTotal: string;
+  usageLimitPerUser: string;
+  minimumSubtotal: string;
+  isStackable: boolean;
+  status: string;
+  applicablePlanCodesText: string;
+  applicableAddOnCodesText: string;
+  notes: string;
 }
 
 const defaultPlanForm: BillingPlanFormState = {
+  code: '',
   name: '',
   price: '0',
+  description: '',
+  currency: 'AUD',
   interval: 'month',
+  durationMonths: '1',
+  includedCredits: '0',
+  displayOrder: '0',
+  isVisible: true,
+  isRenewable: true,
+  trialDays: '0',
+  status: 'active',
+  includedSubtestsText: 'writing, speaking',
+  entitlementsJson: '{}',
+};
+
+const defaultAddOnForm: BillingAddOnFormState = {
+  code: '',
+  name: '',
+  description: '',
+  price: '0',
+  currency: 'AUD',
+  interval: 'one_time',
+  durationDays: '0',
+  grantCredits: '0',
+  displayOrder: '0',
+  isRecurring: false,
+  appliesToAllPlans: true,
+  isStackable: true,
+  quantityStep: '1',
+  maxQuantity: '',
+  status: 'active',
+  compatiblePlanCodesText: '',
+  grantEntitlementsJson: '{}',
+};
+
+const defaultCouponForm: BillingCouponFormState = {
+  code: '',
+  name: '',
+  description: '',
+  discountType: 'percentage',
+  discountValue: '10',
+  currency: 'AUD',
+  startsAt: '',
+  endsAt: '',
+  usageLimitTotal: '',
+  usageLimitPerUser: '',
+  minimumSubtotal: '',
+  isStackable: true,
+  status: 'active',
+  applicablePlanCodesText: '',
+  applicableAddOnCodesText: '',
+  notes: '',
 };
 
 function formatCurrency(amount: number, currency = 'AUD') {
@@ -40,20 +163,161 @@ function formatCurrency(amount: number, currency = 'AUD') {
   }).format(amount);
 }
 
+function splitList(value: string): string[] {
+  return value
+    .split(',')
+    .map((item) => item.trim())
+    .filter(Boolean);
+}
+
+function toLocalDateTimeValue(value: string | null | undefined): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const offset = date.getTimezoneOffset();
+  return new Date(date.getTime() - offset * 60_000).toISOString().slice(0, 16);
+}
+
+function fromLocalDateTimeValue(value: string): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date.toISOString();
+}
+
+function toOptionalNumber(value: string): number | null {
+  if (!value.trim()) return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+function toNumber(value: string, fallback = 0): number {
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function jsonList(value: string): string {
+  return JSON.stringify(splitList(value));
+}
+
+function safeJsonObject(value: string, fallback: string = '{}'): string {
+  const trimmed = value.trim();
+  if (!trimmed) {
+    return fallback;
+  }
+
+  const parsed = JSON.parse(trimmed);
+  return JSON.stringify(parsed, null, 2);
+}
+
+function normalizedCode(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64);
+}
+
+function toPlanForm(plan: AdminBillingPlan): BillingPlanFormState {
+  return {
+    code: plan.code ?? plan.id,
+    name: plan.name,
+    description: plan.description ?? '',
+    price: String(plan.price),
+    currency: plan.currency ?? 'AUD',
+    interval: plan.interval,
+    durationMonths: String(plan.durationMonths ?? 1),
+    includedCredits: String(plan.includedCredits ?? 0),
+    displayOrder: String(plan.displayOrder ?? 0),
+    isVisible: plan.isVisible ?? true,
+    isRenewable: plan.isRenewable ?? true,
+    trialDays: String(plan.trialDays ?? 0),
+    status: plan.status,
+    includedSubtestsText: (plan.includedSubtests ?? []).join(', '),
+    entitlementsJson: JSON.stringify(plan.entitlements ?? {}, null, 2),
+  };
+}
+
+function toAddOnForm(addOn: AdminBillingAddOn): BillingAddOnFormState {
+  return {
+    code: addOn.code,
+    name: addOn.name,
+    description: addOn.description ?? '',
+    price: String(addOn.price),
+    currency: addOn.currency ?? 'AUD',
+    interval: addOn.interval,
+    durationDays: String(addOn.durationDays ?? 0),
+    grantCredits: String(addOn.grantCredits ?? 0),
+    displayOrder: String(addOn.displayOrder ?? 0),
+    isRecurring: addOn.isRecurring,
+    appliesToAllPlans: addOn.appliesToAllPlans,
+    isStackable: addOn.isStackable,
+    quantityStep: String(addOn.quantityStep ?? 1),
+    maxQuantity: addOn.maxQuantity == null ? '' : String(addOn.maxQuantity),
+    status: addOn.status,
+    compatiblePlanCodesText: (addOn.compatiblePlanCodes ?? []).join(', '),
+    grantEntitlementsJson: JSON.stringify(addOn.grantEntitlements ?? {}, null, 2),
+  };
+}
+
+function toCouponForm(coupon: AdminBillingCoupon): BillingCouponFormState {
+  return {
+    code: coupon.code,
+    name: coupon.name,
+    description: coupon.description ?? '',
+    discountType: coupon.discountType,
+    discountValue: String(coupon.discountValue ?? 0),
+    currency: coupon.currency ?? 'AUD',
+    startsAt: toLocalDateTimeValue(coupon.startsAt),
+    endsAt: toLocalDateTimeValue(coupon.endsAt),
+    usageLimitTotal: coupon.usageLimitTotal == null ? '' : String(coupon.usageLimitTotal),
+    usageLimitPerUser: coupon.usageLimitPerUser == null ? '' : String(coupon.usageLimitPerUser),
+    minimumSubtotal: coupon.minimumSubtotal == null ? '' : String(coupon.minimumSubtotal),
+    isStackable: coupon.isStackable,
+    status: coupon.status,
+    applicablePlanCodesText: (coupon.applicablePlanCodes ?? []).join(', '),
+    applicableAddOnCodesText: (coupon.applicableAddOnCodes ?? []).join(', '),
+    notes: coupon.notes ?? '',
+  };
+}
+
 export default function BillingPage() {
   const { isAuthenticated, role } = useAdminAuth();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
   const [planFilters, setPlanFilters] = useState<Record<string, string[]>>({ status: [] });
+  const [addOnFilters, setAddOnFilters] = useState<Record<string, string[]>>({ status: [] });
+  const [couponFilters, setCouponFilters] = useState<Record<string, string[]>>({ status: [] });
+  const [subscriptionFilters, setSubscriptionFilters] = useState<Record<string, string[]>>({ status: [] });
+  const [redemptionFilters, setRedemptionFilters] = useState<Record<string, string[]>>({ status: [] });
   const [invoiceFilters, setInvoiceFilters] = useState<Record<string, string[]>>({ status: [] });
+  const [subscriptionSearch, setSubscriptionSearch] = useState('');
+  const [redemptionSearch, setRedemptionSearch] = useState('');
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const [plans, setPlans] = useState<AdminBillingPlan[]>([]);
+  const [addOns, setAddOns] = useState<AdminBillingAddOn[]>([]);
+  const [coupons, setCoupons] = useState<AdminBillingCoupon[]>([]);
+  const [subscriptions, setSubscriptions] = useState<AdminBillingSubscription[]>([]);
+  const [redemptions, setRedemptions] = useState<AdminBillingCouponRedemption[]>([]);
   const [invoices, setInvoices] = useState<AdminBillingInvoice[]>([]);
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
+  const [isAddOnModalOpen, setIsAddOnModalOpen] = useState(false);
+  const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
   const [planForm, setPlanForm] = useState<BillingPlanFormState>(defaultPlanForm);
+  const [addOnForm, setAddOnForm] = useState<BillingAddOnFormState>(defaultAddOnForm);
+  const [couponForm, setCouponForm] = useState<BillingCouponFormState>(defaultCouponForm);
   const [isSavingPlan, setIsSavingPlan] = useState(false);
+  const [isSavingAddOn, setIsSavingAddOn] = useState(false);
+  const [isSavingCoupon, setIsSavingCoupon] = useState(false);
+  const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
+  const [editingAddOnId, setEditingAddOnId] = useState<string | null>(null);
+  const [editingCouponId, setEditingCouponId] = useState<string | null>(null);
   const [toast, setToast] = useState<ToastState>(null);
 
   const selectedPlanStatus = planFilters.status?.[0];
+  const selectedAddOnStatus = addOnFilters.status?.[0];
+  const selectedCouponStatus = couponFilters.status?.[0];
+  const selectedSubscriptionStatus = subscriptionFilters.status?.[0];
+  const selectedRedemptionStatus = redemptionFilters.status?.[0];
   const selectedInvoiceStatus = invoiceFilters.status?.[0];
 
   useEffect(() => {
@@ -62,8 +326,12 @@ export default function BillingPage() {
     async function loadBilling() {
       setPageStatus('loading');
       try {
-        const [planItems, invoiceResult] = await Promise.all([
+        const [planItems, addOnItems, couponItems, subscriptionResult, redemptionResult, invoiceResult] = await Promise.all([
           getAdminBillingPlanData({ status: selectedPlanStatus }),
+          getAdminBillingAddOnData({ status: selectedAddOnStatus }),
+          getAdminBillingCouponData({ status: selectedCouponStatus }),
+          getAdminBillingSubscriptionData({ status: selectedSubscriptionStatus, search: subscriptionSearch || undefined, pageSize: 100 }),
+          getAdminBillingCouponRedemptionData({ couponCode: redemptionSearch || undefined, pageSize: 100 }),
           getAdminBillingInvoiceData({
             status: selectedInvoiceStatus,
             search: invoiceSearch || undefined,
@@ -74,8 +342,23 @@ export default function BillingPage() {
         if (cancelled) return;
 
         setPlans(planItems);
+        setAddOns(addOnItems);
+        setCoupons(couponItems);
+        const redemptionItems = selectedRedemptionStatus ? redemptionResult.items.filter((item) => item.status === selectedRedemptionStatus) : redemptionResult.items;
+
+        setSubscriptions(subscriptionResult.items);
+        setRedemptions(redemptionItems);
         setInvoices(invoiceResult.items);
-        setPageStatus(planItems.length > 0 || invoiceResult.items.length > 0 ? 'success' : 'empty');
+        setPageStatus(
+          planItems.length > 0 ||
+          addOnItems.length > 0 ||
+          couponItems.length > 0 ||
+          subscriptionResult.items.length > 0 ||
+          redemptionItems.length > 0 ||
+          invoiceResult.items.length > 0
+            ? 'success'
+            : 'empty',
+        );
       } catch (error) {
         console.error(error);
         if (!cancelled) {
@@ -90,7 +373,7 @@ export default function BillingPage() {
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [selectedPlanStatus, selectedInvoiceStatus, invoiceSearch]);
+  }, [selectedPlanStatus, selectedAddOnStatus, selectedCouponStatus, selectedSubscriptionStatus, selectedRedemptionStatus, subscriptionSearch, redemptionSearch, selectedInvoiceStatus, invoiceSearch]);
 
   const metrics = useMemo(() => {
     const totalMRR = plans
@@ -100,20 +383,34 @@ export default function BillingPage() {
     const totalSubscribers = plans.reduce((sum, plan) => sum + plan.activeSubscribers, 0);
     const failedInvoices = invoices.filter((invoice) => invoice.status === 'failed').length;
     const activePlans = plans.filter((plan) => plan.status === 'active').length;
+    const activeAddOns = addOns.filter((addOn) => addOn.status === 'active').length;
+    const activeCoupons = coupons.filter((coupon) => coupon.status === 'active').length;
+    const activeSubscriptions = subscriptions.filter((subscription) => subscription.status === 'active' || subscription.status === 'trial').length;
 
-    return { totalMRR, totalSubscribers, failedInvoices, activePlans };
-  }, [plans, invoices]);
+    return { totalMRR, totalSubscribers, failedInvoices, activePlans, activeAddOns, activeCoupons, activeSubscriptions };
+  }, [plans, addOns, coupons, subscriptions, invoices]);
 
   const planColumns: Column<AdminBillingPlan>[] = [
     {
       key: 'name',
       header: 'Plan',
-      render: (plan) => <span className="font-medium text-slate-900">{plan.name}</span>,
+      render: (plan) => (
+        <div className="space-y-1">
+          <p className="font-medium text-slate-900">{plan.name}</p>
+          <p className="text-xs uppercase tracking-[0.12em] text-slate-400">{plan.code ?? plan.id}</p>
+          {plan.description ? <p className="text-sm text-slate-500">{plan.description}</p> : null}
+        </div>
+      ),
     },
     {
       key: 'price',
       header: 'Pricing',
-      render: (plan) => <span className="text-slate-600">{formatCurrency(plan.price)} / {plan.interval}</span>,
+      render: (plan) => (
+        <div className="space-y-1 text-slate-600">
+          <p>{formatCurrency(plan.price, plan.currency)} / {plan.interval}</p>
+          <p className="text-xs">{plan.includedCredits} included credits</p>
+        </div>
+      ),
     },
     {
       key: 'activeSubscribers',
@@ -121,13 +418,201 @@ export default function BillingPage() {
       render: (plan) => <span className="text-slate-600">{plan.activeSubscribers.toLocaleString()}</span>,
     },
     {
+      key: 'visibility',
+      header: 'Visibility',
+      render: (plan) => <Badge variant={plan.isVisible ? 'success' : 'muted'}>{plan.isVisible ? 'Visible' : 'Hidden'}</Badge>,
+    },
+    {
       key: 'status',
       header: 'Status',
       render: (plan) => (
-        <Badge variant={plan.status === 'active' ? 'success' : 'muted'}>
+        <Badge variant={plan.status === 'active' ? 'success' : plan.status === 'archived' ? 'danger' : 'muted'}>
           {plan.status}
         </Badge>
       ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (plan) => (
+        <Button variant="outline" size="sm" onClick={() => openPlanEditor(plan)}>
+          Edit
+        </Button>
+      ),
+    },
+  ];
+
+  const addOnColumns: Column<AdminBillingAddOn>[] = [
+    {
+      key: 'name',
+      header: 'Add-on',
+      render: (addOn) => (
+        <div className="space-y-1">
+          <p className="font-medium text-slate-900">{addOn.name}</p>
+          <p className="text-xs uppercase tracking-[0.12em] text-slate-400">{addOn.code}</p>
+          {addOn.description ? <p className="text-sm text-slate-500">{addOn.description}</p> : null}
+        </div>
+      ),
+    },
+    {
+      key: 'price',
+      header: 'Pricing',
+      render: (addOn) => (
+        <div className="space-y-1 text-slate-600">
+          <p>{formatCurrency(addOn.price, addOn.currency)} / {addOn.interval}</p>
+          <p className="text-xs">{addOn.grantCredits} credits · qty step {addOn.quantityStep}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'scope',
+      header: 'Scope',
+      render: (addOn) => (
+        <div className="space-y-1 text-sm text-slate-600">
+          <p>{addOn.appliesToAllPlans ? 'All plans' : addOn.compatiblePlanCodes.join(', ') || 'Restricted'}</p>
+          <p>{addOn.isRecurring ? 'Recurring' : 'One-time'}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (addOn) => (
+        <Badge variant={addOn.status === 'active' ? 'success' : addOn.status === 'archived' ? 'danger' : 'muted'}>
+          {addOn.status}
+        </Badge>
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (addOn) => (
+        <Button variant="outline" size="sm" onClick={() => openAddOnEditor(addOn)}>
+          Edit
+        </Button>
+      ),
+    },
+  ];
+
+  const couponColumns: Column<AdminBillingCoupon>[] = [
+    {
+      key: 'code',
+      header: 'Coupon',
+      render: (coupon) => (
+        <div className="space-y-1">
+          <p className="font-medium text-slate-900">{coupon.code}</p>
+          <p className="text-sm text-slate-500">{coupon.name}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'discount',
+      header: 'Discount',
+      render: (coupon) => (
+        <div className="space-y-1 text-slate-600">
+          <p>{coupon.discountType === 'percentage' ? `${coupon.discountValue}%` : formatCurrency(coupon.discountValue, coupon.currency)}</p>
+          <p className="text-xs">Min subtotal {coupon.minimumSubtotal == null ? 'none' : formatCurrency(coupon.minimumSubtotal, coupon.currency)}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'usage',
+      header: 'Usage',
+      render: (coupon) => (
+        <div className="space-y-1 text-slate-600">
+          <p>{coupon.redemptionCount} redemptions</p>
+          <p className="text-xs">{coupon.usageLimitTotal == null ? 'Unlimited' : `${coupon.usageLimitTotal} total`} · {coupon.usageLimitPerUser == null ? 'No per-user limit' : `${coupon.usageLimitPerUser} per user`}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (coupon) => (
+        <Badge variant={coupon.status === 'active' ? 'success' : coupon.status === 'archived' ? 'danger' : 'muted'}>
+          {coupon.status}
+        </Badge>
+      ),
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (coupon) => (
+        <Button variant="outline" size="sm" onClick={() => openCouponEditor(coupon)}>
+          Edit
+        </Button>
+      ),
+    },
+  ];
+
+  const subscriptionColumns: Column<AdminBillingSubscription>[] = [
+    {
+      key: 'user',
+      header: 'User',
+      render: (subscription) => (
+        <div className="space-y-1">
+          <p className="font-medium text-slate-900">{subscription.userName}</p>
+          <p className="text-xs uppercase tracking-[0.12em] text-slate-400">{subscription.userId}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'plan',
+      header: 'Plan',
+      render: (subscription) => (
+        <div className="space-y-1 text-slate-600">
+          <p>{subscription.planName}</p>
+          <p className="text-xs uppercase tracking-[0.12em] text-slate-400">{subscription.planId}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'price',
+      header: 'Billing',
+      render: (subscription) => (
+        <div className="space-y-1 text-slate-600">
+          <p>{formatCurrency(subscription.price, subscription.currency)} / {subscription.interval}</p>
+          <p className="text-xs">{subscription.addOnCount} add-ons</p>
+        </div>
+      ),
+    },
+    {
+      key: 'nextRenewalAt',
+      header: 'Renewal',
+      render: (subscription) => <span className="text-sm text-slate-500">{subscription.nextRenewalAt ? new Date(subscription.nextRenewalAt).toLocaleString() : 'N/A'}</span>,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (subscription) => <Badge variant={subscription.status === 'active' ? 'success' : subscription.status === 'trial' ? 'info' : 'muted'}>{subscription.status}</Badge>,
+    },
+  ];
+
+  const redemptionColumns: Column<AdminBillingCouponRedemption>[] = [
+    {
+      key: 'couponCode',
+      header: 'Coupon',
+      render: (redemption) => <span className="font-medium text-slate-900">{redemption.couponCode}</span>,
+    },
+    {
+      key: 'userId',
+      header: 'User',
+      render: (redemption) => <span className="text-slate-600">{redemption.userId}</span>,
+    },
+    {
+      key: 'discountAmount',
+      header: 'Discount',
+      render: (redemption) => <span className="text-slate-600">{formatCurrency(redemption.discountAmount, redemption.currency)}</span>,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (redemption) => <Badge variant={redemption.status === 'applied' ? 'success' : redemption.status === 'rejected' ? 'danger' : 'muted'}>{redemption.status}</Badge>,
+    },
+    {
+      key: 'redeemedAt',
+      header: 'Redeemed',
+      render: (redemption) => <span className="text-sm text-slate-500">{new Date(redemption.redeemedAt).toLocaleString()}</span>,
     },
   ];
 
@@ -174,7 +659,65 @@ export default function BillingPage() {
       label: 'Plan Status',
       options: [
         { id: 'active', label: 'Active' },
+        { id: 'draft', label: 'Draft' },
+        { id: 'inactive', label: 'Inactive' },
+        { id: 'archived', label: 'Archived' },
         { id: 'legacy', label: 'Legacy' },
+      ],
+    },
+  ];
+
+  const addOnFilterGroups: FilterGroup[] = [
+    {
+      id: 'status',
+      label: 'Add-on Status',
+      options: [
+        { id: 'active', label: 'Active' },
+        { id: 'draft', label: 'Draft' },
+        { id: 'inactive', label: 'Inactive' },
+        { id: 'archived', label: 'Archived' },
+      ],
+    },
+  ];
+
+  const couponFilterGroups: FilterGroup[] = [
+    {
+      id: 'status',
+      label: 'Coupon Status',
+      options: [
+        { id: 'active', label: 'Active' },
+        { id: 'draft', label: 'Draft' },
+        { id: 'inactive', label: 'Inactive' },
+        { id: 'archived', label: 'Archived' },
+      ],
+    },
+  ];
+
+  const subscriptionFilterGroups: FilterGroup[] = [
+    {
+      id: 'status',
+      label: 'Subscription Status',
+      options: [
+        { id: 'active', label: 'Active' },
+        { id: 'trial', label: 'Trial' },
+        { id: 'pending', label: 'Pending' },
+        { id: 'past_due', label: 'Past due' },
+        { id: 'suspended', label: 'Suspended' },
+        { id: 'cancelled', label: 'Cancelled' },
+        { id: 'expired', label: 'Expired' },
+      ],
+    },
+  ];
+
+  const redemptionFilterGroups: FilterGroup[] = [
+    {
+      id: 'status',
+      label: 'Redemption Status',
+      options: [
+        { id: 'pending', label: 'Pending' },
+        { id: 'applied', label: 'Applied' },
+        { id: 'rejected', label: 'Rejected' },
+        { id: 'reversed', label: 'Reversed' },
       ],
     },
   ];
@@ -203,8 +746,12 @@ export default function BillingPage() {
   }
 
   async function reloadBilling() {
-    const [planItems, invoiceResult] = await Promise.all([
+    const [planItems, addOnItems, couponItems, subscriptionResult, redemptionResult, invoiceResult] = await Promise.all([
       getAdminBillingPlanData({ status: selectedPlanStatus }),
+      getAdminBillingAddOnData({ status: selectedAddOnStatus }),
+      getAdminBillingCouponData({ status: selectedCouponStatus }),
+      getAdminBillingSubscriptionData({ status: selectedSubscriptionStatus, search: subscriptionSearch || undefined, pageSize: 100 }),
+      getAdminBillingCouponRedemptionData({ couponCode: redemptionSearch || undefined, pageSize: 100 }),
       getAdminBillingInvoiceData({
         status: selectedInvoiceStatus,
         search: invoiceSearch || undefined,
@@ -212,29 +759,164 @@ export default function BillingPage() {
       }),
     ]);
 
+    const redemptionItems = selectedRedemptionStatus ? redemptionResult.items.filter((item) => item.status === selectedRedemptionStatus) : redemptionResult.items;
+
     setPlans(planItems);
+    setAddOns(addOnItems);
+    setCoupons(couponItems);
+    setSubscriptions(subscriptionResult.items);
+    setRedemptions(redemptionItems);
     setInvoices(invoiceResult.items);
-    setPageStatus(planItems.length > 0 || invoiceResult.items.length > 0 ? 'success' : 'empty');
+    setPageStatus(
+      planItems.length > 0 ||
+      addOnItems.length > 0 ||
+      couponItems.length > 0 ||
+      subscriptionResult.items.length > 0 ||
+      redemptionItems.length > 0 ||
+      invoiceResult.items.length > 0
+        ? 'success'
+        : 'empty',
+    );
   }
 
-  async function handleCreatePlan() {
+  function openPlanEditor(plan?: AdminBillingPlan) {
+    setEditingPlanId(plan?.id ?? null);
+    setPlanForm(plan ? toPlanForm(plan) : defaultPlanForm);
+    setIsPlanModalOpen(true);
+  }
+
+  function openAddOnEditor(addOn?: AdminBillingAddOn) {
+    setEditingAddOnId(addOn?.id ?? null);
+    setAddOnForm(addOn ? toAddOnForm(addOn) : defaultAddOnForm);
+    setIsAddOnModalOpen(true);
+  }
+
+  function openCouponEditor(coupon?: AdminBillingCoupon) {
+    setEditingCouponId(coupon?.id ?? null);
+    setCouponForm(coupon ? toCouponForm(coupon) : defaultCouponForm);
+    setIsCouponModalOpen(true);
+  }
+
+  async function handleSavePlan() {
     setIsSavingPlan(true);
     try {
-      await createAdminBillingPlan({
+      const payload = {
+        code: normalizedCode(planForm.code || planForm.name),
         name: planForm.name,
-        price: Number(planForm.price || 0),
+        description: planForm.description,
+        price: toNumber(planForm.price),
+        currency: planForm.currency,
         interval: planForm.interval,
-      });
+        durationMonths: toNumber(planForm.durationMonths, 1),
+        includedCredits: toNumber(planForm.includedCredits),
+        displayOrder: toNumber(planForm.displayOrder),
+        isVisible: planForm.isVisible,
+        isRenewable: planForm.isRenewable,
+        trialDays: toNumber(planForm.trialDays),
+        status: planForm.status,
+        includedSubtestsJson: jsonList(planForm.includedSubtestsText),
+        entitlementsJson: safeJsonObject(planForm.entitlementsJson),
+      };
+
+      if (editingPlanId) {
+        await updateAdminBillingPlan(editingPlanId, payload);
+      } else {
+        await createAdminBillingPlan(payload);
+      }
 
       await reloadBilling();
       setIsPlanModalOpen(false);
       setPlanForm(defaultPlanForm);
-      setToast({ variant: 'success', message: 'Billing plan created successfully.' });
+      setEditingPlanId(null);
+      setToast({ variant: 'success', message: editingPlanId ? 'Billing plan updated successfully.' : 'Billing plan created successfully.' });
     } catch (error) {
       console.error(error);
-      setToast({ variant: 'error', message: 'Unable to create this billing plan.' });
+      setToast({ variant: 'error', message: 'Unable to save this billing plan.' });
     } finally {
       setIsSavingPlan(false);
+    }
+  }
+
+  async function handleSaveAddOn() {
+    setIsSavingAddOn(true);
+    try {
+      const payload = {
+        code: normalizedCode(addOnForm.code || addOnForm.name),
+        name: addOnForm.name,
+        description: addOnForm.description,
+        price: toNumber(addOnForm.price),
+        currency: addOnForm.currency,
+        interval: addOnForm.interval,
+        durationDays: toNumber(addOnForm.durationDays),
+        grantCredits: toNumber(addOnForm.grantCredits),
+        displayOrder: toNumber(addOnForm.displayOrder),
+        isRecurring: addOnForm.isRecurring,
+        appliesToAllPlans: addOnForm.appliesToAllPlans,
+        isStackable: addOnForm.isStackable,
+        quantityStep: toNumber(addOnForm.quantityStep, 1),
+        maxQuantity: toOptionalNumber(addOnForm.maxQuantity),
+        status: addOnForm.status,
+        compatiblePlanCodesJson: jsonList(addOnForm.compatiblePlanCodesText),
+        grantEntitlementsJson: safeJsonObject(addOnForm.grantEntitlementsJson),
+      };
+
+      if (editingAddOnId) {
+        await updateAdminBillingAddOn(editingAddOnId, payload);
+      } else {
+        await createAdminBillingAddOn(payload);
+      }
+
+      await reloadBilling();
+      setIsAddOnModalOpen(false);
+      setAddOnForm(defaultAddOnForm);
+      setEditingAddOnId(null);
+      setToast({ variant: 'success', message: editingAddOnId ? 'Billing add-on updated successfully.' : 'Billing add-on created successfully.' });
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: 'Unable to save this billing add-on.' });
+    } finally {
+      setIsSavingAddOn(false);
+    }
+  }
+
+  async function handleSaveCoupon() {
+    setIsSavingCoupon(true);
+    try {
+      const payload = {
+        code: normalizedCode(couponForm.code || couponForm.name),
+        name: couponForm.name,
+        description: couponForm.description,
+        discountType: couponForm.discountType,
+        discountValue: toNumber(couponForm.discountValue),
+        currency: couponForm.currency,
+        startsAt: fromLocalDateTimeValue(couponForm.startsAt),
+        endsAt: fromLocalDateTimeValue(couponForm.endsAt),
+        usageLimitTotal: toOptionalNumber(couponForm.usageLimitTotal),
+        usageLimitPerUser: toOptionalNumber(couponForm.usageLimitPerUser),
+        minimumSubtotal: toOptionalNumber(couponForm.minimumSubtotal),
+        isStackable: couponForm.isStackable,
+        status: couponForm.status,
+        applicablePlanCodesJson: jsonList(couponForm.applicablePlanCodesText),
+        applicableAddOnCodesJson: jsonList(couponForm.applicableAddOnCodesText),
+        notes: couponForm.notes.trim() || null,
+      };
+
+      if (editingCouponId) {
+        await updateAdminBillingCoupon(editingCouponId, payload);
+      } else {
+        await createAdminBillingCoupon(payload);
+      }
+
+      await reloadBilling();
+      setIsCouponModalOpen(false);
+      setCouponForm(defaultCouponForm);
+      setEditingCouponId(null);
+      setToast({ variant: 'success', message: editingCouponId ? 'Billing coupon updated successfully.' : 'Billing coupon created successfully.' });
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: 'Unable to save this billing coupon.' });
+    } finally {
+      setIsSavingCoupon(false);
     }
   }
 
@@ -246,12 +928,22 @@ export default function BillingPage() {
 
       <AdminPageHeader
         title="Billing Operations"
-        description="Manage subscription plans, invoice visibility, and revenue risk with live plan and invoice data."
+        description="Manage subscription plans, add-ons, coupons, subscriptions, and invoices with live backend data."
         actions={
-          <Button onClick={() => setIsPlanModalOpen(true)} className="gap-2">
-            <CreditCard className="h-4 w-4" />
-            Create Plan
-          </Button>
+          <>
+            <Button onClick={() => openPlanEditor()} className="gap-2">
+              <CreditCard className="h-4 w-4" />
+              Create Plan
+            </Button>
+            <Button variant="outline" onClick={() => openAddOnEditor()} className="gap-2">
+              <Package className="h-4 w-4" />
+              Create Add-on
+            </Button>
+            <Button variant="outline" onClick={() => openCouponEditor()} className="gap-2">
+              <Ticket className="h-4 w-4" />
+              Create Coupon
+            </Button>
+          </>
         }
       />
 
@@ -267,16 +959,69 @@ export default function BillingPage() {
           />
         }
       >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
           <AdminMetricCard label="Monthly Revenue" value={formatCurrency(metrics.totalMRR)} icon={<DollarSign className="h-5 w-5" />} />
           <AdminMetricCard label="Subscribers" value={metrics.totalSubscribers} icon={<Users className="h-5 w-5" />} />
+          <AdminMetricCard label="Active Subscriptions" value={metrics.activeSubscriptions} icon={<Users className="h-5 w-5" />} />
           <AdminMetricCard label="Active Plans" value={metrics.activePlans} icon={<CreditCard className="h-5 w-5" />} />
+          <AdminMetricCard label="Active Add-ons" value={metrics.activeAddOns} icon={<Package className="h-5 w-5" />} />
+          <AdminMetricCard label="Active Coupons" value={metrics.activeCoupons} icon={<Ticket className="h-5 w-5" />} />
           <AdminMetricCard label="Failed Invoices" value={metrics.failedInvoices} icon={<Receipt className="h-5 w-5" />} tone={metrics.failedInvoices > 0 ? 'danger' : 'default'} />
         </div>
 
-        <AdminSectionPanel title="Subscription Plans" description="Live plan data from the admin billing plan endpoint.">
+        <AdminSectionPanel
+          title="Subscription Plans"
+          description="Live plan data from the admin billing plan endpoint."
+          actions={<Button variant="outline" size="sm" onClick={() => openPlanEditor()}>Create Plan</Button>}
+        >
           <FilterBar groups={planFilterGroups} selected={planFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setPlanFilters, groupId, optionId)} onClear={() => setPlanFilters({ status: [] })} />
           <DataTable columns={planColumns} data={plans} keyExtractor={(plan) => plan.id} />
+        </AdminSectionPanel>
+
+        <AdminSectionPanel
+          title="Add-ons"
+          description="Manage review-credit packs and other purchasable subscription items."
+          actions={<Button variant="outline" size="sm" onClick={() => openAddOnEditor()}>Create Add-on</Button>}
+        >
+          <FilterBar groups={addOnFilterGroups} selected={addOnFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setAddOnFilters, groupId, optionId)} onClear={() => setAddOnFilters({ status: [] })} />
+          <DataTable columns={addOnColumns} data={addOns} keyExtractor={(addOn) => addOn.id} />
+        </AdminSectionPanel>
+
+        <AdminSectionPanel
+          title="Coupons"
+          description="Create and edit promo codes, limits, validity windows, and scope rules."
+          actions={<Button variant="outline" size="sm" onClick={() => openCouponEditor()}>Create Coupon</Button>}
+        >
+          <FilterBar groups={couponFilterGroups} selected={couponFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setCouponFilters, groupId, optionId)} onClear={() => setCouponFilters({ status: [] })} />
+          <DataTable columns={couponColumns} data={coupons} keyExtractor={(coupon) => coupon.id} />
+        </AdminSectionPanel>
+
+        <AdminSectionPanel
+          title="Subscriptions"
+          description="Read-only visibility into active learner subscriptions and attached items."
+        >
+          <div className="max-w-md">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input placeholder="Search by user or plan" value={subscriptionSearch} onChange={(event) => setSubscriptionSearch(event.target.value)} className="pl-9" />
+            </div>
+          </div>
+          <FilterBar groups={subscriptionFilterGroups} selected={subscriptionFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setSubscriptionFilters, groupId, optionId)} onClear={() => setSubscriptionFilters({ status: [] })} />
+          <DataTable columns={subscriptionColumns} data={subscriptions} keyExtractor={(subscription) => subscription.id} />
+        </AdminSectionPanel>
+
+        <AdminSectionPanel
+          title="Coupon Redemptions"
+          description="Track which coupons were used and how much discount was granted."
+        >
+          <div className="max-w-md">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Input placeholder="Filter by coupon code" value={redemptionSearch} onChange={(event) => setRedemptionSearch(event.target.value)} className="pl-9" />
+            </div>
+          </div>
+          <FilterBar groups={redemptionFilterGroups} selected={redemptionFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setRedemptionFilters, groupId, optionId)} onClear={() => setRedemptionFilters({ status: [] })} />
+          <DataTable columns={redemptionColumns} data={redemptions} keyExtractor={(redemption) => redemption.id} />
         </AdminSectionPanel>
 
         <AdminSectionPanel title="Invoices" description="Search and filter real invoice records by status and learner reference.">
@@ -291,26 +1036,224 @@ export default function BillingPage() {
         </AdminSectionPanel>
       </AsyncStateWrapper>
 
-      <Modal open={isPlanModalOpen} onClose={() => setIsPlanModalOpen(false)} title="Create Billing Plan">
+      <Modal
+        open={isPlanModalOpen}
+        onClose={() => {
+          setIsPlanModalOpen(false);
+          setEditingPlanId(null);
+          setPlanForm(defaultPlanForm);
+        }}
+        title={editingPlanId ? 'Edit Billing Plan' : 'Create Billing Plan'}
+      >
         <div className="space-y-4 py-2">
-          <Input label="Plan Name" value={planForm.name} onChange={(event) => setPlanForm((current) => ({ ...current, name: event.target.value }))} />
-          <Input label="Price" type="number" min={0} step="0.01" value={planForm.price} onChange={(event) => setPlanForm((current) => ({ ...current, price: event.target.value }))} />
-          <Select
-            label="Interval"
-            value={planForm.interval}
-            onChange={(event) => setPlanForm((current) => ({ ...current, interval: event.target.value }))}
-            options={[
-              { value: 'month', label: 'Monthly' },
-              { value: 'year', label: 'Yearly' },
-            ]}
-          />
+          <div className="grid gap-4 md:grid-cols-2">
+            <Input label="Code" value={planForm.code} onChange={(event) => setPlanForm((current) => ({ ...current, code: event.target.value }))} />
+            <Input label="Name" value={planForm.name} onChange={(event) => setPlanForm((current) => ({ ...current, name: event.target.value }))} />
+          </div>
+          <Textarea label="Description" value={planForm.description} onChange={(event) => setPlanForm((current) => ({ ...current, description: event.target.value }))} />
+          <div className="grid gap-4 md:grid-cols-3">
+            <Input label="Price" type="number" min={0} step="0.01" value={planForm.price} onChange={(event) => setPlanForm((current) => ({ ...current, price: event.target.value }))} />
+            <Input label="Currency" value={planForm.currency} onChange={(event) => setPlanForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} />
+            <Select
+              label="Interval"
+              value={planForm.interval}
+              onChange={(event) => setPlanForm((current) => ({ ...current, interval: event.target.value }))}
+              options={[
+                { value: 'month', label: 'Monthly' },
+                { value: 'year', label: 'Yearly' },
+              ]}
+            />
+          </div>
+          <div className="grid gap-4 md:grid-cols-4">
+            <Input label="Duration months" type="number" min={1} value={planForm.durationMonths} onChange={(event) => setPlanForm((current) => ({ ...current, durationMonths: event.target.value }))} />
+            <Input label="Included credits" type="number" min={0} value={planForm.includedCredits} onChange={(event) => setPlanForm((current) => ({ ...current, includedCredits: event.target.value }))} />
+            <Input label="Display order" type="number" min={0} value={planForm.displayOrder} onChange={(event) => setPlanForm((current) => ({ ...current, displayOrder: event.target.value }))} />
+            <Input label="Trial days" type="number" min={0} value={planForm.trialDays} onChange={(event) => setPlanForm((current) => ({ ...current, trialDays: event.target.value }))} />
+          </div>
+          <div className="flex flex-wrap gap-4">
+            <Checkbox label="Visible" checked={planForm.isVisible} onChange={(event) => setPlanForm((current) => ({ ...current, isVisible: event.target.checked }))} />
+            <Checkbox label="Renewable" checked={planForm.isRenewable} onChange={(event) => setPlanForm((current) => ({ ...current, isRenewable: event.target.checked }))} />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Select
+              label="Status"
+              value={planForm.status}
+              onChange={(event) => setPlanForm((current) => ({ ...current, status: event.target.value }))}
+              options={[
+                { value: 'active', label: 'Active' },
+                { value: 'draft', label: 'Draft' },
+                { value: 'inactive', label: 'Inactive' },
+                { value: 'archived', label: 'Archived' },
+                { value: 'legacy', label: 'Legacy' },
+              ]}
+            />
+            <Input label="Included subtests" value={planForm.includedSubtestsText} onChange={(event) => setPlanForm((current) => ({ ...current, includedSubtestsText: event.target.value }))} hint="Comma-separated codes like writing, speaking" />
+          </div>
+          <Textarea label="Entitlements JSON" value={planForm.entitlementsJson} onChange={(event) => setPlanForm((current) => ({ ...current, entitlementsJson: event.target.value }))} />
 
           <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
-            <Button variant="outline" onClick={() => setIsPlanModalOpen(false)}>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsPlanModalOpen(false);
+                setEditingPlanId(null);
+                setPlanForm(defaultPlanForm);
+              }}
+            >
               Cancel
             </Button>
-            <Button onClick={handleCreatePlan} loading={isSavingPlan}>
-              Save Plan
+            <Button onClick={handleSavePlan} loading={isSavingPlan}>
+              {editingPlanId ? 'Update Plan' : 'Save Plan'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={isAddOnModalOpen}
+        onClose={() => {
+          setIsAddOnModalOpen(false);
+          setEditingAddOnId(null);
+          setAddOnForm(defaultAddOnForm);
+        }}
+        title={editingAddOnId ? 'Edit Add-on' : 'Create Add-on'}
+      >
+        <div className="space-y-4 py-2">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Input label="Code" value={addOnForm.code} onChange={(event) => setAddOnForm((current) => ({ ...current, code: event.target.value }))} />
+            <Input label="Name" value={addOnForm.name} onChange={(event) => setAddOnForm((current) => ({ ...current, name: event.target.value }))} />
+          </div>
+          <Textarea label="Description" value={addOnForm.description} onChange={(event) => setAddOnForm((current) => ({ ...current, description: event.target.value }))} />
+          <div className="grid gap-4 md:grid-cols-3">
+            <Input label="Price" type="number" min={0} step="0.01" value={addOnForm.price} onChange={(event) => setAddOnForm((current) => ({ ...current, price: event.target.value }))} />
+            <Input label="Currency" value={addOnForm.currency} onChange={(event) => setAddOnForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} />
+            <Select
+              label="Interval"
+              value={addOnForm.interval}
+              onChange={(event) => setAddOnForm((current) => ({ ...current, interval: event.target.value }))}
+              options={[
+                { value: 'one_time', label: 'One-time' },
+                { value: 'month', label: 'Monthly' },
+                { value: 'year', label: 'Yearly' },
+              ]}
+            />
+          </div>
+          <div className="grid gap-4 md:grid-cols-4">
+            <Input label="Duration days" type="number" min={0} value={addOnForm.durationDays} onChange={(event) => setAddOnForm((current) => ({ ...current, durationDays: event.target.value }))} />
+            <Input label="Grant credits" type="number" min={0} value={addOnForm.grantCredits} onChange={(event) => setAddOnForm((current) => ({ ...current, grantCredits: event.target.value }))} />
+            <Input label="Display order" type="number" min={0} value={addOnForm.displayOrder} onChange={(event) => setAddOnForm((current) => ({ ...current, displayOrder: event.target.value }))} />
+            <Input label="Quantity step" type="number" min={1} value={addOnForm.quantityStep} onChange={(event) => setAddOnForm((current) => ({ ...current, quantityStep: event.target.value }))} />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Input label="Max quantity" type="number" min={0} value={addOnForm.maxQuantity} onChange={(event) => setAddOnForm((current) => ({ ...current, maxQuantity: event.target.value }))} />
+            <Select
+              label="Status"
+              value={addOnForm.status}
+              onChange={(event) => setAddOnForm((current) => ({ ...current, status: event.target.value }))}
+              options={[
+                { value: 'active', label: 'Active' },
+                { value: 'draft', label: 'Draft' },
+                { value: 'inactive', label: 'Inactive' },
+                { value: 'archived', label: 'Archived' },
+              ]}
+            />
+          </div>
+          <div className="flex flex-wrap gap-4">
+            <Checkbox label="Recurring" checked={addOnForm.isRecurring} onChange={(event) => setAddOnForm((current) => ({ ...current, isRecurring: event.target.checked }))} />
+            <Checkbox label="Applies to all plans" checked={addOnForm.appliesToAllPlans} onChange={(event) => setAddOnForm((current) => ({ ...current, appliesToAllPlans: event.target.checked }))} />
+            <Checkbox label="Stackable" checked={addOnForm.isStackable} onChange={(event) => setAddOnForm((current) => ({ ...current, isStackable: event.target.checked }))} />
+          </div>
+          <Input label="Compatible plan codes" value={addOnForm.compatiblePlanCodesText} onChange={(event) => setAddOnForm((current) => ({ ...current, compatiblePlanCodesText: event.target.value }))} hint="Comma-separated codes" />
+          <Textarea label="Grant entitlements JSON" value={addOnForm.grantEntitlementsJson} onChange={(event) => setAddOnForm((current) => ({ ...current, grantEntitlementsJson: event.target.value }))} />
+
+          <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsAddOnModalOpen(false);
+                setEditingAddOnId(null);
+                setAddOnForm(defaultAddOnForm);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveAddOn} loading={isSavingAddOn}>
+              {editingAddOnId ? 'Update Add-on' : 'Save Add-on'}
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={isCouponModalOpen}
+        onClose={() => {
+          setIsCouponModalOpen(false);
+          setEditingCouponId(null);
+          setCouponForm(defaultCouponForm);
+        }}
+        title={editingCouponId ? 'Edit Coupon' : 'Create Coupon'}
+      >
+        <div className="space-y-4 py-2">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Input label="Code" value={couponForm.code} onChange={(event) => setCouponForm((current) => ({ ...current, code: event.target.value }))} />
+            <Input label="Name" value={couponForm.name} onChange={(event) => setCouponForm((current) => ({ ...current, name: event.target.value }))} />
+          </div>
+          <Textarea label="Description" value={couponForm.description} onChange={(event) => setCouponForm((current) => ({ ...current, description: event.target.value }))} />
+          <div className="grid gap-4 md:grid-cols-3">
+            <Select
+              label="Discount type"
+              value={couponForm.discountType}
+              onChange={(event) => setCouponForm((current) => ({ ...current, discountType: event.target.value as 'percentage' | 'fixed' }))}
+              options={[
+                { value: 'percentage', label: 'Percentage' },
+                { value: 'fixed', label: 'Fixed amount' },
+              ]}
+            />
+            <Input label="Discount value" type="number" min={0} step="0.01" value={couponForm.discountValue} onChange={(event) => setCouponForm((current) => ({ ...current, discountValue: event.target.value }))} />
+            <Input label="Currency" value={couponForm.currency} onChange={(event) => setCouponForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Input label="Starts at" type="datetime-local" value={couponForm.startsAt} onChange={(event) => setCouponForm((current) => ({ ...current, startsAt: event.target.value }))} />
+            <Input label="Ends at" type="datetime-local" value={couponForm.endsAt} onChange={(event) => setCouponForm((current) => ({ ...current, endsAt: event.target.value }))} />
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            <Input label="Usage limit total" type="number" min={0} value={couponForm.usageLimitTotal} onChange={(event) => setCouponForm((current) => ({ ...current, usageLimitTotal: event.target.value }))} />
+            <Input label="Usage limit per user" type="number" min={0} value={couponForm.usageLimitPerUser} onChange={(event) => setCouponForm((current) => ({ ...current, usageLimitPerUser: event.target.value }))} />
+            <Input label="Minimum subtotal" type="number" min={0} step="0.01" value={couponForm.minimumSubtotal} onChange={(event) => setCouponForm((current) => ({ ...current, minimumSubtotal: event.target.value }))} />
+          </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Select
+              label="Status"
+              value={couponForm.status}
+              onChange={(event) => setCouponForm((current) => ({ ...current, status: event.target.value }))}
+              options={[
+                { value: 'active', label: 'Active' },
+                { value: 'draft', label: 'Draft' },
+                { value: 'inactive', label: 'Inactive' },
+                { value: 'archived', label: 'Archived' },
+              ]}
+            />
+            <Input label="Notes" value={couponForm.notes} onChange={(event) => setCouponForm((current) => ({ ...current, notes: event.target.value }))} />
+          </div>
+          <div className="flex flex-wrap gap-4">
+            <Checkbox label="Stackable" checked={couponForm.isStackable} onChange={(event) => setCouponForm((current) => ({ ...current, isStackable: event.target.checked }))} />
+          </div>
+          <Input label="Applicable plan codes" value={couponForm.applicablePlanCodesText} onChange={(event) => setCouponForm((current) => ({ ...current, applicablePlanCodesText: event.target.value }))} hint="Comma-separated codes" />
+          <Input label="Applicable add-on codes" value={couponForm.applicableAddOnCodesText} onChange={(event) => setCouponForm((current) => ({ ...current, applicableAddOnCodesText: event.target.value }))} hint="Comma-separated codes" />
+
+          <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsCouponModalOpen(false);
+                setEditingCouponId(null);
+                setCouponForm(defaultCouponForm);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveCoupon} loading={isSavingCoupon}>
+              {editingCouponId ? 'Update Coupon' : 'Save Coupon'}
             </Button>
           </div>
         </div>

@@ -29,9 +29,6 @@ import type {
   Submission,
   SubmissionComparison,
   SubmissionDetail,
-  BillingData,
-  BillingChangePreview,
-  Invoice,
   TurnaroundOption,
   FocusArea,
   DiagnosticSession,
@@ -43,6 +40,13 @@ import type {
   SettingsSectionId,
   SpeakingTranscriptReview,
 } from './mock-data';
+import type {
+  BillingData,
+  BillingChangePreview,
+  BillingQuote,
+  BillingProductType,
+  Invoice,
+} from './billing-types';
 import type {
   CalibrationCaseDetail,
   CalibrationCase,
@@ -65,6 +69,30 @@ import type {
 
 const API_BASE_URL = env.apiBaseUrl;
 type ApiRecord = Record<string, any>;
+
+function asRecord(value: unknown): ApiRecord {
+  return value && typeof value === 'object' ? (value as ApiRecord) : {};
+}
+
+function asArray(value: unknown): ApiRecord[] {
+  return Array.isArray(value) ? value.map(asRecord) : [];
+}
+
+function toStringArray(value: unknown): string[] {
+  if (!Array.isArray(value)) return [];
+  return value
+    .map((item) => {
+      if (typeof item === 'string') return item;
+      if (typeof item === 'number' || typeof item === 'boolean') return String(item);
+      const record = item && typeof item === 'object' ? (item as ApiRecord) : {};
+      return record.code ?? record.value ?? record.id ?? record.name ?? null;
+    })
+    .filter((item): item is string => typeof item === 'string' && item.length > 0);
+}
+
+function toNullableString(value: unknown): string | null {
+  return typeof value === 'string' && value.length > 0 ? value : null;
+}
 
 function isBrowser() {
   return typeof window !== 'undefined';
@@ -1567,23 +1595,47 @@ export async function fetchBilling(): Promise<BillingData> {
     apiRequest<ApiRecord>('/v1/billing/plans'),
     apiRequest<ApiRecord>('/v1/billing/extras'),
   ]);
+  const activeAddOns = (summary.activeAddOns ?? []).map((item: ApiRecord) => ({
+    id: item.id,
+    code: item.code,
+    name: item.name,
+    productType: item.productType,
+    quantity: Number(item.quantity ?? 0),
+    price: formatCurrency(item.price?.amount ?? item.price, item.price?.currency ?? item.currency ?? 'AUD'),
+    currency: item.price?.currency ?? item.currency ?? 'AUD',
+    interval: item.price?.interval ?? item.interval ?? 'one_time',
+    status: item.status ?? 'active',
+    description: item.description ?? '',
+    grantCredits: Number(item.grantCredits ?? 0),
+    durationDays: Number(item.durationDays ?? 0),
+    isRecurring: Boolean(item.isRecurring),
+    appliesToAllPlans: Boolean(item.appliesToAllPlans),
+    quantityStep: Number(item.quantityStep ?? 1),
+    maxQuantity: item.maxQuantity == null ? null : Number(item.maxQuantity),
+    compatiblePlanCodes: toStringArray(item.compatiblePlanCodes),
+  }));
   return {
-    currentPlan: titleCase(summary.planId),
+    currentPlan: summary.planName ?? titleCase(summary.planId),
     currentPlanId: summary.planId,
+    currentPlanCode: summary.planCode ?? summary.planId,
+    planName: summary.planName ?? titleCase(summary.planId),
+    planDescription: summary.planDescription ?? '',
     price: `$${Number(summary.price.amount).toFixed(2)}`,
     interval: summary.price.interval,
     status: titleCase(summary.status),
     nextRenewal: summary.nextRenewalAt,
     reviewCredits: summary.wallet.creditBalance,
+    activeAddOns,
     entitlements: {
       productiveSkillReviewsEnabled: Boolean(summary.entitlements?.productiveSkillReviewsEnabled),
       supportedReviewSubtests: summary.entitlements?.supportedReviewSubtests ?? [],
       invoiceDownloadsAvailable: Boolean(summary.entitlements?.invoiceDownloadsAvailable),
     },
     plans: (plans.items ?? []).map((plan: ApiRecord) => ({
-      id: plan.planId,
+      id: plan.planId ?? plan.code,
+      code: plan.code ?? plan.planId,
       label: plan.label,
-      tier: titleCase(plan.tier),
+      tier: titleCase(plan.tier ?? plan.code ?? plan.planId),
       description: plan.description,
       price: formatCurrency(plan.price?.amount, plan.price?.currency),
       interval: plan.price?.interval ?? 'month',
@@ -1591,21 +1643,83 @@ export async function fetchBilling(): Promise<BillingData> {
       canChangeTo: Boolean(plan.canChangeTo),
       changeDirection: plan.changeDirection ?? 'current',
       badge: plan.badge ?? '',
+      status: plan.status ?? 'active',
+      durationMonths: Number(plan.durationMonths ?? 1),
+      isVisible: Boolean(plan.isVisible ?? true),
+      isRenewable: Boolean(plan.isRenewable ?? true),
+      trialDays: Number(plan.trialDays ?? 0),
+      displayOrder: Number(plan.displayOrder ?? 0),
+      includedSubtests: toStringArray(plan.includedSubtests),
     })),
-    extras: (extras.items ?? []).map((extra: ApiRecord) => ({
+    addOns: (extras.items ?? []).map((extra: ApiRecord) => ({
       id: extra.id,
+      code: extra.code ?? extra.id,
+      name: extra.name ?? extra.description ?? extra.id,
+      productType: extra.productType ?? 'review_credits',
       quantity: Number(extra.quantity ?? 0),
-      price: formatCurrency(extra.price, extra.currency),
+      price: formatCurrency(extra.price?.amount ?? extra.price, extra.price?.currency ?? extra.currency ?? 'AUD'),
+      currency: extra.price?.currency ?? extra.currency ?? 'AUD',
+      interval: extra.price?.interval ?? extra.interval ?? 'one_time',
+      status: extra.status ?? 'active',
       description: extra.description,
+      grantCredits: Number(extra.grantCredits ?? 0),
+      durationDays: Number(extra.durationDays ?? 0),
+      isRecurring: Boolean(extra.isRecurring ?? false),
+      appliesToAllPlans: Boolean(extra.appliesToAllPlans ?? true),
+      quantityStep: Number(extra.quantityStep ?? 1),
+      maxQuantity: extra.maxQuantity == null ? null : Number(extra.maxQuantity),
+      compatiblePlanCodes: toStringArray(extra.compatiblePlanCodes),
     })),
+    coupons: [],
+    quote: null,
     invoices: (invoices.items ?? []).map((invoice: ApiRecord) => ({
-      id: invoice.invoiceId,
+      id: invoice.invoiceId ?? invoice.id,
       date: invoice.date,
       amount: formatCurrency(invoice.amount, invoice.currency),
       status: toBillingStatus(invoice.status),
       currency: invoice.currency,
       downloadUrl: invoice.downloadUrl,
+      description: invoice.description,
     })),
+  };
+}
+
+export async function fetchBillingQuote(input: {
+  productType: BillingProductType;
+  quantity: number;
+  priceId?: string | null;
+  couponCode?: string | null;
+  addOnCodes?: string[];
+}): Promise<BillingQuote> {
+  const params = new URLSearchParams();
+  params.set('productType', input.productType);
+  params.set('quantity', String(input.quantity));
+  if (input.priceId) params.set('priceId', input.priceId);
+  if (input.couponCode) params.set('couponCode', input.couponCode);
+  if (input.addOnCodes && input.addOnCodes.length > 0) params.set('addOnCodes', input.addOnCodes.join(','));
+  const quote = await apiRequest<ApiRecord>(`/v1/billing/quote?${params.toString()}`);
+  return {
+    quoteId: quote.quoteId,
+    status: quote.status,
+    currency: quote.currency,
+    subtotalAmount: Number(quote.subtotalAmount ?? 0),
+    discountAmount: Number(quote.discountAmount ?? 0),
+    totalAmount: Number(quote.totalAmount ?? 0),
+    planCode: quote.planCode ?? null,
+    couponCode: quote.couponCode ?? null,
+    addOnCodes: toStringArray(quote.addOnCodes),
+    items: asArray(quote.items).map((item: ApiRecord) => ({
+      kind: String(item.kind ?? 'item'),
+      code: String(item.code ?? item.id ?? ''),
+      name: String(item.name ?? item.code ?? ''),
+      amount: Number(item.amount ?? 0),
+      currency: String(item.currency ?? 'AUD'),
+      quantity: Number(item.quantity ?? 1),
+      description: toNullableString(item.description),
+    })),
+    expiresAt: quote.expiresAt,
+    summary: String(quote.summary ?? ''),
+    validation: asRecord(quote.validation),
   };
 }
 
@@ -1613,7 +1727,15 @@ export async function purchaseReviewCredits(count: number): Promise<{ success: b
   const billing = await fetchBilling();
   await apiRequest('/v1/billing/checkout-sessions', {
     method: 'POST',
-    body: JSON.stringify({ productType: 'review_credits', quantity: count, priceId: null, idempotencyKey: crypto.randomUUID?.() ?? String(Date.now()) }),
+    body: JSON.stringify({
+      productType: 'review_credits',
+      quantity: count,
+      priceId: null,
+      couponCode: null,
+      addOnCodes: null,
+      quoteId: null,
+      idempotencyKey: crypto.randomUUID?.() ?? String(Date.now()),
+    }),
   });
   return { success: true, newBalance: billing.reviewCredits + count };
 }
@@ -1633,22 +1755,31 @@ export async function fetchBillingChangePreview(targetPlanId: string): Promise<B
 }
 
 export async function createBillingCheckoutSession(input: {
-  productType: 'review_credits' | 'plan_upgrade' | 'plan_downgrade';
+  productType: BillingProductType;
   quantity: number;
   priceId?: string | null;
-}): Promise<{ checkoutUrl: string; checkoutSessionId: string }> {
+  couponCode?: string | null;
+  addOnCodes?: string[];
+  quoteId?: string | null;
+}): Promise<{ checkoutUrl: string; checkoutSessionId: string; quoteId?: string | null; totalAmount?: number; currency?: string }> {
   const response = await apiRequest<ApiRecord>('/v1/billing/checkout-sessions', {
     method: 'POST',
     body: JSON.stringify({
       productType: input.productType,
       quantity: input.quantity,
       priceId: input.priceId ?? null,
+      couponCode: input.couponCode ?? null,
+      addOnCodes: input.addOnCodes ?? null,
+      quoteId: input.quoteId ?? null,
       idempotencyKey: crypto.randomUUID?.() ?? String(Date.now()),
     }),
   });
   return {
     checkoutUrl: response.checkoutUrl,
     checkoutSessionId: response.checkoutSessionId,
+    quoteId: response.quoteId ?? null,
+    totalAmount: response.totalAmount != null ? Number(response.totalAmount) : undefined,
+    currency: response.currency ?? undefined,
   };
 }
 
@@ -2130,8 +2261,289 @@ export async function fetchAdminBillingPlans(params?: { status?: string }) {
   return apiRequest(`/v1/admin/billing/plans${qs}`);
 }
 
-export async function createAdminBillingPlan(payload: { name: string; price: number; interval: string }) {
-  return apiRequest('/v1/admin/billing/plans', { method: 'POST', body: JSON.stringify(payload) });
+function normalizeBillingCode(value: string): string {
+  return value
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 64) || 'custom-plan';
+}
+
+export async function createAdminBillingPlan(payload: {
+  code?: string;
+  name: string;
+  description?: string;
+  price: number;
+  currency?: string;
+  interval: string;
+  durationMonths?: number;
+  includedCredits?: number;
+  displayOrder?: number;
+  isVisible?: boolean;
+  isRenewable?: boolean;
+  trialDays?: number;
+  status?: string;
+  includedSubtestsJson?: string;
+  entitlementsJson?: string;
+}) {
+  return apiRequest('/v1/admin/billing/plans', {
+    method: 'POST',
+    body: JSON.stringify({
+      code: payload.code ?? normalizeBillingCode(payload.name),
+      name: payload.name,
+      description: payload.description ?? '',
+      price: payload.price,
+      currency: payload.currency ?? 'AUD',
+      interval: payload.interval,
+      durationMonths: payload.durationMonths ?? 1,
+      includedCredits: payload.includedCredits ?? 0,
+      displayOrder: payload.displayOrder ?? 0,
+      isVisible: payload.isVisible ?? true,
+      isRenewable: payload.isRenewable ?? true,
+      trialDays: payload.trialDays ?? 0,
+      status: payload.status ?? 'active',
+      includedSubtestsJson: payload.includedSubtestsJson ?? '[]',
+      entitlementsJson: payload.entitlementsJson ?? '{}',
+    }),
+  });
+}
+
+export async function updateAdminBillingPlan(planId: string, payload: {
+  code: string;
+  name: string;
+  description?: string;
+  price: number;
+  currency?: string;
+  interval: string;
+  durationMonths?: number;
+  includedCredits?: number;
+  displayOrder?: number;
+  isVisible?: boolean;
+  isRenewable?: boolean;
+  trialDays?: number;
+  status?: string;
+  includedSubtestsJson?: string;
+  entitlementsJson?: string;
+}) {
+  return apiRequest(`/v1/admin/billing/plans/${encodeURIComponent(planId)}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      code: payload.code,
+      name: payload.name,
+      description: payload.description ?? '',
+      price: payload.price,
+      currency: payload.currency ?? 'AUD',
+      interval: payload.interval,
+      durationMonths: payload.durationMonths ?? 1,
+      includedCredits: payload.includedCredits ?? 0,
+      displayOrder: payload.displayOrder ?? 0,
+      isVisible: payload.isVisible ?? true,
+      isRenewable: payload.isRenewable ?? true,
+      trialDays: payload.trialDays ?? 0,
+      status: payload.status ?? 'active',
+      includedSubtestsJson: payload.includedSubtestsJson ?? '[]',
+      entitlementsJson: payload.entitlementsJson ?? '{}',
+    }),
+  });
+}
+
+export async function fetchAdminBillingAddOns(params?: { status?: string }) {
+  const qs = params?.status ? `?status=${encodeURIComponent(params.status)}` : '';
+  return apiRequest(`/v1/admin/billing/add-ons${qs}`);
+}
+
+export async function createAdminBillingAddOn(payload: {
+  code?: string;
+  name: string;
+  description?: string;
+  price: number;
+  currency?: string;
+  interval: string;
+  durationDays?: number;
+  grantCredits?: number;
+  displayOrder?: number;
+  isRecurring?: boolean;
+  appliesToAllPlans?: boolean;
+  isStackable?: boolean;
+  quantityStep?: number;
+  maxQuantity?: number | null;
+  status?: string;
+  compatiblePlanCodesJson?: string;
+  grantEntitlementsJson?: string;
+}) {
+  return apiRequest('/v1/admin/billing/add-ons', {
+    method: 'POST',
+    body: JSON.stringify({
+      code: payload.code ?? normalizeBillingCode(payload.name),
+      name: payload.name,
+      description: payload.description ?? '',
+      price: payload.price,
+      currency: payload.currency ?? 'AUD',
+      interval: payload.interval,
+      durationDays: payload.durationDays ?? 0,
+      grantCredits: payload.grantCredits ?? 0,
+      displayOrder: payload.displayOrder ?? 0,
+      isRecurring: payload.isRecurring ?? false,
+      appliesToAllPlans: payload.appliesToAllPlans ?? true,
+      isStackable: payload.isStackable ?? true,
+      quantityStep: payload.quantityStep ?? 1,
+      maxQuantity: payload.maxQuantity ?? null,
+      status: payload.status ?? 'active',
+      compatiblePlanCodesJson: payload.compatiblePlanCodesJson ?? '[]',
+      grantEntitlementsJson: payload.grantEntitlementsJson ?? '{}',
+    }),
+  });
+}
+
+export async function updateAdminBillingAddOn(addOnId: string, payload: {
+  code: string;
+  name: string;
+  description?: string;
+  price: number;
+  currency?: string;
+  interval: string;
+  durationDays?: number;
+  grantCredits?: number;
+  displayOrder?: number;
+  isRecurring?: boolean;
+  appliesToAllPlans?: boolean;
+  isStackable?: boolean;
+  quantityStep?: number;
+  maxQuantity?: number | null;
+  status?: string;
+  compatiblePlanCodesJson?: string;
+  grantEntitlementsJson?: string;
+}) {
+  return apiRequest(`/v1/admin/billing/add-ons/${encodeURIComponent(addOnId)}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      code: payload.code,
+      name: payload.name,
+      description: payload.description ?? '',
+      price: payload.price,
+      currency: payload.currency ?? 'AUD',
+      interval: payload.interval,
+      durationDays: payload.durationDays ?? 0,
+      grantCredits: payload.grantCredits ?? 0,
+      displayOrder: payload.displayOrder ?? 0,
+      isRecurring: payload.isRecurring ?? false,
+      appliesToAllPlans: payload.appliesToAllPlans ?? true,
+      isStackable: payload.isStackable ?? true,
+      quantityStep: payload.quantityStep ?? 1,
+      maxQuantity: payload.maxQuantity ?? null,
+      status: payload.status ?? 'active',
+      compatiblePlanCodesJson: payload.compatiblePlanCodesJson ?? '[]',
+      grantEntitlementsJson: payload.grantEntitlementsJson ?? '{}',
+    }),
+  });
+}
+
+export async function fetchAdminBillingCoupons(params?: { status?: string }) {
+  const qs = params?.status ? `?status=${encodeURIComponent(params.status)}` : '';
+  return apiRequest(`/v1/admin/billing/coupons${qs}`);
+}
+
+export async function createAdminBillingCoupon(payload: {
+  code?: string;
+  name: string;
+  description?: string;
+  discountType: string;
+  discountValue: number;
+  currency?: string;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  usageLimitTotal?: number | null;
+  usageLimitPerUser?: number | null;
+  minimumSubtotal?: number | null;
+  isStackable?: boolean;
+  status?: string;
+  applicablePlanCodesJson?: string;
+  applicableAddOnCodesJson?: string;
+  notes?: string | null;
+}) {
+  return apiRequest('/v1/admin/billing/coupons', {
+    method: 'POST',
+    body: JSON.stringify({
+      code: payload.code ?? normalizeBillingCode(payload.name),
+      name: payload.name,
+      description: payload.description ?? '',
+      discountType: payload.discountType,
+      discountValue: payload.discountValue,
+      currency: payload.currency ?? 'AUD',
+      startsAt: payload.startsAt ?? null,
+      endsAt: payload.endsAt ?? null,
+      usageLimitTotal: payload.usageLimitTotal ?? null,
+      usageLimitPerUser: payload.usageLimitPerUser ?? null,
+      minimumSubtotal: payload.minimumSubtotal ?? null,
+      isStackable: payload.isStackable ?? true,
+      status: payload.status ?? 'active',
+      applicablePlanCodesJson: payload.applicablePlanCodesJson ?? '[]',
+      applicableAddOnCodesJson: payload.applicableAddOnCodesJson ?? '[]',
+      notes: payload.notes ?? null,
+    }),
+  });
+}
+
+export async function updateAdminBillingCoupon(couponId: string, payload: {
+  code: string;
+  name: string;
+  description?: string;
+  discountType: string;
+  discountValue: number;
+  currency?: string;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  usageLimitTotal?: number | null;
+  usageLimitPerUser?: number | null;
+  minimumSubtotal?: number | null;
+  isStackable?: boolean;
+  status?: string;
+  applicablePlanCodesJson?: string;
+  applicableAddOnCodesJson?: string;
+  notes?: string | null;
+}) {
+  return apiRequest(`/v1/admin/billing/coupons/${encodeURIComponent(couponId)}`, {
+    method: 'PUT',
+    body: JSON.stringify({
+      code: payload.code,
+      name: payload.name,
+      description: payload.description ?? '',
+      discountType: payload.discountType,
+      discountValue: payload.discountValue,
+      currency: payload.currency ?? 'AUD',
+      startsAt: payload.startsAt ?? null,
+      endsAt: payload.endsAt ?? null,
+      usageLimitTotal: payload.usageLimitTotal ?? null,
+      usageLimitPerUser: payload.usageLimitPerUser ?? null,
+      minimumSubtotal: payload.minimumSubtotal ?? null,
+      isStackable: payload.isStackable ?? true,
+      status: payload.status ?? 'active',
+      applicablePlanCodesJson: payload.applicablePlanCodesJson ?? '[]',
+      applicableAddOnCodesJson: payload.applicableAddOnCodesJson ?? '[]',
+      notes: payload.notes ?? null,
+    }),
+  });
+}
+
+export async function fetchAdminBillingSubscriptions(params?: { status?: string; search?: string; page?: number; pageSize?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  if (params?.search) qs.set('search', params.search);
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
+  const q = qs.toString();
+  return apiRequest(`/v1/admin/billing/subscriptions${q ? `?${q}` : ''}`);
+}
+
+export async function fetchAdminBillingCouponRedemptions(params?: { couponCode?: string; userId?: string; page?: number; pageSize?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.couponCode) qs.set('couponCode', params.couponCode);
+  if (params?.userId) qs.set('userId', params.userId);
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
+  const q = qs.toString();
+  return apiRequest(`/v1/admin/billing/redemptions${q ? `?${q}` : ''}`);
 }
 
 export async function fetchAdminBillingInvoices(params?: { status?: string; search?: string; page?: number; pageSize?: number }) {

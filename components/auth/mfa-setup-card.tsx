@@ -82,13 +82,22 @@ export function MfaSetupCard({ nextHref }: MfaSetupCardProps) {
     }
   };
 
+  const handleMaybeLater = () => {
+    if (!user) {
+      router.replace('/');
+      return;
+    }
+
+    router.replace(resolvePostAuthDestination(user, nextHref));
+  };
+
   return (
     <AuthScreenShell
       eyebrow="Authenticator Setup"
       title="Set up authenticator MFA"
       subtitle={user?.email
-        ? `Finish the authenticator setup for ${user.email}.`
-        : 'Finish the authenticator setup for this account.'}
+        ? `Add authenticator-based protection for ${user.email}.`
+        : 'Add authenticator-based protection for this account.'}
     >
       <div className={styles.wizard}>
         <div className={styles.summaryCard}>
@@ -104,7 +113,7 @@ export function MfaSetupCard({ nextHref }: MfaSetupCardProps) {
               <span className={styles.summaryIcon}>
                 <IconShieldLock size={16} />
               </span>
-              <p>After pairing the app, enter the current 6-digit code to finish setup and unlock privileged access.</p>
+              <p>After pairing the app, enter the current 6-digit code to finish setup and add stronger protection to your privileged access.</p>
             </div>
           </div>
         </div>
@@ -185,6 +194,17 @@ export function MfaSetupCard({ nextHref }: MfaSetupCardProps) {
             <span>{isConfirming ? 'Finishing setup...' : 'Finish MFA Setup'}</span>
             {!isConfirming ? <IconArrowRight size={18} /> : null}
           </button>
+
+          <div className={styles.actionsRow}>
+            <button
+              type="button"
+              className={styles.secondaryButton}
+              onClick={handleMaybeLater}
+              disabled={isConfirming}
+            >
+              <span>Maybe later</span>
+            </button>
+          </div>
 
           <div className={styles.summaryCard}>
             <h4>After confirmation</h4>

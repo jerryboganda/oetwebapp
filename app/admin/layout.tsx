@@ -1,5 +1,6 @@
 'use client';
 
+import { PrivilegedMfaBanner } from '@/components/auth/privileged-mfa-banner';
 import { AppShell } from '@/components/layout/app-shell';
 import { NavItem } from '@/components/layout/sidebar';
 import { 
@@ -39,7 +40,12 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       mobileNavItems={adminNavItems} 
       requiredRole="admin"
     >
-      {children}
+      <>
+        <div className="px-4 pt-4 md:px-6 md:pt-6">
+          <PrivilegedMfaBanner />
+        </div>
+        {children}
+      </>
     </AppShell>
   );
 }

@@ -1,0 +1,254 @@
+using System.ComponentModel.DataAnnotations;
+
+namespace OetLearner.Api.Domain;
+
+/// <summary>Managed add-on that can be sold alongside a billing plan.</summary>
+public class BillingAddOn
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string Code { get; set; } = default!;
+
+    [MaxLength(128)]
+    public string Name { get; set; } = default!;
+
+    [MaxLength(1024)]
+    public string Description { get; set; } = string.Empty;
+
+    public decimal Price { get; set; }
+
+    [MaxLength(8)]
+    public string Currency { get; set; } = "AUD";
+
+    [MaxLength(32)]
+    public string Interval { get; set; } = "one_time";
+
+    public BillingAddOnStatus Status { get; set; } = BillingAddOnStatus.Active;
+
+    public bool IsRecurring { get; set; }
+
+    public int DurationDays { get; set; }
+
+    public int GrantCredits { get; set; }
+
+    [MaxLength(2048)]
+    public string GrantEntitlementsJson { get; set; } = "{}";
+
+    [MaxLength(2048)]
+    public string CompatiblePlanCodesJson { get; set; } = "[]";
+
+    public bool AppliesToAllPlans { get; set; } = true;
+
+    public bool IsStackable { get; set; } = true;
+
+    public int QuantityStep { get; set; } = 1;
+
+    public int? MaxQuantity { get; set; }
+
+    public int DisplayOrder { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>Promo code or discount rule that can be applied at checkout.</summary>
+public class BillingCoupon
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string Code { get; set; } = default!;
+
+    [MaxLength(128)]
+    public string Name { get; set; } = default!;
+
+    [MaxLength(1024)]
+    public string Description { get; set; } = string.Empty;
+
+    public BillingDiscountType DiscountType { get; set; } = BillingDiscountType.Percentage;
+
+    public decimal DiscountValue { get; set; }
+
+    [MaxLength(8)]
+    public string Currency { get; set; } = "AUD";
+
+    public BillingCouponStatus Status { get; set; } = BillingCouponStatus.Draft;
+
+    public DateTimeOffset? StartsAt { get; set; }
+
+    public DateTimeOffset? EndsAt { get; set; }
+
+    public int? UsageLimitTotal { get; set; }
+
+    public int? UsageLimitPerUser { get; set; }
+
+    public decimal? MinimumSubtotal { get; set; }
+
+    [MaxLength(2048)]
+    public string ApplicablePlanCodesJson { get; set; } = "[]";
+
+    [MaxLength(2048)]
+    public string ApplicableAddOnCodesJson { get; set; } = "[]";
+
+    public bool IsStackable { get; set; }
+
+    [MaxLength(1024)]
+    public string? Notes { get; set; }
+
+    public int RedemptionCount { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>Redemption record for a coupon applied to a checkout or billing quote.</summary>
+public class BillingCouponRedemption
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string CouponCode { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string UserId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string QuoteId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string? CheckoutSessionId { get; set; }
+
+    [MaxLength(64)]
+    public string? SubscriptionId { get; set; }
+
+    public decimal DiscountAmount { get; set; }
+
+    [MaxLength(8)]
+    public string Currency { get; set; } = "AUD";
+
+    public BillingRedemptionStatus Status { get; set; } = BillingRedemptionStatus.Reserved;
+
+    public DateTimeOffset RedeemedAt { get; set; }
+}
+
+/// <summary>Persisted pricing snapshot used for checkout and reconciliation.</summary>
+public class BillingQuote
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string UserId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string? SubscriptionId { get; set; }
+
+    [MaxLength(64)]
+    public string? PlanCode { get; set; }
+
+    [MaxLength(1024)]
+    public string AddOnCodesJson { get; set; } = "[]";
+
+    [MaxLength(64)]
+    public string? CouponCode { get; set; }
+
+    [MaxLength(8)]
+    public string Currency { get; set; } = "AUD";
+
+    public decimal SubtotalAmount { get; set; }
+
+    public decimal DiscountAmount { get; set; }
+
+    public decimal TotalAmount { get; set; }
+
+    public BillingQuoteStatus Status { get; set; } = BillingQuoteStatus.Created;
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset ExpiresAt { get; set; }
+
+    [MaxLength(64)]
+    public string? CheckoutSessionId { get; set; }
+
+    [MaxLength(64)]
+    public string? IdempotencyKey { get; set; }
+
+    [MaxLength(4096)]
+    public string SnapshotJson { get; set; } = "{}";
+}
+
+/// <summary>Billing event ledger for lifecycle and operational history.</summary>
+public class BillingEvent
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string? UserId { get; set; }
+
+    [MaxLength(64)]
+    public string? SubscriptionId { get; set; }
+
+    [MaxLength(64)]
+    public string? QuoteId { get; set; }
+
+    [MaxLength(64)]
+    public string EventType { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string EntityType { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string? EntityId { get; set; }
+
+    [MaxLength(4096)]
+    public string PayloadJson { get; set; } = "{}";
+
+    public DateTimeOffset OccurredAt { get; set; }
+}
+
+/// <summary>Attached billing item such as an add-on on top of an active subscription.</summary>
+public class SubscriptionItem
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string SubscriptionId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ItemCode { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ItemType { get; set; } = "addon";
+
+    public int Quantity { get; set; } = 1;
+
+    public SubscriptionItemStatus Status { get; set; } = SubscriptionItemStatus.Active;
+
+    public DateTimeOffset StartsAt { get; set; }
+
+    public DateTimeOffset? EndsAt { get; set; }
+
+    [MaxLength(64)]
+    public string? QuoteId { get; set; }
+
+    [MaxLength(64)]
+    public string? CheckoutSessionId { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+}

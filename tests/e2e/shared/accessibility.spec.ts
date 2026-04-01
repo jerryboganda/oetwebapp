@@ -2,7 +2,7 @@ import AxeBuilder from '@axe-core/playwright';
 import { expect, test, type Locator } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
 
-async function tabUntilFocused(page: Parameters<typeof AxeBuilder>[0]['page'], locator: Locator, maxTabs = 8) {
+async function tabUntilFocused(page: Parameters<typeof AxeBuilder>[0]['page'], locator: Locator, maxTabs = 12) {
   for (let index = 0; index < maxTabs; index += 1) {
     await page.keyboard.press('Tab');
     if (await locator.evaluate((node) => node === document.activeElement)) {

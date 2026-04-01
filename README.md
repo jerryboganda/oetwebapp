@@ -56,6 +56,28 @@ Frontend default local URL:
 
 - `http://localhost:3000`
 
+### Electron Desktop Shell
+
+The repository includes an Electron shell that loads the existing web app unchanged.
+
+Run the desktop shell in development with:
+
+```bash
+npm run desktop:dev
+```
+
+The Electron main process lives in [`electron/main.cjs`](electron/main.cjs) and uses the same renderer routes, auth flow, and API contract as the web app. The desktop shell also adds a native menu, guarded external-link handling, and an auto-updater that activates when release metadata is present.
+
+Build a desktop package for the current platform with:
+
+```bash
+npm run desktop:dist
+```
+
+That command builds the Next.js renderer with the desktop proxy contract and then runs Electron Builder to produce the native installer target for the current OS under `dist/desktop/`.
+
+For signed release builds with auto-update metadata, set `ELECTRON_UPDATES_URL` to your self-hosted generic update endpoint and run the same packaging flow with `ELECTRON_PUBLISH_MODE=always` in CI.
+
 ## Environment Variables
 
 ### Frontend
@@ -88,17 +110,17 @@ See [`.env.production.example`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET W
 
 There are two important frontend API paths in this repo:
 
-1. Frontend data client
+- Frontend data client
 
-- [`lib/api.ts`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/lib/api.ts) reads `NEXT_PUBLIC_API_BASE_URL`
-- In development it falls back to `http://localhost:5198`
-- In production it requires `NEXT_PUBLIC_API_BASE_URL`
+  - [`lib/api.ts`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/lib/api.ts) reads `NEXT_PUBLIC_API_BASE_URL`
+  - In development it falls back to `http://localhost:5198`
+  - In production it requires `NEXT_PUBLIC_API_BASE_URL`
 
-2. Auth client / backend proxy path
+- Auth client / backend proxy path
 
-- [`lib/auth-client.ts`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/lib/auth-client.ts) falls back to `/api/backend` when `NEXT_PUBLIC_API_BASE_URL` is not set
-- [`app/api/backend/[...path]/route.ts`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/app/api/backend/[...path]/route.ts) proxies same-origin requests to the backend
-- [`lib/backend-proxy.ts`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/lib/backend-proxy.ts) uses `API_PROXY_TARGET_URL` when set, otherwise `http://localhost:5198`
+  - [`lib/auth-client.ts`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/lib/auth-client.ts) falls back to `/api/backend` when `NEXT_PUBLIC_API_BASE_URL` is not set
+  - [`app/api/backend/[...path]/route.ts`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/app/api/backend/[...path]/route.ts) proxies same-origin requests to the backend
+  - [`lib/backend-proxy.ts`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/lib/backend-proxy.ts) uses `API_PROXY_TARGET_URL` when set, otherwise `http://localhost:5198`
 
 Practical rule:
 
@@ -107,7 +129,7 @@ Practical rule:
 
 ## Useful Commands
 
-### Frontend
+### Frontend Commands
 
 ```bash
 npm run dev

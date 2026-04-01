@@ -2,8 +2,12 @@ import {
   fetchAdminAIConfig,
   fetchAdminAuditLogDetail,
   fetchAdminAuditLogs,
+  fetchAdminBillingAddOns,
+  fetchAdminBillingCouponRedemptions,
+  fetchAdminBillingCoupons,
   fetchAdminBillingInvoices,
   fetchAdminBillingPlans,
+  fetchAdminBillingSubscriptions,
   fetchAdminContent,
   fetchAdminContentDetail,
   fetchAdminContentImpact,
@@ -24,8 +28,12 @@ import type {
   AdminAIConfig,
   AdminAuditLogDetail,
   AdminAuditLogRow,
+  AdminBillingAddOn,
   AdminBillingInvoice,
+  AdminBillingCoupon,
+  AdminBillingCouponRedemption,
   AdminBillingPlan,
+  AdminBillingSubscription,
   AdminContentDetail,
   AdminContentImpact,
   AdminContentRow,
@@ -132,6 +140,25 @@ function normalizeReviewStatus(value: unknown): 'pending' | 'in_progress' | 'com
   const normalized = toStringValue(value, 'pending').toLowerCase();
   if (normalized === 'completed') return 'completed';
   if (normalized === 'in_progress') return 'in_progress';
+  return 'pending';
+}
+
+function normalizeSubscriptionStatus(value: unknown): 'pending' | 'trial' | 'active' | 'past_due' | 'suspended' | 'cancelled' | 'expired' {
+  const normalized = toStringValue(value, 'pending').toLowerCase();
+  if (normalized === 'trial') return 'trial';
+  if (normalized === 'active') return 'active';
+  if (normalized === 'past_due') return 'past_due';
+  if (normalized === 'suspended') return 'suspended';
+  if (normalized === 'cancelled') return 'cancelled';
+  if (normalized === 'expired') return 'expired';
+  return 'pending';
+}
+
+function normalizeRedemptionStatus(value: unknown): 'pending' | 'applied' | 'rejected' | 'reversed' {
+  const normalized = toStringValue(value, 'pending').toLowerCase();
+  if (normalized === 'applied') return 'applied';
+  if (normalized === 'rejected') return 'rejected';
+  if (normalized === 'reversed') return 'reversed';
   return 'pending';
 }
 
@@ -401,11 +428,77 @@ export async function getAdminBillingPlanData(params?: Parameters<typeof fetchAd
   const raw = await fetchAdminBillingPlans(params);
   return asArray(raw).map((item) => ({
     id: toStringValue(item.id),
+    code: toNullableString(item.code) ?? toStringValue(item.id),
     name: toStringValue(item.name),
+    description: toNullableString(item.description) ?? '',
     price: toNumberValue(item.price),
-    interval: toStringValue(item.interval),
+    currency: toStringValue(item.currency, 'AUD'),
+    interval: toStringValue(item.interval, 'month'),
+    durationMonths: toNumberValue(item.durationMonths, 1),
+    includedCredits: toNumberValue(item.includedCredits),
+    displayOrder: toNumberValue(item.displayOrder),
+    isVisible: item.isVisible !== false,
+    isRenewable: item.isRenewable !== false,
+    trialDays: toNumberValue(item.trialDays),
     activeSubscribers: toNumberValue(item.activeSubscribers),
     status: toStringValue(item.status),
+    includedSubtests: parseJsonArray(item.includedSubtests),
+    entitlements: asRecord(item.entitlements),
+    archivedAt: toNullableString(item.archivedAt),
+    createdAt: toNullableString(item.createdAt) ?? undefined,
+    updatedAt: toNullableString(item.updatedAt) ?? undefined,
+  }));
+}
+
+export async function getAdminBillingAddOnData(params?: Parameters<typeof fetchAdminBillingAddOns>[0]): Promise<AdminBillingAddOn[]> {
+  const raw = await fetchAdminBillingAddOns(params);
+  return asArray(raw).map((item) => ({
+    id: toStringValue(item.id),
+    code: toStringValue(item.code),
+    name: toStringValue(item.name),
+    description: toStringValue(item.description),
+    price: toNumberValue(item.price),
+    currency: toStringValue(item.currency, 'AUD'),
+    interval: toStringValue(item.interval, 'one_time'),
+    durationDays: toNumberValue(item.durationDays),
+    grantCredits: toNumberValue(item.grantCredits),
+    displayOrder: toNumberValue(item.displayOrder),
+    isRecurring: toBooleanValue(item.isRecurring),
+    appliesToAllPlans: toBooleanValue(item.appliesToAllPlans),
+    isStackable: toBooleanValue(item.isStackable),
+    quantityStep: toNumberValue(item.quantityStep, 1),
+    maxQuantity: item.maxQuantity == null ? null : toNumberValue(item.maxQuantity),
+    status: toStringValue(item.status),
+    compatiblePlanCodes: parseJsonArray(item.compatiblePlanCodes),
+    grantEntitlements: asRecord(item.grantEntitlements),
+    createdAt: toStringValue(item.createdAt),
+    updatedAt: toStringValue(item.updatedAt),
+  }));
+}
+
+export async function getAdminBillingCouponData(params?: Parameters<typeof fetchAdminBillingCoupons>[0]): Promise<AdminBillingCoupon[]> {
+  const raw = await fetchAdminBillingCoupons(params);
+  return asArray(raw).map((item) => ({
+    id: toStringValue(item.id),
+    code: toStringValue(item.code),
+    name: toStringValue(item.name),
+    description: toStringValue(item.description),
+    discountType: toStringValue(item.discountType, 'percentage') as 'percentage' | 'fixed',
+    discountValue: toNumberValue(item.discountValue),
+    currency: toStringValue(item.currency, 'AUD'),
+    startsAt: toNullableString(item.startsAt),
+    endsAt: toNullableString(item.endsAt),
+    usageLimitTotal: item.usageLimitTotal == null ? null : toNumberValue(item.usageLimitTotal),
+    usageLimitPerUser: item.usageLimitPerUser == null ? null : toNumberValue(item.usageLimitPerUser),
+    minimumSubtotal: item.minimumSubtotal == null ? null : toNumberValue(item.minimumSubtotal),
+    isStackable: toBooleanValue(item.isStackable),
+    status: toStringValue(item.status),
+    applicablePlanCodes: parseJsonArray(item.applicablePlanCodes),
+    applicableAddOnCodes: parseJsonArray(item.applicableAddOnCodes),
+    redemptionCount: toNumberValue(item.redemptionCount),
+    notes: toNullableString(item.notes),
+    createdAt: toStringValue(item.createdAt),
+    updatedAt: toStringValue(item.updatedAt),
   }));
 }
 
@@ -424,6 +517,51 @@ export async function getAdminBillingInvoiceData(params?: Parameters<typeof fetc
       status: toStringValue(item.status),
       date: toStringValue(item.date),
       plan: toStringValue(item.plan),
+    })),
+  };
+}
+
+export async function getAdminBillingSubscriptionData(params?: Parameters<typeof fetchAdminBillingSubscriptions>[0]) {
+  const raw = asRecord(await fetchAdminBillingSubscriptions(params));
+  return {
+    total: toNumberValue(raw.total),
+    page: toNumberValue(raw.page, 1),
+    pageSize: toNumberValue(raw.pageSize, 20),
+    items: asArray(raw.items).map<AdminBillingSubscription>((item) => ({
+      id: toStringValue(item.id),
+      userId: toStringValue(item.userId),
+      userName: toStringValue(item.userName, toStringValue(item.userId)),
+      planId: toStringValue(item.planId),
+      planName: toStringValue(item.planName, toStringValue(item.planId)),
+      status: normalizeSubscriptionStatus(item.status),
+      nextRenewalAt: toNullableString(item.nextRenewalAt),
+      startedAt: toNullableString(item.startedAt),
+      changedAt: toNullableString(item.changedAt),
+      price: toNumberValue(item.price),
+      currency: toStringValue(item.currency, 'AUD'),
+      interval: toStringValue(item.interval, 'month'),
+      addOnCount: toNumberValue(item.addOnCount),
+    })),
+  };
+}
+
+export async function getAdminBillingCouponRedemptionData(params?: Parameters<typeof fetchAdminBillingCouponRedemptions>[0]) {
+  const raw = asRecord(await fetchAdminBillingCouponRedemptions(params));
+  return {
+    total: toNumberValue(raw.total),
+    page: toNumberValue(raw.page, 1),
+    pageSize: toNumberValue(raw.pageSize, 20),
+    items: asArray(raw.items).map<AdminBillingCouponRedemption>((item) => ({
+      id: toStringValue(item.id),
+      couponCode: toStringValue(item.couponCode),
+      userId: toStringValue(item.userId),
+      quoteId: toNullableString(item.quoteId),
+      checkoutSessionId: toNullableString(item.checkoutSessionId),
+      subscriptionId: toNullableString(item.subscriptionId),
+      discountAmount: toNumberValue(item.discountAmount),
+      currency: toStringValue(item.currency, 'AUD'),
+      status: normalizeRedemptionStatus(item.status),
+      redeemedAt: toStringValue(item.redeemedAt),
     })),
   };
 }

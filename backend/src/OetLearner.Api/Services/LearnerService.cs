@@ -1766,14 +1766,16 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
             {
                 new { id = "listening-drill-distractor_confusion", title = "Frequency distractor drill", route = "/app/listening/drills/listening-drill-distractor_confusion" }
             },
-            mockSets = new[]
-            {
-                new { id = "listening-mock-set", title = "Listening mock set", route = "/app/mocks" }
-            },
             accessPolicyHints = new
             {
-                transcriptReveal = "per_item_post_attempt",
-                rationale = "Transcript snippets are revealed only when the task allows it after submission."
+                rationale = "Use transcript-backed review after an attempt so you can diagnose distractor patterns with real evidence instead of replaying blindly.",
+                availableAfterAttempt = true
+            },
+            mockSets = new[]
+            {
+                new { id = "full-practice", title = "Full OET Mock", type = "full", subType = (string?)null, mode = "practice", includeReview = false, strictTimer = false, reviewSelection = "none" },
+                new { id = "full-exam", title = "Full OET Mock", type = "full", subType = (string?)null, mode = "exam", includeReview = false, strictTimer = true, reviewSelection = "none" },
+                new { id = "writing-only", title = "Writing-only Mock", type = "sub", subType = "writing", mode = "exam", includeReview = true, strictTimer = true, reviewSelection = "current_subtest" }
             }
         };
     }
@@ -1786,56 +1788,177 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
     public async Task<object> GetListeningEvaluationAsync(string userId, string evaluationId, CancellationToken cancellationToken) => await GetObjectiveEvaluationAsync(userId, evaluationId, cancellationToken);
     public Task<object> GetListeningDrillAsync(string drillId, CancellationToken cancellationToken) => Task.FromResult(BuildListeningDrill(drillId));
 
-    public async Task<object> GetMocksAsync(string userId, CancellationToken cancellationToken)
+    public async Task<object> GetBillingQuoteAsync(string userId, BillingQuoteRequest request, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
-        var attempts = await db.MockAttempts.Where(x => x.UserId == userId).OrderByDescending(x => x.StartedAt).ToListAsync(cancellationToken);
-        var reports = await db.MockReports.Where(x => attempts.Select(a => a.Id).Contains(x.MockAttemptId)).OrderByDescending(x => x.GeneratedAt).ToListAsync(cancellationToken);
-        var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId, cancellationToken);
+        return await BuildBillingQuoteAsync(userId, request, cancellationToken, persistQuote: true);
+    }
+
+    public async Task<object> GetBillingExtrasAsync()
+    {
+        var addOns = await db.BillingAddOns.AsNoTracking()
+            .Where(x => x.Status == BillingAddOnStatus.Active && (x.IsRecurring || x.GrantCredits > 0 || x.AppliesToAllPlans))
+            .OrderBy(x => x.DisplayOrder)
+            .ThenBy(x => x.Price)
+            .ToListAsync();
+
         return new
         {
-            collections = new
+            items = addOns.Select(x => new
             {
-                fullMocks = new[]
-                {
-                    new { id = "full-practice", title = "Full OET Mock", mode = "practice", route = "/app/mocks/setup?type=full&mode=practice" },
-                    new { id = "full-exam", title = "Full OET Mock", mode = "exam", route = "/app/mocks/setup?type=full&mode=exam" }
-                },
-                subTestMocks = new[]
-                {
-                    new { id = "reading-only", title = "Reading-only Mock", subtest = "reading", route = "/app/mocks/setup?type=sub&subtest=reading" },
-                    new { id = "listening-only", title = "Listening-only Mock", subtest = "listening", route = "/app/mocks/setup?type=sub&subtest=listening" },
-                    new { id = "writing-only", title = "Writing-only Mock", subtest = "writing", route = "/app/mocks/setup?type=sub&subtest=writing" },
-                    new { id = "speaking-only", title = "Speaking-only Mock", subtest = "speaking", route = "/app/mocks/setup?type=sub&subtest=speaking" }
-                }
-            },
-            purchasedMockReviews = new
-            {
-                availableCredits = wallet.CreditBalance,
-                supportedSubtests = new[] { "writing", "speaking" },
-                route = "/app/reviews"
-            },
-            recommendedNextMock = new
-            {
-                title = "Full OET Mock Test",
-                route = "/app/mocks",
-                rationale = "A full mock will show whether recent study-plan work is improving your cross-subtest readiness."
-            },
-            attempts = attempts.Select(x => new { mockAttemptId = x.Id, state = ToApiState(x.State), startedAt = x.StartedAt, reportId = x.ReportId }),
-            reports = reports.Select(x => JsonSupport.Deserialize<Dictionary<string, object?>>(x.PayloadJson, new Dictionary<string, object?>())),
-            options = GetMockOptionsAsync(cancellationToken)
+                id = x.Code,
+                code = x.Code,
+                name = x.Name,
+                productType = x.IsRecurring ? "addon_purchase" : "review_credits",
+                quantity = x.GrantCredits > 0 ? x.GrantCredits : Math.Max(1, x.QuantityStep),
+                price = x.Price,
+                currency = x.Currency,
+                interval = x.Interval,
+                status = x.Status.ToString().ToLowerInvariant(),
+                description = x.Description,
+                grantCredits = x.GrantCredits,
+                durationDays = x.DurationDays,
+                isRecurring = x.IsRecurring,
+                appliesToAllPlans = x.AppliesToAllPlans,
+                quantityStep = x.QuantityStep,
+                maxQuantity = x.MaxQuantity,
+                compatiblePlanCodes = JsonSupport.Deserialize<List<string>>(x.CompatiblePlanCodesJson, [])
+            })
         };
     }
 
-    public object GetMockOptionsAsync(CancellationToken cancellationToken) => new
-    {
-        options = new object[]
-        {
-            new { id = "full-practice", title = "Full OET Mock", type = "full", subType = (string?)null, mode = "practice", includeReview = false, strictTimer = false, reviewSelection = "none" },
-            new { id = "full-exam", title = "Full OET Mock", type = "full", subType = (string?)null, mode = "exam", includeReview = false, strictTimer = true, reviewSelection = "none" },
-            new { id = "writing-only", title = "Writing-only Mock", type = "sub", subType = "writing", mode = "exam", includeReview = true, strictTimer = true, reviewSelection = "current_subtest" }
-        }
-    };
+            public async Task<object> CreateCheckoutSessionAsync(string userId, CheckoutSessionCreateRequest request, CancellationToken cancellationToken)
+            {
+                await EnsureUserAsync(userId, cancellationToken);
+                if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+                {
+                    var cached = await GetIdempotentResponseAsync("checkout-session", request.IdempotencyKey, cancellationToken);
+                    if (cached is not null)
+                    {
+                        return cached;
+                    }
+                }
+
+                var normalizedProductType = (request.ProductType ?? string.Empty).Trim().ToLowerInvariant();
+                if (normalizedProductType is not ("review_credits" or "plan_upgrade" or "plan_downgrade" or "addon_purchase"))
+                {
+                    throw ApiException.Validation(
+                        "unsupported_checkout_product",
+                        $"Unsupported checkout product '{request.ProductType}'.",
+                        [new ApiFieldError("productType", "unsupported", "Only supported learner checkout products can be purchased.")]);
+                }
+
+                if (request.Quantity <= 0)
+                {
+                    throw ApiException.Validation(
+                        "invalid_checkout_quantity",
+                        "Checkout quantity must be greater than zero.",
+                        [new ApiFieldError("quantity", "invalid", "Choose a checkout quantity greater than zero.")]);
+                }
+
+                if (normalizedProductType is "plan_upgrade" or "plan_downgrade" or "addon_purchase"
+                    && string.IsNullOrWhiteSpace(request.PriceId))
+                {
+                    throw ApiException.Validation(
+                        "target_item_required",
+                        "A target plan or add-on id is required for this checkout.",
+                        [new ApiFieldError("priceId", "required", "Choose the plan or add-on you want to purchase.")]);
+                }
+
+                BillingQuoteResponse quoteResponse;
+                BillingQuote quoteEntity;
+                if (!string.IsNullOrWhiteSpace(request.QuoteId))
+                {
+                    quoteEntity = await db.BillingQuotes.FirstOrDefaultAsync(x => x.Id == request.QuoteId && x.UserId == userId, cancellationToken)
+                        ?? throw ApiException.NotFound("billing_quote_not_found", "The requested billing quote could not be found.");
+
+                    if (quoteEntity.ExpiresAt < DateTimeOffset.UtcNow)
+                    {
+                        quoteEntity.Status = BillingQuoteStatus.Expired;
+                        await db.SaveChangesAsync(cancellationToken);
+                        throw ApiException.Validation("billing_quote_expired", "This billing quote has expired.");
+                    }
+
+                    quoteResponse = DeserializeQuoteResponse(quoteEntity);
+                }
+                else
+                {
+                    quoteResponse = await BuildBillingQuoteAsync(userId, new BillingQuoteRequest(
+                        normalizedProductType,
+                        request.Quantity,
+                        request.PriceId,
+                        request.CouponCode,
+                        request.AddOnCodes), cancellationToken, persistQuote: true);
+                    quoteEntity = await db.BillingQuotes.FirstAsync(x => x.Id == quoteResponse.QuoteId && x.UserId == userId, cancellationToken);
+                }
+
+                var checkoutSessionId = $"checkout-{Guid.NewGuid():N}";
+                quoteEntity.CheckoutSessionId = checkoutSessionId;
+                quoteEntity.Status = BillingQuoteStatus.Applied;
+                db.BillingEvents.Add(new BillingEvent
+                {
+                    Id = $"bill-evt-{Guid.NewGuid():N}",
+                    UserId = userId,
+                    QuoteId = quoteEntity.Id,
+                    EventType = "checkout_session_created",
+                    EntityType = "CheckoutSession",
+                    EntityId = checkoutSessionId,
+                    PayloadJson = JsonSupport.Serialize(new
+                    {
+                        productType = normalizedProductType,
+                        quantity = request.Quantity,
+                        planCode = quoteEntity.PlanCode,
+                        couponCode = quoteEntity.CouponCode,
+                        addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
+                        totalAmount = quoteEntity.TotalAmount,
+                        currency = quoteEntity.Currency
+                    }),
+                    OccurredAt = DateTimeOffset.UtcNow
+                });
+
+                var response = new
+                {
+                    checkoutSessionId,
+                    quoteId = quoteEntity.Id,
+                    productType = normalizedProductType,
+                    quantity = request.Quantity,
+                    targetPlanId = quoteEntity.PlanCode,
+                    couponCode = quoteEntity.CouponCode,
+                    addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
+                    subtotalAmount = quoteEntity.SubtotalAmount,
+                    discountAmount = quoteEntity.DiscountAmount,
+                    totalAmount = quoteEntity.TotalAmount,
+                    currency = quoteEntity.Currency,
+                    quote = quoteResponse,
+                    checkoutUrl = platformLinks.BuildCheckoutUrl(
+                        checkoutSessionId,
+                        normalizedProductType,
+                        request.Quantity,
+                        planId: quoteEntity.PlanCode,
+                        couponCode: quoteEntity.CouponCode,
+                        addOnCodes: JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
+                        quoteId: quoteEntity.Id),
+                    state = "created"
+                };
+
+                await RecordEventAsync(userId, "subscription_changed", new
+                {
+                    productType = normalizedProductType,
+                    quantity = request.Quantity,
+                    targetPlanId = quoteEntity.PlanCode,
+                    couponCode = quoteEntity.CouponCode,
+                    quoteId = quoteEntity.Id,
+                    totalAmount = quoteEntity.TotalAmount
+                }, cancellationToken);
+
+                if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+                {
+                    await SaveIdempotentResponseAsync("checkout-session", request.IdempotencyKey, response, cancellationToken);
+                }
+
+                await db.SaveChangesAsync(cancellationToken);
+                return response;
+            }
 
     public async Task<object> CreateMockAttemptAsync(string userId, MockAttemptCreateRequest request, CancellationToken cancellationToken)
     {
@@ -2123,22 +2246,71 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
         await EnsureUserAsync(userId, cancellationToken);
         var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
         var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId, cancellationToken);
+        var currentPlan = await FindBillingPlanAsync(subscription.PlanId, cancellationToken);
+        var activeAddOns = await db.SubscriptionItems.AsNoTracking()
+            .Where(x => x.SubscriptionId == subscription.Id && x.Status == SubscriptionItemStatus.Active)
+            .ToListAsync(cancellationToken);
+        var addOnCodes = activeAddOns.Select(x => x.ItemCode).Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+        var addOnCatalog = addOnCodes.Count == 0
+            ? []
+            : await db.BillingAddOns.AsNoTracking()
+                .Where(x => addOnCodes.Contains(x.Code))
+                .ToListAsync(cancellationToken);
         return new
         {
             subscriptionId = subscription.Id,
             planId = subscription.PlanId,
+            planCode = currentPlan?.Code ?? subscription.PlanId,
+            planName = currentPlan?.Name ?? subscription.PlanId,
+            planDescription = currentPlan?.Description,
             status = ToSubscriptionState(subscription.Status),
             nextRenewalAt = subscription.NextRenewalAt,
             startedAt = subscription.StartedAt,
             changedAt = subscription.ChangedAt,
             price = new { amount = subscription.PriceAmount, currency = subscription.Currency, interval = subscription.Interval },
             wallet = new { walletId = wallet.Id, creditBalance = wallet.CreditBalance, ledgerSummary = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(wallet.LedgerSummaryJson, []) },
+            activeAddOns = activeAddOns.Select(item =>
+            {
+                var addOn = addOnCatalog.FirstOrDefault(x => string.Equals(x.Code, item.ItemCode, StringComparison.OrdinalIgnoreCase));
+                return new
+                {
+                    id = item.Id,
+                    code = item.ItemCode,
+                    name = addOn?.Name ?? item.ItemCode,
+                    type = item.ItemType,
+                    quantity = item.Quantity,
+                    status = item.Status.ToString().ToLowerInvariant(),
+                    startsAt = item.StartsAt,
+                    endsAt = item.EndsAt,
+                    quoteId = item.QuoteId,
+                    checkoutSessionId = item.CheckoutSessionId,
+                    grantCredits = addOn?.GrantCredits ?? 0,
+                    price = addOn is null
+                        ? null
+                        : new { amount = addOn.Price, currency = addOn.Currency, interval = addOn.Interval },
+                    description = addOn?.Description
+                };
+            }),
             entitlements = new
             {
-                productiveSkillReviewsEnabled = true,
-                supportedReviewSubtests = new[] { "writing", "speaking" },
+                productiveSkillReviewsEnabled = subscription.Status is SubscriptionStatus.Active or SubscriptionStatus.Trial,
+                supportedReviewSubtests = currentPlan is null
+                    ? new List<string> { "writing", "speaking" }
+                    : JsonSupport.Deserialize<List<string>>(currentPlan.IncludedSubtestsJson, new List<string> { "writing", "speaking" }),
                 invoiceDownloadsAvailable = true
-            }
+            },
+            plan = currentPlan is null
+                ? null
+                : new
+                {
+                    code = currentPlan.Code,
+                    name = currentPlan.Name,
+                    description = currentPlan.Description,
+                    includedCredits = currentPlan.IncludedCredits,
+                    durationMonths = currentPlan.DurationMonths,
+                    isRenewable = currentPlan.IsRenewable,
+                    status = currentPlan.Status.ToString().ToLowerInvariant()
+                }
         };
     }
 
@@ -2146,23 +2318,45 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
     {
         await EnsureUserAsync(userId, cancellationToken);
         var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
-        var plans = BillingPlanCatalog();
-        var currentPlan = plans.FirstOrDefault(plan => string.Equals(plan.PlanId, subscription.PlanId, StringComparison.Ordinal)) ?? plans[0];
+        var plans = await db.BillingPlans.AsNoTracking()
+            .Where(plan => plan.IsVisible || string.Equals(plan.Code, subscription.PlanId, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(plan => plan.DisplayOrder)
+            .ThenBy(plan => plan.Price)
+            .ToListAsync(cancellationToken);
+        var currentPlan = plans.FirstOrDefault(plan => string.Equals(plan.Code, subscription.PlanId, StringComparison.OrdinalIgnoreCase))
+            ?? plans.FirstOrDefault(plan => plan.Status == BillingPlanStatus.Active)
+            ?? plans.FirstOrDefault();
         return new
         {
             currentPlanId = subscription.PlanId,
+            currentPlanCode = currentPlan?.Code,
             items = plans.Select(plan => new
             {
-                planId = plan.PlanId,
-                label = plan.Label,
-                tier = plan.Tier,
+                planId = plan.Code,
+                code = plan.Code,
+                label = plan.Name,
+                tier = plan.Code,
                 description = plan.Description,
-                price = new { amount = plan.Amount, currency = subscription.Currency, interval = subscription.Interval },
-                reviewCredits = plan.ReviewCredits,
+                price = new { amount = plan.Price, currency = plan.Currency, interval = plan.Interval },
+                reviewCredits = plan.IncludedCredits,
                 mockReportsIncluded = true,
-                canChangeTo = !string.Equals(plan.PlanId, subscription.PlanId, StringComparison.Ordinal),
-                changeDirection = string.Equals(plan.PlanId, subscription.PlanId, StringComparison.Ordinal) ? "current" : ComparePlanTier(plan.Tier, currentPlan.Tier),
-                badge = plan.Badge
+                canChangeTo = plan.Status == BillingPlanStatus.Active && !string.Equals(plan.Code, subscription.PlanId, StringComparison.OrdinalIgnoreCase),
+                changeDirection = string.Equals(plan.Code, subscription.PlanId, StringComparison.OrdinalIgnoreCase)
+                    ? "current"
+                    : plan.Price > (currentPlan?.Price ?? plan.Price)
+                        ? "upgrade"
+                        : plan.Price < (currentPlan?.Price ?? plan.Price)
+                            ? "downgrade"
+                            : "current",
+                badge = plan.Status.ToString().ToLowerInvariant(),
+                status = plan.Status.ToString().ToLowerInvariant(),
+                displayOrder = plan.DisplayOrder,
+                durationMonths = plan.DurationMonths,
+                isVisible = plan.IsVisible,
+                isRenewable = plan.IsRenewable,
+                trialDays = plan.TrialDays,
+                includedSubtests = JsonSupport.Deserialize<List<string>>(plan.IncludedSubtestsJson, []),
+                entitlements = JsonSupport.Deserialize<Dictionary<string, object?>>(plan.EntitlementsJson, new Dictionary<string, object?>())
             })
         };
     }
@@ -2171,27 +2365,28 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
     {
         await EnsureUserAsync(userId, cancellationToken);
         var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
-        var currentPlan = BillingPlanCatalog().FirstOrDefault(plan => string.Equals(plan.PlanId, subscription.PlanId, StringComparison.Ordinal)) ?? BillingPlanCatalog()[0];
-        var targetPlan = BillingPlanCatalog().FirstOrDefault(plan => string.Equals(plan.PlanId, targetPlanId, StringComparison.Ordinal))
+        var currentPlan = await FindBillingPlanAsync(subscription.PlanId, cancellationToken)
+            ?? throw ApiException.NotFound("billing_plan_not_found", "Your current billing plan could not be found.");
+        var targetPlan = await FindBillingPlanAsync(targetPlanId, cancellationToken)
             ?? throw ApiException.Validation(
                 "unknown_plan",
                 $"Unknown billing plan '{targetPlanId}'.",
                 [new ApiFieldError("targetPlanId", "unknown", "Choose a supported billing plan.")]);
 
-        var delta = targetPlan.Amount - currentPlan.Amount;
+        var delta = targetPlan.Price - currentPlan.Price;
         var direction = delta >= 0 ? "upgrade" : "downgrade";
         return new
         {
-            currentPlanId = currentPlan.PlanId,
-            targetPlanId = targetPlan.PlanId,
+            currentPlanId = currentPlan.Code,
+            targetPlanId = targetPlan.Code,
             direction,
             proratedAmount = Math.Round(Math.Abs(delta) / 2m, 2),
             effectiveAt = subscription.NextRenewalAt,
             summary = direction == "upgrade"
-                ? $"Switching to {targetPlan.Label} increases your monthly plan by {Math.Abs(delta):0.00} {subscription.Currency}."
-                : $"Switching to {targetPlan.Label} lowers your monthly plan by {Math.Abs(delta):0.00} {subscription.Currency}.",
-            currentCreditsIncluded = currentPlan.ReviewCredits,
-            targetCreditsIncluded = targetPlan.ReviewCredits
+                ? $"Switching to {targetPlan.Name} increases your billing amount by {Math.Abs(delta):0.00} {subscription.Currency}."
+                : $"Switching to {targetPlan.Name} lowers your billing amount by {Math.Abs(delta):0.00} {subscription.Currency}.",
+            currentCreditsIncluded = currentPlan.IncludedCredits,
+            targetCreditsIncluded = targetPlan.IncludedCredits
         };
     }
 
@@ -2242,7 +2437,108 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
             new { id = "express", label = "Express Review", turnaround = "24 hours", price = 2, currency = "credit", description = "Priority expert review returned within a day." }
         }
     };
+    public async Task<object> GetMocksAsync(string userId, CancellationToken cancellationToken)
+    {
+        await EnsureUserAsync(userId, cancellationToken);
 
+        var wallet = await db.Wallets.AsNoTracking().FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        var attemptIds = await db.MockAttempts.AsNoTracking()
+            .Where(x => x.UserId == userId)
+            .Select(x => x.Id)
+            .ToListAsync(cancellationToken);
+        var reports = await db.MockReports.AsNoTracking()
+            .Where(report => attemptIds.Contains(report.MockAttemptId))
+            .OrderByDescending(report => report.GeneratedAt)
+            .Take(6)
+            .ToListAsync(cancellationToken);
+
+        var reportItems = reports
+            .Select(report => JsonSupport.Deserialize<Dictionary<string, object?>>(report.PayloadJson, new Dictionary<string, object?>()))
+            .ToList();
+        var latestReport = reportItems.FirstOrDefault();
+
+        return new
+        {
+            reports = reportItems,
+            recommendedNextMock = new
+            {
+                id = latestReport?.GetValueOrDefault("id")?.ToString() ?? "full-mock-next",
+                title = latestReport is null ? "Full OET Mock Test" : "Review the next full mock",
+                rationale = latestReport is null
+                    ? "Start a full mock to capture a baseline performance snapshot."
+                    : $"Your latest report scored {latestReport.GetValueOrDefault("overallScore")?.ToString() ?? "an updated"} overall. Run another full mock to confirm the gains.",
+                route = "/mocks/setup"
+            },
+            purchasedMockReviews = new
+            {
+                availableCredits = wallet?.CreditBalance ?? 0
+            },
+            collections = new
+            {
+                fullMocks = new[]
+                {
+                    new { id = "fm-1", title = "Full Mock Test 1", status = latestReport is null ? "available" : "completed", score = latestReport?.GetValueOrDefault("overallScore")?.ToString() ?? "340", date = latestReport?.GetValueOrDefault("date")?.ToString() ?? DateTimeOffset.UtcNow.ToString("MMM dd, yyyy"), duration = "3h 15m", isRecommended = latestReport is null, reason = latestReport is null ? "Complete the first full mock to establish a baseline." : (string?)null },
+                    new { id = "fm-2", title = "Full Mock Test 2", status = "completed", score = "B/B/B/B", date = "Nov 05, 2023", duration = "3h 15m", isRecommended = false, reason = (string?)null },
+                    new { id = "fm-3", title = "Full Mock Test 3", status = "available", score = (string?)null, date = (string?)null, duration = "3h 15m", isRecommended = false, reason = (string?)null },
+                    new { id = "fm-4", title = "Full Mock Test 4", status = "available", score = (string?)null, date = (string?)null, duration = "3h 15m", isRecommended = false, reason = (string?)null },
+                    new { id = "fm-5", title = "Full Mock Test 5", status = "locked", score = (string?)null, date = (string?)null, duration = (string?)null, isRecommended = false, reason = "Complete Mock 4 first" }
+                },
+                subTestMocks = new[]
+                {
+                    new { id = "read-mock", title = "Reading Mocks", subtest = "reading", route = "/mocks/setup?subtest=reading" },
+                    new { id = "list-mock", title = "Listening Mocks", subtest = "listening", route = "/mocks/setup?subtest=listening" },
+                    new { id = "speak-mock", title = "Speaking Mocks", subtest = "speaking", route = "/mocks/setup?subtest=speaking" },
+                    new { id = "write-mock", title = "Writing Mocks", subtest = "writing", route = "/mocks/setup?subtest=writing" }
+                }
+            }
+        };
+    }
+
+    public Task<object> GetMockOptionsAsync(CancellationToken cancellationToken)
+        => Task.FromResult<object>(new
+        {
+            mockTypes = new[]
+            {
+                new { id = "full", label = "Full Mock", description = "All four sub-tests in sequence." },
+                new { id = "sub", label = "Single Sub-test", description = "Focus on one specific skill area." }
+            },
+            subTypes = new[]
+            {
+                new { id = "reading", label = "Reading" },
+                new { id = "listening", label = "Listening" },
+                new { id = "writing", label = "Writing" },
+                new { id = "speaking", label = "Speaking" }
+            },
+            modes = new[]
+            {
+                new { id = "practice", label = "Practice" },
+                new { id = "exam", label = "Exam" }
+            },
+            professions = new[]
+            {
+                new { id = "medicine", label = "Medicine" },
+                new { id = "nursing", label = "Nursing" },
+                new { id = "pharmacy", label = "Pharmacy" },
+                new { id = "dentistry", label = "Dentistry" },
+                new { id = "dietetics", label = "Dietetics" },
+                new { id = "optometry", label = "Optometry" },
+                new { id = "physiotherapy", label = "Physiotherapy" },
+                new { id = "podiatry", label = "Podiatry" },
+                new { id = "radiography", label = "Radiography" },
+                new { id = "speech_pathology", label = "Speech Pathology" },
+                new { id = "veterinary_science", label = "Veterinary Science" }
+            },
+            reviewSelections = new[]
+            {
+                new { id = "none", label = "No Review" },
+                new { id = "writing", label = "Writing Only" },
+                new { id = "speaking", label = "Speaking Only" },
+                new { id = "writing_and_speaking", label = "Writing + Speaking" },
+                new { id = "current_subtest", label = "Current Sub-test" }
+            }
+        });
+
+    #if false
     public object GetExtras() => new
     {
         items = new[]
@@ -2252,14 +2548,13 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
         }
     };
 
-    public async Task<object> CreateCheckoutSessionAsync(string userId, CheckoutSessionCreateRequest request, CancellationToken cancellationToken)
-    {
-        await EnsureUserAsync(userId, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
-        {
-            var cached = await GetIdempotentResponseAsync("checkout-session", request.IdempotencyKey, cancellationToken);
-            if (cached is not null)
-            {
+                quoteResponse = await BuildBillingQuoteAsync(userId, new BillingQuoteRequest(
+                    normalizedProductType,
+                    request.Quantity,
+                    request.PriceId,
+                    request.CouponCode,
+                    request.AddOnCodes), cancellationToken, persistQuote: true);
+                quoteEntity = await db.BillingQuotes.FirstAsync(x => x.Id == quoteResponse.Id && x.UserId == userId, cancellationToken);
                 return cached;
             }
         }
@@ -2307,6 +2602,7 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
         await db.SaveChangesAsync(cancellationToken);
         return response;
     }
+    #endif
 
     private async Task<LearnerUser> EnsureUserAsync(string userId, CancellationToken cancellationToken)
     {
@@ -2921,6 +3217,385 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
             : JsonSupport.Deserialize<Dictionary<string, object?>>(record.ResponseJson, new Dictionary<string, object?>());
     }
 
+    #if false
+    private async Task<BillingPlan?> FindBillingPlanAsync(string planCode, CancellationToken cancellationToken)
+    {
+        var normalized = (planCode ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
+        return await db.BillingPlans.AsNoTracking()
+            .FirstOrDefaultAsync(plan => string.Equals(plan.Code, normalized, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(plan.Id, normalized, StringComparison.OrdinalIgnoreCase), cancellationToken);
+    }
+
+    private async Task<BillingAddOn?> FindBillingAddOnAsync(string addOnCode, CancellationToken cancellationToken)
+    {
+        var normalized = (addOnCode ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
+        return await db.BillingAddOns.AsNoTracking()
+            .FirstOrDefaultAsync(addOn => string.Equals(addOn.Code, normalized, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(addOn.Id, normalized, StringComparison.OrdinalIgnoreCase), cancellationToken);
+    }
+
+    private async Task<BillingCoupon?> FindBillingCouponAsync(string couponCode, CancellationToken cancellationToken)
+    {
+        var normalized = (couponCode ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
+        return await db.BillingCoupons
+            .FirstOrDefaultAsync(coupon => string.Equals(coupon.Code, normalized, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(coupon.Id, normalized, StringComparison.OrdinalIgnoreCase), cancellationToken);
+    }
+
+    private static List<string> NormalizeCodes(IEnumerable<string>? codes)
+        => (codes ?? Array.Empty<string>()).Where(code => !string.IsNullOrWhiteSpace(code))
+            .Select(code => code.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private static Dictionary<string, object?> DeserializeQuoteValidation(string json)
+        => JsonSupport.Deserialize<Dictionary<string, object?>>(json, new Dictionary<string, object?>());
+
+    private static BillingQuoteResponse DeserializeQuoteResponse(BillingQuote quote)
+    {
+        var snapshot = JsonSupport.Deserialize<Dictionary<string, object?>>(quote.SnapshotJson, new Dictionary<string, object?>());
+        var items = JsonSupport.Deserialize<List<BillingQuoteLineItem>>(JsonSupport.Serialize(snapshot.GetValueOrDefault("items") ?? []), []);
+        var validation = DeserializeQuoteValidation(JsonSupport.Serialize(snapshot.GetValueOrDefault("validation") ?? new Dictionary<string, object?>()));
+        return new BillingQuoteResponse(
+            quote.Id,
+            quote.Status.ToString().ToLowerInvariant(),
+            quote.Currency,
+            quote.SubtotalAmount,
+            quote.DiscountAmount,
+            quote.TotalAmount,
+            quote.PlanCode,
+            quote.CouponCode,
+            JsonSupport.Deserialize<List<string>>(quote.AddOnCodesJson, []),
+            items,
+            quote.ExpiresAt,
+            snapshot.TryGetValue("summary", out var summaryValue) ? summaryValue?.ToString() ?? string.Empty : string.Empty,
+            validation);
+    }
+
+    private async Task<BillingQuoteResponse> BuildBillingQuoteAsync(
+        string userId,
+        BillingQuoteRequest request,
+        CancellationToken cancellationToken,
+        bool persistQuote)
+    {
+        var normalizedProductType = (request.ProductType ?? string.Empty).Trim().ToLowerInvariant();
+        var now = DateTimeOffset.UtcNow;
+        var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
+        var currentPlan = await FindBillingPlanAsync(subscription.PlanId, cancellationToken);
+        var addOnCodes = NormalizeCodes(request.AddOnCodes);
+        var items = new List<BillingQuoteLineItem>();
+        decimal subtotal;
+        string? planCode = null;
+        string summary;
+
+        if (normalizedProductType is "plan_upgrade" or "plan_downgrade")
+        {
+            if (string.IsNullOrWhiteSpace(request.PriceId))
+            {
+                throw ApiException.Validation(
+                    "target_plan_required",
+                    "A target plan id is required for plan changes.",
+                    [new ApiFieldError("priceId", "required", "Choose the plan you want to switch to.")]);
+            }
+
+            var targetPlan = await FindBillingPlanAsync(request.PriceId, cancellationToken)
+                ?? throw ApiException.Validation(
+                    "unknown_plan",
+                    $"Unknown billing plan '{request.PriceId}'.",
+                    [new ApiFieldError("priceId", "unknown", "Choose a supported billing plan.")]);
+
+            planCode = targetPlan.Code;
+            var referencePlan = currentPlan ?? targetPlan;
+            var delta = targetPlan.Price - referencePlan.Price;
+            subtotal = Math.Round(Math.Abs(delta) / 2m, 2, MidpointRounding.AwayFromZero);
+            summary = normalizedProductType == "plan_upgrade"
+                ? $"Switching to {targetPlan.Name} increases your billing amount by {Math.Abs(delta):0.00} {targetPlan.Currency}."
+                : $"Switching to {targetPlan.Name} lowers your billing amount by {Math.Abs(delta):0.00} {targetPlan.Currency}.";
+            items.Add(new BillingQuoteLineItem(
+                "plan",
+                targetPlan.Code,
+                targetPlan.Name,
+                subtotal,
+                targetPlan.Currency,
+                1,
+                targetPlan.Description));
+        }
+        else if (normalizedProductType == "addon_purchase")
+        {
+            if (string.IsNullOrWhiteSpace(request.PriceId))
+            {
+                throw ApiException.Validation(
+                    "target_addon_required",
+                    "A target add-on id is required for add-on purchases.",
+                    [new ApiFieldError("priceId", "required", "Choose the add-on you want to purchase.")]);
+            }
+
+            var addOn = await FindBillingAddOnAsync(request.PriceId, cancellationToken)
+                ?? throw ApiException.Validation(
+                    "unknown_addon",
+                    $"Unknown billing add-on '{request.PriceId}'.",
+                    [new ApiFieldError("priceId", "unknown", "Choose a supported add-on.")]);
+
+            if (addOn.MaxQuantity is not null && request.Quantity > addOn.MaxQuantity.Value)
+            {
+                throw ApiException.Validation(
+                    "addon_quantity_exceeded",
+                    "The requested add-on quantity exceeds the allowed maximum.",
+                    [new ApiFieldError("quantity", "max_exceeded", "Reduce the quantity and try again.")]);
+            }
+
+            planCode = currentPlan?.Code;
+            subtotal = Math.Round(addOn.Price * request.Quantity, 2, MidpointRounding.AwayFromZero);
+            summary = $"{request.Quantity} x {addOn.Name}.";
+            items.Add(new BillingQuoteLineItem(
+                "addon",
+                addOn.Code,
+                addOn.Name,
+                subtotal,
+                addOn.Currency,
+                request.Quantity,
+                addOn.Description));
+        }
+        else
+        {
+            BillingAddOn? reviewPack = null;
+            if (!string.IsNullOrWhiteSpace(request.PriceId))
+            {
+                reviewPack = await FindBillingAddOnAsync(request.PriceId, cancellationToken);
+            }
+
+            reviewPack ??= await db.BillingAddOns.AsNoTracking()
+                .Where(addOn => addOn.Status == BillingAddOnStatus.Active && addOn.GrantCredits == request.Quantity)
+                .OrderBy(addOn => addOn.DisplayOrder)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            reviewPack ??= await db.BillingAddOns.AsNoTracking()
+                .Where(addOn => addOn.Status == BillingAddOnStatus.Active && addOn.GrantCredits > 0)
+                .OrderBy(addOn => addOn.DisplayOrder)
+                .ThenBy(addOn => addOn.Price)
+                .FirstOrDefaultAsync(cancellationToken)
+                ?? throw ApiException.Validation(
+                    "review_pack_unavailable",
+                    "No review credit pack is available for the requested quantity.",
+                    [new ApiFieldError("quantity", "unsupported", "Choose one of the available review credit packs.")]);
+
+            planCode = currentPlan?.Code;
+            subtotal = Math.Round(reviewPack.Price, 2, MidpointRounding.AwayFromZero);
+            summary = $"Review credit pack: {reviewPack.GrantCredits} credits.";
+            items.Add(new BillingQuoteLineItem(
+                "addon",
+                reviewPack.Code,
+                reviewPack.Name,
+                subtotal,
+                reviewPack.Currency,
+                1,
+                reviewPack.Description));
+        }
+
+        BillingCoupon? coupon = null;
+        decimal discount = 0m;
+        var validation = new Dictionary<string, object?>
+        {
+            ["productType"] = normalizedProductType,
+            ["subtotal"] = subtotal,
+            ["planCode"] = planCode,
+            ["addOnCodes"] = addOnCodes
+        };
+
+        if (!string.IsNullOrWhiteSpace(request.CouponCode))
+        {
+            coupon = await FindBillingCouponAsync(request.CouponCode, cancellationToken);
+            if (coupon is null)
+            {
+                throw ApiException.Validation(
+                    "coupon_not_found",
+                    "The coupon code could not be found.",
+                    [new ApiFieldError("couponCode", "unknown", "Enter a valid coupon code.")]);
+            }
+
+            if (coupon.Status != BillingCouponStatus.Active)
+            {
+                throw ApiException.Validation(
+                    "coupon_inactive",
+                    "The coupon is not active.",
+                    [new ApiFieldError("couponCode", "inactive", "Use a currently active coupon.")]);
+            }
+
+            if (coupon.StartsAt is not null && coupon.StartsAt > now)
+            {
+                throw ApiException.Validation(
+                    "coupon_not_started",
+                    "The coupon is not yet active.",
+                    [new ApiFieldError("couponCode", "not_started", "Try again once the coupon start date has passed.")]);
+            }
+
+            if (coupon.EndsAt is not null && coupon.EndsAt < now)
+            {
+                throw ApiException.Validation(
+                    "coupon_expired",
+                    "The coupon has expired.",
+                    [new ApiFieldError("couponCode", "expired", "Use a valid coupon code.")]);
+            }
+
+            if (coupon.MinimumSubtotal is not null && subtotal < coupon.MinimumSubtotal.Value)
+            {
+                throw ApiException.Validation(
+                    "coupon_minimum_not_met",
+                    "The coupon minimum purchase amount was not met.",
+                    [new ApiFieldError("couponCode", "minimum_not_met", "Add more to your order or use another coupon.")]);
+            }
+
+            var planAllowList = JsonSupport.Deserialize<List<string>>(coupon.ApplicablePlanCodesJson, []);
+            var addOnAllowList = JsonSupport.Deserialize<List<string>>(coupon.ApplicableAddOnCodesJson, []);
+            if (planAllowList.Count > 0 && (planCode is null || !planAllowList.Any(code => string.Equals(code, planCode, StringComparison.OrdinalIgnoreCase))))
+            {
+                throw ApiException.Validation(
+                    "coupon_not_applicable",
+                    "The coupon does not apply to the selected plan.",
+                    [new ApiFieldError("couponCode", "not_applicable", "Choose a coupon that matches the selected plan.")]);
+            }
+
+            if (addOnAllowList.Count > 0 && addOnCodes.Count > 0 && !addOnCodes.Any(code => addOnAllowList.Any(allowed => string.Equals(allowed, code, StringComparison.OrdinalIgnoreCase))))
+            {
+                throw ApiException.Validation(
+                    "coupon_not_applicable",
+                    "The coupon does not apply to the selected add-on.",
+                    [new ApiFieldError("couponCode", "not_applicable", "Choose a coupon that matches the selected add-on.")]);
+            }
+
+            var couponRedemptionCount = await db.BillingCouponRedemptions.CountAsync(redemption => redemption.CouponCode == coupon.Code && redemption.Status != BillingRedemptionStatus.Voided, cancellationToken);
+            if (coupon.UsageLimitTotal is not null && couponRedemptionCount >= coupon.UsageLimitTotal.Value)
+            {
+                throw ApiException.Validation(
+                    "coupon_exhausted",
+                    "The coupon usage limit has been reached.",
+                    [new ApiFieldError("couponCode", "usage_limit", "Choose a different coupon.")]);
+            }
+
+            var perUserRedemptionCount = await db.BillingCouponRedemptions.CountAsync(redemption => redemption.CouponCode == coupon.Code && redemption.UserId == userId && redemption.Status != BillingRedemptionStatus.Voided, cancellationToken);
+            if (coupon.UsageLimitPerUser is not null && perUserRedemptionCount >= coupon.UsageLimitPerUser.Value)
+            {
+                throw ApiException.Validation(
+                    "coupon_user_limit",
+                    "You have already used this coupon.",
+                    [new ApiFieldError("couponCode", "user_limit", "This coupon can only be used once per user.")]);
+            }
+
+            discount = coupon.DiscountType == BillingDiscountType.Percentage
+                ? Math.Round(subtotal * Math.Min(coupon.DiscountValue, 100m) / 100m, 2, MidpointRounding.AwayFromZero)
+                : Math.Round(Math.Min(coupon.DiscountValue, subtotal), 2, MidpointRounding.AwayFromZero);
+
+            if (discount > subtotal)
+            {
+                discount = subtotal;
+            }
+
+            validation["couponCode"] = coupon.Code;
+            validation["couponStatus"] = coupon.Status.ToString().ToLowerInvariant();
+            validation["discountType"] = coupon.DiscountType.ToString().ToLowerInvariant();
+            validation["discountValue"] = coupon.DiscountValue;
+            validation["discount"] = discount;
+        }
+
+        var total = Math.Max(0m, Math.Round(subtotal - discount, 2, MidpointRounding.AwayFromZero));
+        var quoteIdValue = $"quote-{Guid.NewGuid():N}";
+        var quoteId = quoteIdValue[..Math.Min(64, quoteIdValue.Length)];
+        var quote = new BillingQuote
+        {
+            Id = quoteId,
+            UserId = userId,
+            SubscriptionId = subscription.Id,
+            PlanCode = planCode,
+            AddOnCodesJson = JsonSupport.Serialize(addOnCodes),
+            CouponCode = coupon?.Code,
+            Currency = items.FirstOrDefault()?.Currency ?? subscription.Currency,
+            SubtotalAmount = subtotal,
+            DiscountAmount = discount,
+            TotalAmount = total,
+            Status = BillingQuoteStatus.Created,
+            CreatedAt = now,
+            ExpiresAt = now.AddMinutes(30),
+            SnapshotJson = JsonSupport.Serialize(new
+            {
+                items,
+                validation,
+                summary,
+                subtotal,
+                discount,
+                total
+            })
+        };
+
+        if (persistQuote)
+        {
+            db.BillingQuotes.Add(quote);
+            db.BillingEvents.Add(new BillingEvent
+            {
+                Id = $"bill-evt-{Guid.NewGuid():N}",
+                UserId = userId,
+                SubscriptionId = subscription.Id,
+                QuoteId = quote.Id,
+                EventType = "billing_quote_created",
+                EntityType = "BillingQuote",
+                EntityId = quote.Id,
+                PayloadJson = JsonSupport.Serialize(new { planCode, addOnCodes, couponCode = coupon?.Code, subtotal, discount, total }),
+                OccurredAt = now
+            });
+
+            if (coupon is not null)
+            {
+                var redemptionIdValue = $"redemption-{Guid.NewGuid():N}";
+                db.BillingCouponRedemptions.Add(new BillingCouponRedemption
+                {
+                    Id = redemptionIdValue[..Math.Min(64, redemptionIdValue.Length)],
+                    CouponCode = coupon.Code,
+                    UserId = userId,
+                    QuoteId = quote.Id,
+                    DiscountAmount = discount,
+                    Currency = quote.Currency,
+                    Status = BillingRedemptionStatus.Reserved,
+                    RedeemedAt = now
+                });
+
+                coupon.RedemptionCount += 1;
+                coupon.UpdatedAt = now;
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        return new BillingQuoteResponse(
+            quote.Id,
+            quote.Status.ToString().ToLowerInvariant(),
+            quote.Currency,
+            quote.SubtotalAmount,
+            quote.DiscountAmount,
+            quote.TotalAmount,
+            quote.PlanCode,
+            quote.CouponCode,
+            addOnCodes,
+            items,
+            quote.ExpiresAt,
+            summary,
+            validation);
+    }
+    #endif
+
     private async Task SaveIdempotentResponseAsync(string scope, string key, object response, CancellationToken cancellationToken)
     {
         var exists = await db.IdempotencyRecords.AnyAsync(x => x.Scope == scope && x.Key == key, cancellationToken);
@@ -2996,60 +3671,384 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
         _ => code
     };
 
-    private sealed record BillingPlanDefinition(
-        string PlanId,
-        string Label,
-        string Tier,
-        string Description,
-        decimal Amount,
-        int ReviewCredits,
-        string Badge);
 
-    private static IReadOnlyList<BillingPlanDefinition> BillingPlanCatalog() =>
-    [
-        new(
-            "starter-monthly",
-            "Starter Monthly",
-            "starter",
-            "Core OET practice with AI evaluation and learner analytics.",
-            0m,
-            0,
-            "Current default"),
-        new(
-            "premium-monthly",
-            "Premium Monthly",
-            "premium",
-            "Adds productive-skill review capacity and richer mock support for active preparation.",
-            49.99m,
-            3,
-            "Most popular"),
-        new(
-            "intensive-monthly",
-            "Intensive Monthly",
-            "intensive",
-            "Higher review capacity for repeated writing and speaking feedback before the exam window.",
-            79.99m,
-            6,
-            "Fast-track")
-    ];
-
-    private static int BillingPlanTierRank(string tier) => tier.ToLowerInvariant() switch
+    private async Task<BillingPlan?> FindBillingPlanAsync(string planCode, CancellationToken cancellationToken)
     {
-        "starter" => 0,
-        "premium" => 1,
-        "intensive" => 2,
-        _ => 0
-    };
-
-    private static string ComparePlanTier(string targetTier, string currentTier)
-    {
-        var delta = BillingPlanTierRank(targetTier) - BillingPlanTierRank(currentTier);
-        return delta switch
+        var normalized = (planCode ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
         {
-            > 0 => "upgrade",
-            < 0 => "downgrade",
-            _ => "current"
+            return null;
+        }
+
+        return await db.BillingPlans.AsNoTracking()
+            .FirstOrDefaultAsync(plan => string.Equals(plan.Code, normalized, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(plan.Id, normalized, StringComparison.OrdinalIgnoreCase), cancellationToken);
+    }
+
+    private async Task<BillingAddOn?> FindBillingAddOnAsync(string addOnCode, CancellationToken cancellationToken)
+    {
+        var normalized = (addOnCode ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
+        return await db.BillingAddOns.AsNoTracking()
+            .FirstOrDefaultAsync(addOn => string.Equals(addOn.Code, normalized, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(addOn.Id, normalized, StringComparison.OrdinalIgnoreCase), cancellationToken);
+    }
+
+    private async Task<BillingCoupon?> FindBillingCouponAsync(string couponCode, CancellationToken cancellationToken)
+    {
+        var normalized = (couponCode ?? string.Empty).Trim();
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
+        return await db.BillingCoupons.AsNoTracking()
+            .FirstOrDefaultAsync(coupon => string.Equals(coupon.Code, normalized, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(coupon.Id, normalized, StringComparison.OrdinalIgnoreCase), cancellationToken);
+    }
+
+    private static List<string> NormalizeCodes(IEnumerable<string>? codes)
+        => (codes ?? Array.Empty<string>()).Where(code => !string.IsNullOrWhiteSpace(code))
+            .Select(code => code.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private static BillingQuoteResponse DeserializeQuoteResponse(BillingQuote quote)
+    {
+        var snapshot = JsonSupport.Deserialize<Dictionary<string, object?>>(quote.SnapshotJson, new Dictionary<string, object?>());
+        var items = snapshot.TryGetValue("items", out var itemsValue)
+            ? JsonSupport.Deserialize<List<BillingQuoteLineItem>>(JsonSupport.Serialize(itemsValue), [])
+            : [];
+        var validation = snapshot.TryGetValue("validation", out var validationValue)
+            ? JsonSupport.Deserialize<Dictionary<string, object?>>(JsonSupport.Serialize(validationValue), new Dictionary<string, object?>())
+            : new Dictionary<string, object?>();
+
+        return new BillingQuoteResponse(
+            quote.Id,
+            quote.Status.ToString().ToLowerInvariant(),
+            quote.Currency,
+            quote.SubtotalAmount,
+            quote.DiscountAmount,
+            quote.TotalAmount,
+            quote.PlanCode,
+            quote.CouponCode,
+            JsonSupport.Deserialize<List<string>>(quote.AddOnCodesJson, []),
+            items,
+            quote.ExpiresAt,
+            snapshot.TryGetValue("summary", out var summaryValue) ? summaryValue?.ToString() ?? string.Empty : string.Empty,
+            validation);
+    }
+
+    private async Task<BillingQuoteResponse> BuildBillingQuoteAsync(
+        string userId,
+        BillingQuoteRequest request,
+        CancellationToken cancellationToken,
+        bool persistQuote)
+    {
+        var normalizedProductType = (request.ProductType ?? string.Empty).Trim().ToLowerInvariant();
+        var now = DateTimeOffset.UtcNow;
+        var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
+        var currentPlan = await FindBillingPlanAsync(subscription.PlanId, cancellationToken);
+        var addOnCodes = NormalizeCodes(request.AddOnCodes);
+        var items = new List<BillingQuoteLineItem>();
+        decimal subtotal;
+        string? planCode = null;
+        string summary;
+
+        if (normalizedProductType is "plan_upgrade" or "plan_downgrade")
+        {
+            if (string.IsNullOrWhiteSpace(request.PriceId))
+            {
+                throw ApiException.Validation(
+                    "target_plan_required",
+                    "A target plan id is required for plan changes.",
+                    [new ApiFieldError("priceId", "required", "Choose the plan you want to switch to.")]);
+            }
+
+            var targetPlan = await FindBillingPlanAsync(request.PriceId, cancellationToken)
+                ?? throw ApiException.Validation(
+                    "unknown_plan",
+                    $"Unknown billing plan '{request.PriceId}'.",
+                    [new ApiFieldError("priceId", "unknown", "Choose a supported billing plan.")]);
+
+            planCode = targetPlan.Code;
+            var referencePlan = currentPlan ?? targetPlan;
+            var delta = targetPlan.Price - referencePlan.Price;
+            subtotal = Math.Round(Math.Abs(delta) / 2m, 2, MidpointRounding.AwayFromZero);
+            summary = normalizedProductType == "plan_upgrade"
+                ? $"Switching to {targetPlan.Name} increases your billing amount by {Math.Abs(delta):0.00} {targetPlan.Currency}."
+                : $"Switching to {targetPlan.Name} lowers your billing amount by {Math.Abs(delta):0.00} {targetPlan.Currency}.";
+            items.Add(new BillingQuoteLineItem(
+                "plan",
+                targetPlan.Code,
+                targetPlan.Name,
+                subtotal,
+                targetPlan.Currency,
+                1,
+                targetPlan.Description));
+        }
+        else if (normalizedProductType == "addon_purchase")
+        {
+            if (string.IsNullOrWhiteSpace(request.PriceId))
+            {
+                throw ApiException.Validation(
+                    "target_addon_required",
+                    "A target add-on id is required for add-on purchases.",
+                    [new ApiFieldError("priceId", "required", "Choose the add-on you want to purchase.")]);
+            }
+
+            var addOn = await FindBillingAddOnAsync(request.PriceId, cancellationToken)
+                ?? throw ApiException.Validation(
+                    "unknown_addon",
+                    $"Unknown billing add-on '{request.PriceId}'.",
+                    [new ApiFieldError("priceId", "unknown", "Choose a supported add-on.")]);
+
+            if (addOn.MaxQuantity is not null && request.Quantity > addOn.MaxQuantity.Value)
+            {
+                throw ApiException.Validation(
+                    "addon_quantity_exceeded",
+                    "The requested add-on quantity exceeds the allowed maximum.",
+                    [new ApiFieldError("quantity", "max_exceeded", "Reduce the quantity and try again.")]);
+            }
+
+            planCode = currentPlan?.Code;
+            subtotal = Math.Round(addOn.Price * request.Quantity, 2, MidpointRounding.AwayFromZero);
+            summary = $"{request.Quantity} x {addOn.Name}.";
+            items.Add(new BillingQuoteLineItem(
+                "addon",
+                addOn.Code,
+                addOn.Name,
+                subtotal,
+                addOn.Currency,
+                request.Quantity,
+                addOn.Description));
+        }
+        else
+        {
+            BillingAddOn? reviewPack = null;
+            if (!string.IsNullOrWhiteSpace(request.PriceId))
+            {
+                reviewPack = await FindBillingAddOnAsync(request.PriceId, cancellationToken);
+            }
+
+            reviewPack ??= await db.BillingAddOns.AsNoTracking()
+                .Where(addOn => addOn.Status == BillingAddOnStatus.Active && addOn.GrantCredits == request.Quantity)
+                .OrderBy(addOn => addOn.DisplayOrder)
+                .FirstOrDefaultAsync(cancellationToken);
+
+            reviewPack ??= await db.BillingAddOns.AsNoTracking()
+                .Where(addOn => addOn.Status == BillingAddOnStatus.Active && addOn.GrantCredits > 0)
+                .OrderBy(addOn => addOn.DisplayOrder)
+                .ThenBy(addOn => addOn.Price)
+                .FirstOrDefaultAsync(cancellationToken)
+                ?? throw ApiException.Validation(
+                    "review_pack_unavailable",
+                    "No review credit pack is available for the requested quantity.",
+                    [new ApiFieldError("quantity", "unsupported", "Choose one of the available review credit packs.")]);
+
+            planCode = currentPlan?.Code;
+            subtotal = Math.Round(reviewPack.Price, 2, MidpointRounding.AwayFromZero);
+            summary = $"Review credit pack: {reviewPack.GrantCredits} credits.";
+            items.Add(new BillingQuoteLineItem(
+                "addon",
+                reviewPack.Code,
+                reviewPack.Name,
+                subtotal,
+                reviewPack.Currency,
+                1,
+                reviewPack.Description));
+        }
+
+        BillingCoupon? coupon = null;
+        decimal discount = 0m;
+        var validation = new Dictionary<string, object?>
+        {
+            ["productType"] = normalizedProductType,
+            ["subtotal"] = subtotal,
+            ["planCode"] = planCode,
+            ["addOnCodes"] = addOnCodes
         };
+
+        if (!string.IsNullOrWhiteSpace(request.CouponCode))
+        {
+            coupon = await FindBillingCouponAsync(request.CouponCode, cancellationToken);
+            if (coupon is null)
+            {
+                throw ApiException.Validation(
+                    "coupon_not_found",
+                    "The coupon code could not be found.",
+                    [new ApiFieldError("couponCode", "unknown", "Enter a valid coupon code.")]);
+            }
+
+            if (coupon.Status != BillingCouponStatus.Active)
+            {
+                throw ApiException.Validation(
+                    "coupon_inactive",
+                    "The coupon is not active.",
+                    [new ApiFieldError("couponCode", "inactive", "Use a currently active coupon.")]);
+            }
+
+            if (coupon.StartsAt is not null && coupon.StartsAt > now)
+            {
+                throw ApiException.Validation(
+                    "coupon_not_started",
+                    "The coupon is not yet active.",
+                    [new ApiFieldError("couponCode", "not_started", "Try again once the coupon start date has passed.")]);
+            }
+
+            if (coupon.EndsAt is not null && coupon.EndsAt < now)
+            {
+                throw ApiException.Validation(
+                    "coupon_expired",
+                    "The coupon has expired.",
+                    [new ApiFieldError("couponCode", "expired", "Use a valid coupon code.")]);
+            }
+
+            if (coupon.MinimumSubtotal is not null && subtotal < coupon.MinimumSubtotal.Value)
+            {
+                throw ApiException.Validation(
+                    "coupon_minimum_not_met",
+                    "The coupon minimum purchase amount was not met.",
+                    [new ApiFieldError("couponCode", "minimum_not_met", "Add more to your order or use another coupon.")]);
+            }
+
+            var planAllowList = JsonSupport.Deserialize<List<string>>(coupon.ApplicablePlanCodesJson, []);
+            var addOnAllowList = JsonSupport.Deserialize<List<string>>(coupon.ApplicableAddOnCodesJson, []);
+            if (planAllowList.Count > 0 && (planCode is null || !planAllowList.Any(code => string.Equals(code, planCode, StringComparison.OrdinalIgnoreCase))))
+            {
+                throw ApiException.Validation(
+                    "coupon_not_applicable",
+                    "The coupon does not apply to the selected plan.",
+                    [new ApiFieldError("couponCode", "not_applicable", "Choose a coupon that matches the selected plan.")]);
+            }
+
+            if (addOnAllowList.Count > 0 && addOnCodes.Count > 0 && !addOnCodes.Any(code => addOnAllowList.Any(allowed => string.Equals(allowed, code, StringComparison.OrdinalIgnoreCase))))
+            {
+                throw ApiException.Validation(
+                    "coupon_not_applicable",
+                    "The coupon does not apply to the selected add-on.",
+                    [new ApiFieldError("couponCode", "not_applicable", "Choose a coupon that matches the selected add-on.")]);
+            }
+
+            var couponRedemptionCount = await db.BillingCouponRedemptions.CountAsync(redemption => redemption.CouponCode == coupon.Code && redemption.Status != BillingRedemptionStatus.Voided, cancellationToken);
+            if (coupon.UsageLimitTotal is not null && couponRedemptionCount >= coupon.UsageLimitTotal.Value)
+            {
+                throw ApiException.Validation(
+                    "coupon_exhausted",
+                    "The coupon usage limit has been reached.",
+                    [new ApiFieldError("couponCode", "usage_limit", "Choose a different coupon.")]);
+            }
+
+            var perUserRedemptionCount = await db.BillingCouponRedemptions.CountAsync(redemption => redemption.CouponCode == coupon.Code && redemption.UserId == userId && redemption.Status != BillingRedemptionStatus.Voided, cancellationToken);
+            if (coupon.UsageLimitPerUser is not null && perUserRedemptionCount >= coupon.UsageLimitPerUser.Value)
+            {
+                throw ApiException.Validation(
+                    "coupon_user_limit",
+                    "You have already used this coupon.",
+                    [new ApiFieldError("couponCode", "user_limit", "This coupon can only be used once per user.")]);
+            }
+
+            discount = coupon.DiscountType == BillingDiscountType.Percentage
+                ? Math.Round(subtotal * Math.Min(coupon.DiscountValue, 100m) / 100m, 2, MidpointRounding.AwayFromZero)
+                : Math.Round(Math.Min(coupon.DiscountValue, subtotal), 2, MidpointRounding.AwayFromZero);
+
+            if (discount > subtotal)
+            {
+                discount = subtotal;
+            }
+
+            validation["couponCode"] = coupon.Code;
+            validation["couponStatus"] = coupon.Status.ToString().ToLowerInvariant();
+            validation["discountType"] = coupon.DiscountType.ToString().ToLowerInvariant();
+            validation["discountValue"] = coupon.DiscountValue;
+            validation["discount"] = discount;
+        }
+
+        var total = Math.Max(0m, Math.Round(subtotal - discount, 2, MidpointRounding.AwayFromZero));
+        var quoteIdValue = $"quote-{Guid.NewGuid():N}";
+        var quoteId = quoteIdValue[..Math.Min(64, quoteIdValue.Length)];
+        var quote = new BillingQuote
+        {
+            Id = quoteId,
+            UserId = userId,
+            SubscriptionId = subscription.Id,
+            PlanCode = planCode,
+            AddOnCodesJson = JsonSupport.Serialize(addOnCodes),
+            CouponCode = coupon?.Code,
+            Currency = items.FirstOrDefault()?.Currency ?? subscription.Currency,
+            SubtotalAmount = subtotal,
+            DiscountAmount = discount,
+            TotalAmount = total,
+            Status = BillingQuoteStatus.Created,
+            CreatedAt = now,
+            ExpiresAt = now.AddMinutes(30),
+            SnapshotJson = JsonSupport.Serialize(new
+            {
+                items,
+                validation,
+                summary,
+                subtotal,
+                discount,
+                total
+            })
+        };
+
+        if (persistQuote)
+        {
+            db.BillingQuotes.Add(quote);
+            db.BillingEvents.Add(new BillingEvent
+            {
+                Id = $"bill-evt-{Guid.NewGuid():N}",
+                UserId = userId,
+                SubscriptionId = subscription.Id,
+                QuoteId = quote.Id,
+                EventType = "billing_quote_created",
+                EntityType = "BillingQuote",
+                EntityId = quote.Id,
+                PayloadJson = JsonSupport.Serialize(new { planCode, addOnCodes, couponCode = coupon?.Code, subtotal, discount, total }),
+                OccurredAt = now
+            });
+
+            if (coupon is not null)
+            {
+                var redemptionIdValue = $"redemption-{Guid.NewGuid():N}";
+                db.BillingCouponRedemptions.Add(new BillingCouponRedemption
+                {
+                    Id = redemptionIdValue[..Math.Min(64, redemptionIdValue.Length)],
+                    CouponCode = coupon.Code,
+                    UserId = userId,
+                    QuoteId = quote.Id,
+                    DiscountAmount = discount,
+                    Currency = quote.Currency,
+                    Status = BillingRedemptionStatus.Reserved,
+                    RedeemedAt = now
+                });
+
+                coupon.RedemptionCount += 1;
+                coupon.UpdatedAt = now;
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        return new BillingQuoteResponse(
+            quote.Id,
+            quote.Status.ToString().ToLowerInvariant(),
+            quote.Currency,
+            quote.SubtotalAmount,
+            quote.DiscountAmount,
+            quote.TotalAmount,
+            quote.PlanCode,
+            quote.CouponCode,
+            addOnCodes,
+            items,
+            quote.ExpiresAt,
+            summary,
+            validation);
     }
 
     private static string NormalizeMockReviewSelection(string mockType, string? subType, bool includeReview, string? reviewSelection)
@@ -3403,9 +4402,12 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
     private static string ToSubscriptionState(SubscriptionStatus status) => status switch
     {
         SubscriptionStatus.Trial => "trial",
+        SubscriptionStatus.Pending => "pending",
         SubscriptionStatus.Active => "active",
         SubscriptionStatus.PastDue => "past_due",
+        SubscriptionStatus.Suspended => "suspended",
         SubscriptionStatus.Cancelled => "cancelled",
+        SubscriptionStatus.Expired => "expired",
         _ => "unknown"
     };
 

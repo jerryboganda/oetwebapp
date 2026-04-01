@@ -2,6 +2,7 @@
 
 import { AppShell } from '@/components/layout/app-shell';
 import { NavItem } from '@/components/layout/sidebar';
+import { PrivilegedMfaBanner } from '@/components/auth/privileged-mfa-banner';
 import { AuthProvider } from '@/contexts/auth-context';
 import { LayoutDashboard, Inbox, CheckCircle, BarChart3, CalendarClock, Users } from 'lucide-react';
 import { usePathname } from 'next/navigation';
@@ -38,7 +39,12 @@ function ExpertLayoutContent({ children }: { children: React.ReactNode }) {
       userSummary={{ displayName: expert?.displayName, email: expert?.email }}
       requiredRole="expert"
     >
-      {children}
+      <>
+        <div className="px-4 pt-4 md:px-8 md:pt-6">
+          <PrivilegedMfaBanner />
+        </div>
+        {children}
+      </>
     </AppShell>
   );
 }

@@ -6,6 +6,7 @@ coverage/
 .playwright-cli/
 .playwright/
 playwright/.auth/
+dist/
 output/
 output/playwright/
 .tmp-*.png

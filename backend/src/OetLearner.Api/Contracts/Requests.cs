@@ -60,7 +60,10 @@ public record CheckoutSessionCreateRequest(
     string ProductType,
     int Quantity,
     string? PriceId,
-    string? IdempotencyKey);
+    string? CouponCode = null,
+    List<string>? AddOnCodes = null,
+    string? QuoteId = null,
+    string? IdempotencyKey = null);
 
 public record StudyPlanRescheduleRequest(DateOnly? DueDate);
 

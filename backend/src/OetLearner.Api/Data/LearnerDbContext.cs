@@ -44,6 +44,12 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<NotificationPolicyOverride> NotificationPolicyOverrides => Set<NotificationPolicyOverride>();
     public DbSet<NotificationDeliveryAttempt> NotificationDeliveryAttempts => Set<NotificationDeliveryAttempt>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
+    public DbSet<SubscriptionItem> SubscriptionItems => Set<SubscriptionItem>();
+    public DbSet<BillingAddOn> BillingAddOns => Set<BillingAddOn>();
+    public DbSet<BillingCoupon> BillingCoupons => Set<BillingCoupon>();
+    public DbSet<BillingCouponRedemption> BillingCouponRedemptions => Set<BillingCouponRedemption>();
+    public DbSet<BillingQuote> BillingQuotes => Set<BillingQuote>();
+    public DbSet<BillingEvent> BillingEvents => Set<BillingEvent>();
 
     // Expert Console entities
     public DbSet<ExpertUser> ExpertUsers => Set<ExpertUser>();
@@ -122,5 +128,18 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<NotificationPolicyOverride>().HasIndex(x => new { x.AudienceRole, x.EventKey }).IsUnique();
         modelBuilder.Entity<NotificationDeliveryAttempt>().HasIndex(x => new { x.NotificationEventId, x.Channel, x.AttemptedAt });
         modelBuilder.Entity<PushSubscription>().HasIndex(x => x.Endpoint).IsUnique();
+        modelBuilder.Entity<SubscriptionItem>().HasIndex(x => new { x.SubscriptionId, x.Status });
+        modelBuilder.Entity<SubscriptionItem>().HasIndex(x => new { x.ItemCode, x.SubscriptionId });
+        modelBuilder.Entity<BillingPlan>().HasIndex(x => x.Code).IsUnique();
+        modelBuilder.Entity<BillingPlan>().HasIndex(x => new { x.Status, x.DisplayOrder });
+        modelBuilder.Entity<BillingAddOn>().HasIndex(x => x.Code).IsUnique();
+        modelBuilder.Entity<BillingAddOn>().HasIndex(x => new { x.Status, x.DisplayOrder });
+        modelBuilder.Entity<BillingCoupon>().HasIndex(x => x.Code).IsUnique();
+        modelBuilder.Entity<BillingCoupon>().HasIndex(x => new { x.Status, x.EndsAt });
+        modelBuilder.Entity<BillingCouponRedemption>().HasIndex(x => new { x.CouponCode, x.UserId, x.RedeemedAt });
+        modelBuilder.Entity<BillingQuote>().HasIndex(x => new { x.UserId, x.CreatedAt });
+        modelBuilder.Entity<BillingQuote>().HasIndex(x => new { x.Status, x.ExpiresAt });
+        modelBuilder.Entity<BillingEvent>().HasIndex(x => new { x.EntityType, x.EntityId, x.OccurredAt });
+        modelBuilder.Entity<BillingEvent>().HasIndex(x => new { x.UserId, x.OccurredAt });
     }
 }

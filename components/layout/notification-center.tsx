@@ -1,7 +1,7 @@
 'use client';
 
 import * as Popover from '@radix-ui/react-popover';
-import { useMemo, useState } from 'react';
+import { forwardRef, useMemo, useState, type ComponentPropsWithoutRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bell, CheckCheck, Clock3, Filter, RefreshCw } from 'lucide-react';
 import { useNotificationCenter } from '@/contexts/notification-center-context';
@@ -277,27 +277,31 @@ function NotificationCenterContent({ onNavigate }: { onNavigate?: () => void }) 
   );
 }
 
-function NotificationBellButton({
-  onClick,
-  open,
-  className,
-}: {
-  onClick?: () => void;
+type NotificationBellButtonProps = ComponentPropsWithoutRef<'button'> & {
   open?: boolean;
-  className?: string;
-}) {
+};
+
+const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellButtonProps>(function NotificationBellButton(
+  {
+    open,
+    className,
+    ...buttonProps
+  },
+  ref,
+) {
   const { unreadCount } = useNotificationCenter();
 
   return (
     <button
+      ref={ref}
       type="button"
-      onClick={onClick}
       className={cn(
         'relative rounded p-2 text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
         className,
       )}
-      aria-label={`Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
-      aria-expanded={open}
+      aria-label={buttonProps['aria-label'] ?? `Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
+      aria-expanded={open ?? buttonProps['aria-expanded']}
+      {...buttonProps}
     >
       <Bell className="h-5 w-5" aria-hidden="true" />
       {unreadCount > 0 ? (
@@ -307,7 +311,7 @@ function NotificationBellButton({
       ) : null}
     </button>
   );
-}
+});
 
 export function NotificationCenter() {
   const [desktopOpen, setDesktopOpen] = useState(false);

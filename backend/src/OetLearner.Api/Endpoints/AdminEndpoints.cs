@@ -184,6 +184,38 @@ public static class AdminEndpoints
             => Results.Ok(await service.CreateBillingPlanAsync(http.AdminId(), http.AdminName(), request, ct)))
             .RequireRateLimiting("PerUserWrite");
 
+        admin.MapPut("/billing/plans/{planId}", async (string planId, HttpContext http, AdminBillingPlanUpdateRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.UpdateBillingPlanAsync(http.AdminId(), http.AdminName(), planId, request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        admin.MapGet("/billing/add-ons", async (AdminService service, CancellationToken ct, string? status)
+            => Results.Ok(await service.GetBillingAddOnsAsync(status, ct)));
+
+        admin.MapPost("/billing/add-ons", async (HttpContext http, AdminBillingAddOnCreateRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.CreateBillingAddOnAsync(http.AdminId(), http.AdminName(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        admin.MapPut("/billing/add-ons/{addOnId}", async (string addOnId, HttpContext http, AdminBillingAddOnUpdateRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.UpdateBillingAddOnAsync(http.AdminId(), http.AdminName(), addOnId, request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        admin.MapGet("/billing/coupons", async (AdminService service, CancellationToken ct, string? status)
+            => Results.Ok(await service.GetBillingCouponsAsync(status, ct)));
+
+        admin.MapPost("/billing/coupons", async (HttpContext http, AdminBillingCouponCreateRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.CreateBillingCouponAsync(http.AdminId(), http.AdminName(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        admin.MapPut("/billing/coupons/{couponId}", async (string couponId, HttpContext http, AdminBillingCouponUpdateRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.UpdateBillingCouponAsync(http.AdminId(), http.AdminName(), couponId, request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        admin.MapGet("/billing/subscriptions", async (AdminService service, CancellationToken ct, string? status, string? search, int? page, int? pageSize)
+            => Results.Ok(await service.GetBillingSubscriptionsAsync(status, search, page ?? 1, pageSize ?? 20, ct)));
+
+        admin.MapGet("/billing/redemptions", async (AdminService service, CancellationToken ct, string? couponCode, string? userId, int? page, int? pageSize)
+            => Results.Ok(await service.GetBillingCouponRedemptionsAsync(couponCode, userId, page ?? 1, pageSize ?? 20, ct)));
+
         admin.MapGet("/billing/invoices", async (AdminService service, CancellationToken ct,
             string? status, string? search, int? page, int? pageSize)
             => Results.Ok(await service.GetBillingInvoicesAsync(status, search, page ?? 1, pageSize ?? 20, ct)));

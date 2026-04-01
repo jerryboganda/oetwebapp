@@ -169,6 +169,90 @@ public class AdminService(
         return $"\"{normalized}\"";
     }
 
+    private static BillingPlanStatus ParseBillingPlanStatus(string? status, BillingPlanStatus fallback = BillingPlanStatus.Active)
+        => Enum.TryParse<BillingPlanStatus>(status, true, out var parsed) ? parsed : fallback;
+
+    private static BillingAddOnStatus ParseBillingAddOnStatus(string? status, BillingAddOnStatus fallback = BillingAddOnStatus.Active)
+        => Enum.TryParse<BillingAddOnStatus>(status, true, out var parsed) ? parsed : fallback;
+
+    private static BillingCouponStatus ParseBillingCouponStatus(string? status, BillingCouponStatus fallback = BillingCouponStatus.Active)
+        => Enum.TryParse<BillingCouponStatus>(status, true, out var parsed) ? parsed : fallback;
+
+    private static BillingDiscountType ParseBillingDiscountType(string? status)
+        => Enum.TryParse<BillingDiscountType>(status, true, out var parsed) ? parsed : BillingDiscountType.Percentage;
+
+    private static object MapBillingPlan(BillingPlan plan) => new
+    {
+        plan.Id,
+        code = plan.Code,
+        plan.Name,
+        plan.Description,
+        plan.Price,
+        plan.Currency,
+        plan.Interval,
+        plan.DurationMonths,
+        plan.IncludedCredits,
+        plan.DisplayOrder,
+        plan.IsVisible,
+        plan.IsRenewable,
+        plan.TrialDays,
+        activeSubscribers = plan.ActiveSubscribers,
+        status = plan.Status.ToString().ToLowerInvariant(),
+        includedSubtests = JsonSupport.Deserialize<List<string>>(plan.IncludedSubtestsJson, []),
+        entitlements = JsonSupport.Deserialize<Dictionary<string, object?>>(plan.EntitlementsJson, new Dictionary<string, object?>()),
+        archivedAt = plan.ArchivedAt,
+        plan.UpdatedAt,
+        plan.CreatedAt
+    };
+
+    private static object MapBillingAddOn(BillingAddOn addOn) => new
+    {
+        addOn.Id,
+        code = addOn.Code,
+        addOn.Name,
+        addOn.Description,
+        addOn.Price,
+        addOn.Currency,
+        addOn.Interval,
+        addOn.DurationDays,
+        addOn.GrantCredits,
+        addOn.DisplayOrder,
+        addOn.IsRecurring,
+        addOn.AppliesToAllPlans,
+        addOn.IsStackable,
+        addOn.QuantityStep,
+        addOn.MaxQuantity,
+        status = addOn.Status.ToString().ToLowerInvariant(),
+        compatiblePlanCodes = JsonSupport.Deserialize<List<string>>(addOn.CompatiblePlanCodesJson, []),
+        grantEntitlements = JsonSupport.Deserialize<Dictionary<string, object?>>(addOn.GrantEntitlementsJson, new Dictionary<string, object?>()),
+        addOn.CreatedAt,
+        addOn.UpdatedAt
+    };
+
+    private static object MapBillingCoupon(BillingCoupon coupon) => new
+    {
+        coupon.Id,
+        code = coupon.Code,
+        coupon.Name,
+        coupon.Description,
+        discountType = coupon.DiscountType.ToString().ToLowerInvariant(),
+        coupon.DiscountValue,
+        coupon.Currency,
+        coupon.StartsAt,
+        coupon.EndsAt,
+        coupon.UsageLimitTotal,
+        coupon.UsageLimitPerUser,
+        coupon.MinimumSubtotal,
+        coupon.IsStackable,
+        status = coupon.Status.ToString().ToLowerInvariant(),
+        applicablePlanCodes = JsonSupport.Deserialize<List<string>>(coupon.ApplicablePlanCodesJson, []),
+        applicableAddOnCodes = JsonSupport.Deserialize<List<string>>(coupon.ApplicableAddOnCodesJson, []),
+        coupon.RedemptionCount,
+        coupon.Notes,
+        coupon.CreatedAt,
+        coupon.UpdatedAt
+    };
+
     public async Task<object> GetDashboardSummaryAsync(CancellationToken ct)
     {
         var now = timeProvider.GetUtcNow();
@@ -1553,47 +1637,357 @@ public class AdminService(
 
     public async Task<object> GetBillingPlansAsync(string? status, CancellationToken ct)
     {
-        var query = db.BillingPlans.AsQueryable();
+        var query = db.BillingPlans.AsNoTracking().AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(status) && status != "all")
         {
-            var parsedStatus = Enum.Parse<BillingPlanStatus>(status, true);
+            var parsedStatus = ParseBillingPlanStatus(status, BillingPlanStatus.Active);
             query = query.Where(p => p.Status == parsedStatus);
         }
 
-        var plans = await query.OrderByDescending(p => p.CreatedAt).ToListAsync(ct);
-        return plans.Select(p => new
-        {
-            p.Id,
-            p.Name,
-            p.Price,
-            p.Interval,
-            activeSubscribers = p.ActiveSubscribers,
-            status = p.Status.ToString().ToLowerInvariant()
-        });
+        var plans = await query
+            .OrderBy(p => p.DisplayOrder)
+            .ThenByDescending(p => p.UpdatedAt)
+            .ToListAsync(ct);
+
+        return plans.Select(MapBillingPlan);
     }
 
     public async Task<object> CreateBillingPlanAsync(string adminId, string adminName,
         AdminBillingPlanCreateRequest request, CancellationToken ct)
     {
-        var id = $"PLAN-{Guid.NewGuid():N}"[..12];
-        var now = DateTimeOffset.UtcNow;
+        if (await db.BillingPlans.AnyAsync(plan => plan.Code == request.Code, ct))
+        {
+            throw ApiException.Validation("billing_plan_code_exists", "A plan with this code already exists.");
+        }
 
-        db.BillingPlans.Add(new BillingPlan
+        var idValue = $"plan-{Guid.NewGuid():N}";
+        var id = idValue[..Math.Min(64, idValue.Length)];
+        var now = DateTimeOffset.UtcNow;
+        var status = ParseBillingPlanStatus(request.Status, BillingPlanStatus.Active);
+
+        var plan = new BillingPlan
         {
             Id = id,
+            Code = request.Code.Trim(),
             Name = request.Name,
+            Description = request.Description,
             Price = request.Price,
+            Currency = request.Currency,
             Interval = request.Interval,
+            DurationMonths = request.DurationMonths,
+            IncludedCredits = request.IncludedCredits,
+            DisplayOrder = request.DisplayOrder,
+            IsVisible = request.IsVisible,
+            IsRenewable = request.IsRenewable,
+            TrialDays = request.TrialDays,
+            IncludedSubtestsJson = request.IncludedSubtestsJson ?? "[]",
+            EntitlementsJson = request.EntitlementsJson ?? "{}",
             ActiveSubscribers = 0,
-            Status = BillingPlanStatus.Active,
+            Status = status,
             CreatedAt = now,
             UpdatedAt = now
-        });
+        };
+
+        db.BillingPlans.Add(plan);
         await db.SaveChangesAsync(ct);
 
         await LogAuditAsync(adminId, adminName, "Created", "BillingPlan", id, $"Created plan: {request.Name}", ct);
-        return new { id, status = "active" };
+        return MapBillingPlan(plan);
+    }
+
+    public async Task<object> UpdateBillingPlanAsync(string adminId, string adminName, string planId, AdminBillingPlanUpdateRequest request, CancellationToken ct)
+    {
+        var plan = await db.BillingPlans.FirstOrDefaultAsync(p => p.Id == planId || p.Code == planId, ct)
+            ?? throw ApiException.NotFound("billing_plan_not_found", "Billing plan not found.");
+
+        var now = DateTimeOffset.UtcNow;
+        plan.Code = request.Code.Trim();
+        plan.Name = request.Name;
+        plan.Description = request.Description;
+        plan.Price = request.Price;
+        plan.Currency = request.Currency;
+        plan.Interval = request.Interval;
+        plan.DurationMonths = request.DurationMonths;
+        plan.IncludedCredits = request.IncludedCredits;
+        plan.DisplayOrder = request.DisplayOrder;
+        plan.IsVisible = request.IsVisible;
+        plan.IsRenewable = request.IsRenewable;
+        plan.TrialDays = request.TrialDays;
+        plan.IncludedSubtestsJson = request.IncludedSubtestsJson ?? "[]";
+        plan.EntitlementsJson = request.EntitlementsJson ?? "{}";
+        plan.Status = ParseBillingPlanStatus(request.Status, plan.Status);
+        plan.ArchivedAt = plan.Status == BillingPlanStatus.Archived ? now : plan.ArchivedAt;
+        plan.UpdatedAt = now;
+
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Updated", "BillingPlan", plan.Id, $"Updated plan: {request.Name}", ct);
+        return MapBillingPlan(plan);
+    }
+
+    public async Task<object> GetBillingAddOnsAsync(string? status, CancellationToken ct)
+    {
+        var query = db.BillingAddOns.AsNoTracking().AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(status) && status != "all")
+        {
+            var parsedStatus = ParseBillingAddOnStatus(status, BillingAddOnStatus.Active);
+            query = query.Where(addOn => addOn.Status == parsedStatus);
+        }
+
+        var addOns = await query
+            .OrderBy(addOn => addOn.DisplayOrder)
+            .ThenByDescending(addOn => addOn.UpdatedAt)
+            .ToListAsync(ct);
+
+        return addOns.Select(MapBillingAddOn);
+    }
+
+    public async Task<object> CreateBillingAddOnAsync(string adminId, string adminName, AdminBillingAddOnCreateRequest request, CancellationToken ct)
+    {
+        if (await db.BillingAddOns.AnyAsync(addOn => addOn.Code == request.Code, ct))
+        {
+            throw ApiException.Validation("billing_addon_code_exists", "An add-on with this code already exists.");
+        }
+
+        var addOnIdValue = $"addon-{Guid.NewGuid():N}";
+        var id = addOnIdValue[..Math.Min(64, addOnIdValue.Length)];
+        var now = DateTimeOffset.UtcNow;
+        var addOn = new BillingAddOn
+        {
+            Id = id,
+            Code = request.Code.Trim(),
+            Name = request.Name,
+            Description = request.Description,
+            Price = request.Price,
+            Currency = request.Currency,
+            Interval = request.Interval,
+            DurationDays = request.DurationDays,
+            GrantCredits = request.GrantCredits,
+            DisplayOrder = request.DisplayOrder,
+            IsRecurring = request.IsRecurring,
+            AppliesToAllPlans = request.AppliesToAllPlans,
+            IsStackable = request.IsStackable,
+            QuantityStep = request.QuantityStep,
+            MaxQuantity = request.MaxQuantity,
+            Status = ParseBillingAddOnStatus(request.Status, BillingAddOnStatus.Active),
+            CompatiblePlanCodesJson = request.CompatiblePlanCodesJson ?? "[]",
+            GrantEntitlementsJson = request.GrantEntitlementsJson ?? "{}",
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        db.BillingAddOns.Add(addOn);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Created", "BillingAddOn", addOn.Id, $"Created add-on: {request.Name}", ct);
+        return MapBillingAddOn(addOn);
+    }
+
+    public async Task<object> UpdateBillingAddOnAsync(string adminId, string adminName, string addOnId, AdminBillingAddOnUpdateRequest request, CancellationToken ct)
+    {
+        var addOn = await db.BillingAddOns.FirstOrDefaultAsync(addOn => addOn.Id == addOnId || addOn.Code == addOnId, ct)
+            ?? throw ApiException.NotFound("billing_addon_not_found", "Billing add-on not found.");
+
+        var now = DateTimeOffset.UtcNow;
+        addOn.Code = request.Code.Trim();
+        addOn.Name = request.Name;
+        addOn.Description = request.Description;
+        addOn.Price = request.Price;
+        addOn.Currency = request.Currency;
+        addOn.Interval = request.Interval;
+        addOn.DurationDays = request.DurationDays;
+        addOn.GrantCredits = request.GrantCredits;
+        addOn.DisplayOrder = request.DisplayOrder;
+        addOn.IsRecurring = request.IsRecurring;
+        addOn.AppliesToAllPlans = request.AppliesToAllPlans;
+        addOn.IsStackable = request.IsStackable;
+        addOn.QuantityStep = request.QuantityStep;
+        addOn.MaxQuantity = request.MaxQuantity;
+        addOn.Status = ParseBillingAddOnStatus(request.Status, addOn.Status);
+        addOn.CompatiblePlanCodesJson = request.CompatiblePlanCodesJson ?? "[]";
+        addOn.GrantEntitlementsJson = request.GrantEntitlementsJson ?? "{}";
+        addOn.UpdatedAt = now;
+
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Updated", "BillingAddOn", addOn.Id, $"Updated add-on: {request.Name}", ct);
+        return MapBillingAddOn(addOn);
+    }
+
+    public async Task<object> GetBillingCouponsAsync(string? status, CancellationToken ct)
+    {
+        var query = db.BillingCoupons.AsNoTracking().AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(status) && status != "all")
+        {
+            var parsedStatus = ParseBillingCouponStatus(status, BillingCouponStatus.Active);
+            query = query.Where(coupon => coupon.Status == parsedStatus);
+        }
+
+        var coupons = await query
+            .OrderByDescending(coupon => coupon.CreatedAt)
+            .ToListAsync(ct);
+
+        return coupons.Select(MapBillingCoupon);
+    }
+
+    public async Task<object> CreateBillingCouponAsync(string adminId, string adminName, AdminBillingCouponCreateRequest request, CancellationToken ct)
+    {
+        if (await db.BillingCoupons.AnyAsync(coupon => coupon.Code == request.Code, ct))
+        {
+            throw ApiException.Validation("billing_coupon_code_exists", "A coupon with this code already exists.");
+        }
+
+        var couponIdValue = $"coupon-{Guid.NewGuid():N}";
+        var id = couponIdValue[..Math.Min(64, couponIdValue.Length)];
+        var now = DateTimeOffset.UtcNow;
+        var coupon = new BillingCoupon
+        {
+            Id = id,
+            Code = request.Code.Trim(),
+            Name = request.Name,
+            Description = request.Description,
+            DiscountType = ParseBillingDiscountType(request.DiscountType),
+            DiscountValue = request.DiscountValue,
+            Currency = request.Currency,
+            StartsAt = request.StartsAt,
+            EndsAt = request.EndsAt,
+            UsageLimitTotal = request.UsageLimitTotal,
+            UsageLimitPerUser = request.UsageLimitPerUser,
+            MinimumSubtotal = request.MinimumSubtotal,
+            IsStackable = request.IsStackable,
+            Status = ParseBillingCouponStatus(request.Status, BillingCouponStatus.Active),
+            ApplicablePlanCodesJson = request.ApplicablePlanCodesJson ?? "[]",
+            ApplicableAddOnCodesJson = request.ApplicableAddOnCodesJson ?? "[]",
+            Notes = request.Notes,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        db.BillingCoupons.Add(coupon);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Created", "BillingCoupon", coupon.Id, $"Created coupon: {request.Code}", ct);
+        return MapBillingCoupon(coupon);
+    }
+
+    public async Task<object> UpdateBillingCouponAsync(string adminId, string adminName, string couponId, AdminBillingCouponUpdateRequest request, CancellationToken ct)
+    {
+        var coupon = await db.BillingCoupons.FirstOrDefaultAsync(coupon => coupon.Id == couponId || coupon.Code == couponId, ct)
+            ?? throw ApiException.NotFound("billing_coupon_not_found", "Billing coupon not found.");
+
+        var now = DateTimeOffset.UtcNow;
+        coupon.Code = request.Code.Trim();
+        coupon.Name = request.Name;
+        coupon.Description = request.Description;
+        coupon.DiscountType = ParseBillingDiscountType(request.DiscountType);
+        coupon.DiscountValue = request.DiscountValue;
+        coupon.Currency = request.Currency;
+        coupon.StartsAt = request.StartsAt;
+        coupon.EndsAt = request.EndsAt;
+        coupon.UsageLimitTotal = request.UsageLimitTotal;
+        coupon.UsageLimitPerUser = request.UsageLimitPerUser;
+        coupon.MinimumSubtotal = request.MinimumSubtotal;
+        coupon.IsStackable = request.IsStackable;
+        coupon.Status = ParseBillingCouponStatus(request.Status, coupon.Status);
+        coupon.ApplicablePlanCodesJson = request.ApplicablePlanCodesJson ?? "[]";
+        coupon.ApplicableAddOnCodesJson = request.ApplicableAddOnCodesJson ?? "[]";
+        coupon.Notes = request.Notes;
+        coupon.UpdatedAt = now;
+
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Updated", "BillingCoupon", coupon.Id, $"Updated coupon: {request.Code}", ct);
+        return MapBillingCoupon(coupon);
+    }
+
+    public async Task<object> GetBillingSubscriptionsAsync(string? status, string? search, int page, int pageSize, CancellationToken ct)
+    {
+        var query = db.Subscriptions.AsNoTracking().AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(status) && status != "all")
+        {
+            if (Enum.TryParse<SubscriptionStatus>(status, true, out var parsedStatus))
+            {
+                query = query.Where(subscription => subscription.Status == parsedStatus);
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var normalized = search.Trim();
+            query = query.Where(subscription => subscription.UserId.Contains(normalized) || subscription.PlanId.Contains(normalized));
+        }
+
+        var total = await query.CountAsync(ct);
+        var subscriptions = await query
+            .OrderByDescending(subscription => subscription.ChangedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        var userIds = subscriptions.Select(subscription => subscription.UserId).Distinct().ToList();
+        var userNames = await db.Users.AsNoTracking()
+            .Where(user => userIds.Contains(user.Id))
+            .ToDictionaryAsync(user => user.Id, user => user.DisplayName, ct);
+
+        var planCodes = subscriptions.Select(subscription => subscription.PlanId).Distinct().ToList();
+        var planNames = await db.BillingPlans.AsNoTracking()
+            .Where(plan => planCodes.Contains(plan.Code) || planCodes.Contains(plan.Id))
+            .ToDictionaryAsync(plan => plan.Code, plan => plan.Name, ct);
+
+        var items = subscriptions.Select(subscription => new
+        {
+            subscription.Id,
+            subscription.UserId,
+            userName = userNames.TryGetValue(subscription.UserId, out var name) ? name : subscription.UserId,
+            planId = subscription.PlanId,
+            planName = planNames.TryGetValue(subscription.PlanId, out var planName) ? planName : subscription.PlanId,
+            status = subscription.Status.ToString().ToLowerInvariant(),
+            subscription.NextRenewalAt,
+            subscription.StartedAt,
+            subscription.ChangedAt,
+            price = subscription.PriceAmount,
+            subscription.Currency,
+            subscription.Interval,
+            addOnCount = 0
+        }).ToList();
+
+        return new { total, page, pageSize, items };
+    }
+
+    public async Task<object> GetBillingCouponRedemptionsAsync(string? couponCode, string? userId, int page, int pageSize, CancellationToken ct)
+    {
+        var query = db.BillingCouponRedemptions.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(couponCode) && couponCode != "all")
+        {
+            query = query.Where(redemption => redemption.CouponCode == couponCode);
+        }
+
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            query = query.Where(redemption => redemption.UserId == userId);
+        }
+
+        var total = await query.CountAsync(ct);
+        var redemptions = await query
+            .OrderByDescending(redemption => redemption.RedeemedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        var items = redemptions.Select(redemption => new
+        {
+            redemption.Id,
+            redemption.CouponCode,
+            redemption.UserId,
+            redemption.QuoteId,
+            redemption.CheckoutSessionId,
+            redemption.SubscriptionId,
+            redemption.DiscountAmount,
+            redemption.Currency,
+            status = redemption.Status.ToString().ToLowerInvariant(),
+            redemption.RedeemedAt
+        }).ToList();
+
+        return new { total, page, pageSize, items };
     }
 
     public async Task<object> GetBillingInvoicesAsync(string? status, string? search,

@@ -860,9 +860,7 @@ public sealed class AuthService(
     {
         cancellationToken.ThrowIfCancellationRequested();
 
-        var requiresMfa = (string.Equals(account.Role, ApplicationUserRoles.Expert, StringComparison.Ordinal)
-            || string.Equals(account.Role, ApplicationUserRoles.Admin, StringComparison.Ordinal))
-            && account.AuthenticatorEnabledAt is null;
+        var requiresMfa = false;
 
         if (_allowLocalDemoWithoutMfa)
         {
