@@ -1,7 +1,7 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-import { resolveProxyTarget, sanitizeProxyHeaders } from '../../../../lib/backend-proxy';
+import { resolveProxyTarget, sanitizeProxyHeaders, sanitizeProxyResponseHeaders } from '../../../../lib/backend-proxy';
 
 async function proxyRequest(request: Request, context: { params: Promise<{ path: string[] }> }) {
   const { path } = await context.params;
@@ -26,9 +26,7 @@ async function proxyRequest(request: Request, context: { params: Promise<{ path:
     redirect: 'manual',
   });
 
-  const responseHeaders = new Headers(upstreamResponse.headers);
-  responseHeaders.delete('content-length');
-  responseHeaders.delete('connection');
+  const responseHeaders = sanitizeProxyResponseHeaders(upstreamResponse.headers);
 
   return new Response(upstreamResponse.body, {
     status: upstreamResponse.status,

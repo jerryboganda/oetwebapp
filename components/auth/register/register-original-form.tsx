@@ -57,7 +57,7 @@ export function RegisterForm() {
   const [selectedCountryCode, setSelectedCountryCode] = useState('pk');
   const [mobileLocalNumber, setMobileLocalNumber] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const { enrollmentSessions, examTypes, professions } = useSignupCatalog();
+  const { enrollmentSessions, examTypes, externalAuthProviders, professions } = useSignupCatalog();
   const nextPath = searchParams.get('next');
   const registrationToken = searchParams.get('registrationToken');
   const externalEmail = searchParams.get('email') ?? '';
@@ -65,24 +65,25 @@ export function RegisterForm() {
   const externalLastName = searchParams.get('lastName') ?? '';
 
   const socials = useMemo(
-    () => [
-      {
-        href: buildExternalAuthStartHref('facebook', nextPath),
-        label: 'Sign up with Facebook',
-        icon: <IconBrandFacebook size={18} />,
-      },
-      {
-        href: buildExternalAuthStartHref('google', nextPath),
-        label: 'Sign up with Google',
-        icon: <IconBrandGoogle size={18} />,
-      },
-      {
-        href: buildExternalAuthStartHref('linkedin', nextPath),
-        label: 'Sign up with LinkedIn',
-        icon: <IconBrandLinkedin size={18} />,
-      },
-    ],
-    [nextPath],
+    () =>
+      externalAuthProviders.map((provider) => ({
+        href: buildExternalAuthStartHref(provider, nextPath),
+        label:
+          provider === 'facebook'
+            ? 'Sign up with Facebook'
+            : provider === 'google'
+              ? 'Sign up with Google'
+              : 'Sign up with LinkedIn',
+        icon:
+          provider === 'facebook' ? (
+            <IconBrandFacebook size={18} />
+          ) : provider === 'google' ? (
+            <IconBrandGoogle size={18} />
+          ) : (
+            <IconBrandLinkedin size={18} />
+          ),
+      })),
+    [externalAuthProviders, nextPath],
   );
 
   const form = useForm<SignupPayloadFormValues>({

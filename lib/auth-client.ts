@@ -1,6 +1,7 @@
 import {
   clearPendingMfaChallenge,
   clearStoredSession,
+  hydrateAuthStorage,
   loadPendingMfaChallenge,
   loadStoredSessionRecord,
   savePendingMfaChallenge,
@@ -19,6 +20,7 @@ import type {
   SignupCatalog,
   SignInResult,
 } from './types/auth';
+import { fetchWithTimeout } from './network/fetch-with-timeout';
 
 const API_BASE_URL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? '/api/backend').replace(/\/$/, '');
 
@@ -97,25 +99,47 @@ async function parseResponse<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
+function isAbortError(error: unknown): boolean {
+  return error instanceof DOMException
+    ? error.name === 'AbortError'
+    : error instanceof Error && error.name === 'AbortError';
+}
+
 async function postJson<TResponse>(path: string, body: unknown, accessToken?: string | null): Promise<TResponse> {
   const headers = withAuthHeader(new Headers({ 'Content-Type': 'application/json' }), accessToken);
-  const response = await fetch(resolveUrl(path), {
-    method: 'POST',
-    headers,
-    body: JSON.stringify(body),
-  });
+  try {
+    const response = await fetchWithTimeout(resolveUrl(path), {
+      method: 'POST',
+      headers,
+      body: JSON.stringify(body),
+    });
 
-  return parseResponse<TResponse>(response);
+    return parseResponse<TResponse>(response);
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new AuthClientError(408, 'auth_request_timeout', 'Authentication request timed out.', true);
+    }
+
+    throw error;
+  }
 }
 
 async function getJson<TResponse>(path: string, accessToken?: string | null): Promise<TResponse> {
   const headers = withAuthHeader(new Headers(), accessToken);
-  const response = await fetch(resolveUrl(path), {
-    method: 'GET',
-    headers,
-  });
+  try {
+    const response = await fetchWithTimeout(resolveUrl(path), {
+      method: 'GET',
+      headers,
+    });
 
-  return parseResponse<TResponse>(response);
+    return parseResponse<TResponse>(response);
+  } catch (error) {
+    if (isAbortError(error)) {
+      throw new AuthClientError(408, 'auth_request_timeout', 'Authentication request timed out.', true);
+    }
+
+    throw error;
+  }
 }
 
 function isExpiredOrCloseToExpiry(isoDate: string, skewSeconds = 30): boolean {
@@ -136,6 +160,7 @@ async function fetchCurrentUser(accessToken: string): Promise<CurrentUser> {
 }
 
 export async function ensureFreshSession(): Promise<AuthSession | null> {
+  await hydrateAuthStorage();
   const record = loadStoredSessionRecord();
   if (!record) {
     return null;
@@ -162,6 +187,7 @@ export async function ensureFreshAccessToken(): Promise<string | null> {
 }
 
 export async function restoreSession(): Promise<AuthSession | null> {
+  await hydrateAuthStorage();
   const record = loadStoredSessionRecord();
   if (!record) {
     return null;

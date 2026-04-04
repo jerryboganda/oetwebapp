@@ -26,7 +26,7 @@ export function TopNav({ pageTitle, className, actions, items = mainNavItems, us
     <>
       <header
         className={cn(
-          'h-16 bg-surface border-b border-border flex items-center justify-between px-4 lg:px-6 shrink-0 sticky top-0 z-30 shadow-sm',
+          'min-h-16 safe-area-inset-top bg-surface border-b border-border flex items-center justify-between px-4 lg:px-6 shrink-0 sticky top-0 z-30 shadow-sm',
           className,
         )}
       >

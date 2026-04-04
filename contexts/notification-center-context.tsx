@@ -1,6 +1,6 @@
 'use client';
 
-import { HubConnection, HubConnectionBuilder, LogLevel } from '@microsoft/signalr';
+import { HubConnection, HubConnectionBuilder, HttpTransportType, LogLevel } from '@microsoft/signalr';
 import { Toast } from '@/components/ui/alert';
 import { ensureFreshAccessToken } from '@/lib/auth-client';
 import { env } from '@/lib/env';
@@ -59,6 +59,11 @@ const NotificationCenterContext = createContext<NotificationCenterContextValue |
 const PAGE_SIZE = 20;
 const POLL_INTERVAL_MS = 30_000;
 const PUSH_STORAGE_KEY = 'oet.notification.push-registration';
+// Same-origin `/api/backend` is implemented via a Next route handler, which can proxy HTTP
+// requests but not a SignalR WebSocket upgrade. Fall back to long polling in that topology.
+const PROXY_SAFE_SIGNALR_TRANSPORT = env.apiBaseUrl.startsWith('/')
+  ? HttpTransportType.LongPolling
+  : HttpTransportType.WebSockets;
 
 interface StoredPushRegistration {
   endpoint: string;
@@ -492,6 +497,7 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
     const connection = new HubConnectionBuilder()
       .withUrl(`${env.apiBaseUrl}/v1/notifications/hub`, {
         accessTokenFactory: async () => (await ensureFreshAccessToken()) ?? '',
+        transport: PROXY_SAFE_SIGNALR_TRANSPORT,
       })
       .configureLogging(LogLevel.Warning)
       .withAutomaticReconnect([0, 2_000, 5_000, 10_000])

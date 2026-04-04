@@ -1,4 +1,5 @@
 using System.Text;
+using System.Linq.Expressions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -181,6 +182,60 @@ public class AdminService(
     private static BillingDiscountType ParseBillingDiscountType(string? status)
         => Enum.TryParse<BillingDiscountType>(status, true, out var parsed) ? parsed : BillingDiscountType.Percentage;
 
+    private async Task<List<TItem>> ToOrderedListDescendingAsync<TItem, TKey>(
+        IQueryable<TItem> query,
+        Expression<Func<TItem, TKey>> orderBy,
+        CancellationToken ct,
+        int? skip = null,
+        int? take = null)
+    {
+        if (!db.Database.IsSqlite())
+        {
+            IQueryable<TItem> orderedQuery = query.OrderByDescending(orderBy);
+            if (skip is int skipCount)
+            {
+                orderedQuery = orderedQuery.Skip(skipCount);
+            }
+
+            if (take is int takeCount)
+            {
+                orderedQuery = orderedQuery.Take(takeCount);
+            }
+
+            return await orderedQuery.ToListAsync(ct);
+        }
+
+        IEnumerable<TItem> orderedItems = (await query.ToListAsync(ct))
+            .OrderByDescending(orderBy.Compile());
+
+        if (skip is int skipLimit)
+        {
+            orderedItems = orderedItems.Skip(skipLimit);
+        }
+
+        if (take is int takeLimit)
+        {
+            orderedItems = orderedItems.Take(takeLimit);
+        }
+
+        return orderedItems.ToList();
+    }
+
+    private async Task<DateTimeOffset?> MaxDateTimeOffsetAsync<TItem>(
+        IQueryable<TItem> query,
+        Expression<Func<TItem, DateTimeOffset?>> selector,
+        CancellationToken ct)
+    {
+        if (!db.Database.IsSqlite())
+        {
+            return await query.MaxAsync(selector, ct);
+        }
+
+        return (await query.ToListAsync(ct))
+            .Select(selector.Compile())
+            .Max();
+    }
+
     private static object MapBillingPlan(BillingPlan plan) => new
     {
         plan.Id,
@@ -257,40 +312,126 @@ public class AdminService(
     {
         var now = timeProvider.GetUtcNow();
         var staleDraftThreshold = now.AddDays(-14);
-
-        var draftCount = await db.ContentItems.CountAsync(c => c.Status == ContentStatus.Draft, ct);
-        var publishedCount = await db.ContentItems.CountAsync(c => c.Status == ContentStatus.Published, ct);
-        var archivedCount = await db.ContentItems.CountAsync(c => c.Status == ContentStatus.Archived, ct);
-        var staleDrafts = await db.ContentItems.CountAsync(c => c.Status == ContentStatus.Draft && c.UpdatedAt < staleDraftThreshold, ct);
-
-        var queuedReviews = await db.ReviewRequests.CountAsync(r => r.State == ReviewRequestState.Queued, ct);
-        var inReviewCount = await db.ReviewRequests.CountAsync(r => r.State == ReviewRequestState.InReview, ct);
-        var reviewFailures = await db.ReviewRequests.CountAsync(r => r.State == ReviewRequestState.Failed, ct);
-        var failedJobs = await db.BackgroundJobs.CountAsync(j => j.State == AsyncState.Failed, ct);
         var overdueThreshold = now.AddHours(-48);
-        var overdueReviews = await db.ReviewRequests.CountAsync(r =>
-            (r.State == ReviewRequestState.Queued || r.State == ReviewRequestState.InReview) && r.CreatedAt < overdueThreshold, ct);
 
-        var pendingInvoices = await db.Invoices.CountAsync(i => i.Status == "Pending", ct);
-        var failedInvoices = await db.Invoices.CountAsync(i => i.Status == "Failed", ct);
-        var legacyPlans = await db.BillingPlans.CountAsync(p => p.Status == BillingPlanStatus.Legacy, ct);
-        var activeSubscribers = await db.BillingPlans.SumAsync(p => p.ActiveSubscribers, ct);
+        int draftCount;
+        int publishedCount;
+        int archivedCount;
+        int staleDrafts;
+        int queuedReviews;
+        int inReviewCount;
+        int reviewFailures;
+        int failedJobs;
+        int overdueReviews;
+        int pendingInvoices;
+        int failedInvoices;
+        int legacyPlans;
+        int activeSubscribers;
+        int totalFlags;
+        int enabledFlags;
+        int liveExperiments;
+        int recentFlagChanges;
+        int evaluationCount;
+        int agreementCount;
+        List<ReviewRequest>? reviewRequestRows = null;
+        DateTimeOffset? contentUpdatedAt;
+        DateTimeOffset? auditUpdatedAt;
+        DateTimeOffset? reviewUpdatedAt;
 
-        var totalFlags = await db.FeatureFlags.CountAsync(ct);
-        var enabledFlags = await db.FeatureFlags.CountAsync(f => f.Enabled, ct);
-        var liveExperiments = await db.FeatureFlags.CountAsync(f => f.FlagType == FeatureFlagType.Experiment && f.Enabled, ct);
-        var recentFlagChanges = await db.FeatureFlags.CountAsync(f => f.UpdatedAt >= now.AddDays(-7), ct);
+        if (db.Database.IsSqlite())
+        {
+            var contentItems = await db.ContentItems.AsNoTracking().ToListAsync(ct);
+            reviewRequestRows = await db.ReviewRequests.AsNoTracking().ToListAsync(ct);
+            var backgroundJobs = await db.BackgroundJobs.AsNoTracking().ToListAsync(ct);
+            var invoices = await db.Invoices.AsNoTracking().ToListAsync(ct);
+            var billingPlans = await db.BillingPlans.AsNoTracking().ToListAsync(ct);
+            var featureFlags = await db.FeatureFlags.AsNoTracking().ToListAsync(ct);
+            var evaluations = await db.Evaluations.AsNoTracking().ToListAsync(ct);
+            var auditEvents = await db.AuditEvents.AsNoTracking().ToListAsync(ct);
 
-        var recentEvaluations = db.Evaluations.AsNoTracking().Where(e => e.GeneratedAt >= now.AddDays(-30));
-        var evaluationCount = await recentEvaluations.CountAsync(ct);
-        var agreementCount = evaluationCount > 0
-            ? await recentEvaluations.CountAsync(e => e.ConfidenceBand == ConfidenceBand.High, ct)
-            : 0;
+            draftCount = contentItems.Count(c => c.Status == ContentStatus.Draft);
+            publishedCount = contentItems.Count(c => c.Status == ContentStatus.Published);
+            archivedCount = contentItems.Count(c => c.Status == ContentStatus.Archived);
+            staleDrafts = contentItems.Count(c => c.Status == ContentStatus.Draft && c.UpdatedAt < staleDraftThreshold);
+
+            queuedReviews = reviewRequestRows.Count(r => r.State == ReviewRequestState.Queued);
+            inReviewCount = reviewRequestRows.Count(r => r.State == ReviewRequestState.InReview);
+            reviewFailures = reviewRequestRows.Count(r => r.State == ReviewRequestState.Failed);
+            failedJobs = backgroundJobs.Count(j => j.State == AsyncState.Failed);
+            overdueReviews = reviewRequestRows.Count(r =>
+                (r.State == ReviewRequestState.Queued || r.State == ReviewRequestState.InReview) && r.CreatedAt < overdueThreshold);
+
+            pendingInvoices = invoices.Count(i => i.Status == "Pending");
+            failedInvoices = invoices.Count(i => i.Status == "Failed");
+            legacyPlans = billingPlans.Count(p => p.Status == BillingPlanStatus.Legacy);
+            activeSubscribers = billingPlans.Sum(p => p.ActiveSubscribers);
+
+            totalFlags = featureFlags.Count;
+            enabledFlags = featureFlags.Count(f => f.Enabled);
+            liveExperiments = featureFlags.Count(f => f.FlagType == FeatureFlagType.Experiment && f.Enabled);
+            recentFlagChanges = featureFlags.Count(f => f.UpdatedAt >= now.AddDays(-7));
+
+            var recentEvaluations = evaluations.Where(e => e.GeneratedAt >= now.AddDays(-30)).ToList();
+            evaluationCount = recentEvaluations.Count;
+            agreementCount = recentEvaluations.Count(e => e.ConfidenceBand == ConfidenceBand.High);
+
+            contentUpdatedAt = contentItems.Select(c => (DateTimeOffset?)c.UpdatedAt).Max();
+            auditUpdatedAt = auditEvents.Select(a => (DateTimeOffset?)a.OccurredAt).Max();
+            reviewUpdatedAt = reviewRequestRows.Select(r => (DateTimeOffset?)(r.CompletedAt ?? r.CreatedAt)).Max();
+        }
+        else
+        {
+            draftCount = await db.ContentItems.CountAsync(c => c.Status == ContentStatus.Draft, ct);
+            publishedCount = await db.ContentItems.CountAsync(c => c.Status == ContentStatus.Published, ct);
+            archivedCount = await db.ContentItems.CountAsync(c => c.Status == ContentStatus.Archived, ct);
+            staleDrafts = await db.ContentItems.CountAsync(c => c.Status == ContentStatus.Draft && c.UpdatedAt < staleDraftThreshold, ct);
+
+            queuedReviews = await db.ReviewRequests.CountAsync(r => r.State == ReviewRequestState.Queued, ct);
+            inReviewCount = await db.ReviewRequests.CountAsync(r => r.State == ReviewRequestState.InReview, ct);
+            reviewFailures = await db.ReviewRequests.CountAsync(r => r.State == ReviewRequestState.Failed, ct);
+            failedJobs = await db.BackgroundJobs.CountAsync(j => j.State == AsyncState.Failed, ct);
+            overdueReviews = await db.ReviewRequests.CountAsync(r =>
+                (r.State == ReviewRequestState.Queued || r.State == ReviewRequestState.InReview) && r.CreatedAt < overdueThreshold, ct);
+
+            pendingInvoices = await db.Invoices.CountAsync(i => i.Status == "Pending", ct);
+            failedInvoices = await db.Invoices.CountAsync(i => i.Status == "Failed", ct);
+            legacyPlans = await db.BillingPlans.CountAsync(p => p.Status == BillingPlanStatus.Legacy, ct);
+            activeSubscribers = await db.BillingPlans.SumAsync(p => p.ActiveSubscribers, ct);
+
+            totalFlags = await db.FeatureFlags.CountAsync(ct);
+            enabledFlags = await db.FeatureFlags.CountAsync(f => f.Enabled, ct);
+            liveExperiments = await db.FeatureFlags.CountAsync(f => f.FlagType == FeatureFlagType.Experiment && f.Enabled, ct);
+            recentFlagChanges = await db.FeatureFlags.CountAsync(f => f.UpdatedAt >= now.AddDays(-7), ct);
+
+            var recentEvaluations = db.Evaluations.AsNoTracking().Where(e => e.GeneratedAt >= now.AddDays(-30));
+            evaluationCount = await recentEvaluations.CountAsync(ct);
+            agreementCount = evaluationCount > 0
+                ? await recentEvaluations.CountAsync(e => e.ConfidenceBand == ConfidenceBand.High, ct)
+                : 0;
+
+            contentUpdatedAt = await MaxDateTimeOffsetAsync(
+                db.ContentItems,
+                c => (DateTimeOffset?)c.UpdatedAt,
+                ct);
+            auditUpdatedAt = await MaxDateTimeOffsetAsync(
+                db.AuditEvents,
+                a => (DateTimeOffset?)a.OccurredAt,
+                ct);
+            reviewUpdatedAt = await MaxDateTimeOffsetAsync(
+                db.ReviewRequests,
+                r => (DateTimeOffset?)(r.CompletedAt ?? r.CreatedAt),
+                ct);
+        }
+
         var agreementRate = evaluationCount > 0 ? Math.Round(100.0 * agreementCount / evaluationCount, 1) : 0;
 
-        var completedReviews = await db.ReviewRequests.AsNoTracking()
-            .Where(r => r.State == ReviewRequestState.Completed && r.CompletedAt != null && r.CreatedAt >= now.AddDays(-30))
-            .ToListAsync(ct);
+        var completedReviews = db.Database.IsSqlite()
+            ? (reviewRequestRows ?? await db.ReviewRequests.AsNoTracking().ToListAsync(ct))
+                .Where(r => r.State == ReviewRequestState.Completed && r.CompletedAt != null && r.CreatedAt >= now.AddDays(-30))
+                .ToList()
+            : await db.ReviewRequests.AsNoTracking()
+                .Where(r => r.State == ReviewRequestState.Completed && r.CompletedAt != null && r.CreatedAt >= now.AddDays(-30))
+                .ToListAsync(ct);
         var averageReviewHours = completedReviews.Count > 0
             ? Math.Round(completedReviews.Average(r => ((r.CompletedAt ?? r.CreatedAt) - r.CreatedAt).TotalHours), 1)
             : 0;
@@ -300,11 +441,9 @@ public class AdminService(
             generatedAt = now,
             freshness = new
             {
-                contentUpdatedAt = await db.ContentItems.MaxAsync(c => (DateTimeOffset?)c.UpdatedAt, ct),
-                auditUpdatedAt = await db.AuditEvents.MaxAsync(a => (DateTimeOffset?)a.OccurredAt, ct),
-                reviewUpdatedAt = await db.ReviewRequests
-                    .Select(r => (DateTimeOffset?)(r.CompletedAt ?? r.CreatedAt))
-                    .MaxAsync(ct),
+                contentUpdatedAt,
+                auditUpdatedAt,
+                reviewUpdatedAt,
                 qualityWindow = "30d"
             },
             contentHealth = new
@@ -368,9 +507,12 @@ public class AdminService(
             query = query.Where(c => c.Title.Contains(search) || c.Id.Contains(search));
 
         var total = await query.CountAsync(ct);
-        var items = await query.OrderByDescending(c => c.UpdatedAt)
-            .Skip((page - 1) * pageSize).Take(pageSize)
-            .ToListAsync(ct);
+        var items = await ToOrderedListDescendingAsync(
+            query,
+            c => c.UpdatedAt,
+            ct,
+            skip: (page - 1) * pageSize,
+            take: pageSize);
 
         var result = items.Select(c => new
         {
@@ -379,6 +521,8 @@ public class AdminService(
             type = c.ContentType,
             profession = c.ProfessionId,
             status = c.Status.ToString().ToLowerInvariant(),
+            sourceType = c.SourceType,
+            qaStatus = c.QaStatus,
             updatedAt = c.UpdatedAt,
             author = c.CreatedBy ?? "System",
             revisionCount = db.ContentRevisions.Count(r => r.ContentItemId == c.Id)
@@ -409,6 +553,8 @@ public class AdminService(
             difficulty = c.Difficulty,
             estimatedDurationMinutes = c.EstimatedDurationMinutes,
             status = c.Status.ToString().ToLowerInvariant(),
+            sourceType = c.SourceType,
+            qaStatus = c.QaStatus,
             detail = c.DetailJson,
             modelAnswer = c.ModelAnswerJson,
             criteriaFocus = c.CriteriaFocusJson,

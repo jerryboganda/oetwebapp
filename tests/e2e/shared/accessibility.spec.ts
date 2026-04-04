@@ -1,8 +1,8 @@
 import AxeBuilder from '@axe-core/playwright';
-import { expect, test, type Locator } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
 
-async function tabUntilFocused(page: Parameters<typeof AxeBuilder>[0]['page'], locator: Locator, maxTabs = 12) {
+async function tabUntilFocused(page: Page, locator: Locator, maxTabs = 12) {
   for (let index = 0; index < maxTabs; index += 1) {
     await page.keyboard.press('Tab');
     if (await locator.evaluate((node) => node === document.activeElement)) {
@@ -11,7 +11,7 @@ async function tabUntilFocused(page: Parameters<typeof AxeBuilder>[0]['page'], l
   }
 }
 
-async function expectNoSeriousAxeViolations(page: Parameters<typeof AxeBuilder>[0]['page']) {
+async function expectNoSeriousAxeViolations(page: Page) {
   const results = await new AxeBuilder({ page })
     .withTags(['wcag2a', 'wcag2aa'])
     .analyze();

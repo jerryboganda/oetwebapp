@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter } from 'next/font/google';
+import { AppProviders } from './providers';
 import './globals.css';
 
 const inter = Inter({
@@ -24,13 +25,15 @@ export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
   maximumScale: 5,
+  viewportFit: 'cover',
+  themeColor: '#f8fafc',
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={inter.variable}>
-      <body className="font-sans antialiased min-h-screen bg-background-light" suppressHydrationWarning>
-        {children}
+      <body className="font-sans antialiased min-h-[var(--app-viewport-height,100dvh)] bg-background-light overflow-x-hidden" suppressHydrationWarning>
+        <AppProviders>{children}</AppProviders>
       </body>
     </html>
   );

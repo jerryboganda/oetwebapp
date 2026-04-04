@@ -25,7 +25,7 @@ const SUB_TESTS = [
     name: 'Writing',
     icon: PenLine,
     duration: '45 mins',
-    description: 'Compose a clinical letter based on case notes',
+    description: 'Complete a timed writing task aligned to your selected exam family',
     color: 'text-blue-600',
     bg: 'bg-blue-50',
   },
@@ -33,7 +33,7 @@ const SUB_TESTS = [
     name: 'Speaking',
     icon: Mic,
     duration: '20 mins',
-    description: 'Complete a role play task simulating a clinical scenario',
+    description: 'Respond to a timed speaking prompt aligned to your selected exam family',
     color: 'text-violet-600',
     bg: 'bg-violet-50',
   },
@@ -41,7 +41,7 @@ const SUB_TESTS = [
     name: 'Reading',
     icon: BookOpen,
     duration: '30 mins',
-    description: 'Answer questions on healthcare texts (Parts A, B, and C)',
+    description: 'Answer questions on exam-style reading passages',
     color: 'text-emerald-600',
     bg: 'bg-emerald-50',
   },
@@ -49,7 +49,7 @@ const SUB_TESTS = [
     name: 'Listening',
     icon: Headphones,
     duration: '25 mins',
-    description: 'Listen to clinical consultations and answer questions',
+    description: 'Listen to exam-style audio and answer questions',
     color: 'text-amber-600',
     bg: 'bg-amber-50',
   },
@@ -102,6 +102,8 @@ export default function DiagnosticIntroPage() {
     return hours >= 2 ? `~${Math.round(hours)} hours` : `~${overview.estimatedTotalMinutes} mins`;
   }, [overview]);
 
+  const diagnosticDisclaimer = overview?.disclaimer ?? 'Diagnostic results are training estimates only and are not official exam scores.';
+
   const handleStart = async () => {
     setStarting(true);
     try {
@@ -122,8 +124,7 @@ export default function DiagnosticIntroPage() {
             <div>
               <p className="font-bold text-navy text-sm">Training Estimate Only</p>
               <p className="text-xs text-muted mt-1">
-                This diagnostic gives you an AI-estimated score range to personalise your study plan.
-                It is <strong>not</strong> an official OET score. Use it as a guide to identify strengths and areas for improvement.
+                {diagnosticDisclaimer} Use it as a guide to identify strengths and areas for improvement.
               </p>
             </div>
           </div>
@@ -140,7 +141,7 @@ export default function DiagnosticIntroPage() {
           highlights={[
             { icon: Clock, label: 'Estimated time', value: totalDuration },
             { icon: Activity, label: 'Sub-tests', value: `${subTests.length} included` },
-            { icon: ShieldCheck, label: 'Result type', value: 'AI estimate only' },
+            { icon: ShieldCheck, label: 'Result type', value: 'Practice estimate' },
           ]}
         />
 

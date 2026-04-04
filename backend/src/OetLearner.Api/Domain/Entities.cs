@@ -45,6 +45,14 @@ public class LearnerUser
     [MaxLength(32)]
     public string AccountStatus { get; set; } = "active";
 
+    // ── Engagement tracking ──
+    public int CurrentStreak { get; set; }
+    public int LongestStreak { get; set; }
+    public DateTimeOffset? LastPracticeDate { get; set; }
+    public int TotalPracticeMinutes { get; set; }
+    public int TotalPracticeSessions { get; set; }
+    public string? WeeklyActivityJson { get; set; }
+
     public ApplicationUserAccount? AuthAccount { get; set; }
 }
 
@@ -73,6 +81,9 @@ public class LearnerGoal
     public string DraftStateJson { get; set; } = "{}";
     public DateTimeOffset? SubmittedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
+
+    [MaxLength(16)]
+    public string ExamFamilyCode { get; set; } = "oet";
 }
 
 public class LearnerSettings
@@ -191,6 +202,24 @@ public class ContentItem
     public DateTimeOffset UpdatedAt { get; set; }
     public DateTimeOffset? PublishedAt { get; set; }
     public DateTimeOffset? ArchivedAt { get; set; }
+
+    // ── Multi-exam discriminator ──
+    [MaxLength(16)]
+    public string ExamFamilyCode { get; set; } = "oet";
+
+    // ── Content source and QA ──
+    [MaxLength(32)]
+    public string SourceType { get; set; } = "manual";
+
+    [MaxLength(32)]
+    public string QaStatus { get; set; } = "approved";
+
+    [MaxLength(64)]
+    public string? QaReviewedBy { get; set; }
+
+    public DateTimeOffset? QaReviewedAt { get; set; }
+
+    public string? PerformanceMetricsJson { get; set; }
 }
 
 public class Attempt
@@ -240,6 +269,9 @@ public class Attempt
     public string AudioMetadataJson { get; set; } = "{}";
     public string TranscriptJson { get; set; } = "[]";
     public string AnalysisJson { get; set; } = "{}";
+
+    [MaxLength(16)]
+    public string ExamFamilyCode { get; set; } = "oet";
 }
 
 public class Evaluation
@@ -301,6 +333,9 @@ public class StudyPlan
     public string Checkpoint { get; set; } = default!;
     public string WeakSkillFocus { get; set; } = default!;
     public string? RetakeRescueMode { get; set; }
+
+    [MaxLength(16)]
+    public string ExamFamilyCode { get; set; } = "oet";
 }
 
 public class StudyPlanItem
@@ -469,6 +504,9 @@ public class DiagnosticSession
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public DateTimeOffset? ExpiresAt { get; set; }
+
+    [MaxLength(16)]
+    public string ExamFamilyCode { get; set; } = "oet";
 }
 
 public class DiagnosticSubtestStatus
@@ -504,6 +542,9 @@ public class MockAttempt
     public DateTimeOffset? SubmittedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public string? ReportId { get; set; }
+
+    [MaxLength(16)]
+    public string ExamFamilyCode { get; set; } = "oet";
 }
 
 public class MockReport
@@ -550,4 +591,30 @@ public class IdempotencyRecord
 
     public string ResponseJson { get; set; } = "{}";
     public DateTimeOffset CreatedAt { get; set; }
+}
+
+// ── Multi-Exam Reference ──
+
+public class ExamFamily
+{
+    [Key]
+    [MaxLength(16)]
+    public string Code { get; set; } = "oet";
+
+    [MaxLength(64)]
+    public string Label { get; set; } = "OET";
+
+    [MaxLength(32)]
+    public string ScoringModel { get; set; } = "0-500-letter";
+
+    [MaxLength(256)]
+    public string? Description { get; set; }
+
+    public string SubtestConfigJson { get; set; } = "[]";
+    public string CriteriaConfigJson { get; set; } = "[]";
+
+    public int SortOrder { get; set; }
+    public bool IsActive { get; set; } = true;
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
 }

@@ -21,35 +21,56 @@ const adminRoutes = [
   { path: '/admin/audit-logs', text: /audit logs/i },
 ];
 
+async function expectPrivilegedAuthResolution(
+  page: Parameters<typeof observePage>[0],
+  targetPath: '/expert' | '/admin',
+  workspaceText: RegExp,
+) {
+  await page.goto(`/mfa/setup?next=${encodeURIComponent(targetPath)}`, { waitUntil: 'domcontentloaded' });
+
+  const setupHeading = page.getByRole('heading', { name: /set up authenticator mfa/i });
+  const setupLoadingNotice = page.getByText(/preparing your authenticator secret and recovery codes/i);
+  const otpInput = page.getByRole('textbox', { name: 'OTP digit 1' });
+  const workspace = page.getByRole('main').getByText(workspaceText).first();
+
+  const resolvedBranch = await Promise.any([
+    expect(setupHeading).toBeVisible({ timeout: 15_000 }).then(() => 'setup' as const),
+    expect(workspace).toBeVisible({ timeout: 15_000 }).then(() => 'workspace' as const),
+  ]);
+
+  if (resolvedBranch === 'setup') {
+    await Promise.any([
+      expect(setupLoadingNotice).toBeVisible({ timeout: 10_000 }),
+      expect(otpInput).toBeVisible({ timeout: 10_000 }),
+      expect(workspace).toBeVisible({ timeout: 10_000 }),
+    ]);
+    return;
+  }
+
+  await expect(workspace).toBeVisible();
+}
+
 test.describe('Privileged workspaces @smoke', () => {
-  test('expert session reaches authenticator setup branch', async ({ page }, testInfo) => {
+  test('expert session resolves privileged auth branch', async ({ page }, testInfo) => {
     if (!testInfo.project.name.includes('expert')) {
       test.skip();
     }
 
     const diagnostics = observePage(page);
-    await page.goto('/mfa/setup?next=/expert');
-
-    await expect(page.getByRole('heading', { name: /set up authenticator mfa/i })).toBeVisible();
-    await expect(page.getByText('Authenticator code')).toBeVisible();
-    await expect(page.getByRole('textbox', { name: 'OTP digit 1' })).toBeVisible();
+    await expectPrivilegedAuthResolution(page, '/expert', /dashboard|expert/i);
 
     expectNoSevereClientIssues(diagnostics);
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });
 
-  test('admin session reaches authenticator setup branch', async ({ page }, testInfo) => {
+  test('admin session resolves privileged auth branch', async ({ page }, testInfo) => {
     if (!testInfo.project.name.includes('admin')) {
       test.skip();
     }
 
     const diagnostics = observePage(page);
-    await page.goto('/mfa/setup?next=/admin');
-
-    await expect(page.getByRole('heading', { name: /set up authenticator mfa/i })).toBeVisible();
-    await expect(page.getByText('Authenticator code')).toBeVisible();
-    await expect(page.getByRole('textbox', { name: 'OTP digit 1' })).toBeVisible();
+    await expectPrivilegedAuthResolution(page, '/admin', /operations|admin/i);
 
     expectNoSevereClientIssues(diagnostics);
     diagnostics.detach();

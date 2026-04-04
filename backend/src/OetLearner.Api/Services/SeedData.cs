@@ -37,6 +37,12 @@ public static class SeedData
             hasChanges = true;
         }
 
+        if (!await db.ExamFamilies.AnyAsync(cancellationToken))
+        {
+            SeedExamFamilies(db);
+            hasChanges = true;
+        }
+
         if (hasChanges)
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -432,6 +438,22 @@ public static class SeedData
             ApplicationUserRoles.Admin,
             now.AddMonths(-6));
 
+        var localAuthAccountIds = new[]
+        {
+            learnerAccount.Id,
+            expertAccount.Id,
+            secondaryExpertAccount.Id,
+            adminAccount.Id
+        };
+
+        var existingRecoveryCodes = db.MfaRecoveryCodes
+            .Where(x => localAuthAccountIds.Contains(x.ApplicationUserAccountId))
+            .ToList();
+        if (existingRecoveryCodes.Count > 0)
+        {
+            db.MfaRecoveryCodes.RemoveRange(existingRecoveryCodes);
+        }
+
         foreach (var auditEvent in db.AuditEvents.Where(x => x.ActorId == "admin-user-001" && x.ActorAuthAccountId != adminAccount.Id))
         {
             auditEvent.ActorAuthAccountId = adminAccount.Id;
@@ -464,6 +486,8 @@ public static class SeedData
         account.NormalizedEmail = normalizedEmail;
         account.Role = role;
         account.EmailVerifiedAt ??= createdAt;
+        account.ProtectedAuthenticatorSecret = null;
+        account.AuthenticatorEnabledAt = null;
         account.UpdatedAt = DateTimeOffset.UtcNow;
         account.PasswordHash = passwordHasher.HashPassword(account, LocalSeedPassword);
         return account;
@@ -490,7 +514,14 @@ public static class SeedData
             OnboardingStartedAt = now.AddDays(-30),
             OnboardingCompletedAt = now.AddDays(-29),
             CreatedAt = now.AddMonths(-3),
-            LastActiveAt = now.AddMinutes(-10)
+            LastActiveAt = now.AddMinutes(-10),
+            // Engagement tracking
+            CurrentStreak = 7,
+            LongestStreak = 14,
+            LastPracticeDate = now.AddHours(-2),
+            TotalPracticeMinutes = 1860,
+            TotalPracticeSessions = 42,
+            WeeklyActivityJson = JsonSupport.Serialize(new[] { true, true, true, false, true, true, true })
         });
 
         db.Goals.Add(new LearnerGoal
@@ -1562,6 +1593,82 @@ public static class SeedData
                 SeatsRemaining = 0,
                 SortOrder = 4,
                 IsActive = true
+            });
+    }
+
+    private static void SeedExamFamilies(LearnerDbContext db)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        db.ExamFamilies.AddRange(
+            new ExamFamily
+            {
+                Code = "oet",
+                Label = "OET",
+                ScoringModel = "0-500-letter",
+                Description = "Occupational English Test — healthcare professional English proficiency assessment.",
+                SubtestConfigJson = JsonSupport.Serialize(new[]
+                {
+                    new { code = "writing", label = "Writing", duration = 45, isProfessionSpecific = true },
+                    new { code = "speaking", label = "Speaking", duration = 20, isProfessionSpecific = true },
+                    new { code = "reading", label = "Reading", duration = 60, isProfessionSpecific = false },
+                    new { code = "listening", label = "Listening", duration = 40, isProfessionSpecific = false }
+                }),
+                CriteriaConfigJson = JsonSupport.Serialize(new object[]
+                {
+                    new { subtest = "writing", criteria = new[] { "purpose", "content", "conciseness", "genre", "organization", "language" } },
+                    new { subtest = "speaking", criteria = new[] { "intelligibility", "fluency", "appropriateness", "grammar_expression" } }
+                }),
+                SortOrder = 1,
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new ExamFamily
+            {
+                Code = "ielts",
+                Label = "IELTS Academic",
+                ScoringModel = "0-9-band",
+                Description = "International English Language Testing System — Academic module for university and professional registration.",
+                SubtestConfigJson = JsonSupport.Serialize(new[]
+                {
+                    new { code = "writing", label = "Writing", duration = 60, isProfessionSpecific = false },
+                    new { code = "speaking", label = "Speaking", duration = 14, isProfessionSpecific = false },
+                    new { code = "reading", label = "Reading", duration = 60, isProfessionSpecific = false },
+                    new { code = "listening", label = "Listening", duration = 30, isProfessionSpecific = false }
+                }),
+                CriteriaConfigJson = JsonSupport.Serialize(new object[]
+                {
+                    new { subtest = "writing", criteria = new[] { "task_achievement", "coherence_cohesion", "lexical_resource", "grammatical_range" } },
+                    new { subtest = "speaking", criteria = new[] { "fluency_coherence", "lexical_resource", "grammatical_range", "pronunciation" } }
+                }),
+                SortOrder = 2,
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new ExamFamily
+            {
+                Code = "pte",
+                Label = "PTE Academic",
+                ScoringModel = "10-90",
+                Description = "Pearson Test of English Academic — computer-based, AI-scored English proficiency test.",
+                SubtestConfigJson = JsonSupport.Serialize(new[]
+                {
+                    new { code = "speaking_writing", label = "Speaking & Writing", duration = 67, isProfessionSpecific = false },
+                    new { code = "reading", label = "Reading", duration = 30, isProfessionSpecific = false },
+                    new { code = "listening", label = "Listening", duration = 43, isProfessionSpecific = false }
+                }),
+                CriteriaConfigJson = JsonSupport.Serialize(new object[]
+                {
+                    new { subtest = "speaking_writing", criteria = new[] { "oral_fluency", "pronunciation", "content", "form", "grammar", "vocabulary", "spelling" } },
+                    new { subtest = "reading", criteria = new[] { "content", "form" } },
+                    new { subtest = "listening", criteria = new[] { "content", "form" } }
+                }),
+                SortOrder = 3,
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now
             });
     }
 

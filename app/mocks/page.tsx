@@ -76,7 +76,7 @@ export default function MockCenter() {
     accent: 'navy',
     eyebrow: 'Recommended Next Step',
     eyebrowIcon: Star,
-    title: recommended?.title ?? 'Full OET Mock Test',
+    title: recommended?.title ?? 'Full Practice Mock',
     description: recommended?.rationale ?? 'Start a full mock when you need evidence that your recent practice work is holding up under full-exam pressure.',
     metaItems: [
       { icon: Clock, label: '~3 hours' },

@@ -12,6 +12,19 @@ const SENSITIVE_REQUEST_HEADERS = new Set([
   'x-middleware-subrequest',
 ]);
 
+const UNSAFE_RESPONSE_HEADERS = new Set([
+  'connection',
+  'content-encoding',
+  'content-length',
+  'keep-alive',
+  'proxy-authenticate',
+  'proxy-authorization',
+  'te',
+  'trailer',
+  'transfer-encoding',
+  'upgrade',
+]);
+
 export function validateProxyPathSegments(pathSegments: string[]): string[] {
   if (pathSegments.length === 0) {
     throw new Error('Invalid proxy path.');
@@ -42,6 +55,23 @@ export function sanitizeProxyHeaders(headers: Headers): Headers {
   for (const [headerName] of sanitizedHeaders) {
     const normalizedName = headerName.toLowerCase();
     if (normalizedName.startsWith('x-debug-') || SENSITIVE_REQUEST_HEADERS.has(normalizedName)) {
+      namesToRemove.add(headerName);
+    }
+  }
+
+  for (const headerName of namesToRemove) {
+    sanitizedHeaders.delete(headerName);
+  }
+
+  return sanitizedHeaders;
+}
+
+export function sanitizeProxyResponseHeaders(headers: Headers): Headers {
+  const sanitizedHeaders = new Headers(headers);
+  const namesToRemove = new Set<string>();
+
+  for (const [headerName] of sanitizedHeaders) {
+    if (UNSAFE_RESPONSE_HEADERS.has(headerName.toLowerCase())) {
       namesToRemove.add(headerName);
     }
   }

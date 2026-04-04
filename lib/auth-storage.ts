@@ -1,4 +1,5 @@
 import type { AuthSession, CurrentUser, PendingMfaChallenge } from './types/auth';
+import { hydrateWebStorageKeys, persistWebStorageKey, removeWebStorageKey } from './mobile/native-storage';
 
 export type AuthPersistence = 'local' | 'session';
 
@@ -36,17 +37,25 @@ function getStorage(persistence: AuthPersistence): Storage | null {
 }
 
 export function saveStoredSession(session: AuthSession, persistence: AuthPersistence): void {
-  const target = getStorage(persistence);
-  const secondary = getStorage(persistence === 'local' ? 'session' : 'local');
+  const key = persistence === 'local' ? LOCAL_SESSION_KEY : SESSION_SESSION_KEY;
+  persistWebStorageKey(key, JSON.stringify(session), persistence);
 
-  target?.setItem(persistence === 'local' ? LOCAL_SESSION_KEY : SESSION_SESSION_KEY, JSON.stringify(session));
-  secondary?.removeItem(persistence === 'local' ? SESSION_SESSION_KEY : LOCAL_SESSION_KEY);
+  if (persistence === 'local') {
+    removeWebStorageKey(SESSION_SESSION_KEY);
+  } else {
+    removeWebStorageKey(LOCAL_SESSION_KEY);
+  }
 }
 
 export function loadStoredSessionRecord(): StoredSessionRecord | null {
   const sessionSession = parseJson<AuthSession>(getStorage('session')?.getItem(SESSION_SESSION_KEY) ?? null);
   if (sessionSession) {
     return { persistence: 'session', session: sessionSession };
+  }
+
+  const sessionSessionFallback = parseJson<AuthSession>(getStorage('local')?.getItem(SESSION_SESSION_KEY) ?? null);
+  if (sessionSessionFallback) {
+    return { persistence: 'session', session: sessionSessionFallback };
   }
 
   const localSession = parseJson<AuthSession>(getStorage('local')?.getItem(LOCAL_SESSION_KEY) ?? null);
@@ -73,18 +82,22 @@ export function updateStoredUser(currentUser: CurrentUser): AuthSession | null {
 }
 
 export function clearStoredSession(): void {
-  getStorage('local')?.removeItem(LOCAL_SESSION_KEY);
-  getStorage('session')?.removeItem(SESSION_SESSION_KEY);
+  removeWebStorageKey(LOCAL_SESSION_KEY);
+  removeWebStorageKey(SESSION_SESSION_KEY);
 }
 
 export function savePendingMfaChallenge(challenge: PendingMfaChallenge): void {
-  getStorage('session')?.setItem(MFA_CHALLENGE_KEY, JSON.stringify(challenge));
+  persistWebStorageKey(MFA_CHALLENGE_KEY, JSON.stringify(challenge), 'session');
 }
 
 export function loadPendingMfaChallenge(): PendingMfaChallenge | null {
-  return parseJson<PendingMfaChallenge>(getStorage('session')?.getItem(MFA_CHALLENGE_KEY) ?? null);
+  return parseJson<PendingMfaChallenge>(getStorage('session')?.getItem(MFA_CHALLENGE_KEY) ?? getStorage('local')?.getItem(MFA_CHALLENGE_KEY) ?? null);
 }
 
 export function clearPendingMfaChallenge(): void {
-  getStorage('session')?.removeItem(MFA_CHALLENGE_KEY);
+  removeWebStorageKey(MFA_CHALLENGE_KEY);
+}
+
+export async function hydrateAuthStorage(): Promise<void> {
+  await hydrateWebStorageKeys([LOCAL_SESSION_KEY, SESSION_SESSION_KEY, MFA_CHALLENGE_KEY]);
 }

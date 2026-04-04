@@ -86,6 +86,62 @@ public class NotificationFlowsTests
     }
 
     [Fact]
+    public async Task FeedEndpoint_RemainsQueryable_WhenSqliteBacksDesktopRuntime()
+    {
+        var sqlitePath = Path.Combine(Path.GetTempPath(), $"oet-notifications-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            await using var factory = CreateFactoryWithOverrides(
+                _ => { },
+                new Dictionary<string, string?>
+                {
+                    ["ConnectionStrings:DefaultConnection"] = $"Data Source={sqlitePath}"
+                });
+            using var adminClient = await CreateAuthenticatedClientAsync(factory, SeedData.AdminEmail, SeedData.LocalSeedPassword);
+            using var learnerClient = await CreateAuthenticatedClientAsync(factory, SeedData.LearnerEmail, SeedData.LocalSeedPassword);
+
+            var proof = await TriggerProofAsync(adminClient, new AdminNotificationProofTriggerRequest(
+                "LearnerReviewCompleted",
+                SeedData.LearnerEmail,
+                new Dictionary<string, string?>
+                {
+                    ["attemptId"] = "wa-001",
+                    ["subtest"] = "writing",
+                    ["message"] = "SQLite-backed feed should stay queryable."
+                }));
+
+            var response = await learnerClient.GetAsync("/v1/notifications?page=1&pageSize=20");
+            var responseBody = await response.Content.ReadAsStringAsync();
+
+            response.EnsureSuccessStatusCode();
+
+            var feed = JsonSerializer.Deserialize<NotificationFeedResponse>(responseBody, JsonSupport.Options);
+            Assert.NotNull(feed);
+            Assert.Contains(feed!.Items, item => item.Id == proof.InboxItemId);
+        }
+        finally
+        {
+            foreach (var path in new[] { sqlitePath, $"{sqlitePath}-wal", $"{sqlitePath}-shm" })
+            {
+                if (!File.Exists(path))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    File.Delete(path);
+                }
+                catch (IOException)
+                {
+                    // Windows can briefly retain SQLite file handles after host disposal.
+                }
+            }
+        }
+    }
+
+    [Fact]
     public async Task AdminPolicyOverride_DisablesEmail_ButKeepsInAppDelivery()
     {
         await using var factory = new TestWebApplicationFactory();

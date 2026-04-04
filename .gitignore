@@ -7,6 +7,7 @@ coverage/
 .playwright/
 playwright/.auth/
 dist/
+desktop-backend-runtime/
 output/
 output/playwright/
 .tmp-*.png

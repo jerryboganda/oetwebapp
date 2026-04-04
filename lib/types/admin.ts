@@ -45,6 +45,8 @@ export interface AdminContentRow {
   type: string;
   profession: string;
   status: 'draft' | 'published' | 'archived';
+  sourceType?: string;
+  qaStatus?: string;
   updatedAt: string;
   author: string;
   revisionCount: number;
@@ -59,6 +61,8 @@ export interface AdminContentDetail {
   difficulty: string;
   estimatedDurationMinutes: number;
   status: 'draft' | 'published' | 'archived';
+  sourceType?: string;
+  qaStatus?: string;
   description: string;
   caseNotes: string;
   modelAnswer: string;

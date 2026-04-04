@@ -9,11 +9,14 @@ import {
   CheckCircle2,
   FilePenLine,
   Flag,
+  Flame,
   Headphones,
   Mic,
   Sparkles,
   Star,
+  Timer,
   TrendingUp,
+  Trophy,
 } from 'lucide-react';
 import { Button, Card, CardContent, CardHeader, CardLink, CardTitle, ProgressBar } from '@/components/ui';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -47,7 +50,7 @@ export default function Dashboard() {
   const router = useRouter();
   const prefersReducedMotion = useReducedMotion();
   const { data, error, reload, status } = useDashboardHome();
-  const { home, profile, readiness, tasks } = data;
+  const { home, profile, readiness, tasks, engagement } = data;
 
   const todayTasks = tasks.filter((task) => task.section === 'today');
   const upcomingTasks = tasks.filter((task) => task.section === 'thisWeek');
@@ -293,6 +296,64 @@ export default function Dashboard() {
                   subtest={readiness.subTests.find((subTest) => subTest.isWeakest)?.name ?? 'General'}
                   description={readiness.blockers[0].description}
                 />
+              ) : null}
+
+              {engagement ? (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>
+                      <Flame className="mr-1.5 inline-block h-4.5 w-4.5 text-orange-500" />
+                      Practice Streak
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-4">
+                    <div className="flex items-center justify-between">
+                      <div className="text-center">
+                        <div className="text-3xl font-bold text-orange-500">{engagement.currentStreak}</div>
+                        <div className="text-xs text-muted">Day Streak</div>
+                      </div>
+                      <div className="text-center">
+                        <div className="flex items-center gap-1 text-lg font-bold text-amber-600">
+                          <Trophy className="h-4 w-4" />
+                          {engagement.longestStreak}
+                        </div>
+                        <div className="text-xs text-muted">Longest</div>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="mb-2 text-xs font-medium text-muted">This Week</p>
+                      <div className="flex justify-between gap-1">
+                        {engagement.weeklyActivity.map((day) => (
+                          <div key={day.day} className="flex flex-col items-center gap-1">
+                            <div
+                              className={`h-7 w-7 rounded-md transition-colors ${
+                                day.active
+                                  ? 'bg-orange-500/90 shadow-sm shadow-orange-200'
+                                  : 'bg-gray-100'
+                              }`}
+                            />
+                            <span className="text-[10px] text-muted">{day.day}</span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="rounded-lg bg-gray-50 p-2.5 text-center">
+                        <div className="flex items-center justify-center gap-1 text-sm font-bold text-navy">
+                          <Timer className="h-3.5 w-3.5" />
+                          {Math.round(engagement.totalPracticeMinutes / 60)}h
+                        </div>
+                        <div className="text-[10px] text-muted">Total Practice</div>
+                      </div>
+                      <div className="rounded-lg bg-gray-50 p-2.5 text-center">
+                        <div className="text-sm font-bold text-navy">{engagement.totalPracticeSessions}</div>
+                        <div className="text-[10px] text-muted">Sessions</div>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
               ) : null}
             </div>
           </div>

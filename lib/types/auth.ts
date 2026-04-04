@@ -76,6 +76,7 @@ export interface SignupCatalog {
   examTypes: SignupExamType[];
   professions: SignupProfession[];
   sessions: SignupSession[];
+  externalAuthProviders: ExternalAuthProvider[];
 }
 
 export interface RegisterLearnerInput {

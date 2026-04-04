@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback, useRef } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/layout';
 import { AsyncStateWrapper } from '@/components/state';
@@ -13,6 +14,7 @@ import { Modal } from '@/components/ui/modal';
 import { InlineAlert } from '@/components/ui/alert';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { fetchRoleCard, submitSpeakingRecording } from '@/lib/api';
+import { SpeakingRecorder, base64ToBlob } from '@/lib/mobile/speaking-recorder';
 import type { RoleCard } from '@/lib/mock-data';
 import {
   Mic,
@@ -32,6 +34,7 @@ type SpeakingPhase = 'mic-check' | 'role-card' | 'recording' | 'review' | 'uploa
 export default function DiagnosticSpeakingPage() {
   const router = useRouter();
   const { track } = useAnalytics();
+  const isNativePlatform = Capacitor.isNativePlatform();
 
   const [roleCard, setRoleCard] = useState<RoleCard | null>(null);
   const [loading, setLoading] = useState(true);
@@ -49,6 +52,7 @@ export default function DiagnosticSpeakingPage() {
   const audioChunksRef = useRef<Blob[]>([]);
   const streamRef = useRef<MediaStream | null>(null);
   const recordedBlobRef = useRef<Blob | null>(null);
+  const autoStopTimeoutRef = useRef<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -67,14 +71,20 @@ export default function DiagnosticSpeakingPage() {
 
   useEffect(() => {
     return () => {
-      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      if (autoStopTimeoutRef.current !== null) {
+        window.clearTimeout(autoStopTimeoutRef.current);
+        autoStopTimeoutRef.current = null;
+      }
+      if (isNativePlatform) {
+        void SpeakingRecorder.cancel().catch(() => undefined);
+      } else if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
         mediaRecorderRef.current.stop();
       }
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
       }
     };
-  }, []);
+  }, [isNativePlatform]);
 
   const handleMicCheckComplete = () => {
     track('task_started', { subTest: 'Speaking', mode: 'diagnostic', taskId: DIAGNOSTIC_SPEAKING_TASK_ID });
@@ -83,20 +93,40 @@ export default function DiagnosticSpeakingPage() {
 
   const handleStartRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      streamRef.current = stream;
-      const recorder = new MediaRecorder(stream);
-      mediaRecorderRef.current = recorder;
-      audioChunksRef.current = [];
+      setError(undefined);
+      if (autoStopTimeoutRef.current !== null) {
+        window.clearTimeout(autoStopTimeoutRef.current);
+        autoStopTimeoutRef.current = null;
+      }
+
       recordedBlobRef.current = null;
 
-      recorder.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
+      if (isNativePlatform) {
+        await SpeakingRecorder.start({ mimeType: 'audio/mp4' });
+        mediaRecorderRef.current = null;
+        audioChunksRef.current = [];
+      } else {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        streamRef.current = stream;
+        const recorder = new MediaRecorder(stream);
+        mediaRecorderRef.current = recorder;
+        audioChunksRef.current = [];
 
-      recorder.start(100);
+        recorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
+        };
+
+        recorder.start(100);
+      }
+
+      autoStopTimeoutRef.current = window.setTimeout(() => {
+        if (recordingRef.current) {
+          void handleStopRecording();
+        }
+      }, 3000);
+
       setPhase('recording');
       setIsRecording(true);
       recordingRef.current = true;
@@ -107,24 +137,49 @@ export default function DiagnosticSpeakingPage() {
   };
 
   const handleStopRecording = async () => {
-    const recorder = mediaRecorderRef.current;
-    if (recorder && recorder.state !== 'inactive') {
-      await new Promise<void>((resolve) => {
-        recorder.addEventListener('stop', () => resolve(), { once: true });
-        recorder.stop();
-      });
-    }
+    try {
+      if (autoStopTimeoutRef.current !== null) {
+        window.clearTimeout(autoStopTimeoutRef.current);
+        autoStopTimeoutRef.current = null;
+      }
 
-    recordedBlobRef.current = new Blob(audioChunksRef.current, { type: recorder?.mimeType || 'audio/webm' });
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
+      if (isNativePlatform) {
+        const recording = await SpeakingRecorder.stop();
+        recordedBlobRef.current = base64ToBlob(recording.base64, recording.mimeType);
+      } else {
+        const recorder = mediaRecorderRef.current;
+        if (recorder && recorder.state !== 'inactive') {
+          await new Promise<void>((resolve) => {
+            recorder.addEventListener('stop', () => resolve(), { once: true });
+            recorder.stop();
+          });
+        }
 
-    setIsRecording(false);
-    recordingRef.current = false;
-    setShowStopModal(false);
-    setPhase('review');
+        recordedBlobRef.current = new Blob(audioChunksRef.current, { type: recorder?.mimeType || 'audio/webm' });
+      }
+
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
+
+      setPhase('review');
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to stop recording');
+      recordedBlobRef.current = null;
+      if (isNativePlatform) {
+        void SpeakingRecorder.cancel().catch(() => undefined);
+      }
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
+      setPhase('role-card');
+    } finally {
+      setIsRecording(false);
+      recordingRef.current = false;
+      setShowStopModal(false);
+    }
   };
 
   const handleSubmit = async () => {

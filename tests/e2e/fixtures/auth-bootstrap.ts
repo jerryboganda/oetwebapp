@@ -1,13 +1,26 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { createHmac } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import type { APIRequestContext, Page } from '@playwright/test';
 import { authStatePaths, seededAccounts, type SeededRole } from './auth';
 
-const apiBaseURL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:5198').replace(/\/$/, '');
+const defaultApiBaseURL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:5198').replace(/\/$/, '');
 const localSessionKey = 'oet.auth.session.local';
 const sessionSessionKey = 'oet.auth.session.session';
 const mfaChallengeKey = 'oet.auth.challenge.mfa';
+const desktopComposeFilePath = join(process.cwd(), 'docker-compose.desktop.yml');
+const execFileAsync = promisify(execFile);
+let dockerPrivilegedAuthResetPromise: Promise<void> | null = null;
+const privilegedSessionCache = new Map<string, AuthSessionResponse>();
+const privilegedSessionBootstrapPromises = new Map<string, Promise<AuthSessionResponse>>();
+
+export const authStorageKeys = {
+  localSessionKey,
+  sessionSessionKey,
+  mfaChallengeKey,
+};
 
 type CurrentUser = {
   userId: string;
@@ -50,8 +63,65 @@ type MfaBootstrapState = {
   updatedAt: string;
 };
 
+type SessionCacheState = {
+  apiBaseURL: string;
+  session: AuthSessionResponse;
+  updatedAt: string;
+};
+
+type BootstrapSessionOptions = {
+  useDiskCache?: boolean;
+};
+
 function mfaStatePathForRole(role: Extract<SeededRole, 'expert' | 'admin'>) {
   return join(dirname(authStatePaths[role]), `${role}.mfa.json`);
+}
+
+function sessionCachePathForRole(role: SeededRole) {
+  return join(dirname(authStatePaths[role]), `${role}.session.json`);
+}
+
+function privilegedSessionCacheKey(
+  role: Extract<SeededRole, 'expert' | 'admin'>,
+  apiBaseURL?: string,
+) {
+  return `${role}::${resolveApiBaseURL(apiBaseURL)}`;
+}
+
+function getCachedPrivilegedSession(
+  role: Extract<SeededRole, 'expert' | 'admin'>,
+  apiBaseURL?: string,
+) {
+  const key = privilegedSessionCacheKey(role, apiBaseURL);
+  const cached = privilegedSessionCache.get(key);
+
+  if (!cached) {
+    return null;
+  }
+
+  const expiresAt = Date.parse(cached.accessTokenExpiresAt);
+  if (Number.isNaN(expiresAt) || expiresAt <= Date.now() + 60_000) {
+    privilegedSessionCache.delete(key);
+    return null;
+  }
+
+  return cached;
+}
+
+function cachePrivilegedSession(
+  role: Extract<SeededRole, 'expert' | 'admin'>,
+  session: AuthSessionResponse,
+  apiBaseURL?: string,
+) {
+  privilegedSessionCache.set(privilegedSessionCacheKey(role, apiBaseURL), session);
+}
+
+function clearPrivilegedSessionCache(
+  role: Extract<SeededRole, 'expert' | 'admin'>,
+  apiBaseURL?: string,
+) {
+  privilegedSessionCache.delete(privilegedSessionCacheKey(role, apiBaseURL));
+  privilegedSessionBootstrapPromises.delete(privilegedSessionCacheKey(role, apiBaseURL));
 }
 
 async function readJsonFile<T>(path: string): Promise<T | null> {
@@ -74,6 +144,40 @@ async function readMfaBootstrapState(role: Extract<SeededRole, 'expert' | 'admin
 
 async function writeMfaBootstrapState(role: Extract<SeededRole, 'expert' | 'admin'>, state: MfaBootstrapState) {
   await writeJsonFile(mfaStatePathForRole(role), state);
+}
+
+async function clearMfaBootstrapState(role: Extract<SeededRole, 'expert' | 'admin'>) {
+  await rm(mfaStatePathForRole(role), { force: true });
+}
+
+async function readSessionCacheState(role: SeededRole, apiBaseURL?: string) {
+  const cached = await readJsonFile<SessionCacheState>(sessionCachePathForRole(role));
+  if (!cached) {
+    return null;
+  }
+
+  if (cached.apiBaseURL !== resolveApiBaseURL(apiBaseURL)) {
+    return null;
+  }
+
+  const expiresAt = Date.parse(cached.session.accessTokenExpiresAt);
+  if (Number.isNaN(expiresAt) || expiresAt <= Date.now() + 60_000) {
+    return null;
+  }
+
+  return cached.session;
+}
+
+async function writeSessionCacheState(role: SeededRole, session: AuthSessionResponse, apiBaseURL?: string) {
+  await writeJsonFile(sessionCachePathForRole(role), {
+    apiBaseURL: resolveApiBaseURL(apiBaseURL),
+    session,
+    updatedAt: new Date().toISOString(),
+  } satisfies SessionCacheState);
+}
+
+async function clearSessionCacheState(role: SeededRole) {
+  await rm(sessionCachePathForRole(role), { force: true });
 }
 
 async function readResponseBody(response: Awaited<ReturnType<APIRequestContext['post']>>) {
@@ -151,9 +255,97 @@ function generateTotp(secretKey: string, timestamp = new Date()) {
   return String(binaryCode % 1_000_000).padStart(6, '0');
 }
 
-async function signInRaw(request: APIRequestContext, role: SeededRole) {
+function generateTotpCandidates(secretKey: string, timestamp = new Date()) {
+  const offsets = [-30_000, 0, 30_000];
+  const seenCodes = new Set<string>();
+  const codes: string[] = [];
+
+  for (const offset of offsets) {
+    const code = generateTotp(secretKey, new Date(timestamp.getTime() + offset));
+    if (seenCodes.has(code)) {
+      continue;
+    }
+
+    seenCodes.add(code);
+    codes.push(code);
+  }
+
+  return codes;
+}
+
+function resolveApiBaseURL(apiBaseURL?: string) {
+  return (apiBaseURL ?? defaultApiBaseURL).replace(/\/$/, '');
+}
+
+function canResetDockerBackedPrivilegedAuth(apiBaseURL?: string) {
+  try {
+    const url = new URL(resolveApiBaseURL(apiBaseURL));
+    return (url.hostname === 'localhost' || url.hostname === '127.0.0.1') && url.port === '5198';
+  } catch {
+    return false;
+  }
+}
+
+function isInvalidAuthenticatorCodeError(error: unknown) {
+  return error instanceof Error && error.message.includes('"code":"invalid_authenticator_code"');
+}
+
+function isMfaNotConfiguredError(error: unknown) {
+  return error instanceof Error && error.message.includes('"code":"mfa_not_configured"');
+}
+
+async function waitForHealth(url: string, timeoutMs = 120_000) {
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const response = await fetch(url);
+      if (response.ok) {
+        return;
+      }
+    } catch {
+      // The container may still be restarting.
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+
+  throw new Error(`Timed out waiting for Docker-backed auth baseline health at ${url}.`);
+}
+
+async function resetDockerBackedPrivilegedAuthState(
+  role: Extract<SeededRole, 'expert' | 'admin'>,
+  apiBaseURL?: string,
+) {
+  if (!canResetDockerBackedPrivilegedAuth(apiBaseURL)) {
+    return;
+  }
+
+  await clearMfaBootstrapState(role);
+  clearPrivilegedSessionCache(role, apiBaseURL);
+  await clearSessionCacheState(role);
+
+  if (!dockerPrivilegedAuthResetPromise) {
+    dockerPrivilegedAuthResetPromise = (async () => {
+      const dockerCommand = process.platform === 'win32' ? 'docker.exe' : 'docker';
+      try {
+        await execFileAsync(dockerCommand, ['compose', '-f', desktopComposeFilePath, 'restart', 'learner-api']);
+      } catch {
+        await execFileAsync(dockerCommand, ['compose', '-f', desktopComposeFilePath, 'up', '-d', 'learner-api']);
+      }
+
+      await waitForHealth(`${resolveApiBaseURL(apiBaseURL)}/health/ready`);
+    })().finally(() => {
+      dockerPrivilegedAuthResetPromise = null;
+    });
+  }
+
+  await dockerPrivilegedAuthResetPromise;
+}
+
+async function signInRaw(request: APIRequestContext, role: SeededRole, apiBaseURL?: string) {
   const account = seededAccounts[role];
-  return request.post(`${apiBaseURL}/v1/auth/sign-in`, {
+  return request.post(`${resolveApiBaseURL(apiBaseURL)}/v1/auth/sign-in`, {
     headers: { 'Content-Type': 'application/json' },
     data: {
       email: account.email,
@@ -163,8 +355,8 @@ async function signInRaw(request: APIRequestContext, role: SeededRole) {
   });
 }
 
-async function beginAuthenticatorSetup(request: APIRequestContext, accessToken: string) {
-  const response = await request.post(`${apiBaseURL}/v1/auth/mfa/authenticator/begin`, {
+async function beginAuthenticatorSetup(request: APIRequestContext, accessToken: string, apiBaseURL?: string) {
+  const response = await request.post(`${resolveApiBaseURL(apiBaseURL)}/v1/auth/mfa/authenticator/begin`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
@@ -175,8 +367,8 @@ async function beginAuthenticatorSetup(request: APIRequestContext, accessToken: 
   return expectJsonOk<AuthenticatorSetupResponse>(response, 'Expected authenticator setup bootstrap to succeed.');
 }
 
-async function confirmAuthenticatorSetup(request: APIRequestContext, accessToken: string, code: string) {
-  const response = await request.post(`${apiBaseURL}/v1/auth/mfa/authenticator/confirm`, {
+async function confirmAuthenticatorSetup(request: APIRequestContext, accessToken: string, code: string, apiBaseURL?: string) {
+  const response = await request.post(`${resolveApiBaseURL(apiBaseURL)}/v1/auth/mfa/authenticator/confirm`, {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
@@ -187,18 +379,42 @@ async function confirmAuthenticatorSetup(request: APIRequestContext, accessToken
   return expectJsonOk<CurrentUser>(response, 'Expected authenticator confirmation to succeed.');
 }
 
+async function confirmAuthenticatorSetupWithRetry(
+  request: APIRequestContext,
+  accessToken: string,
+  secretKey: string,
+  apiBaseURL?: string,
+) {
+  let lastInvalidCodeError: unknown = null;
+
+  for (const code of generateTotpCandidates(secretKey)) {
+    try {
+      return await confirmAuthenticatorSetup(request, accessToken, code, apiBaseURL);
+    } catch (error) {
+      if (!isInvalidAuthenticatorCodeError(error)) {
+        throw error;
+      }
+
+      lastInvalidCodeError = error;
+    }
+  }
+
+  throw lastInvalidCodeError ?? new Error('Expected authenticator confirmation to succeed.');
+}
+
 async function completeMfaChallenge(
   request: APIRequestContext,
   role: Extract<SeededRole, 'expert' | 'admin'>,
   challengeToken: string,
-  secretKey: string,
+  code: string,
+  apiBaseURL?: string,
 ) {
   const account = seededAccounts[role];
-  const response = await request.post(`${apiBaseURL}/v1/auth/mfa/challenge`, {
+  const response = await request.post(`${resolveApiBaseURL(apiBaseURL)}/v1/auth/mfa/challenge`, {
     headers: { 'Content-Type': 'application/json' },
     data: {
       email: account.email,
-      code: generateTotp(secretKey),
+      code,
       challengeToken,
       recoveryCode: null,
     },
@@ -207,42 +423,114 @@ async function completeMfaChallenge(
   return expectJsonOk<AuthSessionResponse>(response, `Expected MFA challenge completion to succeed for ${role}.`);
 }
 
+async function completeMfaChallengeWithRetry(
+  request: APIRequestContext,
+  role: Extract<SeededRole, 'expert' | 'admin'>,
+  challengeToken: string,
+  secretKey: string,
+  apiBaseURL?: string,
+) {
+  let lastInvalidCodeError: unknown = null;
+
+  for (const code of generateTotpCandidates(secretKey)) {
+    try {
+      return await completeMfaChallenge(request, role, challengeToken, code, apiBaseURL);
+    } catch (error) {
+      if (!isInvalidAuthenticatorCodeError(error)) {
+        throw error;
+      }
+
+      lastInvalidCodeError = error;
+    }
+  }
+
+  throw lastInvalidCodeError ?? new Error(`Expected MFA challenge completion to succeed for ${role}.`);
+}
+
 async function resolvePrivilegedSession(
   request: APIRequestContext,
   role: Extract<SeededRole, 'expert' | 'admin'>,
+  apiBaseURL?: string,
+  allowDockerReset = true,
 ) {
-  const initialSignIn = await signInRaw(request, role);
+  const initialSignIn = await signInRaw(request, role, apiBaseURL);
 
   if (initialSignIn.ok()) {
     const initialSession = await initialSignIn.json() as AuthSessionResponse;
-    const bootstrap = await beginAuthenticatorSetup(request, initialSession.accessToken);
+    const bootstrap = await beginAuthenticatorSetup(request, initialSession.accessToken, apiBaseURL);
     await writeMfaBootstrapState(role, {
       secretKey: bootstrap.secretKey,
       recoveryCodes: bootstrap.recoveryCodes,
       updatedAt: new Date().toISOString(),
     });
 
-    await confirmAuthenticatorSetup(request, initialSession.accessToken, generateTotp(bootstrap.secretKey));
+    try {
+      await confirmAuthenticatorSetupWithRetry(request, initialSession.accessToken, bootstrap.secretKey, apiBaseURL);
+    } catch (error) {
+      if (allowDockerReset && canResetDockerBackedPrivilegedAuth(apiBaseURL) && isInvalidAuthenticatorCodeError(error)) {
+        await resetDockerBackedPrivilegedAuthState(role, apiBaseURL);
+        return resolvePrivilegedSession(request, role, apiBaseURL, false);
+      }
 
-    const challengedSignIn = await signInRaw(request, role);
+      throw error;
+    }
+
+    const challengedSignIn = await signInRaw(request, role, apiBaseURL);
     if (challengedSignIn.status() !== 403) {
       const body = await readResponseBody(challengedSignIn);
       throw new Error(`Expected MFA challenge sign-in for ${role} after setup.\nStatus: ${challengedSignIn.status()}\nBody: ${body}`);
     }
 
     const challenge = await challengedSignIn.json() as MfaChallengePayload;
-    return completeMfaChallenge(request, role, challenge.challengeToken, bootstrap.secretKey);
+    try {
+      return await completeMfaChallengeWithRetry(request, role, challenge.challengeToken, bootstrap.secretKey, apiBaseURL);
+    } catch (error) {
+      if (isMfaNotConfiguredError(error)) {
+        await clearMfaBootstrapState(role);
+        clearPrivilegedSessionCache(role, apiBaseURL);
+        await clearSessionCacheState(role);
+        return resolvePrivilegedSession(request, role, apiBaseURL, false);
+      }
+
+      if (allowDockerReset && canResetDockerBackedPrivilegedAuth(apiBaseURL) && isInvalidAuthenticatorCodeError(error)) {
+        await resetDockerBackedPrivilegedAuthState(role, apiBaseURL);
+        return resolvePrivilegedSession(request, role, apiBaseURL, false);
+      }
+
+      throw error;
+    }
   }
 
   if (initialSignIn.status() === 403) {
     const challenge = await initialSignIn.json() as MfaChallengePayload;
     const bootstrapState = await readMfaBootstrapState(role);
     if (!bootstrapState?.secretKey) {
+      if (allowDockerReset && canResetDockerBackedPrivilegedAuth(apiBaseURL)) {
+        await resetDockerBackedPrivilegedAuthState(role, apiBaseURL);
+        return resolvePrivilegedSession(request, role, apiBaseURL, false);
+      }
+
       const body = await readResponseBody(initialSignIn);
       throw new Error(`MFA is already required for ${role}, but no stored TOTP secret is available.\nStatus: ${initialSignIn.status()}\nBody: ${body}`);
     }
 
-    return completeMfaChallenge(request, role, challenge.challengeToken, bootstrapState.secretKey);
+    try {
+      return await completeMfaChallengeWithRetry(request, role, challenge.challengeToken, bootstrapState.secretKey, apiBaseURL);
+    } catch (error) {
+      if (isMfaNotConfiguredError(error)) {
+        await clearMfaBootstrapState(role);
+        clearPrivilegedSessionCache(role, apiBaseURL);
+        await clearSessionCacheState(role);
+        return resolvePrivilegedSession(request, role, apiBaseURL, false);
+      }
+
+      if (allowDockerReset && canResetDockerBackedPrivilegedAuth(apiBaseURL) && isInvalidAuthenticatorCodeError(error)) {
+        await resetDockerBackedPrivilegedAuthState(role, apiBaseURL);
+        return resolvePrivilegedSession(request, role, apiBaseURL, false);
+      }
+
+      throw error;
+    }
   }
 
   const body = await readResponseBody(initialSignIn);
@@ -252,21 +540,55 @@ async function resolvePrivilegedSession(
 export async function bootstrapSessionForRole(
   request: APIRequestContext,
   role: SeededRole,
+  apiBaseURL?: string,
+  options?: BootstrapSessionOptions,
 ): Promise<AuthSessionResponse> {
-  if (role === 'learner') {
-    const response = await signInRaw(request, role);
-    return expectJsonOk<AuthSessionResponse>(response, 'Expected learner sign-in bootstrap to succeed.');
+  const useDiskCache = options?.useDiskCache ?? true;
+
+  if (useDiskCache) {
+    const cachedDiskSession = await readSessionCacheState(role, apiBaseURL);
+    if (cachedDiskSession) {
+      if (role !== 'learner') {
+        cachePrivilegedSession(role, cachedDiskSession, apiBaseURL);
+      }
+
+      return cachedDiskSession;
+    }
   }
 
-  return resolvePrivilegedSession(request, role);
+  if (role === 'learner') {
+    const response = await signInRaw(request, role, apiBaseURL);
+    const session = await expectJsonOk<AuthSessionResponse>(response, 'Expected learner sign-in bootstrap to succeed.');
+    await writeSessionCacheState(role, session, apiBaseURL);
+    return session;
+  }
+
+  const cachedSession = getCachedPrivilegedSession(role, apiBaseURL);
+  if (cachedSession) {
+    return cachedSession;
+  }
+
+  const key = privilegedSessionCacheKey(role, apiBaseURL);
+  const inFlightBootstrap = privilegedSessionBootstrapPromises.get(key);
+  if (inFlightBootstrap) {
+    return inFlightBootstrap;
+  }
+
+  const bootstrapPromise = resolvePrivilegedSession(request, role, apiBaseURL)
+    .then(async (session) => {
+      cachePrivilegedSession(role, session, apiBaseURL);
+      await writeSessionCacheState(role, session, apiBaseURL);
+      return session;
+    })
+    .finally(() => {
+      privilegedSessionBootstrapPromises.delete(key);
+    });
+
+  privilegedSessionBootstrapPromises.set(key, bootstrapPromise);
+  return bootstrapPromise;
 }
 
-export async function persistSessionToStorageState(
-  page: Page,
-  role: SeededRole,
-  session: AuthSessionResponse,
-) {
-  await page.goto('/sign-in', { waitUntil: 'domcontentloaded' });
+export async function hydrateSessionStorage(page: Page, session: AuthSessionResponse) {
   await page.evaluate(
     ({ sessionRecord, localKey, sessionKey, challengeKey }) => {
       window.localStorage.setItem(localKey, JSON.stringify(sessionRecord));
@@ -280,6 +602,15 @@ export async function persistSessionToStorageState(
       challengeKey: mfaChallengeKey,
     },
   );
+}
+
+export async function persistSessionToStorageState(
+  page: Page,
+  role: SeededRole,
+  session: AuthSessionResponse,
+) {
+  await page.goto('/sign-in', { waitUntil: 'domcontentloaded' });
+  await hydrateSessionStorage(page, session);
 
   await page.context().storageState({ path: authStatePaths[role] });
 }

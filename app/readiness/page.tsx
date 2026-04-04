@@ -74,6 +74,25 @@ export default function ReadinessCenter() {
     data.overallRisk === 'Moderate' ? Shield :
     ShieldCheck;
 
+  // ── Risk Gauge Data ──
+  const riskPercent =
+    data.overallRisk === 'High' ? 82 :
+    data.overallRisk === 'Moderate' ? 52 :
+    22;
+  const needleAngle = Math.PI * (1 - riskPercent / 100);
+  const needleX = 100 + 80 * Math.cos(needleAngle);
+  const needleY = 100 - 80 * Math.sin(needleAngle);
+
+  interface RiskFactor { label: string; severity: 'high' | 'medium' | 'low'; impact: number; description: string }
+  const weakest = data.subTests.find((t) => t.isWeakest);
+  const avgReadiness = data.subTests.reduce((sum, t) => sum + t.readiness, 0) / (data.subTests.length || 1);
+  const riskFactors: RiskFactor[] = [
+    { label: 'Practice Consistency', severity: data.overallRisk === 'High' ? 'high' : data.overallRisk === 'Moderate' ? 'medium' : 'low', impact: data.overallRisk === 'High' ? 85 : data.overallRisk === 'Moderate' ? 55 : 25, description: 'Steady daily practice reduces overall risk substantially.' },
+    { label: weakest ? `${weakest.name} Gap` : 'Sub-test Balance', severity: weakest && weakest.readiness < 50 ? 'high' : 'medium', impact: weakest ? Math.max(0, 100 - weakest.readiness) : 30, description: weakest ? `${weakest.name} readiness is ${weakest.readiness}% against a ${weakest.target}% target.` : 'Sub-tests are relatively balanced.' },
+    { label: 'Mock Test Frequency', severity: data.evidence.mocksCompleted < 2 ? 'high' : data.evidence.mocksCompleted < 5 ? 'medium' : 'low', impact: data.evidence.mocksCompleted < 2 ? 75 : data.evidence.mocksCompleted < 5 ? 45 : 15, description: `${data.evidence.mocksCompleted} mock tests completed; full mocks are the strongest readiness signal.` },
+    { label: 'Time Remaining', severity: data.weeksRemaining <= 3 ? 'high' : data.weeksRemaining <= 6 ? 'medium' : 'low', impact: data.weeksRemaining <= 3 ? 90 : data.weeksRemaining <= 6 ? 50 : 20, description: `${data.weeksRemaining} weeks until exam date.` },
+  ];
+
   return (
     <LearnerDashboardShell
       pageTitle="Readiness Center"
@@ -94,8 +113,8 @@ export default function ReadinessCenter() {
           ]}
         />
 
-        {/* 1. Risk + Recommended Study Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {/* 1. Risk Probability Gauge + Recommended Study + Risk Factors */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <motion.section
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
@@ -106,11 +125,30 @@ export default function ReadinessCenter() {
               <div className="flex items-center gap-2 mb-4">
                 {data.overallRisk === 'High'     ? <ShieldAlert className="w-6 h-6" /> :
                  data.overallRisk === 'Moderate' ? <Shield className="w-6 h-6" /> :
-                                                   <ShieldCheck className="w-6 h-6" />}
+                                                    <ShieldCheck className="w-6 h-6" />}
                 <span className="text-sm font-black uppercase tracking-widest opacity-90">Target-Date Risk</span>
               </div>
-              <h2 className="text-4xl font-black mb-2">{data.overallRisk} Risk</h2>
-              <p className="text-white/90 text-sm leading-relaxed max-w-sm">
+
+              {/* ── Risk Probability Gauge ── */}
+              <div className="flex flex-col items-center my-4">
+                <svg viewBox="0 0 200 120" className="w-48 h-auto">
+                  <defs>
+                    <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+                      <stop offset="0%" stopColor="#22c55e" />
+                      <stop offset="50%" stopColor="#f59e0b" />
+                      <stop offset="100%" stopColor="#ef4444" />
+                    </linearGradient>
+                  </defs>
+                  <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="14" strokeLinecap="round" />
+                  <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="url(#gaugeGrad)" strokeWidth="14" strokeLinecap="round" strokeDasharray={`${251 * (riskPercent / 100)} 251`} />
+                  <circle cx={needleX} cy={needleY} r="6" fill="white" stroke="rgba(0,0,0,0.2)" strokeWidth="1" />
+                  <text x="100" y="95" textAnchor="middle" className="fill-white text-2xl font-black">{riskPercent}%</text>
+                  <text x="100" y="112" textAnchor="middle" className="fill-white/70 text-[10px] font-bold uppercase tracking-widest">probability</text>
+                </svg>
+              </div>
+
+              <h2 className="text-3xl font-black mb-2 text-center">{data.overallRisk} Risk</h2>
+              <p className="text-white/90 text-sm leading-relaxed text-center max-w-sm mx-auto">
                 With {data.weeksRemaining} weeks remaining until your exam, you are at a {data.overallRisk.toLowerCase()} risk of not meeting your target scores.
               </p>
             </div>
@@ -135,6 +173,38 @@ export default function ReadinessCenter() {
               <p className="text-white/70 text-sm leading-relaxed">
                 Estimated remaining study time to reach target readiness levels before {data.targetDate}.
               </p>
+            </div>
+          </motion.section>
+
+          {/* ── Risk Factors Breakdown ── */}
+          <motion.section
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.15 }}
+            className="bg-surface rounded-[32px] border border-gray-200 p-6 shadow-sm"
+          >
+            <div className="flex items-center gap-2 mb-5">
+              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              <span className="text-xs font-black uppercase tracking-widest text-muted">Risk Factors</span>
+            </div>
+            <div className="space-y-4">
+              {riskFactors.map((factor) => (
+                <div key={factor.label}>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-sm font-semibold text-navy">{factor.label}</span>
+                    <span className={`text-xs font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${factor.severity === 'high' ? 'text-rose-700 bg-rose-100' : factor.severity === 'medium' ? 'text-amber-700 bg-amber-100' : 'text-emerald-700 bg-emerald-100'}`}>{factor.severity}</span>
+                  </div>
+                  <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                    <motion.div
+                      initial={{ width: 0 }}
+                      animate={{ width: `${factor.impact}%` }}
+                      transition={{ duration: 0.8, delay: 0.4 }}
+                      className={`h-full rounded-full ${factor.severity === 'high' ? 'bg-rose-500' : factor.severity === 'medium' ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                    />
+                  </div>
+                  <p className="text-[11px] text-muted mt-1">{factor.description}</p>
+                </div>
+              ))}
             </div>
           </motion.section>
         </div>

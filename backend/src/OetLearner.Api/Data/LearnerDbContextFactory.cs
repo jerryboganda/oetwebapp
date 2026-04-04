@@ -15,18 +15,11 @@ public sealed class LearnerDbContextFactory : IDesignTimeDbContextFactory<Learne
             .AddEnvironmentVariables()
             .Build();
 
-        var connectionString = configuration.GetConnectionString("DefaultConnection")
-            ?? "Host=localhost;Port=5432;Database=oet_learner_dev;Username=postgres;Password=postgres";
+        var isDevelopment = !string.Equals(configuration["ASPNETCORE_ENVIRONMENT"], "Production", StringComparison.OrdinalIgnoreCase);
+        var connectionString = DatabaseConfiguration.ResolveConnectionString(configuration, isDevelopment);
 
         var optionsBuilder = new DbContextOptionsBuilder<LearnerDbContext>();
-        if (connectionString.StartsWith("InMemory:", StringComparison.OrdinalIgnoreCase))
-        {
-            optionsBuilder.UseInMemoryDatabase(connectionString["InMemory:".Length..]);
-        }
-        else
-        {
-            optionsBuilder.UseNpgsql(connectionString);
-        }
+        DatabaseConfiguration.ConfigureDbContext(optionsBuilder, connectionString);
 
         return new LearnerDbContext(optionsBuilder.Options);
     }

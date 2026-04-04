@@ -6,6 +6,7 @@
 // ═══════════════════ SHARED TYPES ═══════════════════
 
 export type SubTest = 'Writing' | 'Speaking' | 'Reading' | 'Listening';
+export type ExamFamilyCode = 'oet' | 'ielts' | 'pte';
 export type Difficulty = 'Easy' | 'Medium' | 'Hard';
 export type TaskStatus = 'not_started' | 'in_progress' | 'completed' | 'failed';
 export type ReviewStatus = 'reviewed' | 'pending' | 'not_requested';
@@ -18,6 +19,7 @@ export interface UserProfile {
   email: string;
   displayName: string;
   profession: string;
+  examFamilyCode: ExamFamilyCode;
   examDate: string | null;
   targetScores: Record<SubTest, number | null>;
   previousAttempts: number;
@@ -86,9 +88,18 @@ export interface WritingResult {
   id: string;
   taskId: string;
   taskTitle: string;
+  examFamilyCode: ExamFamilyCode;
+  examFamilyLabel: string;
   estimatedScoreRange: string;
   estimatedGradeRange: string;
-  confidenceLabel: Confidence;
+  confidenceBand: Confidence;
+  confidenceLabel: string;
+  learnerDisclaimer: string;
+  methodLabel: string;
+  provenanceLabel: string;
+  humanReviewRecommended: boolean;
+  escalationRecommended: boolean;
+  isOfficialScore: boolean;
   topStrengths: string[];
   topIssues: string[];
   criteria: CriterionFeedback[];
@@ -185,8 +196,17 @@ export interface SpeakingResult {
   id: string;
   taskId: string;
   taskTitle: string;
+  examFamilyCode: ExamFamilyCode;
+  examFamilyLabel: string;
   scoreRange: string;
   confidence: Confidence;
+  confidenceLabel: string;
+  learnerDisclaimer: string;
+  methodLabel: string;
+  provenanceLabel: string;
+  humanReviewRecommended: boolean;
+  escalationRecommended: boolean;
+  isOfficialScore: boolean;
   strengths: string[];
   improvements: string[];
   evalStatus: EvalStatus;
@@ -625,6 +645,7 @@ export const MOCK_USER: UserProfile = {
   id: 'mock-user-001',
   email: 'learner@oet-prep.dev',
   displayName: 'Faisal Maqsood',
+  examFamilyCode: 'oet',
   profession: 'Nursing',
   examDate: '2025-09-15',
   targetScores: { Writing: 350, Speaking: 350, Reading: 350, Listening: 350 },
@@ -739,8 +760,17 @@ export const MOCK_WRITING_CHECKLIST: ChecklistItem[] = [
 export const MOCK_WRITING_RESULTS: Record<string, WritingResult> = {
   'wr-001': {
     id: 'wr-001', taskId: 'wt-001', taskTitle: 'Discharge Summary — Post-Surgical Patient',
+    examFamilyCode: 'oet',
+    examFamilyLabel: 'OET',
     estimatedScoreRange: '330–360', estimatedGradeRange: 'B–B+',
     confidenceLabel: 'Medium',
+    confidenceBand: 'Medium',
+    learnerDisclaimer: 'AI-assisted practice estimate only. This is not an official OET score.',
+    methodLabel: 'AI-assisted evaluation',
+    provenanceLabel: 'Generated from your submission and the configured scoring workflow.',
+    humanReviewRecommended: true,
+    escalationRecommended: false,
+    isOfficialScore: false,
     topStrengths: [
       'Clinical information accurately captured',
       'Medications clearly listed with dosages',
@@ -880,7 +910,16 @@ export const MOCK_ROLE_CARDS: Record<string, RoleCard> = {
 export const MOCK_SPEAKING_RESULTS: Record<string, SpeakingResult> = {
   'sr-001': {
     id: 'sr-001', taskId: 'st-001', taskTitle: 'Patient Handover — Post-Op Recovery',
+    examFamilyCode: 'oet',
+    examFamilyLabel: 'OET',
     scoreRange: '330–360', confidence: 'Medium',
+    confidenceLabel: 'Medium confidence practice estimate',
+    learnerDisclaimer: 'AI-assisted practice estimate only. This is not an official OET score.',
+    methodLabel: 'AI-assisted speaking evaluation',
+    provenanceLabel: 'Generated from transcript, fluency markers, and configured speaking scoring rules.',
+    humanReviewRecommended: true,
+    escalationRecommended: false,
+    isOfficialScore: false,
     strengths: [
       'Clear and logical structure following ISBAR format',
       'Appropriate medical terminology used throughout',

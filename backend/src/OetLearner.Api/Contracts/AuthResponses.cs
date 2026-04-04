@@ -36,7 +36,8 @@ public sealed record AuthenticatorSetupResponse(
 public sealed record SignupCatalogResponse(
     IReadOnlyList<SignupExamTypeResponse> ExamTypes,
     IReadOnlyList<SignupProfessionResponse> Professions,
-    IReadOnlyList<SignupSessionResponse> Sessions);
+    IReadOnlyList<SignupSessionResponse> Sessions,
+    IReadOnlyList<string> ExternalAuthProviders);
 
 public sealed record SignupExamTypeResponse(
     string Id,

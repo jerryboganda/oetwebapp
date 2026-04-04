@@ -1211,6 +1211,7 @@ public class AuthFlowsTests
         var emailSender = new RecordingEmailSender();
         var emailOtpService = new EmailOtpService(new LearnerDbContext(dbOptions), authOptions, emailSender, now);
         var authBehaviorOptions = Options.Create(new AuthOptions { UseDevelopmentAuth = true });
+        var externalAuthOptions = Options.Create(new ExternalAuthOptions());
         var environment = new TestWebHostEnvironment { EnvironmentName = "Development" };
         var dataProtectionProvider = DataProtectionProvider.Create("OetLearner.Api.AuthServiceHarness");
         var externalAuthTicketService = new ExternalAuthTicketService(dataProtectionProvider);
@@ -1225,6 +1226,7 @@ public class AuthFlowsTests
             tokenService,
             emailOtpService,
             externalAuthTicketService,
+            externalAuthOptions,
             authOptions,
             authBehaviorOptions,
             environment,

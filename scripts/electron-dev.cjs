@@ -1,63 +1,14 @@
 const { spawn } = require('child_process');
-const net = require('net');
+const path = require('path');
 
-const npmCommand = process.platform === 'win32' ? 'cmd.exe' : 'npm';
-const preferredPort = Number(process.env.PORT || 3000);
+const frontendBaseUrl = (process.env.ELECTRON_RENDERER_URL || process.env.PLAYWRIGHT_BASE_URL || 'http://localhost:3000').replace(/\/$/, '');
+const apiBaseUrl = (process.env.ELECTRON_API_URL || process.env.PLAYWRIGHT_API_URL || 'http://localhost:5198').replace(/\/$/, '');
+const nodeCommand = process.execPath;
+const qaReadinessScript = path.join(__dirname, 'qa', 'assert-local-stack.mjs');
 
-function npmArgs(args) {
-  return process.platform === 'win32' ? ['/c', 'npm', ...args] : args;
-}
-
-function isPortAvailable(port) {
-  return new Promise((resolve) => {
-    const server = net.createServer();
-
-    server.unref();
-    server.once('error', () => {
-      resolve(false);
-    });
-    server.once('listening', () => {
-      server.close(() => resolve(true));
-    });
-    server.listen(port);
-  });
-}
-
-async function findAvailablePort(startPort) {
-  for (let port = startPort; port < startPort + 25; port += 1) {
-    if (await isPortAvailable(port)) {
-      return port;
-    }
-  }
-
-  throw new Error(`Unable to find an open port starting from ${startPort}`);
-}
-
-let rendererProcess = null;
+let readinessProcess = null;
 let electronProcess = null;
 let shuttingDown = false;
-
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitForRenderer(url) {
-  const healthUrl = new URL('/api/health', url).toString();
-  for (let attempt = 0; attempt < 120; attempt += 1) {
-    try {
-      const response = await fetch(healthUrl, { cache: 'no-store' });
-      if (response.ok) {
-        return;
-      }
-    } catch {
-      // keep waiting
-    }
-
-    await wait(1000);
-  }
-
-  throw new Error(`Timed out waiting for the renderer at ${healthUrl}`);
-}
 
 function shutdown(code = 0) {
   if (shuttingDown) {
@@ -66,43 +17,53 @@ function shutdown(code = 0) {
 
   shuttingDown = true;
 
-  if (electronProcess && !electronProcess.killed) {
-    electronProcess.kill();
+  if (readinessProcess && !readinessProcess.killed) {
+    readinessProcess.kill();
   }
 
-  if (rendererProcess && !rendererProcess.killed) {
-    rendererProcess.kill();
+  if (electronProcess && !electronProcess.killed) {
+    electronProcess.kill();
   }
 
   process.exit(code);
 }
 
+function runReadinessCheck() {
+  return new Promise((resolve, reject) => {
+    readinessProcess = spawn(nodeCommand, [qaReadinessScript], {
+      stdio: 'inherit',
+      env: {
+        ...process.env,
+        PLAYWRIGHT_BASE_URL: frontendBaseUrl,
+        PLAYWRIGHT_API_URL: apiBaseUrl,
+      },
+      shell: false,
+    });
+
+    readinessProcess.on('error', reject);
+    readinessProcess.on('exit', (code, signal) => {
+      readinessProcess = null;
+
+      if (code === 0) {
+        resolve();
+        return;
+      }
+
+      reject(new Error(`[electron-dev] Docker desktop baseline readiness failed (code ${code ?? 'unknown'}${signal ? `, signal ${signal}` : ''}).`));
+    });
+  });
+}
+
 async function main() {
-  const rendererPort = await findAvailablePort(preferredPort);
-  const rendererUrl = `http://localhost:${rendererPort}`;
+  await runReadinessCheck();
 
-  rendererProcess = spawn(npmCommand, npmArgs(['run', 'dev', '--', '--port', String(rendererPort)]), {
+  electronProcess = spawn(process.platform === 'win32' ? 'cmd.exe' : 'npm', process.platform === 'win32' ? ['/c', 'npm', 'exec', '--', 'electron', '.'] : ['exec', '--', 'electron', '.'], {
     stdio: 'inherit',
     env: {
       ...process.env,
-      PORT: String(rendererPort),
-    },
-    shell: false,
-  });
-
-  rendererProcess.on('exit', (code) => {
-    if (!shuttingDown) {
-      shutdown(typeof code === 'number' ? code : 1);
-    }
-  });
-
-  await waitForRenderer(rendererUrl);
-
-  electronProcess = spawn(npmCommand, npmArgs(['exec', '--', 'electron', '.']), {
-    stdio: 'inherit',
-    env: {
-      ...process.env,
-      ELECTRON_RENDERER_URL: rendererUrl,
+      ELECTRON_RENDERER_URL: frontendBaseUrl,
+      NEXT_PUBLIC_API_BASE_URL: process.env.NEXT_PUBLIC_API_BASE_URL || '/api/backend',
+      API_PROXY_TARGET_URL: process.env.API_PROXY_TARGET_URL || apiBaseUrl,
     },
     shell: false,
   });

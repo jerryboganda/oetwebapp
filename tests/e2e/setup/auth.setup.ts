@@ -4,9 +4,11 @@ import { bootstrapSessionForRole, persistSessionToStorageState } from '../fixtur
 
 const roles: SeededRole[] = ['learner', 'expert', 'admin'];
 
+setup.describe.configure({ mode: 'serial' });
+
 for (const role of roles) {
   setup(`bootstrap ${role} auth state`, async ({ page, request }) => {
-    const session = await bootstrapSessionForRole(request, role);
+    const session = await bootstrapSessionForRole(request, role, undefined, { useDiskCache: false });
     await persistSessionToStorageState(page, role, session);
 
     const storageState = await page.context().storageState();

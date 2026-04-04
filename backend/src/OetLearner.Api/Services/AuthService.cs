@@ -21,6 +21,7 @@ public sealed class AuthService(
     AuthTokenService tokenService,
     EmailOtpService emailOtpService,
     ExternalAuthTicketService externalAuthTicketService,
+    IOptions<ExternalAuthOptions> externalAuthOptions,
     IOptions<AuthTokenOptions> authTokenOptions,
     IOptions<AuthOptions> authOptions,
     IWebHostEnvironment environment,
@@ -228,7 +229,10 @@ public sealed class AuthService(
                 item.EndDate,
                 item.DeliveryMode,
                 item.Capacity,
-                item.SeatsRemaining)).ToList());
+                item.SeatsRemaining)).ToList(),
+            ExternalAuthProviders.All
+                .Where(provider => externalAuthOptions.Value.GetProvider(provider).Enabled)
+                .ToArray());
     }
 
     public async Task<AuthSessionResponse> SignInAsync(PasswordSignInRequest request, CancellationToken cancellationToken = default)

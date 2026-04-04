@@ -1,8 +1,12 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const { mockSignIn } = vi.hoisted(() => ({
   mockSignIn: vi.fn(),
+}));
+
+const { mockUseSignupCatalog } = vi.hoisted(() => ({
+  mockUseSignupCatalog: vi.fn(() => ({ externalAuthProviders: [] })),
 }));
 
 vi.mock('next/navigation', () => ({
@@ -21,9 +25,17 @@ vi.mock('@/lib/auth-client', () => ({
   buildExternalAuthStartHref: vi.fn((_provider: string) => '#'),
 }));
 
+vi.mock('@/lib/hooks/use-signup-catalog', () => ({
+  useSignupCatalog: () => mockUseSignupCatalog(),
+}));
+
 import { SignInForm } from '../sign-in-form';
 
 describe('SignInForm', () => {
+  beforeEach(() => {
+    mockUseSignupCatalog.mockReturnValue({ externalAuthProviders: [] });
+  });
+
   it('uses explicit auth copy and ergonomic field attributes', () => {
     render(<SignInForm nextHref="/study-plan" />);
 
@@ -38,5 +50,13 @@ describe('SignInForm', () => {
     const passwordInput = screen.getByLabelText(/^password$/i);
     expect(passwordInput).toHaveAttribute('name', 'password');
     expect(passwordInput).toHaveAttribute('autocomplete', 'current-password');
+  });
+
+  it('renders when the signup catalog omits external auth providers', () => {
+    mockUseSignupCatalog.mockReturnValue({ externalAuthProviders: undefined } as never);
+
+    render(<SignInForm nextHref="/study-plan" />);
+
+    expect(screen.getByRole('button', { name: 'Sign In' })).toBeInTheDocument();
   });
 });

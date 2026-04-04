@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.EntityFrameworkCore;
 
 namespace OetLearner.Api.Domain;
 
@@ -251,4 +252,108 @@ public class SubscriptionItem
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
+}
+
+// ── Wallet Transaction Ledger ──
+
+[Index(nameof(WalletId))]
+public class WalletTransaction
+{
+    [Key]
+    public Guid Id { get; set; }
+
+    [MaxLength(64)]
+    public string WalletId { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string TransactionType { get; set; } = default!;
+    // credit_purchase | plan_grant | review_deduction | mock_deduction |
+    // top_up | refund | expiration | manual_adjustment
+
+    public int Amount { get; set; } // Positive = credit, Negative = debit
+    public int BalanceAfter { get; set; }
+
+    [MaxLength(32)]
+    public string? ReferenceType { get; set; } // payment | subscription | addon | review | mock | manual
+
+    [MaxLength(128)]
+    public string? ReferenceId { get; set; }
+
+    [MaxLength(256)]
+    public string? Description { get; set; }
+
+    [MaxLength(64)]
+    public string? CreatedBy { get; set; } // system | admin user id
+
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
+// ── Payment Gateway Integration ──
+
+[Index(nameof(LearnerUserId))]
+[Index(nameof(GatewayTransactionId), IsUnique = true)]
+public class PaymentTransaction
+{
+    [Key]
+    public Guid Id { get; set; }
+
+    [MaxLength(64)]
+    public string LearnerUserId { get; set; } = default!;
+
+    [MaxLength(16)]
+    public string Gateway { get; set; } = default!; // stripe | paypal
+
+    [MaxLength(256)]
+    public string GatewayTransactionId { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string TransactionType { get; set; } = default!;
+    // subscription_payment | one_time_purchase | wallet_top_up | refund
+
+    [MaxLength(32)]
+    public string Status { get; set; } = "pending";
+    // pending | completed | failed | refunded | disputed
+
+    public decimal Amount { get; set; }
+
+    [MaxLength(8)]
+    public string Currency { get; set; } = "AUD";
+
+    [MaxLength(32)]
+    public string? ProductType { get; set; } // plan | addon | wallet_top_up
+
+    [MaxLength(128)]
+    public string? ProductId { get; set; }
+
+    public string? MetadataJson { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+[Index(nameof(GatewayEventId), IsUnique = true)]
+public class PaymentWebhookEvent
+{
+    [Key]
+    public Guid Id { get; set; }
+
+    [MaxLength(16)]
+    public string Gateway { get; set; } = default!; // stripe | paypal
+
+    [MaxLength(128)]
+    public string EventType { get; set; } = default!;
+
+    [MaxLength(256)]
+    public string GatewayEventId { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string ProcessingStatus { get; set; } = "received";
+    // received | processing | completed | failed | ignored
+
+    public string PayloadJson { get; set; } = "{}";
+
+    public string? ErrorMessage { get; set; }
+
+    public DateTimeOffset ReceivedAt { get; set; }
+    public DateTimeOffset? ProcessedAt { get; set; }
 }

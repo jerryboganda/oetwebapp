@@ -1,15 +1,29 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useContext, useEffect, useState } from 'react';
+import { AuthContext } from '@/contexts/auth-context';
 import { useAnalytics } from '@/hooks/use-analytics';
-import { fetchDashboardHome, fetchReadiness, fetchStudyPlan, fetchUserProfile } from '@/lib/api';
+import { fetchDashboardHome, fetchEngagement, fetchReadiness, fetchStudyPlan, fetchUserProfile } from '@/lib/api';
 import type { ReadinessData, StudyPlanTask, UserProfile } from '@/lib/mock-data';
+
+export interface EngagementData {
+  currentStreak: number;
+  longestStreak: number;
+  lastPracticeDate: string | null;
+  totalPracticeMinutes: number;
+  totalPracticeSessions: number;
+  avgSessionMinutes: number;
+  weeklyActivity: { day: string; active: boolean }[];
+  streakFreezeAvailable: boolean;
+  streakFreezeUsedThisWeek: boolean;
+}
 
 export interface DashboardHomeData {
   home: Record<string, any> | null;
   profile: UserProfile | null;
   readiness: ReadinessData | null;
   tasks: StudyPlanTask[];
+  engagement: EngagementData | null;
 }
 
 interface DashboardHomeState {
@@ -24,6 +38,7 @@ const initialState: DashboardHomeState = {
     profile: null,
     readiness: null,
     tasks: [],
+    engagement: null,
   },
   error: null,
   status: 'loading',
@@ -45,9 +60,16 @@ function toErrorMessage(error: unknown): string {
 
 export function useDashboardHome() {
   const { track } = useAnalytics();
+  const authContext = useContext(AuthContext);
+  const authLoading = authContext?.loading ?? false;
+  const isAuthenticated = authContext?.isAuthenticated ?? true;
   const [state, setState] = useState<DashboardHomeState>(initialState);
 
   async function load() {
+    if (authLoading || !isAuthenticated) {
+      return;
+    }
+
     setState((current) => ({
       ...current,
       error: null,
@@ -55,12 +77,25 @@ export function useDashboardHome() {
     }));
 
     try {
-      const [tasks, readiness, profile, home] = await Promise.all([
+      const [tasks, readiness, profile, home, engagementData] = await Promise.all([
         fetchStudyPlan(),
         fetchReadiness(),
         fetchUserProfile(),
         fetchDashboardHome(),
+        fetchEngagement(),
       ]);
+
+      const engagement: EngagementData = {
+        currentStreak: (engagementData as any)?.currentStreak ?? 0,
+        longestStreak: (engagementData as any)?.longestStreak ?? 0,
+        lastPracticeDate: (engagementData as any)?.lastPracticeDate ?? null,
+        totalPracticeMinutes: (engagementData as any)?.totalPracticeMinutes ?? 0,
+        totalPracticeSessions: (engagementData as any)?.totalPracticeSessions ?? 0,
+        avgSessionMinutes: (engagementData as any)?.avgSessionMinutes ?? 0,
+        weeklyActivity: (engagementData as any)?.weeklyActivity ?? [],
+        streakFreezeAvailable: (engagementData as any)?.streakFreezeAvailable ?? false,
+        streakFreezeUsedThisWeek: (engagementData as any)?.streakFreezeUsedThisWeek ?? false,
+      };
 
       setState({
         data: {
@@ -68,6 +103,7 @@ export function useDashboardHome() {
           profile,
           readiness,
           tasks,
+          engagement,
         },
         error: null,
         status: 'success',
@@ -84,9 +120,22 @@ export function useDashboardHome() {
   }
 
   useEffect(() => {
+    if (authLoading) {
+      return;
+    }
+
+    if (!isAuthenticated) {
+      setState({
+        data: initialState.data,
+        error: null,
+        status: 'success',
+      });
+      return;
+    }
+
     void load();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [authLoading, isAuthenticated]);
 
   return {
     data: state.data,

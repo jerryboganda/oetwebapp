@@ -1,10 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockFetchReadingHome, mockFetchMockReports, mockTrack } = vi.hoisted(() => ({
+const { mockFetchReadingHome, mockFetchMockReports, mockTrack, mockUseAuth } = vi.hoisted(() => ({
   mockFetchReadingHome: vi.fn(),
   mockFetchMockReports: vi.fn(),
   mockTrack: vi.fn(),
+  mockUseAuth: vi.fn(),
 }));
 
 vi.mock('next/link', () => ({
@@ -23,6 +24,10 @@ vi.mock('@/components/layout', () => ({
   ),
 }));
 
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => mockUseAuth(),
+}));
+
 vi.mock('@/lib/analytics', () => ({
   analytics: {
     track: mockTrack,
@@ -39,6 +44,10 @@ import ReadingPage from './page';
 describe('Reading page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseAuth.mockReturnValue({
+      isAuthenticated: true,
+      loading: false,
+    });
     mockFetchReadingHome.mockResolvedValue({
       intro: 'Reading practice focuses on rapid detail extraction and inference control.',
       featuredTasks: [

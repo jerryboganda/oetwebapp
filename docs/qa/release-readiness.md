@@ -7,6 +7,7 @@
   - no known high-severity defects remain
   - no known reproduced medium defects remain from the audited surface
   - Playwright smoke matrix and backend tests are green
+  - Electron desktop smoke is green in both dev and packaged local unsigned validation
   - Chromium now covers expert review completion/rework, admin deep publish/export/user mutations, and learner immersive listening/writing/speaking completion
   - remaining concerns are external signoff and coverage-depth risks, not active reproduced release blockers
 

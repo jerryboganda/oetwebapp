@@ -1,4 +1,5 @@
 using System.Globalization;
+using System.Linq.Expressions;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
@@ -76,11 +77,12 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
 
         var evaluations = attemptIds.Count == 0
             ? []
-            : await db.Evaluations
-                .AsNoTracking()
-                .Where(evaluation => attemptIds.Contains(evaluation.AttemptId))
-                .OrderByDescending(evaluation => evaluation.GeneratedAt)
-                .ToListAsync(ct);
+            : await ToOrderedListDescendingAsync(
+                db.Evaluations
+                    .AsNoTracking()
+                    .Where(evaluation => attemptIds.Contains(evaluation.AttemptId)),
+                evaluation => evaluation.GeneratedAt,
+                ct);
 
         var latestEvaluations = evaluations
             .GroupBy(evaluation => evaluation.AttemptId)
@@ -147,11 +149,12 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
             PageSize = 5
         }, ct);
 
-        var draftRows = await db.ExpertReviewDrafts
-            .AsNoTracking()
-            .Where(draft => draft.ReviewerId == reviewerId && (draft.State == null || draft.State != "submitted"))
-            .OrderByDescending(draft => draft.DraftSavedAt)
-            .ToListAsync(ct);
+        var draftRows = await ToOrderedListDescendingAsync(
+            db.ExpertReviewDrafts
+                .AsNoTracking()
+                .Where(draft => draft.ReviewerId == reviewerId && (draft.State == null || draft.State != "submitted")),
+            draft => draft.DraftSavedAt,
+            ct);
 
         var draftReviewIds = draftRows.Select(draft => draft.ReviewRequestId).Distinct().ToHashSet(StringComparer.Ordinal);
         var resumeDrafts = assignedQueue.Items
@@ -176,23 +179,25 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
 
         var metrics = await GetMetricsAsync(reviewerId, 7, ct);
 
-        var availability = await db.ExpertAvailabilities
-            .AsNoTracking()
-            .Where(existingAvailability => existingAvailability.ReviewerId == reviewerId)
-            .OrderByDescending(existingAvailability => existingAvailability.EffectiveFrom)
-            .FirstOrDefaultAsync(ct);
+        var availability = await FirstOrDefaultOrderedDescendingAsync(
+            db.ExpertAvailabilities
+                .AsNoTracking()
+                .Where(existingAvailability => existingAvailability.ReviewerId == reviewerId),
+            existingAvailability => existingAvailability.EffectiveFrom,
+            ct);
 
         var todayKey = ResolveTodayKey(expert.Timezone);
         var todaySchedule = availability is null
             ? DefaultScheduleDays().GetValueOrDefault(todayKey)
             : JsonSupport.Deserialize(availability.DaysJson, DefaultScheduleDays()).GetValueOrDefault(todayKey);
 
-        var auditEvents = await db.AuditEvents
-            .AsNoTracking()
-            .Where(auditEvent => auditEvent.ActorId == reviewerId || auditEvent.ActorName == expert.DisplayName)
-            .OrderByDescending(auditEvent => auditEvent.OccurredAt)
-            .Take(6)
-            .ToListAsync(ct);
+        var auditEvents = await ToOrderedListDescendingAsync(
+            db.AuditEvents
+                .AsNoTracking()
+                .Where(auditEvent => auditEvent.ActorId == reviewerId || auditEvent.ActorName == expert.DisplayName),
+            auditEvent => auditEvent.OccurredAt,
+            ct,
+            take: 6);
 
         var recentActivity = auditEvents
             .Select(auditEvent => new ExpertDashboardActivityResponse(
@@ -767,11 +772,12 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         var attemptIds = attempts.Select(attempt => attempt.Id).ToList();
         var evaluations = attemptIds.Count == 0
             ? []
-            : await db.Evaluations
-                .AsNoTracking()
-                .Where(evaluation => attemptIds.Contains(evaluation.AttemptId))
-                .OrderByDescending(evaluation => evaluation.GeneratedAt)
-                .ToListAsync(ct);
+            : await ToOrderedListDescendingAsync(
+                db.Evaluations
+                    .AsNoTracking()
+                    .Where(evaluation => attemptIds.Contains(evaluation.AttemptId)),
+                evaluation => evaluation.GeneratedAt,
+                ct);
 
         var evaluationByAttemptId = evaluations
             .GroupBy(evaluation => evaluation.AttemptId)
@@ -876,10 +882,11 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
     {
         await EnsureExpertAsync(reviewerId, ct);
 
-        var cases = await db.ExpertCalibrationCases
-            .AsNoTracking()
-            .OrderByDescending(calibrationCase => calibrationCase.CreatedAt)
-            .ToListAsync(ct);
+        var cases = await ToOrderedListDescendingAsync(
+            db.ExpertCalibrationCases
+                .AsNoTracking(),
+            calibrationCase => calibrationCase.CreatedAt,
+            ct);
 
         var results = await db.ExpertCalibrationResults
             .AsNoTracking()
@@ -906,12 +913,13 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
     {
         await EnsureExpertAsync(reviewerId, ct);
 
-        var notes = await db.ExpertCalibrationNotes
-            .AsNoTracking()
-            .Where(note => note.ReviewerId == reviewerId || note.ReviewerId == null)
-            .OrderByDescending(note => note.CreatedAt)
-            .Take(50)
-            .ToListAsync(ct);
+        var notes = await ToOrderedListDescendingAsync(
+            db.ExpertCalibrationNotes
+                .AsNoTracking()
+                .Where(note => note.ReviewerId == reviewerId || note.ReviewerId == null),
+            note => note.CreatedAt,
+            ct,
+            take: 50);
 
         return notes.Select(note => new ExpertCalibrationNoteResponse(
             note.Id,
@@ -1068,11 +1076,12 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
     {
         await EnsureExpertAsync(reviewerId, ct);
 
-        var availability = await db.ExpertAvailabilities
-            .AsNoTracking()
-            .Where(existingAvailability => existingAvailability.ReviewerId == reviewerId)
-            .OrderByDescending(existingAvailability => existingAvailability.EffectiveFrom)
-            .FirstOrDefaultAsync(ct);
+        var availability = await FirstOrDefaultOrderedDescendingAsync(
+            db.ExpertAvailabilities
+                .AsNoTracking()
+                .Where(existingAvailability => existingAvailability.ReviewerId == reviewerId),
+            existingAvailability => existingAvailability.EffectiveFrom,
+            ct);
 
         if (availability is null)
         {
@@ -1417,11 +1426,12 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
 
         var learner = await db.Users.AsNoTracking().FirstOrDefaultAsync(user => user.Id == attempt.UserId, ct);
         var content = await db.ContentItems.AsNoTracking().FirstOrDefaultAsync(item => item.Id == attempt.ContentId, ct);
-        var evaluation = await db.Evaluations
-            .AsNoTracking()
-            .Where(existingEvaluation => existingEvaluation.AttemptId == attempt.Id)
-            .OrderByDescending(existingEvaluation => existingEvaluation.GeneratedAt)
-            .FirstOrDefaultAsync(ct);
+        var evaluation = await FirstOrDefaultOrderedDescendingAsync(
+            db.Evaluations
+                .AsNoTracking()
+                .Where(existingEvaluation => existingEvaluation.AttemptId == attempt.Id),
+            existingEvaluation => existingEvaluation.GeneratedAt,
+            ct);
 
         var assignments = await db.ExpertReviewAssignments
             .AsNoTracking()
@@ -1462,11 +1472,12 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
                 .Where(expert => assignedReviewerIds.Contains(expert.Id))
                 .ToDictionaryAsync(expert => expert.Id, ct);
 
-        var draftEntity = await db.ExpertReviewDrafts
-            .AsNoTracking()
-            .Where(existingDraft => existingDraft.ReviewRequestId == reviewRequestId && existingDraft.ReviewerId == reviewerId)
-            .OrderByDescending(existingDraft => existingDraft.DraftSavedAt)
-            .FirstOrDefaultAsync(ct);
+        var draftEntity = await FirstOrDefaultOrderedDescendingAsync(
+            db.ExpertReviewDrafts
+                .AsNoTracking()
+                .Where(existingDraft => existingDraft.ReviewRequestId == reviewRequestId && existingDraft.ReviewerId == reviewerId),
+            existingDraft => existingDraft.DraftSavedAt,
+            ct);
 
         return new ReadContext(reviewRequest, attempt, learner, activeAssignment, content, evaluation, BuildDraftResponse(draftEntity), assignedReviewers);
     }
@@ -1520,11 +1531,12 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
             return [];
         }
 
-        return await db.ReviewRequests
-            .AsNoTracking()
-            .Where(reviewRequest => learnerAttemptIds.Contains(reviewRequest.AttemptId) && accessibleReviewIds.Contains(reviewRequest.Id))
-            .OrderByDescending(reviewRequest => reviewRequest.CompletedAt ?? reviewRequest.CreatedAt)
-            .ToListAsync(ct);
+        return await ToOrderedListDescendingAsync(
+            db.ReviewRequests
+                .AsNoTracking()
+                .Where(reviewRequest => learnerAttemptIds.Contains(reviewRequest.AttemptId) && accessibleReviewIds.Contains(reviewRequest.Id)),
+            reviewRequest => reviewRequest.CompletedAt ?? reviewRequest.CreatedAt,
+            ct);
     }
 
     private async Task<ExpertReviewAssignment?> GetActiveAssignmentAsync(string reviewRequestId, bool tracked, CancellationToken ct)
@@ -1535,10 +1547,63 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
             query = query.AsNoTracking();
         }
 
-        return await query
+        if (!db.Database.IsSqlite())
+        {
+            return await query
+                .OrderByDescending(assignment => assignment.AssignedAt ?? DateTimeOffset.MinValue)
+                .ThenByDescending(assignment => assignment.ReleasedAt ?? DateTimeOffset.MinValue)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        return (await query.ToListAsync(ct))
             .OrderByDescending(assignment => assignment.AssignedAt ?? DateTimeOffset.MinValue)
             .ThenByDescending(assignment => assignment.ReleasedAt ?? DateTimeOffset.MinValue)
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefault();
+    }
+
+    private async Task<List<TItem>> ToOrderedListDescendingAsync<TItem, TKey>(
+        IQueryable<TItem> query,
+        Expression<Func<TItem, TKey>> orderBy,
+        CancellationToken ct,
+        int? take = null)
+    {
+        if (!db.Database.IsSqlite())
+        {
+            IQueryable<TItem> orderedQuery = query.OrderByDescending(orderBy);
+            if (take is int takeCount)
+            {
+                orderedQuery = orderedQuery.Take(takeCount);
+            }
+
+            return await orderedQuery.ToListAsync(ct);
+        }
+
+        IEnumerable<TItem> orderedItems = (await query.ToListAsync(ct))
+            .OrderByDescending(orderBy.Compile());
+
+        if (take is int takeLimit)
+        {
+            orderedItems = orderedItems.Take(takeLimit);
+        }
+
+        return orderedItems.ToList();
+    }
+
+    private async Task<TItem?> FirstOrDefaultOrderedDescendingAsync<TItem, TKey>(
+        IQueryable<TItem> query,
+        Expression<Func<TItem, TKey>> orderBy,
+        CancellationToken ct)
+    {
+        if (!db.Database.IsSqlite())
+        {
+            return await query
+                .OrderByDescending(orderBy)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        return (await query.ToListAsync(ct))
+            .OrderByDescending(orderBy.Compile())
+            .FirstOrDefault();
     }
 
     private static List<ExpertQueueItemResponse> ApplyQueueFilters(List<ExpertQueueItemResponse> items, ExpertQueueQueryRequest request)

@@ -26,6 +26,10 @@ interface AuthScreenShellProps {
   headerClassName?: string;
 }
 
+function isActionHref(href: string) {
+  return href.startsWith('/api/') || href.includes('/api/');
+}
+
 export function AuthScreenShell({
   title,
   subtitle,
@@ -72,14 +76,26 @@ export function AuthScreenShell({
                 <div className={styles.divider}>OR</div>
                 <div className={styles.socials}>
                   {socials.map((social) => (
-                    <Link
-                      key={social.label}
-                      href={social.href}
-                      aria-label={social.label}
-                      className={styles.social}
-                    >
-                      {social.icon}
-                    </Link>
+                    isActionHref(social.href) ? (
+                      <a
+                        key={social.label}
+                        href={social.href}
+                        aria-label={social.label}
+                        className={styles.social}
+                      >
+                        {social.icon}
+                      </a>
+                    ) : (
+                      <Link
+                        key={social.label}
+                        href={social.href}
+                        prefetch={false}
+                        aria-label={social.label}
+                        className={styles.social}
+                      >
+                        {social.icon}
+                      </Link>
+                    )
                   ))}
                 </div>
               </>

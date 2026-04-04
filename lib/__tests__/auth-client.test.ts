@@ -163,6 +163,16 @@ describe('auth-client', () => {
       email: 'learner@oet-prep.dev',
       password: 'Password123!',
       displayName: 'Learner Local',
+      firstName: 'Learner',
+      lastName: 'Local',
+      mobileNumber: '+923001234567',
+      examTypeId: 'oet',
+      professionId: 'nursing',
+      sessionId: 'session-oet-nursing-apr',
+      countryTarget: 'Australia',
+      agreeToTerms: true,
+      agreeToPrivacy: true,
+      marketingOptIn: false,
     }, { persistSession: false })).resolves.toEqual(session);
 
     expect(loadStoredSession()).toBeNull();

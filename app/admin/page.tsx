@@ -5,7 +5,6 @@ import Link from 'next/link';
 import { AlertTriangle, ArrowRight, BarChart3, CreditCard, FileText, Flag, Inbox, Sparkles } from 'lucide-react';
 import { AdminRouteFreshnessBadge, AdminRouteHero, AdminRoutePanel, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { Button } from '@/components/ui/button';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { getAdminDashboardData } from '@/lib/admin';
 import type { AdminDashboardData } from '@/lib/types/admin';
@@ -16,6 +15,7 @@ export default function AdminDashboardPage() {
   const { isAuthenticated, role } = useAdminAuth();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
   const [dashboard, setDashboard] = useState<AdminDashboardData | null>(null);
+  const quickActionLinkClassName = 'inline-flex w-full items-center justify-center rounded-lg px-5 py-2 text-sm font-medium transition-[background-color,border-color,color,box-shadow,transform,opacity] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2';
 
   useEffect(() => {
     let cancelled = false;
@@ -66,12 +66,12 @@ export default function AdminDashboardPage() {
                     <p className="mt-1 text-sm text-muted">Move straight into the admin areas that typically need action first.</p>
                   </div>
                   <div className="space-y-2">
-                    <Button fullWidth asChild>
-                      <Link href="/admin/review-ops">Open Review Ops</Link>
-                    </Button>
-                    <Button fullWidth variant="outline" asChild>
-                      <Link href="/admin/content">Open Content Library</Link>
-                    </Button>
+                    <Link href="/admin/review-ops" className={`${quickActionLinkClassName} bg-primary text-white shadow-sm hover:bg-primary/90`}>
+                      Open Review Ops
+                    </Link>
+                    <Link href="/admin/content" className={`${quickActionLinkClassName} border border-gray-300 text-navy hover:bg-gray-50`}>
+                      Open Content Library
+                    </Link>
                   </div>
                   <div className="space-y-1 text-xs text-muted">
                     <AdminRouteFreshnessBadge value={dashboard.generatedAt} />

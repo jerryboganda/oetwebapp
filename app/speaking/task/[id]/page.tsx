@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, Suspense, useCallback } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { motion, AnimatePresence } from 'motion/react';
 import {
@@ -14,6 +15,7 @@ import { Timer } from '@/components/ui/timer';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchRoleCard, submitSpeakingRecording } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { SpeakingRecorder, base64ToBlob } from '@/lib/mobile/speaking-recorder';
 import type { RoleCard } from '@/lib/mock-data';
 
 // --- Types ---
@@ -54,6 +56,7 @@ function LiveSpeakingTaskContent() {
   // --- Refs ---
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const nativePulseRef = useRef<number | null>(null);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -67,6 +70,7 @@ function LiveSpeakingTaskContent() {
   const stopTriggerRef = useRef<HTMLButtonElement | null>(null);
   const submitTriggerRef = useRef<HTMLButtonElement | null>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const isNativeRecorder = Capacitor.isNativePlatform();
 
   // --- Timer ---
   useEffect(() => {
@@ -75,6 +79,27 @@ function LiveSpeakingTaskContent() {
 
   const buildRecordingBlob = () =>
     new Blob(audioChunksRef.current, { type: mediaRecorderRef.current?.mimeType || 'audio/webm' });
+
+  const stopNativeVisualizerPulse = useCallback(() => {
+    if (nativePulseRef.current !== null) {
+      window.clearInterval(nativePulseRef.current);
+      nativePulseRef.current = null;
+    }
+  }, []);
+
+  const startNativeVisualizerPulse = useCallback(() => {
+    stopNativeVisualizerPulse();
+
+    nativePulseRef.current = window.setInterval(() => {
+      setAudioLevels([
+        12 + Math.random() * 8,
+        18 + Math.random() * 12,
+        24 + Math.random() * 10,
+        18 + Math.random() * 12,
+        12 + Math.random() * 8,
+      ]);
+    }, 160);
+  }, [stopNativeVisualizerPulse]);
 
   const trapDialogFocus = useCallback((event: KeyboardEvent, dialog: HTMLDivElement | null) => {
     if (event.key !== 'Tab' || !dialog) return;
@@ -100,6 +125,11 @@ function LiveSpeakingTaskContent() {
   }, []);
 
   const stopRecorderAsync = async () => {
+    if (isNativeRecorder) {
+      const recording = await SpeakingRecorder.stop();
+      return base64ToBlob(recording.base64, recording.mimeType);
+    }
+
     const recorder = mediaRecorderRef.current;
     if (!recorder || recorder.state === 'inactive') {
       return buildRecordingBlob();
@@ -122,12 +152,17 @@ function LiveSpeakingTaskContent() {
     });
   };
 
-  const cleanupAudio = (stopRecorder = true) => {
+  const cleanupAudio = useCallback((stopRecorder = true) => {
+    stopNativeVisualizerPulse();
+
     if (animationFrameRef.current) {
       cancelAnimationFrame(animationFrameRef.current);
     }
     if (audioContextRef.current && audioContextRef.current.state !== 'closed') {
       audioContextRef.current.close().catch(console.error);
+    }
+    if (stopRecorder && isNativeRecorder) {
+      void SpeakingRecorder.cancel().catch(() => undefined);
     }
     if (stopRecorder && mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
@@ -135,7 +170,7 @@ function LiveSpeakingTaskContent() {
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(track => track.stop());
     }
-  };
+  }, [isNativeRecorder, stopNativeVisualizerPulse]);
 
   const setupVisualizer = (stream: MediaStream, audioContext: AudioContext) => {
     const source = audioContext.createMediaStreamSource(stream);
@@ -170,7 +205,7 @@ function LiveSpeakingTaskContent() {
     return () => {
       cleanupAudio();
     };
-  }, []);
+  }, [cleanupAudio]);
 
   useEffect(() => {
     const activeDialogRef = showStopConfirm ? stopDialogRef : showSubmitConfirm ? submitDialogRef : null;
@@ -218,24 +253,43 @@ function LiveSpeakingTaskContent() {
 
   // --- Local Recording Controls (Self/Exam Mode) ---
   const handleStartRecording = async () => {
-    if (recordingState === 'paused' && mediaRecorderRef.current) {
-      mediaRecorderRef.current.resume();
+    if (recordingState === 'paused' && (isNativeRecorder || mediaRecorderRef.current)) {
+      if (isNativeRecorder) {
+        await SpeakingRecorder.resume();
+        startNativeVisualizerPulse();
+      } else {
+        const recorder = mediaRecorderRef.current;
+        if (!recorder) {
+          return;
+        }
+
+        recorder.resume();
+      }
       setRecordingState('recording');
       return;
     }
 
     try {
+      if (isNativeRecorder) {
+        await SpeakingRecorder.start({ mimeType: 'audio/mp4' });
+        mediaRecorderRef.current = null;
+        audioChunksRef.current = [];
+        startNativeVisualizerPulse();
+        setRecordingState('recording');
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       streamRef.current = stream;
       mediaRecorderRef.current = new MediaRecorder(stream);
       audioChunksRef.current = [];
-      
+
       mediaRecorderRef.current.ondataavailable = (e) => {
         if (e.data.size > 0) {
           audioChunksRef.current.push(e.data);
         }
       };
-      
+
       mediaRecorderRef.current.start(100); // Collect data every 100ms
       setRecordingState('recording');
 
@@ -249,6 +303,13 @@ function LiveSpeakingTaskContent() {
   };
 
   const handlePauseRecording = () => {
+    if (isNativeRecorder) {
+      void SpeakingRecorder.pause().catch(() => undefined);
+      stopNativeVisualizerPulse();
+      setRecordingState('paused');
+      return;
+    }
+
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.pause();
       setRecordingState('paused');
@@ -433,7 +494,7 @@ function LiveSpeakingTaskContent() {
         </div>
 
         {/* Role Card & Notes Toggles */}
-        <div className="absolute bottom-32 left-1/2 -translate-x-1/2 flex gap-4 z-20">
+        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-4 z-20">
           <button 
             onClick={() => setShowRoleCard(!showRoleCard)}
             className={`px-6 py-2 rounded-full text-xs font-bold flex items-center gap-2 transition-all ${

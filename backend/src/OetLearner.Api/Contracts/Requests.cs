@@ -4,6 +4,7 @@ public record PatchGoalsRequest(
     string? ProfessionId,
     DateOnly? TargetExamDate,
     string? OverallGoal,
+    string? ExamFamilyCode,
     int? TargetWritingScore,
     int? TargetSpeakingScore,
     int? TargetReadingScore,
@@ -63,7 +64,8 @@ public record CheckoutSessionCreateRequest(
     string? CouponCode = null,
     List<string>? AddOnCodes = null,
     string? QuoteId = null,
-    string? IdempotencyKey = null);
+    string? IdempotencyKey = null,
+    string? Gateway = null);
 
 public record StudyPlanRescheduleRequest(DateOnly? DueDate);
 
@@ -79,3 +81,8 @@ public record MockAttemptCreateRequest(
     string? ReviewSelection = null);
 
 public record RevisionSubmitRequest(string Content, string? IdempotencyKey);
+
+public record WalletTopUpRequest(
+    int Amount,
+    string Gateway,
+    string? IdempotencyKey = null);

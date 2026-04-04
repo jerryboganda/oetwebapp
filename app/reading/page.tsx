@@ -8,6 +8,7 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
 import { fetchMockReports, fetchReadingHome } from '@/lib/api';
 import type { MockReport } from '@/lib/mock-data';
@@ -23,6 +24,7 @@ interface ReadingHomeTask {
 }
 
 export default function ReadingHome() {
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [home, setHome] = useState<Record<string, any> | null>(null);
   const [tasks, setTasks] = useState<ReadingHomeTask[]>([]);
   const [mockReports, setMockReports] = useState<MockReport[]>([]);
@@ -30,7 +32,13 @@ export default function ReadingHome() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (authLoading || !isAuthenticated) {
+      return;
+    }
+
     let cancelled = false;
+    setLoading(true);
+    setError(null);
     analytics.track('module_entry', { module: 'reading' });
 
     (async () => {
@@ -54,7 +62,7 @@ export default function ReadingHome() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authLoading, isAuthenticated]);
 
   const mockRoute = home?.mockSets?.[0]?.route ?? '/mocks';
 

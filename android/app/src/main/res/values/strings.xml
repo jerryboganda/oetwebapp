@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">OET Prep Learner</string>
+    <string name="title_activity_main">OET Prep Learner</string>
+    <string name="package_name">com.oetprep.learner</string>
+    <string name="custom_url_scheme">com.oetprep.learner</string>
+</resources>

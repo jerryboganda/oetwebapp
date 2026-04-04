@@ -231,7 +231,7 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
-    public async Task CheckoutSession_UsesConfiguredProductionCheckoutBaseUrl()
+    public async Task CheckoutSession_UsesHostedProviderCheckoutUrl()
     {
         using var learner = await CreateLearnerClientAsync("checkout-user");
 
@@ -247,9 +247,8 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         var checkoutUrl = json.RootElement.GetProperty("checkoutUrl").GetString();
         Assert.NotNull(checkoutUrl);
-        Assert.StartsWith("https://app.example.test/billing/checkout", checkoutUrl, StringComparison.Ordinal);
-        Assert.Contains("productType=review_credits", checkoutUrl, StringComparison.Ordinal);
-        Assert.Contains("quantity=3", checkoutUrl, StringComparison.Ordinal);
+        Assert.StartsWith("https://checkout.stripe.com/pay/", checkoutUrl, StringComparison.Ordinal);
+        Assert.DoesNotContain("app.example.test/billing/checkout", checkoutUrl, StringComparison.Ordinal);
     }
 
     private async Task<HttpClient> CreateLearnerClientAsync(string userId)

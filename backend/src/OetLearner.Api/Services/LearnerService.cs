@@ -8,7 +8,13 @@ namespace OetLearner.Api.Services;
 
 public sealed record GeneratedDownloadFile(Stream Stream, string ContentType, string FileName);
 
-public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorage, PlatformLinkService platformLinks, NotificationService notifications)
+public class LearnerService(
+    LearnerDbContext db,
+    MediaStorageService mediaStorage,
+    PlatformLinkService platformLinks,
+    NotificationService notifications,
+    WalletService walletService,
+    PaymentGatewayService paymentGateways)
 {
     public async Task<object> GetMeAsync(string userId, CancellationToken cancellationToken)
     {
@@ -29,6 +35,7 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
             activeProfessionId = user.ActiveProfessionId,
             goals = new
             {
+                examFamilyCode = goal.ExamFamilyCode,
                 professionId = goal.ProfessionId,
                 targetExamDate = goal.TargetExamDate,
                 targetScoresBySubtest = new
@@ -196,17 +203,27 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
     {
         await EnsureUserAsync(userId, cancellationToken);
         var goal = await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken);
+        var examFamilyCode = NormalizeExamFamilyCode(request.ExamFamilyCode ?? goal.ExamFamilyCode);
+        var examFamilyExists = await db.ExamFamilies.AsNoTracking()
+            .AnyAsync(x => x.IsActive && x.Code == examFamilyCode, cancellationToken);
+        if (!examFamilyExists)
+        {
+            throw ApiException.Validation(
+                "invalid_exam_family",
+                $"Exam family '{examFamilyCode}' is not supported.",
+                [new ApiFieldError("examFamilyCode", "unsupported", "Choose a supported exam family.")]);
+        }
 
-        // Validate score ranges (OET scores: 0-500)
-        ValidateScoreRange(request.TargetWritingScore, nameof(request.TargetWritingScore));
-        ValidateScoreRange(request.TargetSpeakingScore, nameof(request.TargetSpeakingScore));
-        ValidateScoreRange(request.TargetReadingScore, nameof(request.TargetReadingScore));
-        ValidateScoreRange(request.TargetListeningScore, nameof(request.TargetListeningScore));
+        ValidateScoreRange(request.TargetWritingScore, nameof(request.TargetWritingScore), examFamilyCode);
+        ValidateScoreRange(request.TargetSpeakingScore, nameof(request.TargetSpeakingScore), examFamilyCode);
+        ValidateScoreRange(request.TargetReadingScore, nameof(request.TargetReadingScore), examFamilyCode);
+        ValidateScoreRange(request.TargetListeningScore, nameof(request.TargetListeningScore), examFamilyCode);
         if (request.StudyHoursPerWeek.HasValue && (request.StudyHoursPerWeek.Value < 0 || request.StudyHoursPerWeek.Value > 168))
             throw ApiException.Validation("invalid_study_hours", "Study hours per week must be between 0 and 168.", [new ApiFieldError("studyHoursPerWeek", "out_of_range", "Must be 0–168.")]);
         if (request.PreviousAttempts.HasValue && request.PreviousAttempts.Value < 0)
             throw ApiException.Validation("invalid_previous_attempts", "Previous attempts cannot be negative.", [new ApiFieldError("previousAttempts", "out_of_range", "Must be 0 or greater.")]);
 
+        goal.ExamFamilyCode = examFamilyCode;
         if (!string.IsNullOrWhiteSpace(request.ProfessionId)) goal.ProfessionId = request.ProfessionId;
         if (request.TargetExamDate.HasValue) goal.TargetExamDate = request.TargetExamDate;
         if (request.OverallGoal is not null) goal.OverallGoal = request.OverallGoal;
@@ -227,10 +244,27 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
         return GoalDto(goal);
     }
 
-    private static void ValidateScoreRange(int? score, string fieldName)
+    private static void ValidateScoreRange(int? score, string fieldName, string examFamilyCode)
     {
-        if (score.HasValue && (score.Value < 0 || score.Value > 500))
-            throw ApiException.Validation("invalid_score_range", $"Target score must be between 0 and 500.", [new ApiFieldError(fieldName, "out_of_range", "Must be 0–500.")]);
+        if (!score.HasValue)
+        {
+            return;
+        }
+
+        var (minimum, maximum, label) = examFamilyCode switch
+        {
+            "ielts" => (0, 9, "0-9"),
+            "pte" => (10, 90, "10-90"),
+            _ => (0, 500, "0-500")
+        };
+
+        if (score.Value < minimum || score.Value > maximum)
+        {
+            throw ApiException.Validation(
+                "invalid_score_range",
+                $"Target score must be between {minimum} and {maximum} for {label} scoring.",
+                [new ApiFieldError(fieldName, "out_of_range", $"Must be {minimum}–{maximum} for {label} scoring.")]);
+        }
     }
 
     public async Task<object> SubmitGoalsAsync(string userId, CancellationToken cancellationToken)
@@ -293,6 +327,7 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
         studyValues["studyHoursPerWeek"] = goal.StudyHoursPerWeek;
         studyValues["targetCountry"] = goal.TargetCountry;
         studyValues["professionId"] = goal.ProfessionId ?? user.ActiveProfessionId;
+        studyValues["examFamilyCode"] = goal.ExamFamilyCode;
 
         return section.ToLowerInvariant() switch
         {
@@ -438,6 +473,8 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
     public async Task<object> GetDiagnosticOverviewAsync(string userId, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
+        var goal = await db.Goals.AsNoTracking().FirstAsync(x => x.UserId == userId, cancellationToken);
+        var examFamilyLabel = FormatExamFamilyLabel(goal.ExamFamilyCode);
         var session = await db.DiagnosticSessions.Where(x => x.UserId == userId).OrderByDescending(x => x.StartedAt).FirstOrDefaultAsync(cancellationToken);
         if (session is null)
         {
@@ -446,7 +483,7 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
                 diagnosticId = (string?)null,
                 state = "not_started",
                 estimatedTotalMinutes = 120,
-                disclaimer = "Diagnostic results are training estimates only and are not official OET scores.",
+                disclaimer = $"Diagnostic results are training estimates only and are not official {examFamilyLabel} scores.",
                 resumable = false,
                 startRoute = "/app/diagnostic",
                 subtests = new[]
@@ -466,7 +503,7 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
             diagnosticId = session.Id,
             state = ToApiState(session.State),
             estimatedTotalMinutes = subtests.Sum(x => x.EstimatedDurationMinutes),
-            disclaimer = "Diagnostic results are training estimates only and are not official OET scores.",
+            disclaimer = $"Diagnostic results are training estimates only and are not official {examFamilyLabel} scores.",
             resumable = session.State is AttemptState.InProgress or AttemptState.Paused,
             startRoute = "/app/diagnostic",
             subtests = subtests.OrderBy(x => DiagnosticSubtestOrder(x.SubtestCode)).Select(x => new
@@ -482,6 +519,7 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
     public async Task<object> CreateOrResumeDiagnosticAsync(string userId, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
+        var goal = await db.Goals.AsNoTracking().FirstAsync(x => x.UserId == userId, cancellationToken);
         var active = await db.DiagnosticSessions.Where(x => x.UserId == userId && x.State == AttemptState.InProgress).FirstOrDefaultAsync(cancellationToken);
         if (active is not null)
         {
@@ -504,6 +542,7 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
             Id = id,
             UserId = userId,
             State = AttemptState.InProgress,
+            ExamFamilyCode = NormalizeExamFamilyCode(goal.ExamFamilyCode),
             StartedAt = now,
             ExpiresAt = now.AddDays(7)
         };
@@ -677,10 +716,7 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
         var plan = await GetStudyPlanAsync(userId, cancellationToken);
         var activePlan = await GetActiveStudyPlanEntityAsync(userId, cancellationToken);
         var attemptIds = await db.Attempts.Where(x => x.UserId == userId).Select(x => x.Id).ToListAsync(cancellationToken);
-        var latestEvaluation = await db.Evaluations
-            .Where(x => attemptIds.Contains(x.AttemptId))
-            .OrderByDescending(x => x.GeneratedAt)
-            .FirstOrDefaultAsync(cancellationToken);
+        var latestEvaluation = await GetLatestEvaluationForAttemptsAsync(attemptIds, cancellationToken);
         var latestAttempt = latestEvaluation is null
             ? null
             : await db.Attempts.FirstAsync(x => x.Id == latestEvaluation.AttemptId, cancellationToken);
@@ -693,6 +729,7 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
             .OrderBy(x => x.DueDate)
             .Take(2)
             .ToListAsync(cancellationToken);
+        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, cancellationToken);
 
         return new
         {
@@ -708,9 +745,17 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
                     ? new List<Dictionary<string, object?>>()
                     : JsonSupport.Deserialize<List<Dictionary<string, object?>>>(latestEvaluation.CriterionScoresJson, []),
                 momentum = new { streakDays = streak, completionRate = 0.78 },
-                nextMockRecommendation = new { title = "Full OET Mock Test", route = "/app/mocks", rationale = "A full mock will confirm whether Writing gains are transferring under pressure." },
+                nextMockRecommendation = new { title = $"Full {FormatExamFamilyLabel(goal.ExamFamilyCode)} Mock Test", route = "/app/mocks", rationale = "A full mock will confirm whether your recent practice gains are transferring under pressure." },
                 pendingExpertReviews = new { count = pendingReviews, route = "/app/reviews" }
             },
+            engagement = user is not null ? new
+            {
+                currentStreak = user.CurrentStreak,
+                longestStreak = user.LongestStreak,
+                lastPracticeDate = user.LastPracticeDate,
+                totalPracticeMinutes = user.TotalPracticeMinutes,
+                totalPracticeSessions = user.TotalPracticeSessions
+            } : null,
             primaryActions = new[]
             {
                 new { id = "resume-study-plan", label = "Resume Study Plan", route = "/app/study-plan" },
@@ -727,10 +772,7 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
         await EnsureUserAsync(userId, cancellationToken);
         var plan = await GetActiveStudyPlanEntityAsync(userId, cancellationToken);
         var items = await db.StudyPlanItems.Where(x => x.StudyPlanId == plan.Id).OrderBy(x => x.DueDate).ToListAsync(cancellationToken);
-        var latestJob = await db.BackgroundJobs
-            .Where(x => x.Type == JobType.StudyPlanRegeneration && x.ResourceId == plan.Id)
-            .OrderByDescending(x => x.LastTransitionAt)
-            .FirstOrDefaultAsync(cancellationToken);
+        var latestJob = await GetLatestStudyPlanRegenerationJobAsync(plan.Id, cancellationToken);
 
         return new
         {
@@ -808,7 +850,7 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
     public async Task<object> GetReadinessAsync(string userId, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
-        var snapshot = await db.ReadinessSnapshots.Where(x => x.UserId == userId).OrderByDescending(x => x.ComputedAt).FirstAsync(cancellationToken);
+        var snapshot = await GetLatestReadinessSnapshotAsync(userId, cancellationToken);
         var payload = JsonSupport.Deserialize<Dictionary<string, object?>>(snapshot.PayloadJson, new Dictionary<string, object?>());
         payload["snapshotId"] = snapshot.Id;
         payload["computedAt"] = snapshot.ComputedAt;
@@ -974,6 +1016,8 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
     public async Task<object> GetWritingHomeAsync(string userId, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
+        var goal = await db.Goals.AsNoTracking().FirstAsync(x => x.UserId == userId, cancellationToken);
+        var examFamilyLabel = FormatExamFamilyLabel(goal.ExamFamilyCode);
         var tasks = await GetTasksBySubtestAsync("writing", cancellationToken);
         var attemptIds = await db.Attempts.Where(x => x.UserId == userId && x.SubtestCode == "writing").Select(x => x.Id).ToListAsync(cancellationToken);
         var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId, cancellationToken);
@@ -1038,9 +1082,9 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
             },
             fullMockEntry = new
             {
-                title = "Full OET Mock Test",
+                title = $"{examFamilyLabel} Full Mock Test",
                 route = "/app/mocks",
-                rationale = "Use a full mock to confirm whether writing gains are transferring under timed conditions."
+                rationale = $"Use a full mock to confirm whether your {examFamilyLabel} writing gains are transferring under timed conditions."
             },
             featuredTasks = tasks.Take(3),
             latestEvaluation = latestEvaluation is null ? null : await GetWritingEvaluationSummaryAsync(userId, latestEvaluation.Id, cancellationToken),
@@ -1200,6 +1244,8 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
         var evaluation = await GetEvaluationOwnedByUserAsync(userId, evaluationId, cancellationToken);
         var attempt = await db.Attempts.FirstAsync(x => x.Id == evaluation.AttemptId, cancellationToken);
         var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
+        var examFamilyCode = NormalizeExamFamilyCode(attempt.ExamFamilyCode);
+        var examFamilyLabel = FormatExamFamilyLabel(examFamilyCode);
         await RecordEventAsync(userId, "evaluation_viewed", new { evaluationId = evaluation.Id, attemptId = attempt.Id, subtest = evaluation.SubtestCode }, cancellationToken);
 
         return new
@@ -1208,16 +1254,24 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
             attemptId = attempt.Id,
             taskId = content.Id,
             taskTitle = content.Title,
+            examFamilyCode,
+            examFamilyLabel,
             subtest = evaluation.SubtestCode,
             state = ToAsyncState(evaluation.State),
             scoreRange = evaluation.ScoreRange,
             gradeRange = evaluation.GradeRange,
             confidenceBand = evaluation.ConfidenceBand.ToString().ToLowerInvariant(),
+            confidenceLabel = BuildConfidenceLabel(evaluation.ConfidenceBand),
             strengths = JsonSupport.Deserialize<List<string>>(evaluation.StrengthsJson, []),
             issues = JsonSupport.Deserialize<List<string>>(evaluation.IssuesJson, []),
             generatedAt = evaluation.GeneratedAt,
             modelExplanationSafe = evaluation.ModelExplanationSafe,
             learnerDisclaimer = evaluation.LearnerDisclaimer,
+            isOfficialScore = false,
+            methodLabel = BuildAiMethodLabel(evaluation.SubtestCode),
+            provenanceLabel = $"{examFamilyLabel} practice estimate",
+            humanReviewRecommended = ShouldRecommendHumanReview(evaluation.ConfidenceBand),
+            escalationRecommended = ShouldRecommendHumanReview(evaluation.ConfidenceBand),
             statusReasonCode = evaluation.StatusReasonCode,
             retryable = evaluation.Retryable,
             retryAfterMs = evaluation.RetryAfterMs
@@ -1645,6 +1699,8 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
         var evaluation = await GetEvaluationOwnedByUserAsync(userId, evaluationId, cancellationToken);
         var attempt = await db.Attempts.FirstAsync(x => x.Id == evaluation.AttemptId, cancellationToken);
         var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
+        var examFamilyCode = NormalizeExamFamilyCode(attempt.ExamFamilyCode);
+        var examFamilyLabel = FormatExamFamilyLabel(examFamilyCode);
         await RecordEventAsync(userId, "evaluation_viewed", new { evaluationId = evaluation.Id, attemptId = attempt.Id, subtest = evaluation.SubtestCode }, cancellationToken);
 
         return new
@@ -1653,16 +1709,24 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
             attemptId = attempt.Id,
             taskId = content.Id,
             taskTitle = content.Title,
+            examFamilyCode,
+            examFamilyLabel,
             subtest = "speaking",
             state = ToAsyncState(evaluation.State),
             scoreRange = evaluation.ScoreRange,
             confidenceBand = evaluation.ConfidenceBand.ToString().ToLowerInvariant(),
+            confidenceLabel = BuildConfidenceLabel(evaluation.ConfidenceBand),
             strengths = JsonSupport.Deserialize<List<string>>(evaluation.StrengthsJson, []),
             issues = JsonSupport.Deserialize<List<string>>(evaluation.IssuesJson, []),
             generatedAt = evaluation.GeneratedAt,
             nextDrill = new { id = "fluency-drill-001", title = "Fluency: Transition Phrases", description = "Practise moving between handover sections without fillers." },
             modelExplanationSafe = evaluation.ModelExplanationSafe,
-            learnerDisclaimer = evaluation.LearnerDisclaimer
+            learnerDisclaimer = evaluation.LearnerDisclaimer,
+            isOfficialScore = false,
+            methodLabel = BuildAiMethodLabel("speaking"),
+            provenanceLabel = $"{examFamilyLabel} practice estimate",
+            humanReviewRecommended = ShouldRecommendHumanReview(evaluation.ConfidenceBand),
+            escalationRecommended = ShouldRecommendHumanReview(evaluation.ConfidenceBand)
         };
     }
 
@@ -1775,7 +1839,7 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
             {
                 new { id = "full-practice", title = "Full OET Mock", type = "full", subType = (string?)null, mode = "practice", includeReview = false, strictTimer = false, reviewSelection = "none" },
                 new { id = "full-exam", title = "Full OET Mock", type = "full", subType = (string?)null, mode = "exam", includeReview = false, strictTimer = true, reviewSelection = "none" },
-                new { id = "writing-only", title = "Writing-only Mock", type = "sub", subType = "writing", mode = "exam", includeReview = true, strictTimer = true, reviewSelection = "current_subtest" }
+                new { id = "writing-only", title = "Writing-only Mock", type = "sub", subType = (string?)"writing", mode = "exam", includeReview = true, strictTimer = true, reviewSelection = "current_subtest" }
             }
         };
     }
@@ -1827,138 +1891,219 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
         };
     }
 
-            public async Task<object> CreateCheckoutSessionAsync(string userId, CheckoutSessionCreateRequest request, CancellationToken cancellationToken)
+    public async Task<object> CreateCheckoutSessionAsync(string userId, CheckoutSessionCreateRequest request, CancellationToken cancellationToken)
+    {
+        await EnsureUserAsync(userId, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            var cached = await GetIdempotentResponseAsync("checkout-session", request.IdempotencyKey, cancellationToken);
+            if (cached is not null)
             {
-                await EnsureUserAsync(userId, cancellationToken);
-                if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
-                {
-                    var cached = await GetIdempotentResponseAsync("checkout-session", request.IdempotencyKey, cancellationToken);
-                    if (cached is not null)
-                    {
-                        return cached;
-                    }
-                }
-
-                var normalizedProductType = (request.ProductType ?? string.Empty).Trim().ToLowerInvariant();
-                if (normalizedProductType is not ("review_credits" or "plan_upgrade" or "plan_downgrade" or "addon_purchase"))
-                {
-                    throw ApiException.Validation(
-                        "unsupported_checkout_product",
-                        $"Unsupported checkout product '{request.ProductType}'.",
-                        [new ApiFieldError("productType", "unsupported", "Only supported learner checkout products can be purchased.")]);
-                }
-
-                if (request.Quantity <= 0)
-                {
-                    throw ApiException.Validation(
-                        "invalid_checkout_quantity",
-                        "Checkout quantity must be greater than zero.",
-                        [new ApiFieldError("quantity", "invalid", "Choose a checkout quantity greater than zero.")]);
-                }
-
-                if (normalizedProductType is "plan_upgrade" or "plan_downgrade" or "addon_purchase"
-                    && string.IsNullOrWhiteSpace(request.PriceId))
-                {
-                    throw ApiException.Validation(
-                        "target_item_required",
-                        "A target plan or add-on id is required for this checkout.",
-                        [new ApiFieldError("priceId", "required", "Choose the plan or add-on you want to purchase.")]);
-                }
-
-                BillingQuoteResponse quoteResponse;
-                BillingQuote quoteEntity;
-                if (!string.IsNullOrWhiteSpace(request.QuoteId))
-                {
-                    quoteEntity = await db.BillingQuotes.FirstOrDefaultAsync(x => x.Id == request.QuoteId && x.UserId == userId, cancellationToken)
-                        ?? throw ApiException.NotFound("billing_quote_not_found", "The requested billing quote could not be found.");
-
-                    if (quoteEntity.ExpiresAt < DateTimeOffset.UtcNow)
-                    {
-                        quoteEntity.Status = BillingQuoteStatus.Expired;
-                        await db.SaveChangesAsync(cancellationToken);
-                        throw ApiException.Validation("billing_quote_expired", "This billing quote has expired.");
-                    }
-
-                    quoteResponse = DeserializeQuoteResponse(quoteEntity);
-                }
-                else
-                {
-                    quoteResponse = await BuildBillingQuoteAsync(userId, new BillingQuoteRequest(
-                        normalizedProductType,
-                        request.Quantity,
-                        request.PriceId,
-                        request.CouponCode,
-                        request.AddOnCodes), cancellationToken, persistQuote: true);
-                    quoteEntity = await db.BillingQuotes.FirstAsync(x => x.Id == quoteResponse.QuoteId && x.UserId == userId, cancellationToken);
-                }
-
-                var checkoutSessionId = $"checkout-{Guid.NewGuid():N}";
-                quoteEntity.CheckoutSessionId = checkoutSessionId;
-                quoteEntity.Status = BillingQuoteStatus.Applied;
-                db.BillingEvents.Add(new BillingEvent
-                {
-                    Id = $"bill-evt-{Guid.NewGuid():N}",
-                    UserId = userId,
-                    QuoteId = quoteEntity.Id,
-                    EventType = "checkout_session_created",
-                    EntityType = "CheckoutSession",
-                    EntityId = checkoutSessionId,
-                    PayloadJson = JsonSupport.Serialize(new
-                    {
-                        productType = normalizedProductType,
-                        quantity = request.Quantity,
-                        planCode = quoteEntity.PlanCode,
-                        couponCode = quoteEntity.CouponCode,
-                        addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
-                        totalAmount = quoteEntity.TotalAmount,
-                        currency = quoteEntity.Currency
-                    }),
-                    OccurredAt = DateTimeOffset.UtcNow
-                });
-
-                var response = new
-                {
-                    checkoutSessionId,
-                    quoteId = quoteEntity.Id,
-                    productType = normalizedProductType,
-                    quantity = request.Quantity,
-                    targetPlanId = quoteEntity.PlanCode,
-                    couponCode = quoteEntity.CouponCode,
-                    addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
-                    subtotalAmount = quoteEntity.SubtotalAmount,
-                    discountAmount = quoteEntity.DiscountAmount,
-                    totalAmount = quoteEntity.TotalAmount,
-                    currency = quoteEntity.Currency,
-                    quote = quoteResponse,
-                    checkoutUrl = platformLinks.BuildCheckoutUrl(
-                        checkoutSessionId,
-                        normalizedProductType,
-                        request.Quantity,
-                        planId: quoteEntity.PlanCode,
-                        couponCode: quoteEntity.CouponCode,
-                        addOnCodes: JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
-                        quoteId: quoteEntity.Id),
-                    state = "created"
-                };
-
-                await RecordEventAsync(userId, "subscription_changed", new
-                {
-                    productType = normalizedProductType,
-                    quantity = request.Quantity,
-                    targetPlanId = quoteEntity.PlanCode,
-                    couponCode = quoteEntity.CouponCode,
-                    quoteId = quoteEntity.Id,
-                    totalAmount = quoteEntity.TotalAmount
-                }, cancellationToken);
-
-                if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
-                {
-                    await SaveIdempotentResponseAsync("checkout-session", request.IdempotencyKey, response, cancellationToken);
-                }
-
-                await db.SaveChangesAsync(cancellationToken);
-                return response;
+                return cached;
             }
+        }
+
+        var normalizedProductType = (request.ProductType ?? string.Empty).Trim().ToLowerInvariant();
+        if (normalizedProductType is not ("review_credits" or "plan_upgrade" or "plan_downgrade" or "addon_purchase"))
+        {
+            throw ApiException.Validation(
+                "unsupported_checkout_product",
+                $"Unsupported checkout product '{request.ProductType}'.",
+                [new ApiFieldError("productType", "unsupported", "Only supported learner checkout products can be purchased.")]);
+        }
+
+        if (request.Quantity <= 0)
+        {
+            throw ApiException.Validation(
+                "invalid_checkout_quantity",
+                "Checkout quantity must be greater than zero.",
+                [new ApiFieldError("quantity", "invalid", "Choose a checkout quantity greater than zero.")]);
+        }
+
+        if (normalizedProductType is "plan_upgrade" or "plan_downgrade" or "addon_purchase"
+            && string.IsNullOrWhiteSpace(request.PriceId))
+        {
+            throw ApiException.Validation(
+                "target_item_required",
+                "A target plan or add-on id is required for this checkout.",
+                [new ApiFieldError("priceId", "required", "Choose the plan or add-on you want to purchase.")]);
+        }
+
+        var gatewayLabel = string.IsNullOrWhiteSpace(request.Gateway) ? "stripe" : request.Gateway.Trim().ToLowerInvariant();
+        if (!paymentGateways.SupportedGateways.Contains(gatewayLabel, StringComparer.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation(
+                "unsupported_gateway",
+                $"Payment gateway '{gatewayLabel}' is not supported.",
+                [new ApiFieldError("gateway", "unsupported", "Choose stripe or paypal.")]);
+        }
+
+        BillingQuoteResponse quoteResponse;
+        BillingQuote quoteEntity;
+        if (!string.IsNullOrWhiteSpace(request.QuoteId))
+        {
+            quoteEntity = await db.BillingQuotes.FirstOrDefaultAsync(x => x.Id == request.QuoteId && x.UserId == userId, cancellationToken)
+                ?? throw ApiException.NotFound("billing_quote_not_found", "The requested billing quote could not be found.");
+
+            if (quoteEntity.ExpiresAt < DateTimeOffset.UtcNow)
+            {
+                quoteEntity.Status = BillingQuoteStatus.Expired;
+                await db.SaveChangesAsync(cancellationToken);
+                throw ApiException.Validation("billing_quote_expired", "This billing quote has expired.");
+            }
+
+            quoteResponse = DeserializeQuoteResponse(quoteEntity);
+        }
+        else
+        {
+            quoteResponse = await BuildBillingQuoteAsync(userId, new BillingQuoteRequest(
+                normalizedProductType,
+                request.Quantity,
+                request.PriceId,
+                request.CouponCode,
+                request.AddOnCodes), cancellationToken, persistQuote: true);
+            quoteEntity = await db.BillingQuotes.FirstAsync(x => x.Id == quoteResponse.QuoteId && x.UserId == userId, cancellationToken);
+        }
+
+        var purchaseTarget = quoteResponse.Items.FirstOrDefault()?.Code ?? quoteEntity.PlanCode ?? request.PriceId;
+        var checkoutIntent = await paymentGateways.GetGateway(gatewayLabel).CreatePaymentIntentAsync(
+            new CreatePaymentIntentRequest(
+                UserId: userId,
+                Amount: quoteEntity.TotalAmount,
+                Currency: quoteEntity.Currency,
+                ProductType: normalizedProductType,
+                ProductId: quoteEntity.Id,
+                Description: quoteResponse.Summary,
+                Metadata: new Dictionary<string, string>
+                {
+                    ["quote_id"] = quoteEntity.Id,
+                    ["product_type"] = normalizedProductType,
+                    ["purchase_target"] = purchaseTarget ?? string.Empty,
+                    ["user_id"] = userId,
+                    ["plan_code"] = quoteEntity.PlanCode ?? string.Empty,
+                    ["coupon_code"] = quoteEntity.CouponCode ?? string.Empty,
+                    ["add_on_codes"] = string.Join(',', JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []))
+                },
+                SuccessUrl: platformLinks.BuildWebUrl($"/billing?payment=success&gateway={Uri.EscapeDataString(gatewayLabel)}"),
+                CancelUrl: platformLinks.BuildWebUrl($"/billing?payment=cancelled&gateway={Uri.EscapeDataString(gatewayLabel)}")),
+            cancellationToken);
+
+        quoteEntity.CheckoutSessionId = checkoutIntent.GatewayTransactionId;
+        quoteEntity.Status = BillingQuoteStatus.Applied;
+
+        var paymentTransaction = await db.PaymentTransactions.FirstOrDefaultAsync(
+            transaction => transaction.GatewayTransactionId == checkoutIntent.GatewayTransactionId,
+            cancellationToken);
+        if (paymentTransaction is null)
+        {
+            var now = DateTimeOffset.UtcNow;
+            paymentTransaction = new PaymentTransaction
+            {
+                Id = Guid.NewGuid(),
+                LearnerUserId = userId,
+                Gateway = gatewayLabel,
+                GatewayTransactionId = checkoutIntent.GatewayTransactionId,
+                TransactionType = normalizedProductType is "plan_upgrade" or "plan_downgrade"
+                    ? "subscription_payment"
+                    : "one_time_purchase",
+                Status = "pending",
+                Amount = quoteEntity.TotalAmount,
+                Currency = quoteEntity.Currency,
+                ProductType = normalizedProductType is "plan_upgrade" or "plan_downgrade" ? "plan" : "addon",
+                ProductId = purchaseTarget ?? quoteEntity.Id,
+                MetadataJson = JsonSupport.Serialize(new
+                {
+                    quoteId = quoteEntity.Id,
+                    productType = normalizedProductType,
+                    purchaseTarget,
+                    addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
+                    planCode = quoteEntity.PlanCode,
+                    couponCode = quoteEntity.CouponCode
+                }),
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            db.PaymentTransactions.Add(paymentTransaction);
+        }
+
+        var reservedRedemptions = await db.BillingCouponRedemptions
+            .Where(redemption => redemption.QuoteId == quoteEntity.Id && redemption.Status == BillingRedemptionStatus.Reserved)
+            .ToListAsync(cancellationToken);
+        foreach (var redemption in reservedRedemptions)
+        {
+            redemption.CheckoutSessionId = checkoutIntent.GatewayTransactionId;
+        }
+
+        db.BillingEvents.Add(new BillingEvent
+        {
+            Id = $"bill-evt-{Guid.NewGuid():N}",
+            UserId = userId,
+            QuoteId = quoteEntity.Id,
+            EventType = "checkout_session_created",
+            EntityType = "CheckoutSession",
+            EntityId = checkoutIntent.GatewayTransactionId,
+            PayloadJson = JsonSupport.Serialize(new
+            {
+                productType = normalizedProductType,
+                quantity = request.Quantity,
+                planCode = quoteEntity.PlanCode,
+                couponCode = quoteEntity.CouponCode,
+                addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
+                totalAmount = quoteEntity.TotalAmount,
+                currency = quoteEntity.Currency,
+                gateway = gatewayLabel,
+                status = checkoutIntent.Status
+            }),
+            OccurredAt = DateTimeOffset.UtcNow
+        });
+
+        var response = new
+        {
+            checkoutSessionId = checkoutIntent.GatewayTransactionId,
+            quoteId = quoteEntity.Id,
+            productType = normalizedProductType,
+            quantity = request.Quantity,
+            targetPlanId = quoteEntity.PlanCode,
+            couponCode = quoteEntity.CouponCode,
+            addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
+            subtotalAmount = quoteEntity.SubtotalAmount,
+            discountAmount = quoteEntity.DiscountAmount,
+            totalAmount = quoteEntity.TotalAmount,
+            currency = quoteEntity.Currency,
+            gateway = gatewayLabel,
+            quote = quoteResponse,
+            checkoutUrl = string.IsNullOrWhiteSpace(checkoutIntent.CheckoutUrl)
+                ? platformLinks.BuildCheckoutUrl(
+                    checkoutIntent.GatewayTransactionId,
+                    normalizedProductType,
+                    request.Quantity,
+                    planId: quoteEntity.PlanCode,
+                    couponCode: quoteEntity.CouponCode,
+                    addOnCodes: JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
+                    quoteId: quoteEntity.Id)
+                : checkoutIntent.CheckoutUrl,
+            state = checkoutIntent.Status
+        };
+
+        await RecordEventAsync(userId, "checkout_started", new
+        {
+            productType = normalizedProductType,
+            quantity = request.Quantity,
+            targetPlanId = quoteEntity.PlanCode,
+            couponCode = quoteEntity.CouponCode,
+            quoteId = quoteEntity.Id,
+            totalAmount = quoteEntity.TotalAmount,
+            gateway = gatewayLabel
+        }, cancellationToken);
+
+        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            await SaveIdempotentResponseAsync("checkout-session", request.IdempotencyKey, response, cancellationToken);
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return response;
+    }
 
     public async Task<object> CreateMockAttemptAsync(string userId, MockAttemptCreateRequest request, CancellationToken cancellationToken)
     {
@@ -2675,6 +2820,7 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
     {
         goalId = goal.Id,
         userId = goal.UserId,
+        examFamilyCode = goal.ExamFamilyCode,
         professionId = goal.ProfessionId,
         targetExamDate = goal.TargetExamDate,
         overallGoal = goal.OverallGoal,
@@ -2697,6 +2843,7 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
 
     private static object GoalSettingsDto(LearnerGoal goal) => new
     {
+        examFamilyCode = goal.ExamFamilyCode,
         professionId = goal.ProfessionId,
         targetExamDate = goal.TargetExamDate,
         overallGoal = goal.OverallGoal,
@@ -2784,6 +2931,11 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
 
     private static void ApplyGoalSettingsPatch(LearnerGoal goal, Dictionary<string, object?> values)
     {
+        if (values.TryGetValue("examFamilyCode", out var examFamilyCode))
+        {
+            goal.ExamFamilyCode = NormalizeExamFamilyCode(ReadString(examFamilyCode) ?? goal.ExamFamilyCode);
+        }
+
         if (values.TryGetValue("professionId", out var professionId))
         {
             goal.ProfessionId = ReadString(professionId) ?? goal.ProfessionId;
@@ -3210,7 +3362,71 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
     }
 
     private async Task<StudyPlan> GetActiveStudyPlanEntityAsync(string userId, CancellationToken cancellationToken)
-        => await db.StudyPlans.Where(x => x.UserId == userId).OrderByDescending(x => x.GeneratedAt).FirstAsync(cancellationToken);
+    {
+        var query = db.StudyPlans.Where(x => x.UserId == userId);
+        if (!db.Database.IsSqlite())
+        {
+            return await query.OrderByDescending(x => x.GeneratedAt).FirstAsync(cancellationToken);
+        }
+
+        var plans = await query.ToListAsync(cancellationToken);
+        return plans
+            .OrderByDescending(x => x.GeneratedAt)
+            .First();
+    }
+
+    private async Task<ReadinessSnapshot> GetLatestReadinessSnapshotAsync(string userId, CancellationToken cancellationToken)
+    {
+        var query = db.ReadinessSnapshots.Where(x => x.UserId == userId);
+        if (!db.Database.IsSqlite())
+        {
+            return await query.OrderByDescending(x => x.ComputedAt).FirstAsync(cancellationToken);
+        }
+
+        var snapshots = await query.ToListAsync(cancellationToken);
+        return snapshots
+            .OrderByDescending(x => x.ComputedAt)
+            .First();
+    }
+
+    private async Task<BackgroundJobItem?> GetLatestStudyPlanRegenerationJobAsync(string planId, CancellationToken cancellationToken)
+    {
+        var query = db.BackgroundJobs
+            .Where(x => x.Type == JobType.StudyPlanRegeneration && x.ResourceId == planId);
+
+        if (!db.Database.IsSqlite())
+        {
+            return await query
+                .OrderByDescending(x => x.LastTransitionAt)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        var jobs = await query.ToListAsync(cancellationToken);
+        return jobs
+            .OrderByDescending(x => x.LastTransitionAt)
+            .FirstOrDefault();
+    }
+
+    private async Task<Evaluation?> GetLatestEvaluationForAttemptsAsync(IReadOnlyCollection<string> attemptIds, CancellationToken cancellationToken)
+    {
+        if (attemptIds.Count == 0)
+        {
+            return null;
+        }
+
+        var query = db.Evaluations.Where(x => attemptIds.Contains(x.AttemptId));
+        if (!db.Database.IsSqlite())
+        {
+            return await query
+                .OrderByDescending(x => x.GeneratedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
+
+        var evaluations = await query.ToListAsync(cancellationToken);
+        return evaluations
+            .OrderByDescending(x => x.GeneratedAt)
+            .FirstOrDefault();
+    }
 
     private async Task QueueJobAsync(JobType type, string? attemptId = null, string? resourceId = null, CancellationToken cancellationToken = default)
     {
@@ -4501,4 +4717,684 @@ public class LearnerService(LearnerDbContext db, MediaStorageService mediaStorag
         "listening" => $"/app/listening/task/{evaluationId}",
         _ => $"/app/history/{evaluationId}"
     };
+
+    // ── Engagement ──
+
+    public async Task<object> GetEngagementAsync(string userId, CancellationToken ct)
+    {
+        var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(x => x.Id == userId, ct)
+            ?? throw ApiException.NotFound("user_not_found", "User not found.");
+
+        var weeklyActivity = JsonSupport.Deserialize<bool[]>(user.WeeklyActivityJson ?? "[]", []);
+        var daysLabels = new[] { "Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun" };
+
+        return new
+        {
+            currentStreak = user.CurrentStreak,
+            longestStreak = user.LongestStreak,
+            lastPracticeDate = user.LastPracticeDate,
+            totalPracticeMinutes = user.TotalPracticeMinutes,
+            totalPracticeSessions = user.TotalPracticeSessions,
+            avgSessionMinutes = user.TotalPracticeSessions > 0 ? user.TotalPracticeMinutes / user.TotalPracticeSessions : 0,
+            weeklyActivity = weeklyActivity.Select((active, index) => new
+            {
+                day = index < daysLabels.Length ? daysLabels[index] : $"Day {index + 1}",
+                active
+            }),
+            streakFreezeAvailable = true,
+            streakFreezeUsedThisWeek = false
+        };
+    }
+
+    // ── Wallet Transactions ──
+
+    public async Task<object> GetWalletTransactionsAsync(string userId, int limit, CancellationToken ct)
+    {
+        var wallet = await db.Wallets.AsNoTracking().FirstOrDefaultAsync(x => x.UserId == userId, ct);
+        if (wallet is null)
+        {
+            return new { balance = 0, transactions = Array.Empty<object>() };
+        }
+
+        var transactions = await db.WalletTransactions.AsNoTracking()
+            .Where(x => x.WalletId == wallet.Id)
+            .OrderByDescending(x => x.CreatedAt)
+            .Take(Math.Min(limit, 100))
+            .Select(x => new
+            {
+                id = x.Id,
+                type = x.TransactionType,
+                amount = x.Amount,
+                balanceAfter = x.BalanceAfter,
+                referenceType = x.ReferenceType,
+                referenceId = x.ReferenceId,
+                description = x.Description,
+                createdAt = x.CreatedAt
+            })
+            .ToListAsync(ct);
+
+        return new
+        {
+            balance = wallet.CreditBalance,
+            lastUpdatedAt = wallet.LastUpdatedAt,
+            transactions
+        };
+    }
+
+    public async Task<object> CreateWalletTopUpAsync(string userId, WalletTopUpRequest request, CancellationToken ct)
+    {
+        await EnsureUserAsync(userId, ct);
+        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            var cached = await GetIdempotentResponseAsync("wallet-top-up", request.IdempotencyKey, ct);
+            if (cached is not null)
+            {
+                return cached;
+            }
+        }
+
+        if (request.Gateway is not "stripe" and not "paypal")
+        {
+            throw ApiException.Validation(
+                "invalid_gateway",
+                "Choose stripe or paypal as payment gateway.",
+                [new ApiFieldError("gateway", "invalid", "Select a supported payment method.")]);
+        }
+
+        if (request.Amount is not (10 or 25 or 50 or 100))
+        {
+            throw ApiException.Validation(
+                "invalid_amount",
+                "Choose a valid top-up amount: $10, $25, $50, or $100.",
+                [new ApiFieldError("amount", "invalid", "Select one of the available top-up amounts.")]);
+        }
+
+        var session = await walletService.CreateTopUpSessionAsync(userId, request.Amount, request.Gateway, ct);
+        var response = new
+        {
+            sessionId = session.SessionId,
+            gateway = session.Gateway,
+            amountAud = session.AmountDollars,
+            creditsGranted = session.CreditsGranted,
+            bonusCredits = session.BonusCredits,
+            totalCredits = session.TotalCredits,
+            checkoutUrl = session.CheckoutUrl,
+            status = "pending_payment",
+            expiresAt = session.ExpiresAt
+        };
+
+        if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
+        {
+            await SaveIdempotentResponseAsync("wallet-top-up", request.IdempotencyKey, response, ct);
+        }
+
+        return response;
+    }
+
+    // ── Payment Webhooks ──
+
+    public Task<object> HandleStripeWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
+        => HandlePaymentWebhookAsync("stripe", payload, headers, ct);
+
+    public Task<object> HandlePayPalWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
+        => HandlePaymentWebhookAsync("paypal", payload, headers, ct);
+
+    private async Task<object> HandlePaymentWebhookAsync(
+        string gatewayName,
+        string payload,
+        IReadOnlyDictionary<string, string> headers,
+        CancellationToken ct)
+    {
+        var receivedAt = DateTimeOffset.UtcNow;
+        WebhookProcessResult result;
+        try
+        {
+            result = await paymentGateways.GetGateway(gatewayName).HandleWebhookAsync(payload, headers, ct);
+        }
+        catch (Exception ex)
+        {
+            result = new WebhookProcessResult(
+                EventId: $"{gatewayName}-error-{Guid.NewGuid():N}",
+                EventType: "handler_exception",
+                Processed: false,
+                Error: ex.Message);
+        }
+
+        var webhookEvent = await db.PaymentWebhookEvents
+            .FirstOrDefaultAsync(x => x.Gateway == gatewayName && x.GatewayEventId == result.EventId, ct);
+
+        if (webhookEvent is not null && webhookEvent.ProcessingStatus is "completed" or "ignored")
+        {
+            return new
+            {
+                received = true,
+                duplicate = true,
+                gateway = gatewayName,
+                eventId = webhookEvent.GatewayEventId,
+                eventType = webhookEvent.EventType,
+                state = webhookEvent.ProcessingStatus
+            };
+        }
+
+        webhookEvent ??= new PaymentWebhookEvent
+        {
+            Id = Guid.NewGuid(),
+            Gateway = gatewayName,
+            GatewayEventId = result.EventId,
+            ReceivedAt = receivedAt
+        };
+
+        webhookEvent.EventType = result.EventType;
+        webhookEvent.PayloadJson = payload;
+        webhookEvent.ErrorMessage = null;
+        webhookEvent.ProcessingStatus = "processing";
+        if (db.Entry(webhookEvent).State == EntityState.Detached)
+        {
+            db.PaymentWebhookEvents.Add(webhookEvent);
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        if (!result.Processed)
+        {
+            webhookEvent.ProcessingStatus = "failed";
+            webhookEvent.ErrorMessage = result.Error ?? "Webhook verification failed.";
+            webhookEvent.ProcessedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+            return new
+            {
+                received = false,
+                gateway = gatewayName,
+                eventId = result.EventId,
+                eventType = result.EventType,
+                error = webhookEvent.ErrorMessage,
+                state = webhookEvent.ProcessingStatus
+            };
+        }
+
+        if (string.IsNullOrWhiteSpace(result.GatewayTransactionId))
+        {
+            webhookEvent.ProcessingStatus = "ignored";
+            webhookEvent.ErrorMessage = "No checkout or payment transaction id was included in the webhook payload.";
+            webhookEvent.ProcessedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+            return new
+            {
+                received = true,
+                gateway = gatewayName,
+                eventId = result.EventId,
+                eventType = result.EventType,
+                state = webhookEvent.ProcessingStatus
+            };
+        }
+
+        var paymentTransaction = await db.PaymentTransactions
+            .FirstOrDefaultAsync(x => x.GatewayTransactionId == result.GatewayTransactionId, ct);
+
+        if (paymentTransaction is null)
+        {
+            webhookEvent.ProcessingStatus = "ignored";
+            webhookEvent.ErrorMessage = $"Payment transaction '{result.GatewayTransactionId}' was not found.";
+            webhookEvent.ProcessedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+            return new
+            {
+                received = true,
+                gateway = gatewayName,
+                eventId = result.EventId,
+                eventType = result.EventType,
+                state = webhookEvent.ProcessingStatus,
+                gatewayTransactionId = result.GatewayTransactionId
+            };
+        }
+
+        paymentTransaction.Status = string.IsNullOrWhiteSpace(result.NormalizedStatus)
+            ? paymentTransaction.Status
+            : result.NormalizedStatus!;
+        paymentTransaction.UpdatedAt = DateTimeOffset.UtcNow;
+
+        try
+        {
+            switch (result.NormalizedStatus)
+            {
+                case "completed":
+                    if (string.Equals(paymentTransaction.TransactionType, "wallet_top_up", StringComparison.OrdinalIgnoreCase))
+                    {
+                        await ApplyWalletTopUpCompletionAsync(paymentTransaction, ct);
+                    }
+                    else
+                    {
+                        await ApplyCheckoutCompletionAsync(paymentTransaction, ct);
+                    }
+                    webhookEvent.ProcessingStatus = "completed";
+                    break;
+
+                case "failed":
+                    await MarkCheckoutFailedAsync(paymentTransaction, ct);
+                    webhookEvent.ProcessingStatus = "failed";
+                    break;
+
+                default:
+                    webhookEvent.ProcessingStatus = "completed";
+                    break;
+            }
+
+            webhookEvent.ProcessedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+        }
+        catch (Exception ex)
+        {
+            webhookEvent.ProcessingStatus = "failed";
+            webhookEvent.ErrorMessage = ex.Message;
+            webhookEvent.ProcessedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+            return new
+            {
+                received = true,
+                gateway = gatewayName,
+                eventId = result.EventId,
+                eventType = result.EventType,
+                gatewayTransactionId = paymentTransaction.GatewayTransactionId,
+                error = ex.Message,
+                state = webhookEvent.ProcessingStatus
+            };
+        }
+
+        return new
+        {
+            received = true,
+            gateway = gatewayName,
+            eventId = result.EventId,
+            eventType = result.EventType,
+            gatewayTransactionId = paymentTransaction.GatewayTransactionId,
+            normalizedStatus = paymentTransaction.Status,
+            state = webhookEvent.ProcessingStatus
+        };
+    }
+
+    private async Task ApplyWalletTopUpCompletionAsync(PaymentTransaction transaction, CancellationToken ct)
+    {
+        var metadata = ReadObject(JsonSupport.Deserialize<object?>(transaction.MetadataJson ?? "{}", null));
+        var credits = ReadInt(metadata?.GetValueOrDefault("credits")) ?? 0;
+        var bonus = ReadInt(metadata?.GetValueOrDefault("bonus")) ?? 0;
+        var totalCredits = ReadInt(metadata?.GetValueOrDefault("totalCredits")) ?? credits + bonus;
+        if (totalCredits <= 0)
+        {
+            return;
+        }
+
+        await CreditWalletForPaymentAsync(
+            transaction.LearnerUserId,
+            totalCredits,
+            "top_up",
+            "payment",
+            transaction.GatewayTransactionId,
+            $"Wallet top-up: {totalCredits} credits",
+            ct);
+
+        var invoiceId = TruncateIdentifier($"inv-topup-{transaction.GatewayTransactionId}");
+        var existingInvoice = await db.Invoices.FirstOrDefaultAsync(x => x.Id == invoiceId, ct);
+        if (existingInvoice is null)
+        {
+            db.Invoices.Add(new Invoice
+            {
+                Id = invoiceId,
+                UserId = transaction.LearnerUserId,
+                IssuedAt = DateTimeOffset.UtcNow,
+                Amount = transaction.Amount,
+                Currency = transaction.Currency,
+                Status = "Paid",
+                Description = $"Wallet top-up: {credits} credits + {bonus} bonus credits"
+            });
+        }
+
+        db.BillingEvents.Add(new BillingEvent
+        {
+            Id = $"bill-evt-{Guid.NewGuid():N}",
+            UserId = transaction.LearnerUserId,
+            EventType = "wallet_top_up_completed",
+            EntityType = "PaymentTransaction",
+            EntityId = transaction.GatewayTransactionId,
+            PayloadJson = JsonSupport.Serialize(new
+            {
+                totalCredits,
+                credits,
+                bonus,
+                amount = transaction.Amount,
+                currency = transaction.Currency,
+                gateway = transaction.Gateway
+            }),
+            OccurredAt = DateTimeOffset.UtcNow
+        });
+    }
+
+    private async Task ApplyCheckoutCompletionAsync(PaymentTransaction transaction, CancellationToken ct)
+    {
+        var quote = await GetQuoteForTransactionAsync(transaction, ct);
+        if (quote is null || quote.Status == BillingQuoteStatus.Completed)
+        {
+            return;
+        }
+
+        var user = await EnsureUserAsync(transaction.LearnerUserId, ct);
+        var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == transaction.LearnerUserId, ct);
+        var quoteResponse = DeserializeQuoteResponse(quote);
+        var now = DateTimeOffset.UtcNow;
+
+        if (!string.IsNullOrWhiteSpace(quote.PlanCode) && string.Equals(transaction.TransactionType, "subscription_payment", StringComparison.OrdinalIgnoreCase))
+        {
+            var targetPlan = await FindBillingPlanAsync(quote.PlanCode, ct);
+            if (targetPlan is not null)
+            {
+                subscription.PlanId = targetPlan.Code;
+                subscription.Status = SubscriptionStatus.Active;
+                subscription.PriceAmount = targetPlan.Price;
+                subscription.Currency = targetPlan.Currency;
+                subscription.Interval = targetPlan.Interval;
+                subscription.ChangedAt = now;
+                if (subscription.StartedAt == default)
+                {
+                    subscription.StartedAt = now;
+                }
+
+                if (subscription.NextRenewalAt <= now)
+                {
+                    subscription.NextRenewalAt = now.AddMonths(Math.Max(1, targetPlan.DurationMonths));
+                }
+
+                user.CurrentPlanId = targetPlan.Code;
+
+                if (targetPlan.IncludedCredits > 0)
+                {
+                    await CreditWalletForPaymentAsync(
+                        transaction.LearnerUserId,
+                        targetPlan.IncludedCredits,
+                        "plan_grant",
+                        "subscription",
+                        quote.Id,
+                        $"Included credits for {targetPlan.Name}",
+                        ct);
+                }
+            }
+        }
+
+        foreach (var item in quoteResponse.Items.Where(x => string.Equals(x.Kind, "addon", StringComparison.OrdinalIgnoreCase)))
+        {
+            var addOn = await FindBillingAddOnAsync(item.Code, ct);
+            if (addOn is null)
+            {
+                continue;
+            }
+
+            var existingItem = await db.SubscriptionItems.FirstOrDefaultAsync(
+                x => x.SubscriptionId == subscription.Id
+                     && x.ItemCode == addOn.Code
+                     && x.QuoteId == quote.Id,
+                ct);
+
+            if (existingItem is null)
+            {
+                db.SubscriptionItems.Add(new SubscriptionItem
+                {
+                    Id = TruncateIdentifier($"subitem-{Guid.NewGuid():N}"),
+                    SubscriptionId = subscription.Id,
+                    ItemCode = addOn.Code,
+                    ItemType = addOn.IsRecurring ? "recurring_addon" : "addon",
+                    Quantity = Math.Max(1, item.Quantity),
+                    Status = SubscriptionItemStatus.Active,
+                    StartsAt = now,
+                    EndsAt = addOn.DurationDays > 0 ? now.AddDays(addOn.DurationDays) : null,
+                    QuoteId = quote.Id,
+                    CheckoutSessionId = transaction.GatewayTransactionId,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
+            }
+
+            if (addOn.GrantCredits > 0)
+            {
+                var creditAmount = addOn.GrantCredits * Math.Max(1, item.Quantity);
+                await CreditWalletForPaymentAsync(
+                    transaction.LearnerUserId,
+                    creditAmount,
+                    "credit_purchase",
+                    "addon",
+                    $"{quote.Id}:{addOn.Code}",
+                    $"{addOn.Name} credits",
+                    ct);
+            }
+        }
+
+        var redemptions = await db.BillingCouponRedemptions
+            .Where(x => x.QuoteId == quote.Id && x.Status == BillingRedemptionStatus.Reserved)
+            .ToListAsync(ct);
+        foreach (var redemption in redemptions)
+        {
+            redemption.Status = BillingRedemptionStatus.Applied;
+            redemption.CheckoutSessionId = transaction.GatewayTransactionId;
+            redemption.SubscriptionId = subscription.Id;
+        }
+
+        var invoiceId = TruncateIdentifier($"inv-{quote.Id}");
+        var existingInvoice = await db.Invoices.FirstOrDefaultAsync(x => x.Id == invoiceId, ct);
+        if (existingInvoice is null)
+        {
+            db.Invoices.Add(new Invoice
+            {
+                Id = invoiceId,
+                UserId = transaction.LearnerUserId,
+                IssuedAt = now,
+                Amount = quote.TotalAmount,
+                Currency = quote.Currency,
+                Status = "Paid",
+                Description = quoteResponse.Summary
+            });
+        }
+
+        quote.Status = BillingQuoteStatus.Completed;
+        quote.CheckoutSessionId = transaction.GatewayTransactionId;
+
+        db.BillingEvents.Add(new BillingEvent
+        {
+            Id = $"bill-evt-{Guid.NewGuid():N}",
+            UserId = transaction.LearnerUserId,
+            SubscriptionId = subscription.Id,
+            QuoteId = quote.Id,
+            EventType = "checkout_completed",
+            EntityType = "PaymentTransaction",
+            EntityId = transaction.GatewayTransactionId,
+            PayloadJson = JsonSupport.Serialize(new
+            {
+                quoteId = quote.Id,
+                planCode = quote.PlanCode,
+                items = quoteResponse.Items,
+                totalAmount = quote.TotalAmount,
+                currency = quote.Currency,
+                gateway = transaction.Gateway
+            }),
+            OccurredAt = now
+        });
+
+        await RecordEventAsync(transaction.LearnerUserId, "checkout_completed", new
+        {
+            quoteId = quote.Id,
+            gateway = transaction.Gateway,
+            planCode = quote.PlanCode,
+            totalAmount = quote.TotalAmount
+        }, ct);
+    }
+
+    private async Task MarkCheckoutFailedAsync(PaymentTransaction transaction, CancellationToken ct)
+    {
+        var quote = await GetQuoteForTransactionAsync(transaction, ct);
+        if (quote is null || quote.Status == BillingQuoteStatus.Completed)
+        {
+            return;
+        }
+
+        quote.Status = BillingQuoteStatus.Cancelled;
+        quote.CheckoutSessionId ??= transaction.GatewayTransactionId;
+
+        var redemptions = await db.BillingCouponRedemptions
+            .Where(x => x.QuoteId == quote.Id && x.Status == BillingRedemptionStatus.Reserved)
+            .ToListAsync(ct);
+
+        foreach (var redemption in redemptions)
+        {
+            redemption.Status = BillingRedemptionStatus.Voided;
+            redemption.CheckoutSessionId = transaction.GatewayTransactionId;
+
+            var coupon = await db.BillingCoupons.FirstOrDefaultAsync(x => x.Code == redemption.CouponCode, ct);
+            if (coupon is not null && coupon.RedemptionCount > 0)
+            {
+                coupon.RedemptionCount -= 1;
+                coupon.UpdatedAt = DateTimeOffset.UtcNow;
+            }
+        }
+
+        db.BillingEvents.Add(new BillingEvent
+        {
+            Id = $"bill-evt-{Guid.NewGuid():N}",
+            UserId = transaction.LearnerUserId,
+            QuoteId = quote.Id,
+            EventType = "checkout_failed",
+            EntityType = "PaymentTransaction",
+            EntityId = transaction.GatewayTransactionId,
+            PayloadJson = JsonSupport.Serialize(new
+            {
+                quoteId = quote.Id,
+                gateway = transaction.Gateway,
+                totalAmount = quote.TotalAmount,
+                currency = quote.Currency
+            }),
+            OccurredAt = DateTimeOffset.UtcNow
+        });
+    }
+
+    private async Task CreditWalletForPaymentAsync(
+        string userId,
+        int amount,
+        string transactionType,
+        string referenceType,
+        string referenceId,
+        string description,
+        CancellationToken ct)
+    {
+        if (amount <= 0)
+        {
+            return;
+        }
+
+        var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId, ct);
+        var existing = await db.WalletTransactions.FirstOrDefaultAsync(
+            x => x.WalletId == wallet.Id
+                 && x.TransactionType == transactionType
+                 && x.ReferenceType == referenceType
+                 && x.ReferenceId == referenceId,
+            ct);
+
+        if (existing is not null)
+        {
+            return;
+        }
+
+        wallet.CreditBalance += amount;
+        wallet.LastUpdatedAt = DateTimeOffset.UtcNow;
+
+        db.WalletTransactions.Add(new WalletTransaction
+        {
+            Id = Guid.NewGuid(),
+            WalletId = wallet.Id,
+            TransactionType = transactionType,
+            Amount = amount,
+            BalanceAfter = wallet.CreditBalance,
+            ReferenceType = referenceType,
+            ReferenceId = referenceId,
+            Description = description,
+            CreatedBy = "system",
+            CreatedAt = wallet.LastUpdatedAt
+        });
+    }
+
+    private async Task<BillingQuote?> GetQuoteForTransactionAsync(PaymentTransaction transaction, CancellationToken ct)
+    {
+        var metadata = ReadObject(JsonSupport.Deserialize<object?>(transaction.MetadataJson ?? "{}", null));
+        var quoteId = ReadString(metadata?.GetValueOrDefault("quoteId"))
+            ?? ReadString(metadata?.GetValueOrDefault("quote_id"));
+
+        if (!string.IsNullOrWhiteSpace(quoteId))
+        {
+            var quoteById = await db.BillingQuotes.FirstOrDefaultAsync(x => x.Id == quoteId, ct);
+            if (quoteById is not null)
+            {
+                return quoteById;
+            }
+        }
+
+        return await db.BillingQuotes.FirstOrDefaultAsync(x => x.CheckoutSessionId == transaction.GatewayTransactionId, ct);
+    }
+
+    private static string NormalizeExamFamilyCode(string? value)
+        => (value ?? "oet").Trim().ToLowerInvariant() switch
+        {
+            "" => "oet",
+            "oet" => "oet",
+            "ielts" => "ielts",
+            "pte" => "pte",
+            var other => other
+        };
+
+    private static string FormatExamFamilyLabel(string? value)
+        => NormalizeExamFamilyCode(value) switch
+        {
+            "oet" => "OET",
+            "ielts" => "IELTS",
+            "pte" => "PTE",
+            var other => other.ToUpperInvariant()
+        };
+
+    private static string BuildConfidenceLabel(ConfidenceBand band) => band switch
+    {
+        ConfidenceBand.High => "High confidence practice estimate",
+        ConfidenceBand.Medium => "Medium confidence practice estimate",
+        _ => "Low confidence practice estimate"
+    };
+
+    private static string BuildAiMethodLabel(string subtestCode)
+        => (subtestCode ?? string.Empty).Trim().ToLowerInvariant() switch
+        {
+            "writing" => "AI-assisted writing evaluation",
+            "speaking" => "AI-assisted speaking evaluation",
+            "reading" => "Auto-scored reading evaluation",
+            "listening" => "Auto-scored listening evaluation",
+            _ => "AI-assisted practice evaluation"
+        };
+
+    private static bool ShouldRecommendHumanReview(ConfidenceBand band)
+        => band is ConfidenceBand.Low or ConfidenceBand.Medium;
+
+    private static string TruncateIdentifier(string value)
+        => value.Length <= 64 ? value : value[..64];
+
+    // ── Exam Family Reference ──
+
+    public async Task<object> GetExamFamiliesAsync(CancellationToken ct)
+    {
+        var families = await db.ExamFamilies.AsNoTracking()
+            .Where(x => x.IsActive)
+            .OrderBy(x => x.SortOrder)
+            .Select(x => new
+            {
+                code = x.Code,
+                label = x.Label,
+                scoringModel = x.ScoringModel,
+                description = x.Description,
+                subtests = x.SubtestConfigJson,
+                criteria = x.CriteriaConfigJson,
+                isActive = x.IsActive
+            })
+            .ToListAsync(ct);
+
+        return new { examFamilies = families };
+    }
 }

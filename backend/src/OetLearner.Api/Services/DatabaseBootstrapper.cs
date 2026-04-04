@@ -17,7 +17,7 @@ public static class DatabaseBootstrapper
         var autoMigrate = options.AutoMigrate ?? environment.IsDevelopment();
         var seedDemoData = options.SeedDemoData ?? environment.IsDevelopment();
 
-        if (db.Database.IsInMemory())
+        if (db.Database.IsInMemory() || db.Database.IsSqlite())
         {
             await db.Database.EnsureCreatedAsync(cancellationToken);
         }

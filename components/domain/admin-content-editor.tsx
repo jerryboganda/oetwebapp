@@ -32,6 +32,8 @@ interface FormState {
   caseNotes: string;
   modelAnswer: string;
   criteriaFocus: string[];
+  sourceType: string;
+  qaStatus: string;
 }
 
 const defaultFormState: FormState = {
@@ -45,6 +47,8 @@ const defaultFormState: FormState = {
   caseNotes: '',
   modelAnswer: '',
   criteriaFocus: [],
+  sourceType: 'original',
+  qaStatus: 'pending',
 };
 
 export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
@@ -86,6 +90,8 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
           caseNotes: detail.caseNotes,
           modelAnswer: detail.modelAnswer,
           criteriaFocus: detail.criteriaFocus,
+          sourceType: detail.sourceType || 'original',
+          qaStatus: detail.qaStatus || 'pending',
         });
         setImpact(impactSummary);
         setPageStatus('success');
@@ -319,6 +325,31 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
                   max={240}
                   value={form.estimatedDurationMinutes}
                   onChange={(event) => updateField('estimatedDurationMinutes', event.target.value)}
+                />
+              </div>
+              <div className="grid gap-4 md:grid-cols-2">
+                <Select
+                  label="Source Type"
+                  value={form.sourceType}
+                  onChange={(event) => updateField('sourceType', event.target.value)}
+                  options={[
+                    { value: 'original', label: 'Original' },
+                    { value: 'adapted', label: 'Adapted' },
+                    { value: 'ai_generated', label: 'AI-Generated' },
+                    { value: 'community', label: 'Community Contributed' },
+                    { value: 'licensed', label: 'Licensed Material' },
+                  ]}
+                />
+                <Select
+                  label="QA Status"
+                  value={form.qaStatus}
+                  onChange={(event) => updateField('qaStatus', event.target.value)}
+                  options={[
+                    { value: 'pending', label: 'Pending Review' },
+                    { value: 'approved', label: 'Approved' },
+                    { value: 'rejected', label: 'Rejected' },
+                    { value: 'needs_revision', label: 'Needs Revision' },
+                  ]}
                 />
               </div>
               <Textarea

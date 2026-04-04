@@ -66,7 +66,15 @@ Run the desktop shell in development with:
 npm run desktop:dev
 ```
 
+`desktop:dev` now expects the Docker Desktop baseline from [`docker-compose.desktop.yml`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/docker-compose.desktop.yml) to be running first and attaches Electron to the verified `http://localhost:3000` renderer and `http://localhost:5198` API stack.
+
 The Electron main process lives in [`electron/main.cjs`](electron/main.cjs) and uses the same renderer routes, auth flow, and API contract as the web app. The desktop shell also adds a native menu, guarded external-link handling, and an auto-updater that activates when release metadata is present.
+
+Desktop security hardening in the shell now includes:
+
+- certificate pinning for production HTTPS hosts via `ELECTRON_CERT_PINS`
+- OS-backed secret storage via Electron `safeStorage`, exposed through the preload bridge instead of direct Node access
+- enforced Windows code-signing requirements for packaged builds unless you explicitly opt into an unsigned local build
 
 Build a desktop package for the current platform with:
 
@@ -77,6 +85,18 @@ npm run desktop:dist
 That command builds the Next.js renderer with the desktop proxy contract and then runs Electron Builder to produce the native installer target for the current OS under `dist/desktop/`.
 
 For signed release builds with auto-update metadata, set `ELECTRON_UPDATES_URL` to your self-hosted generic update endpoint and run the same packaging flow with `ELECTRON_PUBLISH_MODE=always` in CI.
+
+For production desktop releases, also configure:
+
+- `ELECTRON_CERT_PINS`
+  JSON array of host pin rules, for example:
+  `[{"host":"api.example.com","spkiSha256":["BASE64_SPKI_PIN"]},{"host":"updates.example.com","spkiSha256":["BASE64_SPKI_PIN"]}]`
+- `ELECTRON_WINDOWS_PUBLISHER_NAME`
+  The expected Windows publisher display name used during signing
+- Windows signing credentials
+  `WIN_CSC_LINK` + `WIN_CSC_KEY_PASSWORD`, or `CSC_LINK` + `CSC_KEY_PASSWORD`, or Azure Trusted Signing environment variables
+
+The packaging script now refuses to produce a professional Windows installer without signing material unless `ELECTRON_ALLOW_UNSIGNED_WINDOWS_BUILD=true` is set explicitly for a disposable local build.
 
 ## Environment Variables
 
@@ -160,12 +180,13 @@ The E2E commands expect the local stack to be up and use `scripts/qa/assert-loca
 
 ## Quality Baseline
 
-Verified during the March 30, 2026 polish pass:
+Verified during the April 2, 2026 desktop release-readiness pass:
 
 - `npm run lint`
 - `npm test`
 - `dotnet test backend/OetLearner.sln`
 - `npm run build`
+- `npx playwright test -c playwright.desktop.config.ts --reporter=line`
 
 Targeted frontend tests were also added or updated for:
 
@@ -173,6 +194,7 @@ Targeted frontend tests were also added or updated for:
 - auth form labels and field attributes
 - semantic card-link navigation
 - dashboard data-loading hook behavior
+- desktop shell boot, learner persistence, packaged smoke, and protected role routes
 
 ## Docker and Deployment Notes
 

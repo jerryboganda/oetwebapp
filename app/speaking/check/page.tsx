@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, Suspense } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Mic, Volume2, Play, Square, AlertTriangle, CheckCircle2,
@@ -13,6 +14,7 @@ import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
 import { postSpeakingDeviceCheck } from '@/lib/api';
+import { SpeakingRecorder, base64ToBlob } from '@/lib/mobile/speaking-recorder';
 
 type CheckStatus = 'pending' | 'checking' | 'success' | 'warning' | 'error';
 
@@ -20,6 +22,7 @@ function MicEnvironmentCheckContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const taskId = searchParams?.get('taskId') || 'st-001';
+  const isNativePlatform = Capacitor.isNativePlatform();
 
   // --- State ---
   const [permissionStatus, setPermissionStatus] = useState<CheckStatus>('pending');
@@ -32,20 +35,29 @@ function MicEnvironmentCheckContent() {
   
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
+  const streamRef = useRef<MediaStream | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const animationFrameRef = useRef<number | null>(null);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
+  const autoStopTimeoutRef = useRef<number | null>(null);
+  const isRecordingRef = useRef(false);
+  const recordedBlobRef = useRef<Blob | null>(null);
 
   // --- Initial Compatibility Check ---
   useEffect(() => {
     const checkCompatibility = () => {
+      if (isNativePlatform) {
+        setIsCompatible(true);
+        return;
+      }
+
       const hasMediaRecorder = typeof window !== 'undefined' && !!window.MediaRecorder;
       const hasAudioContext = typeof window !== 'undefined' && (!!window.AudioContext || !!(window as any).webkitAudioContext);
       setIsCompatible(hasMediaRecorder && hasAudioContext);
     };
     checkCompatibility();
-  }, []);
+  }, [isNativePlatform]);
 
   // --- Noise Monitoring ---
   const startNoiseMonitoring = (stream: MediaStream) => {
@@ -89,7 +101,20 @@ function MicEnvironmentCheckContent() {
   const requestPermission = async () => {
     setPermissionStatus('checking');
     try {
+      if (isNativePlatform) {
+        await SpeakingRecorder.start({ mimeType: 'audio/mp4' });
+        await SpeakingRecorder.cancel();
+        setPermissionStatus('success');
+        setIsCompatible(true);
+        setNoiseLevel(0);
+        setIsNoisy(false);
+        analytics.track('task_started', { subtest: 'speaking', phase: 'mic_permission_granted' });
+        void postSpeakingDeviceCheck({ microphoneGranted: true, networkStable: navigator.onLine, deviceType: 'native' });
+        return;
+      }
+
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  streamRef.current = stream;
       setPermissionStatus('success');
       analytics.track('task_started', { subtest: 'speaking', phase: 'mic_permission_granted' });
       startNoiseMonitoring(stream);
@@ -104,30 +129,42 @@ function MicEnvironmentCheckContent() {
 
   const startRecording = async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-      mediaRecorderRef.current = new MediaRecorder(stream);
-      audioChunksRef.current = [];
+      if (autoStopTimeoutRef.current !== null) {
+        window.clearTimeout(autoStopTimeoutRef.current);
+        autoStopTimeoutRef.current = null;
+      }
 
-      mediaRecorderRef.current.ondataavailable = (event) => {
-        if (event.data.size > 0) {
-          audioChunksRef.current.push(event.data);
-        }
-      };
+      if (audioUrl) {
+        URL.revokeObjectURL(audioUrl);
+        setAudioUrl(null);
+      }
 
-      mediaRecorderRef.current.onstop = () => {
-        const audioBlob = new Blob(audioChunksRef.current, { type: 'audio/wav' });
-        const url = URL.createObjectURL(audioBlob);
-        setAudioUrl(url);
-        setRecordingStatus('finished');
-      };
+      recordedBlobRef.current = null;
 
-      mediaRecorderRef.current.start();
+      if (isNativePlatform) {
+        await SpeakingRecorder.start({ mimeType: 'audio/mp4' });
+        audioChunksRef.current = [];
+        mediaRecorderRef.current = null;
+      } else {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        mediaRecorderRef.current = new MediaRecorder(stream);
+        audioChunksRef.current = [];
+
+        mediaRecorderRef.current.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data);
+          }
+        };
+
+        mediaRecorderRef.current.start(100);
+      }
+
       setRecordingStatus('recording');
-      
-      // Auto-stop after 3 seconds
-      setTimeout(() => {
-        if (mediaRecorderRef.current?.state === 'recording') {
-          stopRecording();
+      isRecordingRef.current = true;
+
+      autoStopTimeoutRef.current = window.setTimeout(() => {
+        if (isRecordingRef.current) {
+          void stopRecording();
         }
       }, 3000);
     } catch (err) {
@@ -135,9 +172,48 @@ function MicEnvironmentCheckContent() {
     }
   };
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
-      mediaRecorderRef.current.stop();
+  const stopRecording = async () => {
+    if (autoStopTimeoutRef.current !== null) {
+      window.clearTimeout(autoStopTimeoutRef.current);
+      autoStopTimeoutRef.current = null;
+    }
+
+    try {
+      if (isNativePlatform) {
+        const recording = await SpeakingRecorder.stop();
+        recordedBlobRef.current = base64ToBlob(recording.base64, recording.mimeType);
+      } else if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
+        await new Promise<void>((resolve) => {
+          mediaRecorderRef.current?.addEventListener('stop', () => resolve(), { once: true });
+          mediaRecorderRef.current?.stop();
+        });
+
+        recordedBlobRef.current = new Blob(audioChunksRef.current, { type: mediaRecorderRef.current?.mimeType || 'audio/webm' });
+      }
+
+      const audioBlob = recordedBlobRef.current;
+      if (!audioBlob || audioBlob.size === 0) {
+        throw new Error('No audio was captured.');
+      }
+
+      const url = URL.createObjectURL(audioBlob);
+      setAudioUrl(url);
+      setRecordingStatus('finished');
+      if (!isNativePlatform) {
+        mediaRecorderRef.current = null;
+      }
+    } catch (err) {
+      console.error('Failed to stop recording:', err);
+      setRecordingStatus('idle');
+      recordedBlobRef.current = null;
+      if (isNativePlatform) {
+        void SpeakingRecorder.cancel().catch(() => undefined);
+      }
+    } finally {
+      isRecordingRef.current = false;
+      if (!isNativePlatform && mediaRecorderRef.current) {
+        mediaRecorderRef.current = null;
+      }
     }
   };
 
@@ -155,17 +231,28 @@ function MicEnvironmentCheckContent() {
   // Cleanup
   useEffect(() => {
     return () => {
+      if (autoStopTimeoutRef.current !== null) {
+        window.clearTimeout(autoStopTimeoutRef.current);
+        autoStopTimeoutRef.current = null;
+      }
       if (animationFrameRef.current) cancelAnimationFrame(animationFrameRef.current);
+      if (isNativePlatform) {
+        void SpeakingRecorder.cancel().catch(() => undefined);
+      }
       if (audioContextRef.current) audioContextRef.current.close();
+      if (streamRef.current) {
+        streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
+      }
     };
-  }, []);
+  }, [isNativePlatform]);
 
   const allChecksPassed = permissionStatus === 'success' && recordingStatus === 'finished' && !isNoisy && isCompatible;
 
   const handleContinue = () => {
     if (allChecksPassed) {
       analytics.track('task_started', { subtest: 'speaking', phase: 'mic_check_passed', taskId });
-      void postSpeakingDeviceCheck({ microphoneGranted: true, networkStable: navigator.onLine, deviceType: 'web' });
+      void postSpeakingDeviceCheck({ microphoneGranted: true, networkStable: navigator.onLine, deviceType: isNativePlatform ? 'native' : 'web' });
       router.push(`/speaking/task/${taskId}?mode=self`);
     }
   };

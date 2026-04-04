@@ -4,10 +4,15 @@ import { describe, expect, it, vi } from 'vitest';
 
 const authProviderSpy = vi.fn(({ children }: { children: React.ReactNode }) => <div data-testid="auth-provider">{children}</div>);
 const authGuardSpy = vi.fn(({ children }: { children: React.ReactNode }) => <div data-testid="auth-guard">{children}</div>);
+const useAuthSpy = vi.fn(() => ({
+  isAuthenticated: false,
+  loading: false,
+}));
 
 vi.mock('@/contexts/auth-context', () => ({
   AuthContext: createContext(null),
   AuthProvider: (props: { children: React.ReactNode }) => authProviderSpy(props),
+  useAuth: () => useAuthSpy(),
 }));
 
 vi.mock('@/components/auth/auth-guard', () => ({

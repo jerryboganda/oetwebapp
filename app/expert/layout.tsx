@@ -2,7 +2,6 @@
 
 import { AppShell, ExpertDashboardShell } from '@/components/layout';
 import { NavItem } from '@/components/layout/sidebar';
-import { AuthProvider } from '@/contexts/auth-context';
 import { LayoutDashboard, Inbox, CheckCircle, BarChart3, CalendarClock, Users } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useExpertAuth } from '@/lib/hooks/use-expert-auth';
@@ -74,9 +73,5 @@ function ExpertLayoutContent({ children }: { children: React.ReactNode }) {
 }
 
 export default function ExpertLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <AuthProvider>
-      <ExpertLayoutContent>{children}</ExpertLayoutContent>
-    </AuthProvider>
-  );
+  return <ExpertLayoutContent>{children}</ExpertLayoutContent>;
 }

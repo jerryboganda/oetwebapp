@@ -53,15 +53,18 @@ public class ProfileAccessGuardTests
 
     private static LearnerService CreateLearnerService(LearnerDbContext db)
     {
+        var billingOptions = Options.Create(new BillingOptions());
         var platformLinks = new PlatformLinkService(
             Options.Create(new PlatformOptions { FallbackEmailDomain = "example.test" }),
-            Options.Create(new BillingOptions()));
+            billingOptions);
 
         var storageRoot = Path.Combine(Path.GetTempPath(), $"oet-profile-guards-{Guid.NewGuid():N}");
         var storageOptions = Options.Create(new StorageOptions { LocalRootPath = storageRoot });
         var mediaStorage = new MediaStorageService(new TestHostEnvironment(storageRoot), storageOptions);
+        var paymentGateways = CreatePaymentGatewayService(billingOptions);
+        var walletService = new WalletService(db, paymentGateways, platformLinks);
 
-        return new LearnerService(db, mediaStorage, platformLinks, null!);
+        return new LearnerService(db, mediaStorage, platformLinks, null!, walletService, paymentGateways);
     }
 
     private static ExpertService CreateExpertService(LearnerDbContext db)
@@ -75,6 +78,13 @@ public class ProfileAccessGuardTests
         var mediaStorage = new MediaStorageService(new TestHostEnvironment(storageRoot), storageOptions);
 
         return new ExpertService(db, NullLogger<ExpertService>.Instance, mediaStorage, platformLinks, null!);
+    }
+
+    private static PaymentGatewayService CreatePaymentGatewayService(IOptions<BillingOptions> billingOptions)
+    {
+        var stripe = new StripeGateway(new HttpClient(), billingOptions);
+        var paypal = new PayPalGateway(new HttpClient(), billingOptions);
+        return new PaymentGatewayService(stripe, paypal);
     }
 
     private sealed class TestHostEnvironment(string contentRootPath) : Microsoft.AspNetCore.Hosting.IWebHostEnvironment

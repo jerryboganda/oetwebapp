@@ -1,7 +1,9 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using OetLearner.Api.Services;
 using OetLearner.Api.Tests.Infrastructure;
@@ -121,6 +123,53 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
         Assert.True(json.RootElement.TryGetProperty("reviewOps", out _));
         Assert.True(json.RootElement.TryGetProperty("billingRisk", out _));
         Assert.True(json.RootElement.TryGetProperty("quality", out _));
+    }
+
+    [Fact]
+    public async Task AdminDashboard_AndContentList_RemainQueryable_WhenSqliteBacksDesktopRuntime()
+    {
+        var sqlitePath = Path.Combine(Path.GetTempPath(), $"oet-admin-dashboard-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            await using var factory = new SqliteAdminWebApplicationFactory(sqlitePath);
+            using var client = factory.CreateAuthenticatedClient(SeedData.AdminEmail, SeedData.LocalSeedPassword, expectedRole: "admin");
+
+            var dashboardResponse = await client.GetAsync("/v1/admin/dashboard");
+            var dashboardPayload = await dashboardResponse.Content.ReadAsStringAsync();
+            Assert.True(dashboardResponse.IsSuccessStatusCode, dashboardPayload);
+
+            using var dashboardJson = JsonDocument.Parse(dashboardPayload);
+            Assert.True(dashboardJson.RootElement.TryGetProperty("generatedAt", out _));
+            Assert.True(dashboardJson.RootElement.TryGetProperty("contentHealth", out _));
+
+            var contentResponse = await client.GetAsync("/v1/admin/content");
+            var contentPayload = await contentResponse.Content.ReadAsStringAsync();
+            Assert.True(contentResponse.IsSuccessStatusCode, contentPayload);
+
+            using var contentJson = JsonDocument.Parse(contentPayload);
+            Assert.True(contentJson.RootElement.GetProperty("total").GetInt32() >= 1);
+            Assert.True(contentJson.RootElement.GetProperty("items").GetArrayLength() >= 1);
+        }
+        finally
+        {
+            foreach (var path in new[] { sqlitePath, $"{sqlitePath}-wal", $"{sqlitePath}-shm" })
+            {
+                if (!File.Exists(path))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    File.Delete(path);
+                }
+                catch (IOException)
+                {
+                    // Windows can briefly retain SQLite file handles after host disposal.
+                }
+            }
+        }
     }
 
     // ── Criteria ───────────────────────────────
@@ -419,6 +468,21 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
         return document.RootElement.TryGetProperty("code", out var codeElement)
             ? codeElement.GetString()
             : null;
+    }
+
+    private sealed class SqliteAdminWebApplicationFactory(string sqlitePath) : TestWebApplicationFactory
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["ConnectionStrings:DefaultConnection"] = $"Data Source={sqlitePath}"
+                });
+            });
+        }
     }
 
 }

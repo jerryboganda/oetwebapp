@@ -165,7 +165,7 @@ export function BottomNav({ className, items = mobileNavItems }: { className?: s
 
   return (
     <nav
-      className={cn('lg:hidden fixed bottom-0 left-0 right-0 z-40 bg-surface border-t border-border safe-area-inset-bottom shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]', className)}
+      className={cn('lg:hidden fixed left-0 right-0 z-40 bg-surface border-t border-border safe-area-inset-bottom keyboard-safe-bottom shadow-[0_-4px_6px_-1px_rgba(0,0,0,0.05)]', className)}
       aria-label="Mobile navigation"
     >
       <ul className="flex items-center justify-around py-2 px-2">

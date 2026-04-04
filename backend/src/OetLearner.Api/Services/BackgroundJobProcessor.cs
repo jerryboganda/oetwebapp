@@ -28,12 +28,24 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         var now = DateTimeOffset.UtcNow;
+        var queuedJobQuery = db.BackgroundJobs
+            .Where(x => x.State == AsyncState.Queued);
 
-        var jobs = await db.BackgroundJobs
-            .Where(x => x.State == AsyncState.Queued && x.AvailableAt <= now)
-            .OrderBy(x => x.CreatedAt)
+        var queuedJobs = db.Database.IsSqlite()
+            ? await queuedJobQuery
+                .Take(200)
+                .ToListAsync(cancellationToken)
+            : await queuedJobQuery
+                .OrderBy(x => x.CreatedAt)
+                .Take(50)
+                .ToListAsync(cancellationToken);
+
+        var jobs = queuedJobs
+            .Where(x => x.AvailableAt <= now)
+            .OrderBy(x => x.AvailableAt)
+            .ThenBy(x => x.CreatedAt)
             .Take(50)
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         foreach (var job in jobs)
         {

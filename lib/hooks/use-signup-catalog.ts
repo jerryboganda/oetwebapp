@@ -7,12 +7,18 @@ import {
   examTypes as fallbackExamTypes,
   professions as fallbackProfessions,
 } from '@/lib/auth/enrollment';
-import type { SignupExamType, SignupProfession, SignupSession } from '@/lib/types/auth';
+import type {
+  ExternalAuthProvider,
+  SignupExamType,
+  SignupProfession,
+  SignupSession,
+} from '@/lib/types/auth';
 
 export function useSignupCatalog() {
   const [examTypes, setExamTypes] = useState<SignupExamType[]>(fallbackExamTypes);
   const [professions, setProfessions] = useState<SignupProfession[]>(fallbackProfessions);
   const [enrollmentSessions, setEnrollmentSessions] = useState<SignupSession[]>(fallbackSessions);
+  const [externalAuthProviders, setExternalAuthProviders] = useState<ExternalAuthProvider[]>([]);
 
   useEffect(() => {
     let cancelled = false;
@@ -25,9 +31,10 @@ export function useSignupCatalog() {
           return;
         }
 
-        setExamTypes(catalog.examTypes);
-        setProfessions(catalog.professions);
-        setEnrollmentSessions(catalog.sessions);
+        setExamTypes(Array.isArray(catalog.examTypes) ? catalog.examTypes : fallbackExamTypes);
+        setProfessions(Array.isArray(catalog.professions) ? catalog.professions : fallbackProfessions);
+        setEnrollmentSessions(Array.isArray(catalog.sessions) ? catalog.sessions : fallbackSessions);
+        setExternalAuthProviders(Array.isArray(catalog.externalAuthProviders) ? catalog.externalAuthProviders : []);
       } catch {
         if (cancelled) {
           return;
@@ -36,6 +43,7 @@ export function useSignupCatalog() {
         setExamTypes(fallbackExamTypes);
         setProfessions(fallbackProfessions);
         setEnrollmentSessions(fallbackSessions);
+        setExternalAuthProviders([]);
       }
     };
 
@@ -49,6 +57,7 @@ export function useSignupCatalog() {
   return {
     enrollmentSessions,
     examTypes,
+    externalAuthProviders,
     professions,
   };
 }

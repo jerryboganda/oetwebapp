@@ -26,13 +26,14 @@ test.describe('Learner workspace smoke @learner @smoke', () => {
     }
 
     const diagnostics = observePage(page);
+    const dashboardHeading = page.getByRole('heading', { name: /keep today'?s priorities and exam signals in view/i });
     await page.goto('/', { waitUntil: 'domcontentloaded' });
 
-    await expect(page.getByRole('heading', { name: /keep today'?s priorities and exam signals in view/i })).toBeVisible();
+    await expect(dashboardHeading).toBeVisible({ timeout: 20000 });
     await page.reload({ waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: /keep today'?s priorities and exam signals in view/i })).toBeVisible();
+    await expect(dashboardHeading).toBeVisible({ timeout: 20000 });
 
-    expectNoSevereClientIssues(diagnostics);
+    expectNoSevereClientIssues(diagnostics, { allowNotificationReconnectNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });

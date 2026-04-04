@@ -51,7 +51,7 @@ export function AppShell({
   const hasAuthProvider = authContext !== null;
 
   const shell = distractionFree ? (
-    <div className="min-h-screen flex flex-col bg-background-light">
+    <div className="min-h-[var(--app-viewport-height,100dvh)] flex flex-col bg-background-light">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:rounded-lg focus:shadow-lg"
@@ -64,7 +64,7 @@ export function AppShell({
       </main>
     </div>
   ) : (
-    <div className="flex min-h-screen flex-col bg-background-light lg:flex-row">
+    <div className="flex min-h-[var(--app-viewport-height,100dvh)] flex-col bg-background-light lg:flex-row">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:rounded-lg focus:shadow-lg"
@@ -87,7 +87,7 @@ export function AppShell({
           items={navItems}
           userSummary={userSummary}
         />
-        <main id="main-content" className={cn('flex-1 overflow-y-auto pb-20 lg:pb-0', className)}>
+        <main id="main-content" className={cn('flex-1 overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0', className)}>
           {children}
         </main>
       </div>

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { resolveProxyTarget, sanitizeProxyHeaders, validateProxyPathSegments } from '../backend-proxy';
+import {
+  resolveProxyTarget,
+  sanitizeProxyHeaders,
+  sanitizeProxyResponseHeaders,
+  validateProxyPathSegments,
+} from '../backend-proxy';
 
 describe('backend proxy helpers', () => {
   it('builds a safe backend target for v1 paths', () => {
@@ -32,5 +37,25 @@ describe('backend proxy helpers', () => {
     expect(sanitized.get('Host')).toBeNull();
     expect(sanitized.get('Connection')).toBeNull();
     expect(sanitized.get('X-Forwarded-For')).toBeNull();
+  });
+
+  it('removes unsafe upstream response headers before streaming back to the renderer', () => {
+    const headers = new Headers({
+      'Content-Type': 'application/json',
+      'Content-Encoding': 'gzip',
+      'Content-Length': '123',
+      Connection: 'keep-alive',
+      'Transfer-Encoding': 'chunked',
+      Vary: 'Accept-Encoding',
+    });
+
+    const sanitized = sanitizeProxyResponseHeaders(headers);
+
+    expect(sanitized.get('Content-Type')).toBe('application/json');
+    expect(sanitized.get('Vary')).toBe('Accept-Encoding');
+    expect(sanitized.get('Content-Encoding')).toBeNull();
+    expect(sanitized.get('Content-Length')).toBeNull();
+    expect(sanitized.get('Connection')).toBeNull();
+    expect(sanitized.get('Transfer-Encoding')).toBeNull();
   });
 });

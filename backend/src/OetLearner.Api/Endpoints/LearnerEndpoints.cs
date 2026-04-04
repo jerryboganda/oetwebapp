@@ -159,6 +159,47 @@ public static class LearnerEndpoints
         billing.MapGet("/extras", async (LearnerService service) => Results.Ok(await service.GetBillingExtrasAsync()));
         billing.MapPost("/checkout-sessions", async (HttpContext http, CheckoutSessionCreateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateCheckoutSessionAsync(http.UserId(), request, ct)));
 
+        // Engagement endpoints
+        v1.MapGet("/learner/engagement", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetEngagementAsync(http.UserId(), ct)));
+
+        // Wallet endpoints
+        billing.MapGet("/wallet/transactions", async (HttpContext http, [FromQuery] int? limit, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWalletTransactionsAsync(http.UserId(), limit ?? 20, ct)));
+        billing.MapPost("/wallet/top-up", async (HttpContext http, WalletTopUpRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateWalletTopUpAsync(http.UserId(), request, ct)));
+
+        // Payment webhook endpoints (no auth required)
+        var webhooks = app.MapGroup("/v1/payment/webhooks");
+        webhooks.MapPost("/stripe", async (HttpContext http, LearnerService service, CancellationToken ct) =>
+        {
+            var payload = await new StreamReader(http.Request.Body).ReadToEndAsync(ct);
+            var headers = http.Request.Headers.ToDictionary(
+                header => header.Key,
+                header => header.Value.ToString(),
+                StringComparer.OrdinalIgnoreCase);
+            return Results.Ok(await service.HandleStripeWebhookAsync(payload, headers, ct));
+        });
+        webhooks.MapPost("/paypal", async (HttpContext http, LearnerService service, CancellationToken ct) =>
+        {
+            var payload = await new StreamReader(http.Request.Body).ReadToEndAsync(ct);
+            var headers = http.Request.Headers.ToDictionary(
+                header => header.Key,
+                header => header.Value.ToString(),
+                StringComparer.OrdinalIgnoreCase);
+            return Results.Ok(await service.HandlePayPalWebhookAsync(payload, headers, ct));
+        });
+
+        // Exam family reference
+        v1.MapGet("/reference/exam-families", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetExamFamiliesAsync(ct)));
+
+        // Target-date risk assessment
+        v1.MapGet("/learner/readiness/risk", async (HttpContext http, EngagementService engagement, CancellationToken ct) => Results.Ok(await engagement.CalculateTargetDateRiskAsync(http.UserId(), ct)));
+
+        // Streak freeze
+        v1.MapPost("/learner/engagement/streak-freeze", async (HttpContext http, EngagementService engagement, CancellationToken ct) =>
+        {
+            var result = await engagement.UseStreakFreezeAsync(http.UserId(), ct);
+            return Results.Ok(new { applied = result, message = result ? "Streak freeze applied." : "No streak freeze needed or available." });
+        });
+
         return app;
     }
 

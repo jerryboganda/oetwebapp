@@ -4,6 +4,9 @@ const fs = require('fs');
 const net = require('net');
 const path = require('path');
 const { createDesktopMenu } = require('./menu.cjs');
+const { installCertificatePinning } = require('./security/certificate-pinning.cjs');
+const { createSecureSecretStore } = require('./security/secure-secrets.cjs');
+const { loadDesktopRuntimeConfig, resolveDesktopApiBaseUrl } = require('./runtime-config.cjs');
 const { createDesktopUpdater } = require('./updater.cjs');
 
 const DEFAULT_RENDERER_URL = 'http://localhost:3000';
@@ -13,6 +16,43 @@ const DEFAULT_PROXY_TARGET_URL = (process.env.API_PROXY_TARGET_URL || 'http://lo
 const START_LOCAL_RENDERER = process.env.ELECTRON_START_LOCAL_SERVER === 'true';
 const ALLOWED_EXTERNAL_PROTOCOLS = new Set(['http:', 'https:']);
 const ALLOWED_PERMISSION_NAMES = new Set(['media', 'microphone', 'notifications']);
+const BUNDLED_BACKEND_DIR = 'backend-runtime';
+const BUNDLED_BACKEND_EXECUTABLE = process.platform === 'win32' ? 'OetLearner.Api.exe' : 'OetLearner.Api';
+
+function resolveRuntimeChannel() {
+  const explicitChannel = process.env.ELECTRON_RUNTIME_CHANNEL?.trim();
+  if (explicitChannel) {
+    return explicitChannel.replace(/[^a-zA-Z0-9_-]+/g, '-').toLowerCase();
+  }
+
+  return app.isPackaged ? 'prod' : 'dev';
+}
+
+function configureDesktopDataPaths() {
+  const channel = resolveRuntimeChannel();
+  const explicitRoot = process.env.ELECTRON_APPDATA_ROOT?.trim();
+  const baseDataRoot = explicitRoot
+    ? path.resolve(explicitRoot)
+    : path.join(app.getPath('appData'), 'OET Prep');
+  const channelRoot = path.join(baseDataRoot, channel);
+  const userDataPath = path.join(channelRoot, 'user-data');
+  const sessionDataPath = path.join(channelRoot, 'session-data');
+
+  fs.mkdirSync(userDataPath, { recursive: true });
+  fs.mkdirSync(sessionDataPath, { recursive: true });
+
+  app.setPath('userData', userDataPath);
+
+  try {
+    app.setPath('sessionData', sessionDataPath);
+  } catch {
+    // Older Electron builds may not expose sessionData; userData still isolates the profile.
+  }
+
+  return { channel, userDataPath, sessionDataPath };
+}
+
+const desktopDataPaths = configureDesktopDataPaths();
 
 if (!app.requestSingleInstanceLock()) {
   app.quit();
@@ -21,9 +61,54 @@ if (!app.requestSingleInstanceLock()) {
 let mainWindow = null;
 let rendererUrl = null;
 let rendererServerProcess = null;
+let backendServerProcess = null;
 let desktopUpdater = null;
 let updateCheckTimer = null;
 let shuttingDown = false;
+let secureSecretStore = null;
+let desktopRuntimeConfig = null;
+const allowPackagedLoopbackApiTarget = !app.isPackaged || process.env.ELECTRON_ALLOW_LOCAL_API_TARGET === 'true';
+let activeBackendUrl = null;
+let ignoredPackagedLoopbackApiTarget = null;
+
+function getDesktopRuntimeConfig() {
+  if (desktopRuntimeConfig) {
+    return desktopRuntimeConfig;
+  }
+
+  desktopRuntimeConfig = loadDesktopRuntimeConfig({
+    resourcesPath: process.resourcesPath,
+    appPath: app.getAppPath(),
+    userDataPath: app.getPath('userData'),
+    isPackaged: app.isPackaged,
+    logger: console,
+  });
+
+  return desktopRuntimeConfig;
+}
+
+function getConfiguredDesktopApiBaseUrl() {
+  const runtimeConfig = getDesktopRuntimeConfig();
+  const resolvedUrl = resolveDesktopApiBaseUrl(
+    process.env,
+    runtimeConfig,
+    { allowLoopback: allowPackagedLoopbackApiTarget },
+  );
+
+  if (
+    app.isPackaged
+    && !allowPackagedLoopbackApiTarget
+    && runtimeConfig.publicApiBaseUrl
+    && !resolvedUrl
+  ) {
+    ignoredPackagedLoopbackApiTarget = runtimeConfig.publicApiBaseUrl;
+    console.warn('[electron] ignoring packaged desktop api target because it points to a loopback address', {
+      publicApiBaseUrl: runtimeConfig.publicApiBaseUrl,
+    });
+  }
+
+  return resolvedUrl;
+}
 
 function getRendererUrl() {
   if (rendererUrl) {
@@ -157,6 +242,47 @@ function openOrNavigateUrl(urlString) {
   navigateToUrl(urlString);
 }
 
+function formatStartupError(error) {
+  if (error instanceof Error && error.message.trim()) {
+    return error.message;
+  }
+
+  if (typeof error === 'string' && error.trim()) {
+    return error;
+  }
+
+  return 'Unknown startup failure.';
+}
+
+function showStartupFailure(error) {
+  console.error('[electron] failed to start desktop shell', error);
+  dialog.showErrorBox('OET Prep failed to start', formatStartupError(error));
+}
+
+function normalizeSecretNamespace(value) {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error('A non-empty secret namespace is required.');
+  }
+
+  return value.trim();
+}
+
+function normalizeSecretKey(value) {
+  if (typeof value !== 'string' || value.trim() === '') {
+    throw new Error('A non-empty secret key is required.');
+  }
+
+  return value.trim();
+}
+
+function normalizeSecretValue(value) {
+  if (typeof value !== 'string') {
+    throw new Error('Secret values must be strings.');
+  }
+
+  return value;
+}
+
 function canRequestPermission(webContents, permission, requestingOrigin) {
   if (!ALLOWED_PERMISSION_NAMES.has(permission)) {
     return false;
@@ -222,6 +348,25 @@ async function waitForRenderer(url) {
   throw new Error(`Timed out waiting for the renderer at ${healthUrl}`);
 }
 
+async function waitForBackend(url) {
+  const healthUrl = new URL('/health/ready', url).toString();
+
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    try {
+      const response = await fetch(healthUrl, { cache: 'no-store' });
+      if (response.ok) {
+        return;
+      }
+    } catch {
+      // keep waiting
+    }
+
+    await wait(1000);
+  }
+
+  throw new Error(`Timed out waiting for the backend at ${healthUrl}`);
+}
+
 function isPortAvailable(port) {
   return new Promise((resolve) => {
     const server = net.createServer();
@@ -255,6 +400,18 @@ function getStandaloneRoot() {
   return path.join(app.getAppPath(), '.next', 'standalone');
 }
 
+function getBundledBackendRoot() {
+  if (app.isPackaged) {
+    return path.join(process.resourcesPath, BUNDLED_BACKEND_DIR);
+  }
+
+  return path.join(app.getAppPath(), 'dist', BUNDLED_BACKEND_DIR);
+}
+
+function getBundledBackendExecutablePath() {
+  return path.join(getBundledBackendRoot(), BUNDLED_BACKEND_EXECUTABLE);
+}
+
 function getStandaloneServerPath() {
   return path.join(getStandaloneRoot(), 'server.js');
 }
@@ -267,6 +424,14 @@ function stopRendererServer() {
   rendererServerProcess = null;
 }
 
+function stopBackendServer() {
+  if (backendServerProcess && !backendServerProcess.killed) {
+    backendServerProcess.kill();
+  }
+
+  backendServerProcess = null;
+}
+
 function stopUpdateCheckTimer() {
   if (updateCheckTimer) {
     clearTimeout(updateCheckTimer);
@@ -274,7 +439,7 @@ function stopUpdateCheckTimer() {
   }
 }
 
-function getStandaloneServerEnv(runtimeUrl, port) {
+function getStandaloneServerEnv(runtimeUrl, port, backendUrl) {
   return {
     ...process.env,
     ELECTRON_RUN_AS_NODE: '1',
@@ -282,12 +447,69 @@ function getStandaloneServerEnv(runtimeUrl, port) {
     PORT: String(port),
     HOSTNAME: '127.0.0.1',
     NEXT_PUBLIC_API_BASE_URL: DEFAULT_API_BASE_URL,
-    API_PROXY_TARGET_URL: DEFAULT_PROXY_TARGET_URL,
+    API_PROXY_TARGET_URL: backendUrl || DEFAULT_PROXY_TARGET_URL,
     APP_URL: runtimeUrl,
   };
 }
 
-async function startStandaloneRendererServer() {
+function getBundledBackendEnv(runtimeUrl) {
+  const dataRoot = path.join(app.getPath('userData'), 'backend');
+  const storageRoot = path.join(app.getPath('userData'), 'storage');
+  const databasePath = path.join(dataRoot, 'oet-prep.desktop.db');
+
+  fs.mkdirSync(dataRoot, { recursive: true });
+  fs.mkdirSync(storageRoot, { recursive: true });
+
+  return {
+    ...process.env,
+    ASPNETCORE_ENVIRONMENT: 'Development',
+    ASPNETCORE_URLS: runtimeUrl,
+    ConnectionStrings__DefaultConnection: `Data Source=${databasePath}`,
+    Auth__UseDevelopmentAuth: 'true',
+    Bootstrap__AutoMigrate: 'true',
+    Bootstrap__SeedDemoData: 'true',
+    Platform__PublicApiBaseUrl: runtimeUrl,
+    Platform__PublicWebBaseUrl: DEFAULT_RENDERER_URL,
+    Billing__CheckoutBaseUrl: `${DEFAULT_RENDERER_URL}/billing/checkout`,
+    Proxy__TrustForwardHeaders: 'false',
+    Proxy__EnforceHttps: 'false',
+    Storage__LocalRootPath: storageRoot,
+  };
+}
+
+async function startBundledBackendServer() {
+  const backendExecutable = getBundledBackendExecutablePath();
+
+  if (!fs.existsSync(backendExecutable)) {
+    throw new Error(`Bundled backend executable is missing. Expected ${backendExecutable}.`);
+  }
+
+  const port = await findAvailablePort(Number.parseInt(process.env.ELECTRON_BACKEND_PORT || '5198', 10) || 5198);
+  const runtimeUrl = `http://127.0.0.1:${port}`;
+
+  backendServerProcess = spawn(backendExecutable, [], {
+    cwd: getBundledBackendRoot(),
+    env: getBundledBackendEnv(runtimeUrl),
+    stdio: 'inherit',
+    shell: false,
+    windowsHide: true,
+  });
+
+  backendServerProcess.on('exit', (code, signal) => {
+    backendServerProcess = null;
+
+    if (!shuttingDown) {
+      showStartupFailure(new Error(`[electron] bundled backend exited unexpectedly (code ${code ?? 'unknown'}${signal ? `, signal ${signal}` : ''}).`));
+      app.quit();
+    }
+  });
+
+  await waitForBackend(runtimeUrl);
+  activeBackendUrl = runtimeUrl;
+  return runtimeUrl;
+}
+
+async function startStandaloneRendererServer(backendUrl) {
   const standaloneRoot = getStandaloneRoot();
   const serverScript = getStandaloneServerPath();
 
@@ -300,7 +522,7 @@ async function startStandaloneRendererServer() {
 
   rendererServerProcess = spawn(process.execPath, [serverScript], {
     cwd: standaloneRoot,
-    env: getStandaloneServerEnv(runtimeUrl, port),
+    env: getStandaloneServerEnv(runtimeUrl, port, backendUrl),
     stdio: 'inherit',
     shell: false,
     windowsHide: true,
@@ -328,7 +550,9 @@ async function resolveRendererUrl() {
   }
 
   if (app.isPackaged || START_LOCAL_RENDERER) {
-    rendererUrl = await startStandaloneRendererServer();
+    const backendUrl = getConfiguredDesktopApiBaseUrl() || await startBundledBackendServer();
+    activeBackendUrl = backendUrl;
+    rendererUrl = await startStandaloneRendererServer(backendUrl);
     return rendererUrl;
   }
 
@@ -451,6 +675,12 @@ app.whenReady().then(async () => {
   try {
     app.setAppUserModelId('com.oetprep.desktop');
     applyApplicationSecurityPolicies();
+    installCertificatePinning(session.defaultSession, { logger: console });
+    secureSecretStore = createSecureSecretStore({ logger: console });
+
+    if (!app.isPackaged) {
+      console.info('[electron] desktop runtime paths', desktopDataPaths);
+    }
 
     if (app.isPackaged) {
       app.setAsDefaultProtocolClient('oet-prep');
@@ -474,7 +704,7 @@ app.whenReady().then(async () => {
       }
     });
   } catch (error) {
-    console.error('[electron] failed to start desktop shell', error);
+    showStartupFailure(error);
     app.quit();
   }
 });
@@ -482,6 +712,7 @@ app.whenReady().then(async () => {
 app.on('before-quit', () => {
   shuttingDown = true;
   stopUpdateCheckTimer();
+  stopBackendServer();
   stopRendererServer();
 });
 
@@ -503,3 +734,48 @@ ipcMain.handle('desktop:open-external', async (_event, url) => {
   await shell.openExternal(url);
   return true;
 });
+
+ipcMain.handle('desktop:secret-storage:status', async () => {
+  if (!secureSecretStore) {
+    secureSecretStore = createSecureSecretStore({ logger: console });
+  }
+
+  return secureSecretStore.getStatus();
+});
+
+ipcMain.handle('desktop:secret-storage:get', async (_event, payload) => {
+  if (!secureSecretStore) {
+    secureSecretStore = createSecureSecretStore({ logger: console });
+  }
+
+  const namespace = normalizeSecretNamespace(payload?.namespace || 'default');
+  const key = normalizeSecretKey(payload?.key);
+  return secureSecretStore.getSecret({ namespace, key });
+});
+
+ipcMain.handle('desktop:secret-storage:set', async (_event, payload) => {
+  if (!secureSecretStore) {
+    secureSecretStore = createSecureSecretStore({ logger: console });
+  }
+
+  const namespace = normalizeSecretNamespace(payload?.namespace || 'default');
+  const key = normalizeSecretKey(payload?.key);
+  const value = normalizeSecretValue(payload?.value);
+  return secureSecretStore.setSecret({ namespace, key, value });
+});
+
+ipcMain.handle('desktop:secret-storage:delete', async (_event, payload) => {
+  if (!secureSecretStore) {
+    secureSecretStore = createSecureSecretStore({ logger: console });
+  }
+
+  const namespace = normalizeSecretNamespace(payload?.namespace || 'default');
+  const key = normalizeSecretKey(payload?.key);
+  return secureSecretStore.deleteSecret({ namespace, key });
+});
+
+ipcMain.handle('desktop:runtime-info', async () => ({
+  isPackaged: app.isPackaged,
+  activeBackendUrl,
+  ignoredPackagedLoopbackApiTarget,
+}));

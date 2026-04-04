@@ -3,6 +3,7 @@ using System.Threading.RateLimiting;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.HttpOverrides;
@@ -106,32 +107,20 @@ builder.Services.AddDbContext<LearnerDbContext>((serviceProvider, options) =>
 {
     var configuration = serviceProvider.GetRequiredService<IConfiguration>();
     var environment = serviceProvider.GetRequiredService<IWebHostEnvironment>();
-    var resolvedConnectionString = configuration.GetConnectionString("DefaultConnection");
-    if (string.IsNullOrWhiteSpace(resolvedConnectionString))
-    {
-        if (environment.IsDevelopment())
-        {
-            resolvedConnectionString = "Host=localhost;Port=5432;Database=oet_learner_dev;Username=postgres;Password=postgres";
-        }
-        else
-        {
-            throw new InvalidOperationException("ConnectionStrings:DefaultConnection must be configured outside the Development environment.");
-        }
-    }
-
-    if (resolvedConnectionString.StartsWith("InMemory:", StringComparison.OrdinalIgnoreCase))
-    {
-        options.UseInMemoryDatabase(resolvedConnectionString["InMemory:".Length..]);
-    }
-    else
-    {
-        options.UseNpgsql(resolvedConnectionString);
-    }
+    var resolvedConnectionString = DatabaseConfiguration.ResolveConnectionString(configuration, environment.IsDevelopment());
+    DatabaseConfiguration.ConfigureDbContext(options, resolvedConnectionString);
 });
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddProblemDetails();
-builder.Services.AddDataProtection();
+var dataProtectionKeyPath = Path.IsPathRooted(storageOptions.LocalRootPath)
+    ? Path.Combine(storageOptions.LocalRootPath, ".data-protection")
+    : Path.Combine(builder.Environment.ContentRootPath, storageOptions.LocalRootPath, ".data-protection");
+Directory.CreateDirectory(dataProtectionKeyPath);
+
+builder.Services.AddDataProtection()
+    .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeyPath))
+    .SetApplicationName("OET Prep");
 if (enableSwagger)
 {
     builder.Services.AddSwaggerGen();
@@ -199,6 +188,11 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
 builder.Services.AddRateLimiter(options =>
 {
+    // The desktop smoke suite reuses seeded accounts across many browser projects in parallel.
+    // Keep production protections tight, but give development/test runs enough headroom to avoid
+    // false-positive 429s from shared-session traffic bursts.
+    var perUserPermitLimit = builder.Environment.IsDevelopment() ? 5000 : 100;
+    var perUserWritePermitLimit = builder.Environment.IsDevelopment() ? 300 : 30;
     options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
     options.OnRejected = async (context, ct) =>
     {
@@ -214,7 +208,7 @@ builder.Services.AddRateLimiter(options =>
             : httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         return RateLimitPartition.GetFixedWindowLimiter(userId, _ => new FixedWindowRateLimiterOptions
         {
-            PermitLimit = 100,
+            PermitLimit = perUserPermitLimit,
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0
         });
@@ -226,7 +220,7 @@ builder.Services.AddRateLimiter(options =>
             : httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
         return RateLimitPartition.GetFixedWindowLimiter($"write-{userId}", _ => new FixedWindowRateLimiterOptions
         {
-            PermitLimit = 30,
+            PermitLimit = perUserWritePermitLimit,
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0
         });
@@ -372,6 +366,11 @@ builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<AnalyticsIngestionService>();
 builder.Services.AddSingleton<PlatformLinkService>();
 builder.Services.AddSingleton<MediaStorageService>();
+builder.Services.AddHttpClient<StripeGateway>();
+builder.Services.AddHttpClient<PayPalGateway>();
+builder.Services.AddScoped<PaymentGatewayService>();
+builder.Services.AddScoped<WalletService>();
+builder.Services.AddScoped<EngagementService>();
 builder.Services.AddHostedService<BackgroundJobProcessor>();
 
 var app = builder.Build();
@@ -521,8 +520,24 @@ app.MapGet("/health/ready", async (LearnerDbContext db, IOptions<StorageOptions>
         if (dbOk && !db.Database.IsInMemory())
         {
             var stuckThreshold = DateTimeOffset.UtcNow.AddMinutes(-10);
-            var stuckJobs = await db.BackgroundJobs
-                .CountAsync(j => j.State == AsyncState.Processing && j.LastTransitionAt < stuckThreshold, ct);
+            int stuckJobs;
+
+            try
+            {
+                stuckJobs = await db.BackgroundJobs
+                    .AsNoTracking()
+                    .CountAsync(j => j.State == AsyncState.Processing && j.LastTransitionAt < stuckThreshold, ct);
+            }
+            catch (InvalidOperationException) when (db.Database.IsSqlite())
+            {
+                var backgroundJobSnapshots = await db.BackgroundJobs
+                    .AsNoTracking()
+                    .Select(j => new { j.State, j.LastTransitionAt })
+                    .ToListAsync(ct);
+
+                stuckJobs = backgroundJobSnapshots.Count(j => j.State == AsyncState.Processing && j.LastTransitionAt < stuckThreshold);
+            }
+
             checks["stuck_jobs"] = stuckJobs > 0 ? $"warning:{stuckJobs}" : "ok";
         }
 

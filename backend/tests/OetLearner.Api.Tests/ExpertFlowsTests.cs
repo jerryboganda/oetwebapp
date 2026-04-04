@@ -1,6 +1,8 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
+using Microsoft.Extensions.Configuration;
 using OetLearner.Api.Services;
 using OetLearner.Api.Tests.Infrastructure;
 
@@ -87,6 +89,46 @@ public class ExpertFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFa
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.True(json.RootElement.GetProperty("activeAssignedReviews").GetInt32() >= 0);
         Assert.False(string.IsNullOrWhiteSpace(json.RootElement.GetProperty("generatedAt").GetString()));
+    }
+
+    [Fact]
+    public async Task ExpertDashboard_RemainsQueryable_WhenSqliteBacksDesktopRuntime()
+    {
+        var sqlitePath = Path.Combine(Path.GetTempPath(), $"oet-expert-dashboard-{Guid.NewGuid():N}.db");
+
+        try
+        {
+            await using var factory = new SqliteExpertWebApplicationFactory(sqlitePath);
+            using var client = factory.CreateAuthenticatedClient(SeedData.ExpertEmail, SeedData.LocalSeedPassword, expectedRole: "expert");
+
+            var response = await client.GetAsync("/v1/expert/dashboard");
+            var payload = await response.Content.ReadAsStringAsync();
+
+            response.EnsureSuccessStatusCode();
+
+            using var json = JsonDocument.Parse(payload);
+            Assert.True(json.RootElement.GetProperty("activeAssignedReviews").GetInt32() >= 0);
+            Assert.False(string.IsNullOrWhiteSpace(json.RootElement.GetProperty("generatedAt").GetString()));
+        }
+        finally
+        {
+            foreach (var path in new[] { sqlitePath, $"{sqlitePath}-wal", $"{sqlitePath}-shm" })
+            {
+                if (!File.Exists(path))
+                {
+                    continue;
+                }
+
+                try
+                {
+                    File.Delete(path);
+                }
+                catch (IOException)
+                {
+                    // Windows can briefly retain SQLite file handles after host disposal.
+                }
+            }
+        }
     }
 
     [Fact]
@@ -421,6 +463,21 @@ public class ExpertFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFa
             ? SeedData.ExpertSecondaryEmail
             : SeedData.ExpertEmail;
         return factory.CreateAuthenticatedClient(email, SeedData.LocalSeedPassword, expectedRole: "expert");
+    }
+
+    private sealed class SqliteExpertWebApplicationFactory(string sqlitePath) : TestWebApplicationFactory
+    {
+        protected override void ConfigureWebHost(IWebHostBuilder builder)
+        {
+            base.ConfigureWebHost(builder);
+            builder.ConfigureAppConfiguration((_, config) =>
+            {
+                config.AddInMemoryCollection(new Dictionary<string, string?>
+                {
+                    ["ConnectionStrings:DefaultConnection"] = $"Data Source={sqlitePath}"
+                });
+            });
+        }
     }
 
 }

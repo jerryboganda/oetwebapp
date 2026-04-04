@@ -1,6 +1,8 @@
 import { ensureFreshAccessToken } from './auth-client';
 import { env } from './env';
+import { fetchWithTimeout } from './network/fetch-with-timeout';
 import type {
+  ExamFamilyCode,
   UserProfile,
   StudyPlanTask,
   WritingTask,
@@ -110,7 +112,7 @@ function toSubTest(code: string): SubTest {
       return 'Listening';
     default:
       if (process.env.NODE_ENV === 'development') {
-        console.warn('[API] Unknown subtest code:', code, '— defaulting to Writing');
+        console.warn('[API] Unknown subtest code:', code, '- defaulting to Writing');
       }
       return 'Writing';
   }
@@ -138,6 +140,15 @@ function toConfidence(value: string | null | undefined): Confidence {
   return 'Medium';
 }
 
+function toExamFamilyCode(value: unknown): ExamFamilyCode {
+  const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+  if (normalized === 'ielts' || normalized === 'pte') {
+    return normalized;
+  }
+
+  return 'oet';
+}
+
 function toEvalStatus(value: string | null | undefined) {
   const normalized = (value ?? '').toLowerCase();
   if (normalized === 'queued' || normalized === 'processing' || normalized === 'completed' || normalized === 'failed') {
@@ -154,7 +165,7 @@ function toReviewStatus(value: string | null | undefined) {
 }
 
 function scoreRangeDisplay(value: string | null | undefined): string {
-  return (value ?? '').replace(/-/g, '–');
+  return (value ?? '').replace(/\s*-\s*/g, ' to ');
 }
 
 function formatCurrency(amount: number | string | null | undefined, currency = 'AUD'): string {
@@ -303,7 +314,7 @@ async function apiRequest<T = any>(path: string, init?: RequestInit): Promise<T>
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const response = await fetch(resolveApiUrl(path), {
+      const response = await fetchWithTimeout(resolveApiUrl(path), {
         ...init,
         headers: await getHeaders(path, init?.headers),
       });
@@ -344,6 +355,17 @@ async function apiRequest<T = any>(path: string, init?: RequestInit): Promise<T>
       if (err instanceof ApiError) {
         throw err;
       }
+
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        const timeoutError = new ApiError(408, 'request_timeout', 'The request timed out. Please try again.', true);
+        lastError = timeoutError;
+        if (attempt < MAX_RETRIES) {
+          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS[attempt]));
+          continue;
+        }
+        throw timeoutError;
+      }
+
       // Network errors (TypeError from fetch) are retryable
       lastError = err instanceof Error ? err : new Error(String(err));
       if (attempt < MAX_RETRIES) {
@@ -358,11 +380,11 @@ async function apiRequest<T = any>(path: string, init?: RequestInit): Promise<T>
 }
 
 async function uploadBinary(pathOrUrl: string, blob: Blob): Promise<void> {
-  const response = await fetch(resolveApiUrl(pathOrUrl), {
+  const response = await fetchWithTimeout(resolveApiUrl(pathOrUrl), {
     method: 'PUT',
     headers: await getHeaders(pathOrUrl, { 'Content-Type': blob.type || 'audio/webm' }, { json: false }),
     body: blob,
-  });
+  }, 90_000);
 
   if (!response.ok) {
     let message = `Upload failed: ${response.status}`;
@@ -377,7 +399,7 @@ async function uploadBinary(pathOrUrl: string, blob: Blob): Promise<void> {
 }
 
 export async function fetchAuthorizedObjectUrl(pathOrUrl: string): Promise<string> {
-  const response = await fetch(resolveApiUrl(pathOrUrl), {
+  const response = await fetchWithTimeout(resolveApiUrl(pathOrUrl), {
     headers: await getHeaders(pathOrUrl, undefined, { json: false }),
   });
 
@@ -671,6 +693,7 @@ export async function fetchUserProfile(): Promise<UserProfile> {
     email: user.email,
     displayName: user.displayName,
     profession: titleCase(goals.professionId ?? user.activeProfessionId),
+    examFamilyCode: toExamFamilyCode(goals.examFamilyCode),
     examDate: goals.targetExamDate ?? null,
     targetScores: {
       Writing: goals.targetScoresBySubtest?.writing ?? null,
@@ -716,6 +739,25 @@ export async function fetchDiagnosticOverview(): Promise<ApiRecord> {
 export async function fetchDashboardHome(): Promise<ApiRecord> {
   const data = await apiRequest<ApiRecord>('/v1/learner/dashboard');
   return normalizeRouteValues(data);
+}
+
+export async function fetchEngagement(): Promise<ApiRecord> {
+  return apiRequest<ApiRecord>('/v1/learner/engagement');
+}
+
+export async function fetchWalletTransactions(limit = 20): Promise<ApiRecord> {
+  return apiRequest<ApiRecord>(`/v1/billing/wallet/transactions?limit=${limit}`);
+}
+
+export async function createWalletTopUp(amount: number, gateway: 'stripe' | 'paypal'): Promise<ApiRecord> {
+  return apiRequest<ApiRecord>('/v1/billing/wallet/top-up', {
+    method: 'POST',
+    body: JSON.stringify({ amount, gateway }),
+  });
+}
+
+export async function fetchExamFamilies(): Promise<ApiRecord> {
+  return apiRequest<ApiRecord>('/v1/reference/exam-families');
 }
 
 export async function fetchSettingsData(): Promise<ApiRecord> {
@@ -780,6 +822,7 @@ export async function updateUserProfile(updates: Partial<UserProfile>): Promise<
 
   const goalValues: ApiRecord = {};
   if (updates.profession) goalValues.professionId = updates.profession.toLowerCase();
+  if (updates.examFamilyCode) goalValues.examFamilyCode = updates.examFamilyCode;
   if (updates.examDate !== undefined) goalValues.targetExamDate = updates.examDate;
   if (updates.studyHoursPerWeek !== undefined) goalValues.studyHoursPerWeek = updates.studyHoursPerWeek;
   if (updates.targetCountry !== undefined) goalValues.targetCountry = updates.targetCountry;
@@ -905,9 +948,18 @@ export async function fetchWritingResult(resultId: string): Promise<WritingResul
     id: resultId,
     taskId: summary.taskId,
     taskTitle: summary.taskTitle,
+    examFamilyCode: toExamFamilyCode(summary.examFamilyCode),
+    examFamilyLabel: summary.examFamilyLabel ?? titleCase(summary.examFamilyCode ?? 'oet'),
     estimatedScoreRange: scoreRangeDisplay(summary.scoreRange),
     estimatedGradeRange: scoreRangeDisplay(summary.gradeRange ?? 'Pending'),
-    confidenceLabel: toConfidence(summary.confidenceBand),
+    confidenceBand: toConfidence(summary.confidenceBand),
+    confidenceLabel: summary.confidenceLabel ?? `${toConfidence(summary.confidenceBand)} confidence practice estimate`,
+    learnerDisclaimer: summary.learnerDisclaimer ?? `Practice estimate only. This is not an official ${summary.examFamilyLabel ?? 'exam'} score.`,
+    methodLabel: summary.methodLabel ?? 'AI-assisted practice evaluation',
+    provenanceLabel: summary.provenanceLabel ?? `${summary.examFamilyLabel ?? 'Exam'} practice estimate`,
+    humanReviewRecommended: Boolean(summary.humanReviewRecommended),
+    escalationRecommended: Boolean(summary.escalationRecommended),
+    isOfficialScore: Boolean(summary.isOfficialScore),
     topStrengths: summary.strengths ?? [],
     topIssues: summary.issues ?? [],
     criteria,
@@ -1017,8 +1069,17 @@ export async function fetchSpeakingResult(resultId: string): Promise<SpeakingRes
     id: resultId,
     taskId: summary.taskId,
     taskTitle: summary.taskTitle,
+    examFamilyCode: toExamFamilyCode(summary.examFamilyCode),
+    examFamilyLabel: summary.examFamilyLabel ?? titleCase(summary.examFamilyCode ?? 'oet'),
     scoreRange: scoreRangeDisplay(summary.scoreRange),
     confidence: toConfidence(summary.confidenceBand),
+    confidenceLabel: summary.confidenceLabel ?? `${toConfidence(summary.confidenceBand)} confidence practice estimate`,
+    learnerDisclaimer: summary.learnerDisclaimer ?? `Practice estimate only. This is not an official ${summary.examFamilyLabel ?? 'exam'} score.`,
+    methodLabel: summary.methodLabel ?? 'AI-assisted speaking evaluation',
+    provenanceLabel: summary.provenanceLabel ?? `${summary.examFamilyLabel ?? 'Exam'} practice estimate`,
+    humanReviewRecommended: Boolean(summary.humanReviewRecommended),
+    escalationRecommended: Boolean(summary.escalationRecommended),
+    isOfficialScore: Boolean(summary.isOfficialScore),
     strengths: summary.strengths ?? [],
     improvements: summary.issues ?? [],
     evalStatus: toEvalStatus(summary.state),
@@ -2202,7 +2263,7 @@ export async function exportAdminAuditLogs(params?: { action?: string; actor?: s
   if (params?.search) qs.set('search', params.search);
 
   const path = `/v1/admin/audit-logs/export${qs.toString() ? `?${qs.toString()}` : ''}`;
-  const response = await fetch(resolveApiUrl(path), {
+  const response = await fetchWithTimeout(resolveApiUrl(path), {
     method: 'GET',
     headers: await getHeaders(path, undefined, { json: false }),
   });

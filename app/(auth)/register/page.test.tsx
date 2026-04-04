@@ -46,6 +46,7 @@ vi.mock('@/lib/auth-client', () => ({
         seatsRemaining: 12,
       },
     ],
+    externalAuthProviders: ['linkedin'],
   }),
   buildExternalAuthStartHref: vi.fn((_provider: string) => '#'),
   registerLearner: vi.fn(),

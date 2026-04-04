@@ -208,10 +208,7 @@ public sealed class NotificationService(
             .Where(item => item.AuthAccountId == authAccountId);
 
         var unreadCount = await baseQuery.CountAsync(item => !item.IsRead, ct);
-        var items = await baseQuery
-            .OrderByDescending(item => item.CreatedAt)
-            .Take(500)
-            .ToListAsync(ct);
+        var items = await GetFeedItemsAsync(baseQuery, ct);
 
         if (query.UnreadOnly)
         {
@@ -241,6 +238,24 @@ public sealed class NotificationService(
             .ToArray();
 
         return new NotificationFeedResponse(pagedItems, totalCount, unreadCount, page, pageSize);
+    }
+
+    private async Task<List<NotificationInboxItem>> GetFeedItemsAsync(
+        IQueryable<NotificationInboxItem> query,
+        CancellationToken ct)
+    {
+        if (!db.Database.IsSqlite())
+        {
+            return await query
+                .OrderByDescending(item => item.CreatedAt)
+                .Take(500)
+                .ToListAsync(ct);
+        }
+
+        return (await query.ToListAsync(ct))
+            .OrderByDescending(item => item.CreatedAt)
+            .Take(500)
+            .ToList();
     }
 
     public async Task MarkReadAsync(string authAccountId, string notificationId, CancellationToken ct)
@@ -1925,14 +1940,15 @@ public sealed class NotificationService(
 
     private async Task QueueDeferredPushAsync(NotificationEvent notificationEvent, DateTimeOffset deferredUntilUtc, CancellationToken ct)
     {
-        var existingDeferredPushJob = await db.BackgroundJobs
+        var existingDeferredPushJobs = await db.BackgroundJobs
             .AsNoTracking()
-            .FirstOrDefaultAsync(job =>
+            .Where(job =>
                 job.Type == JobType.NotificationFanout
                 && job.ResourceId == notificationEvent.Id
-                && job.State == AsyncState.Queued
-                && job.AvailableAt >= deferredUntilUtc.AddSeconds(-30), ct);
-        if (existingDeferredPushJob is not null)
+                && job.State == AsyncState.Queued)
+            .ToListAsync(ct);
+
+        if (existingDeferredPushJobs.Any(job => job.AvailableAt >= deferredUntilUtc.AddSeconds(-30)))
         {
             return;
         }

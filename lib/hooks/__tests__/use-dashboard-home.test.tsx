@@ -3,12 +3,14 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const {
   mockFetchDashboardHome,
+  mockFetchEngagement,
   mockFetchReadiness,
   mockFetchStudyPlan,
   mockFetchUserProfile,
   mockTrack,
 } = vi.hoisted(() => ({
   mockFetchDashboardHome: vi.fn(),
+  mockFetchEngagement: vi.fn(),
   mockFetchReadiness: vi.fn(),
   mockFetchStudyPlan: vi.fn(),
   mockFetchUserProfile: vi.fn(),
@@ -17,6 +19,7 @@ const {
 
 vi.mock('@/lib/api', () => ({
   fetchDashboardHome: mockFetchDashboardHome,
+  fetchEngagement: mockFetchEngagement,
   fetchReadiness: mockFetchReadiness,
   fetchStudyPlan: mockFetchStudyPlan,
   fetchUserProfile: mockFetchUserProfile,
@@ -40,6 +43,7 @@ describe('useDashboardHome', () => {
     mockFetchReadiness.mockResolvedValue({ subTests: [{ id: 'writing', name: 'Writing', readiness: 60, target: 70 }], blockers: [], weakestLink: 'Conciseness', weeksRemaining: 6, overallRisk: 'Moderate', evidence: { recentTrend: 'Improving' } });
     mockFetchUserProfile.mockResolvedValue({ id: 'user-1', examDate: '2026-06-27' });
     mockFetchDashboardHome.mockResolvedValue({ cards: { pendingExpertReviews: { count: 1 } } });
+    mockFetchEngagement.mockResolvedValue({ currentStreak: 7, longestStreak: 14, totalPracticeMinutes: 1860, totalPracticeSessions: 42, weeklyActivity: [] });
 
     const { result } = renderHook(() => useDashboardHome());
 

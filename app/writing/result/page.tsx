@@ -2,11 +2,10 @@
 
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
-import { FileText, BarChart3, ShieldAlert, ThumbsUp, AlertTriangle, ArrowRight, Edit3, Star, Info } from 'lucide-react';
+import { FileText, BarChart3, ShieldAlert, ThumbsUp, AlertTriangle, Edit3, Star, Info } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
-import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -33,6 +32,7 @@ export default function WritingResultSummary() {
           setLoading(false);
           return;
         }
+
         setTimeout(() => { void poll(); }, 2000);
       } catch {
         if (!cancelled) {
@@ -61,14 +61,24 @@ export default function WritingResultSummary() {
     );
   }
 
-  if (!result) return <LearnerDashboardShell pageTitle="Not Found"><div className="p-10 text-center text-muted">Result not found.</div></LearnerDashboardShell>;
+  if (!result) {
+    return (
+      <LearnerDashboardShell pageTitle="Not Found">
+        <div className="p-10 text-center text-muted">Result not found.</div>
+      </LearnerDashboardShell>
+    );
+  }
 
-  const confidenceColor = result.confidenceLabel === 'High' ? 'success' : result.confidenceLabel === 'Medium' ? 'warning' : 'danger';
+  const confidenceColor = result.confidenceBand === 'High'
+    ? 'success'
+    : result.confidenceBand === 'Medium'
+      ? 'warning'
+      : 'danger';
 
   return (
     <LearnerDashboardShell pageTitle="Evaluation Summary">
       <header className="bg-navy text-white pt-10 pb-24 px-4 sm:px-6 lg:px-8 relative overflow-hidden">
-        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-400 via-navy to-navy"></div>
+        <div className="absolute inset-0 opacity-10 bg-[radial-gradient(circle_at_top_right,_var(--tw-gradient-stops))] from-blue-400 via-navy to-navy" />
         <div className="relative z-10 text-center">
           <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-white/10 mb-6">
             <FileText className="w-6 h-6 text-blue-300" />
@@ -79,20 +89,45 @@ export default function WritingResultSummary() {
       </header>
 
       <main className="-mt-16 relative z-20">
-        {/* Disclaimer */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-start gap-3 shadow-sm">
           <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
           <p className="text-sm text-blue-800 leading-relaxed">
-            <strong>AI-Generated Estimate:</strong> The scores below are estimates provided by our AI evaluation engine for directional feedback only.
+            <strong>{result.methodLabel}:</strong> {result.learnerDisclaimer}
           </p>
         </motion.div>
 
-        {/* Main Score Card */}
+        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="grid grid-cols-1 gap-4 md:grid-cols-3 mb-8">
+          <Card className="p-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-muted">Exam Family</p>
+            <p className="mt-2 text-base font-bold text-navy">{result.examFamilyLabel}</p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-muted">Confidence</p>
+            <p className="mt-2 text-base font-bold text-navy">{result.confidenceLabel}</p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs font-bold uppercase tracking-wider text-muted">Provenance</p>
+            <p className="mt-2 text-base font-bold text-navy">{result.provenanceLabel}</p>
+          </Card>
+        </motion.div>
+
+        {result.humanReviewRecommended ? (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 flex items-start gap-3 shadow-sm">
+            <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
+            <p className="text-sm text-amber-900 leading-relaxed">
+              Human review is recommended here because the AI score is still a practice estimate. Use expert review for higher-stakes decisions and borderline readiness calls.
+            </p>
+          </motion.div>
+        ) : null}
+
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
           <Card className="p-8 mb-8 text-center">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 divide-y md:divide-y-0 md:divide-x divide-gray-100">
               <div className="flex flex-col items-center justify-center pt-4 md:pt-0">
-                <div className="text-sm font-bold text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5"><BarChart3 className="w-4 h-4" /> Estimated Score</div>
+                <div className="text-sm font-bold text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <BarChart3 className="w-4 h-4" />
+                  Estimated Score
+                </div>
                 <div className="text-4xl sm:text-5xl font-black text-navy tracking-tight">{result.estimatedScoreRange}</div>
               </div>
               <div className="flex flex-col items-center justify-center pt-8 md:pt-0">
@@ -100,24 +135,32 @@ export default function WritingResultSummary() {
                 <div className="text-4xl sm:text-5xl font-black text-primary tracking-tight">{result.estimatedGradeRange}</div>
               </div>
               <div className="flex flex-col items-center justify-center pt-8 md:pt-0">
-                <div className="text-sm font-bold text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5"><ShieldAlert className="w-4 h-4" /> AI Confidence</div>
-                <Badge variant={confidenceColor} size="sm">{result.confidenceLabel} Confidence</Badge>
+                <div className="text-sm font-bold text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
+                  <ShieldAlert className="w-4 h-4" />
+                  AI Confidence
+                </div>
+                <Badge variant={confidenceColor} size="sm">{result.confidenceBand} Band</Badge>
+                <p className="mt-2 text-xs text-muted">{result.confidenceLabel}</p>
               </div>
             </div>
           </Card>
         </motion.div>
 
-        {/* Strengths & Issues */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
             <Card className="p-6">
               <div className="flex items-center gap-2 mb-6">
-                <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center shrink-0"><ThumbsUp className="w-4 h-4 text-green-600" /></div>
+                <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center shrink-0">
+                  <ThumbsUp className="w-4 h-4 text-green-600" />
+                </div>
                 <h2 className="text-lg font-bold text-navy">Top Strengths</h2>
               </div>
               <ul className="space-y-4">
-                {result.topStrengths.map((s, i) => (
-                  <li key={i} className="flex items-start gap-3 text-gray-700"><span className="w-1.5 h-1.5 rounded-full bg-green-500 mt-2 shrink-0"></span><span className="leading-relaxed">{s}</span></li>
+                {result.topStrengths.map((strength, index) => (
+                  <li key={index} className="flex items-start gap-3 text-gray-700">
+                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 mt-2 shrink-0" />
+                    <span className="leading-relaxed">{strength}</span>
+                  </li>
                 ))}
               </ul>
             </Card>
@@ -125,19 +168,23 @@ export default function WritingResultSummary() {
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
             <Card className="p-6">
               <div className="flex items-center gap-2 mb-6">
-                <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0"><AlertTriangle className="w-4 h-4 text-amber-600" /></div>
+                <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                </div>
                 <h2 className="text-lg font-bold text-navy">Top Issues to Fix</h2>
               </div>
               <ul className="space-y-4">
-                {result.topIssues.map((s, i) => (
-                  <li key={i} className="flex items-start gap-3 text-gray-700"><span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-2 shrink-0"></span><span className="leading-relaxed">{s}</span></li>
+                {result.topIssues.map((issue, index) => (
+                  <li key={index} className="flex items-start gap-3 text-gray-700">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-2 shrink-0" />
+                    <span className="leading-relaxed">{issue}</span>
+                  </li>
                 ))}
               </ul>
             </Card>
           </motion.div>
         </div>
 
-        {/* Next Actions CTAs */}
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-8">
           <Link href={`/writing/feedback?id=${resultId}`} className="group bg-primary hover:bg-primary/90 text-white rounded-xl p-4 flex flex-col items-center justify-center text-center transition-all shadow-sm hover:shadow-md">
             <BarChart3 className="w-6 h-6 mb-2 opacity-80 group-hover:opacity-100 transition-opacity" />

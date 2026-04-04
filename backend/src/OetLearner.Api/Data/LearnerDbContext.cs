@@ -51,6 +51,12 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<BillingQuote> BillingQuotes => Set<BillingQuote>();
     public DbSet<BillingEvent> BillingEvents => Set<BillingEvent>();
 
+    // Multi-exam & payment entities
+    public DbSet<ExamFamily> ExamFamilies => Set<ExamFamily>();
+    public DbSet<WalletTransaction> WalletTransactions => Set<WalletTransaction>();
+    public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
+    public DbSet<PaymentWebhookEvent> PaymentWebhookEvents => Set<PaymentWebhookEvent>();
+
     // Expert Console entities
     public DbSet<ExpertUser> ExpertUsers => Set<ExpertUser>();
     public DbSet<ExpertReviewAssignment> ExpertReviewAssignments => Set<ExpertReviewAssignment>();
@@ -141,5 +147,19 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<BillingQuote>().HasIndex(x => new { x.Status, x.ExpiresAt });
         modelBuilder.Entity<BillingEvent>().HasIndex(x => new { x.EntityType, x.EntityId, x.OccurredAt });
         modelBuilder.Entity<BillingEvent>().HasIndex(x => new { x.UserId, x.OccurredAt });
+
+        // Multi-exam indexes
+        modelBuilder.Entity<ExamFamily>().HasIndex(x => new { x.IsActive, x.SortOrder });
+        modelBuilder.Entity<ContentItem>().HasIndex(x => x.ExamFamilyCode);
+        modelBuilder.Entity<Attempt>().HasIndex(x => x.ExamFamilyCode);
+
+        // Wallet transaction indexes
+        modelBuilder.Entity<WalletTransaction>().HasIndex(x => new { x.WalletId, x.CreatedAt });
+
+        // Payment indexes
+        modelBuilder.Entity<PaymentTransaction>().HasIndex(x => new { x.LearnerUserId, x.CreatedAt });
+        modelBuilder.Entity<PaymentTransaction>().HasIndex(x => x.GatewayTransactionId).IsUnique();
+        modelBuilder.Entity<PaymentWebhookEvent>().HasIndex(x => x.GatewayEventId).IsUnique();
+        modelBuilder.Entity<PaymentWebhookEvent>().HasIndex(x => new { x.ProcessingStatus, x.ReceivedAt });
     }
 }

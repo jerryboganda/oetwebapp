@@ -13,6 +13,7 @@ import { AuthScreenShell } from '@/components/auth/auth-screen-shell';
 import { PasswordField } from '@/components/auth/password-field';
 import { useAuth } from '@/contexts/auth-context';
 import { buildExternalAuthStartHref } from '@/lib/auth-client';
+import { useSignupCatalog } from '@/lib/hooks/use-signup-catalog';
 import { resolveAuthenticatedDestination } from '@/lib/auth-routes';
 import { AUTH_ROUTES, getAuthFlowLinks } from '@/lib/auth/routes';
 import styles from '@/components/auth/auth-screen-shell.module.scss';
@@ -59,32 +60,59 @@ function resolveExternalErrorMessage(errorCode?: string | null): string | null {
 export function SignInForm({ nextHref, initialEmail, externalError }: SignInFormProps) {
   const router = useRouter();
   const { signIn } = useAuth();
+  const { externalAuthProviders = [] } = useSignupCatalog();
   const flowLinks = getAuthFlowLinks('signIn');
   const [email, setEmail] = useState(initialEmail ?? '');
   const [password, setPassword] = useState('');
   const [rememberMe, setRememberMe] = useState(false);
   const [error, setError] = useState<string | null>(resolveExternalErrorMessage(externalError));
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [desktopRuntimeInfo, setDesktopRuntimeInfo] = useState<Awaited<ReturnType<NonNullable<typeof window.desktopBridge>['runtime']['info']>> | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+
+    if (!window.desktopBridge?.runtime?.info) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void window.desktopBridge.runtime.info().then((runtimeInfo) => {
+      if (!cancelled) {
+        setDesktopRuntimeInfo(runtimeInfo);
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setDesktopRuntimeInfo(null);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const socials = useMemo(
-    () => [
-      {
-        href: buildExternalAuthStartHref('facebook', nextHref),
-        label: 'Sign in with Facebook',
-        icon: <IconBrandFacebook size={18} />,
-      },
-      {
-        href: buildExternalAuthStartHref('google', nextHref),
-        label: 'Sign in with Google',
-        icon: <IconBrandGoogle size={18} />,
-      },
-      {
-        href: buildExternalAuthStartHref('linkedin', nextHref),
-        label: 'Sign in with LinkedIn',
-        icon: <IconBrandLinkedin size={18} />,
-      },
-    ],
-    [nextHref],
+    () =>
+      externalAuthProviders.map((provider) => ({
+        href: buildExternalAuthStartHref(provider, nextHref),
+        label:
+          provider === 'facebook'
+            ? 'Sign in with Facebook'
+            : provider === 'google'
+              ? 'Sign in with Google'
+              : 'Sign in with LinkedIn',
+        icon:
+          provider === 'facebook' ? (
+            <IconBrandFacebook size={18} />
+          ) : provider === 'google' ? (
+            <IconBrandGoogle size={18} />
+          ) : (
+            <IconBrandLinkedin size={18} />
+          ),
+      })),
+    [externalAuthProviders, nextHref],
   );
 
   const handleSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
@@ -113,7 +141,17 @@ export function SignInForm({ nextHref, initialEmail, externalError }: SignInForm
         return;
       }
 
-      setError(readErrorMessage(authError));
+      let nextError = readErrorMessage(authError);
+      if (
+        readErrorCode(authError) === 'invalid_credentials'
+        && desktopRuntimeInfo?.isPackaged
+        && desktopRuntimeInfo.activeBackendUrl
+        && /^https?:\/\/(?:127\.0\.0\.1|localhost|\[::1\])/i.test(desktopRuntimeInfo.activeBackendUrl)
+      ) {
+        nextError = `${nextError} This desktop build is currently using the local auth server (${desktopRuntimeInfo.activeBackendUrl}), so credentials from your live web account will not work here.`;
+      }
+
+      setError(nextError);
     } finally {
       setIsSubmitting(false);
     }

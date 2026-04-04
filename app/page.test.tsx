@@ -1,11 +1,12 @@
 import { render, screen } from '@testing-library/react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
-const { mockFetchStudyPlan, mockFetchReadiness, mockFetchUserProfile, mockFetchDashboardHome, mockTrack, mockPush } = vi.hoisted(() => ({
+const { mockFetchStudyPlan, mockFetchReadiness, mockFetchUserProfile, mockFetchDashboardHome, mockFetchEngagement, mockTrack, mockPush } = vi.hoisted(() => ({
   mockFetchStudyPlan: vi.fn(),
   mockFetchReadiness: vi.fn(),
   mockFetchUserProfile: vi.fn(),
   mockFetchDashboardHome: vi.fn(),
+  mockFetchEngagement: vi.fn(),
   mockTrack: vi.fn(),
   mockPush: vi.fn(),
 }));
@@ -46,6 +47,7 @@ vi.mock('@/lib/api', () => ({
   fetchReadiness: mockFetchReadiness,
   fetchUserProfile: mockFetchUserProfile,
   fetchDashboardHome: mockFetchDashboardHome,
+  fetchEngagement: mockFetchEngagement,
 }));
 
 import DashboardPage from './page';
@@ -106,6 +108,15 @@ describe('Dashboard page', () => {
           route: '/mocks',
         },
       },
+    });
+
+    mockFetchEngagement.mockResolvedValue({
+      currentStreak: 7,
+      longestStreak: 14,
+      totalPracticeMinutes: 1860,
+      totalPracticeSessions: 42,
+      avgSessionMinutes: 44,
+      weeklyActivity: [{ day: 'Mon', active: true }, { day: 'Tue', active: true }],
     });
   });
 
