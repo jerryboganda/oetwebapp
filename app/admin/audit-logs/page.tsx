@@ -131,27 +131,27 @@ export default function AuditLogsPage() {
       {
         key: 'timestamp',
         header: 'Timestamp',
-        render: (log) => <span className="text-sm text-slate-600">{new Date(log.timestamp).toLocaleString()}</span>,
+        render: (log) => <span className="text-sm text-muted">{new Date(log.timestamp).toLocaleString()}</span>,
       },
       {
         key: 'actor',
         header: 'Actor',
-        render: (log) => <span className="font-medium text-slate-900">{log.actor}</span>,
+        render: (log) => <span className="font-medium text-navy">{log.actor}</span>,
       },
       {
         key: 'action',
         header: 'Action',
-        render: (log) => <span className="text-slate-900">{log.action}</span>,
+        render: (log) => <span className="text-navy">{log.action}</span>,
       },
       {
         key: 'resource',
         header: 'Resource',
-        render: (log) => <span className="font-mono text-xs text-slate-500">{log.resource}</span>,
+        render: (log) => <span className="font-mono text-xs text-muted">{log.resource}</span>,
       },
       {
         key: 'details',
         header: 'Details',
-        render: (log) => <span className="text-sm text-slate-500">{log.details}</span>,
+        render: (log) => <span className="text-sm text-muted">{log.details}</span>,
       },
     ],
     [],
@@ -241,7 +241,7 @@ export default function AuditLogsPage() {
         onRetry={() => window.location.reload()}
         emptyContent={
           <EmptyState
-            icon={<FileText className="h-10 w-10 text-slate-400" />}
+            icon={<FileText className="h-10 w-10 text-muted" />}
             title="No audit events found"
             description="Adjust the search or filters, or wait for more operational activity to be recorded."
           />
@@ -250,7 +250,7 @@ export default function AuditLogsPage() {
         <AdminRoutePanel title="Audit Stream" description="Search, filter, and inspect individual events without leaving the admin console.">
           <div className="max-w-md">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
               <Input placeholder="Search actions, actors, resources, or details" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="pl-9" />
             </div>
           </div>
@@ -261,34 +261,34 @@ export default function AuditLogsPage() {
 
       <Drawer open={Boolean(selectedLogId)} onClose={handleDrawerClose} title="Audit Event Detail">
         {isDetailLoading || !selectedLogDetail ? (
-          <p className="text-sm text-slate-500">Loading event detail...</p>
+          <p className="text-sm text-muted">Loading event detail...</p>
         ) : (
           <div className="space-y-4 text-sm">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Event ID</p>
-              <p className="font-mono text-slate-900">{selectedLogDetail.id}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Event ID</p>
+              <p className="font-mono text-navy">{selectedLogDetail.id}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Timestamp</p>
-              <p className="text-slate-900">{new Date(selectedLogDetail.timestamp).toLocaleString()}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Timestamp</p>
+              <p className="text-navy">{new Date(selectedLogDetail.timestamp).toLocaleString()}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Actor</p>
-              <p className="text-slate-900">{selectedLogDetail.actorName}</p>
-              <p className="font-mono text-xs text-slate-500">{selectedLogDetail.actorId}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Actor</p>
+              <p className="text-navy">{selectedLogDetail.actorName}</p>
+              <p className="font-mono text-xs text-muted">{selectedLogDetail.actorId}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Action</p>
-              <p className="text-slate-900">{selectedLogDetail.action}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Action</p>
+              <p className="text-navy">{selectedLogDetail.action}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Resource</p>
-              <p className="text-slate-900">{selectedLogDetail.resourceType}</p>
-              <p className="font-mono text-xs text-slate-500">{selectedLogDetail.resourceId || 'No resource ID'}</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Resource</p>
+              <p className="text-navy">{selectedLogDetail.resourceType}</p>
+              <p className="font-mono text-xs text-muted">{selectedLogDetail.resourceId || 'No resource ID'}</p>
             </div>
             <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Details</p>
-              <p className="whitespace-pre-wrap rounded-xl border border-slate-200 bg-slate-50 p-4 text-slate-700">
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Details</p>
+              <p className="whitespace-pre-wrap rounded-xl border border-gray-200 bg-background-light p-4 text-navy">
                 {selectedLogDetail.details || 'No additional details recorded.'}
               </p>
             </div>

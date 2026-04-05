@@ -107,15 +107,15 @@ export default function CriteriaPage() {
         header: 'Criterion',
         render: (criterion) => (
           <div className="space-y-1">
-            <p className="font-medium text-slate-900">{criterion.name}</p>
-            <p className="max-w-2xl text-sm text-slate-500">{criterion.description || 'No editorial description yet.'}</p>
+            <p className="font-medium text-navy">{criterion.name}</p>
+            <p className="max-w-2xl text-sm text-muted">{criterion.description || 'No editorial description yet.'}</p>
           </div>
         ),
       },
       {
         key: 'weight',
         header: 'Weight',
-        render: (criterion) => <span className="font-mono text-sm text-slate-600">{criterion.weight}</span>,
+        render: (criterion) => <span className="font-mono text-sm text-muted">{criterion.weight}</span>,
         className: 'w-24',
       },
       {
@@ -238,16 +238,14 @@ export default function CriteriaPage() {
         }
       />
 
-      <div className="rounded-xl border border-slate-200 bg-white px-2 pt-2">
-        <Tabs tabs={subtestTabs} activeTab={activeTab} onChange={setActiveTab} className="border-none" />
-      </div>
+      <Tabs tabs={subtestTabs} activeTab={activeTab} onChange={setActiveTab} />
 
       <AsyncStateWrapper
         status={pageStatus}
         onRetry={() => window.location.reload()}
         emptyContent={
           <EmptyState
-            icon={<Target className="h-10 w-10 text-slate-400" />}
+            icon={<Target className="h-10 w-10 text-muted" />}
             title={`No ${activeTab} criteria yet`}
             description="Create the first scoring criterion for this subtest so editors and evaluators share the same rubric language."
             action={{ label: 'Add Criterion', onClick: openCreateModal }}
@@ -298,7 +296,7 @@ export default function CriteriaPage() {
             ]}
           />
 
-          <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
             <Button variant="outline" onClick={() => setIsModalOpen(false)}>
               Cancel
             </Button>

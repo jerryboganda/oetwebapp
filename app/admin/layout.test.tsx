@@ -84,6 +84,21 @@ describe('AdminLayout', () => {
     expect(screen.getByTestId('learner-workspace')).toBeInTheDocument();
   });
 
+  it('keeps the new content workspace route on the distraction-free app shell', () => {
+    state.pathname = '/admin/content/new';
+
+    render(
+      <AdminLayout>
+        <div>New content workspace</div>
+      </AdminLayout>,
+    );
+
+    expect(screen.getByTestId('app-shell')).toHaveAttribute('data-page-title', 'Content Workspace');
+    expect(screen.getByTestId('app-shell')).toHaveAttribute('data-distraction-free', 'true');
+    expect(screen.queryByTestId('admin-dashboard-shell')).not.toBeInTheDocument();
+    expect(screen.getByTestId('learner-workspace')).toBeInTheDocument();
+  });
+
   it('maps revision history routes back to the learner-style admin shell title', () => {
     state.pathname = '/admin/content/content-1/revisions';
 

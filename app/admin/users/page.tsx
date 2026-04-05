@@ -130,7 +130,7 @@ export default function UsersPage() {
             <Link href={`/admin/users/${user.id}`} className="font-medium text-blue-600 hover:underline">
               {user.name}
             </Link>
-            <p className="text-sm text-slate-500">{user.email}</p>
+            <p className="text-sm text-muted">{user.email}</p>
           </div>
         ),
       },
@@ -156,7 +156,7 @@ export default function UsersPage() {
         key: 'lastLogin',
         header: 'Last Login',
         render: (user) => (
-          <span className="text-sm text-slate-500">
+          <span className="text-sm text-muted">
             {user.lastLogin ? new Date(user.lastLogin).toLocaleString() : 'Never'}
           </span>
         ),
@@ -235,7 +235,7 @@ export default function UsersPage() {
         onRetry={() => window.location.reload()}
         emptyContent={
           <EmptyState
-            icon={<Users className="h-10 w-10 text-slate-400" />}
+            icon={<Users className="h-10 w-10 text-muted" />}
             title="No users found"
             description="Invite the first learner, expert, or admin account to start operating the platform."
             action={{ label: 'Invite User', onClick: () => setIsInviteOpen(true) }}
@@ -251,13 +251,13 @@ export default function UsersPage() {
         <AdminRoutePanel title="Directory" description="This directory is powered by the live admin users endpoint with real role and status filtering.">
           <div className="max-w-sm">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
               <Input placeholder="Search by name, email, or ID" value={searchQuery} onChange={(event) => { setPage(1); setSearchQuery(event.target.value); }} className="pl-9" />
             </div>
           </div>
           <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => { setPage(1); setFilters({ role: [], status: [] }); setSearchQuery(''); }} />
           <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="text-sm text-slate-500">
+            <div className="text-sm text-muted">
               Showing {pageStart}-{pageEnd} of {total} users
             </div>
             <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
@@ -277,7 +277,7 @@ export default function UsersPage() {
                 <Button variant="outline" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>
                   Previous
                 </Button>
-                <span className="text-sm text-slate-500">
+                <span className="text-sm text-muted">
                   Page {page} of {totalPages}
                 </span>
                 <Button variant="outline" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>
@@ -319,11 +319,11 @@ export default function UsersPage() {
             />
           ) : null}
 
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
+          <div className="rounded-xl border border-gray-200 bg-background-light p-3 text-sm text-muted">
             The backend will create the account, send a setup challenge, and log the invitation in audit history.
           </div>
 
-          <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
             <Button variant="outline" onClick={() => setIsInviteOpen(false)}>
               Cancel
             </Button>

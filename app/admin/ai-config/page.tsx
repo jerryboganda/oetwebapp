@@ -114,31 +114,31 @@ export default function AIConfigPage() {
       header: 'Model',
       render: (config) => (
         <div className="space-y-1">
-          <p className="font-medium text-slate-900">{config.model}</p>
-          <p className="text-sm text-slate-500">{config.provider}</p>
+          <p className="font-medium text-navy">{config.model}</p>
+          <p className="text-sm text-muted">{config.provider}</p>
         </div>
       ),
     },
     {
       key: 'taskType',
       header: 'Task Type',
-      render: (config) => <span className="capitalize text-slate-600">{config.taskType}</span>,
+      render: (config) => <span className="capitalize text-muted">{config.taskType}</span>,
     },
     {
       key: 'promptLabel',
       header: 'Prompt Label',
-      render: (config) => <span className="font-mono text-xs text-slate-600">{config.promptLabel || 'Not labeled'}</span>,
+      render: (config) => <span className="font-mono text-xs text-muted">{config.promptLabel || 'Not labeled'}</span>,
     },
     {
       key: 'routingRule',
       header: 'Routing Rule',
-      render: (config) => <span className="text-sm text-slate-500">{config.routingRule || 'No routing override'}</span>,
+      render: (config) => <span className="text-sm text-muted">{config.routingRule || 'No routing override'}</span>,
     },
     {
       key: 'metrics',
       header: 'Confidence / Accuracy',
       render: (config) => (
-        <div className="space-y-1 text-sm text-slate-600">
+        <div className="space-y-1 text-sm text-muted">
           <p>{Math.round(config.confidenceThreshold * 100)}% threshold</p>
           <p>{Math.round(config.accuracy * 100)}% accuracy</p>
         </div>
@@ -279,7 +279,7 @@ export default function AIConfigPage() {
         onRetry={() => window.location.reload()}
         emptyContent={
           <EmptyState
-            icon={<Cpu className="h-10 w-10 text-slate-400" />}
+            icon={<Cpu className="h-10 w-10 text-muted" />}
             title="No AI configurations yet"
             description="Create the first evaluation configuration so routing, experimentation, and activation are controlled from admin."
             action={{ label: 'New Configuration', onClick: openCreateModal }}
@@ -358,7 +358,7 @@ export default function AIConfigPage() {
             ]}
           />
 
-          <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
             <Button variant="outline" onClick={() => setIsModalOpen(false)}>
               Cancel
             </Button>

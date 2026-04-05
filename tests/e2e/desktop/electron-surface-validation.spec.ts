@@ -11,6 +11,9 @@ import { installFakeRecordingMedia } from '../fixtures/media';
 const baseURL = (process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000').replace(/\/$/, '');
 
 type ElectronApp = Awaited<ReturnType<typeof electron.launch>>;
+const warmedRendererRoutes = new Set<string>();
+
+test.setTimeout(180_000);
 
 const learnerRoutes = [
   { path: '/', text: /keep today'?s priorities and exam signals in view|current focus|dashboard/i },
@@ -198,7 +201,23 @@ async function getDesktopPage(app: ElectronApp) {
 
 async function loadAbsolute(page: Page, targetPath: string) {
   const targetUrl = `${baseURL}${targetPath}`;
-  await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
+
+  if (!warmedRendererRoutes.has(targetUrl)) {
+    try {
+      await fetch(targetUrl, {
+        headers: {
+          Accept: 'text/html',
+        },
+      });
+      warmedRendererRoutes.add(targetUrl);
+    } catch {
+      // If the warm-up probe fails we still let Playwright drive the real navigation.
+    }
+  }
+
+  // Desktop E2E runs against the local Next.js dev server, so the first hit on a
+  // route can include an on-demand compile that is slower than Playwright's default.
+  await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 90_000 });
 }
 
 function routeRegExp(routePath: string) {

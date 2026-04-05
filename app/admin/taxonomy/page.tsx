@@ -70,8 +70,8 @@ export default function AdminTaxonomyPage() {
   ];
 
   const columns: Column<AdminTaxonomyNode>[] = [
-    { key: 'label', header: 'Label', render: (row) => <span className="font-medium text-slate-900">{row.label}</span> },
-    { key: 'slug', header: 'Code', render: (row) => <span className="font-mono text-xs text-slate-500">{row.slug}</span> },
+    { key: 'label', header: 'Label', render: (row) => <span className="font-medium text-navy">{row.label}</span> },
+    { key: 'slug', header: 'Code', render: (row) => <span className="font-mono text-xs text-muted">{row.slug}</span> },
     { key: 'contentCount', header: 'Linked Content', render: (row) => <span>{row.contentCount}</span> },
     {
       key: 'status',
@@ -172,7 +172,7 @@ export default function AdminTaxonomyPage() {
       <AsyncStateWrapper
         status={pageStatus}
         onRetry={() => setReloadNonce((current) => current + 1)}
-        emptyContent={<EmptyState icon={<ListTree className="h-10 w-10 text-slate-400" />} title="No taxonomy entries" description="Add your first profession to start structuring content." />}
+        emptyContent={<EmptyState icon={<ListTree className="h-10 w-10 text-muted" />} title="No taxonomy entries" description="Add your first profession to start structuring content." />}
       >
         <AdminRoutePanel title="Filters" description="Review active vs archived taxonomy nodes.">
           <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({})} />
@@ -205,15 +205,15 @@ export default function AdminTaxonomyPage() {
             hint="Reserved for taxonomy governance notes."
           />
           {impact ? (
-            <div className="rounded-xl bg-slate-50 p-4 text-sm text-slate-600">
-              <p className="font-medium text-slate-900">Impact preview</p>
+            <div className="rounded-xl bg-background-light p-4 text-sm text-muted">
+              <p className="font-medium text-navy">Impact preview</p>
               <p>Linked content: {impact.usage.contentCount}</p>
               <p>Linked learners: {impact.usage.learnerCount}</p>
               <p>Goal references: {impact.usage.goalCount}</p>
               <p>{impact.safeToArchive ? 'Safe to archive when needed.' : 'Not safe to archive yet.'}</p>
             </div>
           ) : null}
-          <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
             <Button variant="outline" onClick={() => setModalOpen(false)}>Cancel</Button>
             <Button onClick={() => void submitNode()}>{editingNode ? 'Save Changes' : 'Create Profession'}</Button>
           </div>

@@ -96,16 +96,16 @@ export default function AdminDashboardPage() {
               >
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div>
-                    <p className="text-sm text-slate-500">Drafts</p>
-                    <p className="text-xl font-semibold text-slate-900">{dashboard.contentHealth.drafts}</p>
+                    <p className="text-sm text-muted">Drafts</p>
+                    <p className="text-xl font-semibold text-navy">{dashboard.contentHealth.drafts}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-slate-500">Archived</p>
-                    <p className="text-xl font-semibold text-slate-900">{dashboard.contentHealth.archived}</p>
+                    <p className="text-sm text-muted">Archived</p>
+                    <p className="text-xl font-semibold text-navy">{dashboard.contentHealth.archived}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-slate-500">Stale Drafts</p>
-                    <p className="text-xl font-semibold text-slate-900">{dashboard.contentHealth.staleDrafts}</p>
+                    <p className="text-sm text-muted">Stale Drafts</p>
+                    <p className="text-xl font-semibold text-navy">{dashboard.contentHealth.staleDrafts}</p>
                   </div>
                 </div>
               </AdminRoutePanel>
@@ -117,16 +117,16 @@ export default function AdminDashboardPage() {
               >
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div>
-                    <p className="text-sm text-slate-500">In Progress</p>
-                    <p className="text-xl font-semibold text-slate-900">{dashboard.reviewOps.inProgress}</p>
+                    <p className="text-sm text-muted">In Progress</p>
+                    <p className="text-xl font-semibold text-navy">{dashboard.reviewOps.inProgress}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-slate-500">Failed Reviews</p>
-                    <p className="text-xl font-semibold text-slate-900">{dashboard.reviewOps.failedReviews}</p>
+                    <p className="text-sm text-muted">Failed Reviews</p>
+                    <p className="text-xl font-semibold text-navy">{dashboard.reviewOps.failedReviews}</p>
                   </div>
                   <div>
-                    <p className="text-sm text-slate-500">Failed Jobs</p>
-                    <p className="text-xl font-semibold text-slate-900">{dashboard.reviewOps.failedJobs}</p>
+                    <p className="text-sm text-muted">Failed Jobs</p>
+                    <p className="text-xl font-semibold text-navy">{dashboard.reviewOps.failedJobs}</p>
                   </div>
                 </div>
               </AdminRoutePanel>
@@ -134,26 +134,26 @@ export default function AdminDashboardPage() {
 
             <div className="grid gap-6 lg:grid-cols-3">
               <AdminRoutePanel title="Billing" description="Subscription exposure and legacy plan drag.">
-                <p className="text-sm text-slate-500">Legacy plans</p>
-                <p className="text-2xl font-semibold text-slate-900">{dashboard.billingRisk.legacyPlans}</p>
-                <p className="mt-3 text-sm text-slate-500">Active subscribers: {dashboard.billingRisk.activeSubscribers.toLocaleString()}</p>
+                <p className="text-sm text-muted">Legacy plans</p>
+                <p className="text-2xl font-semibold text-navy">{dashboard.billingRisk.legacyPlans}</p>
+                <p className="mt-3 text-sm text-muted">Active subscribers: {dashboard.billingRisk.activeSubscribers.toLocaleString()}</p>
               </AdminRoutePanel>
 
               <AdminRoutePanel title="Feature Flags" description="Rollout footprint and recent changes.">
-                <p className="text-sm text-slate-500">Enabled / total</p>
-                <p className="text-2xl font-semibold text-slate-900">
+                <p className="text-sm text-muted">Enabled / total</p>
+                <p className="text-2xl font-semibold text-navy">
                   {dashboard.flags.enabled} / {dashboard.flags.total}
                 </p>
-                <p className="mt-3 text-sm text-slate-500">Live experiments: {dashboard.flags.liveExperiments}</p>
-                <p className="text-sm text-slate-500">Changed in 7 days: {dashboard.flags.recentChanges}</p>
+                <p className="mt-3 text-sm text-muted">Live experiments: {dashboard.flags.liveExperiments}</p>
+                <p className="text-sm text-muted">Changed in 7 days: {dashboard.flags.recentChanges}</p>
               </AdminRoutePanel>
 
               <AdminRoutePanel title="Quality Risk" description="Signals that need closer QA review.">
                 <div className="flex items-start gap-3">
                   <AlertTriangle className="mt-1 h-5 w-5 text-amber-500" />
                   <div>
-                    <p className="text-2xl font-semibold text-slate-900">{dashboard.quality.riskCases}</p>
-                    <p className="text-sm text-slate-500">Combined failed jobs and failed review cases in the current operational view.</p>
+                    <p className="text-2xl font-semibold text-navy">{dashboard.quality.riskCases}</p>
+                    <p className="text-sm text-muted">Combined failed jobs and failed review cases in the current operational view.</p>
                   </div>
                 </div>
               </AdminRoutePanel>

@@ -141,7 +141,7 @@ export default function QualityAnalyticsPage() {
         }
       />
 
-      <div className="rounded-xl border border-slate-200 bg-white p-4">
+      <div className="rounded-xl border border-gray-200 bg-white p-4">
         <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ subtest: [], profession: [] })} />
       </div>
 
@@ -150,7 +150,7 @@ export default function QualityAnalyticsPage() {
         onRetry={() => window.location.reload()}
         emptyContent={
           <EmptyState
-            icon={<BarChart3 className="h-10 w-10 text-slate-400" />}
+            icon={<BarChart3 className="h-10 w-10 text-muted" />}
             title="No quality analytics are available for this filter set"
             description="Try a broader time range or clear the current subtest and profession filters."
           />
@@ -208,17 +208,17 @@ export default function QualityAnalyticsPage() {
             <AdminRoutePanel title="Sample Coverage" description="Quality analytics are only as trustworthy as the evidence window behind them.">
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Evaluation Samples</p>
-                  <p className="text-xl font-semibold text-slate-900">{analytics.freshness.evaluationSampleCount}</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Evaluation Samples</p>
+                  <p className="text-xl font-semibold text-navy">{analytics.freshness.evaluationSampleCount}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Review Samples</p>
-                  <p className="text-xl font-semibold text-slate-900">{analytics.freshness.reviewSampleCount}</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Review Samples</p>
+                  <p className="text-xl font-semibold text-navy">{analytics.freshness.reviewSampleCount}</p>
                 </div>
                 <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Applied Filters</p>
-                  <p className="text-sm text-slate-600">Subtest: {analytics.filters.subtest}</p>
-                  <p className="text-sm text-slate-600">Profession: {analytics.filters.profession}</p>
+                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Applied Filters</p>
+                  <p className="text-sm text-muted">Subtest: {analytics.filters.subtest}</p>
+                  <p className="text-sm text-muted">Profession: {analytics.filters.profession}</p>
                 </div>
               </div>
             </AdminRoutePanel>

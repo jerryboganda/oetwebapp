@@ -11,6 +11,8 @@ type ElectronApp = Awaited<ReturnType<typeof electron.launch>>;
 const packagedRendererPort = process.env.ELECTRON_PACKAGED_RENDERER_PORT ?? '3300';
 const packagedBackendPort = process.env.ELECTRON_PACKAGED_BACKEND_PORT ?? '5298';
 
+test.setTimeout(180_000);
+
 function resolvePackagedExecutablePath() {
   if (process.env.ELECTRON_EXECUTABLE_PATH) {
     return process.env.ELECTRON_EXECUTABLE_PATH;
@@ -157,7 +159,7 @@ function getAppOrigin(urlString: string) {
 
 async function loadWithinApp(page: Parameters<typeof observePage>[0], routePath: string) {
   const targetUrl = new URL(routePath, `${getAppOrigin(page.url())}/`).toString();
-  await page.goto(targetUrl, { waitUntil: 'domcontentloaded' });
+  await page.goto(targetUrl, { waitUntil: 'domcontentloaded', timeout: 90_000 });
 }
 
 test.describe('Packaged Electron desktop shell', () => {
@@ -171,13 +173,15 @@ test.describe('Packaged Electron desktop shell', () => {
       app = await launchPackagedDesktop(appDataRoot);
       const page = await getDesktopPage(app);
       const diagnostics = observePage(page);
+      const runtimeInfo = await page.evaluate(() => window.desktopBridge.runtime.info());
+      const activeBackendUrl = runtimeInfo.activeBackendUrl ?? `http://127.0.0.1:${packagedBackendPort}`;
 
       await expect(page.getByRole('heading', { name: /login to your account|access your workspace/i })).toBeVisible();
 
       const origin = getAppOrigin(page.url());
       const [rendererHealth, backendReady] = await Promise.all([
         request.get(`${origin}/api/health`),
-        request.get(`http://127.0.0.1:${packagedBackendPort}/health/ready`),
+        request.get(new URL('/health/ready', activeBackendUrl).toString()),
       ]);
 
       expect(rendererHealth.ok()).toBe(true);

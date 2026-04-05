@@ -2,10 +2,10 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, CheckCircle, History, Save } from 'lucide-react';
-import { AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { ArrowLeft, BookMarked, CheckCircle, ClipboardCheck, History, Save, TimerReset } from 'lucide-react';
+import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { EmptyState } from '@/components/ui/empty-error';
 import { Checkbox, Input, Select, Textarea } from '@/components/ui/form-controls';
 import { Tabs, TabPanel } from '@/components/ui/tabs';
 import { Toast } from '@/components/ui/alert';
@@ -207,7 +207,7 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
     <AdminRouteWorkspace role="main" aria-label="Content workspace">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <div className="space-y-4">
+      <div className="space-y-5">
         <div className="flex items-start gap-3">
           <Button variant="ghost" size="sm" onClick={() => router.back()} className="mt-1 px-2">
             <ArrowLeft className="h-4 w-4" />
@@ -216,60 +216,67 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
             <AdminRouteSectionHeader
               title={isNew ? 'Create Content' : `Edit ${form.title || contentId}`}
               description="Build OET practice content with real metadata, live rubric criteria, and a publishable revision trail."
-              meta={contentId}
+              meta={contentId ? `Content ID ${contentId}` : 'New draft workspace'}
+              highlights={[
+                {
+                  label: 'QA Status',
+                  value: form.qaStatus.replace(/_/g, ' '),
+                  icon: ClipboardCheck,
+                },
+                {
+                  label: 'Criteria Linked',
+                  value: `${form.criteriaFocus.length} selected`,
+                  icon: BookMarked,
+                },
+                {
+                  label: 'Estimated Time',
+                  value: `${form.estimatedDurationMinutes || '45'} mins`,
+                  icon: TimerReset,
+                },
+              ]}
+              actions={
+                <>
+                  {!isNew && contentId ? (
+                    <Button variant="outline" onClick={() => router.push(`/admin/content/${contentId}/revisions`)} className="gap-2">
+                      <History className="h-4 w-4" /> Revisions
+                    </Button>
+                  ) : null}
+                  <Button variant="outline" onClick={() => saveContent(false)} loading={isSaving} className="gap-2">
+                    <Save className="h-4 w-4" /> Save Draft
+                  </Button>
+                  <Button onClick={() => saveContent(true)} loading={isSaving} className="gap-2">
+                    <CheckCircle className="h-4 w-4" /> Publish
+                  </Button>
+                </>
+              }
             />
           </div>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-3">
-          {!isNew && contentId ? (
-            <Button variant="outline" onClick={() => router.push(`/admin/content/${contentId}/revisions`)} className="gap-2">
-              <History className="h-4 w-4" /> Revisions
-            </Button>
-          ) : null}
-          <Button variant="outline" onClick={() => saveContent(false)} loading={isSaving} className="gap-2">
-            <Save className="h-4 w-4" /> Save Draft
-          </Button>
-          <Button onClick={() => saveContent(true)} loading={isSaving} className="gap-2">
-            <CheckCircle className="h-4 w-4" /> Publish
-          </Button>
         </div>
       </div>
 
       <AsyncStateWrapper status={pageStatus} onRetry={() => window.location.reload()}>
         {impact ? (
-          <Card>
-            <CardContent className="grid gap-4 p-5 md:grid-cols-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Attempts</p>
-                <p className="text-lg font-semibold text-slate-900">{impact.usage.attemptCount}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Evaluations</p>
-                <p className="text-lg font-semibold text-slate-900">{impact.usage.evaluationCount}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Study Plan References</p>
-                <p className="text-lg font-semibold text-slate-900">{impact.usage.studyPlanReferences}</p>
-              </div>
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Archive Safety</p>
-                <p className="text-lg font-semibold text-slate-900">{impact.safeToArchive ? 'Safe' : 'Live usage'}</p>
-              </div>
-            </CardContent>
-          </Card>
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <AdminRouteSummaryCard label="Attempts" value={impact.usage.attemptCount} hint="Learner sessions linked to this content." icon={BookMarked} />
+            <AdminRouteSummaryCard label="Evaluations" value={impact.usage.evaluationCount} hint="AI or expert evaluations completed in-window." icon={ClipboardCheck} />
+            <AdminRouteSummaryCard label="Study Plan References" value={impact.usage.studyPlanReferences} hint="Study plans currently surfacing this item." icon={TimerReset} />
+            <AdminRouteSummaryCard
+              label="Archive Safety"
+              value={impact.safeToArchive ? 'Safe' : 'Live usage'}
+              hint={impact.safeToArchive ? 'No active learner dependencies detected.' : 'This content is still attached to live learner journeys.'}
+              tone={impact.safeToArchive ? 'success' : 'warning'}
+              icon={CheckCircle}
+            />
+          </div>
         ) : null}
 
-        <div className="rounded-2xl border border-slate-200/90 bg-white/95 p-2 shadow-sm">
-          <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} className="border-none" />
-        </div>
+        <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
         <TabPanel id="metadata" activeTab={activeTab}>
-          <Card>
-            <CardHeader>
-              <CardTitle>Core Content Metadata</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-5">
+          <AdminRoutePanel
+            title="Core Content Metadata"
+            description="Set the learner-facing metadata, timing, and prompt material that define how this item appears and behaves."
+          >
               <Input label="Content Title" value={form.title} onChange={(event) => updateField('title', event.target.value)} />
               <div className="grid gap-4 md:grid-cols-2">
                 <Select
@@ -364,58 +371,51 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
                 onChange={(event) => updateField('caseNotes', event.target.value)}
                 className="min-h-[220px]"
               />
-            </CardContent>
-          </Card>
+          </AdminRoutePanel>
         </TabPanel>
 
         <TabPanel id="criteria" activeTab={activeTab}>
-          <Card>
-            <CardHeader>
-              <CardTitle>Criteria Mapping</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-sm text-slate-500">
-                Criteria are loaded live from the rubric library for the selected subtest. Only active criteria appear here.
-              </p>
+          <AdminRoutePanel
+            title="Criteria Mapping"
+            description="Criteria are loaded live from the rubric library for the selected subtest so editorial decisions stay aligned with the learner evaluation model."
+          >
               {criteriaOptions.length === 0 ? (
-                <div className="rounded-xl border border-dashed border-slate-300 bg-slate-50 p-8 text-sm text-slate-500">
-                  No active criteria are available for this subtest yet.
-                </div>
+                <EmptyState
+                  title="No active criteria available"
+                  description="Activate rubric criteria for this subtest first, then return here to map the content."
+                />
               ) : (
                 <div className="grid gap-3 md:grid-cols-2">
                   {criteriaOptions.map((criterion) => (
-                    <div key={criterion.id} className="rounded-xl border border-slate-200 p-4">
+                    <div key={criterion.id} className="rounded-[20px] border border-gray-200 bg-background-light p-4 shadow-sm">
                       <Checkbox
                         checked={form.criteriaFocus.includes(criterion.id)}
                         onChange={() => toggleCriterion(criterion.id)}
                         label={`${criterion.name} (${criterion.weight})`}
                       />
-                      <p className="mt-2 text-sm text-slate-500">{criterion.description}</p>
+                      <p className="mt-3 text-sm leading-6 text-muted">{criterion.description}</p>
                     </div>
                   ))}
                 </div>
               )}
-            </CardContent>
-          </Card>
+          </AdminRoutePanel>
         </TabPanel>
 
         <TabPanel id="rubric" activeTab={activeTab}>
-          <Card>
-            <CardHeader>
-              <CardTitle>Model Answer & Internal Notes</CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-5">
+          <AdminRoutePanel
+            title="Model Answer & Internal Notes"
+            description="Store the internal reference answer or structured response payload used by reviewers, AI evaluation, and future revisions."
+          >
               <Textarea
                 label="Model Answer JSON / Reference Text"
                 value={form.modelAnswer}
                 onChange={(event) => updateField('modelAnswer', event.target.value)}
                 className="min-h-[240px]"
               />
-              <p className="text-sm text-slate-500">
+              <p className="text-sm leading-6 text-muted">
                 Use structured JSON when the content type already expects it, or plain reference prose while editorial work is in progress.
               </p>
-            </CardContent>
-          </Card>
+          </AdminRoutePanel>
         </TabPanel>
       </AsyncStateWrapper>
     </AdminRouteWorkspace>

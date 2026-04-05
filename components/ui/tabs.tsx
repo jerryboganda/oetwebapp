@@ -41,7 +41,13 @@ export function Tabs({ tabs, activeTab, onChange, className }: TabsProps) {
   };
 
   return (
-    <div className={cn('flex border-b border-gray-200 overflow-x-auto', className)} role="tablist">
+    <div
+      className={cn(
+        'inline-flex w-full flex-wrap items-center gap-2 rounded-[20px] border border-gray-200 bg-background-light p-2',
+        className,
+      )}
+      role="tablist"
+    >
       {tabs.map((tab, index) => (
         <button
           key={tab.id}
@@ -53,10 +59,10 @@ export function Tabs({ tabs, activeTab, onChange, className }: TabsProps) {
           onClick={() => onChange(tab.id)}
           onKeyDown={(event) => handleKeyDown(event, index)}
           className={cn(
-            'flex items-center gap-2 px-4 py-3 text-sm font-semibold whitespace-nowrap border-b-2 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+            'flex items-center gap-2 whitespace-nowrap rounded-2xl px-4 py-2.5 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
             activeTab === tab.id
-              ? 'border-primary text-primary'
-              : 'border-transparent text-muted hover:text-navy hover:border-gray-300',
+              ? 'bg-surface text-primary shadow-sm'
+              : 'text-muted hover:bg-white hover:text-navy',
           )}
         >
           {tab.icon}
@@ -64,7 +70,7 @@ export function Tabs({ tabs, activeTab, onChange, className }: TabsProps) {
           {tab.count !== undefined && (
             <span className={cn(
               'px-1.5 py-0.5 rounded-full text-xs',
-              activeTab === tab.id ? 'bg-primary/10 text-primary' : 'bg-gray-100 text-muted',
+              activeTab === tab.id ? 'bg-primary/10 text-primary' : 'bg-white text-muted',
             )}>
               {tab.count}
             </span>

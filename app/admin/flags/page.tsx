@@ -107,20 +107,20 @@ export default function FlagsPage() {
       header: 'Flag',
       render: (flag) => (
         <div className="space-y-1">
-          <p className="font-medium text-slate-900">{flag.name}</p>
-          <p className="font-mono text-xs text-slate-500">{flag.key}</p>
+          <p className="font-medium text-navy">{flag.name}</p>
+          <p className="font-mono text-xs text-muted">{flag.key}</p>
         </div>
       ),
     },
     {
       key: 'description',
       header: 'Description',
-      render: (flag) => <span className="text-sm text-slate-500">{flag.description || 'No rollout description yet.'}</span>,
+      render: (flag) => <span className="text-sm text-muted">{flag.description || 'No rollout description yet.'}</span>,
     },
     {
       key: 'owner',
       header: 'Owner',
-      render: (flag) => <span className="text-sm text-slate-600">{flag.owner || 'Unassigned'}</span>,
+      render: (flag) => <span className="text-sm text-muted">{flag.owner || 'Unassigned'}</span>,
     },
     {
       key: 'type',
@@ -136,10 +136,10 @@ export default function FlagsPage() {
       header: 'Rollout',
       render: (flag) => (
         <div className="min-w-[140px] space-y-2">
-          <div className="h-2 rounded-full bg-slate-100">
+          <div className="h-2 rounded-full bg-background-light">
             <div className="h-2 rounded-full bg-blue-600" style={{ width: `${flag.rolloutPercentage}%` }} />
           </div>
-          <p className="font-mono text-xs text-slate-500">{flag.rolloutPercentage}%</p>
+          <p className="font-mono text-xs text-muted">{flag.rolloutPercentage}%</p>
         </div>
       ),
     },
@@ -285,7 +285,7 @@ export default function FlagsPage() {
         onRetry={() => window.location.reload()}
         emptyContent={
           <EmptyState
-            icon={<Flag className="h-10 w-10 text-slate-400" />}
+            icon={<Flag className="h-10 w-10 text-muted" />}
             title="No feature flags yet"
             description="Create the first rollout control so experiments and launches are traceable from admin."
             action={{ label: 'Create Flag', onClick: openCreateModal }}
@@ -339,7 +339,7 @@ export default function FlagsPage() {
             ]}
           />
 
-          <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
             <Button variant="outline" onClick={() => setIsModalOpen(false)}>
               Cancel
             </Button>

@@ -396,9 +396,9 @@ export default function BillingPage() {
       header: 'Plan',
       render: (plan) => (
         <div className="space-y-1">
-          <p className="font-medium text-slate-900">{plan.name}</p>
-          <p className="text-xs uppercase tracking-[0.12em] text-slate-400">{plan.code ?? plan.id}</p>
-          {plan.description ? <p className="text-sm text-slate-500">{plan.description}</p> : null}
+          <p className="font-medium text-navy">{plan.name}</p>
+          <p className="text-xs uppercase tracking-[0.12em] text-muted">{plan.code ?? plan.id}</p>
+          {plan.description ? <p className="text-sm text-muted">{plan.description}</p> : null}
         </div>
       ),
     },
@@ -406,7 +406,7 @@ export default function BillingPage() {
       key: 'price',
       header: 'Pricing',
       render: (plan) => (
-        <div className="space-y-1 text-slate-600">
+        <div className="space-y-1 text-muted">
           <p>{formatCurrency(plan.price, plan.currency)} / {plan.interval}</p>
           <p className="text-xs">{plan.includedCredits} included credits</p>
         </div>
@@ -415,7 +415,7 @@ export default function BillingPage() {
     {
       key: 'activeSubscribers',
       header: 'Subscribers',
-      render: (plan) => <span className="text-slate-600">{plan.activeSubscribers.toLocaleString()}</span>,
+      render: (plan) => <span className="text-muted">{plan.activeSubscribers.toLocaleString()}</span>,
     },
     {
       key: 'visibility',
@@ -448,9 +448,9 @@ export default function BillingPage() {
       header: 'Add-on',
       render: (addOn) => (
         <div className="space-y-1">
-          <p className="font-medium text-slate-900">{addOn.name}</p>
-          <p className="text-xs uppercase tracking-[0.12em] text-slate-400">{addOn.code}</p>
-          {addOn.description ? <p className="text-sm text-slate-500">{addOn.description}</p> : null}
+          <p className="font-medium text-navy">{addOn.name}</p>
+          <p className="text-xs uppercase tracking-[0.12em] text-muted">{addOn.code}</p>
+          {addOn.description ? <p className="text-sm text-muted">{addOn.description}</p> : null}
         </div>
       ),
     },
@@ -458,7 +458,7 @@ export default function BillingPage() {
       key: 'price',
       header: 'Pricing',
       render: (addOn) => (
-        <div className="space-y-1 text-slate-600">
+        <div className="space-y-1 text-muted">
           <p>{formatCurrency(addOn.price, addOn.currency)} / {addOn.interval}</p>
           <p className="text-xs">{addOn.grantCredits} credits Â· qty step {addOn.quantityStep}</p>
         </div>
@@ -468,7 +468,7 @@ export default function BillingPage() {
       key: 'scope',
       header: 'Scope',
       render: (addOn) => (
-        <div className="space-y-1 text-sm text-slate-600">
+        <div className="space-y-1 text-sm text-muted">
           <p>{addOn.appliesToAllPlans ? 'All plans' : addOn.compatiblePlanCodes.join(', ') || 'Restricted'}</p>
           <p>{addOn.isRecurring ? 'Recurring' : 'One-time'}</p>
         </div>
@@ -500,8 +500,8 @@ export default function BillingPage() {
       header: 'Coupon',
       render: (coupon) => (
         <div className="space-y-1">
-          <p className="font-medium text-slate-900">{coupon.code}</p>
-          <p className="text-sm text-slate-500">{coupon.name}</p>
+          <p className="font-medium text-navy">{coupon.code}</p>
+          <p className="text-sm text-muted">{coupon.name}</p>
         </div>
       ),
     },
@@ -509,7 +509,7 @@ export default function BillingPage() {
       key: 'discount',
       header: 'Discount',
       render: (coupon) => (
-        <div className="space-y-1 text-slate-600">
+        <div className="space-y-1 text-muted">
           <p>{coupon.discountType === 'percentage' ? `${coupon.discountValue}%` : formatCurrency(coupon.discountValue, coupon.currency)}</p>
           <p className="text-xs">Min subtotal {coupon.minimumSubtotal == null ? 'none' : formatCurrency(coupon.minimumSubtotal, coupon.currency)}</p>
         </div>
@@ -519,7 +519,7 @@ export default function BillingPage() {
       key: 'usage',
       header: 'Usage',
       render: (coupon) => (
-        <div className="space-y-1 text-slate-600">
+        <div className="space-y-1 text-muted">
           <p>{coupon.redemptionCount} redemptions</p>
           <p className="text-xs">{coupon.usageLimitTotal == null ? 'Unlimited' : `${coupon.usageLimitTotal} total`} Â· {coupon.usageLimitPerUser == null ? 'No per-user limit' : `${coupon.usageLimitPerUser} per user`}</p>
         </div>
@@ -551,8 +551,8 @@ export default function BillingPage() {
       header: 'User',
       render: (subscription) => (
         <div className="space-y-1">
-          <p className="font-medium text-slate-900">{subscription.userName}</p>
-          <p className="text-xs uppercase tracking-[0.12em] text-slate-400">{subscription.userId}</p>
+          <p className="font-medium text-navy">{subscription.userName}</p>
+          <p className="text-xs uppercase tracking-[0.12em] text-muted">{subscription.userId}</p>
         </div>
       ),
     },
@@ -560,9 +560,9 @@ export default function BillingPage() {
       key: 'plan',
       header: 'Plan',
       render: (subscription) => (
-        <div className="space-y-1 text-slate-600">
+        <div className="space-y-1 text-muted">
           <p>{subscription.planName}</p>
-          <p className="text-xs uppercase tracking-[0.12em] text-slate-400">{subscription.planId}</p>
+          <p className="text-xs uppercase tracking-[0.12em] text-muted">{subscription.planId}</p>
         </div>
       ),
     },
@@ -570,7 +570,7 @@ export default function BillingPage() {
       key: 'price',
       header: 'Billing',
       render: (subscription) => (
-        <div className="space-y-1 text-slate-600">
+        <div className="space-y-1 text-muted">
           <p>{formatCurrency(subscription.price, subscription.currency)} / {subscription.interval}</p>
           <p className="text-xs">{subscription.addOnCount} add-ons</p>
         </div>
@@ -579,7 +579,7 @@ export default function BillingPage() {
     {
       key: 'nextRenewalAt',
       header: 'Renewal',
-      render: (subscription) => <span className="text-sm text-slate-500">{subscription.nextRenewalAt ? new Date(subscription.nextRenewalAt).toLocaleString() : 'N/A'}</span>,
+      render: (subscription) => <span className="text-sm text-muted">{subscription.nextRenewalAt ? new Date(subscription.nextRenewalAt).toLocaleString() : 'N/A'}</span>,
     },
     {
       key: 'status',
@@ -592,17 +592,17 @@ export default function BillingPage() {
     {
       key: 'couponCode',
       header: 'Coupon',
-      render: (redemption) => <span className="font-medium text-slate-900">{redemption.couponCode}</span>,
+      render: (redemption) => <span className="font-medium text-navy">{redemption.couponCode}</span>,
     },
     {
       key: 'userId',
       header: 'User',
-      render: (redemption) => <span className="text-slate-600">{redemption.userId}</span>,
+      render: (redemption) => <span className="text-muted">{redemption.userId}</span>,
     },
     {
       key: 'discountAmount',
       header: 'Discount',
-      render: (redemption) => <span className="text-slate-600">{formatCurrency(redemption.discountAmount, redemption.currency)}</span>,
+      render: (redemption) => <span className="text-muted">{formatCurrency(redemption.discountAmount, redemption.currency)}</span>,
     },
     {
       key: 'status',
@@ -612,7 +612,7 @@ export default function BillingPage() {
     {
       key: 'redeemedAt',
       header: 'Redeemed',
-      render: (redemption) => <span className="text-sm text-slate-500">{new Date(redemption.redeemedAt).toLocaleString()}</span>,
+      render: (redemption) => <span className="text-sm text-muted">{new Date(redemption.redeemedAt).toLocaleString()}</span>,
     },
   ];
 
@@ -620,27 +620,27 @@ export default function BillingPage() {
     {
       key: 'id',
       header: 'Invoice',
-      render: (invoice) => <span className="font-mono text-xs text-slate-600">{invoice.id}</span>,
+      render: (invoice) => <span className="font-mono text-xs text-muted">{invoice.id}</span>,
     },
     {
       key: 'userName',
       header: 'User',
       render: (invoice) => (
         <div className="space-y-1">
-          <p className="font-medium text-slate-900">{invoice.userName}</p>
-          <p className="text-sm text-slate-500">{invoice.plan}</p>
+          <p className="font-medium text-navy">{invoice.userName}</p>
+          <p className="text-sm text-muted">{invoice.plan}</p>
         </div>
       ),
     },
     {
       key: 'amount',
       header: 'Amount',
-      render: (invoice) => <span className="text-slate-600">{formatCurrency(invoice.amount, invoice.currency)}</span>,
+      render: (invoice) => <span className="text-muted">{formatCurrency(invoice.amount, invoice.currency)}</span>,
     },
     {
       key: 'date',
       header: 'Issued',
-      render: (invoice) => <span className="text-sm text-slate-500">{new Date(invoice.date).toLocaleString()}</span>,
+      render: (invoice) => <span className="text-sm text-muted">{new Date(invoice.date).toLocaleString()}</span>,
     },
     {
       key: 'status',
@@ -952,7 +952,7 @@ export default function BillingPage() {
         onRetry={() => window.location.reload()}
         emptyContent={
           <EmptyState
-            icon={<Receipt className="h-10 w-10 text-slate-400" />}
+            icon={<Receipt className="h-10 w-10 text-muted" />}
             title="No billing records found"
             description="Create a plan or wait for invoices to populate the admin billing workspace."
             action={{ label: 'Create Plan', onClick: () => setIsPlanModalOpen(true) }}
@@ -1002,7 +1002,7 @@ export default function BillingPage() {
         >
           <div className="max-w-md">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
               <Input placeholder="Search by user or plan" value={subscriptionSearch} onChange={(event) => setSubscriptionSearch(event.target.value)} className="pl-9" />
             </div>
           </div>
@@ -1016,7 +1016,7 @@ export default function BillingPage() {
         >
           <div className="max-w-md">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
               <Input placeholder="Filter by coupon code" value={redemptionSearch} onChange={(event) => setRedemptionSearch(event.target.value)} className="pl-9" />
             </div>
           </div>
@@ -1027,7 +1027,7 @@ export default function BillingPage() {
         <AdminRoutePanel title="Invoices" description="Search and filter real invoice records by status and learner reference.">
           <div className="max-w-md">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
               <Input placeholder="Search by user or plan description" value={invoiceSearch} onChange={(event) => setInvoiceSearch(event.target.value)} className="pl-9" />
             </div>
           </div>
@@ -1091,7 +1091,7 @@ export default function BillingPage() {
           </div>
           <Textarea label="Entitlements JSON" value={planForm.entitlementsJson} onChange={(event) => setPlanForm((current) => ({ ...current, entitlementsJson: event.target.value }))} />
 
-          <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
             <Button
               variant="outline"
               onClick={() => {
@@ -1166,7 +1166,7 @@ export default function BillingPage() {
           <Input label="Compatible plan codes" value={addOnForm.compatiblePlanCodesText} onChange={(event) => setAddOnForm((current) => ({ ...current, compatiblePlanCodesText: event.target.value }))} hint="Comma-separated codes" />
           <Textarea label="Grant entitlements JSON" value={addOnForm.grantEntitlementsJson} onChange={(event) => setAddOnForm((current) => ({ ...current, grantEntitlementsJson: event.target.value }))} />
 
-          <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
             <Button
               variant="outline"
               onClick={() => {
@@ -1241,7 +1241,7 @@ export default function BillingPage() {
           <Input label="Applicable plan codes" value={couponForm.applicablePlanCodesText} onChange={(event) => setCouponForm((current) => ({ ...current, applicablePlanCodesText: event.target.value }))} hint="Comma-separated codes" />
           <Input label="Applicable add-on codes" value={couponForm.applicableAddOnCodesText} onChange={(event) => setCouponForm((current) => ({ ...current, applicableAddOnCodesText: event.target.value }))} hint="Comma-separated codes" />
 
-          <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
             <Button
               variant="outline"
               onClick={() => {

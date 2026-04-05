@@ -104,22 +104,22 @@ export default function ReviewOpsPage() {
     {
       key: 'id',
       header: 'Review Request',
-      render: (item) => <span className="font-mono text-xs text-slate-600">{item.id}</span>,
+      render: (item) => <span className="font-mono text-xs text-muted">{item.id}</span>,
     },
     {
       key: 'learner',
       header: 'Learner',
       render: (item) => (
         <div className="space-y-1">
-          <p className="font-medium text-slate-900">{item.learnerName}</p>
-          <p className="text-xs text-slate-500">{item.taskId}</p>
+          <p className="font-medium text-navy">{item.learnerName}</p>
+          <p className="text-xs text-muted">{item.taskId}</p>
         </div>
       ),
     },
     {
       key: 'subtestCode',
       header: 'Subtest',
-      render: (item) => <span className="capitalize text-slate-600">{item.subtestCode}</span>,
+      render: (item) => <span className="capitalize text-muted">{item.subtestCode}</span>,
     },
     {
       key: 'priority',
@@ -142,7 +142,7 @@ export default function ReviewOpsPage() {
     {
       key: 'assignedExpertId',
       header: 'Assigned Expert',
-      render: (item) => <span className="text-sm text-slate-500">{item.assignedExpertId ?? 'Unassigned'}</span>,
+      render: (item) => <span className="text-sm text-muted">{item.assignedExpertId ?? 'Unassigned'}</span>,
     },
     {
       key: 'actions',
@@ -160,7 +160,7 @@ export default function ReviewOpsPage() {
               </Button>
             </>
           ) : (
-            <span className="text-xs text-slate-400">Completed</span>
+            <span className="text-xs text-muted">Completed</span>
           )}
         </div>
       ),
@@ -171,22 +171,22 @@ export default function ReviewOpsPage() {
     {
       key: 'id',
       header: 'Failed Review',
-      render: (review) => <span className="font-mono text-xs text-slate-600">{review.id}</span>,
+      render: (review) => <span className="font-mono text-xs text-muted">{review.id}</span>,
     },
     {
       key: 'attemptId',
       header: 'Attempt',
-      render: (review) => <span className="text-sm text-slate-500">{review.attemptId}</span>,
+      render: (review) => <span className="text-sm text-muted">{review.attemptId}</span>,
     },
     {
       key: 'subtestCode',
       header: 'Subtest',
-      render: (review) => <span className="capitalize text-slate-600">{review.subtestCode}</span>,
+      render: (review) => <span className="capitalize text-muted">{review.subtestCode}</span>,
     },
     {
       key: 'createdAt',
       header: 'Created',
-      render: (review) => <span className="text-sm text-slate-500">{new Date(review.createdAt).toLocaleString()}</span>,
+      render: (review) => <span className="text-sm text-muted">{new Date(review.createdAt).toLocaleString()}</span>,
     },
     {
       key: 'actions',
@@ -206,17 +206,17 @@ export default function ReviewOpsPage() {
     {
       key: 'id',
       header: 'Stuck Review',
-      render: (review) => <span className="font-mono text-xs text-slate-600">{review.id}</span>,
+      render: (review) => <span className="font-mono text-xs text-muted">{review.id}</span>,
     },
     {
       key: 'attemptId',
       header: 'Attempt',
-      render: (review) => <span className="text-sm text-slate-500">{review.attemptId}</span>,
+      render: (review) => <span className="text-sm text-muted">{review.attemptId}</span>,
     },
     {
       key: 'createdAt',
       header: 'Queued Since',
-      render: (review) => <span className="text-sm text-slate-500">{new Date(review.createdAt).toLocaleString()}</span>,
+      render: (review) => <span className="text-sm text-muted">{new Date(review.createdAt).toLocaleString()}</span>,
     },
     {
       key: 'actions',
@@ -236,27 +236,27 @@ export default function ReviewOpsPage() {
     {
       key: 'id',
       header: 'Job',
-      render: (job) => <span className="font-mono text-xs text-slate-600">{job.id}</span>,
+      render: (job) => <span className="font-mono text-xs text-muted">{job.id}</span>,
     },
     {
       key: 'type',
       header: 'Type',
-      render: (job) => <span className="text-slate-600">{job.type}</span>,
+      render: (job) => <span className="text-muted">{job.type}</span>,
     },
     {
       key: 'reason',
       header: 'Reason',
-      render: (job) => <span className="text-sm text-slate-500">{job.reason || 'No reason code'}</span>,
+      render: (job) => <span className="text-sm text-muted">{job.reason || 'No reason code'}</span>,
     },
     {
       key: 'retryCount',
       header: 'Retries',
-      render: (job) => <span className="text-slate-600">{job.retryCount}</span>,
+      render: (job) => <span className="text-muted">{job.retryCount}</span>,
     },
     {
       key: 'createdAt',
       header: 'Created',
-      render: (job) => <span className="text-sm text-slate-500">{new Date(job.createdAt).toLocaleString()}</span>,
+      render: (job) => <span className="text-sm text-muted">{new Date(job.createdAt).toLocaleString()}</span>,
     },
   ];
 
@@ -370,7 +370,7 @@ export default function ReviewOpsPage() {
         onRetry={() => window.location.reload()}
         emptyContent={
           <EmptyState
-            icon={<Inbox className="h-10 w-10 text-slate-400" />}
+            icon={<Inbox className="h-10 w-10 text-muted" />}
             title="No review work is currently visible"
             description="Adjust the filters or wait for queued, failed, or stuck reviews to appear."
           />
@@ -388,12 +388,12 @@ export default function ReviewOpsPage() {
         {summary && totalReviews > 0 ? (
           <AdminRoutePanel title="Queue Distribution" description="The distribution bar below is computed from live review summary data.">
             <div className="space-y-3">
-              <div className="flex h-3 rounded-full overflow-hidden bg-slate-100">
-                <div className="bg-slate-400" style={{ width: `${(summary.statusDistribution.pending / totalReviews) * 100}%` }} />
+              <div className="flex h-3 rounded-full overflow-hidden bg-background-light">
+                <div className="bg-gray-300" style={{ width: `${(summary.statusDistribution.pending / totalReviews) * 100}%` }} />
                 <div className="bg-amber-400" style={{ width: `${(summary.statusDistribution.inProgress / totalReviews) * 100}%` }} />
                 <div className="bg-emerald-500" style={{ width: `${(summary.statusDistribution.completed / totalReviews) * 100}%` }} />
               </div>
-              <div className="flex flex-wrap gap-4 text-sm text-slate-500">
+              <div className="flex flex-wrap gap-4 text-sm text-muted">
                 <span>Pending: {summary.statusDistribution.pending}</span>
                 <span>In progress: {summary.statusDistribution.inProgress}</span>
                 <span>Completed: {summary.statusDistribution.completed}</span>
@@ -411,7 +411,7 @@ export default function ReviewOpsPage() {
           <div className="grid gap-6 xl:grid-cols-3">
             <AdminRoutePanel title="Failed Reviews" description={`${failures.summary.failedReviewCount} failed review requests currently need recovery.`}>
               {failures.failedReviews.length === 0 ? (
-                <p className="text-sm text-slate-500">No failed review requests at the moment.</p>
+                <p className="text-sm text-muted">No failed review requests at the moment.</p>
               ) : (
                 <DataTable columns={failedReviewColumns} data={failures.failedReviews} keyExtractor={(item) => item.id} />
               )}
@@ -419,7 +419,7 @@ export default function ReviewOpsPage() {
 
             <AdminRoutePanel title="Stuck Reviews" description={`${failures.summary.stuckReviewCount} reviews have been in review too long and may need intervention.`}>
               {failures.stuckReviews.length === 0 ? (
-                <p className="text-sm text-slate-500">No stuck reviews detected.</p>
+                <p className="text-sm text-muted">No stuck reviews detected.</p>
               ) : (
                 <DataTable columns={stuckReviewColumns} data={failures.stuckReviews} keyExtractor={(item) => item.id} />
               )}
@@ -427,7 +427,7 @@ export default function ReviewOpsPage() {
 
             <AdminRoutePanel title="Failed Jobs" description={`${failures.summary.failedJobCount} background jobs failed in the review pipeline.`}>
               {failures.failedJobs.length === 0 ? (
-                <p className="text-sm text-slate-500">No failed background jobs detected.</p>
+                <p className="text-sm text-muted">No failed background jobs detected.</p>
               ) : (
                 <DataTable columns={failedJobColumns} data={failures.failedJobs} keyExtractor={(item) => item.id} />
               )}
@@ -438,7 +438,7 @@ export default function ReviewOpsPage() {
 
       <Modal open={Boolean(assignTarget)} onClose={() => setAssignTarget(null)} title="Assign Review">
         <div className="space-y-4 py-2">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-500">
+          <div className="rounded-xl border border-gray-200 bg-background-light p-3 text-sm text-muted">
             {assignTarget ? `Assign review ${assignTarget.id} for ${assignTarget.learnerName} (${assignTarget.subtestCode}).` : 'Select an expert to continue.'}
           </div>
           <Select
@@ -447,7 +447,7 @@ export default function ReviewOpsPage() {
             onChange={(event) => setSelectedExpertId(event.target.value)}
             options={experts.map((expert) => ({ value: expert.id, label: `${expert.name} (${expert.email})` }))}
           />
-          <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
             <Button variant="outline" onClick={() => setAssignTarget(null)}>
               Cancel
             </Button>
@@ -462,7 +462,7 @@ export default function ReviewOpsPage() {
       <Modal open={Boolean(cancelTarget)} onClose={() => setCancelTarget(null)} title="Cancel Review">
         <div className="space-y-4 py-2">
           <Input label="Reason" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} hint="This reason is stored in audit history." />
-          <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
             <Button variant="outline" onClick={() => setCancelTarget(null)}>
               Keep Review
             </Button>

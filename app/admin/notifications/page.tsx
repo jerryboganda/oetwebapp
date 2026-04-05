@@ -152,8 +152,8 @@ export default function AdminNotificationsPage() {
       header: 'Event',
       render: (row) => (
         <div className="space-y-1">
-          <p className="font-medium text-slate-900">{row.label}</p>
-          <p className="font-mono text-[11px] text-slate-500">{row.eventKey}</p>
+          <p className="font-medium text-navy">{row.label}</p>
+          <p className="font-mono text-[11px] text-muted">{row.eventKey}</p>
         </div>
       ),
     },
@@ -297,8 +297,8 @@ export default function AdminNotificationsPage() {
       header: 'Event',
       render: (row) => (
         <div className="space-y-1">
-          <p className="font-medium text-slate-900">{row.eventKey}</p>
-          <p className="text-xs text-slate-500">{row.audienceRole}</p>
+          <p className="font-medium text-navy">{row.eventKey}</p>
+          <p className="text-xs text-muted">{row.audienceRole}</p>
         </div>
       ),
     },
@@ -315,12 +315,12 @@ export default function AdminNotificationsPage() {
     {
       key: 'error',
       header: 'Error',
-      render: (row) => <span className="text-sm text-slate-500">{row.errorMessage || row.errorCode || 'No error details'}</span>,
+      render: (row) => <span className="text-sm text-muted">{row.errorMessage || row.errorCode || 'No error details'}</span>,
     },
     {
       key: 'attemptedAt',
       header: 'Attempted',
-      render: (row) => <span className="text-sm text-slate-500">{new Date(row.attemptedAt).toLocaleString()}</span>,
+      render: (row) => <span className="text-sm text-muted">{new Date(row.attemptedAt).toLocaleString()}</span>,
     },
   ];
 
@@ -330,8 +330,8 @@ export default function AdminNotificationsPage() {
       header: 'Event',
       render: (row) => (
         <div className="space-y-1">
-          <p className="font-medium text-slate-900">{row.eventKey}</p>
-          <p className="text-xs text-slate-500">{row.audienceRole}</p>
+          <p className="font-medium text-navy">{row.eventKey}</p>
+          <p className="text-xs text-muted">{row.audienceRole}</p>
         </div>
       ),
     },
@@ -348,12 +348,12 @@ export default function AdminNotificationsPage() {
     {
       key: 'provider',
       header: 'Provider',
-      render: (row) => <span className="text-sm text-slate-500">{row.provider || 'n/a'}</span>,
+      render: (row) => <span className="text-sm text-muted">{row.provider || 'n/a'}</span>,
     },
     {
       key: 'attemptedAt',
       header: 'Attempted',
-      render: (row) => <span className="text-sm text-slate-500">{new Date(row.attemptedAt).toLocaleString()}</span>,
+      render: (row) => <span className="text-sm text-muted">{new Date(row.attemptedAt).toLocaleString()}</span>,
     },
   ];
 
@@ -450,7 +450,7 @@ export default function AdminNotificationsPage() {
         onRetry={() => void loadPageData(true)}
         emptyContent={(
           <EmptyState
-            icon={<Bell className="h-10 w-10 text-slate-400" />}
+            icon={<Bell className="h-10 w-10 text-muted" />}
             title="No notification governance data is available yet"
             description="Reload after the first notification events and policy rows have been generated."
           />
@@ -466,12 +466,12 @@ export default function AdminNotificationsPage() {
         <AdminRoutePanel title="Global Email Governance" description="These switches suppress email only. In-app delivery remains active even when a role-wide email switch is off.">
           <div className="grid gap-3 md:grid-cols-3">
             {(['learner', 'expert', 'admin'] as NotificationAudienceRole[]).map((audienceRole) => (
-              <div key={audienceRole} className="rounded-2xl border border-slate-200 bg-white p-4">
+              <div key={audienceRole} className="rounded-[20px] border border-gray-200 bg-background-light p-4 shadow-sm">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-3">
                     <div>
-                      <p className="text-sm font-semibold capitalize text-slate-900">{audienceRole} email</p>
-                      <p className="text-xs text-slate-500">Role-wide email enable/disable.</p>
+                      <p className="text-sm font-semibold capitalize text-navy">{audienceRole} email</p>
+                      <p className="text-xs text-muted">Role-wide email enable/disable.</p>
                     </div>
                     <Badge variant={globalEmailEnabledByAudience[audienceRole] ? 'success' : 'warning'}>
                       {globalEmailEnabledByAudience[audienceRole] ? 'Enabled' : 'Suppressed'}
@@ -537,8 +537,8 @@ export default function AdminNotificationsPage() {
               }))}
             />
             {catalog.find((entry) => entry.eventKey === testEventKey && entry.audienceRole === testAudienceRole) ? (
-              <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4 text-sm text-slate-600">
-                <p className="font-semibold text-slate-900">
+              <div className="rounded-2xl border border-gray-200 bg-background-light p-4 text-sm text-muted">
+                <p className="font-semibold text-navy">
                   {catalog.find((entry) => entry.eventKey === testEventKey && entry.audienceRole === testAudienceRole)?.label}
                 </p>
                 <p className="mt-1">
@@ -562,16 +562,16 @@ export default function AdminNotificationsPage() {
             {health?.channels?.length ? (
               <div className="grid gap-3 sm:grid-cols-3">
                 {health.channels.map((channel) => (
-                  <div key={channel.channel} className="rounded-2xl border border-slate-200 bg-white p-4 text-sm">
-                    <p className="font-semibold capitalize text-slate-900">{channel.channel}</p>
-                    <p className="mt-2 text-slate-500">Sent {channel.sentLast24Hours}</p>
-                    <p className="text-slate-500">Failed {channel.failedLast24Hours}</p>
-                    <p className="text-slate-500">Suppressed {channel.suppressedLast24Hours}</p>
+                  <div key={channel.channel} className="rounded-[20px] border border-gray-200 bg-background-light p-4 text-sm shadow-sm">
+                    <p className="font-semibold capitalize text-navy">{channel.channel}</p>
+                    <p className="mt-2 text-muted">Sent {channel.sentLast24Hours}</p>
+                    <p className="text-muted">Failed {channel.failedLast24Hours}</p>
+                    <p className="text-muted">Suppressed {channel.suppressedLast24Hours}</p>
                   </div>
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-slate-500">No channel telemetry has been recorded yet.</p>
+              <p className="text-sm text-muted">No channel telemetry has been recorded yet.</p>
             )}
           </AdminRoutePanel>
         </div>
@@ -581,7 +581,7 @@ export default function AdminNotificationsPage() {
             {health?.failureQueue?.length ? (
               <DataTable columns={failureQueueColumns} data={health.failureQueue} keyExtractor={(row) => `${row.eventId}:${row.channel}:${row.attemptedAt}`} />
             ) : (
-              <p className="text-sm text-slate-500">No failed or expired deliveries are currently queued for investigation.</p>
+              <p className="text-sm text-muted">No failed or expired deliveries are currently queued for investigation.</p>
             )}
           </AdminRoutePanel>
 
@@ -589,7 +589,7 @@ export default function AdminNotificationsPage() {
             {deliveries.length ? (
               <DataTable columns={deliveryColumns} data={deliveries} keyExtractor={(row) => row.id} />
             ) : (
-              <p className="text-sm text-slate-500">No delivery attempts have been recorded yet.</p>
+              <p className="text-sm text-muted">No delivery attempts have been recorded yet.</p>
             )}
           </AdminRoutePanel>
         </div>
@@ -601,29 +601,29 @@ export default function AdminNotificationsPage() {
                 {
                   key: 'timestamp',
                   header: 'Timestamp',
-                  render: (row) => <span className="text-sm text-slate-500">{new Date(row.timestamp).toLocaleString()}</span>,
+                  render: (row) => <span className="text-sm text-muted">{new Date(row.timestamp).toLocaleString()}</span>,
                 },
                 {
                   key: 'actor',
                   header: 'Actor',
-                  render: (row) => <span className="font-medium text-slate-900">{row.actor}</span>,
+                  render: (row) => <span className="font-medium text-navy">{row.actor}</span>,
                 },
                 {
                   key: 'resource',
                   header: 'Resource',
-                  render: (row) => <span className="font-mono text-xs text-slate-500">{row.resource}</span>,
+                  render: (row) => <span className="font-mono text-xs text-muted">{row.resource}</span>,
                 },
                 {
                   key: 'details',
                   header: 'Details',
-                  render: (row) => <span className="text-sm text-slate-500">{row.details}</span>,
+                  render: (row) => <span className="text-sm text-muted">{row.details}</span>,
                 },
               ]}
               data={auditRows}
               keyExtractor={(row) => row.id}
             />
           ) : (
-            <p className="text-sm text-slate-500">No notification policy audit rows have been recorded yet.</p>
+            <p className="text-sm text-muted">No notification policy audit rows have been recorded yet.</p>
           )}
         </AdminRoutePanel>
       </AsyncStateWrapper>

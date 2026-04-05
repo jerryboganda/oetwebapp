@@ -13,10 +13,20 @@ interface EmptyStateProps {
 
 export function EmptyState({ icon, title, description, action, className }: EmptyStateProps) {
   return (
-    <div role="status" className={cn('flex flex-col items-center justify-center text-center py-12 px-4', className)}>
-      {icon && <div className="w-16 h-16 rounded-full bg-gray-100 flex items-center justify-center text-muted mb-4" aria-hidden="true">{icon}</div>}
-      <h3 className="text-lg font-bold text-navy mb-1">{title}</h3>
-      {description && <p className="text-sm text-muted max-w-sm mb-4">{description}</p>}
+    <div
+      role="status"
+      className={cn(
+        'flex flex-col items-center justify-center rounded-[24px] border border-dashed border-gray-200 bg-background-light px-6 py-12 text-center shadow-sm',
+        className,
+      )}
+    >
+      {icon ? (
+        <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-surface text-muted shadow-sm" aria-hidden="true">
+          {icon}
+        </div>
+      ) : null}
+      <h3 className="mb-1 text-lg font-bold tracking-tight text-navy">{title}</h3>
+      {description && <p className="mb-4 max-w-sm text-sm leading-6 text-muted">{description}</p>}
       {action && <Button onClick={action.onClick}>{action.label}</Button>}
     </div>
   );
@@ -32,12 +42,18 @@ interface ErrorStateProps {
 
 export function ErrorState({ title = 'Something went wrong', message = 'An unexpected error occurred. Please try again.', onRetry, className }: ErrorStateProps) {
   return (
-    <div role="alert" className={cn('flex flex-col items-center justify-center text-center py-12 px-4', className)}>
-      <div className="w-16 h-16 rounded-full bg-red-50 flex items-center justify-center text-red-500 mb-4" aria-hidden="true">
+    <div
+      role="alert"
+      className={cn(
+        'flex flex-col items-center justify-center rounded-[24px] border border-red-100 bg-red-50/70 px-6 py-12 text-center shadow-sm',
+        className,
+      )}
+    >
+      <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-2xl bg-white text-red-500 shadow-sm" aria-hidden="true">
         <svg className="w-8 h-8" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
       </div>
-      <h3 className="text-lg font-bold text-navy mb-1">{title}</h3>
-      <p className="text-sm text-muted max-w-sm mb-4">{message}</p>
+      <h3 className="mb-1 text-lg font-bold tracking-tight text-navy">{title}</h3>
+      <p className="mb-4 max-w-sm text-sm leading-6 text-muted">{message}</p>
       {onRetry && <Button variant="outline" onClick={onRetry}>Try Again</Button>}
     </div>
   );

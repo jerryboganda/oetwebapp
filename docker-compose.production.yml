@@ -54,6 +54,10 @@ services:
       SMTP__ENABLESSL: ${SMTP__ENABLESSL:-true}
       SMTP__FROMEMAIL: ${SMTP__FROMEMAIL}
       SMTP__FROMNAME: ${SMTP__FROMNAME:-OET Learner}
+      Billing__Stripe__SecretKey: ${BILLING__STRIPE__SECRETKEY}
+      Billing__Stripe__SuccessUrl: ${BILLING__STRIPE__SUCCESSURL}
+      Billing__Stripe__CancelUrl: ${BILLING__STRIPE__CANCELURL}
+      Billing__Stripe__WebhookSecret: ${BILLING__STRIPE__WEBHOOKSECRET}
       Platform__PublicApiBaseUrl: ${PUBLIC_API_BASE_URL}
       Platform__FallbackEmailDomain: ${FALLBACK_EMAIL_DOMAIN:-example.invalid}
       Billing__CheckoutBaseUrl: ${CHECKOUT_BASE_URL}

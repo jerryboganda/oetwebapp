@@ -28,9 +28,16 @@ export function FilterBar({ groups, selected, onChange, onClear, className }: Fi
   const totalSelected = Object.values(selected).reduce((sum, arr) => sum + arr.length, 0);
 
   return (
-    <div className={cn('flex flex-wrap items-center gap-3', className)} role="toolbar" aria-label="Filters">
+    <div
+      className={cn(
+        'flex flex-wrap items-center gap-3 rounded-[20px] border border-gray-200 bg-background-light px-4 py-3 shadow-sm',
+        className,
+      )}
+      role="toolbar"
+      aria-label="Filters"
+    >
       <div className="flex items-center gap-2">
-        <span className="text-sm font-semibold text-navy mr-2">Filters:</span>
+        <span className="mr-2 text-sm font-semibold text-navy">Filters:</span>
         {groups.map((group) => {
           const selectedCount = selected[group.id]?.length || 0;
           const isActive = selectedCount > 0;
@@ -40,10 +47,10 @@ export function FilterBar({ groups, selected, onChange, onClear, className }: Fi
               <Popover.Trigger asChild>
                 <button
                   className={cn(
-                    'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium border transition-all duration-200 active:scale-95 shadow-sm',
+                    'flex items-center gap-2 rounded-xl border px-3.5 py-2 text-sm font-medium transition-all duration-200 active:scale-95 shadow-sm',
                     isActive
-                      ? 'bg-primary/5 border-primary/30 text-primary'
-                      : 'bg-surface text-navy border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      ? 'border-primary/25 bg-primary/6 text-primary'
+                      : 'border-gray-200 bg-surface text-navy hover:border-gray-300 hover:bg-white'
                   )}
                   aria-label={`Filter by ${group.label}${isActive ? `, ${selectedCount} selected` : ''}`}
                   aria-expanded={undefined}
@@ -59,11 +66,11 @@ export function FilterBar({ groups, selected, onChange, onClear, className }: Fi
               </Popover.Trigger>
               <Popover.Portal>
                 <Popover.Content 
-                  className="z-50 w-56 p-1 bg-surface border border-gray-200 rounded-xl shadow-lg animate-in fade-in zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95"
+                  className="z-50 w-60 rounded-2xl border border-gray-200 bg-surface p-2 shadow-xl animate-in fade-in zoom-in-95 data-[state=closed]:animate-out data-[state=closed]:fade-out data-[state=closed]:zoom-out-95"
                   sideOffset={4}
                   align="start"
                 >
-                  <div className="flex flex-col">
+                  <div className="flex flex-col gap-1">
                     {group.options.map((option) => {
                       const isOptionSelected = selected[group.id]?.includes(option.id);
                       return (
@@ -73,8 +80,8 @@ export function FilterBar({ groups, selected, onChange, onClear, className }: Fi
                           role="checkbox"
                           aria-checked={isOptionSelected}
                           className={cn(
-                            'flex items-center justify-between w-full px-3 py-2 text-sm rounded-lg transition-colors',
-                            isOptionSelected ? 'bg-primary/5 text-primary font-semibold' : 'text-navy hover:bg-gray-50'
+                            'flex w-full items-center justify-between rounded-xl px-3 py-2 text-sm transition-colors',
+                            isOptionSelected ? 'bg-primary/6 text-primary font-semibold' : 'text-navy hover:bg-gray-50'
                           )}
                         >
                           <div className="flex items-center gap-2">
@@ -110,7 +117,7 @@ export function FilterBar({ groups, selected, onChange, onClear, className }: Fi
         <button
           type="button"
           onClick={onClear}
-          className="flex items-center gap-1.5 px-3 py-1.5 text-sm font-medium text-muted hover:text-navy transition-colors rounded-lg hover:bg-gray-100"
+          className="flex items-center gap-1.5 rounded-xl px-3 py-2 text-sm font-medium text-muted transition-colors hover:bg-white hover:text-navy"
           aria-label={`Clear all ${totalSelected} filters`}
         >
           <X className="w-4 h-4" /> Clear filters

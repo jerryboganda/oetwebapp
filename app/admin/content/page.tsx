@@ -119,7 +119,7 @@ export default function AdminContentLibraryPage() {
     },
     { key: 'type', header: 'Type', render: (row) => <span className="capitalize">{row.type.replace('_', ' ')}</span> },
     { key: 'profession', header: 'Profession', render: (row) => <span className="capitalize">{row.profession || 'All'}</span> },
-    { key: 'author', header: 'Author', render: (row) => <span className="text-slate-500">{row.author}</span> },
+    { key: 'author', header: 'Author', render: (row) => <span className="text-muted">{row.author}</span> },
     {
       key: 'status',
       header: 'Status',
@@ -134,7 +134,7 @@ export default function AdminContentLibraryPage() {
       header: 'Revisions',
       render: (row) => (
         <button
-          className="flex items-center gap-1 text-xs text-slate-500 hover:text-slate-900"
+          className="flex items-center gap-1 text-xs text-muted hover:text-navy"
           onClick={() => router.push(`/admin/content/${row.id}/revisions`)}
         >
           <History className="h-3.5 w-3.5" />
@@ -142,7 +142,7 @@ export default function AdminContentLibraryPage() {
         </button>
       ),
     },
-    { key: 'updatedAt', header: 'Updated', render: (row) => <span className="text-xs text-slate-500">{new Date(row.updatedAt).toLocaleString()}</span> },
+    { key: 'updatedAt', header: 'Updated', render: (row) => <span className="text-xs text-muted">{new Date(row.updatedAt).toLocaleString()}</span> },
   ];
 
   function handleFilterChange(groupId: string, optionId: string) {
@@ -181,7 +181,7 @@ export default function AdminContentLibraryPage() {
         onRetry={() => setReloadNonce((current) => current + 1)}
         emptyContent={
           <EmptyState
-            icon={<FileText className="h-10 w-10 text-slate-400" />}
+            icon={<FileText className="h-10 w-10 text-muted" />}
             title="No content items yet"
             description="Create the first publishable content item to start the library."
             action={{ label: 'Create Content', onClick: () => router.push('/admin/content/new') }}
@@ -191,7 +191,7 @@ export default function AdminContentLibraryPage() {
         <AdminRoutePanel title="Filters" description="Filter by subtest, profession, or publication state.">
           <div className="max-w-sm">
             <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
               <Input
                 placeholder="Search title, ID, or author"
                 value={searchQuery}
@@ -221,7 +221,7 @@ export default function AdminContentLibraryPage() {
         >
           {rows.length === 0 ? (
             <EmptyState
-              icon={<Search className="h-10 w-10 text-slate-400" />}
+              icon={<Search className="h-10 w-10 text-muted" />}
               title="No matching content"
               description="Adjust your search or filters to find a content item."
               action={{
@@ -236,7 +236,7 @@ export default function AdminContentLibraryPage() {
           ) : (
             <div className="space-y-4">
               <DataTable columns={columns} data={rows} keyExtractor={(row) => row.id} />
-              <div className="flex flex-col gap-3 border-t border-slate-100 pt-4 text-sm text-slate-500 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-3 border-t border-gray-200 pt-4 text-sm text-muted sm:flex-row sm:items-center sm:justify-between">
                 <p>
                   Page {page} of {Math.max(1, Math.ceil(total / PAGE_SIZE))}
                 </p>

@@ -74,7 +74,7 @@ export default function AdminContentRevisionsPage() {
         </Badge>
       ),
     },
-    { key: 'note', header: 'Change Note', render: (row) => <span className="text-slate-500">{row.note}</span> },
+    { key: 'note', header: 'Change Note', render: (row) => <span className="text-muted">{row.note}</span> },
     {
       key: 'actions',
       header: '',

@@ -165,17 +165,24 @@ export function Modal({ open, onClose, title, children, className, size = 'md' }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby={title ? 'modal-title' : undefined} aria-label={title ? undefined : 'Dialog'}>
-      <div className="fixed inset-0 bg-black/40" onClick={onClose} aria-hidden="true" />
-      <div ref={dialogRef} className={cn('relative bg-white rounded-2xl shadow-xl w-full animate-in fade-in zoom-in-95 duration-200', sizeStyles[size], className)}>
+      <div className="fixed inset-0 bg-navy/25 backdrop-blur-[2px]" onClick={onClose} aria-hidden="true" />
+      <div
+        ref={dialogRef}
+        className={cn(
+          'relative w-full animate-in fade-in zoom-in-95 rounded-[28px] border border-gray-200 bg-surface shadow-2xl duration-200',
+          sizeStyles[size],
+          className,
+        )}
+      >
         {title && (
-          <div className="flex items-center justify-between px-6 py-4 border-b border-border">
+          <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
             <h2 id="modal-title" className="text-lg font-bold text-navy">{title}</h2>
-            <button onClick={onClose} className="p-1 text-muted hover:text-navy rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Close">
+            <button onClick={onClose} className="rounded-xl p-2 text-muted transition-colors hover:bg-background-light hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Close">
               <X className="w-5 h-5" aria-hidden="true" />
             </button>
           </div>
         )}
-        <div className="px-6 py-4">{children}</div>
+        <div className="px-6 py-5">{children}</div>
       </div>
     </div>
   );
@@ -246,24 +253,24 @@ export function Drawer({ open, onClose, title, children, side = 'right', classNa
 
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-labelledby={title ? 'drawer-title' : undefined} aria-label={title ? undefined : 'Drawer'}>
-      <div className="fixed inset-0 bg-black/40 animate-in fade-in duration-200" onClick={onClose} aria-hidden="true" />
+      <div className="fixed inset-0 bg-navy/25 backdrop-blur-[2px] animate-in fade-in duration-200" onClick={onClose} aria-hidden="true" />
       <div
         ref={drawerRef}
         className={cn(
-          'fixed top-0 bottom-0 bg-white shadow-xl w-full max-w-md flex flex-col animate-in duration-300',
+          'fixed top-0 bottom-0 flex w-full max-w-md flex-col border-l border-gray-200 bg-surface shadow-2xl animate-in duration-300',
           side === 'right' ? 'right-0 slide-in-from-right' : 'left-0 slide-in-from-left',
           className,
         )}
       >
         {title && (
-          <div className="flex items-center justify-between px-6 py-4 border-b border-border shrink-0">
+          <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-6 py-5">
             <h2 id="drawer-title" className="text-lg font-bold text-navy">{title}</h2>
-            <button onClick={onClose} className="p-1 text-muted hover:text-navy rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Close">
+            <button onClick={onClose} className="rounded-xl p-2 text-muted transition-colors hover:bg-background-light hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Close">
               <X className="w-5 h-5" aria-hidden="true" />
             </button>
           </div>
         )}
-        <div className="flex-1 overflow-y-auto px-6 py-4">{children}</div>
+        <div className="flex-1 overflow-y-auto px-6 py-5">{children}</div>
       </div>
     </div>
   );

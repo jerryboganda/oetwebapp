@@ -185,7 +185,7 @@ export default function UserDetailPage() {
     <AdminRouteWorkspace role="main" aria-label="User operations detail">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <Link href="/admin/users" className="inline-flex items-center gap-2 text-sm text-slate-500 hover:text-blue-600">
+      <Link href="/admin/users" className="inline-flex items-center gap-2 text-sm text-muted hover:text-primary">
         <ArrowLeft className="h-4 w-4" />
         Back to users
       </Link>
@@ -235,7 +235,7 @@ export default function UserDetailPage() {
                     <UserIcon className="h-8 w-8" />
                   </div>
                   <div className="space-y-2">
-                    <p className="text-lg font-semibold text-slate-900">{user.name}</p>
+                    <p className="text-lg font-semibold text-navy">{user.name}</p>
                     <div className="flex flex-wrap items-center justify-center gap-2">
                       <Badge variant={user.role === 'admin' ? 'danger' : user.role === 'expert' ? 'warning' : 'default'}>
                         {user.role}
@@ -245,17 +245,17 @@ export default function UserDetailPage() {
                       </Badge>
                     </div>
                   </div>
-                  <div className="w-full space-y-3 text-left text-sm text-slate-500">
+                  <div className="w-full space-y-3 text-left text-sm text-muted">
                     <div className="flex items-start gap-3">
-                      <Mail className="mt-0.5 h-4 w-4 text-slate-400" />
+                      <Mail className="mt-0.5 h-4 w-4 text-muted" />
                       <span>{user.email}</span>
                     </div>
                     <div className="flex items-start gap-3">
-                      <UserLock className="mt-0.5 h-4 w-4 text-slate-400" />
+                      <UserLock className="mt-0.5 h-4 w-4 text-muted" />
                       <span>{user.authAccountId ?? 'No linked auth account'}</span>
                     </div>
                     <div className="flex items-start gap-3">
-                      <Shield className="mt-0.5 h-4 w-4 text-slate-400" />
+                      <Shield className="mt-0.5 h-4 w-4 text-muted" />
                       <span>{user.createdAt ? `Created ${new Date(user.createdAt).toLocaleString()}` : 'Creation date unavailable'}</span>
                     </div>
                   </div>
@@ -285,11 +285,11 @@ export default function UserDetailPage() {
                 <AdminRoutePanel title="Operational Context" description="Only data the backend currently knows about this user is shown here.">
                   <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
-                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Profession</p>
-                      <p className="text-sm text-slate-600">{user.profession ?? 'Not assigned'}</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Profession</p>
+                      <p className="text-sm text-muted">{user.profession ?? 'Not assigned'}</p>
                     </div>
                     <div className="space-y-2">
-                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Specialties</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Specialties</p>
                       <div className="flex flex-wrap gap-2">
                         {user.specialties && user.specialties.length > 0 ? (
                           user.specialties.map((specialty) => (
@@ -298,7 +298,7 @@ export default function UserDetailPage() {
                             </Badge>
                           ))
                         ) : (
-                          <span className="text-sm text-slate-500">No specialties recorded</span>
+                          <span className="text-sm text-muted">No specialties recorded</span>
                         )}
                       </div>
                     </div>
@@ -307,21 +307,21 @@ export default function UserDetailPage() {
 
                 <AdminRoutePanel title="Access Controls" description="Actions hidden here are not available in the current backend account model.">
                   <div className="grid gap-3 md:grid-cols-4">
-                    <div className="rounded-xl border border-slate-200 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Suspend / Reactivate</p>
-                      <p className="mt-2 text-sm text-slate-600">{user.availableActions.canSuspend ? 'Supported' : 'Not supported for this account type'}</p>
+                    <div className="rounded-[20px] border border-gray-200 bg-background-light p-4 shadow-sm">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Suspend / Reactivate</p>
+                      <p className="mt-2 text-sm text-muted">{user.availableActions.canSuspend ? 'Supported' : 'Not supported for this account type'}</p>
                     </div>
-                    <div className="rounded-xl border border-slate-200 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Delete / Restore</p>
-                      <p className="mt-2 text-sm text-slate-600">{user.availableActions.canDelete || user.availableActions.canRestore ? 'Supported' : 'Not supported for this account type'}</p>
+                    <div className="rounded-[20px] border border-gray-200 bg-background-light p-4 shadow-sm">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Delete / Restore</p>
+                      <p className="mt-2 text-sm text-muted">{user.availableActions.canDelete || user.availableActions.canRestore ? 'Supported' : 'Not supported for this account type'}</p>
                     </div>
-                    <div className="rounded-xl border border-slate-200 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Credit Adjustment</p>
-                      <p className="mt-2 text-sm text-slate-600">{user.availableActions.canAdjustCredits ? 'Supported' : 'Not applicable for this account type'}</p>
+                    <div className="rounded-[20px] border border-gray-200 bg-background-light p-4 shadow-sm">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Credit Adjustment</p>
+                      <p className="mt-2 text-sm text-muted">{user.availableActions.canAdjustCredits ? 'Supported' : 'Not applicable for this account type'}</p>
                     </div>
-                    <div className="rounded-xl border border-slate-200 p-4">
-                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Password Reset</p>
-                      <p className="mt-2 text-sm text-slate-600">{user.availableActions.canTriggerPasswordReset ? 'Supported' : 'No linked auth account available'}</p>
+                    <div className="rounded-[20px] border border-gray-200 bg-background-light p-4 shadow-sm">
+                      <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Password Reset</p>
+                      <p className="mt-2 text-sm text-muted">{user.availableActions.canTriggerPasswordReset ? 'Supported' : 'No linked auth account available'}</p>
                     </div>
                   </div>
                 </AdminRoutePanel>
@@ -341,7 +341,7 @@ export default function UserDetailPage() {
             hint="Use a negative number to remove credits when the current balance allows it."
           />
           <Input label="Reason" value={creditReason} onChange={(event) => setCreditReason(event.target.value)} />
-          <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
             <Button variant="outline" onClick={() => setIsCreditModalOpen(false)}>
               Cancel
             </Button>
@@ -358,7 +358,7 @@ export default function UserDetailPage() {
         title={lifecycleAction === 'delete' ? 'Delete Account' : 'Restore Account'}
       >
         <div className="space-y-4 py-2">
-          <div className="rounded-xl border border-slate-200 bg-slate-50 p-3 text-sm text-slate-600">
+          <div className="rounded-[20px] border border-gray-200 bg-background-light p-3 text-sm text-muted">
             {lifecycleAction === 'delete'
               ? 'Deleting the account removes it from active operation, blocks sign-in, and can be reversed later from this screen.'
               : 'Restoring the account removes the deleted marker and returns it to active operation.'}
@@ -369,7 +369,7 @@ export default function UserDetailPage() {
             onChange={(event) => setLifecycleReason(event.target.value)}
             hint="Optional, but helpful for the audit trail."
           />
-          <div className="flex justify-end gap-3 border-t border-slate-100 pt-4">
+          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
             <Button variant="outline" onClick={closeLifecycleModal}>
               Cancel
             </Button>

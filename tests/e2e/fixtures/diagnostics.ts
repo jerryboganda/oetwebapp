@@ -151,7 +151,8 @@ function shouldIgnoreConsoleError(
 
   if (
     options.allowNotificationReconnectNoise
-    && (text.includes("Connection disconnected with error 'TypeError: Load failed'.")
+    && (text === 'TypeError: Failed to fetch'
+      || text.includes("Connection disconnected with error 'TypeError: Load failed'.")
       || text.includes('Failed to complete negotiation with the server: TypeError: Failed to fetch')
       || text.includes('Failed to complete negotiation with the server: TypeError: Load failed')
       || text.includes('Failed to start the connection: Error: Failed to complete negotiation with the server: TypeError: Failed to fetch')
