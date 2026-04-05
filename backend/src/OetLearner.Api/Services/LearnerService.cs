@@ -3562,7 +3562,35 @@ public class LearnerService(
     {
         var normalizedProductType = (request.ProductType ?? string.Empty).Trim().ToLowerInvariant();
         var now = DateTimeOffset.UtcNow;
-        var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
+        var subscription = await db.Subscriptions.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        if (subscription is null)
+        {
+            var defaultPlan = await db.BillingPlans.AsNoTracking()
+                .Where(plan => plan.Status == BillingPlanStatus.Active)
+                .OrderBy(plan => plan.DisplayOrder)
+                .ThenBy(plan => plan.Price)
+                .FirstOrDefaultAsync(cancellationToken)
+                ?? throw ApiException.NotFound(
+                    "billing_plan_not_found",
+                    "No active billing plan is available for checkout.");
+
+            subscription = new Subscription
+            {
+                Id = CreateIdentifier("sub"),
+                UserId = userId,
+                PlanId = defaultPlan.Code,
+                Status = SubscriptionStatus.Active,
+                NextRenewalAt = now.AddMonths(Math.Max(defaultPlan.DurationMonths, 1)),
+                StartedAt = now,
+                ChangedAt = now,
+                PriceAmount = defaultPlan.Price,
+                Currency = defaultPlan.Currency,
+                Interval = defaultPlan.Interval
+            };
+
+            db.Subscriptions.Add(subscription);
+            await db.SaveChangesAsync(cancellationToken);
+        }
         var currentPlan = await FindBillingPlanAsync(subscription.PlanId, cancellationToken);
         var addOnCodes = NormalizeCodes(request.AddOnCodes);
         var items = new List<BillingQuoteLineItem>();
