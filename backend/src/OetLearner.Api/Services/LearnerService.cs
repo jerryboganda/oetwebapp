@@ -3570,9 +3570,13 @@ public class LearnerService(
                 .OrderBy(plan => plan.DisplayOrder)
                 .ThenBy(plan => plan.Price)
                 .FirstOrDefaultAsync(cancellationToken)
+                ?? await db.BillingPlans.AsNoTracking()
+                    .OrderBy(plan => plan.DisplayOrder)
+                    .ThenBy(plan => plan.Price)
+                    .FirstOrDefaultAsync(cancellationToken)
                 ?? throw ApiException.NotFound(
                     "billing_plan_not_found",
-                    "No active billing plan is available for checkout.");
+                    "No billing plan is available for checkout.");
 
             subscription = new Subscription
             {
@@ -4057,9 +4061,13 @@ public class LearnerService(
                 .OrderBy(plan => plan.DisplayOrder)
                 .ThenBy(plan => plan.Price)
                 .FirstOrDefaultAsync(cancellationToken)
+                ?? await db.BillingPlans.AsNoTracking()
+                    .OrderBy(plan => plan.DisplayOrder)
+                    .ThenBy(plan => plan.Price)
+                    .FirstOrDefaultAsync(cancellationToken)
                 ?? throw ApiException.NotFound(
                     "billing_plan_not_found",
-                    "No active billing plan is available for checkout.");
+                    "No billing plan is available for checkout.");
 
             subscription = new Subscription
             {
