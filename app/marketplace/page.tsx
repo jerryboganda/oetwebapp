@@ -1,0 +1,356 @@
+'use client';
+
+import { useEffect, useState, useCallback } from 'react';
+import { motion, AnimatePresence } from 'motion/react';
+import { Store, Search, Upload, ChevronRight, Filter, BookOpen, Mic, Pen, Headphones, Clock, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import Link from 'next/link';
+import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero, ExamTypeBadge } from '@/components/domain';
+import { Skeleton } from '@/components/ui/skeleton';
+import { InlineAlert } from '@/components/ui/alert';
+import { analytics } from '@/lib/analytics';
+
+type Submission = {
+  id: string;
+  contributorId: string;
+  examFamilyCode: string;
+  subtestCode: string;
+  title: string;
+  description: string | null;
+  contentType: string;
+  difficulty: string;
+  tags: string | null;
+  status: string;
+  submittedAt: string;
+  approvedAt: string | null;
+};
+
+type ContributorProfile = {
+  id: string;
+  displayName: string;
+  bio: string | null;
+  verificationStatus: string;
+  submissionCount: number;
+  approvedCount: number;
+  rating: number;
+};
+
+const SUBTEST_ICONS: Record<string, typeof BookOpen> = {
+  writing: Pen,
+  speaking: Mic,
+  reading: BookOpen,
+  listening: Headphones,
+};
+
+const STATUS_CONFIG: Record<string, { label: string; icon: typeof CheckCircle2; color: string }> = {
+  pending: { label: 'Pending Review', icon: Clock, color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300' },
+  in_review: { label: 'In Review', icon: Loader2, color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' },
+  approved: { label: 'Approved', icon: CheckCircle2, color: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' },
+  rejected: { label: 'Rejected', icon: XCircle, color: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' },
+};
+
+async function apiFetch(path: string, options?: RequestInit) {
+  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
+  const token = await ensureFreshAccessToken();
+  const { env } = await import('@/lib/env');
+  const res = await fetch(`${env.apiBaseUrl}${path}`, {
+    ...options,
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...options?.headers },
+  });
+  if (!res.ok) throw new Error(`API ${res.status}`);
+  return res.json();
+}
+
+export default function MarketplacePage() {
+  const [tab, setTab] = useState<'browse' | 'submit' | 'my'>('browse');
+  const [profile, setProfile] = useState<ContributorProfile | null>(null);
+  const [browseItems, setBrowseItems] = useState<Submission[]>([]);
+  const [myItems, setMyItems] = useState<Submission[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [searchQ, setSearchQ] = useState('');
+  const [filterSubtest, setFilterSubtest] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  // Submit form
+  const [submitForm, setSubmitForm] = useState({
+    title: '', subtestCode: 'writing', description: '', difficulty: 'medium',
+    contentType: 'practice_task', tags: '', examFamilyCode: 'oet',
+    contentPayloadJson: '{}',
+  });
+  const [submitting, setSubmitting] = useState(false);
+  const [submitSuccess, setSubmitSuccess] = useState(false);
+
+  const loadBrowse = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({ page: '1', pageSize: '20' });
+      if (searchQ) params.set('search', searchQ);
+      if (filterSubtest) params.set('subtest', filterSubtest);
+      const data = await apiFetch(`/v1/marketplace/browse?${params}`);
+      setBrowseItems(Array.isArray(data.items) ? data.items : []);
+    } catch { setError('Failed to load marketplace content.'); }
+  }, [searchQ, filterSubtest]);
+
+  const loadMy = useCallback(async () => {
+    try {
+      const data = await apiFetch('/v1/marketplace/submissions?page=1&pageSize=50');
+      setMyItems(Array.isArray(data.items) ? data.items : []);
+    } catch { /* Ignore - user may not have submissions */ }
+  }, []);
+
+  useEffect(() => {
+    analytics.track('marketplace_page_viewed');
+    const init = async () => {
+      try {
+        const p = await apiFetch('/v1/marketplace/profile');
+        setProfile(p);
+      } catch { /* first visit */ }
+      await loadBrowse();
+      await loadMy();
+      setLoading(false);
+    };
+    void init();
+  }, [loadBrowse, loadMy]);
+
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (submitting || !submitForm.title.trim()) return;
+    setSubmitting(true);
+    setSubmitSuccess(false);
+    setError(null);
+    try {
+      // Ensure profile exists
+      if (!profile) {
+        const p = await apiFetch('/v1/marketplace/profile');
+        setProfile(p);
+      }
+      await apiFetch('/v1/marketplace/submissions', {
+        method: 'POST',
+        body: JSON.stringify(submitForm),
+      });
+      analytics.track('marketplace_submission_created');
+      setSubmitSuccess(true);
+      setSubmitForm(f => ({ ...f, title: '', description: '', tags: '', contentPayloadJson: '{}' }));
+      await loadMy();
+    } catch {
+      setError('Failed to submit content. Please try again.');
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+  return (
+    <LearnerDashboardShell>
+      <LearnerPageHero
+        title="Content Marketplace"
+        description="Browse community-contributed OET practice content or submit your own."
+        icon={Store}
+        accent="blue"
+      />
+
+      {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
+
+      {/* Tabs */}
+      <div className="flex gap-1 mb-6 bg-gray-100 dark:bg-gray-800 rounded-xl p-1">
+        {[
+          { key: 'browse' as const, label: 'Browse', icon: Search },
+          { key: 'submit' as const, label: 'Submit Content', icon: Upload },
+          { key: 'my' as const, label: 'My Submissions', icon: BookOpen },
+        ].map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-colors ${
+              tab === t.key ? 'bg-white dark:bg-gray-700 text-gray-900 dark:text-white shadow-sm' : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+            }`}>
+            <t.icon className="w-4 h-4" /> {t.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Browse Tab */}
+      {tab === 'browse' && (
+        <section>
+          <div className="flex gap-3 mb-4">
+            <div className="flex-1 relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input type="text" placeholder="Search content..." value={searchQ}
+                onChange={e => setSearchQ(e.target.value)}
+                onKeyDown={e => e.key === 'Enter' && loadBrowse()}
+                className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 outline-none" />
+            </div>
+            <select value={filterSubtest} onChange={e => { setFilterSubtest(e.target.value); }}
+              className="px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
+              <option value="">All Subtests</option>
+              <option value="writing">Writing</option>
+              <option value="speaking">Speaking</option>
+              <option value="reading">Reading</option>
+              <option value="listening">Listening</option>
+            </select>
+            <button onClick={loadBrowse} className="px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-sm font-semibold flex items-center gap-1">
+              <Filter className="w-4 h-4" /> Filter
+            </button>
+          </div>
+
+          {loading ? (
+            <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
+          ) : browseItems.length === 0 ? (
+            <div className="text-center py-16 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
+              <Store className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-gray-500">No marketplace content yet</p>
+              <p className="text-xs text-gray-400 mt-1">Be the first to submit practice content!</p>
+            </div>
+          ) : (
+            <AnimatePresence>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {browseItems.map((item, i) => {
+                  const SubIcon = SUBTEST_ICONS[item.subtestCode] ?? BookOpen;
+                  return (
+                    <motion.div key={item.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+                      className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 hover:border-cyan-300 dark:hover:border-cyan-600 hover:shadow-sm transition-all">
+                      <div className="flex items-start gap-3">
+                        <div className="p-2 rounded-lg bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400">
+                          <SubIcon className="w-5 h-5" />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-1">
+                            <h3 className="text-sm font-semibold text-gray-900 dark:text-white truncate">{item.title}</h3>
+                            <ExamTypeBadge examType={item.examFamilyCode} size="sm" />
+                          </div>
+                          {item.description && <p className="text-xs text-gray-500 line-clamp-2 mb-2">{item.description}</p>}
+                          <div className="flex items-center gap-2 text-xs text-gray-400">
+                            <span className="capitalize">{item.subtestCode}</span>
+                            <span>•</span>
+                            <span className="capitalize">{item.difficulty}</span>
+                            {item.approvedAt && <><span>•</span><span>{dateFormatter.format(new Date(item.approvedAt))}</span></>}
+                          </div>
+                        </div>
+                        <ChevronRight className="w-4 h-4 text-gray-300 mt-1" />
+                      </div>
+                    </motion.div>
+                  );
+                })}
+              </div>
+            </AnimatePresence>
+          )}
+        </section>
+      )}
+
+      {/* Submit Tab */}
+      {tab === 'submit' && (
+        <section className="max-w-xl">
+          {submitSuccess && (
+            <InlineAlert variant="success" className="mb-4">
+              Content submitted successfully! It will be reviewed by our team.
+            </InlineAlert>
+          )}
+          <form onSubmit={handleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Title *</label>
+              <input type="text" required value={submitForm.title} onChange={e => setSubmitForm(f => ({ ...f, title: e.target.value }))}
+                className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 outline-none" />
+            </div>
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Subtest *</label>
+                <select value={submitForm.subtestCode} onChange={e => setSubmitForm(f => ({ ...f, subtestCode: e.target.value }))}
+                  className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
+                  <option value="writing">Writing</option>
+                  <option value="speaking">Speaking</option>
+                  <option value="reading">Reading</option>
+                  <option value="listening">Listening</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Difficulty</label>
+                <select value={submitForm.difficulty} onChange={e => setSubmitForm(f => ({ ...f, difficulty: e.target.value }))}
+                  className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
+                  <option value="easy">Easy</option>
+                  <option value="medium">Medium</option>
+                  <option value="hard">Hard</option>
+                </select>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Description</label>
+              <textarea rows={3} value={submitForm.description} onChange={e => setSubmitForm(f => ({ ...f, description: e.target.value }))}
+                className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 outline-none resize-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Content (JSON)</label>
+              <textarea rows={6} value={submitForm.contentPayloadJson} onChange={e => setSubmitForm(f => ({ ...f, contentPayloadJson: e.target.value }))}
+                placeholder='{"caseNotes": "...", "instructions": "..."}'
+                className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-mono focus:ring-2 focus:ring-cyan-500 outline-none resize-none" />
+            </div>
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Tags (comma-separated)</label>
+              <input type="text" value={submitForm.tags} onChange={e => setSubmitForm(f => ({ ...f, tags: e.target.value }))}
+                placeholder="nursing, referral, cardiology"
+                className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 outline-none" />
+            </div>
+            <button type="submit" disabled={submitting || !submitForm.title.trim()}
+              className="w-full py-3 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors">
+              {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : <><Upload className="w-4 h-4" /> Submit for Review</>}
+            </button>
+          </form>
+        </section>
+      )}
+
+      {/* My Submissions Tab */}
+      {tab === 'my' && (
+        <section>
+          {/* Profile Summary */}
+          {profile && (
+            <div className="bg-gradient-to-br from-cyan-50 to-teal-50 dark:from-cyan-950/30 dark:to-teal-950/30 rounded-xl border border-cyan-200/60 dark:border-cyan-800/40 p-4 mb-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 dark:text-white">{profile.displayName}</h3>
+                  <p className="text-xs text-gray-500 capitalize">{profile.verificationStatus}</p>
+                </div>
+                <div className="flex gap-4 text-center">
+                  <div><div className="text-lg font-bold text-cyan-600">{profile.submissionCount}</div><div className="text-xs text-gray-400">Submitted</div></div>
+                  <div><div className="text-lg font-bold text-green-600">{profile.approvedCount}</div><div className="text-xs text-gray-400">Approved</div></div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {myItems.length === 0 ? (
+            <div className="text-center py-12 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
+              <Upload className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+              <p className="text-sm font-semibold text-gray-500">No submissions yet</p>
+              <p className="text-xs text-gray-400 mt-1">Switch to the Submit tab to contribute content</p>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {myItems.map((item, i) => {
+                const statusInfo = STATUS_CONFIG[item.status] ?? STATUS_CONFIG.pending;
+                const StatusIcon = statusInfo.icon;
+                return (
+                  <motion.div key={item.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+                    className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 mb-0.5">
+                          <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{item.title}</span>
+                          <ExamTypeBadge examType={item.examFamilyCode} size="sm" />
+                        </div>
+                        <div className="flex items-center gap-2 text-xs text-gray-400">
+                          <span className="capitalize">{item.subtestCode}</span>
+                          <span>•</span>
+                          <span>{dateFormatter.format(new Date(item.submittedAt))}</span>
+                        </div>
+                      </div>
+                      <span className={`text-xs font-medium px-2.5 py-1 rounded-full flex items-center gap-1 ${statusInfo.color}`}>
+                        <StatusIcon className="w-3 h-3" /> {statusInfo.label}
+                      </span>
+                    </div>
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
+        </section>
+      )}
+    </LearnerDashboardShell>
+  );
+}

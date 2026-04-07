@@ -21,6 +21,7 @@ import CountryCodeSelect, {
 import { AuthScreenShell } from '@/components/auth/auth-screen-shell';
 import styles from '@/components/auth/auth-screen-shell.module.scss';
 import { PasswordField } from '@/components/auth/password-field';
+import { RegisterPlanPreview } from '@/components/auth/register/register-plan-preview';
 import { buildExternalAuthStartHref, registerLearner } from '@/lib/auth-client';
 import { AUTH_ROUTES, getAuthFlowLinks } from '@/lib/auth/routes';
 import {
@@ -57,7 +58,7 @@ export function RegisterForm() {
   const [selectedCountryCode, setSelectedCountryCode] = useState('pk');
   const [mobileLocalNumber, setMobileLocalNumber] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const { enrollmentSessions, examTypes, externalAuthProviders, professions } = useSignupCatalog();
+  const { billingPlans, enrollmentSessions, examTypes, externalAuthProviders, professions } = useSignupCatalog();
   const nextPath = searchParams.get('next');
   const registrationToken = searchParams.get('registrationToken');
   const externalEmail = searchParams.get('email') ?? '';
@@ -477,6 +478,8 @@ export function RegisterForm() {
                 <p>Select a session to preview the cohort summary.</p>
               )}
             </div>
+
+            <RegisterPlanPreview billingPlans={billingPlans} />
           </>
         ) : null}
 

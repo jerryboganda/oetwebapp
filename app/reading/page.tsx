@@ -37,12 +37,12 @@ export default function ReadingHome() {
     }
 
     let cancelled = false;
-    setLoading(true);
-    setError(null);
     analytics.track('module_entry', { module: 'reading' });
 
     (async () => {
       try {
+        setLoading(true);
+        setError(null);
         const [readingHome, reports] = await Promise.all([fetchReadingHome(), fetchMockReports()]);
         if (cancelled) return;
         setHome(readingHome);

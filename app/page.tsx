@@ -13,6 +13,7 @@ import {
   Headphones,
   Mic,
   Sparkles,
+  Shield,
   Star,
   Timer,
   TrendingUp,
@@ -51,6 +52,7 @@ export default function Dashboard() {
   const prefersReducedMotion = useReducedMotion();
   const { data, error, reload, status } = useDashboardHome();
   const { home, profile, readiness, tasks, engagement } = data;
+  const freeze = home?.freeze?.currentFreeze ?? null;
 
   const todayTasks = tasks.filter((task) => task.section === 'today');
   const upcomingTasks = tasks.filter((task) => task.section === 'thisWeek');
@@ -147,6 +149,43 @@ export default function Dashboard() {
             description="Use the dashboard to decide the next action, check readiness evidence, and move without guesswork."
             highlights={dashboardHeroHighlights}
           />
+
+          {freeze ? (
+            <Card className="border-amber-200 bg-amber-50/70 shadow-sm">
+              <CardHeader className="pb-3">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div>
+                    <p className="text-xs font-bold uppercase tracking-[0.18em] text-amber-700">Read-only mode</p>
+                    <CardTitle className="mt-2 flex items-center gap-2 text-xl text-amber-950">
+                      <Shield className="h-5 w-5" />
+                      Your account is currently frozen
+                    </CardTitle>
+                  </div>
+                  <Button variant="outline" onClick={() => router.push('/freeze')}>
+                    Open Freeze Center
+                  </Button>
+                </div>
+              </CardHeader>
+              <CardContent className="grid gap-3 sm:grid-cols-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700/70">Status</p>
+                  <p className="mt-1 text-sm font-semibold text-amber-950">{String(freeze.status ?? 'active')}</p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700/70">Started</p>
+                  <p className="mt-1 text-sm font-semibold text-amber-950">
+                    {freeze.startedAt ? new Date(freeze.startedAt).toLocaleString() : 'Pending'}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-amber-700/70">Ends</p>
+                  <p className="mt-1 text-sm font-semibold text-amber-950">
+                    {freeze.endedAt ? new Date(freeze.endedAt).toLocaleString() : 'Not set'}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : null}
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {nextActionCard ? (

@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using OetLearner.Api.Domain;
 
 namespace OetLearner.Api.Services;
@@ -5,7 +7,11 @@ namespace OetLearner.Api.Services;
 public static class NotificationScheduling
 {
     public static string BuildDedupeKey(NotificationEventKey eventKey, string authAccountId, string entityType, string entityId, string versionOrDateBucket)
-        => $"{eventKey}:{authAccountId}:{entityType}:{entityId}:{versionOrDateBucket}";
+    {
+        var raw = $"{eventKey}:{authAccountId}:{entityType}:{entityId}:{versionOrDateBucket}";
+        var hash = SHA256.HashData(Encoding.UTF8.GetBytes(raw));
+        return Convert.ToHexString(hash);
+    }
 
     public static string GetLocalDateBucket(DateTimeOffset utcTimestamp, string timezone)
     {

@@ -15,6 +15,7 @@ using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Endpoints;
+using OetLearner.Api.Hubs;
 using OetLearner.Api.Security;
 using OetLearner.Api.Services;
 
@@ -251,7 +252,8 @@ void ConfigureJwtBearer(JwtBearerOptions options)
         {
             var accessToken = context.Request.Query["access_token"].FirstOrDefault();
             if (!string.IsNullOrWhiteSpace(accessToken)
-                && context.HttpContext.Request.Path.StartsWithSegments("/v1/notifications/hub"))
+                && (context.HttpContext.Request.Path.StartsWithSegments("/v1/notifications/hub")
+                    || context.HttpContext.Request.Path.StartsWithSegments("/v1/conversations/hub")))
             {
                 context.Token = accessToken;
             }
@@ -372,6 +374,22 @@ builder.Services.AddScoped<PaymentGatewayService>();
 builder.Services.AddScoped<WalletService>();
 builder.Services.AddScoped<EngagementService>();
 builder.Services.AddHostedService<BackgroundJobProcessor>();
+
+// ── Phase 1 new services ──
+builder.Services.AddScoped<GamificationService>();
+builder.Services.AddScoped<SpacedRepetitionService>();
+builder.Services.AddScoped<VocabularyService>();
+builder.Services.AddScoped<AdaptiveDifficultyService>();
+
+// ── Phase 2 new services ──
+builder.Services.AddScoped<PredictionService>();
+builder.Services.AddScoped<ScoringService>();
+builder.Services.AddScoped<ContentGenerationService>();
+builder.Services.AddSingleton<SpeechToTextService>();
+builder.Services.AddScoped<ConversationService>();
+builder.Services.AddScoped<PronunciationService>();
+builder.Services.AddScoped<WritingCoachService>();
+builder.Services.AddScoped<MarketplaceService>();
 
 var app = builder.Build();
 
@@ -585,7 +603,29 @@ app.MapNotificationEndpoints();
 app.MapLearnerEndpoints();
 app.MapExpertEndpoints();
 app.MapAdminEndpoints();
+
+// ── Phase 1 new endpoints ──
+app.MapGamificationEndpoints();
+app.MapReviewItemEndpoints();
+app.MapVocabularyEndpoints();
+app.MapAdaptiveEndpoints();
+
+// ── Phase 2 new endpoints ──
+app.MapPredictionEndpoints();
+
+// ── Phase 3 new endpoints ──
+app.MapLearningContentEndpoints();
+app.MapCommunityEndpoints();
+app.MapSocialEndpoints();
+
+// ── Phase 2 new endpoints ──
+app.MapConversationEndpoints();
+app.MapPronunciationEndpoints();
+app.MapWritingCoachEndpoints();
+app.MapMarketplaceEndpoints();
+
 app.MapHub<NotificationHub>("/v1/notifications/hub").RequireAuthorization();
+app.MapHub<ConversationHub>("/v1/conversations/hub").RequireAuthorization();
 
 await using (var scope = app.Services.CreateAsyncScope())
 {

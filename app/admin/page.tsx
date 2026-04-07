@@ -69,6 +69,9 @@ export default function AdminDashboardPage() {
                     <Link href="/admin/review-ops" className={`${quickActionLinkClassName} bg-primary text-white shadow-sm hover:bg-primary/90`}>
                       Open Review Ops
                     </Link>
+                    <Link href="/admin/freeze" className={`${quickActionLinkClassName} border border-gray-300 text-navy hover:bg-gray-50`}>
+                      Open Freeze Center
+                    </Link>
                     <Link href="/admin/content" className={`${quickActionLinkClassName} border border-gray-300 text-navy hover:bg-gray-50`}>
                       Open Content Library
                     </Link>
@@ -164,6 +167,7 @@ export default function AdminDashboardPage() {
                 {[
                   { href: '/admin/content', label: 'Content Library' },
                   { href: '/admin/review-ops', label: 'Review Ops' },
+                  { href: '/admin/freeze', label: 'Freeze Center' },
                   { href: '/admin/billing', label: 'Billing Ops' },
                   { href: '/admin/analytics/quality', label: 'Quality Analytics' },
                 ].map((link) => (

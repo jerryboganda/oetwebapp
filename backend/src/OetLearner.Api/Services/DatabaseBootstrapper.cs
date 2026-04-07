@@ -47,6 +47,7 @@ public static class DatabaseBootstrapper
 
         await EnsureAdminSchemaCompatibilityAsync(db, cancellationToken);
         await EnsureExpertSchemaCompatibilityAsync(db, cancellationToken);
+        await EnsureFreezePolicyAsync(db, cancellationToken);
 
         // Reference data (professions, subtests, criteria, content) is always seeded
         await SeedData.EnsureReferenceDataAsync(db, cancellationToken);
@@ -171,6 +172,46 @@ public static class DatabaseBootstrapper
             cancellationToken);
     }
 #pragma warning restore EF1002
+
+    private static async Task EnsureFreezePolicyAsync(LearnerDbContext db, CancellationToken cancellationToken)
+    {
+        if (await db.AccountFreezePolicies.AnyAsync(cancellationToken))
+        {
+            return;
+        }
+
+        db.AccountFreezePolicies.Add(new AccountFreezePolicy
+        {
+            Id = "freeze-policy-default",
+            IsEnabled = true,
+            SelfServiceEnabled = true,
+            ApprovalMode = FreezeApprovalMode.AutoApprove,
+            MinDurationDays = 1,
+            MaxDurationDays = 365,
+            AllowScheduling = true,
+            AccessMode = FreezeAccessMode.ReadOnly,
+            EntitlementPauseMode = FreezeEntitlementPauseMode.InternalClock,
+            RequireReason = true,
+            RequireInternalNotes = false,
+            AllowActivePaid = true,
+            AllowGracePeriod = true,
+            AllowTrial = false,
+            AllowComplimentary = false,
+            AllowCancelled = false,
+            AllowExpired = false,
+            AllowReviewOnly = false,
+            AllowPastDue = false,
+            AllowSuspended = false,
+            PolicyNotes = "Default internal freeze policy seeded at startup.",
+            EligibilityReasonCodesJson = "[\"active_paid\",\"grace_period\"]",
+            UpdatedByAdminId = null,
+            UpdatedByAdminName = null,
+            UpdatedAt = DateTimeOffset.UtcNow,
+            Version = 1
+        });
+
+        await db.SaveChangesAsync(cancellationToken);
+    }
 
     private static string QuoteIdentifier(string identifier)
         => $"\"{identifier.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";

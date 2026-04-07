@@ -116,6 +116,29 @@ public class LearnerSurfaceContractTests : IClassFixture<TestWebApplicationFacto
     }
 
     [Fact]
+    public async Task SignupCatalog_ExposesBillingPlansForRegistration()
+    {
+        var response = await _client.GetAsync("/v1/auth/catalog/signup");
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.True(json.RootElement.TryGetProperty("billingPlans", out var billingPlans));
+        Assert.Equal(JsonValueKind.Array, billingPlans.ValueKind);
+
+        if (billingPlans.GetArrayLength() > 0)
+        {
+            using var enumerator = billingPlans.EnumerateArray();
+            Assert.True(enumerator.MoveNext());
+            var firstPlan = enumerator.Current;
+
+            Assert.True(firstPlan.TryGetProperty("code", out _));
+            Assert.True(firstPlan.TryGetProperty("label", out _));
+            Assert.True(firstPlan.TryGetProperty("isVisible", out _));
+            Assert.True(firstPlan.TryGetProperty("entitlements", out _));
+        }
+    }
+
+    [Fact]
     public async Task NewLearner_MockAndBillingSurfacesHydrateWithoutExistingData()
     {
         using var client = await CreateClientForUserAsync("surface-new-user");

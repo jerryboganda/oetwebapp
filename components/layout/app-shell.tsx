@@ -1,11 +1,13 @@
 'use client';
 
 import { Suspense, type ReactNode, useContext } from 'react';
+import { motion, useReducedMotion } from 'motion/react';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { AuthContext, AuthProvider } from '@/contexts/auth-context';
 import { NotificationCenterProvider } from '@/contexts/notification-center-context';
 import type { UserRole } from '@/lib/types/auth';
 import { cn } from '@/lib/utils';
+import { usePathname } from 'next/navigation';
 import { BottomNav, type NavItem, type ShellUserSummary, Sidebar } from './sidebar';
 import { TopNav } from './top-nav';
 
@@ -26,10 +28,13 @@ export interface AppShellProps {
 
 function ShellFallback() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background-light px-6">
-      <div className="space-y-2 text-center">
+    <div className="flex min-h-screen items-center justify-center px-6">
+      <div className="page-surface w-full max-w-sm rounded-[2rem] px-6 py-8 text-center shadow-lg">
+        <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+          <div className="h-5 w-5 rounded-full border-2 border-current border-t-transparent animate-spin" aria-hidden="true" />
+        </div>
         <p className="text-sm font-semibold text-navy">Loading workspace...</p>
-        <p className="text-xs text-muted">Preparing your authenticated session.</p>
+        <p className="mt-1 text-xs text-muted">Preparing your authenticated session.</p>
       </div>
     </div>
   );
@@ -49,25 +54,50 @@ export function AppShell({
 }: AppShellProps) {
   const authContext = useContext(AuthContext);
   const hasAuthProvider = authContext !== null;
+  const pathname = usePathname() ?? 'root';
+  const prefersReducedMotion = useReducedMotion() ?? false;
+
+  const pageMotionProps = prefersReducedMotion
+    ? { initial: false, animate: { opacity: 1 }, transition: { duration: 0 } }
+    : {
+        initial: { opacity: 0, y: 10 },
+        animate: { opacity: 1, y: 0 },
+        transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] as const },
+      };
+
+  const shellBackdrop = (
+    <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
+      <div className="absolute left-1/2 top-0 h-64 w-[42rem] -translate-x-1/2 rounded-full bg-primary/10 blur-3xl" />
+      <div className="absolute -left-24 top-24 h-72 w-72 rounded-full bg-info/10 blur-3xl" />
+      <div className="absolute bottom-0 right-0 h-72 w-72 rounded-full bg-warning/10 blur-3xl" />
+    </div>
+  );
 
   const shell = distractionFree ? (
-    <div className="min-h-[var(--app-viewport-height,100dvh)] flex flex-col bg-background-light">
+    <div className="relative isolate flex min-h-[var(--app-viewport-height,100dvh)] flex-col overflow-hidden bg-background-light text-navy">
+      {shellBackdrop}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:rounded-lg focus:shadow-lg"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-2xl focus:bg-primary focus:px-4 focus:py-2 focus:text-white focus:shadow-lg"
       >
         Skip to content
       </a>
       <TopNav pageTitle={pageTitle} actions={navActions} items={navItems} userSummary={userSummary} />
-      <main id="main-content" className={cn('flex-1 flex flex-col', className)}>
+      <motion.main
+        id="main-content"
+        key={pathname}
+        className={cn('relative z-10 flex-1 flex flex-col px-4 py-4 sm:px-6 lg:px-8 lg:py-6', className)}
+        {...pageMotionProps}
+      >
         {children}
-      </main>
+      </motion.main>
     </div>
   ) : (
-    <div className="flex min-h-[var(--app-viewport-height,100dvh)] flex-col bg-background-light lg:flex-row">
+    <div className="relative isolate flex min-h-[var(--app-viewport-height,100dvh)] flex-col overflow-hidden bg-background-light text-navy lg:flex-row">
+      {shellBackdrop}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-[100] focus:px-4 focus:py-2 focus:bg-primary focus:text-white focus:rounded-lg focus:shadow-lg"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-[100] focus:rounded-2xl focus:bg-primary focus:px-4 focus:py-2 focus:text-white focus:shadow-lg"
       >
         Skip to content
       </a>
@@ -79,7 +109,7 @@ export function AppShell({
         userSummary={userSummary}
       />
       <Sidebar items={navItems} userSummary={userSummary} />
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="relative z-10 flex min-w-0 flex-1 flex-col">
         <TopNav
           className="hidden lg:flex"
           pageTitle={pageTitle}
@@ -87,9 +117,14 @@ export function AppShell({
           items={navItems}
           userSummary={userSummary}
         />
-        <main id="main-content" className={cn('flex-1 overflow-y-auto pb-[calc(5rem+env(safe-area-inset-bottom))] lg:pb-0', className)}>
+        <motion.main
+          id="main-content"
+          key={pathname}
+          className={cn('relative flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 lg:px-8 lg:py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-6', className)}
+          {...pageMotionProps}
+        >
           {children}
-        </main>
+        </motion.main>
       </div>
       <BottomNav items={mobileNavItems} />
     </div>

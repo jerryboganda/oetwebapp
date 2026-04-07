@@ -9,7 +9,7 @@ using OetLearner.Api.Domain;
 
 namespace OetLearner.Api.Services;
 
-public class AdminService(
+public partial class AdminService(
     LearnerDbContext db,
     EmailOtpService emailOtpService,
     IPasswordHasher<ApplicationUserAccount> passwordHasher,

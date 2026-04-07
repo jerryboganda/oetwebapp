@@ -1,15 +1,17 @@
 import { loadEnvConfig } from '@next/env';
 import type { CapacitorConfig } from '@capacitor/cli';
+import { KeyboardResize } from '@capacitor/keyboard';
 
 import { resolveCapacitorAppUrl } from './lib/mobile/capacitor-config';
 
 loadEnvConfig(process.cwd(), false, console);
 
 const configuredAppUrl = resolveCapacitorAppUrl();
-const appUrl = configuredAppUrl || 'https://app.example.com';
+const productionAppUrl = 'https://app.oetwithdrhesham.co.uk';
+const appUrl = configuredAppUrl || productionAppUrl;
 
 if (!configuredAppUrl) {
-  console.warn('[capacitor] APP_URL/CAPACITOR_APP_URL was not set; falling back to https://app.example.com');
+  console.warn(`[capacitor] APP_URL/CAPACITOR_APP_URL was not set; falling back to ${productionAppUrl}`);
 }
 
 const config: CapacitorConfig = {
@@ -28,14 +30,18 @@ const config: CapacitorConfig = {
     allowMixedContent: true,
   },
   plugins: {
+    Keyboard: {
+      resize: KeyboardResize.Body,
+      resizeOnFullScreen: true,
+    },
     SplashScreen: {
       launchShowDuration: 0,
       showSpinner: false,
-      backgroundColor: '#f8fafc',
+      backgroundColor: '#f7f5ef',
     },
     StatusBar: {
       style: 'DARK',
-      backgroundColor: '#f8fafc',
+      backgroundColor: '#f7f5ef',
     },
   },
 };

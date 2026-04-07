@@ -17,6 +17,11 @@ public enum NotificationEventKey
     LearnerInvoiceFailed,
     LearnerSubscriptionChanged,
     LearnerAccountStatusChanged,
+    LearnerFreezeRequested,
+    LearnerFreezeApproved,
+    LearnerFreezeRejected,
+    LearnerFreezeStarted,
+    LearnerFreezeEnded,
     ExpertReviewAssigned,
     ExpertReviewClaimed,
     ExpertReviewReleased,
@@ -32,7 +37,9 @@ public enum NotificationEventKey
     AdminFeatureFlagChanged,
     AdminAiConfigChanged,
     AdminStuckJobAlert,
-    AdminNotificationDeliveryFailureAlert
+    AdminNotificationDeliveryFailureAlert,
+    AdminFreezePolicyChanged,
+    AdminFreezeLifecycleAction
 }
 
 public enum NotificationChannel

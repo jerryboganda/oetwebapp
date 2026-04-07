@@ -14,6 +14,26 @@ public static class AdminEndpoints
 
         admin.MapGet("/dashboard", async (AdminService service, CancellationToken ct)
             => Results.Ok(await service.GetDashboardSummaryAsync(ct)));
+        admin.MapGet("/freeze/overview", async (AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GetFreezeOverviewAsync(ct)));
+        admin.MapPut("/freeze/policy", async (HttpContext http, FreezePolicyRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.UpdateFreezePolicyAsync(http.AdminId(), http.AdminName(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+        admin.MapPost("/freeze/manual", async (HttpContext http, FreezeManualCreateRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.CreateManualFreezeAsync(http.AdminId(), http.AdminName(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+        admin.MapPost("/freeze/{freezeId}/approve", async (string freezeId, HttpContext http, FreezeActionRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ApproveFreezeAsync(http.AdminId(), http.AdminName(), freezeId, request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+        admin.MapPost("/freeze/{freezeId}/reject", async (string freezeId, HttpContext http, FreezeActionRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.RejectFreezeAsync(http.AdminId(), http.AdminName(), freezeId, request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+        admin.MapPost("/freeze/{freezeId}/end", async (string freezeId, HttpContext http, FreezeActionRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.EndFreezeAsync(http.AdminId(), http.AdminName(), freezeId, request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+        admin.MapPost("/freeze/{freezeId}/force-end", async (string freezeId, HttpContext http, FreezeActionRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ForceEndFreezeAsync(http.AdminId(), http.AdminName(), freezeId, request, ct)))
+            .RequireRateLimiting("PerUserWrite");
 
         // ── Content Management ──────────────────────────────
 
@@ -53,6 +73,18 @@ public static class AdminEndpoints
         admin.MapPost("/content/{contentId}/revisions/{revisionId}/restore", async (string contentId, string revisionId, HttpContext http, AdminService service, CancellationToken ct)
             => Results.Ok(await service.RestoreRevisionAsync(http.AdminId(), http.AdminName(), contentId, revisionId, ct)))
             .RequireRateLimiting("PerUserWrite");
+
+        // ── AI Content Generation ─────────────────────────
+
+        admin.MapPost("/content/generate", async (HttpContext http, ContentGenerationRequest request, ContentGenerationService service, CancellationToken ct)
+            => Results.Ok(await service.QueueGenerationAsync(http.AdminId(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        admin.MapGet("/content/generation-jobs", async (ContentGenerationService service, CancellationToken ct, int? page, int? pageSize)
+            => Results.Ok(await service.GetJobsAsync(page ?? 1, pageSize ?? 20, ct)));
+
+        admin.MapGet("/content/generation-jobs/{jobId}", async (string jobId, ContentGenerationService service, CancellationToken ct)
+            => Results.Ok(await service.GetJobDetailAsync(jobId, ct)));
 
         // ── Taxonomy (Professions) ──────────────────────────
 

@@ -72,10 +72,28 @@ export interface SignupSession {
   seatsRemaining: number;
 }
 
+export interface SignupBillingPlan {
+  id: string;
+  code: string;
+  label: string;
+  description: string;
+  priceAmount: number;
+  currency: string;
+  interval: string;
+  reviewCredits: number;
+  displayOrder: number;
+  isVisible: boolean;
+  isRenewable: boolean;
+  trialDays: number;
+  includedSubtests: string[];
+  entitlements: Record<string, unknown>;
+}
+
 export interface SignupCatalog {
   examTypes: SignupExamType[];
   professions: SignupProfession[];
   sessions: SignupSession[];
+  billingPlans: SignupBillingPlan[];
   externalAuthProviders: ExternalAuthProvider[];
 }
 

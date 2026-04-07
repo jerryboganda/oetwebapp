@@ -1,5 +1,5 @@
 const frontendBaseUrl = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000';
-const apiBaseUrl = process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:5198';
+const apiBaseUrl = process.env.PLAYWRIGHT_API_URL ?? 'http://localhost:5199';
 
 async function check(url, expectation) {
   const controller = new AbortController();

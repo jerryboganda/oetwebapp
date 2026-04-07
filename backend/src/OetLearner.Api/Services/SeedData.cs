@@ -49,6 +49,36 @@ public static class SeedData
             hasChanges = true;
         }
 
+        if (!await db.ExamTypes.AnyAsync(cancellationToken))
+        {
+            SeedExamTypes(db);
+            hasChanges = true;
+        }
+
+        if (!await db.Achievements.AnyAsync(cancellationToken))
+        {
+            SeedAchievements(db);
+            hasChanges = true;
+        }
+
+        if (!await db.VocabularyTerms.AnyAsync(cancellationToken))
+        {
+            SeedVocabularyTerms(db);
+            hasChanges = true;
+        }
+
+        if (!await db.ForumCategories.AnyAsync(cancellationToken))
+        {
+            SeedForumCategories(db);
+            hasChanges = true;
+        }
+
+        if (!await db.PronunciationDrills.AnyAsync(cancellationToken))
+        {
+            SeedPronunciationDrills(db);
+            hasChanges = true;
+        }
+
         if (hasChanges)
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -1373,10 +1403,36 @@ public static class SeedData
         // ─── Admin / CMS Seed Data ───
 
         db.FeatureFlags.AddRange(
+            // ── Existing operational flags ──
             new FeatureFlag { Id = "flg-001", Name = "AI Scoring V2", Key = "ai_scoring_v2", FlagType = FeatureFlagType.Release, Enabled = true, RolloutPercentage = 100, Description = "Enable AI scoring V2 pipeline for all subtests.", Owner = "Platform Team", CreatedAt = now.AddDays(-60), UpdatedAt = now.AddDays(-5) },
             new FeatureFlag { Id = "flg-002", Name = "Mock Exam Timer", Key = "mock_exam_timer", FlagType = FeatureFlagType.Release, Enabled = true, RolloutPercentage = 100, Description = "Show countdown timers in full mock exams.", Owner = "Product", CreatedAt = now.AddDays(-45), UpdatedAt = now.AddDays(-10) },
             new FeatureFlag { Id = "flg-003", Name = "Expert Double Review", Key = "expert_double_review", FlagType = FeatureFlagType.Experiment, Enabled = false, RolloutPercentage = 25, Description = "A/B test: assign two expert reviewers to each writing submission.", Owner = "QA Team", CreatedAt = now.AddDays(-14), UpdatedAt = now.AddDays(-1) },
-            new FeatureFlag { Id = "flg-004", Name = "Maintenance Banner", Key = "maintenance_banner", FlagType = FeatureFlagType.Operational, Enabled = false, RolloutPercentage = 0, Description = "Show maintenance notice banner across the platform.", Owner = "DevOps", CreatedAt = now.AddDays(-90), UpdatedAt = now.AddDays(-30) }
+            new FeatureFlag { Id = "flg-004", Name = "Maintenance Banner", Key = "maintenance_banner", FlagType = FeatureFlagType.Operational, Enabled = false, RolloutPercentage = 0, Description = "Show maintenance notice banner across the platform.", Owner = "DevOps", CreatedAt = now.AddDays(-90), UpdatedAt = now.AddDays(-30) },
+            // ── Phase 1 new feature flags ──
+            new FeatureFlag { Id = "flg-005", Name = "Multi-Exam Foundation", Key = "multi_exam_foundation", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable multi-exam support (IELTS, PTE, Cambridge, TOEFL) alongside OET.", Owner = "Platform Team", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-006", Name = "Adaptive Difficulty", Key = "adaptive_difficulty", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable Elo-based adaptive difficulty engine for content recommendations.", Owner = "Platform Team", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-007", Name = "Spaced Repetition", Key = "spaced_repetition", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable SM-2 spaced repetition review system for mistakes and weak areas.", Owner = "Platform Team", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-008", Name = "Gamification", Key = "gamification", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable XP, streaks, achievements, and leaderboard gamification mechanics.", Owner = "Product", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-009", Name = "Vocabulary Builder", Key = "vocabulary_builder", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable medical and academic vocabulary builder with flashcards and quizzes.", Owner = "Product", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-010", Name = "AI Content Generation", Key = "ai_content_generation", FlagType = FeatureFlagType.Operational, Enabled = false, RolloutPercentage = 0, Description = "Enable admin AI content generation tool.", Owner = "Content Team", CreatedAt = now, UpdatedAt = now },
+            // ── Phase 2 new feature flags ──
+            new FeatureFlag { Id = "flg-011", Name = "AI Conversation Practice", Key = "ai_conversation", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable AI roleplay conversation partner for speaking practice.", Owner = "Platform Team", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-012", Name = "AI Writing Coach", Key = "ai_writing_coach", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable real-time AI writing suggestions in the writing editor.", Owner = "Platform Team", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-013", Name = "Pronunciation Analysis", Key = "pronunciation_analysis", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable phoneme-level pronunciation analysis and drills.", Owner = "Platform Team", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-014", Name = "Performance Prediction", Key = "performance_prediction", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable predicted score forecasting based on practice history.", Owner = "Product", CreatedAt = now, UpdatedAt = now },
+            // ── Phase 3 new feature flags ──
+            new FeatureFlag { Id = "flg-015", Name = "Grammar Lessons", Key = "grammar_lessons", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable structured grammar lesson modules.", Owner = "Content Team", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-016", Name = "Video Lessons", Key = "video_lessons", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable video lesson catalogue.", Owner = "Content Team", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-017", Name = "Strategy Guides", Key = "strategy_guides", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable written exam strategy guides.", Owner = "Content Team", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-018", Name = "Community Forums", Key = "community_forums", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable community discussion forums and study groups.", Owner = "Product", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-019", Name = "Live Tutoring", Key = "live_tutoring", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable one-on-one live tutoring sessions with experts.", Owner = "Product", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-020", Name = "Certificates", Key = "certificates", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable achievement certificate generation and download.", Owner = "Product", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-021", Name = "Referral Program", Key = "referral_program", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable referral program with credit rewards.", Owner = "Growth", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-022", Name = "Sponsor Dashboard", Key = "sponsor_cohorts", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable sponsor dashboard and cohort management.", Owner = "Enterprise", CreatedAt = now, UpdatedAt = now },
+            // ── Phase 4 new feature flags ──
+            new FeatureFlag { Id = "flg-023", Name = "Exam Booking", Key = "exam_booking", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable exam booking integration with official booking portals.", Owner = "Product", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-024", Name = "Content Marketplace", Key = "content_marketplace", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable content contributor marketplace.", Owner = "Platform Team", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-025", Name = "Offline Mode", Key = "offline_mode", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable offline practice mode for mobile.", Owner = "Mobile Team", CreatedAt = now, UpdatedAt = now }
         );
 
         db.AIConfigVersions.AddRange(
@@ -1688,6 +1744,258 @@ public static class SeedData
             new BillingPlan { Id = "plan-premium-yearly", Code = "premium-yearly", Name = "Premium Yearly", Description = "Annual premium access with the same learner benefits and stronger retention value.", Price = 399.99m, Currency = "AUD", Interval = "yearly", DurationMonths = 12, IsVisible = true, IsRenewable = true, TrialDays = 0, DisplayOrder = 30, IncludedCredits = 6, IncludedSubtestsJson = JsonSupport.Serialize(new[] { "writing", "speaking" }), EntitlementsJson = JsonSupport.Serialize(new { productiveSkillReviewsEnabled = true, invoiceDownloadsAvailable = true }), ActiveSubscribers = 820, Status = BillingPlanStatus.Active, CreatedAt = now.AddMonths(-12), UpdatedAt = now.AddDays(-5) },
             new BillingPlan { Id = "plan-intensive-monthly", Code = "intensive-monthly", Name = "Intensive Monthly", Description = "Higher review capacity for repeated writing and speaking feedback before the exam window.", Price = 79.99m, Currency = "AUD", Interval = "monthly", DurationMonths = 1, IsVisible = true, IsRenewable = true, TrialDays = 0, DisplayOrder = 40, IncludedCredits = 8, IncludedSubtestsJson = JsonSupport.Serialize(new[] { "writing", "speaking" }), EntitlementsJson = JsonSupport.Serialize(new { productiveSkillReviewsEnabled = true, invoiceDownloadsAvailable = true }), ActiveSubscribers = 540, Status = BillingPlanStatus.Active, CreatedAt = now.AddMonths(-10), UpdatedAt = now.AddDays(-3) },
             new BillingPlan { Id = "plan-legacy-trial", Code = "legacy-trial", Name = "Legacy Trial", Description = "Legacy trial plan retained for compatibility.", Price = 0m, Currency = "AUD", Interval = "monthly", DurationMonths = 1, IsVisible = false, IsRenewable = false, TrialDays = 14, DisplayOrder = 0, IncludedCredits = 0, IncludedSubtestsJson = JsonSupport.Serialize(new[] { "writing", "speaking" }), EntitlementsJson = JsonSupport.Serialize(new { productiveSkillReviewsEnabled = true, invoiceDownloadsAvailable = true }), ActiveSubscribers = 0, Status = BillingPlanStatus.Legacy, CreatedAt = now.AddMonths(-24), UpdatedAt = now.AddMonths(-6) }
+        );
+    }
+
+    private static void SeedExamTypes(LearnerDbContext db)
+    {
+        db.ExamTypes.AddRange(
+            new ExamType
+            {
+                Code = "oet",
+                Label = "OET",
+                Description = "Occupational English Test for healthcare professionals.",
+                SubtestDefinitionsJson = """[{"code":"listening","label":"Listening","durationMinutes":45},{"code":"reading","label":"Reading","durationMinutes":60},{"code":"writing","label":"Writing","durationMinutes":45},{"code":"speaking","label":"Speaking","durationMinutes":20}]""",
+                ScoringSystemJson = """{"scale":"A-E","passing":"B","grades":[{"grade":"A","label":"Expert"},{"grade":"B","label":"Good"},{"grade":"C","label":"Borderline"},{"grade":"D","label":"Limited"},{"grade":"E","label":"Very Limited"}]}""",
+                TimingsJson = """{"listening":45,"reading":60,"writing":45,"speaking":20}""",
+                ProfessionIdsJson = """["medicine","nursing","pharmacy","dentistry","physiotherapy","occupational_therapy","radiography","optometry","veterinary","dietetics","podiatry","speech_pathology","social_work"]""",
+                Status = "active",
+                SortOrder = 1
+            },
+            new ExamType
+            {
+                Code = "ielts",
+                Label = "IELTS Academic",
+                Description = "International English Language Testing System (Academic) for higher education and professional registration.",
+                SubtestDefinitionsJson = """[{"code":"listening","label":"Listening","durationMinutes":40},{"code":"reading","label":"Reading","durationMinutes":60},{"code":"writing","label":"Writing","durationMinutes":60},{"code":"speaking","label":"Speaking","durationMinutes":15}]""",
+                ScoringSystemJson = """{"scale":"0-9","passing":6.5,"bandIncrement":0.5}""",
+                TimingsJson = """{"listening":40,"reading":60,"writing":60,"speaking":15}""",
+                ProfessionIdsJson = "[]",
+                Status = "planned",
+                SortOrder = 2
+            },
+            new ExamType
+            {
+                Code = "pte",
+                Label = "PTE Academic",
+                Description = "Pearson Test of English Academic — a computer-based test accepted by universities and governments worldwide.",
+                SubtestDefinitionsJson = """[{"code":"speaking_writing","label":"Speaking & Writing","durationMinutes":77},{"code":"reading","label":"Reading","durationMinutes":32},{"code":"listening","label":"Listening","durationMinutes":45}]""",
+                ScoringSystemJson = """{"scale":"10-90","passing":50}""",
+                TimingsJson = """{"speaking_writing":77,"reading":32,"listening":45}""",
+                ProfessionIdsJson = "[]",
+                Status = "planned",
+                SortOrder = 3
+            },
+            new ExamType
+            {
+                Code = "cambridge",
+                Label = "Cambridge English",
+                Description = "Cambridge English Qualifications (B2 First, C1 Advanced, C2 Proficiency) — globally recognised by universities and employers.",
+                SubtestDefinitionsJson = """[{"code":"reading_use","label":"Reading & Use of English","durationMinutes":75},{"code":"writing","label":"Writing","durationMinutes":80},{"code":"listening","label":"Listening","durationMinutes":40},{"code":"speaking","label":"Speaking","durationMinutes":15}]""",
+                ScoringSystemJson = """{"scale":"CEFR","levels":["B2","C1","C2"],"scores":{"B2":{"min":160,"max":179},"C1":{"min":180,"max":199},"C2":{"min":200,"max":230}}}""",
+                TimingsJson = """{"reading_use":75,"writing":80,"listening":40,"speaking":15}""",
+                ProfessionIdsJson = "[]",
+                Status = "planned",
+                SortOrder = 4
+            },
+            new ExamType
+            {
+                Code = "toefl",
+                Label = "TOEFL iBT",
+                Description = "Test of English as a Foreign Language (internet-based) — the world's most widely accepted English proficiency test.",
+                SubtestDefinitionsJson = """[{"code":"reading","label":"Reading","durationMinutes":54},{"code":"listening","label":"Listening","durationMinutes":41},{"code":"speaking","label":"Speaking","durationMinutes":17},{"code":"writing","label":"Writing","durationMinutes":50}]""",
+                ScoringSystemJson = """{"scale":"0-120","sectionMax":30,"passing":80}""",
+                TimingsJson = """{"reading":54,"listening":41,"speaking":17,"writing":50}""",
+                ProfessionIdsJson = "[]",
+                Status = "planned",
+                SortOrder = 5
+            }
+        );
+    }
+
+    private static void SeedAchievements(LearnerDbContext db)
+    {
+        db.Achievements.AddRange(
+            // ── Practice achievements ──
+            new Achievement { Id = "ach-001", Code = "first_attempt", Label = "First Step", Description = "Complete your very first practice attempt.", Category = "practice", XPReward = 25, CriteriaJson = """{"type":"attempt_count","threshold":1}""", SortOrder = 10, Status = "active" },
+            new Achievement { Id = "ach-002", Code = "attempts_10", Label = "Getting Started", Description = "Complete 10 practice attempts.", Category = "practice", XPReward = 50, CriteriaJson = """{"type":"attempt_count","threshold":10}""", SortOrder = 20, Status = "active" },
+            new Achievement { Id = "ach-003", Code = "attempts_50", Label = "Committed Learner", Description = "Complete 50 practice attempts.", Category = "practice", XPReward = 100, CriteriaJson = """{"type":"attempt_count","threshold":50}""", SortOrder = 30, Status = "active" },
+            new Achievement { Id = "ach-004", Code = "attempts_100", Label = "Century Mark", Description = "Complete 100 practice attempts.", Category = "practice", XPReward = 200, CriteriaJson = """{"type":"attempt_count","threshold":100}""", SortOrder = 40, Status = "active" },
+            new Achievement { Id = "ach-005", Code = "attempts_500", Label = "Practice Champion", Description = "Complete 500 practice attempts.", Category = "practice", XPReward = 500, CriteriaJson = """{"type":"attempt_count","threshold":500}""", SortOrder = 50, Status = "active" },
+            // ── Streak achievements ──
+            new Achievement { Id = "ach-010", Code = "streak_3", Label = "3-Day Streak", Description = "Maintain a 3-day study streak.", Category = "streak", XPReward = 30, CriteriaJson = """{"type":"streak_days","threshold":3}""", SortOrder = 100, Status = "active" },
+            new Achievement { Id = "ach-011", Code = "streak_7", Label = "Week Warrior", Description = "Maintain a 7-day study streak.", Category = "streak", XPReward = 75, CriteriaJson = """{"type":"streak_days","threshold":7}""", SortOrder = 110, Status = "active" },
+            new Achievement { Id = "ach-012", Code = "streak_14", Label = "Fortnight Focus", Description = "Maintain a 14-day study streak.", Category = "streak", XPReward = 150, CriteriaJson = """{"type":"streak_days","threshold":14}""", SortOrder = 120, Status = "active" },
+            new Achievement { Id = "ach-013", Code = "streak_30", Label = "Monthly Dedication", Description = "Maintain a 30-day study streak.", Category = "streak", XPReward = 300, CriteriaJson = """{"type":"streak_days","threshold":30}""", SortOrder = 130, Status = "active" },
+            new Achievement { Id = "ach-014", Code = "streak_100", Label = "Century Streak", Description = "Maintain a 100-day study streak.", Category = "streak", XPReward = 1000, CriteriaJson = """{"type":"streak_days","threshold":100}""", SortOrder = 140, Status = "active" },
+            // ── Score milestone achievements ──
+            new Achievement { Id = "ach-020", Code = "first_grade_b", Label = "Grade B Unlocked", Description = "Achieve an OET Grade B on any subtest for the first time.", Category = "milestone", XPReward = 150, CriteriaJson = """{"type":"first_grade","grade":"B","examTypeCode":"oet"}""", SortOrder = 200, Status = "active" },
+            new Achievement { Id = "ach-021", Code = "all_b_grade", Label = "All B's", Description = "Achieve Grade B or above on all four OET subtests in practice.", Category = "milestone", XPReward = 500, CriteriaJson = """{"type":"all_subtests_grade","grade":"B","examTypeCode":"oet"}""", SortOrder = 210, Status = "active" },
+            new Achievement { Id = "ach-022", Code = "grade_a_writing", Label = "Writing Ace", Description = "Achieve OET Grade A in Writing.", Category = "milestone", XPReward = 250, CriteriaJson = """{"type":"first_grade","grade":"A","subtest":"writing","examTypeCode":"oet"}""", SortOrder = 220, Status = "active" },
+            new Achievement { Id = "ach-023", Code = "grade_a_speaking", Label = "Speaking Star", Description = "Achieve OET Grade A in Speaking.", Category = "milestone", XPReward = 250, CriteriaJson = """{"type":"first_grade","grade":"A","subtest":"speaking","examTypeCode":"oet"}""", SortOrder = 230, Status = "active" },
+            new Achievement { Id = "ach-024", Code = "score_improvement", Label = "On the Rise", Description = "Improve your score on the same subtest across three consecutive attempts.", Category = "milestone", XPReward = 100, CriteriaJson = """{"type":"consecutive_improvement","count":3}""", SortOrder = 240, Status = "active" },
+            // ── Mastery achievements ──
+            new Achievement { Id = "ach-030", Code = "vocab_50", Label = "Word Collector", Description = "Add 50 vocabulary terms to your study list.", Category = "mastery", XPReward = 50, CriteriaJson = """{"type":"vocab_added","threshold":50}""", SortOrder = 300, Status = "active" },
+            new Achievement { Id = "ach-031", Code = "vocab_100", Label = "Vocabulary Builder", Description = "Add 100 vocabulary terms to your study list.", Category = "mastery", XPReward = 100, CriteriaJson = """{"type":"vocab_added","threshold":100}""", SortOrder = 310, Status = "active" },
+            new Achievement { Id = "ach-032", Code = "vocab_mastered_25", Label = "Word Master", Description = "Master 25 vocabulary terms.", Category = "mastery", XPReward = 100, CriteriaJson = """{"type":"vocab_mastered","threshold":25}""", SortOrder = 320, Status = "active" },
+            new Achievement { Id = "ach-033", Code = "review_sessions_10", Label = "Spaced Repetition Pro", Description = "Complete 10 spaced repetition review sessions.", Category = "mastery", XPReward = 75, CriteriaJson = """{"type":"review_sessions","threshold":10}""", SortOrder = 330, Status = "active" },
+            new Achievement { Id = "ach-034", Code = "pronunciation_drill_5", Label = "Articulate", Description = "Complete 5 pronunciation drill sessions.", Category = "mastery", XPReward = 60, CriteriaJson = """{"type":"pronunciation_drills","threshold":5}""", SortOrder = 340, Status = "active" },
+            new Achievement { Id = "ach-035", Code = "conversation_sessions_5", Label = "Conversationalist", Description = "Complete 5 AI conversation practice sessions.", Category = "mastery", XPReward = 100, CriteriaJson = """{"type":"conversation_sessions","threshold":5}""", SortOrder = 350, Status = "active" },
+            new Achievement { Id = "ach-036", Code = "grammar_lessons_5", Label = "Grammar Guru", Description = "Complete 5 grammar lessons.", Category = "mastery", XPReward = 75, CriteriaJson = """{"type":"grammar_lessons_completed","threshold":5}""", SortOrder = 360, Status = "active" },
+            // ── Social achievements ──
+            new Achievement { Id = "ach-040", Code = "first_forum_post", Label = "Community Member", Description = "Post your first message in the community forums.", Category = "social", XPReward = 25, CriteriaJson = """{"type":"forum_posts","threshold":1}""", SortOrder = 400, Status = "active" },
+            new Achievement { Id = "ach-041", Code = "forum_posts_10", Label = "Active Contributor", Description = "Post 10 messages in the community forums.", Category = "social", XPReward = 75, CriteriaJson = """{"type":"forum_posts","threshold":10}""", SortOrder = 410, Status = "active" },
+            new Achievement { Id = "ach-042", Code = "first_referral", Label = "Referral Pioneer", Description = "Successfully refer a friend to the platform.", Category = "social", XPReward = 100, CriteriaJson = """{"type":"referrals_converted","threshold":1}""", SortOrder = 420, Status = "active" },
+            new Achievement { Id = "ach-043", Code = "referrals_5", Label = "Brand Ambassador", Description = "Successfully refer 5 friends to the platform.", Category = "social", XPReward = 300, CriteriaJson = """{"type":"referrals_converted","threshold":5}""", SortOrder = 430, Status = "active" },
+            // ── Milestone XP achievements ──
+            new Achievement { Id = "ach-050", Code = "xp_500", Label = "Rising Star", Description = "Earn 500 total XP.", Category = "milestone", XPReward = 0, CriteriaJson = """{"type":"total_xp","threshold":500}""", SortOrder = 500, Status = "active" },
+            new Achievement { Id = "ach-051", Code = "xp_1000", Label = "Level Up", Description = "Earn 1,000 total XP.", Category = "milestone", XPReward = 0, CriteriaJson = """{"type":"total_xp","threshold":1000}""", SortOrder = 510, Status = "active" },
+            new Achievement { Id = "ach-052", Code = "xp_5000", Label = "XP Champion", Description = "Earn 5,000 total XP.", Category = "milestone", XPReward = 0, CriteriaJson = """{"type":"total_xp","threshold":5000}""", SortOrder = 520, Status = "active" },
+            new Achievement { Id = "ach-053", Code = "xp_10000", Label = "Elite Learner", Description = "Earn 10,000 total XP.", Category = "milestone", XPReward = 0, CriteriaJson = """{"type":"total_xp","threshold":10000}""", SortOrder = 530, Status = "active" },
+            new Achievement { Id = "ach-054", Code = "leaderboard_top10", Label = "Top 10", Description = "Reach the top 10 on the weekly leaderboard.", Category = "social", XPReward = 150, CriteriaJson = """{"type":"leaderboard_rank","threshold":10,"period":"weekly"}""", SortOrder = 540, Status = "active" },
+            new Achievement { Id = "ach-055", Code = "mock_exam_first", Label = "Mock Exam Taker", Description = "Complete your first full mock exam.", Category = "practice", XPReward = 75, CriteriaJson = """{"type":"mock_exams","threshold":1}""", SortOrder = 60, Status = "active" }
+        );
+    }
+
+    private static void SeedVocabularyTerms(LearnerDbContext db)
+    {
+        db.VocabularyTerms.AddRange(
+            // ── Clinical Communication ──
+            new VocabularyTerm { Id = "vt-001", Term = "analgesia", Definition = "The absence of pain or the relief of pain without loss of consciousness.", ExampleSentence = "The patient was given analgesia to manage post-operative pain.", ContextNotes = "Commonly used when referring to pain management in clinical settings.", ExamTypeCode = "oet", Category = "medical", Difficulty = "medium", SynonymsJson = """["pain relief","pain management"]""", CollocationsJson = """["provide analgesia","adequate analgesia","post-operative analgesia"]""", RelatedTermsJson = """["analgesic","nociception","pain score"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-002", Term = "dyspnoea", Definition = "Difficulty or laboured breathing; shortness of breath.", ExampleSentence = "The patient presented with acute dyspnoea on exertion.", ContextNotes = "Preferred clinical spelling in Australian/UK English (vs. 'dyspnea' in US English).", ExamTypeCode = "oet", Category = "medical", Difficulty = "medium", SynonymsJson = """["shortness of breath","breathlessness","SOB"]""", CollocationsJson = """["acute dyspnoea","dyspnoea on exertion","nocturnal dyspnoea"]""", RelatedTermsJson = """["tachypnoea","orthopnoea","respiratory distress"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-003", Term = "haemoptysis", Definition = "The coughing up of blood or blood-stained mucus from the bronchi, larynx, trachea, or lungs.", ExampleSentence = "The referral letter noted intermittent haemoptysis over the past three weeks.", ContextNotes = "Important OET writing term; always flag as a red flag symptom.", ExamTypeCode = "oet", Category = "medical", Difficulty = "hard", SynonymsJson = """["coughing up blood"]""", CollocationsJson = """["frank haemoptysis","intermittent haemoptysis","massive haemoptysis"]""", RelatedTermsJson = """["haematemesis","epistaxis","pulmonary embolism"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-004", Term = "oedema", Definition = "Swelling caused by excess fluid trapped in the body's tissues.", ExampleSentence = "Peripheral oedema was noted bilaterally up to the knees.", ContextNotes = "Australian/UK spelling. US spelling is 'edema'.", ExamTypeCode = "oet", Category = "medical", Difficulty = "medium", SynonymsJson = """["edema","swelling","fluid retention"]""", CollocationsJson = """["peripheral oedema","pitting oedema","pulmonary oedema","bilateral oedema"]""", RelatedTermsJson = """["ascites","pleural effusion","lymphoedema"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-005", Term = "tachycardia", Definition = "Abnormally rapid heart rate, typically defined as over 100 beats per minute in adults.", ExampleSentence = "The patient was in sinus tachycardia at 118 bpm on admission.", ContextNotes = "Can be physiological (exercise) or pathological; specify subtype in clinical notes.", ExamTypeCode = "oet", Category = "medical", Difficulty = "medium", SynonymsJson = """["rapid heart rate","fast pulse"]""", CollocationsJson = """["sinus tachycardia","ventricular tachycardia","resting tachycardia"]""", RelatedTermsJson = """["bradycardia","arrhythmia","palpitations"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-006", Term = "hypotension", Definition = "Abnormally low blood pressure, generally defined as systolic BP below 90 mmHg.", ExampleSentence = "Postural hypotension was identified as the likely cause of the patient's recurrent falls.", ContextNotes = "Distinguish orthostatic/postural hypotension from general hypotension in referrals.", ExamTypeCode = "oet", Category = "medical", Difficulty = "medium", SynonymsJson = """["low blood pressure"]""", CollocationsJson = """["postural hypotension","orthostatic hypotension","severe hypotension"]""", RelatedTermsJson = """["hypertension","syncope","vasodilation"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-007", Term = "contraindicated", Definition = "Not recommended or inadvisable due to the potential for harm in a specific situation.", ExampleSentence = "NSAIDs are contraindicated in patients with active peptic ulcer disease.", ContextNotes = "Passive form 'is contraindicated' is standard in clinical writing.", ExamTypeCode = "oet", Category = "clinical_communication", Difficulty = "medium", SynonymsJson = """["not recommended","inadvisable","unsafe"]""", CollocationsJson = """["contraindicated in","absolutely contraindicated","relatively contraindicated"]""", RelatedTermsJson = """["precaution","adverse reaction","side effect"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-008", Term = "prognosis", Definition = "A forecast of the likely course and outcome of a disease or condition.", ExampleSentence = "The prognosis for stage II breast cancer with current treatment protocols is generally favourable.", ContextNotes = "Distinguish from 'diagnosis' (identification of condition) in OET speaking scenarios.", ExamTypeCode = "oet", Category = "clinical_communication", Difficulty = "easy", SynonymsJson = """["outlook","forecast","expected outcome"]""", CollocationsJson = """["poor prognosis","favourable prognosis","guarded prognosis","overall prognosis"]""", RelatedTermsJson = """["diagnosis","diagnosis and management","treatment outcome"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-009", Term = "exacerbation", Definition = "A worsening or increase in severity of a disease or its symptoms.", ExampleSentence = "The patient was admitted with an acute exacerbation of COPD.", ContextNotes = "Frequently appears in OET writing tasks for chronic disease referrals.", ExamTypeCode = "oet", Category = "medical", Difficulty = "medium", SynonymsJson = """["flare-up","deterioration","worsening"]""", CollocationsJson = """["acute exacerbation","exacerbation of COPD","prevent exacerbation"]""", RelatedTermsJson = """["remission","relapse","deterioration"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-010", Term = "palliative", Definition = "Providing relief from the symptoms of a serious illness without curing it; relating to end-of-life care.", ExampleSentence = "The patient and family elected to pursue palliative care rather than further curative treatment.", ContextNotes = "Sensitive term; use with care in OET speaking scenarios involving end-of-life discussions.", ExamTypeCode = "oet", Category = "clinical_communication", Difficulty = "medium", SynonymsJson = """["comfort care","supportive care","end-of-life care"]""", CollocationsJson = """["palliative care","palliative approach","palliative management","palliative intent"]""", RelatedTermsJson = """["hospice","curative","terminal illness"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-011", Term = "aetiology", Definition = "The cause, set of causes, or manner of causation of a disease or condition.", ExampleSentence = "The aetiology of the patient's hypertension was considered to be multifactorial.", ContextNotes = "Australian/UK spelling; US English uses 'etiology'.", ExamTypeCode = "oet", Category = "medical", Difficulty = "hard", SynonymsJson = """["cause","etiology","origin"]""", CollocationsJson = """["unknown aetiology","multifactorial aetiology","aetiology of"]""", RelatedTermsJson = """["pathophysiology","risk factor","precipitating factor"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-012", Term = "pyrexia", Definition = "Fever; an abnormally high body temperature, typically above 38°C.", ExampleSentence = "The child presented with pyrexia of unknown origin for five days.", ContextNotes = "Formal clinical term; 'fever' is acceptable in patient-facing communication.", ExamTypeCode = "oet", Category = "medical", Difficulty = "medium", SynonymsJson = """["fever","febrile","elevated temperature"]""", CollocationsJson = """["pyrexia of unknown origin","low-grade pyrexia","high pyrexia"]""", RelatedTermsJson = """["hyperpyrexia","hypothermia","sepsis"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-013", Term = "diuresis", Definition = "Increased or excessive production of urine.", ExampleSentence = "Forced diuresis was initiated to manage the patient's fluid overload.", ContextNotes = "Often used in renal and cardiac nursing contexts.", ExamTypeCode = "oet", Category = "medical", Difficulty = "hard", SynonymsJson = """["urine output","polyuria"]""", CollocationsJson = """["forced diuresis","osmotic diuresis","inadequate diuresis"]""", RelatedTermsJson = """["oliguria","anuria","fluid balance"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-014", Term = "ambulate", Definition = "To walk or be able to walk; to move around under one's own power.", ExampleSentence = "The physiotherapist documented that the patient could ambulate 20 metres with a walking frame.", ContextNotes = "Common in rehabilitation and nursing notes.", ExamTypeCode = "oet", Category = "clinical_communication", Difficulty = "easy", SynonymsJson = """["walk","mobilise","move independently"]""", CollocationsJson = """["ambulate independently","ambulate with assistance","unable to ambulate"]""", RelatedTermsJson = """["mobilisation","gait","transfers"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-015", Term = "haemorrhage", Definition = "Escape of blood from a ruptured blood vessel; heavy bleeding.", ExampleSentence = "Emergency surgery was required due to post-partum haemorrhage.", ContextNotes = "Australian/UK spelling; US spelling is 'hemorrhage'.", ExamTypeCode = "oet", Category = "medical", Difficulty = "medium", SynonymsJson = """["bleeding","hemorrhage","blood loss"]""", CollocationsJson = """["postpartum haemorrhage","intracranial haemorrhage","subarachnoid haemorrhage","major haemorrhage"]""", RelatedTermsJson = """["coagulopathy","transfusion","haemostasis"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-016", Term = "nausea", Definition = "A feeling of sickness with an inclination to vomit.", ExampleSentence = "The patient reported persistent nausea and one episode of vomiting following chemotherapy.", ContextNotes = "Distinguish from vomiting (emesis); both may need to be reported in OET writing tasks.", ExamTypeCode = "oet", Category = "medical", Difficulty = "easy", SynonymsJson = """["queasiness","sickness","feeling sick"]""", CollocationsJson = """["nausea and vomiting","persistent nausea","intractable nausea","post-operative nausea"]""", RelatedTermsJson = """["emesis","antiemetic","dyspepsia"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-017", Term = "aspiration", Definition = "The inhalation of food, liquid, or foreign material into the airway; or the act of drawing fluid out of a body cavity.", ExampleSentence = "The patient was at high risk of aspiration due to impaired swallowing function.", ContextNotes = "Dual meaning — context determines which sense is intended.", ExamTypeCode = "oet", Category = "medical", Difficulty = "medium", SynonymsJson = """["inhalation","silent aspiration"]""", CollocationsJson = """["aspiration risk","aspiration pneumonia","silent aspiration","aspiration of fluid"]""", RelatedTermsJson = """["dysphagia","choking","pneumonia"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-018", Term = "arrhythmia", Definition = "An irregular or abnormal heart rhythm.", ExampleSentence = "The ECG confirmed a new arrhythmia that required urgent cardiology review.", ContextNotes = "Umbrella term encompassing tachycardia, bradycardia, fibrillation, etc.", ExamTypeCode = "oet", Category = "medical", Difficulty = "medium", SynonymsJson = """["dysrhythmia","irregular heartbeat","cardiac dysrhythmia"]""", CollocationsJson = """["cardiac arrhythmia","arrhythmia management","ventricular arrhythmia","atrial arrhythmia"]""", RelatedTermsJson = """["atrial fibrillation","tachycardia","bradycardia","ECG"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-019", Term = "benign", Definition = "Not malignant; (of a tumour) not cancerous and not tending to spread.", ExampleSentence = "The biopsy results confirmed the lesion was benign.", ContextNotes = "Contrast with 'malignant' — critical distinction in OET writing referral letters.", ExamTypeCode = "oet", Category = "medical", Difficulty = "easy", SynonymsJson = """["non-cancerous","non-malignant","harmless"]""", CollocationsJson = """["benign tumour","benign lesion","benign condition","benign prostatic hyperplasia"]""", RelatedTermsJson = """["malignant","carcinoma","neoplasm"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-020", Term = "prophylaxis", Definition = "Treatment given to prevent disease rather than to treat an existing disease.", ExampleSentence = "The patient was commenced on antibiotic prophylaxis prior to the dental procedure.", ContextNotes = "Common in OET writing for surgical and high-risk patient referrals.", ExamTypeCode = "oet", Category = "clinical_communication", Difficulty = "hard", SynonymsJson = """["prevention","preventive treatment","precaution"]""", CollocationsJson = """["antibiotic prophylaxis","DVT prophylaxis","primary prophylaxis","post-exposure prophylaxis"]""", RelatedTermsJson = """["indication","contraindication","treatment"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-021", Term = "iatrogenic", Definition = "Caused by medical examination or treatment.", ExampleSentence = "The iatrogenic pneumothorax occurred following central line insertion.", ContextNotes = "Important term for documenting adverse events in clinical notes.", ExamTypeCode = "oet", Category = "medical", Difficulty = "hard", SynonymsJson = """["treatment-induced","medically caused"]""", CollocationsJson = """["iatrogenic injury","iatrogenic complication","iatrogenic disease"]""", RelatedTermsJson = """["adverse event","complication","harm"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-022", Term = "titrate", Definition = "To adjust the dose of a drug to the required level in a measured way.", ExampleSentence = "The opioid dose was titrated upwards according to the patient's pain response.", ContextNotes = "Frequently used in pain management and ICU nursing documentation.", ExamTypeCode = "oet", Category = "clinical_communication", Difficulty = "medium", SynonymsJson = """["adjust","dose-adjust","calibrate"]""", CollocationsJson = """["titrate to effect","titrate dose","up-titrate","down-titrate"]""", RelatedTermsJson = """["analgesic","dosing","therapeutic range"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-023", Term = "triage", Definition = "The process of determining the priority of patients' treatment based on urgency of need.", ExampleSentence = "The emergency department nurse triaged the patient as category 2 (emergency).", ContextNotes = "Common in emergency nursing OET speaking and writing tasks.", ExamTypeCode = "oet", Category = "clinical_communication", Difficulty = "easy", SynonymsJson = """["priority assessment","sorting"]""", CollocationsJson = """["emergency triage","triage category","triage nurse","triage assessment"]""", RelatedTermsJson = """["primary survey","ABCDE assessment","acuity"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-024", Term = "consent", Definition = "Permission granted for medical treatment or procedure, especially informed consent.", ExampleSentence = "Written informed consent was obtained before the procedure.", ContextNotes = "Critical ethical and legal concept in OET healthcare scenarios.", ExamTypeCode = "oet", Category = "clinical_communication", Difficulty = "easy", SynonymsJson = """["agreement","permission","authorisation"]""", CollocationsJson = """["informed consent","written consent","consent form","capacity to consent","consent obtained"]""", RelatedTermsJson = """["capacity","autonomy","refusal"]""", Status = "active" },
+            new VocabularyTerm { Id = "vt-025", Term = "idiopathic", Definition = "Relating to a disease or condition that arises spontaneously and for which no cause is known.", ExampleSentence = "The diagnosis was idiopathic pulmonary fibrosis.", ContextNotes = "Use when no identifiable cause has been determined despite investigation.", ExamTypeCode = "oet", Category = "medical", Difficulty = "hard", SynonymsJson = """["unknown cause","of unknown origin"]""", CollocationsJson = """["idiopathic disease","idiopathic pulmonary fibrosis","idiopathic hypertension"]""", RelatedTermsJson = """["aetiology","primary","secondary"]""", Status = "active" }
+        );
+    }
+
+    private static void SeedForumCategories(LearnerDbContext db)
+    {
+        db.ForumCategories.AddRange(
+            new ForumCategory { Id = "fcat-001", ExamTypeCode = null, Name = "General Discussion", Description = "General conversations about studying, test preparation strategies, and learner experiences.", SortOrder = 10, Status = "active" },
+            new ForumCategory { Id = "fcat-002", ExamTypeCode = "oet", Name = "OET Writing", Description = "Discuss OET Writing tasks, referral letter structures, and get peer feedback.", SortOrder = 20, Status = "active" },
+            new ForumCategory { Id = "fcat-003", ExamTypeCode = "oet", Name = "OET Speaking", Description = "OET Speaking roleplays, scenario tips, and fluency improvement strategies.", SortOrder = 30, Status = "active" },
+            new ForumCategory { Id = "fcat-004", ExamTypeCode = "oet", Name = "OET Reading", Description = "Techniques for OET Reading, time management, and comprehension strategies.", SortOrder = 40, Status = "active" },
+            new ForumCategory { Id = "fcat-005", ExamTypeCode = "oet", Name = "OET Listening", Description = "Tips and resources for the OET Listening subtest.", SortOrder = 50, Status = "active" },
+            new ForumCategory { Id = "fcat-006", ExamTypeCode = null, Name = "Study Groups", Description = "Find and organise study partners and virtual study groups.", SortOrder = 60, Status = "active" },
+            new ForumCategory { Id = "fcat-007", ExamTypeCode = null, Name = "Exam Experiences", Description = "Share your exam day experiences, scores, and re-sit strategies.", SortOrder = 70, Status = "active" },
+            new ForumCategory { Id = "fcat-008", ExamTypeCode = null, Name = "Resources & Tools", Description = "Share helpful resources, books, videos, and preparation tools.", SortOrder = 80, Status = "active" }
+        );
+    }
+
+    private static void SeedPronunciationDrills(LearnerDbContext db)
+    {
+        db.PronunciationDrills.AddRange(
+            new PronunciationDrill
+            {
+                Id = "pd-001", TargetPhoneme = "θ", Label = "th (voiceless) — as in 'think'",
+                ExampleWordsJson = """["think","therapy","three","breath","tooth","both","method","author"]""",
+                MinimalPairsJson = """[{"a":"think","b":"sink"},{"a":"three","b":"free"},{"a":"bath","b":"bass"},{"a":"thin","b":"tin"}]""",
+                SentencesJson = """["The therapist recommended three therapeutic exercises.","Breathe through your mouth during the assessment.","The pathologist confirmed the diagnosis on Thursday."]""",
+                TipsHtml = "<p>Place the tip of your tongue lightly between your upper and lower front teeth. Blow air through gently — do <strong>not</strong> voice this sound.</p>",
+                Difficulty = "medium", Status = "active"
+            },
+            new PronunciationDrill
+            {
+                Id = "pd-002", TargetPhoneme = "ð", Label = "th (voiced) — as in 'this'",
+                ExampleWordsJson = """["this","the","that","breathe","soothe","other","mother","whether"]""",
+                MinimalPairsJson = """[{"a":"this","b":"miss"},{"a":"then","b":"den"},{"a":"breathe","b":"breed"},{"a":"they","b":"day"}]""",
+                SentencesJson = """["Breathe in deeply through the nose.","The other doctor confirmed the diagnosis.","Although the patient denied symptoms, further investigation was warranted."]""",
+                TipsHtml = "<p>Same tongue position as voiceless th, but <strong>add voice</strong> by vibrating your vocal cords. You should feel vibration in your throat.</p>",
+                Difficulty = "medium", Status = "active"
+            },
+            new PronunciationDrill
+            {
+                Id = "pd-003", TargetPhoneme = "v", Label = "v — as in 'vital'",
+                ExampleWordsJson = """["vital","valve","intravenous","invasive","vomit","vast","fever","verbal"]""",
+                MinimalPairsJson = """[{"a":"very","b":"berry"},{"a":"van","b":"ban"},{"a":"vest","b":"best"},{"a":"vein","b":"bane"}]""",
+                SentencesJson = """["Vital signs were stable on arrival.","The vascular surgeon reviewed the patient.","Intravenous fluids were administered at a very slow rate."]""",
+                TipsHtml = "<p>Lightly bite your lower lip with your upper teeth, then push air through while vibrating your vocal cords. Avoid closing the lips completely.</p>",
+                Difficulty = "easy", Status = "active"
+            },
+            new PronunciationDrill
+            {
+                Id = "pd-004", TargetPhoneme = "w", Label = "w — as in 'wound'",
+                ExampleWordsJson = """["wound","ward","weight","swallow","withdraw","weakness","well-being","away"]""",
+                MinimalPairsJson = """[{"a":"wet","b":"vet"},{"a":"wine","b":"vine"},{"a":"west","b":"vest"},{"a":"while","b":"vile"}]""",
+                SentencesJson = """["The wound was well-healed at the two-week review.","The patient's weight had reduced significantly.","Withdrawal of treatment was discussed with the family."]""",
+                TipsHtml = "<p>Round your lips tightly into a small circle, then open them quickly while pushing air out and voicing. Do not use your teeth.</p>",
+                Difficulty = "easy", Status = "active"
+            },
+            new PronunciationDrill
+            {
+                Id = "pd-005", TargetPhoneme = "ɪ", Label = "Short i — as in 'symptom'",
+                ExampleWordsJson = """["symptom","physical","clinic","insulin","infusion","intravenous","inhibitor","risk"]""",
+                MinimalPairsJson = """[{"a":"bit","b":"beat"},{"a":"sit","b":"seat"},{"a":"ship","b":"sheep"},{"a":"fill","b":"feel"}]""",
+                SentencesJson = """["The clinical symptoms included intermittent nausea.","Physical examination findings were significant.","The patient was given insulin via infusion."]""",
+                TipsHtml = "<p>This is a short, relaxed vowel. The tongue is high and forward, but <strong>more relaxed</strong> than the long 'ee' (iː) sound. Keep it brief.</p>",
+                Difficulty = "easy", Status = "active"
+            },
+            new PronunciationDrill
+            {
+                Id = "pd-006", TargetPhoneme = "æ", Label = "Short a (trap vowel) — as in 'catheter'",
+                ExampleWordsJson = """["catheter","analgesia","abdominal","fracture","clamp","traction","anaphylaxis","anaemia"]""",
+                MinimalPairsJson = """[{"a":"bad","b":"bed"},{"a":"band","b":"bend"},{"a":"can","b":"ken"},{"a":"mass","b":"mess"}]""",
+                SentencesJson = """["A nasogastric catheter was inserted.","The abdominal examination was unremarkable.","Anaphylaxis protocol was activated immediately."]""",
+                TipsHtml = "<p>Open your jaw wide, spread your lips, and position your tongue low and forward. This is the 'flat' a sound — do not let it sound like 'eh'.</p>",
+                Difficulty = "medium", Status = "active"
+            },
+            new PronunciationDrill
+            {
+                Id = "pd-007", TargetPhoneme = "ɜː", Label = "er vowel — as in 'nurse'",
+                ExampleWordsJson = """["nurse","word","alert","observed","referred","further","concerns","determinant"]""",
+                MinimalPairsJson = """[{"a":"word","b":"ward"},{"a":"nurse","b":"Norse"},{"a":"bird","b":"bad"},{"a":"hurt","b":"heart"}]""",
+                SentencesJson = """["The nurse observed the patient throughout the turn.","Further assessment was required.","The patient was referred for urgent evaluation."]""",
+                TipsHtml = "<p>This is a mid-central vowel. Your tongue should be in the middle of your mouth, relaxed. In Australian and British English, this vowel is <strong>non-rhotic</strong> — do not pronounce the 'r'.</p>",
+                Difficulty = "medium", Status = "active"
+            },
+            new PronunciationDrill
+            {
+                Id = "pd-008", TargetPhoneme = "stress", Label = "Word Stress in Medical Terms",
+                ExampleWordsJson = """["hyPERtension","DIAgnosis","preSCRIPtion","MEDication","aNAEsthesia","surGEry","theraPEUtic","physiOLogy"]""",
+                MinimalPairsJson = "[]",
+                SentencesJson = """["The patient's hypertension was managed with medication.","The diagnosis was confirmed following further investigation.","A therapeutic approach was outlined for the family."]""",
+                TipsHtml = "<p>In English, the stressed syllable is louder, longer, and higher pitched. Medical terms often stress the second-to-last syllable (penultimate stress). Practise by clapping the rhythm of each word.</p>",
+                Difficulty = "hard", Status = "active"
+            },
+            new PronunciationDrill
+            {
+                Id = "pd-009", TargetPhoneme = "r", Label = "Non-rhotic r — post-vocalic r in Australian/British English",
+                ExampleWordsJson = """["care","refer","disorder","further","monitor","procedure","doctor","fever"]""",
+                MinimalPairsJson = """[{"a":"car (AU)","b":"car (US)"},{"a":"nurse (AU)","b":"nurse (US)"}]""",
+                SentencesJson = """["The doctor ordered further investigations.","Post-operative monitoring continued throughout the day.","The procedure was performed under general anaesthesia."]""",
+                TipsHtml = "<p>In Australian and British English, the 'r' after a vowel is <strong>not pronounced</strong> unless the next word begins with a vowel. This is called non-rhotic pronunciation. Do not curl your tongue for a word-final 'r'.</p>",
+                Difficulty = "hard", Status = "active"
+            },
+            new PronunciationDrill
+            {
+                Id = "pd-010", TargetPhoneme = "intonation", Label = "Rising vs. Falling Intonation in Clinical Questioning",
+                ExampleWordsJson = "[]",
+                MinimalPairsJson = "[]",
+                SentencesJson = """["Are you experiencing any chest pain? (rising)","Tell me where the pain is located. (falling)","Have you taken your medication today? (rising)","I'd like to check your blood pressure now. (falling)"]""",
+                TipsHtml = "<p>In OET Speaking, use <strong>rising intonation</strong> for yes/no questions and <strong>falling intonation</strong> for statements and wh-questions. Appropriate intonation signals empathy and clinical authority.</p>",
+                Difficulty = "medium", Status = "active"
+            }
         );
     }
 

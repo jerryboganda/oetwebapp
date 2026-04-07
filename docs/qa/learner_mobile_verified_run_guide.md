@@ -31,7 +31,7 @@
    cmd /c npm run mobile:build
    ```
 
-   Set `APP_URL` to the deployed Next.js origin before packaging. `CAPACITOR_APP_URL` is also accepted. If neither is set, the Capacitor config falls back to `https://app.example.com` instead of shipping the scaffold page, but real deployments should still override the origin explicitly.
+   Set `APP_URL` to the deployed Next.js origin before packaging. `CAPACITOR_APP_URL` is also accepted. If neither is set, the Capacitor config falls back to `https://app.oetwithdrhesham.co.uk` instead of shipping the scaffold page, but real deployments should still override the origin explicitly.
 
 2. If you only need to refresh the native project files, run:
 

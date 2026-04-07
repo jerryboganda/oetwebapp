@@ -18,6 +18,9 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<StudyPlan> StudyPlans => Set<StudyPlan>();
     public DbSet<StudyPlanItem> StudyPlanItems => Set<StudyPlanItem>();
     public DbSet<ReviewRequest> ReviewRequests => Set<ReviewRequest>();
+    public DbSet<AccountFreezePolicy> AccountFreezePolicies => Set<AccountFreezePolicy>();
+    public DbSet<AccountFreezeRecord> AccountFreezeRecords => Set<AccountFreezeRecord>();
+    public DbSet<AccountFreezeEntitlement> AccountFreezeEntitlements => Set<AccountFreezeEntitlement>();
     public DbSet<Subscription> Subscriptions => Set<Subscription>();
     public DbSet<Wallet> Wallets => Set<Wallet>();
     public DbSet<Invoice> Invoices => Set<Invoice>();
@@ -51,7 +54,9 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<BillingQuote> BillingQuotes => Set<BillingQuote>();
     public DbSet<BillingEvent> BillingEvents => Set<BillingEvent>();
 
-    // Multi-exam & payment entities
+    // Multi-exam reference entities
+    public DbSet<ExamType> ExamTypes => Set<ExamType>();
+    public DbSet<TaskType> TaskTypes => Set<TaskType>();
     public DbSet<ExamFamily> ExamFamilies => Set<ExamFamily>();
     public DbSet<WalletTransaction> WalletTransactions => Set<WalletTransaction>();
     public DbSet<PaymentTransaction> PaymentTransactions => Set<PaymentTransaction>();
@@ -67,7 +72,68 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<ExpertAvailability> ExpertAvailabilities => Set<ExpertAvailability>();
     public DbSet<ExpertMetricSnapshot> ExpertMetricSnapshots => Set<ExpertMetricSnapshot>();
 
+    // Gamification entities
+    public DbSet<LearnerStreak> LearnerStreaks => Set<LearnerStreak>();
+    public DbSet<LearnerXP> LearnerXPs => Set<LearnerXP>();
+    public DbSet<Achievement> Achievements => Set<Achievement>();
+    public DbSet<LearnerAchievement> LearnerAchievements => Set<LearnerAchievement>();
+    public DbSet<LeaderboardEntry> LeaderboardEntries => Set<LeaderboardEntry>();
+
+    // Spaced repetition entities
+    public DbSet<ReviewItem> ReviewItems => Set<ReviewItem>();
+
+    // Vocabulary entities
+    public DbSet<VocabularyTerm> VocabularyTerms => Set<VocabularyTerm>();
+    public DbSet<LearnerVocabulary> LearnerVocabularies => Set<LearnerVocabulary>();
+    public DbSet<VocabularyQuizResult> VocabularyQuizResults => Set<VocabularyQuizResult>();
+
+    // Adaptive difficulty entities
+    public DbSet<LearnerSkillProfile> LearnerSkillProfiles => Set<LearnerSkillProfile>();
+
+    // AI features entities
+    public DbSet<ConversationSession> ConversationSessions => Set<ConversationSession>();
+    public DbSet<ConversationTurn> ConversationTurns => Set<ConversationTurn>();
+    public DbSet<WritingCoachSession> WritingCoachSessions => Set<WritingCoachSession>();
+    public DbSet<WritingCoachSuggestion> WritingCoachSuggestions => Set<WritingCoachSuggestion>();
+    public DbSet<PronunciationAssessment> PronunciationAssessments => Set<PronunciationAssessment>();
+    public DbSet<PronunciationDrill> PronunciationDrills => Set<PronunciationDrill>();
+    public DbSet<LearnerPronunciationProgress> LearnerPronunciationProgress => Set<LearnerPronunciationProgress>();
+    public DbSet<PredictionSnapshot> PredictionSnapshots => Set<PredictionSnapshot>();
+
+    // Learning content entities
+    public DbSet<GrammarLesson> GrammarLessons => Set<GrammarLesson>();
+    public DbSet<LearnerGrammarProgress> LearnerGrammarProgress => Set<LearnerGrammarProgress>();
+    public DbSet<VideoLesson> VideoLessons => Set<VideoLesson>();
+    public DbSet<LearnerVideoProgress> LearnerVideoProgress => Set<LearnerVideoProgress>();
+    public DbSet<StrategyGuide> StrategyGuides => Set<StrategyGuide>();
+
+    // Community entities
+    public DbSet<ForumCategory> ForumCategories => Set<ForumCategory>();
+    public DbSet<ForumThread> ForumThreads => Set<ForumThread>();
+    public DbSet<ForumReply> ForumReplies => Set<ForumReply>();
+    public DbSet<StudyGroup> StudyGroups => Set<StudyGroup>();
+    public DbSet<StudyGroupMember> StudyGroupMembers => Set<StudyGroupMember>();
+
+    // Tutoring entities
+    public DbSet<TutoringSession> TutoringSessions => Set<TutoringSession>();
+    public DbSet<TutoringAvailability> TutoringAvailabilities => Set<TutoringAvailability>();
+
+    // Social / achievement entities
+    public DbSet<Certificate> Certificates => Set<Certificate>();
+    public DbSet<ReferralCode> ReferralCodes => Set<ReferralCode>();
+    public DbSet<Referral> Referrals => Set<Referral>();
+    public DbSet<SponsorAccount> SponsorAccounts => Set<SponsorAccount>();
+    public DbSet<SponsorLearnerLink> SponsorLearnerLinks => Set<SponsorLearnerLink>();
+    public DbSet<Cohort> Cohorts => Set<Cohort>();
+    public DbSet<CohortMember> CohortMembers => Set<CohortMember>();
+
+    // Marketplace / booking entities
+    public DbSet<ExamBooking> ExamBookings => Set<ExamBooking>();
+    public DbSet<ContentContributor> ContentContributors => Set<ContentContributor>();
+    public DbSet<ContentSubmission> ContentSubmissions => Set<ContentSubmission>();
+
     // Admin / CMS entities
+    public DbSet<ContentGenerationJob> ContentGenerationJobs => Set<ContentGenerationJob>();
     public DbSet<ContentRevision> ContentRevisions => Set<ContentRevision>();
     public DbSet<AIConfigVersion> AIConfigVersions => Set<AIConfigVersion>();
     public DbSet<FeatureFlag> FeatureFlags => Set<FeatureFlag>();
@@ -80,6 +146,12 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<Attempt>().HasIndex(x => new { x.UserId, x.SubtestCode, x.State });
         modelBuilder.Entity<Evaluation>().HasIndex(x => new { x.AttemptId, x.State });
         modelBuilder.Entity<ReviewRequest>().HasIndex(x => new { x.AttemptId, x.State });
+        modelBuilder.Entity<AccountFreezePolicy>().HasIndex(x => x.Version);
+        modelBuilder.Entity<AccountFreezeRecord>().HasIndex(x => new { x.UserId, x.Status });
+        modelBuilder.Entity<AccountFreezeRecord>().HasIndex(x => x.UserId).IsUnique().HasFilter("\"IsCurrent\" = TRUE");
+        modelBuilder.Entity<AccountFreezeRecord>().HasIndex(x => new { x.Status, x.ScheduledStartAt });
+        modelBuilder.Entity<AccountFreezeRecord>().HasIndex(x => new { x.Status, x.EndedAt });
+        modelBuilder.Entity<AccountFreezeEntitlement>().HasIndex(x => x.UserId).IsUnique();
         modelBuilder.Entity<StudyPlanItem>().HasIndex(x => new { x.StudyPlanId, x.Section, x.Status });
         modelBuilder.Entity<BackgroundJobItem>().HasIndex(x => new { x.State, x.AvailableAt });
         modelBuilder.Entity<Invoice>().HasIndex(x => new { x.UserId, x.IssuedAt });
@@ -150,8 +222,81 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
 
         // Multi-exam indexes
         modelBuilder.Entity<ExamFamily>().HasIndex(x => new { x.IsActive, x.SortOrder });
+        modelBuilder.Entity<ExamType>().HasIndex(x => new { x.Status, x.SortOrder });
+        modelBuilder.Entity<TaskType>().HasIndex(x => new { x.ExamTypeCode, x.SubtestCode, x.Status });
         modelBuilder.Entity<ContentItem>().HasIndex(x => x.ExamFamilyCode);
+        modelBuilder.Entity<ContentItem>().HasIndex(x => x.ExamTypeCode);
         modelBuilder.Entity<Attempt>().HasIndex(x => x.ExamFamilyCode);
+        modelBuilder.Entity<Attempt>().HasIndex(x => x.ExamTypeCode);
+
+        // Gamification indexes
+        modelBuilder.Entity<LearnerAchievement>().HasIndex(x => x.UserId);
+        modelBuilder.Entity<LearnerAchievement>().HasIndex(x => new { x.UserId, x.AchievementId }).IsUnique();
+        modelBuilder.Entity<Achievement>().HasIndex(x => new { x.Status, x.SortOrder });
+        modelBuilder.Entity<LeaderboardEntry>().HasIndex(x => new { x.ExamTypeCode, x.Period, x.PeriodStart, x.Rank });
+        modelBuilder.Entity<LeaderboardEntry>().HasIndex(x => new { x.UserId, x.Period });
+
+        // Spaced repetition indexes
+        modelBuilder.Entity<ReviewItem>().HasIndex(x => new { x.UserId, x.DueDate, x.Status });
+        modelBuilder.Entity<ReviewItem>().HasIndex(x => new { x.UserId, x.ExamTypeCode, x.Status });
+
+        // Vocabulary indexes
+        modelBuilder.Entity<VocabularyTerm>().HasIndex(x => new { x.ExamTypeCode, x.Status, x.Category });
+        modelBuilder.Entity<LearnerVocabulary>().HasIndex(x => new { x.UserId, x.NextReviewDate });
+        modelBuilder.Entity<LearnerVocabulary>().HasIndex(x => new { x.UserId, x.TermId }).IsUnique();
+
+        // Adaptive difficulty indexes
+        modelBuilder.Entity<LearnerSkillProfile>().HasIndex(x => new { x.UserId, x.ExamTypeCode, x.SubtestCode });
+
+        // Conversation indexes
+        modelBuilder.Entity<ConversationSession>().HasIndex(x => new { x.UserId, x.State });
+        modelBuilder.Entity<ConversationTurn>().HasIndex(x => new { x.SessionId, x.TurnNumber });
+
+        // Writing coach indexes
+        modelBuilder.Entity<WritingCoachSession>().HasIndex(x => x.AttemptId);
+        modelBuilder.Entity<WritingCoachSuggestion>().HasIndex(x => new { x.AttemptId, x.Resolution });
+
+        // Pronunciation indexes
+        modelBuilder.Entity<PronunciationAssessment>().HasIndex(x => x.UserId);
+        modelBuilder.Entity<LearnerPronunciationProgress>().HasIndex(x => new { x.UserId, x.PhonemeCode });
+
+        // Prediction indexes
+        modelBuilder.Entity<PredictionSnapshot>().HasIndex(x => new { x.UserId, x.ExamTypeCode, x.SubtestCode, x.ComputedAt });
+
+        // Learning content indexes
+        modelBuilder.Entity<GrammarLesson>().HasIndex(x => new { x.ExamTypeCode, x.Category, x.Status });
+        modelBuilder.Entity<LearnerGrammarProgress>().HasIndex(x => new { x.UserId, x.LessonId }).IsUnique();
+        modelBuilder.Entity<VideoLesson>().HasIndex(x => new { x.ExamTypeCode, x.Category, x.Status });
+        modelBuilder.Entity<LearnerVideoProgress>().HasIndex(x => new { x.UserId, x.VideoLessonId }).IsUnique();
+        modelBuilder.Entity<StrategyGuide>().HasIndex(x => new { x.ExamTypeCode, x.Category, x.Status });
+
+        // Community indexes
+        modelBuilder.Entity<ForumThread>().HasIndex(x => new { x.CategoryId, x.LastActivityAt });
+        modelBuilder.Entity<ForumReply>().HasIndex(x => x.ThreadId);
+        modelBuilder.Entity<StudyGroupMember>().HasIndex(x => new { x.GroupId, x.UserId }).IsUnique();
+        modelBuilder.Entity<StudyGroupMember>().HasIndex(x => x.UserId);
+
+        // Tutoring indexes
+        modelBuilder.Entity<TutoringSession>().HasIndex(x => new { x.LearnerUserId, x.ScheduledAt });
+        modelBuilder.Entity<TutoringSession>().HasIndex(x => new { x.ExpertUserId, x.ScheduledAt });
+        modelBuilder.Entity<TutoringAvailability>().HasIndex(x => x.ExpertUserId);
+
+        // Social indexes
+        modelBuilder.Entity<Certificate>().HasIndex(x => x.UserId);
+        modelBuilder.Entity<Certificate>().HasIndex(x => x.VerificationCode).IsUnique();
+        modelBuilder.Entity<ReferralCode>().HasIndex(x => x.UserId).IsUnique();
+        modelBuilder.Entity<ReferralCode>().HasIndex(x => x.Code).IsUnique();
+        modelBuilder.Entity<Referral>().HasIndex(x => x.ReferrerUserId);
+        modelBuilder.Entity<SponsorLearnerLink>().HasIndex(x => new { x.SponsorId, x.LearnerId }).IsUnique();
+        modelBuilder.Entity<CohortMember>().HasIndex(x => new { x.CohortId, x.LearnerId }).IsUnique();
+
+        // Marketplace indexes
+        modelBuilder.Entity<ExamBooking>().HasIndex(x => new { x.UserId, x.ExamDate });
+        modelBuilder.Entity<ContentSubmission>().HasIndex(x => new { x.ContributorId, x.Status });
+
+        // Admin content generation indexes
+        modelBuilder.Entity<ContentGenerationJob>().HasIndex(x => new { x.State, x.CreatedAt });
+        modelBuilder.Entity<ContentGenerationJob>().HasIndex(x => x.RequestedBy);
 
         // Wallet transaction indexes
         modelBuilder.Entity<WalletTransaction>().HasIndex(x => new { x.WalletId, x.CreatedAt });

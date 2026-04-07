@@ -17,7 +17,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { analytics } from '@/lib/analytics';
-import { fetchSettingsData, fetchUserProfile, updateSettingsSection } from '@/lib/api';
+import { fetchFreezeStatus, fetchSettingsData, fetchUserProfile, updateSettingsSection } from '@/lib/api';
 import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 
@@ -75,6 +75,7 @@ export default function Settings() {
   });
   const [profileName, setProfileName] = useState('');
   const [profileEmail, setProfileEmail] = useState('');
+  const [freezeState, setFreezeState] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -85,13 +86,18 @@ export default function Settings() {
 
     (async () => {
       try {
-        const [settings, profile] = await Promise.all([fetchSettingsData(), fetchUserProfile()]);
+        const [settings, profile, freeze] = await Promise.all([
+          fetchSettingsData(),
+          fetchUserProfile(),
+          fetchFreezeStatus().catch(() => null),
+        ]);
         if (cancelled) return;
         setToggles({
           'low-bandwidth': Boolean(settings.audio?.lowBandwidthMode ?? false),
         });
         setProfileName(profile.displayName);
         setProfileEmail(profile.email);
+        setFreezeState(freeze as any);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to load settings.');
@@ -109,6 +115,10 @@ export default function Settings() {
   }, []);
 
   const handleToggle = async (id: string) => {
+    if (freezeState?.currentFreeze) {
+      setError('Settings are read-only while your account is frozen.');
+      return;
+    }
     const nextValue = !toggles[id];
     setToggles((prev) => ({ ...prev, [id]: nextValue }));
     setSavingId(id);
@@ -126,10 +136,16 @@ export default function Settings() {
   };
 
   const handleOpen = (id: string) => {
+    if (freezeState?.currentFreeze) {
+      setError('Settings are read-only while your account is frozen.');
+      return;
+    }
     const target = id === 'goals' ? '/settings/goals' : `/settings/${id}`;
     router.push(target);
     analytics.track('content_view', { page: 'settings', setting: id, action: 'open' });
   };
+
+  const isFrozen = Boolean(freezeState?.currentFreeze);
 
   return (
     <LearnerDashboardShell
@@ -152,6 +168,11 @@ export default function Settings() {
         />
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+        {isFrozen ? (
+          <InlineAlert variant="warning">
+            Your account is currently frozen, so settings are view-only until the freeze ends. You can still review your information, but updates are paused.
+          </InlineAlert>
+        ) : null}
 
         {settingsGroups.map((group, groupIndex) => (
           <motion.section
@@ -174,7 +195,7 @@ export default function Settings() {
                   return (
                     <div
                       key={item.id}
-                      className={`flex items-center justify-between p-4 sm:p-5 transition-colors ${item.type === 'link' ? 'hover:bg-gray-50 cursor-pointer' : ''}`}
+                      className={`flex items-center justify-between p-4 sm:p-5 transition-colors ${item.type === 'link' ? (isFrozen ? 'cursor-not-allowed opacity-60' : 'hover:bg-gray-50 cursor-pointer') : ''}`}
                       onClick={item.type === 'link' ? () => handleOpen(item.id) : undefined}
                     >
                       <div className="flex items-center gap-4 pr-4">
@@ -195,7 +216,7 @@ export default function Settings() {
                         ) : (
                           <button
                             onClick={() => handleToggle(item.id)}
-                            disabled={savingId === item.id}
+                            disabled={savingId === item.id || isFrozen}
                             className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-navy focus:ring-offset-2 ${toggles[item.id] ? 'bg-navy' : 'bg-gray-200'}`}
                             role="switch"
                             aria-checked={toggles[item.id]}

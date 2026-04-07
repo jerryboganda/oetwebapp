@@ -53,6 +53,10 @@ public class LearnerUser
     public int TotalPracticeSessions { get; set; }
     public string? WeeklyActivityJson { get; set; }
 
+    // ── Multi-exam ──
+    [MaxLength(16)]
+    public string ActiveExamTypeCode { get; set; } = "oet";
+
     public ApplicationUserAccount? AuthAccount { get; set; }
 }
 
@@ -84,6 +88,9 @@ public class LearnerGoal
 
     [MaxLength(16)]
     public string ExamFamilyCode { get; set; } = "oet";
+
+    [MaxLength(16)]
+    public string ExamTypeCode { get; set; } = "oet";
 }
 
 public class LearnerSettings
@@ -157,6 +164,9 @@ public class CriterionReference
     public string Status { get; set; } = "active";
 
     public int SortOrder { get; set; }
+
+    [MaxLength(16)]
+    public string ExamTypeCode { get; set; } = "oet";
 }
 
 public class ContentItem
@@ -206,6 +216,11 @@ public class ContentItem
     // ── Multi-exam discriminator ──
     [MaxLength(16)]
     public string ExamFamilyCode { get; set; } = "oet";
+
+    [MaxLength(16)]
+    public string ExamTypeCode { get; set; } = "oet";
+
+    public int DifficultyRating { get; set; } = 1500;    // Elo-style difficulty for adaptive engine
 
     // ── Content source and QA ──
     [MaxLength(32)]
@@ -272,6 +287,9 @@ public class Attempt
 
     [MaxLength(16)]
     public string ExamFamilyCode { get; set; } = "oet";
+
+    [MaxLength(16)]
+    public string ExamTypeCode { get; set; } = "oet";
 }
 
 public class Evaluation
@@ -302,6 +320,9 @@ public class Evaluation
     public bool Retryable { get; set; }
     public int? RetryAfterMs { get; set; }
     public DateTimeOffset LastTransitionAt { get; set; }
+
+    [MaxLength(16)]
+    public string ExamTypeCode { get; set; } = "oet";
 }
 
 public class ReadinessSnapshot
@@ -336,6 +357,9 @@ public class StudyPlan
 
     [MaxLength(16)]
     public string ExamFamilyCode { get; set; } = "oet";
+
+    [MaxLength(16)]
+    public string ExamTypeCode { get; set; } = "oet";
 }
 
 public class StudyPlanItem
@@ -398,6 +422,122 @@ public class ReviewRequest
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
     public string EligibilitySnapshotJson { get; set; } = "{}";
+}
+
+public class AccountFreezePolicy
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = "global";
+
+    public bool IsEnabled { get; set; } = true;
+    public bool SelfServiceEnabled { get; set; } = true;
+    public FreezeApprovalMode ApprovalMode { get; set; } = FreezeApprovalMode.AutoApprove;
+    public int MinDurationDays { get; set; } = 1;
+    public int MaxDurationDays { get; set; } = 365;
+    public bool AllowScheduling { get; set; } = true;
+    public FreezeAccessMode AccessMode { get; set; } = FreezeAccessMode.ReadOnly;
+    public FreezeEntitlementPauseMode EntitlementPauseMode { get; set; } = FreezeEntitlementPauseMode.InternalClock;
+    public bool RequireReason { get; set; } = true;
+    public bool RequireInternalNotes { get; set; }
+    public bool AllowActivePaid { get; set; } = true;
+    public bool AllowGracePeriod { get; set; } = true;
+    public bool AllowTrial { get; set; }
+    public bool AllowComplimentary { get; set; }
+    public bool AllowCancelled { get; set; }
+    public bool AllowExpired { get; set; }
+    public bool AllowReviewOnly { get; set; }
+    public bool AllowPastDue { get; set; }
+    public bool AllowSuspended { get; set; }
+    public string PolicyNotes { get; set; } = string.Empty;
+    public string EligibilityReasonCodesJson { get; set; } = "[]";
+    public string? UpdatedByAdminId { get; set; }
+    public string? UpdatedByAdminName { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+    public int Version { get; set; } = 1;
+}
+
+public class AccountFreezeRecord
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string UserId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string? RequestedByLearnerId { get; set; }
+
+    [MaxLength(64)]
+    public string? RequestedByAdminId { get; set; }
+
+    [MaxLength(128)]
+    public string? RequestedByAdminName { get; set; }
+
+    [MaxLength(64)]
+    public string? ApprovedByAdminId { get; set; }
+
+    [MaxLength(128)]
+    public string? ApprovedByAdminName { get; set; }
+
+    [MaxLength(64)]
+    public string? RejectedByAdminId { get; set; }
+
+    [MaxLength(128)]
+    public string? RejectedByAdminName { get; set; }
+
+    [MaxLength(64)]
+    public string? EndedByAdminId { get; set; }
+
+    [MaxLength(128)]
+    public string? EndedByAdminName { get; set; }
+
+    public FreezeStatus Status { get; set; }
+    public bool IsCurrent { get; set; } = true;
+    public bool IsSelfService { get; set; }
+    public bool EntitlementConsumed { get; set; }
+    public bool EntitlementReset { get; set; }
+    public bool IsOverride { get; set; }
+    public DateTimeOffset RequestedAt { get; set; }
+    public DateTimeOffset? ScheduledStartAt { get; set; }
+    public DateTimeOffset? StartedAt { get; set; }
+    public DateTimeOffset? EndedAt { get; set; }
+    public int DurationDays { get; set; }
+    public string Reason { get; set; } = string.Empty;
+    public string? InternalNotes { get; set; }
+    public string PolicySnapshotJson { get; set; } = "{}";
+    public int PolicyVersionSnapshot { get; set; }
+    public string EligibilitySnapshotJson { get; set; } = "{}";
+    public string? RejectionReason { get; set; }
+    public string? EndReason { get; set; }
+    public string? CancellationReason { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public class AccountFreezeEntitlement
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string UserId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string? FreezeRecordId { get; set; }
+
+    public DateTimeOffset? ConsumedAt { get; set; }
+    public DateTimeOffset? ResetAt { get; set; }
+
+    [MaxLength(64)]
+    public string? ResetByAdminId { get; set; }
+
+    [MaxLength(128)]
+    public string? ResetByAdminName { get; set; }
+
+    [MaxLength(256)]
+    public string? ResetReason { get; set; }
 }
 
 public class Subscription
@@ -507,6 +647,9 @@ public class DiagnosticSession
 
     [MaxLength(16)]
     public string ExamFamilyCode { get; set; } = "oet";
+
+    [MaxLength(16)]
+    public string ExamTypeCode { get; set; } = "oet";
 }
 
 public class DiagnosticSubtestStatus
@@ -545,6 +688,9 @@ public class MockAttempt
 
     [MaxLength(16)]
     public string ExamFamilyCode { get; set; } = "oet";
+
+    [MaxLength(16)]
+    public string ExamTypeCode { get; set; } = "oet";
 }
 
 public class MockReport
@@ -594,6 +740,59 @@ public class IdempotencyRecord
 }
 
 // ── Multi-Exam Reference ──
+
+public class ExamType
+{
+    [Key]
+    [MaxLength(16)]
+    public string Code { get; set; } = default!;           // "oet", "ielts", "pte", "cambridge", "toefl"
+
+    [MaxLength(128)]
+    public string Label { get; set; } = default!;          // "OET - Occupational English Test"
+
+    [MaxLength(512)]
+    public string Description { get; set; } = default!;
+
+    public string SubtestDefinitionsJson { get; set; } = "[]";  // Subtests for this exam
+    public string ScoringSystemJson { get; set; } = "{}";       // Scoring ranges, bands, grades
+    public string TimingsJson { get; set; } = "{}";             // Per-subtest time limits
+    public string ProfessionIdsJson { get; set; } = "[]";       // Applicable professions (empty = all)
+
+    [MaxLength(16)]
+    public string Status { get; set; } = "active";
+
+    public int SortOrder { get; set; }
+}
+
+public class TaskType
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;             // "oet-writing-referral", "ielts-writing-task2"
+
+    [MaxLength(16)]
+    public string ExamTypeCode { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string SubtestCode { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string Code { get; set; } = default!;
+
+    [MaxLength(128)]
+    public string Label { get; set; } = default!;          // "Referral Letter", "Task 2 Essay"
+
+    [MaxLength(512)]
+    public string Description { get; set; } = default!;
+
+    public string ConfigJson { get; set; } = "{}";         // Word limits, time limits, format rules
+    public string CriteriaIdsJson { get; set; } = "[]";    // Evaluation criteria for this task type
+
+    [MaxLength(16)]
+    public string Status { get; set; } = "active";
+
+    public int SortOrder { get; set; }
+}
 
 public class ExamFamily
 {

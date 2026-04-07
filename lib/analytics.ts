@@ -58,6 +58,41 @@ const TRACKED_EVENTS = [
   'admin_audit_log_viewed',
   'admin_review_ops_action',
   'admin_quality_analytics_viewed',
+  // Learner feature events
+  'achievements_viewed',
+  'leaderboard_viewed',
+  'review_page_viewed',
+  'vocabulary_home_viewed',
+  'flashcards_viewed',
+  'vocab_quiz_viewed',
+  'vocab_browse_viewed',
+  'grammar_page_viewed',
+  'grammar_lesson_viewed',
+  'lessons_page_viewed',
+  'video_lesson_viewed',
+  'strategies_page_viewed',
+  'strategy_guide_viewed',
+  'community_page_viewed',
+  'forum_thread_viewed',
+  'new_thread_page_viewed',
+  'study_groups_viewed',
+  'pronunciation_page_viewed',
+  'pronunciation_drill_viewed',
+  'tutoring_page_viewed',
+  'exam_booking_page_viewed',
+  // AI Conversation events
+  'conversation_page_viewed',
+  'conversation_started',
+  'conversation_active',
+  'conversation_ended',
+  'conversation_results_viewed',
+  // Writing Coach events
+  'writing_coach_enabled',
+  'writing_coach_suggestion_accepted',
+  'writing_coach_suggestion_dismissed',
+  // Marketplace events
+  'marketplace_page_viewed',
+  'marketplace_submission_created',
 ] as const;
 
 export type AnalyticsEvent = typeof TRACKED_EVENTS[number];

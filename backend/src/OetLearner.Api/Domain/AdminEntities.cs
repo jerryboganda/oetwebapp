@@ -184,3 +184,42 @@ public class BillingPlan
 
     public DateTimeOffset UpdatedAt { get; set; }
 }
+
+/// <summary>Admin-initiated AI content generation job.</summary>
+public class ContentGenerationJob
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string RequestedBy { get; set; } = default!;    // Admin user ID
+
+    [MaxLength(16)]
+    public string ExamTypeCode { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string SubtestCode { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string? TaskTypeId { get; set; }
+
+    [MaxLength(32)]
+    public string? ProfessionId { get; set; }
+
+    [MaxLength(16)]
+    public string Difficulty { get; set; } = "medium";
+
+    public int RequestedCount { get; set; } = 1;
+    public int GeneratedCount { get; set; }
+
+    public string PromptConfigJson { get; set; } = "{}";   // Custom generation parameters
+    public string GeneratedContentIdsJson { get; set; } = "[]";
+
+    [MaxLength(32)]
+    public string State { get; set; } = "pending";         // "pending", "generating", "completed", "failed"
+
+    public string? ErrorMessage { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? CompletedAt { get; set; }
+}

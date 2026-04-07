@@ -211,6 +211,29 @@ public sealed class AuthService(
             .OrderBy(item => item.SortOrder)
             .ToListAsync(cancellationToken);
 
+        var billingPlans = await db.BillingPlans
+            .AsNoTracking()
+            .Where(plan => plan.Status == BillingPlanStatus.Active && plan.IsVisible)
+            .OrderBy(plan => plan.DisplayOrder)
+            .ThenBy(plan => plan.Price)
+            .ThenBy(plan => plan.Name)
+            .Select(plan => new SignupBillingPlanResponse(
+                plan.Id,
+                plan.Code,
+                plan.Name,
+                plan.Description,
+                plan.Price,
+                plan.Currency,
+                plan.Interval,
+                plan.IncludedCredits,
+                plan.DisplayOrder,
+                plan.IsVisible,
+                plan.IsRenewable,
+                plan.TrialDays,
+                DeserializeStringList(plan.IncludedSubtestsJson),
+                JsonSupport.Deserialize<Dictionary<string, object?>>(plan.EntitlementsJson, new Dictionary<string, object?>())))
+            .ToListAsync(cancellationToken);
+
         return new SignupCatalogResponse(
             examTypes,
             professions.Select(item => new SignupProfessionResponse(
@@ -230,6 +253,7 @@ public sealed class AuthService(
                 item.DeliveryMode,
                 item.Capacity,
                 item.SeatsRemaining)).ToList(),
+            billingPlans,
             ExternalAuthProviders.All
                 .Where(provider => externalAuthOptions.Value.GetProvider(provider).Enabled)
                 .ToArray());

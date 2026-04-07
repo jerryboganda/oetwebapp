@@ -17,6 +17,7 @@ import {
   X,
   Clock,
 } from 'lucide-react';
+import { useSearchParams } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
@@ -25,6 +26,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import {
+  fetchFreezeStatus,
   createBillingCheckoutSession,
   createWalletTopUp,
   downloadInvoice,
@@ -45,6 +47,46 @@ function formatCurrency(amount: number, currency = 'AUD') {
 
 function prettyProductType(productType: BillingProductType) {
   return productType.replace(/_/g, ' ');
+}
+
+function formatPlanList(value: string[] | undefined): string {
+  return value && value.length > 0 ? value.join(' / ') : 'None';
+}
+
+function toPlanTruthLabel(value: unknown): boolean {
+  return value === true;
+}
+
+function getPaymentBanner(payment: string | null, gateway: string | null) {
+  if (!payment) {
+    return null;
+  }
+
+  const gatewayLabel = gateway ? gateway.charAt(0).toUpperCase() + gateway.slice(1) : 'payment';
+
+  switch (payment) {
+    case 'success':
+      return {
+        variant: 'success' as const,
+        message: `Your ${gatewayLabel} checkout completed. We will refresh your subscription once the webhook arrives.`,
+      };
+    case 'cancelled':
+      return {
+        variant: 'warning' as const,
+        message: `Your ${gatewayLabel} checkout was cancelled before payment. Nothing changed on your subscription.`,
+      };
+    case 'failed':
+    case 'expired':
+      return {
+        variant: 'error' as const,
+        message: `The ${gatewayLabel} checkout ${payment} before completion. Please start a new validated quote.`,
+      };
+    default:
+      return {
+        variant: 'info' as const,
+        message: `Checkout status: ${payment}.`,
+      };
+  }
 }
 
 interface WalletData {
@@ -69,27 +111,6 @@ const TOP_UP_TIERS = [
   { amount: 100, credits: 130, bonus: 30, label: '$100', popular: false },
 ] as const;
 
-const PLAN_FEATURES = [
-  { feature: 'AI Practice (All Subtests)', free: true, standard: true, pro: true, premium: true },
-  { feature: 'AI-Powered Evaluation', free: 'Limited', standard: true, pro: true, premium: true },
-  { feature: 'Study Plan Generation', free: false, standard: true, pro: true, premium: true },
-  { feature: 'Readiness Tracking', free: 'Basic', standard: true, pro: true, premium: true },
-  { feature: 'Writing Expert Reviews', free: false, standard: '2/mo', pro: '8/mo', premium: 'Unlimited' },
-  { feature: 'Speaking Expert Reviews', free: false, standard: false, pro: '4/mo', premium: 'Unlimited' },
-  { feature: 'Full Mock Tests', free: false, standard: '1/mo', pro: '4/mo', premium: 'Unlimited' },
-  { feature: 'Progress Analytics', free: false, standard: true, pro: true, premium: true },
-  { feature: 'Priority Review Queue', free: false, standard: false, pro: true, premium: true },
-  { feature: 'Dedicated Expert Reviewer', free: false, standard: false, pro: false, premium: true },
-  { feature: 'Invoice Downloads', free: false, standard: true, pro: true, premium: true },
-  { feature: 'Mobile Micro-Practice', free: true, standard: true, pro: true, premium: true },
-] as const;
-
-function FeatureCell({ value }: { value: boolean | string }) {
-  if (value === true) return <Check className="mx-auto h-4.5 w-4.5 text-emerald-600" />;
-  if (value === false) return <X className="mx-auto h-4.5 w-4.5 text-gray-300" />;
-  return <span className="text-xs font-bold text-navy">{value}</span>;
-}
-
 export default function BillingPage() {
   const [data, setData] = useState<BillingData | null>(null);
   const [preview, setPreview] = useState<BillingChangePreview | null>(null);
@@ -104,7 +125,16 @@ export default function BillingPage() {
 
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [walletLoading, setWalletLoading] = useState(true);
+  const [freezeState, setFreezeState] = useState<any | null>(null);
   const [selectedGateway, setSelectedGateway] = useState<'stripe' | 'paypal'>('stripe');
+  const searchParams = useSearchParams();
+  const paymentStatus = searchParams.get('payment');
+  const paymentGateway = searchParams.get('gateway');
+  const paymentBanner = useMemo(
+    () => getPaymentBanner(paymentStatus, paymentGateway),
+    [paymentGateway, paymentStatus],
+  );
+  const isFrozen = Boolean(freezeState?.currentFreeze);
 
   const loadWallet = useCallback(async () => {
     setWalletLoading(true);
@@ -119,11 +149,12 @@ export default function BillingPage() {
   }, []);
 
   useEffect(() => {
-    analytics.track('content_view', { page: 'billing' });
-    fetchBilling()
-      .then((result) => {
+    analytics.track('content_view', { page: 'subscriptions' });
+    Promise.all([fetchBilling(), fetchFreezeStatus().catch(() => null)])
+      .then(([result, freeze]) => {
         setData(result);
         setQuote(result.quote);
+        setFreezeState(freeze as any);
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Could not load billing data.'))
       .finally(() => setLoading(false));
@@ -138,6 +169,60 @@ export default function BillingPage() {
     () => (data?.plans ?? []).filter((plan) => plan.changeDirection === 'downgrade'),
     [data],
   );
+  const visibleAddOns = useMemo(
+    () =>
+      (data?.addOns ?? []).filter((addOn) => {
+        if (addOn.appliesToAllPlans) {
+          return true;
+        }
+
+        const currentPlanCode = data?.currentPlanCode ?? '';
+        if (!currentPlanCode) {
+          return false;
+        }
+
+        return addOn.compatiblePlanCodes.includes(currentPlanCode);
+      }),
+    [data?.addOns, data?.currentPlanCode],
+  );
+  const planComparisonRows = useMemo(() => {
+    const plans = data?.plans ?? [];
+
+    return [
+      {
+        feature: 'Price',
+        values: plans.map((plan) => plan.price),
+      },
+      {
+        feature: 'Review credits',
+        values: plans.map((plan) => `${plan.reviewCredits}`),
+      },
+      {
+        feature: 'Included subtests',
+        values: plans.map((plan) => formatPlanList(plan.includedSubtests)),
+      },
+      {
+        feature: 'Visible in catalog',
+        values: plans.map((plan) => plan.isVisible),
+      },
+      {
+        feature: 'Renewable',
+        values: plans.map((plan) => plan.isRenewable),
+      },
+      {
+        feature: 'Trial days',
+        values: plans.map((plan) => (plan.trialDays > 0 ? `${plan.trialDays} days` : 'None')),
+      },
+      {
+        feature: 'Productive reviews',
+        values: plans.map((plan) => toPlanTruthLabel((plan.entitlements ?? {})['productiveSkillReviewsEnabled'])),
+      },
+      {
+        feature: 'Invoice downloads',
+        values: plans.map((plan) => toPlanTruthLabel((plan.entitlements ?? {})['invoiceDownloadsAvailable'])),
+      },
+    ];
+  }, [data?.plans]);
 
   const startCheckout = async (
     productType: BillingProductType,
@@ -145,6 +230,10 @@ export default function BillingPage() {
     priceId?: string | null,
     label?: string,
   ) => {
+    if (isFrozen) {
+      setError('Billing actions are read-only while your account is frozen.');
+      return;
+    }
     const coupon = couponCode.trim() || null;
     const quoteKey = `${productType}:${priceId ?? quantity}`;
     setBusyKey(quoteKey);
@@ -165,6 +254,10 @@ export default function BillingPage() {
   };
 
   const loadPreview = async (planId: string) => {
+    if (isFrozen) {
+      setError('Billing actions are read-only while your account is frozen.');
+      return;
+    }
     setBusyKey(`preview:${planId}`);
     setError(null);
     setSuccess(null);
@@ -199,6 +292,10 @@ export default function BillingPage() {
   };
 
   const handleTopUp = async (amount: number) => {
+    if (isFrozen) {
+      setError('Billing actions are read-only while your account is frozen.');
+      return;
+    }
     setBusyKey(`topup:${amount}`);
     setError(null);
     setSuccess(null);
@@ -223,7 +320,7 @@ export default function BillingPage() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell pageTitle="Billing" backHref="/">
+      <LearnerDashboardShell pageTitle="Subscriptions" backHref="/">
         <div className="space-y-6">
           {[1, 2, 3].map((item) => <Skeleton key={item} className="h-40 rounded-[24px]" />)}
         </div>
@@ -233,9 +330,9 @@ export default function BillingPage() {
 
   if (!data) {
     return (
-      <LearnerDashboardShell pageTitle="Billing" backHref="/">
+      <LearnerDashboardShell pageTitle="Subscriptions" backHref="/">
         <div>
-          <InlineAlert variant="error">{error ?? 'Billing data could not be loaded.'}</InlineAlert>
+          <InlineAlert variant="error">{error ?? 'Subscription data could not be loaded.'}</InlineAlert>
         </div>
       </LearnerDashboardShell>
     );
@@ -243,20 +340,20 @@ export default function BillingPage() {
 
   const activeAddOns = data.activeAddOns ?? [];
   const plans = data.plans ?? [];
-  const addOns = data.addOns ?? [];
+  const addOns = visibleAddOns;
   const invoices = data.invoices ?? [];
   const supportedReviewSubtests = data.entitlements?.supportedReviewSubtests ?? [];
   const invoiceDownloadsAvailable = data.entitlements?.invoiceDownloadsAvailable ?? false;
 
   return (
-    <LearnerDashboardShell pageTitle="Billing" subtitle="Manage plans, credits, invoices, and learner entitlements." backHref="/">
+    <LearnerDashboardShell pageTitle="Subscriptions" subtitle="Manage plans, credits, invoices, and learner entitlements." backHref="/">
       <div className="space-y-8">
         <LearnerPageHero
-          eyebrow="Billing Focus"
+          eyebrow="Subscriptions"
           icon={CreditCard}
           accent="navy"
-          title="See what changes before you spend or switch plans"
-          description="Use this page to review entitlements, pricing changes, and credit impact before you open checkout."
+          title="Manage subscriptions without billing surprises"
+          description="Use this page to review entitlements, pricing changes, and payment status before you open checkout."
           highlights={[
             { icon: CreditCard, label: 'Current plan', value: data.currentPlan },
             { icon: Sparkles, label: 'Review credits', value: `${data.reviewCredits} available` },
@@ -265,6 +362,12 @@ export default function BillingPage() {
           ]}
         />
 
+        {paymentBanner ? <InlineAlert variant={paymentBanner.variant}>{paymentBanner.message}</InlineAlert> : null}
+        {isFrozen ? (
+          <InlineAlert variant="warning">
+            Your account is frozen, so checkout, plan changes, and top-ups are paused. Billing history remains visible.
+          </InlineAlert>
+        ) : null}
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
         {success ? <InlineAlert variant="success">{success}</InlineAlert> : null}
 
@@ -493,28 +596,34 @@ export default function BillingPage() {
         <section className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
           <div>
             <LearnerSurfaceSectionHeader eyebrow="Extras" title="Purchase review credits with clear product boundaries" description="Extras only increase productive-skill review capacity. They do not affect Reading or Listening scoring." className="mb-4" />
-            <div className="space-y-4">
-              {addOns.map((addOn) => (
-                <div key={addOn.id} className="rounded-[24px] border border-gray-200 bg-surface p-5 shadow-sm">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-xs font-black uppercase tracking-widest text-muted">{addOn.productType.replace(/_/g, ' ')}</p>
-                      <h3 className="mt-2 text-lg font-black text-navy">{addOn.name}</h3>
-                      <p className="mt-2 text-sm text-muted">{addOn.description}</p>
+            {addOns.length > 0 ? (
+              <div className="space-y-4">
+                {addOns.map((addOn) => (
+                  <div key={addOn.id} className="rounded-[24px] border border-gray-200 bg-surface p-5 shadow-sm">
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-xs font-black uppercase tracking-widest text-muted">{addOn.productType.replace(/_/g, ' ')}</p>
+                        <h3 className="mt-2 text-lg font-black text-navy">{addOn.name}</h3>
+                        <p className="mt-2 text-sm text-muted">{addOn.description}</p>
+                      </div>
+                      <div className="rounded-2xl bg-background-light px-4 py-3 text-sm font-black text-navy">{addOn.price}</div>
                     </div>
-                    <div className="rounded-2xl bg-background-light px-4 py-3 text-sm font-black text-navy">{addOn.price}</div>
+                    <div className="mt-4 flex flex-wrap gap-2 text-xs font-black uppercase tracking-widest text-muted">
+                      <span className="rounded-full bg-background-light px-3 py-1">{addOn.quantity} credits</span>
+                      <span className="rounded-full bg-background-light px-3 py-1">{addOn.interval}</span>
+                      {addOn.isRecurring ? <span className="rounded-full bg-background-light px-3 py-1">Recurring</span> : null}
+                    </div>
+                    <Button className="mt-4" fullWidth loading={busyKey === `addon_purchase:${addOn.code}`} onClick={() => startCheckout('addon_purchase', addOn.quantity, addOn.code, addOn.name)}>
+                      <ShoppingCart className="h-4 w-4" />Purchase add-on
+                    </Button>
                   </div>
-                  <div className="mt-4 flex flex-wrap gap-2 text-xs font-black uppercase tracking-widest text-muted">
-                    <span className="rounded-full bg-background-light px-3 py-1">{addOn.quantity} credits</span>
-                    <span className="rounded-full bg-background-light px-3 py-1">{addOn.interval}</span>
-                    {addOn.isRecurring ? <span className="rounded-full bg-background-light px-3 py-1">Recurring</span> : null}
-                  </div>
-                  <Button className="mt-4" fullWidth loading={busyKey === `addon_purchase:${addOn.code}`} onClick={() => startCheckout('addon_purchase', addOn.quantity, addOn.code, addOn.name)}>
-                    <ShoppingCart className="h-4 w-4" />Purchase add-on
-                  </Button>
-                </div>
-              ))}
-            </div>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-[24px] border border-gray-200 bg-surface p-5 text-sm text-muted shadow-sm">
+                No add-ons are compatible with the current plan.
+              </div>
+            )}
           </div>
           <div>
             <LearnerSurfaceSectionHeader eyebrow="Invoices" title="Keep billing evidence downloadable" description="Each invoice should be visible, dated, and immediately downloadable without a dead button." className="mb-4" />
@@ -549,32 +658,68 @@ export default function BillingPage() {
         {/* ── Plan Comparison Matrix ── */}
         <section>
           <LearnerSurfaceSectionHeader eyebrow="Compare" title="Feature-by-feature plan comparison" description="Understand exactly what each tier includes before making a change." className="mb-4" />
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="overflow-hidden rounded-[32px] border border-gray-200 bg-surface shadow-sm">
-            <div className="overflow-x-auto">
-              <table className="w-full min-w-[640px] text-sm">
-                <thead>
-                  <tr className="border-b border-gray-100">
-                    <th className="px-6 py-4 text-left text-xs font-black uppercase tracking-widest text-muted">Feature</th>
-                    <th className="px-4 py-4 text-center text-xs font-black uppercase tracking-widest text-muted">Free</th>
-                    <th className="px-4 py-4 text-center text-xs font-black uppercase tracking-widest text-muted">Standard</th>
-                    <th className="bg-navy/5 px-4 py-4 text-center text-xs font-black uppercase tracking-widest text-navy">Pro</th>
-                    <th className="px-4 py-4 text-center text-xs font-black uppercase tracking-widest text-muted">Premium</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-50">
-                  {PLAN_FEATURES.map((row) => (
-                    <tr key={row.feature} className="transition-colors hover:bg-gray-50/50">
-                      <td className="px-6 py-3.5 font-semibold text-navy">{row.feature}</td>
-                      <td className="px-4 py-3.5 text-center"><FeatureCell value={row.free} /></td>
-                      <td className="px-4 py-3.5 text-center"><FeatureCell value={row.standard} /></td>
-                      <td className="bg-navy/5 px-4 py-3.5 text-center"><FeatureCell value={row.pro} /></td>
-                      <td className="px-4 py-3.5 text-center"><FeatureCell value={row.premium} /></td>
+          {plans.length > 0 ? (
+            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="overflow-hidden rounded-[32px] border border-gray-200 bg-surface shadow-sm">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[760px] text-sm">
+                  <thead>
+                    <tr className="border-b border-gray-100">
+                      <th className="px-6 py-4 text-left text-xs font-black uppercase tracking-widest text-muted">Feature</th>
+                      {plans.map((plan) => (
+                        <th
+                          key={plan.id}
+                          className={`px-4 py-4 text-center text-xs font-black uppercase tracking-widest ${
+                            plan.changeDirection === 'current' ? 'bg-navy/5 text-navy' : 'text-muted'
+                          }`}
+                        >
+                          <div className="flex flex-col items-center gap-1">
+                            <span>{plan.label}</span>
+                            <span className="text-[10px] font-semibold tracking-normal normal-case">
+                              {plan.price} / {plan.interval}
+                            </span>
+                          </div>
+                        </th>
+                      ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-50">
+                    {planComparisonRows.map((row) => (
+                      <tr key={row.feature} className="transition-colors hover:bg-gray-50/50">
+                        <td className="px-6 py-3.5 font-semibold text-navy">{row.feature}</td>
+                        {row.values.map((value, index) => {
+                          const plan = plans[index];
+                          const isCurrent = plan?.changeDirection === 'current';
+
+                          return (
+                            <td
+                              key={`${row.feature}:${plan?.id ?? index}`}
+                              className={`px-4 py-3.5 text-center ${
+                                isCurrent ? 'bg-navy/5' : ''
+                              }`}
+                            >
+                              {typeof value === 'boolean' ? (
+                                value ? (
+                                  <Check className="mx-auto h-4.5 w-4.5 text-emerald-600" />
+                                ) : (
+                                  <X className="mx-auto h-4.5 w-4.5 text-gray-300" />
+                                )
+                              ) : (
+                                <span className="text-xs font-bold text-navy">{value}</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </motion.div>
+          ) : (
+            <div className="rounded-[24px] border border-gray-200 bg-surface p-5 text-sm text-muted shadow-sm">
+              No published billing plans are available yet.
             </div>
-          </motion.div>
+          )}
         </section>
 
         {(upgradePlans.length === 0 && downgradePlans.length === 0) ? (

@@ -109,12 +109,7 @@ function NotificationCenterContent({ onNavigate }: { onNavigate?: () => void }) 
       return;
     }
 
-    if (/^https?:\/\//i.test(item.actionUrl)) {
-      window.location.assign(item.actionUrl);
-      return;
-    }
-
-    router.push(item.actionUrl);
+    window.location.assign(item.actionUrl);
   };
 
   return (

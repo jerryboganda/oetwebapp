@@ -66,6 +66,11 @@ public static class NotificationCatalog
             NotificationEventKey.LearnerInvoiceFailed => "Payment issue: your latest invoice failed",
             NotificationEventKey.LearnerSubscriptionChanged => "Your subscription status changed",
             NotificationEventKey.LearnerAccountStatusChanged => "Your account status changed",
+            NotificationEventKey.LearnerFreezeRequested => "Your freeze request has been received",
+            NotificationEventKey.LearnerFreezeApproved => "Your freeze request has been approved",
+            NotificationEventKey.LearnerFreezeRejected => "Your freeze request was rejected",
+            NotificationEventKey.LearnerFreezeStarted => "Your freeze is now active",
+            NotificationEventKey.LearnerFreezeEnded => "Your freeze has ended",
             NotificationEventKey.ExpertReviewAssigned => "A review has been assigned to you",
             NotificationEventKey.ExpertReviewClaimed => "Review claimed",
             NotificationEventKey.ExpertReviewReleased => "Review released back to the queue",
@@ -82,6 +87,8 @@ public static class NotificationCatalog
             NotificationEventKey.AdminAiConfigChanged => "AI evaluation config changed",
             NotificationEventKey.AdminStuckJobAlert => "A background job is stuck",
             NotificationEventKey.AdminNotificationDeliveryFailureAlert => "Notification delivery failures need attention",
+            NotificationEventKey.AdminFreezePolicyChanged => "Freeze policy updated",
+            NotificationEventKey.AdminFreezeLifecycleAction => "Freeze lifecycle action completed",
             _ => "Notification update"
         };
 
@@ -100,6 +107,11 @@ public static class NotificationCatalog
             NotificationEventKey.LearnerInvoiceFailed => ReadToken(tokens, "message", "Update billing details to avoid subscription interruption."),
             NotificationEventKey.LearnerSubscriptionChanged => ReadToken(tokens, "message", "A subscription or plan change was recorded on your account."),
             NotificationEventKey.LearnerAccountStatusChanged => ReadToken(tokens, "message", "Your learner account access or status was updated."),
+            NotificationEventKey.LearnerFreezeRequested => ReadToken(tokens, "message", "We received your freeze request and will process it shortly."),
+            NotificationEventKey.LearnerFreezeApproved => ReadToken(tokens, "message", "Your freeze request was approved and will take effect according to the schedule."),
+            NotificationEventKey.LearnerFreezeRejected => ReadToken(tokens, "message", "Your freeze request was rejected by an admin."),
+            NotificationEventKey.LearnerFreezeStarted => ReadToken(tokens, "message", "Your freeze is now active and the learner workspace is read-only."),
+            NotificationEventKey.LearnerFreezeEnded => ReadToken(tokens, "message", "Your freeze period has finished and study access is restored."),
             NotificationEventKey.ExpertReviewAssigned => $"Review {ReadToken(tokens, "reviewRequestId", string.Empty)} is ready in your expert queue.",
             NotificationEventKey.ExpertReviewClaimed => $"You successfully claimed review {ReadToken(tokens, "reviewRequestId", string.Empty)}.",
             NotificationEventKey.ExpertReviewReleased => $"Review {ReadToken(tokens, "reviewRequestId", string.Empty)} was released back to the shared queue.",
@@ -116,6 +128,8 @@ public static class NotificationCatalog
             NotificationEventKey.AdminAiConfigChanged => ReadToken(tokens, "message", "An AI evaluation configuration version was activated or updated."),
             NotificationEventKey.AdminStuckJobAlert => ReadToken(tokens, "message", "Background processing has stalled past the acceptable window."),
             NotificationEventKey.AdminNotificationDeliveryFailureAlert => ReadToken(tokens, "message", "Notification delivery failures crossed the alert threshold."),
+            NotificationEventKey.AdminFreezePolicyChanged => ReadToken(tokens, "message", "Freeze policy settings were updated."),
+            NotificationEventKey.AdminFreezeLifecycleAction => ReadToken(tokens, "message", "A freeze lifecycle action was processed."),
             _ => "A new notification is available."
         };
 
@@ -134,6 +148,11 @@ public static class NotificationCatalog
             NotificationEventKey.LearnerInvoiceFailed => "/billing",
             NotificationEventKey.LearnerSubscriptionChanged => "/billing",
             NotificationEventKey.LearnerAccountStatusChanged => "/settings",
+            NotificationEventKey.LearnerFreezeRequested => "/freeze",
+            NotificationEventKey.LearnerFreezeApproved => "/freeze",
+            NotificationEventKey.LearnerFreezeRejected => "/freeze",
+            NotificationEventKey.LearnerFreezeStarted => "/freeze",
+            NotificationEventKey.LearnerFreezeEnded => "/freeze",
             NotificationEventKey.ExpertReviewAssigned => $"/expert/review/{ReadToken(tokens, "reviewRequestId", string.Empty)}",
             NotificationEventKey.ExpertReviewClaimed => $"/expert/review/{ReadToken(tokens, "reviewRequestId", string.Empty)}",
             NotificationEventKey.ExpertReviewReleased => "/expert/queue",
@@ -150,6 +169,8 @@ public static class NotificationCatalog
             NotificationEventKey.AdminAiConfigChanged => "/admin/ai-config",
             NotificationEventKey.AdminStuckJobAlert => "/admin/review-ops",
             NotificationEventKey.AdminNotificationDeliveryFailureAlert => "/admin/notifications",
+            NotificationEventKey.AdminFreezePolicyChanged => "/admin/freeze",
+            NotificationEventKey.AdminFreezeLifecycleAction => "/admin/freeze",
             _ => null
         };
 
@@ -169,6 +190,11 @@ public static class NotificationCatalog
             new(NotificationEventKey.LearnerInvoiceFailed, ApplicationUserRoles.Learner, "billing", "Invoice Failed", "Notify learners when a billing attempt fails.", NotificationSeverity.Critical, new(true, true, true, NotificationEmailMode.Immediate)),
             new(NotificationEventKey.LearnerSubscriptionChanged, ApplicationUserRoles.Learner, "billing", "Subscription Changed", "Notify learners when a subscription changes.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
             new(NotificationEventKey.LearnerAccountStatusChanged, ApplicationUserRoles.Learner, "account", "Account Status Changed", "Notify learners when their account status changes.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerFreezeRequested, ApplicationUserRoles.Learner, "freeze", "Freeze Requested", "Notify learners when a freeze request is submitted.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerFreezeApproved, ApplicationUserRoles.Learner, "freeze", "Freeze Approved", "Notify learners when a freeze request is approved.", NotificationSeverity.Success, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerFreezeRejected, ApplicationUserRoles.Learner, "freeze", "Freeze Rejected", "Notify learners when a freeze request is rejected.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerFreezeStarted, ApplicationUserRoles.Learner, "freeze", "Freeze Started", "Notify learners when an approved freeze becomes active.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerFreezeEnded, ApplicationUserRoles.Learner, "freeze", "Freeze Ended", "Notify learners when a freeze finishes or is ended early.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
             new(NotificationEventKey.ExpertReviewAssigned, ApplicationUserRoles.Expert, "review_ops", "Review Assigned", "Notify experts when a review is assigned.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
             new(NotificationEventKey.ExpertReviewClaimed, ApplicationUserRoles.Expert, "review_ops", "Review Claimed", "Confirm claim actions in the expert queue.", NotificationSeverity.Info, new(true, false, false, NotificationEmailMode.Off)),
             new(NotificationEventKey.ExpertReviewReleased, ApplicationUserRoles.Expert, "review_ops", "Review Released", "Confirm release actions in the expert queue.", NotificationSeverity.Info, new(true, false, false, NotificationEmailMode.Off)),
@@ -184,7 +210,9 @@ public static class NotificationCatalog
             new(NotificationEventKey.AdminFeatureFlagChanged, ApplicationUserRoles.Admin, "operations", "Feature Flag Changed", "Notify admins when feature flag configuration changes.", NotificationSeverity.Info, new(true, false, false, NotificationEmailMode.Off)),
             new(NotificationEventKey.AdminAiConfigChanged, ApplicationUserRoles.Admin, "operations", "AI Config Changed", "Notify admins when AI config changes.", NotificationSeverity.Info, new(true, false, false, NotificationEmailMode.Off)),
             new(NotificationEventKey.AdminStuckJobAlert, ApplicationUserRoles.Admin, "operations", "Stuck Job Alert", "Notify admins when background jobs are stuck.", NotificationSeverity.Critical, new(true, true, false, NotificationEmailMode.Immediate)),
-            new(NotificationEventKey.AdminNotificationDeliveryFailureAlert, ApplicationUserRoles.Admin, "operations", "Notification Delivery Failure Alert", "Notify admins when notification delivery failures cross alert thresholds.", NotificationSeverity.Critical, new(true, true, false, NotificationEmailMode.Immediate))
+            new(NotificationEventKey.AdminNotificationDeliveryFailureAlert, ApplicationUserRoles.Admin, "operations", "Notification Delivery Failure Alert", "Notify admins when notification delivery failures cross alert thresholds.", NotificationSeverity.Critical, new(true, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.AdminFreezePolicyChanged, ApplicationUserRoles.Admin, "operations", "Freeze Policy Changed", "Notify admins when freeze policy settings are updated.", NotificationSeverity.Info, new(true, false, false, NotificationEmailMode.Off)),
+            new(NotificationEventKey.AdminFreezeLifecycleAction, ApplicationUserRoles.Admin, "operations", "Freeze Lifecycle Action", "Notify admins when freeze requests are approved, rejected, started, ended, or force-ended.", NotificationSeverity.Info, new(true, false, false, NotificationEmailMode.Off))
         ];
     }
 

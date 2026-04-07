@@ -99,6 +99,8 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
 
             await db.SaveChangesAsync(cancellationToken);
         }
+
+        await ReconcileFreezeLifecycleAsync(scope.ServiceProvider, db, cancellationToken);
     }
 
     private static async Task ExecuteJobAsync(IServiceProvider services, LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)
@@ -124,12 +126,189 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             case JobType.ReviewCompletion:
                 await CompleteReviewRequestAsync(db, notifications, job, cancellationToken);
                 break;
+            case JobType.FreezeStart:
+                await CompleteFreezeStartAsync(db, notifications, job, cancellationToken);
+                break;
+            case JobType.FreezeEnd:
+                await CompleteFreezeEndAsync(db, notifications, job, cancellationToken);
+                break;
             case JobType.NotificationFanout:
                 await notifications.ProcessFanoutAsync(job, cancellationToken);
                 break;
             case JobType.NotificationDigestDispatch:
                 await notifications.ProcessDigestDispatchAsync(job, cancellationToken);
                 break;
+            case JobType.ContentGeneration:
+                await CompleteContentGenerationAsync(db, job, cancellationToken);
+                break;
+            case JobType.ConversationEvaluation:
+                await CompleteConversationEvaluationAsync(db, job, cancellationToken);
+                break;
+            case JobType.PronunciationAnalysis:
+                await CompletePronunciationAnalysisAsync(db, job, cancellationToken);
+                break;
+        }
+    }
+
+    private static async Task CompleteFreezeStartAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(job.ResourceId))
+        {
+            return;
+        }
+
+        var record = await db.AccountFreezeRecords.FirstOrDefaultAsync(x => x.Id == job.ResourceId, cancellationToken);
+        if (record is null)
+        {
+            return;
+        }
+
+        if (record.Status is FreezeStatus.Active or FreezeStatus.Completed or FreezeStatus.ForceEnded or FreezeStatus.Cancelled or FreezeStatus.Rejected)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (record.ScheduledStartAt is not null && record.ScheduledStartAt > now)
+        {
+            return;
+        }
+
+        record.Status = FreezeStatus.Active;
+        record.IsCurrent = true;
+        record.StartedAt ??= record.ScheduledStartAt ?? now;
+        record.UpdatedAt = now;
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        await notifications.CreateForLearnerAsync(
+            NotificationEventKey.LearnerFreezeStarted,
+            record.UserId,
+            nameof(AccountFreezeRecord),
+            record.Id,
+            record.PolicyVersionSnapshot.ToString(),
+            new Dictionary<string, object?>
+            {
+                ["freezeId"] = record.Id,
+                ["message"] = "Your freeze is now active."
+            },
+            cancellationToken);
+    }
+
+    private static async Task CompleteFreezeEndAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(job.ResourceId))
+        {
+            return;
+        }
+
+        var record = await db.AccountFreezeRecords.FirstOrDefaultAsync(x => x.Id == job.ResourceId, cancellationToken);
+        if (record is null)
+        {
+            return;
+        }
+
+        if (record.Status is FreezeStatus.Completed or FreezeStatus.ForceEnded or FreezeStatus.Cancelled or FreezeStatus.Rejected)
+        {
+            return;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (record.EndedAt is not null && record.EndedAt > now)
+        {
+            return;
+        }
+
+        record.Status = FreezeStatus.Completed;
+        record.IsCurrent = false;
+        record.StartedAt ??= record.ScheduledStartAt ?? now;
+        record.EndedAt ??= now;
+        record.EndReason ??= "Freeze period ended";
+        record.UpdatedAt = now;
+
+        await db.SaveChangesAsync(cancellationToken);
+
+        await notifications.CreateForLearnerAsync(
+            NotificationEventKey.LearnerFreezeEnded,
+            record.UserId,
+            nameof(AccountFreezeRecord),
+            record.Id,
+            record.PolicyVersionSnapshot.ToString(),
+            new Dictionary<string, object?>
+            {
+                ["freezeId"] = record.Id,
+                ["message"] = "Your freeze period has ended."
+            },
+            cancellationToken);
+    }
+
+    private static async Task ReconcileFreezeLifecycleAsync(IServiceProvider services, LearnerDbContext db, CancellationToken cancellationToken)
+    {
+        var notifications = services.GetRequiredService<NotificationService>();
+        var now = DateTimeOffset.UtcNow;
+        var recordsQuery = db.AccountFreezeRecords
+            .Where(x => x.Status == FreezeStatus.Scheduled || x.Status == FreezeStatus.Active);
+
+        var records = db.Database.IsSqlite()
+            ? (await recordsQuery.ToListAsync(cancellationToken))
+                .OrderBy(x => x.ScheduledStartAt)
+                .ToList()
+            : await recordsQuery
+                .OrderBy(x => x.ScheduledStartAt)
+                .ToListAsync(cancellationToken);
+
+        var changed = false;
+        foreach (var record in records)
+        {
+            if (record.Status == FreezeStatus.Scheduled && record.ScheduledStartAt is not null && record.ScheduledStartAt <= now)
+            {
+                record.Status = FreezeStatus.Active;
+                record.StartedAt ??= record.ScheduledStartAt ?? now;
+                record.UpdatedAt = now;
+                changed = true;
+
+                await notifications.CreateForLearnerAsync(
+                    NotificationEventKey.LearnerFreezeStarted,
+                    record.UserId,
+                    nameof(AccountFreezeRecord),
+                    record.Id,
+                    record.PolicyVersionSnapshot.ToString(),
+                    new Dictionary<string, object?>
+                    {
+                        ["freezeId"] = record.Id,
+                        ["message"] = "Your freeze is now active."
+                    },
+                    cancellationToken);
+            }
+
+            if (record.Status == FreezeStatus.Active && record.EndedAt is not null && record.EndedAt <= now)
+            {
+                record.Status = FreezeStatus.Completed;
+                record.IsCurrent = false;
+                record.StartedAt ??= record.ScheduledStartAt ?? now;
+                record.EndedAt ??= now;
+                record.EndReason ??= "Freeze period ended";
+                record.UpdatedAt = now;
+                changed = true;
+
+                await notifications.CreateForLearnerAsync(
+                    NotificationEventKey.LearnerFreezeEnded,
+                    record.UserId,
+                    nameof(AccountFreezeRecord),
+                    record.Id,
+                    record.PolicyVersionSnapshot.ToString(),
+                    new Dictionary<string, object?>
+                    {
+                        ["freezeId"] = record.Id,
+                        ["message"] = "Your freeze period has ended."
+                    },
+                    cancellationToken);
+            }
+        }
+
+        if (changed)
+        {
+            await db.SaveChangesAsync(cancellationToken);
         }
     }
 
@@ -463,29 +642,27 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         var notifications = services.GetRequiredService<NotificationService>();
         var failureVersion = $"{job.Id}:{job.RetryCount}";
 
-        if (job.Type is JobType.WritingEvaluation or JobType.SpeakingEvaluation)
+        if (job.Type is JobType.WritingEvaluation or JobType.SpeakingEvaluation && !string.IsNullOrWhiteSpace(job.AttemptId))
         {
-            if (!string.IsNullOrWhiteSpace(job.AttemptId))
+            var attempt = await db.Attempts
+                .AsNoTracking()
+                .FirstOrDefaultAsync(existingAttempt => existingAttempt.Id == job.AttemptId, cancellationToken);
+
+            if (attempt is not null)
             {
-                var attempt = await db.Attempts
-                    .AsNoTracking()
-                    .FirstOrDefaultAsync(existingAttempt => existingAttempt.Id == job.AttemptId, cancellationToken);
-                if (attempt is not null)
-                {
-                    await notifications.CreateForLearnerAsync(
-                        NotificationEventKey.LearnerEvaluationFailed,
-                        attempt.UserId,
-                        "attempt",
-                        attempt.Id,
-                        failureVersion,
-                        new Dictionary<string, object?>
-                        {
-                            ["attemptId"] = attempt.Id,
-                            ["subtest"] = attempt.SubtestCode,
-                            ["message"] = $"We could not finish your {attempt.SubtestCode} evaluation automatically. Please try again shortly."
-                        },
-                        cancellationToken);
-                }
+                await notifications.CreateForLearnerAsync(
+                    NotificationEventKey.LearnerEvaluationFailed,
+                    attempt.UserId,
+                    "attempt",
+                    attempt.Id,
+                    failureVersion,
+                    new Dictionary<string, object?>
+                    {
+                        ["attemptId"] = attempt.Id,
+                        ["subtest"] = attempt.SubtestCode,
+                        ["message"] = $"We could not finish your {attempt.SubtestCode} evaluation automatically. Please try again shortly."
+                    },
+                    cancellationToken);
             }
         }
 
@@ -503,5 +680,68 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 ["message"] = $"Background job {job.Id} ({job.Type}) failed after {job.RetryCount} attempts: {ex.Message}"
             },
             cancellationToken);
+    }
+
+    private static async Task CompleteContentGenerationAsync(LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(job.ResourceId)) return;
+
+        var genJob = await db.ContentGenerationJobs.FirstOrDefaultAsync(j => j.Id == job.ResourceId, cancellationToken);
+        if (genJob == null) return;
+
+        genJob.State = "generating";
+        await db.SaveChangesAsync(cancellationToken);
+
+        var generatedIds = new List<string>();
+        for (var i = 0; i < genJob.RequestedCount; i++)
+        {
+            var contentId = $"ci-{Guid.NewGuid():N}";
+            db.ContentItems.Add(new ContentItem
+            {
+                Id = contentId,
+                ExamFamilyCode = genJob.ExamTypeCode,
+                SubtestCode = genJob.SubtestCode,
+                ContentType = "practice_task",
+                ProfessionId = genJob.ProfessionId,
+                Title = $"[AI Generated] {genJob.SubtestCode} Task — {genJob.Difficulty}",
+                Difficulty = genJob.Difficulty ?? "medium",
+                DetailJson = JsonSupport.Serialize(new
+                {
+                    generatedBy = "AI",
+                    generationJobId = genJob.Id,
+                    prompt = genJob.PromptConfigJson,
+                    caseNotes = "This is an AI-generated practice task. Review and edit before publishing.",
+                    scenarioType = genJob.SubtestCode == "writing" ? "referral_letter" : "roleplay"
+                }),
+                Status = ContentStatus.Draft,
+                SourceType = "ai_generated",
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+            generatedIds.Add(contentId);
+        }
+
+        genJob.GeneratedCount = generatedIds.Count;
+        genJob.GeneratedContentIdsJson = JsonSupport.Serialize(generatedIds);
+        genJob.State = "completed";
+        genJob.CompletedAt = DateTimeOffset.UtcNow;
+    }
+
+    private static async Task CompleteConversationEvaluationAsync(LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(job.ResourceId)) return;
+
+        var session = await db.ConversationSessions.FirstOrDefaultAsync(s => s.Id == job.ResourceId, cancellationToken);
+        if (session == null) return;
+
+        session.State = "evaluated";
+        session.EvaluationId = $"ce-{Guid.NewGuid():N}";
+    }
+
+    private static Task CompletePronunciationAnalysisAsync(LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)
+    {
+        // Pronunciation analysis is handled inline in PronunciationService.SubmitDrillAttemptAsync
+        // This handler exists for future production integration with Azure Speech SDK async processing
+        return Task.CompletedTask;
     }
 }

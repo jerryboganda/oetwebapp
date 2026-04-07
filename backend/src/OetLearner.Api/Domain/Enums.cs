@@ -60,6 +60,34 @@ public enum SubscriptionStatus
     Expired
 }
 
+public enum FreezeApprovalMode
+{
+    AutoApprove,
+    AdminApprovalRequired
+}
+
+public enum FreezeAccessMode
+{
+    ReadOnly
+}
+
+public enum FreezeEntitlementPauseMode
+{
+    InternalClock,
+    None
+}
+
+public enum FreezeStatus
+{
+    PendingApproval,
+    Scheduled,
+    Active,
+    Completed,
+    Rejected,
+    Cancelled,
+    ForceEnded
+}
+
 public enum UploadState
 {
     Pending,
@@ -70,6 +98,7 @@ public enum UploadState
 
 public enum JobType
 {
+    // ── Existing ──
     WritingEvaluation,
     SpeakingTranscription,
     SpeakingEvaluation,
@@ -77,7 +106,28 @@ public enum JobType
     MockReportGeneration,
     ReviewCompletion,
     NotificationFanout,
-    NotificationDigestDispatch
+    NotificationDigestDispatch,
+    FreezeStart,
+    FreezeEnd,
+
+    // ── Phase 1 ──
+    ContentGeneration,         // AI content generation for admin
+    SkillProfileUpdate,        // Update learner skill profile after evaluation
+    AchievementCheck,          // Check and award achievements after XP-granting events
+
+    // ── Phase 2 ──
+    ConversationEvaluation,    // Evaluate completed AI conversation
+    PronunciationAnalysis,     // Analyze pronunciation from speaking audio
+    PredictionComputation,     // Compute score predictions after evaluation
+
+    // ── Phase 3 ──
+    CertificateGeneration,     // Generate PDF certificates
+    ReferralConversion,        // Process referral credit awards
+    CohortProgressReport,      // Generate cohort progress reports
+    VocabularyDailySet,        // Prepare daily vocabulary set per learner
+
+    // ── Phase 4 ──
+    LeaderboardComputation     // Weekly/monthly leaderboard recalculation
 }
 
 public enum ConfidenceBand

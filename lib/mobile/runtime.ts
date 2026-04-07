@@ -28,6 +28,14 @@ function isBrowser() {
   return typeof window !== 'undefined';
 }
 
+function getPreferredColorScheme() {
+  if (!isBrowser()) {
+    return 'light' as const;
+  }
+
+  return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+}
+
 function setViewportMetrics() {
   if (!isBrowser()) {
     return;
@@ -39,6 +47,33 @@ function setViewportMetrics() {
 
   document.documentElement.style.setProperty('--app-viewport-height', `${viewportHeight}px`);
   document.documentElement.style.setProperty('--app-keyboard-offset', `${keyboardOffset}px`);
+}
+
+function scheduleViewportMetrics() {
+  if (!isBrowser()) {
+    return;
+  }
+
+  window.requestAnimationFrame(() => {
+    setViewportMetrics();
+  });
+}
+
+async function syncNativeChrome() {
+  if (!isBrowser() || !Capacitor.isNativePlatform()) {
+    return;
+  }
+
+  const isDark = getPreferredColorScheme() === 'dark';
+
+  document.documentElement.dataset.colorScheme = isDark ? 'dark' : 'light';
+  document.documentElement.style.colorScheme = isDark ? 'dark' : 'light';
+
+  await Promise.allSettled([
+    StatusBar.setOverlaysWebView({ overlay: false }),
+    StatusBar.setStyle({ style: isDark ? Style.Light : Style.Dark }),
+    StatusBar.setBackgroundColor({ color: isDark ? '#07111d' : '#f7f5ef' }),
+  ]);
 }
 
 function syncOnlineState(connected: boolean, onNetworkChange?: (connected: boolean) => void) {
@@ -84,26 +119,47 @@ export async function initializeMobileRuntime(handlers: MobileRuntimeHandlers = 
   }
 
   setViewportMetrics();
+  document.documentElement.dataset.colorScheme = getPreferredColorScheme();
   document.documentElement.dataset.capacitorPlatform = Capacitor.getPlatform();
   document.documentElement.dataset.capacitorNative = String(Capacitor.isNativePlatform());
+  document.documentElement.style.colorScheme = getPreferredColorScheme();
 
   const cleanup: Array<() => Promise<void> | void> = [];
 
-  const resizeHandler = () => setViewportMetrics();
+  const resizeHandler = () => scheduleViewportMetrics();
   window.addEventListener('resize', resizeHandler);
   window.addEventListener('orientationchange', resizeHandler);
   cleanup.push(() => window.removeEventListener('resize', resizeHandler));
   cleanup.push(() => window.removeEventListener('orientationchange', resizeHandler));
 
+  if (window.visualViewport) {
+    const visualViewportResize = () => scheduleViewportMetrics();
+    window.visualViewport.addEventListener('resize', visualViewportResize);
+    window.visualViewport.addEventListener('scroll', visualViewportResize);
+    cleanup.push(() => window.visualViewport?.removeEventListener('resize', visualViewportResize));
+    cleanup.push(() => window.visualViewport?.removeEventListener('scroll', visualViewportResize));
+  }
+
+  const colorSchemeQuery = window.matchMedia('(prefers-color-scheme: dark)');
+  const colorSchemeListener = () => {
+    document.documentElement.dataset.colorScheme = colorSchemeQuery.matches ? 'dark' : 'light';
+    document.documentElement.style.colorScheme = colorSchemeQuery.matches ? 'dark' : 'light';
+    void syncNativeChrome();
+  };
+  colorSchemeQuery.addEventListener('change', colorSchemeListener);
+  cleanup.push(() => colorSchemeQuery.removeEventListener('change', colorSchemeListener));
+
   try {
     const keyboardWillShow = await Keyboard.addListener('keyboardWillShow', (event) => {
+      document.documentElement.dataset.keyboardVisible = 'true';
       document.documentElement.style.setProperty('--app-keyboard-offset', `${event.keyboardHeight}px`);
-      setViewportMetrics();
+      scheduleViewportMetrics();
     });
 
     const keyboardWillHide = await Keyboard.addListener('keyboardWillHide', () => {
+      document.documentElement.dataset.keyboardVisible = 'false';
       document.documentElement.style.setProperty('--app-keyboard-offset', '0px');
-      setViewportMetrics();
+      scheduleViewportMetrics();
     });
 
     cleanup.push(() => keyboardWillShow.remove());
@@ -113,11 +169,7 @@ export async function initializeMobileRuntime(handlers: MobileRuntimeHandlers = 
   }
 
   try {
-    await Promise.allSettled([
-      StatusBar.setOverlaysWebView({ overlay: false }),
-      StatusBar.setStyle({ style: Style.Dark }),
-      SplashScreen.hide(),
-    ]);
+    await Promise.allSettled([syncNativeChrome(), SplashScreen.hide()]);
   } catch {
     // Ignore shell setup failures in unsupported environments.
   }
@@ -145,6 +197,8 @@ export async function initializeMobileRuntime(handlers: MobileRuntimeHandlers = 
     const appStateListener = await App.addListener('appStateChange', (state) => {
       document.documentElement.dataset.appActive = state.isActive ? 'true' : 'false';
       if (state.isActive) {
+        scheduleViewportMetrics();
+        void syncNativeChrome();
         handlers.onResume?.();
       } else {
         handlers.onPause?.();

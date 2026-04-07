@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils';
 import { X } from 'lucide-react';
 import { useEffect, useRef, useCallback, type ReactNode } from 'react';
+import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 
 /* ─── Modal ─── */
 interface ModalProps {
@@ -165,7 +166,14 @@ export function Modal({ open, onClose, title, children, className, size = 'md' }
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4" role="dialog" aria-modal="true" aria-labelledby={title ? 'modal-title' : undefined} aria-label={title ? undefined : 'Dialog'}>
-      <div className="fixed inset-0 bg-navy/25 backdrop-blur-[2px]" onClick={onClose} aria-hidden="true" />
+      <div
+        className="fixed inset-0 bg-navy/25 backdrop-blur-[2px]"
+        onClick={() => {
+          void triggerImpactHaptic('LIGHT');
+          onClose();
+        }}
+        aria-hidden="true"
+      />
       <div
         ref={dialogRef}
         className={cn(
@@ -177,7 +185,15 @@ export function Modal({ open, onClose, title, children, className, size = 'md' }
         {title && (
           <div className="flex items-center justify-between border-b border-gray-200 px-6 py-5">
             <h2 id="modal-title" className="text-lg font-bold text-navy">{title}</h2>
-            <button onClick={onClose} className="rounded-xl p-2 text-muted transition-colors hover:bg-background-light hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Close">
+            <button
+              type="button"
+              onClick={() => {
+                void triggerImpactHaptic('LIGHT');
+                onClose();
+              }}
+              className="rounded-xl p-2 text-muted transition-colors hover:bg-background-light hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              aria-label="Close"
+            >
               <X className="w-5 h-5" aria-hidden="true" />
             </button>
           </div>
@@ -253,7 +269,14 @@ export function Drawer({ open, onClose, title, children, side = 'right', classNa
 
   return (
     <div className="fixed inset-0 z-50" role="dialog" aria-modal="true" aria-labelledby={title ? 'drawer-title' : undefined} aria-label={title ? undefined : 'Drawer'}>
-      <div className="fixed inset-0 bg-navy/25 backdrop-blur-[2px] animate-in fade-in duration-200" onClick={onClose} aria-hidden="true" />
+      <div
+        className="fixed inset-0 bg-navy/25 backdrop-blur-[2px] animate-in fade-in duration-200"
+        onClick={() => {
+          void triggerImpactHaptic('LIGHT');
+          onClose();
+        }}
+        aria-hidden="true"
+      />
       <div
         ref={drawerRef}
         className={cn(
@@ -265,7 +288,15 @@ export function Drawer({ open, onClose, title, children, side = 'right', classNa
         {title && (
           <div className="flex shrink-0 items-center justify-between border-b border-gray-200 px-6 py-5">
             <h2 id="drawer-title" className="text-lg font-bold text-navy">{title}</h2>
-            <button onClick={onClose} className="rounded-xl p-2 text-muted transition-colors hover:bg-background-light hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary" aria-label="Close">
+            <button
+              type="button"
+              onClick={() => {
+                void triggerImpactHaptic('LIGHT');
+                onClose();
+              }}
+              className="rounded-xl p-2 text-muted transition-colors hover:bg-background-light hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+              aria-label="Close"
+            >
               <X className="w-5 h-5" aria-hidden="true" />
             </button>
           </div>

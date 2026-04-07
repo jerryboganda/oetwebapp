@@ -1711,6 +1711,7 @@ export async function fetchBilling(): Promise<BillingData> {
       trialDays: Number(plan.trialDays ?? 0),
       displayOrder: Number(plan.displayOrder ?? 0),
       includedSubtests: toStringArray(plan.includedSubtests),
+      entitlements: asRecord(plan.entitlements),
     })),
     addOns: (extras.items ?? []).map((extra: ApiRecord) => ({
       id: extra.id,
@@ -2680,4 +2681,565 @@ export async function fetchAdminReviewFailures() {
 
 export async function fetchAdminAuditLogDetail(eventId: string) {
   return apiRequest(`/v1/admin/audit-logs/${encodeURIComponent(eventId)}`);
+}
+
+export async function fetchFreezeStatus() {
+  return apiRequest('/v1/freeze');
+}
+
+export async function requestFreeze(payload: {
+  startAt?: string | null;
+  endAt?: string | null;
+  reason?: string | null;
+  pauseEntitlementClock?: boolean | null;
+}) {
+  return apiRequest('/v1/freeze/request', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function confirmFreeze(freezeId: string) {
+  return apiRequest(`/v1/freeze/${encodeURIComponent(freezeId)}/confirm`, { method: 'POST' });
+}
+
+export async function cancelFreeze(freezeId: string) {
+  return apiRequest(`/v1/freeze/${encodeURIComponent(freezeId)}/cancel`, { method: 'POST' });
+}
+
+export async function fetchAdminFreezeOverview() {
+  return apiRequest('/v1/admin/freeze/overview');
+}
+
+export async function updateAdminFreezePolicy(payload: unknown) {
+  return apiRequest('/v1/admin/freeze/policy', {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function createAdminManualFreeze(payload: unknown) {
+  return apiRequest('/v1/admin/freeze/manual', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function approveAdminFreeze(freezeId: string, payload: unknown) {
+  return apiRequest(`/v1/admin/freeze/${encodeURIComponent(freezeId)}/approve`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function rejectAdminFreeze(freezeId: string, payload: unknown) {
+  return apiRequest(`/v1/admin/freeze/${encodeURIComponent(freezeId)}/reject`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function endAdminFreeze(freezeId: string, payload: unknown) {
+  return apiRequest(`/v1/admin/freeze/${encodeURIComponent(freezeId)}/end`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function forceEndAdminFreeze(freezeId: string, payload: unknown) {
+  return apiRequest(`/v1/admin/freeze/${encodeURIComponent(freezeId)}/force-end`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+// ── Gamification ─────────────────────────────────────────────────────────────
+
+export async function fetchXP() {
+  return apiRequest('/v1/gamification/xp');
+}
+
+export async function fetchStreak() {
+  return apiRequest('/v1/gamification/streak');
+}
+
+export async function recordActivity() {
+  return apiRequest('/v1/gamification/streak/activity', { method: 'POST' });
+}
+
+export async function fetchAchievements() {
+  return apiRequest('/v1/gamification/achievements');
+}
+
+export async function fetchLeaderboard(examTypeCode?: string, period = 'weekly') {
+  const params = new URLSearchParams({ period });
+  if (examTypeCode) params.set('examTypeCode', examTypeCode);
+  return apiRequest(`/v1/gamification/leaderboard?${params}`);
+}
+
+export async function fetchMyLeaderboardPosition(examTypeCode?: string, period = 'weekly') {
+  const params = new URLSearchParams({ period });
+  if (examTypeCode) params.set('examTypeCode', examTypeCode);
+  return apiRequest(`/v1/gamification/leaderboard/my-position?${params}`);
+}
+
+export async function setLeaderboardOptIn(optedIn: boolean) {
+  return apiRequest('/v1/gamification/leaderboard/opt-in', {
+    method: 'POST',
+    body: JSON.stringify({ optedIn }),
+  });
+}
+
+// ── Spaced Repetition ─────────────────────────────────────────────────────────
+
+export async function fetchReviewSummary() {
+  return apiRequest('/v1/review/summary');
+}
+
+export async function fetchDueReviewItems(limit = 20) {
+  return apiRequest(`/v1/review/due?limit=${limit}`);
+}
+
+export async function createReviewItem(payload: {
+  examTypeCode: string;
+  sourceType: string;
+  sourceId: string;
+  subtestCode?: string;
+  criterionCode?: string;
+  questionJson: string;
+  answerJson: string;
+}) {
+  return apiRequest('/v1/review/items', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function submitReview(itemId: string, quality: number) {
+  return apiRequest(`/v1/review/items/${encodeURIComponent(itemId)}/submit`, {
+    method: 'POST',
+    body: JSON.stringify({ quality }),
+  });
+}
+
+export async function deleteReviewItem(itemId: string) {
+  return apiRequest(`/v1/review/items/${encodeURIComponent(itemId)}`, { method: 'DELETE' });
+}
+
+// ── Vocabulary ────────────────────────────────────────────────────────────────
+
+export async function fetchVocabularyTerms(params?: { examTypeCode?: string; category?: string; search?: string; page?: number; pageSize?: number }) {
+  const p = new URLSearchParams();
+  if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
+  if (params?.category) p.set('category', params.category);
+  if (params?.search) p.set('search', params.search);
+  if (params?.page) p.set('page', String(params.page));
+  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
+  return apiRequest(`/v1/vocabulary/terms?${p}`);
+}
+
+export async function fetchVocabularyTerm(termId: string) {
+  return apiRequest(`/v1/vocabulary/terms/${encodeURIComponent(termId)}`);
+}
+
+export async function fetchMyVocabulary(mastery?: string) {
+  const p = mastery ? `?mastery=${mastery}` : '';
+  return apiRequest(`/v1/vocabulary/my-list${p}`);
+}
+
+export async function addToMyVocabulary(termId: string) {
+  return apiRequest(`/v1/vocabulary/my-list/${encodeURIComponent(termId)}`, { method: 'POST' });
+}
+
+export async function removeFromMyVocabulary(termId: string) {
+  return apiRequest(`/v1/vocabulary/my-list/${encodeURIComponent(termId)}`, { method: 'DELETE' });
+}
+
+export async function fetchDueFlashcards(limit = 20) {
+  return apiRequest(`/v1/vocabulary/flashcards/due?limit=${limit}`);
+}
+
+export async function submitFlashcardReview(lvId: string, quality: number) {
+  return apiRequest(`/v1/vocabulary/flashcards/${encodeURIComponent(lvId)}/review`, {
+    method: 'POST',
+    body: JSON.stringify({ quality }),
+  });
+}
+
+export async function fetchVocabQuiz(count = 10) {
+  return apiRequest(`/v1/vocabulary/quiz?count=${count}`);
+}
+
+export async function submitVocabQuiz(payload: { answers: Array<{ termId: string; correct: boolean; userAnswer?: string }>; durationSeconds: number }) {
+  return apiRequest('/v1/vocabulary/quiz/submit', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+// ── Adaptive Difficulty ───────────────────────────────────────────────────────
+
+export async function fetchSkillProfile(examTypeCode?: string) {
+  const p = examTypeCode ? `?examTypeCode=${examTypeCode}` : '';
+  return apiRequest(`/v1/adaptive/skill-profile${p}`);
+}
+
+export async function fetchAdaptiveContent(examTypeCode: string, subtestCode: string, count = 5) {
+  return apiRequest(`/v1/adaptive/content?examTypeCode=${examTypeCode}&subtestCode=${subtestCode}&count=${count}`);
+}
+
+// ── Predictions ───────────────────────────────────────────────────────────────
+
+export async function fetchPredictions(examTypeCode?: string) {
+  const p = examTypeCode ? `?examTypeCode=${examTypeCode}` : '';
+  return apiRequest(`/v1/predictions${p}`);
+}
+
+export async function fetchPrediction(examTypeCode: string, subtestCode: string) {
+  return apiRequest(`/v1/predictions/${encodeURIComponent(examTypeCode)}/${encodeURIComponent(subtestCode)}`);
+}
+
+export async function requestPredictionComputation(examTypeCode: string, subtestCode: string) {
+  return apiRequest('/v1/predictions/compute', {
+    method: 'POST',
+    body: JSON.stringify({ examTypeCode, subtestCode }),
+  });
+}
+
+// ── Community ─────────────────────────────────────────────────────────────────
+
+export async function fetchForumCategories(examTypeCode?: string) {
+  const p = examTypeCode ? `?examTypeCode=${examTypeCode}` : '';
+  return apiRequest(`/v1/community/categories${p}`);
+}
+
+export async function fetchForumThreads(categoryId?: string, page = 1, pageSize = 20) {
+  const p = new URLSearchParams({ page: String(page), pageSize: String(pageSize) });
+  if (categoryId) p.set('categoryId', categoryId);
+  return apiRequest(`/v1/community/threads?${p}`);
+}
+
+export async function fetchForumThread(threadId: string) {
+  return apiRequest(`/v1/community/threads/${encodeURIComponent(threadId)}`);
+}
+
+export async function createForumThread(payload: { categoryId: string; title: string; body: string }) {
+  return apiRequest('/v1/community/threads', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchThreadReplies(threadId: string, page = 1, pageSize = 20) {
+  return apiRequest(`/v1/community/threads/${encodeURIComponent(threadId)}/replies?page=${page}&pageSize=${pageSize}`);
+}
+
+export async function createReply(threadId: string, body: string) {
+  return apiRequest(`/v1/community/threads/${encodeURIComponent(threadId)}/replies`, {
+    method: 'POST',
+    body: JSON.stringify({ body }),
+  });
+}
+
+export async function fetchStudyGroups(examTypeCode?: string) {
+  const p = examTypeCode ? `?examTypeCode=${examTypeCode}` : '';
+  return apiRequest(`/v1/community/study-groups${p}`);
+}
+
+export async function createStudyGroup(payload: { name: string; description: string; examTypeCode: string; isPublic: boolean }) {
+  return apiRequest('/v1/community/study-groups', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function joinStudyGroup(groupId: string) {
+  return apiRequest(`/v1/community/study-groups/${encodeURIComponent(groupId)}/join`, { method: 'POST' });
+}
+
+// ── Grammar ───────────────────────────────────────────────────────────────────
+
+export async function fetchGrammarLessons(params?: { examTypeCode?: string; category?: string; level?: string }) {
+  const p = new URLSearchParams();
+  if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
+  if (params?.category) p.set('category', params.category);
+  if (params?.level) p.set('level', params.level);
+  return apiRequest(`/v1/grammar/lessons?${p}`);
+}
+
+export async function fetchGrammarLesson(lessonId: string) {
+  return apiRequest(`/v1/grammar/lessons/${encodeURIComponent(lessonId)}`);
+}
+
+export async function startGrammarLesson(lessonId: string) {
+  return apiRequest(`/v1/grammar/lessons/${encodeURIComponent(lessonId)}/start`, { method: 'POST' });
+}
+
+export async function completeGrammarLesson(lessonId: string, score: number, answersJson: string) {
+  return apiRequest(`/v1/grammar/lessons/${encodeURIComponent(lessonId)}/complete`, {
+    method: 'POST',
+    body: JSON.stringify({ score, answersJson }),
+  });
+}
+
+// ── Video Lessons ─────────────────────────────────────────────────────────────
+
+export async function fetchVideoLessons(params?: { examTypeCode?: string; subtestCode?: string; category?: string }) {
+  const p = new URLSearchParams();
+  if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
+  if (params?.subtestCode) p.set('subtestCode', params.subtestCode);
+  if (params?.category) p.set('category', params.category);
+  return apiRequest(`/v1/lessons?${p}`);
+}
+
+export async function fetchVideoLesson(lessonId: string) {
+  return apiRequest(`/v1/lessons/${encodeURIComponent(lessonId)}`);
+}
+
+export async function updateVideoProgress(lessonId: string, watchedSeconds: number) {
+  return apiRequest(`/v1/lessons/${encodeURIComponent(lessonId)}/progress`, {
+    method: 'POST',
+    body: JSON.stringify({ watchedSeconds }),
+  });
+}
+
+// ── Strategy Guides ───────────────────────────────────────────────────────────
+
+export async function fetchStrategyGuides(params?: { examTypeCode?: string; subtestCode?: string; category?: string }) {
+  const p = new URLSearchParams();
+  if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
+  if (params?.subtestCode) p.set('subtestCode', params.subtestCode);
+  if (params?.category) p.set('category', params.category);
+  return apiRequest(`/v1/strategies?${p}`);
+}
+
+export async function fetchStrategyGuide(guideId: string) {
+  return apiRequest(`/v1/strategies/${encodeURIComponent(guideId)}`);
+}
+
+// ── Pronunciation ─────────────────────────────────────────────────────────────
+
+export async function fetchPronunciationDrills(difficulty?: string) {
+  const p = difficulty ? `?difficulty=${difficulty}` : '';
+  return apiRequest(`/v1/pronunciation/drills${p}`);
+}
+
+export async function fetchPronunciationDrill(drillId: string) {
+  return apiRequest(`/v1/pronunciation/drills/${encodeURIComponent(drillId)}`);
+}
+
+export async function fetchMyPronunciationProgress() {
+  return apiRequest('/v1/pronunciation/my-progress');
+}
+
+// ── Certificates ──────────────────────────────────────────────────────────────
+
+export async function fetchMyCertificates() {
+  return apiRequest('/v1/certificates');
+}
+
+export async function verifyCertificate(code: string) {
+  return apiRequest(`/v1/certificates/verify/${encodeURIComponent(code)}`);
+}
+
+// ── Referrals ─────────────────────────────────────────────────────────────────
+
+export async function fetchMyReferralCode() {
+  return apiRequest('/v1/referrals/my-code');
+}
+
+export async function fetchMyReferrals() {
+  return apiRequest('/v1/referrals/my-referrals');
+}
+
+export async function applyReferralCode(code: string) {
+  return apiRequest('/v1/referrals/apply', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  });
+}
+
+// ── Exam Booking ──────────────────────────────────────────────────────────────
+
+export async function fetchExamBookings() {
+  return apiRequest('/v1/exam-bookings');
+}
+
+export async function createExamBooking(payload: { examTypeCode: string; examDate: string; bookingReference?: string; externalUrl?: string; testCenter?: string }) {
+  return apiRequest('/v1/exam-bookings', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteExamBooking(bookingId: string) {
+  return apiRequest(`/v1/exam-bookings/${encodeURIComponent(bookingId)}`, { method: 'DELETE' });
+}
+
+// ── Tutoring ──────────────────────────────────────────────────────────────────
+
+export async function fetchTutoringSessions() {
+  return apiRequest('/v1/tutoring/sessions');
+}
+
+export async function bookTutoringSession(payload: { expertUserId: string; examTypeCode: string; subtestFocus?: string; scheduledAt: string; durationMinutes: number; learnerNotes?: string; price: number }) {
+  return apiRequest('/v1/tutoring/sessions', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function rateTutoringSession(sessionId: string, rating: number, feedback?: string) {
+  return apiRequest(`/v1/tutoring/sessions/${encodeURIComponent(sessionId)}/rate`, {
+    method: 'POST',
+    body: JSON.stringify({ rating, feedback }),
+  });
+}
+
+// ── AI Conversation ─────────────────────────────────────────────────────
+
+export async function createConversation(params: { contentId?: string; examFamilyCode: string; taskTypeCode: string }) {
+  return apiRequest('/v1/conversations', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function getConversation(sessionId: string) {
+  return apiRequest(`/v1/conversations/${encodeURIComponent(sessionId)}`);
+}
+
+export async function completeConversation(sessionId: string) {
+  return apiRequest(`/v1/conversations/${encodeURIComponent(sessionId)}/complete`, {
+    method: 'POST',
+  });
+}
+
+export async function getConversationEvaluation(sessionId: string) {
+  return apiRequest(`/v1/conversations/${encodeURIComponent(sessionId)}/evaluation`);
+}
+
+export async function getConversationHistory(page = 1, pageSize = 10) {
+  return apiRequest(`/v1/conversations/history?page=${page}&pageSize=${pageSize}`);
+}
+
+// ── Pronunciation ───────────────────────────────────────────────────────
+
+export async function fetchPronunciationProfile() {
+  return apiRequest('/v1/pronunciation/profile');
+}
+
+export async function submitPronunciationAttempt(drillId: string, audioUrl?: string) {
+  return apiRequest(`/v1/pronunciation/drills/${encodeURIComponent(drillId)}/attempt`, {
+    method: 'POST',
+    body: JSON.stringify({ audioUrl }),
+  });
+}
+
+export async function fetchPronunciationAssessment(assessmentId: string) {
+  return apiRequest(`/v1/pronunciation/assessment/${encodeURIComponent(assessmentId)}`);
+}
+
+// ── Writing Coach ───────────────────────────────────────────────────────
+
+export async function coachCheckText(attemptId: string, currentText: string, cursorPosition?: number) {
+  return apiRequest(`/v1/writing/attempts/${encodeURIComponent(attemptId)}/coach-check`, {
+    method: 'POST',
+    body: JSON.stringify({ currentText, cursorPosition }),
+  });
+}
+
+export async function resolveCoachSuggestion(suggestionId: string, resolution: 'accepted' | 'dismissed') {
+  return apiRequest(`/v1/writing/coach-suggestions/${encodeURIComponent(suggestionId)}/resolve`, {
+    method: 'POST',
+    body: JSON.stringify({ resolution }),
+  });
+}
+
+export async function fetchCoachStats(attemptId: string) {
+  return apiRequest(`/v1/writing/attempts/${encodeURIComponent(attemptId)}/coach-stats`);
+}
+
+// ── Content Generation (Admin) ──────────────────────────────────────────
+
+export async function queueContentGeneration(params: {
+  examTypeCode: string;
+  subtestCode: string;
+  taskTypeId?: string;
+  professionId?: string;
+  difficulty?: string;
+  count: number;
+  customInstructions?: string;
+}) {
+  return apiRequest('/v1/admin/content/generate', {
+    method: 'POST',
+    body: JSON.stringify(params),
+  });
+}
+
+export async function fetchContentGenerationJobs(page = 1, pageSize = 20) {
+  return apiRequest(`/v1/admin/content/generation-jobs?page=${page}&pageSize=${pageSize}`);
+}
+
+export async function fetchContentGenerationJob(jobId: string) {
+  return apiRequest(`/v1/admin/content/generation-jobs/${encodeURIComponent(jobId)}`);
+}
+
+// ── Content Marketplace ─────────────────────────────────────────────────
+
+export async function fetchMarketplaceProfile() {
+  return apiRequest('/v1/marketplace/profile');
+}
+
+export async function updateMarketplaceProfile(data: { displayName?: string; bio?: string }) {
+  return apiRequest('/v1/marketplace/profile', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function createMarketplaceSubmission(data: {
+  examFamilyCode?: string;
+  subtestCode: string;
+  title: string;
+  description?: string;
+  contentPayloadJson?: string;
+  contentType?: string;
+  professionId?: string;
+  difficulty?: string;
+  tags?: string;
+}) {
+  return apiRequest('/v1/marketplace/submissions', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function fetchMyMarketplaceSubmissions(page = 1, pageSize = 20) {
+  return apiRequest(`/v1/marketplace/submissions?page=${page}&pageSize=${pageSize}`);
+}
+
+export async function fetchMarketplaceSubmission(submissionId: string) {
+  return apiRequest(`/v1/marketplace/submissions/${encodeURIComponent(submissionId)}`);
+}
+
+export async function browseMarketplace(params?: { examTypeCode?: string; subtest?: string; search?: string; page?: number; pageSize?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.examTypeCode) qs.set('examTypeCode', params.examTypeCode);
+  if (params?.subtest) qs.set('subtest', params.subtest);
+  if (params?.search) qs.set('search', params.search);
+  qs.set('page', String(params?.page ?? 1));
+  qs.set('pageSize', String(params?.pageSize ?? 20));
+  return apiRequest(`/v1/marketplace/browse?${qs}`);
+}
+
+export async function reviewMarketplaceSubmission(submissionId: string, data: { decision: 'approved' | 'rejected'; notes?: string; createContentItem?: boolean }) {
+  return apiRequest(`/v1/admin/marketplace/submissions/${encodeURIComponent(submissionId)}/review`, {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function fetchPendingMarketplaceSubmissions(page = 1, pageSize = 20) {
+  return apiRequest(`/v1/admin/marketplace/pending?page=${page}&pageSize=${pageSize}`);
 }

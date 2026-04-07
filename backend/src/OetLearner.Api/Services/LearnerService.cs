@@ -8,7 +8,7 @@ namespace OetLearner.Api.Services;
 
 public sealed record GeneratedDownloadFile(Stream Stream, string ContentType, string FileName);
 
-public class LearnerService(
+public partial class LearnerService(
     LearnerDbContext db,
     MediaStorageService mediaStorage,
     PlatformLinkService platformLinks,
@@ -18,6 +18,7 @@ public class LearnerService(
 {
     public async Task<object> GetMeAsync(string userId, CancellationToken cancellationToken)
     {
+        await EnsureLearnerProfileAsync(userId, cancellationToken);
         var user = await EnsureUserAsync(userId, cancellationToken);
         var goal = await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken);
 
@@ -33,6 +34,7 @@ public class LearnerService(
             lastActiveAt = user.LastActiveAt,
             currentPlanId = user.CurrentPlanId,
             activeProfessionId = user.ActiveProfessionId,
+            freeze = await GetFreezeStatusAsync(userId, cancellationToken),
             goals = new
             {
                 examFamilyCode = goal.ExamFamilyCode,
@@ -51,10 +53,12 @@ public class LearnerService(
 
     public async Task<object> GetBootstrapAsync(string userId, CancellationToken cancellationToken)
     {
+        await EnsureLearnerProfileAsync(userId, cancellationToken);
         var user = await EnsureUserAsync(userId, cancellationToken);
         var onboarding = await GetOnboardingStateAsync(userId, cancellationToken);
         var goals = await GetGoalsAsync(userId, cancellationToken);
         var readiness = await GetReadinessAsync(userId, cancellationToken);
+        var freeze = await GetFreezeStatusAsync(userId, cancellationToken);
 
         return new
         {
@@ -62,6 +66,7 @@ public class LearnerService(
             onboarding,
             goals,
             readiness,
+            freeze,
             permissions = new
             {
                 canRequestReview = true,
@@ -172,6 +177,7 @@ public class LearnerService(
     public async Task<object> StartOnboardingAsync(string userId, CancellationToken cancellationToken)
     {
         var user = await EnsureUserAsync(userId, cancellationToken);
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         user.OnboardingStartedAt ??= DateTimeOffset.UtcNow;
         user.OnboardingCurrentStep = Math.Max(user.OnboardingCurrentStep, 1);
         user.LastActiveAt = DateTimeOffset.UtcNow;
@@ -183,6 +189,7 @@ public class LearnerService(
     public async Task<object> CompleteOnboardingAsync(string userId, CancellationToken cancellationToken)
     {
         var user = await EnsureUserAsync(userId, cancellationToken);
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         user.OnboardingCompleted = true;
         user.OnboardingCurrentStep = user.OnboardingStepCount;
         user.OnboardingCompletedAt = DateTimeOffset.UtcNow;
@@ -194,6 +201,7 @@ public class LearnerService(
 
     public async Task<object> GetGoalsAsync(string userId, CancellationToken cancellationToken)
     {
+        await EnsureLearnerProfileAsync(userId, cancellationToken);
         await EnsureUserAsync(userId, cancellationToken);
         var goal = await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken);
         return GoalDto(goal);
@@ -201,7 +209,9 @@ public class LearnerService(
 
     public async Task<object> PatchGoalsAsync(string userId, PatchGoalsRequest request, CancellationToken cancellationToken)
     {
+        await EnsureLearnerProfileAsync(userId, cancellationToken);
         await EnsureUserAsync(userId, cancellationToken);
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var goal = await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken);
         var examFamilyCode = NormalizeExamFamilyCode(request.ExamFamilyCode ?? goal.ExamFamilyCode);
         var examFamilyExists = await db.ExamFamilies.AsNoTracking()
@@ -269,7 +279,9 @@ public class LearnerService(
 
     public async Task<object> SubmitGoalsAsync(string userId, CancellationToken cancellationToken)
     {
+        await EnsureLearnerProfileAsync(userId, cancellationToken);
         await EnsureUserAsync(userId, cancellationToken);
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
 
         await using var transaction = await db.Database.BeginTransactionAsync(cancellationToken);
         try
@@ -306,6 +318,7 @@ public class LearnerService(
 
     public async Task<object> GetSettingsAsync(string userId, CancellationToken cancellationToken)
     {
+        await EnsureLearnerProfileAsync(userId, cancellationToken);
         await EnsureUserAsync(userId, cancellationToken);
         var settings = await db.Settings.FirstAsync(x => x.UserId == userId, cancellationToken);
         var goal = await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken);
@@ -314,6 +327,7 @@ public class LearnerService(
 
     public async Task<object> GetSettingsSectionAsync(string userId, string section, CancellationToken cancellationToken)
     {
+        await EnsureLearnerProfileAsync(userId, cancellationToken);
         var user = await EnsureUserAsync(userId, cancellationToken);
         var settings = await db.Settings.FirstAsync(x => x.UserId == userId, cancellationToken);
         var goal = await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken);
@@ -347,7 +361,9 @@ public class LearnerService(
 
     public async Task<object> PatchSettingsSectionAsync(string userId, string section, PatchSectionRequest request, CancellationToken cancellationToken)
     {
+        await EnsureLearnerProfileAsync(userId, cancellationToken);
         var user = await EnsureUserAsync(userId, cancellationToken);
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var settings = await db.Settings.FirstAsync(x => x.UserId == userId, cancellationToken);
         var goal = await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken);
         if (section.Equals("goals", StringComparison.OrdinalIgnoreCase))
@@ -519,6 +535,7 @@ public class LearnerService(
     public async Task<object> CreateOrResumeDiagnosticAsync(string userId, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var goal = await db.Goals.AsNoTracking().FirstAsync(x => x.UserId == userId, cancellationToken);
         var active = await db.DiagnosticSessions.Where(x => x.UserId == userId && x.State == AttemptState.InProgress).FirstOrDefaultAsync(cancellationToken);
         if (active is not null)
@@ -710,7 +727,9 @@ public class LearnerService(
 
     public async Task<object> GetDashboardAsync(string userId, CancellationToken cancellationToken)
     {
+        await EnsureLearnerProfileAsync(userId, cancellationToken);
         await EnsureUserAsync(userId, cancellationToken);
+        var freeze = await GetFreezeStatusAsync(userId, cancellationToken);
         var readiness = await GetReadinessAsync(userId, cancellationToken);
         var goal = await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken);
         var plan = await GetStudyPlanAsync(userId, cancellationToken);
@@ -756,6 +775,7 @@ public class LearnerService(
                 totalPracticeMinutes = user.TotalPracticeMinutes,
                 totalPracticeSessions = user.TotalPracticeSessions
             } : null,
+            freeze,
             primaryActions = new[]
             {
                 new { id = "resume-study-plan", label = "Resume Study Plan", route = "/app/study-plan" },
@@ -769,6 +789,7 @@ public class LearnerService(
 
     public async Task<object> GetStudyPlanAsync(string userId, CancellationToken cancellationToken)
     {
+        await EnsureLearnerProfileAsync(userId, cancellationToken);
         await EnsureUserAsync(userId, cancellationToken);
         var plan = await GetActiveStudyPlanEntityAsync(userId, cancellationToken);
         var items = await db.StudyPlanItems.Where(x => x.StudyPlanId == plan.Id).OrderBy(x => x.DueDate).ToListAsync(cancellationToken);
@@ -793,6 +814,7 @@ public class LearnerService(
     public async Task<object> RegenerateStudyPlanAsync(string userId, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var plan = await GetActiveStudyPlanEntityAsync(userId, cancellationToken);
         plan.State = AsyncState.Queued;
         await QueueJobAsync(JobType.StudyPlanRegeneration, resourceId: plan.Id, cancellationToken: cancellationToken);
@@ -802,6 +824,7 @@ public class LearnerService(
 
     public async Task<object> CompleteStudyPlanItemAsync(string userId, string itemId, CancellationToken cancellationToken)
     {
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var item = await GetStudyPlanItemOwnedByUserAsync(userId, itemId, cancellationToken);
         item.Status = StudyPlanItemStatus.Completed;
         var plan = await db.StudyPlans.FirstAsync(x => x.Id == item.StudyPlanId, cancellationToken);
@@ -812,6 +835,7 @@ public class LearnerService(
 
     public async Task<object> SkipStudyPlanItemAsync(string userId, string itemId, CancellationToken cancellationToken)
     {
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var item = await GetStudyPlanItemOwnedByUserAsync(userId, itemId, cancellationToken);
         item.Status = StudyPlanItemStatus.Skipped;
         var plan = await db.StudyPlans.FirstAsync(x => x.Id == item.StudyPlanId, cancellationToken);
@@ -822,6 +846,7 @@ public class LearnerService(
 
     public async Task<object> RescheduleStudyPlanItemAsync(string userId, string itemId, StudyPlanRescheduleRequest request, CancellationToken cancellationToken)
     {
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var item = await GetStudyPlanItemOwnedByUserAsync(userId, itemId, cancellationToken);
         item.Status = StudyPlanItemStatus.Rescheduled;
         item.DueDate = request.DueDate ?? item.DueDate.AddDays(1);
@@ -833,6 +858,7 @@ public class LearnerService(
 
     public async Task<object> ResetStudyPlanItemAsync(string userId, string itemId, CancellationToken cancellationToken)
     {
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var item = await GetStudyPlanItemOwnedByUserAsync(userId, itemId, cancellationToken);
         item.Status = StudyPlanItemStatus.NotStarted;
         await db.SaveChangesAsync(cancellationToken);
@@ -841,6 +867,7 @@ public class LearnerService(
 
     public async Task<object> SwapStudyPlanItemAsync(string userId, string itemId, StudyPlanSwapRequest request, CancellationToken cancellationToken)
     {
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var item = await GetStudyPlanItemOwnedByUserAsync(userId, itemId, cancellationToken);
         item.ContentId = request.ReplacementContentId ?? item.ContentId;
         await db.SaveChangesAsync(cancellationToken);
@@ -849,6 +876,7 @@ public class LearnerService(
 
     public async Task<object> GetReadinessAsync(string userId, CancellationToken cancellationToken)
     {
+        await EnsureLearnerProfileAsync(userId, cancellationToken);
         await EnsureUserAsync(userId, cancellationToken);
         var snapshot = await GetLatestReadinessSnapshotAsync(userId, cancellationToken);
         var payload = JsonSupport.Deserialize<Dictionary<string, object?>>(snapshot.PayloadJson, new Dictionary<string, object?>());
@@ -1132,6 +1160,7 @@ public class LearnerService(
 
     public async Task<object> UpdateWritingDraftAsync(string userId, string attemptId, DraftUpdateRequest request, CancellationToken cancellationToken)
     {
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
         if (request.DraftVersion.HasValue && request.DraftVersion.Value != attempt.DraftVersion)
         {
@@ -1167,6 +1196,7 @@ public class LearnerService(
 
     public async Task<object> HeartbeatAttemptAsync(string userId, string attemptId, HeartbeatRequest request, CancellationToken cancellationToken)
     {
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
         attempt.ElapsedSeconds = request.ElapsedSeconds;
         attempt.LastClientSyncAt = DateTimeOffset.UtcNow;
@@ -1177,6 +1207,7 @@ public class LearnerService(
 
     public async Task<object> SubmitWritingAttemptAsync(string userId, string attemptId, SubmitAttemptRequest request, CancellationToken cancellationToken)
     {
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
             var cached = await GetIdempotentResponseAsync("writing-submit", request.IdempotencyKey, cancellationToken);
@@ -1340,6 +1371,7 @@ public class LearnerService(
 
     public async Task<object> SubmitWritingRevisionAsync(string userId, string attemptId, RevisionSubmitRequest request, CancellationToken cancellationToken)
     {
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
             var cached = await GetIdempotentResponseAsync("writing-revision-submit", request.IdempotencyKey, cancellationToken);
@@ -1519,6 +1551,7 @@ public class LearnerService(
 
     public async Task<object> CreateSpeakingUploadSessionAsync(string userId, string attemptId, CancellationToken cancellationToken)
     {
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
         var uploadId = $"upload-{Guid.NewGuid():N}";
         var upload = new UploadSession
@@ -1551,6 +1584,7 @@ public class LearnerService(
         string? contentType,
         CancellationToken cancellationToken)
     {
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var upload = await GetUploadSessionOwnedByUserAsync(userId, uploadSessionId, cancellationToken);
         if (upload.ExpiresAt <= DateTimeOffset.UtcNow)
         {
@@ -1592,6 +1626,7 @@ public class LearnerService(
 
     public async Task<object> CompleteSpeakingUploadAsync(string userId, string attemptId, UploadCompleteRequest request, CancellationToken cancellationToken)
     {
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
         var upload = await GetUploadSessionForCompletionAsync(userId, attemptId, request, cancellationToken);
         if (upload.State != UploadState.Uploaded || !mediaStorage.Exists(upload.StorageKey))
@@ -1632,6 +1667,7 @@ public class LearnerService(
 
     public async Task<object> SubmitSpeakingAttemptAsync(string userId, string attemptId, CancellationToken cancellationToken)
     {
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
         if (attempt.State is AttemptState.Submitted or AttemptState.Evaluating or AttemptState.Completed)
         {
@@ -1903,6 +1939,8 @@ public class LearnerService(
             }
         }
 
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
+
         var normalizedProductType = (request.ProductType ?? string.Empty).Trim().ToLowerInvariant();
         if (normalizedProductType is not ("review_credits" or "plan_upgrade" or "plan_downgrade" or "addon_purchase"))
         {
@@ -1974,19 +2012,19 @@ public class LearnerService(
                 ProductType: normalizedProductType,
                 ProductId: quoteEntity.Id,
                 Description: quoteResponse.Summary,
-                Metadata: new Dictionary<string, string>
-                {
-                    ["quote_id"] = quoteEntity.Id,
-                    ["product_type"] = normalizedProductType,
-                    ["purchase_target"] = purchaseTarget ?? string.Empty,
+                  Metadata: new Dictionary<string, string>
+                  {
+                      ["quote_id"] = quoteEntity.Id,
+                      ["product_type"] = normalizedProductType,
+                      ["purchase_target"] = purchaseTarget ?? string.Empty,
                     ["user_id"] = userId,
-                    ["plan_code"] = quoteEntity.PlanCode ?? string.Empty,
-                    ["coupon_code"] = quoteEntity.CouponCode ?? string.Empty,
-                    ["add_on_codes"] = string.Join(',', JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []))
-                },
-                SuccessUrl: platformLinks.BuildWebUrl($"/billing?payment=success&gateway={Uri.EscapeDataString(gatewayLabel)}"),
-                CancelUrl: platformLinks.BuildWebUrl($"/billing?payment=cancelled&gateway={Uri.EscapeDataString(gatewayLabel)}")),
-            cancellationToken);
+                      ["plan_code"] = quoteEntity.PlanCode ?? string.Empty,
+                      ["coupon_code"] = quoteEntity.CouponCode ?? string.Empty,
+                      ["add_on_codes"] = string.Join(',', JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []))
+                  },
+                  SuccessUrl: platformLinks.BuildWebUrl($"/subscriptions?payment=success&gateway={Uri.EscapeDataString(gatewayLabel)}"),
+                  CancelUrl: platformLinks.BuildWebUrl($"/subscriptions?payment=cancelled&gateway={Uri.EscapeDataString(gatewayLabel)}")),
+              cancellationToken);
 
         quoteEntity.CheckoutSessionId = checkoutIntent.GatewayTransactionId;
         quoteEntity.Status = BillingQuoteStatus.Applied;
@@ -2108,6 +2146,7 @@ public class LearnerService(
     public async Task<object> CreateMockAttemptAsync(string userId, MockAttemptCreateRequest request, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var id = $"mock-attempt-{Guid.NewGuid():N}";
         var reviewSelection = NormalizeMockReviewSelection(request.MockType, request.SubType, request.IncludeReview, request.ReviewSelection);
         var config = new
@@ -2163,6 +2202,7 @@ public class LearnerService(
 
     public async Task<object> SubmitMockAttemptAsync(string userId, string mockAttemptId, CancellationToken cancellationToken)
     {
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var attempt = await GetMockAttemptOwnedByUserAsync(userId, mockAttemptId, cancellationToken);
         attempt.State = AttemptState.Evaluating;
         attempt.SubmittedAt = DateTimeOffset.UtcNow;
@@ -2239,6 +2279,7 @@ public class LearnerService(
 
     public async Task<object> CreateReviewRequestAsync(string userId, ReviewRequestCreateRequest request, CancellationToken cancellationToken)
     {
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         for (var attemptNumber = 0; attemptNumber < 2; attemptNumber++)
         {
             try
@@ -2391,6 +2432,7 @@ public class LearnerService(
         await EnsureUserAsync(userId, cancellationToken);
         var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
         var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId, cancellationToken);
+        var freeze = await GetFreezeStatusAsync(userId, cancellationToken);
         var currentPlan = await FindBillingPlanAsync(subscription.PlanId, cancellationToken);
         var activeAddOns = await db.SubscriptionItems.AsNoTracking()
             .Where(x => x.SubscriptionId == subscription.Id && x.Status == SubscriptionItemStatus.Active)
@@ -2412,6 +2454,7 @@ public class LearnerService(
             nextRenewalAt = subscription.NextRenewalAt,
             startedAt = subscription.StartedAt,
             changedAt = subscription.ChangedAt,
+            freeze,
             price = new { amount = subscription.PriceAmount, currency = subscription.Currency, interval = subscription.Interval },
             wallet = new { walletId = wallet.Id, creditBalance = wallet.CreditBalance, ledgerSummary = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(wallet.LedgerSummaryJson, []) },
             activeAddOns = activeAddOns.Select(item =>
@@ -2507,17 +2550,17 @@ public class LearnerService(
         };
     }
 
-    public async Task<object> GetBillingChangePreviewAsync(string userId, string targetPlanId, CancellationToken cancellationToken)
-    {
-        await EnsureUserAsync(userId, cancellationToken);
-        var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
-        var currentPlan = await FindBillingPlanAsync(subscription.PlanId, cancellationToken)
-            ?? throw ApiException.NotFound("billing_plan_not_found", "Your current billing plan could not be found.");
-        var targetPlan = await FindBillingPlanAsync(targetPlanId, cancellationToken)
-            ?? throw ApiException.Validation(
-                "unknown_plan",
-                $"Unknown billing plan '{targetPlanId}'.",
-                [new ApiFieldError("targetPlanId", "unknown", "Choose a supported billing plan.")]);
+      public async Task<object> GetBillingChangePreviewAsync(string userId, string targetPlanId, CancellationToken cancellationToken)
+      {
+          await EnsureUserAsync(userId, cancellationToken);
+          var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
+          var currentPlan = await FindBillingPlanAsync(subscription.PlanId, cancellationToken)
+              ?? throw ApiException.NotFound("billing_plan_not_found", "Your current billing plan could not be found.");
+          var targetPlan = await FindPurchasableBillingPlanAsync(targetPlanId, cancellationToken)
+              ?? throw ApiException.Validation(
+                  "unknown_plan",
+                  $"Unknown billing plan '{targetPlanId}'.",
+                  [new ApiFieldError("targetPlanId", "unknown", "Choose a published billing plan.")]);
 
         var delta = targetPlan.Price - currentPlan.Price;
         var direction = delta >= 0 ? "upgrade" : "downgrade";
@@ -2816,6 +2859,36 @@ public class LearnerService(
         return user;
     }
 
+    private async Task<LearnerUser> EnsureLearnerProfileAsync(string userId, CancellationToken cancellationToken)
+    {
+        var user = await EnsureUserAsync(userId, cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        var changed = false;
+
+        var goal = await db.Goals.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        if (goal is null)
+        {
+            goal = CreateDefaultGoal(userId, user.ActiveProfessionId, now);
+            db.Goals.Add(goal);
+            changed = true;
+        }
+
+        var settings = await db.Settings.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        if (settings is null)
+        {
+            settings = CreateDefaultSettings(user, goal);
+            db.Settings.Add(settings);
+            changed = true;
+        }
+
+        if (changed)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
+
+        return user;
+    }
+
     private static object GoalDto(LearnerGoal goal) => new
     {
         goalId = goal.Id,
@@ -2928,6 +3001,185 @@ public class LearnerService(
         audio = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.AudioJson, new Dictionary<string, object?>()),
         study = JsonSupport.Deserialize<Dictionary<string, object?>>(settings.StudyJson, new Dictionary<string, object?>())
     };
+
+    private static LearnerGoal CreateDefaultGoal(string userId, string? professionId, DateTimeOffset now)
+        => new()
+        {
+            Id = Guid.NewGuid(),
+            UserId = userId,
+            ProfessionId = string.IsNullOrWhiteSpace(professionId) ? "nursing" : professionId,
+            TargetExamDate = DateOnly.FromDateTime(now.UtcDateTime.AddMonths(3)),
+            OverallGoal = "Build a strong OET foundation and stay ready for exam day.",
+            TargetWritingScore = 350,
+            TargetSpeakingScore = 350,
+            TargetReadingScore = 350,
+            TargetListeningScore = 350,
+            PreviousAttempts = 0,
+            WeakSubtestsJson = JsonSupport.Serialize(new[] { "writing", "speaking" }),
+            StudyHoursPerWeek = 10,
+            TargetCountry = "Australia",
+            TargetOrganization = "AHPRA",
+            DraftStateJson = JsonSupport.Serialize(new Dictionary<string, object?>()),
+            UpdatedAt = now,
+            ExamFamilyCode = "oet"
+        };
+
+    private static LearnerSettings CreateDefaultSettings(LearnerUser user, LearnerGoal goal)
+        => new()
+        {
+            Id = Guid.NewGuid(),
+            UserId = user.Id,
+            ProfileJson = JsonSupport.Serialize(new Dictionary<string, object?>
+            {
+                ["displayName"] = user.DisplayName,
+                ["email"] = user.Email,
+                ["profession"] = goal.ProfessionId,
+                ["timezone"] = user.Timezone,
+                ["locale"] = user.Locale
+            }),
+            NotificationsJson = JsonSupport.Serialize(new Dictionary<string, object?>
+            {
+                ["emailReminders"] = true,
+                ["reviewUpdates"] = true,
+                ["billingAlerts"] = true
+            }),
+            PrivacyJson = JsonSupport.Serialize(new Dictionary<string, object?>
+            {
+                ["audioConsentAccepted"] = true,
+                ["analyticsOptIn"] = true
+            }),
+            AccessibilityJson = JsonSupport.Serialize(new Dictionary<string, object?>
+            {
+                ["reducedMotion"] = false,
+                ["highContrast"] = false,
+                ["fontScale"] = 1.0
+            }),
+            AudioJson = JsonSupport.Serialize(new Dictionary<string, object?>
+            {
+                ["playbackSpeed"] = 1.0,
+                ["autoAdvance"] = true
+            }),
+            StudyJson = JsonSupport.Serialize(new Dictionary<string, object?>
+            {
+                ["dailyGoalMinutes"] = 45,
+                ["studyHoursPerWeek"] = goal.StudyHoursPerWeek
+            })
+        };
+
+    private static ReadinessSnapshot CreateDefaultReadinessSnapshot(string userId, LearnerGoal goal, DateTimeOffset now)
+    {
+        var targetDate = goal.TargetExamDate ?? DateOnly.FromDateTime(now.UtcDateTime.AddMonths(3));
+
+        return new ReadinessSnapshot
+        {
+            Id = $"rs-{Guid.NewGuid():N}",
+            UserId = userId,
+            ComputedAt = now,
+            Version = 1,
+            PayloadJson = JsonSupport.Serialize(new
+            {
+                targetDate = targetDate.ToString("yyyy-MM-dd"),
+                weeksRemaining = 12,
+                overallRisk = "moderate",
+                recommendedStudyHours = 10,
+                weakestLink = "Writing - Conciseness & Clarity",
+                subTests = new[]
+                {
+                    new { id = "rd-w", name = "Writing", readiness = 62, target = 80, status = "Needs attention", isWeakest = true },
+                    new { id = "rd-s", name = "Speaking", readiness = 68, target = 80, status = "On track", isWeakest = false },
+                    new { id = "rd-r", name = "Reading", readiness = 76, target = 80, status = "Almost there", isWeakest = false },
+                    new { id = "rd-l", name = "Listening", readiness = 72, target = 80, status = "Almost there", isWeakest = false }
+                },
+                blockers = new[]
+                {
+                    new { id = 1, title = "Writing conciseness remains below threshold", description = "Tighten detail so each response stays focused on the clinical brief." },
+                    new { id = 2, title = "Speaking fluency still needs structure", description = "Keep answers short, ordered, and confident under time pressure." }
+                },
+                evidence = new
+                {
+                    source = "bootstrap",
+                    notes = "Created automatically for a newly initialized learner account."
+                }
+            })
+        };
+    }
+
+    private static StudyPlan CreateDefaultStudyPlan(string userId, LearnerGoal goal, DateTimeOffset now)
+        => new()
+        {
+            Id = $"plan-{Guid.NewGuid():N}",
+            UserId = userId,
+            Version = 1,
+            GeneratedAt = now,
+            State = AsyncState.Completed,
+            Checkpoint = "Personalized plan ready",
+            WeakSkillFocus = "Writing conciseness and speaking fluency",
+            ExamFamilyCode = goal.ExamFamilyCode
+        };
+
+    private static IEnumerable<StudyPlanItem> CreateDefaultStudyPlanItems(string planId)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        return
+        [
+            new StudyPlanItem
+            {
+                Id = $"spi-{Guid.NewGuid():N}",
+                StudyPlanId = planId,
+                Title = "Writing: Discharge Summary Practice",
+                SubtestCode = "writing",
+                DurationMinutes = 45,
+                Rationale = "Start with a focused writing task that sharpens conciseness and clinical detail selection.",
+                DueDate = today,
+                Status = StudyPlanItemStatus.NotStarted,
+                Section = "today",
+                ContentId = "wt-001",
+                ItemType = "practice"
+            },
+            new StudyPlanItem
+            {
+                Id = $"spi-{Guid.NewGuid():N}",
+                StudyPlanId = planId,
+                Title = "Speaking: Patient Handover Role Play",
+                SubtestCode = "speaking",
+                DurationMinutes = 20,
+                Rationale = "Practice a calm, ordered response so your fluency stays strong under pressure.",
+                DueDate = today,
+                Status = StudyPlanItemStatus.NotStarted,
+                Section = "today",
+                ContentId = "st-001",
+                ItemType = "roleplay"
+            },
+            new StudyPlanItem
+            {
+                Id = $"spi-{Guid.NewGuid():N}",
+                StudyPlanId = planId,
+                Title = "Reading: Part C Detail Extraction",
+                SubtestCode = "reading",
+                DurationMinutes = 30,
+                Rationale = "Train scanning for exact figures and qualifiers before moving on to the next item.",
+                DueDate = today.AddDays(1),
+                Status = StudyPlanItemStatus.NotStarted,
+                Section = "thisWeek",
+                ContentId = "rt-001",
+                ItemType = "practice"
+            },
+            new StudyPlanItem
+            {
+                Id = $"spi-{Guid.NewGuid():N}",
+                StudyPlanId = planId,
+                Title = "Listening: Number & Frequency Drill",
+                SubtestCode = "listening",
+                DurationMinutes = 15,
+                Rationale = "Use a short drill to reinforce number recognition and frequency cues.",
+                DueDate = today.AddDays(2),
+                Status = StudyPlanItemStatus.NotStarted,
+                Section = "thisWeek",
+                ContentId = "lt-001",
+                ItemType = "drill"
+            }
+        ];
+    }
 
     private static void ApplyGoalSettingsPatch(LearnerGoal goal, Dictionary<string, object?> values)
     {
@@ -3168,6 +3420,7 @@ public class LearnerService(
     private async Task<object> CreateAttemptAsync(string userId, CreateAttemptRequest request, string subtest, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var context = request.Context ?? "practice";
         var mode = request.Mode ?? (subtest is "reading" or "listening" ? "exam" : "practice");
         var existing = await db.Attempts
@@ -3268,6 +3521,7 @@ public class LearnerService(
 
     private async Task<object> UpdateAnswersAsync(string userId, string attemptId, AnswersUpdateRequest request, CancellationToken cancellationToken)
     {
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
         var current = JsonSupport.Deserialize<Dictionary<string, string?>>(attempt.AnswersJson, new Dictionary<string, string?>());
         foreach (var (key, value) in request.Answers)
@@ -3284,6 +3538,7 @@ public class LearnerService(
 
     private async Task<object> SubmitObjectiveAttemptAsync(string userId, string attemptId, string subtest, CancellationToken cancellationToken)
     {
+        await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var attempt = await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
         if (attempt.State == AttemptState.Completed)
         {
@@ -3363,30 +3618,64 @@ public class LearnerService(
 
     private async Task<StudyPlan> GetActiveStudyPlanEntityAsync(string userId, CancellationToken cancellationToken)
     {
+        var user = await EnsureLearnerProfileAsync(userId, cancellationToken);
+        var goal = await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken);
         var query = db.StudyPlans.Where(x => x.UserId == userId);
+        StudyPlan? plan;
         if (!db.Database.IsSqlite())
         {
-            return await query.OrderByDescending(x => x.GeneratedAt).FirstAsync(cancellationToken);
+            plan = await query.OrderByDescending(x => x.GeneratedAt).FirstOrDefaultAsync(cancellationToken);
+        }
+        else
+        {
+            var plans = await query.ToListAsync(cancellationToken);
+            plan = plans.OrderByDescending(x => x.GeneratedAt).FirstOrDefault();
         }
 
-        var plans = await query.ToListAsync(cancellationToken);
-        return plans
-            .OrderByDescending(x => x.GeneratedAt)
-            .First();
+        if (plan is not null)
+        {
+            if (!string.Equals(user.CurrentPlanId, plan.Id, StringComparison.Ordinal))
+            {
+                user.CurrentPlanId = plan.Id;
+                await db.SaveChangesAsync(cancellationToken);
+            }
+
+            return plan;
+        }
+
+        var createdPlan = CreateDefaultStudyPlan(userId, goal, DateTimeOffset.UtcNow);
+        db.StudyPlans.Add(createdPlan);
+        db.StudyPlanItems.AddRange(CreateDefaultStudyPlanItems(createdPlan.Id));
+        user.CurrentPlanId = createdPlan.Id;
+        await db.SaveChangesAsync(cancellationToken);
+        return createdPlan;
     }
 
     private async Task<ReadinessSnapshot> GetLatestReadinessSnapshotAsync(string userId, CancellationToken cancellationToken)
     {
+        await EnsureLearnerProfileAsync(userId, cancellationToken);
+        var goal = await db.Goals.FirstAsync(x => x.UserId == userId, cancellationToken);
         var query = db.ReadinessSnapshots.Where(x => x.UserId == userId);
+        ReadinessSnapshot? snapshot;
         if (!db.Database.IsSqlite())
         {
-            return await query.OrderByDescending(x => x.ComputedAt).FirstAsync(cancellationToken);
+            snapshot = await query.OrderByDescending(x => x.ComputedAt).FirstOrDefaultAsync(cancellationToken);
+        }
+        else
+        {
+            var snapshots = await query.ToListAsync(cancellationToken);
+            snapshot = snapshots.OrderByDescending(x => x.ComputedAt).FirstOrDefault();
         }
 
-        var snapshots = await query.ToListAsync(cancellationToken);
-        return snapshots
-            .OrderByDescending(x => x.ComputedAt)
-            .First();
+        if (snapshot is not null)
+        {
+            return snapshot;
+        }
+
+        snapshot = CreateDefaultReadinessSnapshot(userId, goal, DateTimeOffset.UtcNow);
+        db.ReadinessSnapshots.Add(snapshot);
+        await db.SaveChangesAsync(cancellationToken);
+        return snapshot;
     }
 
     private async Task<BackgroundJobItem?> GetLatestStudyPlanRegenerationJobAsync(string planId, CancellationToken cancellationToken)
@@ -3554,29 +3843,25 @@ public class LearnerService(
             validation);
     }
 
-    private async Task<BillingQuoteResponse> BuildBillingQuoteAsync(
-        string userId,
-        BillingQuoteRequest request,
-        CancellationToken cancellationToken,
-        bool persistQuote)
+      private async Task<BillingQuoteResponse> BuildBillingQuoteAsync(
+          string userId,
+          BillingQuoteRequest request,
+          CancellationToken cancellationToken,
+          bool persistQuote)
     {
-        var normalizedProductType = (request.ProductType ?? string.Empty).Trim().ToLowerInvariant();
-        var now = DateTimeOffset.UtcNow;
-        var subscription = await db.Subscriptions.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
-        if (subscription is null)
-        {
-            var defaultPlan = await db.BillingPlans.AsNoTracking()
-                .Where(plan => plan.Status == BillingPlanStatus.Active)
-                .OrderBy(plan => plan.DisplayOrder)
-                .ThenBy(plan => plan.Price)
-                .FirstOrDefaultAsync(cancellationToken)
-                ?? await db.BillingPlans.AsNoTracking()
-                    .OrderBy(plan => plan.DisplayOrder)
-                    .ThenBy(plan => plan.Price)
-                    .FirstOrDefaultAsync(cancellationToken)
-                ?? throw ApiException.NotFound(
-                    "billing_plan_not_found",
-                    "No billing plan is available for checkout.");
+          var normalizedProductType = (request.ProductType ?? string.Empty).Trim().ToLowerInvariant();
+          var now = DateTimeOffset.UtcNow;
+          var subscription = await db.Subscriptions.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+          if (subscription is null)
+          {
+              var defaultPlan = await db.BillingPlans.AsNoTracking()
+                  .Where(plan => plan.Status == BillingPlanStatus.Active && plan.IsVisible)
+                  .OrderBy(plan => plan.DisplayOrder)
+                  .ThenBy(plan => plan.Price)
+                  .FirstOrDefaultAsync(cancellationToken)
+                  ?? throw ApiException.NotFound(
+                      "billing_plan_not_found",
+                      "No published billing plan is available for checkout.");
 
             subscription = new Subscription
             {
@@ -3602,26 +3887,26 @@ public class LearnerService(
         string? planCode = null;
         string summary;
 
-        if (normalizedProductType is "plan_upgrade" or "plan_downgrade")
-        {
-            if (string.IsNullOrWhiteSpace(request.PriceId))
-            {
-                throw ApiException.Validation(
-                    "target_plan_required",
-                    "A target plan id is required for plan changes.",
-                    [new ApiFieldError("priceId", "required", "Choose the plan you want to switch to.")]);
-            }
+          if (normalizedProductType is "plan_upgrade" or "plan_downgrade")
+          {
+              if (string.IsNullOrWhiteSpace(request.PriceId))
+              {
+                  throw ApiException.Validation(
+                      "target_plan_required",
+                      "A target plan id is required for plan changes.",
+                      [new ApiFieldError("priceId", "required", "Choose the plan you want to switch to.")]);
+              }
 
-            var targetPlan = await FindBillingPlanAsync(request.PriceId, cancellationToken)
-                ?? throw ApiException.Validation(
-                    "unknown_plan",
-                    $"Unknown billing plan '{request.PriceId}'.",
-                    [new ApiFieldError("priceId", "unknown", "Choose a supported billing plan.")]);
+              var targetPlan = await FindPurchasableBillingPlanAsync(request.PriceId, cancellationToken)
+                  ?? throw ApiException.Validation(
+                      "unknown_plan",
+                      $"Unknown billing plan '{request.PriceId}'.",
+                      [new ApiFieldError("priceId", "unknown", "Choose a published billing plan.")]);
 
-            planCode = targetPlan.Code;
-            var referencePlan = currentPlan ?? targetPlan;
-            var delta = targetPlan.Price - referencePlan.Price;
-            subtotal = Math.Round(Math.Abs(delta) / 2m, 2, MidpointRounding.AwayFromZero);
+              planCode = targetPlan.Code;
+              var referencePlan = currentPlan ?? targetPlan;
+              var delta = targetPlan.Price - referencePlan.Price;
+              subtotal = Math.Round(Math.Abs(delta) / 2m, 2, MidpointRounding.AwayFromZero);
             summary = normalizedProductType == "plan_upgrade"
                 ? $"Switching to {targetPlan.Name} increases your billing amount by {Math.Abs(delta):0.00} {targetPlan.Currency}."
                 : $"Switching to {targetPlan.Name} lowers your billing amount by {Math.Abs(delta):0.00} {targetPlan.Currency}.";
@@ -3634,25 +3919,33 @@ public class LearnerService(
                 1,
                 targetPlan.Description));
         }
-        else if (normalizedProductType == "addon_purchase")
-        {
-            if (string.IsNullOrWhiteSpace(request.PriceId))
-            {
-                throw ApiException.Validation(
-                    "target_addon_required",
-                    "A target add-on id is required for add-on purchases.",
-                    [new ApiFieldError("priceId", "required", "Choose the add-on you want to purchase.")]);
-            }
+          else if (normalizedProductType == "addon_purchase")
+          {
+              if (string.IsNullOrWhiteSpace(request.PriceId))
+              {
+                  throw ApiException.Validation(
+                      "target_addon_required",
+                      "A target add-on id is required for add-on purchases.",
+                      [new ApiFieldError("priceId", "required", "Choose the add-on you want to purchase.")]);
+              }
 
-            var addOn = await FindBillingAddOnAsync(request.PriceId, cancellationToken)
-                ?? throw ApiException.Validation(
-                    "unknown_addon",
-                    $"Unknown billing add-on '{request.PriceId}'.",
-                    [new ApiFieldError("priceId", "unknown", "Choose a supported add-on.")]);
+              var addOn = await FindPurchasableBillingAddOnAsync(request.PriceId, cancellationToken)
+                  ?? throw ApiException.Validation(
+                      "unknown_addon",
+                      $"Unknown billing add-on '{request.PriceId}'.",
+                      [new ApiFieldError("priceId", "unknown", "Choose a published add-on.")]);
 
-            if (addOn.MaxQuantity is not null && request.Quantity > addOn.MaxQuantity.Value)
-            {
-                throw ApiException.Validation(
+              if (!IsAddOnCompatibleWithPlan(addOn, currentPlan))
+              {
+                  throw ApiException.Validation(
+                      "addon_incompatible",
+                      "The selected add-on is not available for your current plan.",
+                      [new ApiFieldError("priceId", "incompatible", "Choose an add-on that works with your current plan.")]);
+              }
+
+              if (addOn.MaxQuantity is not null && request.Quantity > addOn.MaxQuantity.Value)
+              {
+                  throw ApiException.Validation(
                     "addon_quantity_exceeded",
                     "The requested add-on quantity exceeds the allowed maximum.",
                     [new ApiFieldError("quantity", "max_exceeded", "Reduce the quantity and try again.")]);
@@ -3670,28 +3963,34 @@ public class LearnerService(
                 request.Quantity,
                 addOn.Description));
         }
-        else
-        {
-            BillingAddOn? reviewPack = null;
-            if (!string.IsNullOrWhiteSpace(request.PriceId))
-            {
-                reviewPack = await FindBillingAddOnAsync(request.PriceId, cancellationToken);
-            }
+          else
+          {
+              BillingAddOn? reviewPack = null;
+              if (!string.IsNullOrWhiteSpace(request.PriceId))
+              {
+                  reviewPack = await FindPurchasableBillingAddOnAsync(request.PriceId, cancellationToken);
+                  if (reviewPack is not null && !IsAddOnCompatibleWithPlan(reviewPack, currentPlan))
+                  {
+                      reviewPack = null;
+                  }
+              }
 
-            reviewPack ??= await db.BillingAddOns.AsNoTracking()
-                .Where(addOn => addOn.Status == BillingAddOnStatus.Active && addOn.GrantCredits == request.Quantity)
-                .OrderBy(addOn => addOn.DisplayOrder)
-                .FirstOrDefaultAsync(cancellationToken);
+              reviewPack ??= (await db.BillingAddOns.AsNoTracking()
+                  .Where(addOn => addOn.Status == BillingAddOnStatus.Active && addOn.GrantCredits == request.Quantity)
+                  .OrderBy(addOn => addOn.DisplayOrder)
+                  .ToListAsync(cancellationToken))
+                  .FirstOrDefault(addOn => IsAddOnCompatibleWithPlan(addOn, currentPlan));
 
-            reviewPack ??= await db.BillingAddOns.AsNoTracking()
-                .Where(addOn => addOn.Status == BillingAddOnStatus.Active && addOn.GrantCredits > 0)
-                .OrderBy(addOn => addOn.DisplayOrder)
-                .ThenBy(addOn => addOn.Price)
-                .FirstOrDefaultAsync(cancellationToken)
-                ?? throw ApiException.Validation(
-                    "review_pack_unavailable",
-                    "No review credit pack is available for the requested quantity.",
-                    [new ApiFieldError("quantity", "unsupported", "Choose one of the available review credit packs.")]);
+              reviewPack ??= (await db.BillingAddOns.AsNoTracking()
+                  .Where(addOn => addOn.Status == BillingAddOnStatus.Active && addOn.GrantCredits > 0)
+                  .OrderBy(addOn => addOn.DisplayOrder)
+                  .ThenBy(addOn => addOn.Price)
+                  .ToListAsync(cancellationToken))
+                  .FirstOrDefault(addOn => IsAddOnCompatibleWithPlan(addOn, currentPlan))
+                  ?? throw ApiException.Validation(
+                      "review_pack_unavailable",
+                      "No review credit pack is available for the requested quantity.",
+                      [new ApiFieldError("quantity", "unsupported", "Choose one of the available review credit packs.")]);
 
             planCode = currentPlan?.Code;
             subtotal = Math.Round(reviewPack.Price, 2, MidpointRounding.AwayFromZero);
@@ -3997,21 +4296,53 @@ public class LearnerService(
                 || addOn.Id.ToLower() == normalized, cancellationToken);
     }
 
-    private async Task<BillingCoupon?> FindBillingCouponAsync(string couponCode, CancellationToken cancellationToken)
-    {
-        var normalized = NormalizeBillingCode(couponCode);
-        if (string.IsNullOrWhiteSpace(normalized))
-        {
+      private async Task<BillingCoupon?> FindBillingCouponAsync(string couponCode, CancellationToken cancellationToken)
+      {
+          var normalized = NormalizeBillingCode(couponCode);
+          if (string.IsNullOrWhiteSpace(normalized))
+          {
             return null;
         }
 
-        return await db.BillingCoupons.AsNoTracking()
-            .FirstOrDefaultAsync(coupon => coupon.Code.ToLower() == normalized
-                || coupon.Id.ToLower() == normalized, cancellationToken);
-    }
+          return await db.BillingCoupons.AsNoTracking()
+              .FirstOrDefaultAsync(coupon => coupon.Code.ToLower() == normalized
+                  || coupon.Id.ToLower() == normalized, cancellationToken);
+      }
 
-    private static string NormalizeBillingCode(string? value)
-        => (value ?? string.Empty).Trim().ToLowerInvariant();
+      private async Task<BillingPlan?> FindPurchasableBillingPlanAsync(string planCode, CancellationToken cancellationToken)
+      {
+          var plan = await FindBillingPlanAsync(planCode, cancellationToken);
+          return plan is not null && plan.Status == BillingPlanStatus.Active && plan.IsVisible
+              ? plan
+              : null;
+      }
+
+      private async Task<BillingAddOn?> FindPurchasableBillingAddOnAsync(string addOnCode, CancellationToken cancellationToken)
+      {
+          var addOn = await FindBillingAddOnAsync(addOnCode, cancellationToken);
+          return addOn is not null && addOn.Status == BillingAddOnStatus.Active
+              ? addOn
+              : null;
+      }
+
+      private static bool IsAddOnCompatibleWithPlan(BillingAddOn addOn, BillingPlan? plan)
+      {
+          if (addOn.AppliesToAllPlans)
+          {
+              return true;
+          }
+
+          var compatiblePlanCodes = JsonSupport.Deserialize<List<string>>(addOn.CompatiblePlanCodesJson, []);
+          if (compatiblePlanCodes.Count == 0 || plan is null)
+          {
+              return false;
+          }
+
+          return compatiblePlanCodes.Any(code => string.Equals(code, plan.Code, StringComparison.OrdinalIgnoreCase));
+      }
+
+      private static string NormalizeBillingCode(string? value)
+          => (value ?? string.Empty).Trim().ToLowerInvariant();
 
     private static List<string> NormalizeCodes(IEnumerable<string>? codes)
         => (codes ?? Array.Empty<string>()).Where(code => !string.IsNullOrWhiteSpace(code))
@@ -4856,6 +5187,8 @@ public class LearnerService(
                 return cached;
             }
         }
+
+        await EnsureLearnerMutationAllowedAsync(userId, ct);
 
         if (request.Gateway is not "stripe" and not "paypal")
         {

@@ -23,6 +23,7 @@ export interface BillingPlan {
   trialDays: number;
   displayOrder: number;
   includedSubtests: string[];
+  entitlements: Record<string, unknown>;
 }
 
 export interface BillingAddOn {

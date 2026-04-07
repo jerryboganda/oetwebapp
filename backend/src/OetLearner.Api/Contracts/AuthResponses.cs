@@ -37,6 +37,7 @@ public sealed record SignupCatalogResponse(
     IReadOnlyList<SignupExamTypeResponse> ExamTypes,
     IReadOnlyList<SignupProfessionResponse> Professions,
     IReadOnlyList<SignupSessionResponse> Sessions,
+    IReadOnlyList<SignupBillingPlanResponse> BillingPlans,
     IReadOnlyList<string> ExternalAuthProviders);
 
 public sealed record SignupExamTypeResponse(
@@ -63,6 +64,22 @@ public sealed record SignupSessionResponse(
     string DeliveryMode,
     int Capacity,
     int SeatsRemaining);
+
+public sealed record SignupBillingPlanResponse(
+    string Id,
+    string Code,
+    string Label,
+    string Description,
+    decimal PriceAmount,
+    string Currency,
+    string Interval,
+    int ReviewCredits,
+    int DisplayOrder,
+    bool IsVisible,
+    bool IsRenewable,
+    int TrialDays,
+    IReadOnlyList<string> IncludedSubtests,
+    IReadOnlyDictionary<string, object?> Entitlements);
 
 public sealed record ExternalRegistrationPromptResponse(
     string RegistrationToken,

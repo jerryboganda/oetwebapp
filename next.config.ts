@@ -8,7 +8,7 @@ function getOrigin(value: string | undefined, fallback: string): string {
   }
 }
 
-const apiOrigin = getOrigin(process.env.NEXT_PUBLIC_API_BASE_URL, 'http://localhost:5198');
+const apiOrigin = getOrigin(process.env.NEXT_PUBLIC_API_BASE_URL, 'http://localhost:5199');
 const apiWebSocketOrigin = apiOrigin.startsWith('https://')
   ? `wss://${apiOrigin.slice('https://'.length)}`
   : apiOrigin.startsWith('http://')

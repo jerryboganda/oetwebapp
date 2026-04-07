@@ -13,6 +13,10 @@ public static class LearnerEndpoints
 
         v1.MapGet("/me", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetMeAsync(http.UserId(), ct)));
         v1.MapGet("/me/bootstrap", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetBootstrapAsync(http.UserId(), ct)));
+        v1.MapGet("/freeze", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetFreezeStatusAsync(http.UserId(), ct)));
+        v1.MapPost("/freeze/request", async (HttpContext http, FreezeRequestRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.RequestFreezeAsync(http.UserId(), request, ct)));
+        v1.MapPost("/freeze/{freezeId}/confirm", async (HttpContext http, string freezeId, LearnerService service, CancellationToken ct) => Results.Ok(await service.ConfirmFreezeAsync(http.UserId(), freezeId, ct)));
+        v1.MapPost("/freeze/{freezeId}/cancel", async (HttpContext http, string freezeId, LearnerService service, CancellationToken ct) => Results.Ok(await service.CancelFreezeAsync(http.UserId(), freezeId, ct)));
 
         v1.MapGet("/reference/professions", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetProfessionsAsync(ct)));
         v1.MapGet("/reference/subtests", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSubtestsAsync(ct)));

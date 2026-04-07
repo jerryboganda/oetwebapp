@@ -78,7 +78,7 @@ public sealed class NotificationService(
             return null;
         }
 
-        return await CreateForAuthAccountAsync(eventKey, learner.AuthAccountId, ApplicationUserRoles.Learner, entityType, entityId, versionOrDateBucket, payload, ct);
+        return await CreateForAuthAccountAsync(eventKey, learner.AuthAccountId, ApplicationUserRoles.Learner, entityType, entityId, versionOrDateBucket, payload, enqueueFanoutJob: true, ct);
     }
 
     public async Task<string?> CreateForExpertAsync(
@@ -98,7 +98,7 @@ public sealed class NotificationService(
             return null;
         }
 
-        return await CreateForAuthAccountAsync(eventKey, expert.AuthAccountId, ApplicationUserRoles.Expert, entityType, entityId, versionOrDateBucket, payload, ct);
+        return await CreateForAuthAccountAsync(eventKey, expert.AuthAccountId, ApplicationUserRoles.Expert, entityType, entityId, versionOrDateBucket, payload, enqueueFanoutJob: true, ct);
     }
 
     public async Task<IReadOnlyList<string>> CreateForAdminsAsync(
@@ -118,7 +118,7 @@ public sealed class NotificationService(
         var createdIds = new List<string>();
         foreach (var adminId in adminIds)
         {
-            var createdId = await CreateForAuthAccountAsync(eventKey, adminId, ApplicationUserRoles.Admin, entityType, entityId, versionOrDateBucket, payload, ct);
+            var createdId = await CreateForAuthAccountAsync(eventKey, adminId, ApplicationUserRoles.Admin, entityType, entityId, versionOrDateBucket, payload, enqueueFanoutJob: true, ct);
             if (!string.IsNullOrWhiteSpace(createdId))
             {
                 createdIds.Add(createdId);
@@ -136,6 +136,7 @@ public sealed class NotificationService(
         string entityId,
         string versionOrDateBucket,
         IReadOnlyDictionary<string, object?> payload,
+        bool enqueueFanoutJob,
         CancellationToken ct)
     {
         var catalog = NotificationCatalog.Get(eventKey);
@@ -178,21 +179,24 @@ public sealed class NotificationService(
         };
 
         db.NotificationEvents.Add(notificationEvent);
-        db.BackgroundJobs.Add(new BackgroundJobItem
+        if (enqueueFanoutJob)
         {
-            Id = $"job-{Guid.NewGuid():N}",
-            Type = JobType.NotificationFanout,
-            State = AsyncState.Queued,
-            ResourceId = notificationEvent.Id,
-            PayloadJson = JsonSupport.Serialize(new { notificationEventId = notificationEvent.Id }),
-            CreatedAt = timeProvider.GetUtcNow(),
-            AvailableAt = timeProvider.GetUtcNow().AddSeconds(1),
-            LastTransitionAt = timeProvider.GetUtcNow(),
-            StatusReasonCode = "queued",
-            StatusMessage = "Notification fan-out queued.",
-            Retryable = true,
-            RetryAfterMs = 2000
-        });
+            db.BackgroundJobs.Add(new BackgroundJobItem
+            {
+                Id = $"job-{Guid.NewGuid():N}",
+                Type = JobType.NotificationFanout,
+                State = AsyncState.Queued,
+                ResourceId = notificationEvent.Id,
+                PayloadJson = JsonSupport.Serialize(new { notificationEventId = notificationEvent.Id }),
+                CreatedAt = timeProvider.GetUtcNow(),
+                AvailableAt = timeProvider.GetUtcNow().AddSeconds(1),
+                LastTransitionAt = timeProvider.GetUtcNow(),
+                StatusReasonCode = "queued",
+                StatusMessage = "Notification fan-out queued.",
+                Retryable = true,
+                RetryAfterMs = 2000
+            });
+        }
 
         await db.SaveChangesAsync(ct);
         return notificationEvent.Id;
@@ -757,106 +761,131 @@ public sealed class NotificationService(
         AdminNotificationProofTriggerRequest request,
         CancellationToken ct)
     {
-        EnsureProofHarnessEnabled();
-
-        if (!NotificationCatalog.TryParseKey(request.EventKey, out var eventKey))
+        try
         {
-            throw ApiException.Validation(
-                "invalid_notification_event_key",
-                $"Unsupported notification event key '{request.EventKey}'.",
-                [new ApiFieldError("eventKey", "invalid_event_key", "Use an event key from the notification catalog.")]);
-        }
+            EnsureProofHarnessEnabled();
 
-        var catalog = NotificationCatalog.Get(eventKey);
-        var account = await db.ApplicationUserAccounts
-            .AsNoTracking()
-            .FirstOrDefaultAsync(existingAccount =>
-                existingAccount.Email == request.RecipientEmail
-                && existingAccount.Role == catalog.AudienceRole
-                && existingAccount.DeletedAt == null, ct)
-            ?? throw ApiException.Validation(
-                "notification_proof_recipient_not_found",
-                $"Could not find an active {catalog.AudienceRole} account for '{request.RecipientEmail}'.",
-                [new ApiFieldError("recipientEmail", "not_found", "Use a dedicated learner, expert, or admin test account email.")]);
-
-        var tokens = BuildProofTokens(request.EventKey, catalog.AudienceRole, request.Tokens);
-        var entityType = string.IsNullOrWhiteSpace(request.EntityType) ? $"proof_{catalog.AudienceRole}" : request.EntityType.Trim();
-        var entityId = string.IsNullOrWhiteSpace(request.EntityId) ? $"{request.EventKey}:{account.Id}" : request.EntityId.Trim();
-        var versionOrDateBucket = string.IsNullOrWhiteSpace(request.VersionOrDateBucket)
-            ? timeProvider.GetUtcNow().UtcDateTime.Ticks.ToString()
-            : request.VersionOrDateBucket.Trim();
-
-        var eventId = await CreateForAuthAccountAsync(eventKey, account.Id, catalog.AudienceRole, entityType, entityId, versionOrDateBucket, tokens, ct)
-            ?? throw ApiException.Validation("notification_proof_create_failed", "The notification proof event could not be created.");
-
-        var processedImmediately = false;
-        if (request.ProcessImmediately)
-        {
-            var fanoutJob = await db.BackgroundJobs
-                .FirstOrDefaultAsync(job => job.Type == JobType.NotificationFanout && job.ResourceId == eventId && job.State == AsyncState.Queued, ct);
-            if (fanoutJob is not null)
+            if (!NotificationCatalog.TryParseKey(request.EventKey, out var eventKey))
             {
-                await ProcessBackgroundProofJobAsync(fanoutJob, job => ProcessFanoutAsync(job, ct), ct);
+                throw ApiException.Validation(
+                    "invalid_notification_event_key",
+                    $"Unsupported notification event key '{request.EventKey}'.",
+                    [new ApiFieldError("eventKey", "invalid_event_key", "Use an event key from the notification catalog.")]);
+            }
+
+            var catalog = NotificationCatalog.Get(eventKey);
+            var account = await db.ApplicationUserAccounts
+                .AsNoTracking()
+                .FirstOrDefaultAsync(existingAccount =>
+                    existingAccount.Email == request.RecipientEmail
+                    && existingAccount.Role == catalog.AudienceRole
+                    && existingAccount.DeletedAt == null, ct)
+                ?? throw ApiException.Validation(
+                    "notification_proof_recipient_not_found",
+                    $"Could not find an active {catalog.AudienceRole} account for '{request.RecipientEmail}'.",
+                    [new ApiFieldError("recipientEmail", "not_found", "Use a dedicated learner, expert, or admin test account email.")]);
+
+            var tokens = BuildProofTokens(request.EventKey, catalog.AudienceRole, request.Tokens);
+            var entityType = string.IsNullOrWhiteSpace(request.EntityType) ? $"proof_{catalog.AudienceRole}" : request.EntityType.Trim();
+            var entityId = string.IsNullOrWhiteSpace(request.EntityId) ? $"{request.EventKey}:{account.Id}" : request.EntityId.Trim();
+            var versionOrDateBucket = string.IsNullOrWhiteSpace(request.VersionOrDateBucket)
+                ? timeProvider.GetUtcNow().UtcDateTime.Ticks.ToString()
+                : request.VersionOrDateBucket.Trim();
+
+            var eventId = await CreateForAuthAccountAsync(eventKey, account.Id, catalog.AudienceRole, entityType, entityId, versionOrDateBucket, tokens, enqueueFanoutJob: false, ct)
+                ?? throw ApiException.Validation("notification_proof_create_failed", "The notification proof event could not be created.");
+
+            var processedImmediately = false;
+            if (request.ProcessImmediately)
+            {
+                await ProcessFanoutAsync(new BackgroundJobItem
+                {
+                    Id = $"job-proof-{Guid.NewGuid():N}",
+                    Type = JobType.NotificationFanout,
+                    State = AsyncState.Processing,
+                    ResourceId = eventId,
+                    PayloadJson = JsonSupport.Serialize(new { notificationEventId = eventId }),
+                    CreatedAt = timeProvider.GetUtcNow(),
+                    AvailableAt = timeProvider.GetUtcNow(),
+                    LastTransitionAt = timeProvider.GetUtcNow(),
+                    StatusReasonCode = "processing",
+                    StatusMessage = "Proof harness processing started.",
+                    Retryable = false
+                }, ct);
                 processedImmediately = true;
             }
-        }
 
-        var digestDispatchedImmediately = false;
-        if (request.DispatchDigestImmediately)
-        {
-            var digestJobs = await db.BackgroundJobs
-                .Where(job => job.Type == JobType.NotificationDigestDispatch && job.State == AsyncState.Queued)
-                .OrderBy(job => job.CreatedAt)
-                .ToListAsync(ct);
-
-            foreach (var digestJob in digestJobs)
+            var digestDispatchedImmediately = false;
+            if (request.DispatchDigestImmediately)
             {
-                var digestPayload = JsonSupport.Deserialize(
-                    digestJob.PayloadJson,
-                    new NotificationDigestJobPayload(string.Empty, string.Empty, "UTC"));
-                if (!string.Equals(digestPayload.AuthAccountId, account.Id, StringComparison.Ordinal))
+                var digestJobs = await db.BackgroundJobs
+                    .Where(job => job.Type == JobType.NotificationDigestDispatch && job.State == AsyncState.Queued)
+                    .OrderBy(job => job.CreatedAt)
+                    .ToListAsync(ct);
+
+                foreach (var digestJob in digestJobs)
                 {
-                    continue;
+                    var digestPayload = JsonSupport.Deserialize(
+                        digestJob.PayloadJson,
+                        new NotificationDigestJobPayload(string.Empty, string.Empty, "UTC"));
+                    if (!string.Equals(digestPayload.AuthAccountId, account.Id, StringComparison.Ordinal))
+                    {
+                        continue;
+                    }
+
+                    await ProcessBackgroundProofJobAsync(digestJob, job => ProcessDigestDispatchAsync(job, ct), ct);
+                    digestDispatchedImmediately = true;
                 }
-
-                await ProcessBackgroundProofJobAsync(digestJob, job => ProcessDigestDispatchAsync(job, ct), ct);
-                digestDispatchedImmediately = true;
             }
+
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = $"AUD-{Guid.NewGuid():N}",
+                OccurredAt = timeProvider.GetUtcNow(),
+                ActorId = adminId,
+                ActorName = adminName,
+                Action = "notification_proof_triggered",
+                ResourceType = "NotificationProof",
+                ResourceId = eventId,
+                Details = $"Triggered notification proof for {request.RecipientEmail}"
+            });
+            await db.SaveChangesAsync(ct);
+
+            var notificationEvent = await db.NotificationEvents
+                .AsNoTracking()
+                .FirstAsync(existingEvent => existingEvent.Id == eventId, ct);
+            var inboxItem = await db.NotificationInboxItems
+                .AsNoTracking()
+                .FirstOrDefaultAsync(item => item.NotificationEventId == eventId, ct);
+
+            return new AdminNotificationProofTriggerResponse(
+                notificationEvent.Id,
+                notificationEvent.EventKey,
+                notificationEvent.RecipientRole,
+                account.Email,
+                account.Id,
+                notificationEvent.Title,
+                notificationEvent.Body,
+                NormalizeActionUrl(notificationEvent.ActionUrl),
+                NormalizeSeverity(notificationEvent.Severity),
+                inboxItem?.Id,
+                processedImmediately,
+                digestDispatchedImmediately);
         }
-
-        db.AuditEvents.Add(new AuditEvent
+        catch (Exception ex) when (ex is not ApiException)
         {
-            Id = $"AUD-{Guid.NewGuid():N}",
-            OccurredAt = timeProvider.GetUtcNow(),
-            ActorId = adminId,
-            ActorName = adminName,
-            Action = "notification_proof_triggered",
-            ResourceType = "NotificationProof",
-            ResourceId = $"{catalog.AudienceRole}:{request.EventKey}:{eventId}",
-            Details = $"Triggered notification proof for {request.RecipientEmail}"
-        });
-        await db.SaveChangesAsync(ct);
-
-        var notificationEvent = await db.NotificationEvents
-            .AsNoTracking()
-            .FirstAsync(existingEvent => existingEvent.Id == eventId, ct);
-        var inboxItem = await db.NotificationInboxItems
-            .AsNoTracking()
-            .FirstOrDefaultAsync(item => item.NotificationEventId == eventId, ct);
-
-        return new AdminNotificationProofTriggerResponse(
-            notificationEvent.Id,
-            notificationEvent.EventKey,
-            notificationEvent.RecipientRole,
-            account.Email,
-            account.Id,
-            notificationEvent.Title,
-            notificationEvent.Body,
-            NormalizeActionUrl(notificationEvent.ActionUrl),
-            NormalizeSeverity(notificationEvent.Severity),
-            inboxItem?.Id,
-            processedImmediately,
-            digestDispatchedImmediately);
+            logger.LogError(ex, "Notification proof trigger failed for {EventKey} to {RecipientEmail}. Base: {BaseMessage}", request.EventKey, request.RecipientEmail, ex.GetBaseException().Message);
+            try
+            {
+                var logPath = Path.Combine(Path.GetTempPath(), "oet-notification-proof-errors.log");
+                var logEntry = $"[{DateTimeOffset.UtcNow:O}] {request.EventKey} -> {request.RecipientEmail}{Environment.NewLine}{ex}{Environment.NewLine}{new string('-', 80)}{Environment.NewLine}";
+                await File.AppendAllTextAsync(logPath, logEntry, ct);
+            }
+            catch
+            {
+            }
+            throw;
+        }
     }
 
     public async Task ProcessFanoutAsync(BackgroundJobItem job, CancellationToken ct)

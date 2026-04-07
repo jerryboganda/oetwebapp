@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 const {
   mockFetchBilling,
   mockFetchBillingChangePreview,
+  mockFetchFreezeStatus,
   mockCreateBillingCheckoutSession,
   mockDownloadInvoice,
   mockFetchBillingQuote,
@@ -11,6 +12,7 @@ const {
 } = vi.hoisted(() => ({
   mockFetchBilling: vi.fn(),
   mockFetchBillingChangePreview: vi.fn(),
+  mockFetchFreezeStatus: vi.fn(),
   mockCreateBillingCheckoutSession: vi.fn(),
   mockDownloadInvoice: vi.fn(),
   mockFetchBillingQuote: vi.fn(),
@@ -26,6 +28,10 @@ vi.mock('motion/react', () => ({
       <button {...props}>{children}</button>
     ),
   },
+}));
+
+vi.mock('next/navigation', () => ({
+  useSearchParams: () => new URLSearchParams(''),
 }));
 
 vi.mock('@/components/layout', () => ({
@@ -47,6 +53,7 @@ vi.mock('@/lib/analytics', () => ({
 vi.mock('@/lib/api', () => ({
   fetchBilling: mockFetchBilling,
   fetchBillingChangePreview: mockFetchBillingChangePreview,
+  fetchFreezeStatus: mockFetchFreezeStatus,
   createBillingCheckoutSession: mockCreateBillingCheckoutSession,
   downloadInvoice: mockDownloadInvoice,
   fetchBillingQuote: mockFetchBillingQuote,
@@ -95,6 +102,11 @@ describe('Billing page', () => {
           trialDays: 0,
           displayOrder: 1,
           includedSubtests: ['Writing', 'Speaking'],
+          entitlements: {
+            productiveSkillReviewsEnabled: true,
+            supportedReviewSubtests: ['Writing', 'Speaking'],
+            invoiceDownloadsAvailable: true,
+          },
         },
       ],
       addOns: [
@@ -147,6 +159,7 @@ describe('Billing page', () => {
       summary: 'Quote ready',
       validation: {},
     });
+    mockFetchFreezeStatus.mockResolvedValue(null);
     mockCreateBillingCheckoutSession.mockResolvedValue({ checkoutUrl: 'https://example.com/checkout' });
     mockDownloadInvoice.mockResolvedValue('blob:invoice');
   });
@@ -154,7 +167,7 @@ describe('Billing page', () => {
   it('renders inside the shared learner dashboard shell', async () => {
     render(<BillingPage />);
 
-    expect(await screen.findByText('See what changes before you spend or switch plans')).toBeInTheDocument();
+    expect(await screen.findByText('Manage subscriptions without billing surprises')).toBeInTheDocument();
     expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
   });
 });

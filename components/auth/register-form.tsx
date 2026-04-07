@@ -43,7 +43,7 @@ export function RegisterForm() {
   const [selectedCountryCode, setSelectedCountryCode] = useState('pk');
   const [mobileLocalNumber, setMobileLocalNumber] = useState('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-  const { enrollmentSessions, examTypes, professions } = useSignupCatalog();
+  const { billingPlans, enrollmentSessions, examTypes, professions } = useSignupCatalog();
   const nextPath = searchParams.get('next');
   const registrationToken = searchParams.get('registrationToken');
   const externalEmail = searchParams.get('email') ?? '';
@@ -294,6 +294,7 @@ export function RegisterForm() {
         {step === 2 ? (
           <RegisterEnrollmentStep
             availableCountries={availableCountries}
+            billingPlans={billingPlans}
             examTypes={examTypes}
             filteredProfessions={filteredProfessions}
             filteredSessions={filteredSessions}

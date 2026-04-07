@@ -1,11 +1,13 @@
 import type { UseFormReturn } from 'react-hook-form';
 import styles from '@/components/auth/auth-screen-shell.module.scss';
+import { RegisterPlanPreview } from '@/components/auth/register/register-plan-preview';
 import type { SignupPayloadFormValues } from '@/lib/auth/schemas';
-import type { SignupExamType, SignupProfession, SignupSession } from '@/lib/types/auth';
+import type { SignupBillingPlan, SignupExamType, SignupProfession, SignupSession } from '@/lib/types/auth';
 import { RegisterErrorText } from './register-error-text';
 
 interface RegisterEnrollmentStepProps {
   availableCountries: string[];
+  billingPlans: SignupBillingPlan[];
   examTypes: SignupExamType[];
   filteredProfessions: SignupProfession[];
   filteredSessions: SignupSession[];
@@ -15,6 +17,7 @@ interface RegisterEnrollmentStepProps {
 
 export function RegisterEnrollmentStep({
   availableCountries,
+  billingPlans,
   examTypes,
   filteredProfessions,
   filteredSessions,
@@ -116,6 +119,8 @@ export function RegisterEnrollmentStep({
           <p>Select a session to preview the cohort summary.</p>
         )}
       </div>
+
+      <RegisterPlanPreview billingPlans={billingPlans} />
     </>
   );
 }

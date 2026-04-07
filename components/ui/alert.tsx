@@ -3,6 +3,7 @@
 import { cn } from '@/lib/utils';
 import { AlertCircle, CheckCircle2, Info, AlertTriangle, X } from 'lucide-react';
 import { useState, useEffect, type ReactNode } from 'react';
+import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 
 /* ─── Inline Alert ─── */
 type AlertVariant = 'info' | 'success' | 'warning' | 'error';
@@ -44,7 +45,15 @@ export function InlineAlert({ variant = 'info', title, children, dismissible, cl
         {action && <div className="mt-2">{action}</div>}
       </div>
       {dismissible && (
-        <button onClick={() => setVisible(false)} className={cn('rounded-xl p-1', config.textClass, 'hover:bg-white/70')} aria-label="Dismiss">
+        <button
+          type="button"
+          onClick={() => {
+            void triggerImpactHaptic('LIGHT');
+            setVisible(false);
+          }}
+          className={cn('rounded-xl p-1', config.textClass, 'hover:bg-white/70')}
+          aria-label="Dismiss"
+        >
           <X className="w-4 h-4" />
         </button>
       )}
@@ -77,7 +86,15 @@ export function Toast({ variant = 'info', message, onClose, className, duration 
       </div>
       <span className={cn('text-sm font-medium', config.textClass)}>{message}</span>
       {onClose && (
-        <button onClick={onClose} className={cn('rounded-xl p-1', config.textClass, 'hover:bg-white/70')} aria-label="Dismiss">
+        <button
+          type="button"
+          onClick={() => {
+            void triggerImpactHaptic('LIGHT');
+            onClose();
+          }}
+          className={cn('rounded-xl p-1', config.textClass, 'hover:bg-white/70')}
+          aria-label="Dismiss"
+        >
           <X className="w-4 h-4" aria-hidden="true" />
         </button>
       )}
