@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { GraduationCap, Calendar, Star, Plus } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
@@ -101,7 +101,7 @@ export default function TutoringPage() {
 
       {/* Book form */}
       {showBook && (
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-white dark:bg-gray-800 rounded-xl border border-indigo-200 dark:border-indigo-700 p-5 mb-6">
+        <MotionSection className="bg-white dark:bg-gray-800 rounded-xl border border-indigo-200 dark:border-indigo-700 p-5 mb-6">
           <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Book a Tutoring Session</h3>
           <form onSubmit={handleBook} className="space-y-3">
             <input
@@ -163,7 +163,7 @@ export default function TutoringPage() {
               </button>
             </div>
           </form>
-        </motion.div>
+        </MotionSection>
       )}
 
       <LearnerSurfaceSectionHeader title="Your Sessions" />
@@ -177,7 +177,7 @@ export default function TutoringPage() {
       ) : (
         <div className="space-y-3">
           {sessions.map((session, i) => (
-            <motion.div key={session.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+            <MotionItem key={session.id} delayIndex={i}
               className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 flex flex-col sm:flex-row sm:items-center gap-3"
             >
               <div className="flex-1">
@@ -214,7 +214,7 @@ export default function TutoringPage() {
                   {'★'.repeat(session.learnerRating)}{'☆'.repeat(5 - session.learnerRating)}
                 </div>
               )}
-            </motion.div>
+            </MotionItem>
           ))}
         </div>
       )}

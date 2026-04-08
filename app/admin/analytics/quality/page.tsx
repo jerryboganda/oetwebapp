@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, BarChart3, CheckCircle2, Clock, FileText, Users } from 'lucide-react';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { AdminRouteFreshnessBadge, AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { EmptyState } from '@/components/ui/empty-error';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
@@ -158,19 +159,24 @@ export default function QualityAnalyticsPage() {
       >
         {analytics ? (
           <>
+            <MotionSection delayIndex={0}>
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
               <AdminRouteSummaryCard label="AI-Human Agreement" value={`${analytics.aiHumanAgreement.value}%`} hint={`${analytics.aiHumanAgreement.trend >= 0 ? '+' : ''}${analytics.aiHumanAgreement.trend}% vs prior window`} icon={<CheckCircle2 className="h-5 w-5" />} tone={analytics.aiHumanAgreement.trend >= 0 ? 'success' : 'warning'} />
               <AdminRouteSummaryCard label="Appeals Rate" value={`${analytics.appealsRate.value}%`} hint={`${analytics.appealsRate.trend >= 0 ? '+' : ''}${analytics.appealsRate.trend}% vs prior window`} icon={<AlertTriangle className="h-5 w-5" />} tone={analytics.appealsRate.trend <= 0 ? 'success' : 'warning'} />
               <AdminRouteSummaryCard label="Avg Review Time" value={`${analytics.avgReviewTime.value} ${analytics.avgReviewTime.unit}`} hint={`SLA met ${analytics.reviewSLA.metPercent}%`} icon={<Clock className="h-5 w-5" />} />
               <AdminRouteSummaryCard label="Risk Cases" value={analytics.riskCases.count} hint={`Severity ${analytics.riskCases.severity}`} icon={<AlertTriangle className="h-5 w-5" />} tone={analytics.riskCases.count > 0 ? 'warning' : 'default'} />
             </div>
+            </MotionSection>
 
+            <MotionSection delayIndex={1}>
             <div className="grid gap-4 md:grid-cols-3">
               <AdminRouteSummaryCard label="Published Content" value={analytics.contentPerformance.publishedCount} icon={<FileText className="h-5 w-5" />} />
               <AdminRouteSummaryCard label="Active Content" value={analytics.contentPerformance.activeContent} icon={<FileText className="h-5 w-5" />} />
               <AdminRouteSummaryCard label="Feature Adoption" value={`${analytics.featureAdoption.adoptionRate}%`} hint={`${analytics.featureAdoption.activeUsers} active users`} icon={<Users className="h-5 w-5" />} />
             </div>
+            </MotionSection>
 
+            <MotionSection delayIndex={2}>
             <div className="grid gap-6 xl:grid-cols-2">
               <AdminRoutePanel title="Quality Rates Trend" description="Agreement and appeals trends from the current analytics window.">
                 <div className="h-[240px] w-full sm:h-[280px] lg:h-[320px]">
@@ -204,7 +210,9 @@ export default function QualityAnalyticsPage() {
                 </div>
               </AdminRoutePanel>
             </div>
+            </MotionSection>
 
+            <MotionSection delayIndex={3}>
             <AdminRoutePanel title="Sample Coverage" description="Quality analytics are only as trustworthy as the evidence window behind them.">
               <div className="grid gap-4 md:grid-cols-3">
                 <div>
@@ -222,6 +230,7 @@ export default function QualityAnalyticsPage() {
                 </div>
               </div>
             </AdminRoutePanel>
+            </MotionSection>
           </>
         ) : null}
       </AsyncStateWrapper>

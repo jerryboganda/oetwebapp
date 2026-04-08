@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import {
   ArrowRight,
   BookOpen,
@@ -59,7 +60,6 @@ export default function Dashboard() {
   const completedToday = todayTasks.filter((task) => task.status === 'completed').length;
   const nextAction = todayTasks.find((task) => task.status !== 'completed');
   const asyncStatus = status === 'loading' ? 'loading' : status === 'error' ? 'error' : !profile ? 'empty' : 'success' as const;
-  const introMotion = prefersReducedMotion ? {} : { initial: { opacity: 0, y: 16 }, animate: { opacity: 1, y: 0 } };
 
   const dashboardHeroHighlights = [
     {
@@ -189,16 +189,13 @@ export default function Dashboard() {
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             {nextActionCard ? (
-              <motion.div {...introMotion}>
+              <MotionItem delayIndex={0}>
                 <LearnerSurfaceCard card={nextActionCard} />
-              </motion.div>
+              </MotionItem>
             ) : null}
-            <motion.div
-              {...introMotion}
-              transition={prefersReducedMotion ? undefined : { delay: 0.05 }}
-            >
+            <MotionItem delayIndex={1}>
               <LearnerSurfaceCard card={nextMockCard} />
-            </motion.div>
+            </MotionItem>
           </div>
 
           <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">

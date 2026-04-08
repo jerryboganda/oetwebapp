@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import {
   LineChart,
   Line,
@@ -109,9 +109,8 @@ export default function ProgressDashboard() {
         {!loading && !error && (
           <>
             {/* 1. Sub-test Trend */}
-            <motion.section
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
+            <MotionSection
+              delayIndex={0}
               className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm"
             >
               <LearnerSurfaceSectionHeader
@@ -144,13 +143,11 @@ export default function ProgressDashboard() {
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-            </motion.section>
+            </MotionSection>
 
             {/* 2. Criterion Trend */}
-            <motion.section
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
+            <MotionSection
+              delayIndex={1}
               className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm"
             >
               <LearnerSurfaceSectionHeader
@@ -201,14 +198,12 @@ export default function ProgressDashboard() {
                   </LineChart>
                 </ResponsiveContainer>
               </div>
-            </motion.section>
+            </MotionSection>
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
               {/* 3. Completion Trend */}
-              <motion.section
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.2 }}
+              <MotionSection
+                delayIndex={2}
                 className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm"
               >
                 <LearnerSurfaceSectionHeader
@@ -243,13 +238,11 @@ export default function ProgressDashboard() {
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
-              </motion.section>
+              </MotionSection>
 
               {/* 4. Submission Volume */}
-              <motion.section
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
+              <MotionSection
+                delayIndex={3}
                 className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm"
               >
                 <LearnerSurfaceSectionHeader
@@ -278,14 +271,12 @@ export default function ProgressDashboard() {
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
-              </motion.section>
+              </MotionSection>
             </div>
 
             {/* 5. Review Usage */}
-            <motion.section
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.4 }}
+            <MotionSection
+              delayIndex={4}
               className="bg-navy rounded-[32px] p-6 sm:p-8 text-white shadow-lg relative overflow-hidden"
             >
               <div className="mb-6 relative z-10">
@@ -317,7 +308,7 @@ export default function ProgressDashboard() {
                   ? 'Review timing is still based on limited data and will sharpen after more requests complete.'
                   : `Updated ${new Date(progressSummary?.freshness.generatedAt ?? new Date().toISOString()).toLocaleString()}.`}
               </p>
-            </motion.section>
+            </MotionSection>
           </>
         )}
 

@@ -18,7 +18,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { MotionSection, MotionItem, MotionCollapse } from '@/components/ui/motion-primitives';
 import { Badge, StatusBadge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
@@ -182,17 +182,17 @@ export default function WritingHome() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {recommendedCard ? (
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+            <MotionSection>
               <LearnerSurfaceCard card={recommendedCard} />
-            </motion.div>
+            </MotionSection>
           ) : null}
 
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+          <MotionSection delayIndex={1}>
             <LearnerSurfaceCard card={mockCard} />
-          </motion.div>
+          </MotionSection>
         </div>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+        <MotionSection delayIndex={2}>
           <LearnerSurfaceSectionHeader
             eyebrow="Writing Workspace"
             title="Choose practice, drills, or past evidence"
@@ -213,14 +213,10 @@ export default function WritingHome() {
             ))}
           </div>
 
-          <AnimatePresence mode="wait">
-            {activeTab !== 'past' && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}>
+          <MotionCollapse open={activeTab !== 'past'}>
                 <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange}
                   onClear={() => setFilters({})} className="mb-6 bg-white p-4 rounded-xl border border-gray-200 shadow-sm" />
-              </motion.div>
-            )}
-          </AnimatePresence>
+          </MotionCollapse>
 
           <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
             <AnimatePresence mode="wait">
@@ -297,7 +293,7 @@ export default function WritingHome() {
               )}
             </AnimatePresence>
           </div>
-        </motion.div>
+        </MotionSection>
       </div>
     </LearnerDashboardShell>
   );

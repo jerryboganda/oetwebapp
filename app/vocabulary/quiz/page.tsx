@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { HelpCircle, CheckCircle2, XCircle, ArrowLeft, RotateCcw } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -91,7 +91,7 @@ export default function VocabQuizPage() {
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
         </div>
       ) : result ? (
-        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="max-w-md mx-auto text-center py-12">
+        <MotionSection className="max-w-md mx-auto text-center py-12">
           <div className="text-6xl font-bold text-gray-900 dark:text-white mb-2">{result.score}/{result.total}</div>
           <div className="text-xl text-gray-500 mb-4">{Math.round((result.score / result.total) * 100)}% correct</div>
           {result.xpAwarded > 0 && (
@@ -107,7 +107,7 @@ export default function VocabQuizPage() {
               <RotateCcw className="w-4 h-4" /> New Quiz
             </button>
           </div>
-        </motion.div>
+        </MotionSection>
       ) : q ? (
         <div className="max-w-xl mx-auto">
           <div className="flex items-center justify-between mb-3 text-sm text-gray-500">
@@ -149,7 +149,7 @@ export default function VocabQuizPage() {
           </div>
 
           {revealed && (
-            <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="mt-4 flex justify-end">
+            <MotionSection className="mt-4 flex justify-end">
               <button
                 onClick={nextQuestion}
                 disabled={submitting}
@@ -157,7 +157,7 @@ export default function VocabQuizPage() {
               >
                 {current + 1 >= questions.length ? 'Finish Quiz' : 'Next Question →'}
               </button>
-            </motion.div>
+            </MotionSection>
           )}
         </div>
       ) : (

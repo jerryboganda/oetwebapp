@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { AsyncStateWrapper } from '@/components/state';
+import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { StatusBadge, type StatusType } from '@/components/ui/badge';
@@ -81,6 +82,7 @@ export default function DiagnosticHubPage() {
           {session && (
             <>
               {/* Progress header */}
+              <MotionSection delayIndex={0}>
               <div className="text-center space-y-2">
                 <h1 className="text-xl sm:text-2xl font-bold text-navy">
                   {allComplete ? 'All Sub-Tests Complete!' : 'Choose a Sub-Test'}
@@ -98,8 +100,10 @@ export default function DiagnosticHubPage() {
                   />
                 </div>
               </div>
+              </MotionSection>
 
               {/* Sub-test cards */}
+              <MotionSection delayIndex={1}>
               <div className="grid gap-4 sm:grid-cols-2">
                 {session.subTests.map((sub) => {
                   const config = SUBTEST_CONFIG[sub.subTest];
@@ -162,6 +166,7 @@ export default function DiagnosticHubPage() {
                   );
                 })}
               </div>
+              </MotionSection>
 
               {/* Resume warning */}
               {session.subTests.some((s) => s.status === 'in_progress') && (

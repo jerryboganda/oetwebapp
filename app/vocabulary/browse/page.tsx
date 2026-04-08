@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { Search, Plus, CheckCircle2, BookOpen, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -117,11 +117,9 @@ export default function BrowseVocabularyPage() {
         <>
           <div className="space-y-3 mb-6">
             {terms.map((term, i) => (
-              <motion.div
+              <MotionItem
                 key={term.id}
-                initial={{ opacity: 0, y: 8 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.02 }}
+                delayIndex={i}
                 className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 flex gap-4"
               >
                 <div className="flex-1 min-w-0">
@@ -141,7 +139,7 @@ export default function BrowseVocabularyPage() {
                 >
                   {added.has(term.id) ? <CheckCircle2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
                 </button>
-              </motion.div>
+              </MotionItem>
             ))}
           </div>
 

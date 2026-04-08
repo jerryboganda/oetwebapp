@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { Lightbulb, ArrowLeft, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -105,11 +105,9 @@ export default function StrategyGuidePage() {
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Key Strategies</h2>
             <div className="space-y-4">
               {content.tips.map((tip, i) => (
-                <motion.div
+                <MotionItem
                   key={i}
-                  initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: i * 0.08 }}
+                  delayIndex={i}
                   className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 flex gap-4"
                 >
                   <div className="flex-shrink-0 w-8 h-8 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center text-yellow-700 dark:text-yellow-300 font-bold text-sm">
@@ -119,7 +117,7 @@ export default function StrategyGuidePage() {
                     <div className="font-medium text-gray-900 dark:text-white mb-1">{tip.title}</div>
                     <div className="text-sm text-gray-600 dark:text-gray-400">{tip.body}</div>
                   </div>
-                </motion.div>
+                </MotionItem>
               ))}
             </div>
           </div>

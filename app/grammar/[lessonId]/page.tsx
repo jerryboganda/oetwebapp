@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
 import { BookMarked, ArrowLeft, Clock, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionPage } from '@/components/ui/motion-primitives';
 import { fetchGrammarLesson, startGrammarLesson, completeGrammarLesson } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
@@ -153,7 +153,7 @@ export default function GrammarLessonPage() {
       {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
 
       {completed ? (
-        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="max-w-md mx-auto text-center py-16">
+        <MotionPage className="max-w-md mx-auto text-center py-16">
           <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Lesson Complete!</h2>
           <div className="text-5xl font-bold text-indigo-600 dark:text-indigo-400 mb-2">{score}%</div>
@@ -161,7 +161,7 @@ export default function GrammarLessonPage() {
           <Link href="/grammar" className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-medium inline-block">
             Back to Grammar Lessons
           </Link>
-        </motion.div>
+        </MotionPage>
       ) : (
         <div className="max-w-2xl mx-auto">
           {/* Intro */}

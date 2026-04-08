@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { Mic, MicOff, Send, Square, Clock, MessageSquare, AlertCircle, Loader2 } from 'lucide-react';
 import { useParams, useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -251,7 +252,7 @@ export default function ConversationSessionPage() {
 
         {/* Prep Phase */}
         {state === 'preparing' && scenario && (
-          <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} className="space-y-6">
+          <MotionSection className="space-y-6">
             <div className="bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-950/40 dark:to-indigo-950/40 rounded-2xl border border-purple-200/60 dark:border-purple-800/40 p-6">
               <div className="text-sm font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 mb-2">
                 Preparation Phase
@@ -294,7 +295,7 @@ export default function ConversationSessionPage() {
                 </button>
               </div>
             </div>
-          </motion.div>
+          </MotionSection>
         )}
 
         {/* Active Conversation */}
@@ -393,11 +394,11 @@ export default function ConversationSessionPage() {
 
         {/* Evaluating State */}
         {state === 'evaluating' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="text-center py-16">
+          <MotionSection className="text-center py-16">
             <Loader2 className="w-12 h-12 text-purple-500 mx-auto mb-4 animate-spin" />
             <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Evaluating Your Conversation</h2>
             <p className="text-gray-500">Our AI is analysing your performance. This usually takes a few seconds.</p>
-          </motion.div>
+          </MotionSection>
         )}
 
         {/* No scenario */}

@@ -19,6 +19,7 @@ import {
   Activity,
 } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { MotionSection } from '@/components/ui/motion-primitives';
 
 const SUB_TESTS = [
   {
@@ -132,6 +133,7 @@ export default function DiagnosticIntroPage() {
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
+        <MotionSection delayIndex={0}>
         <LearnerPageHero
           eyebrow="Starting Point"
           icon={Activity}
@@ -144,7 +146,9 @@ export default function DiagnosticIntroPage() {
             { icon: ShieldCheck, label: 'Result type', value: 'Practice estimate' },
           ]}
         />
+        </MotionSection>
 
+        <MotionSection delayIndex={1}>
         <section>
           <LearnerSurfaceSectionHeader
             eyebrow="Diagnostic Scope"
@@ -175,7 +179,9 @@ export default function DiagnosticIntroPage() {
             })}
           </div>
         </section>
+        </MotionSection>
 
+        <MotionSection delayIndex={2}>
         <section>
           <LearnerSurfaceSectionHeader
             eyebrow="Before You Begin"
@@ -204,6 +210,7 @@ export default function DiagnosticIntroPage() {
             </ul>
           </Card>
         </section>
+        </MotionSection>
 
         <div className="sticky bottom-4 z-10 flex justify-center">
           <Button

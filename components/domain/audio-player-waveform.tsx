@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import { Button } from '@/components/ui/button';
+import { getMicroTap } from '@/lib/motion';
 import { Play, Pause, FastForward } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Select } from '@/components/ui/form-controls';
@@ -153,6 +154,7 @@ export function AudioPlayerWaveform({ audioUrl, onTimeUpdate, seekToTime, classN
           disabled={!isReady}
           className="w-10 h-10 p-0"
           aria-label={isPlaying ? 'Pause audio' : 'Play audio'}
+          {...getMicroTap()}
         >
           {isPlaying ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5 ml-1" />}
         </Button>

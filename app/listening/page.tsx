@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { ArrowRight, Clock, FileText, Headphones, Sparkles, Target, Volume2 } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -148,14 +148,12 @@ export default function ListeningHome() {
                 };
 
                 return (
-                  <motion.div
+                  <MotionItem
                     key={task.contentId}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.08 }}
+                    delayIndex={index}
                   >
                     <LearnerSurfaceCard card={taskCard} />
-                  </motion.div>
+                  </MotionItem>
                 );
               })}
             </div>
@@ -210,14 +208,12 @@ export default function ListeningHome() {
               };
 
               return (
-                <motion.div
+                <MotionItem
                   key={report.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.15 + index * 0.08 }}
+                  delayIndex={index}
                 >
                   <LearnerSurfaceCard card={reportCard} />
-                </motion.div>
+                </MotionItem>
               );
             })}
           </div>

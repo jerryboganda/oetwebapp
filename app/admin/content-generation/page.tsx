@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { Wand2, Loader2, CheckCircle2, AlertCircle, Copy, RefreshCw, Clock3, FileJson2 } from 'lucide-react';
 import { AdminDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
@@ -325,10 +325,8 @@ export default function AdminContentGenerationPage() {
             ) : (
               <div className="space-y-3">
                 {results.map((result) => (
-                  <motion.div
+                  <MotionItem
                     key={result.id}
-                    initial={{ opacity: 0, y: -8 }}
-                    animate={{ opacity: 1, y: 0 }}
                     className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4"
                   >
                     <div className="flex items-start gap-3 mb-2">
@@ -376,7 +374,7 @@ export default function AdminContentGenerationPage() {
                         {result.previewJson}
                       </pre>
                     )}
-                  </motion.div>
+                  </MotionItem>
                 ))}
               </div>
             )}

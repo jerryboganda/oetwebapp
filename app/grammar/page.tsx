@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { BookMarked, Clock, CheckCircle2, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -99,11 +99,9 @@ export default function GrammarPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {lessons.map((lesson, i) => (
-            <motion.div
+            <MotionItem
               key={lesson.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.04 }}
+              delayIndex={i}
             >
               <Link href={`/grammar/${lesson.id}`}>
                 <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 hover:border-purple-300 dark:hover:border-purple-600 hover:shadow-sm transition-all cursor-pointer group">
@@ -126,7 +124,7 @@ export default function GrammarPage() {
                   </div>
                 </div>
               </Link>
-            </motion.div>
+            </MotionItem>
           ))}
         </div>
       )}

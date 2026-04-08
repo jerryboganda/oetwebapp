@@ -2,7 +2,6 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { motion } from 'motion/react';
 import {
   Clock, CreditCard, MessageSquare, CheckCircle2,
   Target, Loader2, ArrowRight, Sparkles,
@@ -13,6 +12,7 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionPage } from '@/components/ui/motion-primitives';
 import { fetchFocusAreas, fetchTurnaroundOptions, fetchBilling, submitReviewRequest } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { TurnaroundOption } from '@/lib/mock-data';
@@ -72,7 +72,7 @@ function ExpertReviewRequestContent() {
     return (
       <LearnerDashboardShell pageTitle="Request Submitted">
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-          <motion.div initial={{ opacity: 0, scale: 0.9 }} animate={{ opacity: 1, scale: 1 }} className="max-w-md w-full">
+          <MotionPage className="max-w-md w-full">
             <div className="w-24 h-24 bg-green-50 rounded-3xl flex items-center justify-center mx-auto mb-8">
               <CheckCircle2 className="w-12 h-12 text-green-600" />
             </div>
@@ -85,7 +85,7 @@ function ExpertReviewRequestContent() {
                 Back to Dashboard <ArrowRight className="w-5 h-5" />
               </Button>
             </Link>
-          </motion.div>
+          </MotionPage>
         </div>
       </LearnerDashboardShell>
     );

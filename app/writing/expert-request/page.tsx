@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
 import {
   ChevronLeft,
   Clock,
@@ -13,6 +12,7 @@ import {
   Info,
   CheckCircle2,
 } from 'lucide-react';
+import { MotionPage } from '@/components/ui/motion-primitives';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -88,14 +88,14 @@ export default function WritingExpertReviewRequest() {
     return (
       <LearnerDashboardShell pageTitle="Request Submitted">
         <div className="flex items-center justify-center min-h-[60vh] p-4">
-          <motion.div initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
+          <MotionPage>
             <Card className="p-8 max-w-md w-full text-center">
               <div className="w-20 h-20 bg-green-100 text-green-600 rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 className="w-10 h-10" /></div>
               <h1 className="text-2xl font-bold text-navy mb-2">Request Submitted!</h1>
               <p className="text-muted mb-8">Your submission has been sent to our expert panel. You will receive a notification once the review is complete.</p>
               <div className="text-sm text-gray-400 animate-pulse">Redirecting to results…</div>
             </Card>
-          </motion.div>
+          </MotionPage>
         </div>
       </LearnerDashboardShell>
     );

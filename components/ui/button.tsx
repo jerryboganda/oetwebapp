@@ -7,7 +7,7 @@ import { motion, useReducedMotion, AnimatePresence } from 'motion/react';
 import { getMicroHover, getMicroTap, motionTokens, prefersReducedMotion } from '@/lib/motion';
 import { triggerImpactHaptic, type HapticImpactStyle } from '@/lib/mobile/haptics';
 
-export interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement>, 'onDrag' | 'onDragEnd' | 'onDragStart' | 'onAnimationStart' | 'onAnimationEnd'> {
   variant?: 'primary' | 'secondary' | 'ghost' | 'destructive' | 'outline';
   size?: 'sm' | 'md' | 'lg';
   loading?: boolean;

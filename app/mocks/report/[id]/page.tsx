@@ -2,7 +2,7 @@
 
 import React, { Suspense, useEffect, useState } from 'react';
 import { useParams } from 'next/navigation';
-import { motion } from 'motion/react';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import {
   TrendingUp,
   TrendingDown,
@@ -81,9 +81,8 @@ function MockReportContent() {
       <div className="space-y-8">
 
         {/* 1. Overall Score */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
+        <MotionSection
+          delayIndex={0}
           className="bg-surface rounded-[32px] border border-gray-200 p-8 sm:p-10 text-center shadow-sm flex flex-col items-center"
         >
           <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center mb-6">
@@ -91,14 +90,12 @@ function MockReportContent() {
           </div>
           <h2 className="text-xl font-black text-navy mb-3">Overall Performance</h2>
           <p className="text-sm text-muted max-w-lg leading-relaxed">{report.summary}</p>
-        </motion.section>
+        </MotionSection>
 
         {/* 2. Prior Comparison */}
         {comp.exists && (
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
+          <MotionSection
+            delayIndex={1}
             className="bg-background-light rounded-[24px] border border-gray-200 p-6"
           >
             <div className="flex items-start gap-4">
@@ -118,14 +115,12 @@ function MockReportContent() {
                 <p className="text-sm text-muted leading-relaxed">{comp.details}</p>
               </div>
             </div>
-          </motion.section>
+          </MotionSection>
         )}
 
         {/* 3. Sub-test Breakdown */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.2 }}
+        <MotionSection
+          delayIndex={2}
         >
           <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-4">Sub-test Breakdown</h2>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -148,13 +143,11 @@ function MockReportContent() {
               );
             })}
           </div>
-        </motion.section>
+        </MotionSection>
 
         {/* 4. Weakest Criterion */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3 }}
+        <MotionSection
+          delayIndex={3}
         >
           <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-4">Area for Improvement</h2>
           <div className="bg-rose-50 rounded-[24px] border border-rose-100 p-6 sm:p-8">
@@ -173,13 +166,11 @@ function MockReportContent() {
               </div>
             </div>
           </div>
-        </motion.section>
+        </MotionSection>
 
         {/* 5. Study Plan CTA */}
-        <motion.section
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.4 }}
+        <MotionSection
+          delayIndex={4}
           className="pt-4"
         >
           <div className="bg-navy rounded-[32px] p-8 text-center text-white relative overflow-hidden shadow-lg">
@@ -200,7 +191,7 @@ function MockReportContent() {
               </Link>
             </div>
           </div>
-        </motion.section>
+        </MotionSection>
 
       </div>
     </LearnerDashboardShell>

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { Users, MessageSquare, Plus, ChevronRight, Pin } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -97,11 +97,9 @@ export default function CommunityPage() {
           ) : (
             <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
               {filtered.map((thread, i) => (
-                <motion.div
+                <MotionItem
                   key={thread.id}
-                  initial={{ opacity: 0 }}
-                  animate={{ opacity: 1 }}
-                  transition={{ delay: i * 0.03 }}
+                  delayIndex={i}
                 >
                   <Link href={`/community/threads/${thread.id}`}>
                     <div className="flex items-start gap-3 px-5 py-4 border-b border-gray-100 dark:border-gray-700 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors cursor-pointer group">
@@ -120,7 +118,7 @@ export default function CommunityPage() {
                       <ChevronRight className="w-4 h-4 text-gray-300 group-hover:text-indigo-400 flex-shrink-0 mt-1 transition-colors" />
                     </div>
                   </Link>
-                </motion.div>
+                </MotionItem>
               ))}
             </div>
           )}

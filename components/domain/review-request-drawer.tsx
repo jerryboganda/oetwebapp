@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { Drawer } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
 import { Select, Textarea, RadioGroup, type RadioOption } from '@/components/ui/form-controls';
@@ -47,13 +48,16 @@ export function ReviewRequestDrawer({
     <Drawer open={open} onClose={onClose} title="Request Expert Review" className={className}>
       <div className="flex flex-col gap-5">
         {submissionTitle && (
+          <MotionSection delayIndex={0}>
           <div className="p-3 bg-gray-50 rounded">
             <p className="text-xs text-muted">Reviewing</p>
             <p className="text-sm font-semibold text-navy">{submissionTitle}</p>
             <p className="text-xs text-muted mt-0.5">{subtest}</p>
           </div>
+          </MotionSection>
         )}
 
+        <MotionSection delayIndex={1}>
         <RadioGroup
           name="turnaround"
           label="Turnaround Time"
@@ -61,13 +65,16 @@ export function ReviewRequestDrawer({
           value={turnaround}
           onChange={setTurnaround}
         />
+        </MotionSection>
 
+        <MotionSection delayIndex={2}>
         <Select
           label="Focus Area"
           options={focusAreaOptions}
           value={focusArea}
           onChange={(e) => setFocusArea(e.target.value)}
         />
+        </MotionSection>
 
         <Textarea
           label="Notes for Reviewer (optional)"

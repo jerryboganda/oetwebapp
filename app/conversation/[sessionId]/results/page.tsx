@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { MessageSquare, BarChart3, Target, ChevronRight, RotateCcw, ArrowLeft, Star, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
@@ -103,13 +103,13 @@ export default function ConversationResultsPage() {
   if (evaluation && !evaluation.ready) {
     return (
       <LearnerDashboardShell>
-        <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="max-w-md mx-auto text-center py-16">
+        <MotionSection className="max-w-md mx-auto text-center py-16">
           <div className="w-16 h-16 rounded-full bg-purple-100 dark:bg-purple-900/30 flex items-center justify-center mx-auto mb-4">
             <BarChart3 className="w-8 h-8 text-purple-500 animate-pulse" />
           </div>
           <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Evaluating conversation...</h2>
           <p className="text-gray-500 text-sm">This usually takes a few seconds. The page will update automatically.</p>
-        </motion.div>
+        </MotionSection>
       </LearnerDashboardShell>
     );
   }
@@ -127,9 +127,7 @@ export default function ConversationResultsPage() {
         </Link>
 
         {/* Overall Score */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
+        <MotionSection
           className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 mb-6 text-center"
         >
           <div className="text-sm font-bold uppercase tracking-wider text-gray-500 mb-3">
@@ -146,13 +144,11 @@ export default function ConversationResultsPage() {
             <span>•</span>
             <span>{formatDuration(evaluation.durationSeconds)}</span>
           </div>
-        </motion.div>
+        </MotionSection>
 
         {/* Criterion Scores */}
-        <motion.div
-          initial={{ opacity: 0, y: 16 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
+        <MotionSection
+          delayIndex={1}
           className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 mb-6"
         >
           <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -162,11 +158,9 @@ export default function ConversationResultsPage() {
             {evaluation.criterionScores.map((criterion, i) => {
               const pct = (criterion.score / criterion.maxScore) * 100;
               return (
-                <motion.div
+                <MotionItem
                   key={criterion.criterionCode}
-                  initial={{ opacity: 0, x: -8 }}
-                  animate={{ opacity: 1, x: 0 }}
-                  transition={{ delay: 0.15 + i * 0.05 }}
+                  delayIndex={i}
                 >
                   <div className="flex items-center justify-between mb-1">
                     <span className="text-sm font-semibold text-gray-900 dark:text-white">{criterion.criterionName}</span>
@@ -181,18 +175,16 @@ export default function ConversationResultsPage() {
                     />
                   </div>
                   <p className="text-xs text-gray-500">{criterion.explanation}</p>
-                </motion.div>
+                </MotionItem>
               );
             })}
           </div>
-        </motion.div>
+        </MotionSection>
 
         {/* Strengths & Improvements */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.2 }}
+          <MotionSection
+            delayIndex={2}
             className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5"
           >
             <h3 className="text-sm font-bold text-green-600 dark:text-green-400 mb-3 flex items-center gap-2">
@@ -206,12 +198,10 @@ export default function ConversationResultsPage() {
                 </li>
               ))}
             </ul>
-          </motion.div>
+          </MotionSection>
 
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.25 }}
+          <MotionSection
+            delayIndex={3}
             className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5"
           >
             <h3 className="text-sm font-bold text-amber-600 dark:text-amber-400 mb-3 flex items-center gap-2">
@@ -225,15 +215,13 @@ export default function ConversationResultsPage() {
                 </li>
               ))}
             </ul>
-          </motion.div>
+          </MotionSection>
         </div>
 
         {/* Turn Annotations */}
         {evaluation.turnAnnotations.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
+          <MotionSection
+            delayIndex={4}
             className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 mb-6"
           >
             <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
@@ -265,15 +253,13 @@ export default function ConversationResultsPage() {
                 </div>
               ))}
             </div>
-          </motion.div>
+          </MotionSection>
         )}
 
         {/* Suggestions */}
         {evaluation.suggestions.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 16 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.35 }}
+          <MotionSection
+            delayIndex={5}
             className="bg-gradient-to-br from-purple-50 to-indigo-50 dark:from-purple-950/30 dark:to-indigo-950/30 rounded-2xl border border-purple-200/60 dark:border-purple-800/40 p-5 mb-6"
           >
             <h3 className="text-sm font-bold text-purple-700 dark:text-purple-300 mb-3">
@@ -284,7 +270,7 @@ export default function ConversationResultsPage() {
                 <li key={i} className="text-sm text-gray-700 dark:text-gray-300">• {s}</li>
               ))}
             </ul>
-          </motion.div>
+          </MotionSection>
         )}
 
         {/* Actions */}

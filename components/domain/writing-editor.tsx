@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { useRef } from 'react';
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react';
 import type { Transition } from 'motion/react';
+import { motionTokens } from '@/lib/motion';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'offline-saved' | 'failed';
 
@@ -38,7 +39,7 @@ export function WritingEditor({
   const count = wordCount ?? value.trim().split(/\s+/).filter(Boolean).length;
   const statusTransition: Transition = prefersReducedMotion
     ? { duration: 0.01 }
-    : { type: 'spring', stiffness: 520, damping: 40 };
+    : motionTokens.spring.item;
 
   return (
     <MotionConfig reducedMotion="user">

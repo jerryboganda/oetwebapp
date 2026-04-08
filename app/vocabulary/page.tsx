@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { BookOpen, Layers, HelpCircle, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -121,18 +122,16 @@ export default function VocabularyPage() {
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
           {myList.slice(0, 20).map((item, i) => (
-            <motion.div
+            <MotionItem
               key={item.termId}
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: i * 0.02 }}
+              delayIndex={i}
               className="flex items-center gap-3 px-4 py-3 border-b border-gray-100 dark:border-gray-700 last:border-0"
             >
               <div className="flex-1 font-medium text-gray-900 dark:text-white text-sm">{item.word}</div>
               <span className={`px-2 py-0.5 rounded-full text-xs font-medium capitalize ${MASTERY_COLORS[item.mastery] ?? ''}`}>
                 {item.mastery}
               </span>
-            </motion.div>
+            </MotionItem>
           ))}
           {myList.length > 20 && (
             <div className="px-4 py-3 text-center text-sm text-gray-500">

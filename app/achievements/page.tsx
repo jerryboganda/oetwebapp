@@ -88,9 +88,8 @@ export default function AchievementsPage() {
           Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)
         ) : (
           <>
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
+            <MotionItem
+              delayIndex={0}
               className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700"
             >
               <div className="flex items-center gap-2 mb-1">
@@ -99,12 +98,10 @@ export default function AchievementsPage() {
               </div>
               <div className="text-3xl font-bold text-gray-900 dark:text-white">{xp?.level ?? '—'}</div>
               <div className="text-xs text-gray-500 mt-1">{xp?.totalXp.toLocaleString()} total XP</div>
-            </motion.div>
+            </MotionItem>
 
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.05 }}
+            <MotionItem
+              delayIndex={1}
               className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700"
             >
               <div className="flex items-center gap-2 mb-2">
@@ -113,12 +110,10 @@ export default function AchievementsPage() {
               </div>
               {xp && <XPBar xpInLevel={xp.xpInCurrentLevel} xpToNext={xp.xpToNextLevel} />}
               <div className="text-xs text-gray-500 mt-1">{xp?.xpInCurrentLevel} / {xp?.xpToNextLevel} to next level</div>
-            </motion.div>
+            </MotionItem>
 
-            <motion.div
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.1 }}
+            <MotionItem
+              delayIndex={2}
               className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700"
             >
               <div className="flex items-center gap-2 mb-1">
@@ -127,7 +122,7 @@ export default function AchievementsPage() {
               </div>
               <div className="text-3xl font-bold text-gray-900 dark:text-white">{streak?.currentStreak ?? '—'} <span className="text-base font-normal text-gray-500">days</span></div>
               <div className="text-xs text-gray-500 mt-1">Best: {streak?.longestStreak ?? 0} days</div>
-            </motion.div>
+            </MotionItem>
           </>
         )}
       </div>
@@ -156,11 +151,9 @@ export default function AchievementsPage() {
               <LearnerSurfaceSectionHeader title={`Unlocked (${unlocked.length})`} />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
                 {unlocked.map((ach, i) => (
-                  <motion.div
+                  <MotionItem
                     key={ach.achievementId}
-                    initial={{ opacity: 0, scale: 0.95 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    transition={{ delay: i * 0.03 }}
+                    delayIndex={i}
                     className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 flex items-start gap-3"
                   >
                     <div className={`p-2 rounded-lg ${CATEGORY_COLORS[ach.category] ?? 'bg-gray-100 text-gray-600'}`}>
@@ -174,7 +167,7 @@ export default function AchievementsPage() {
                         <span className="text-xs font-medium text-yellow-600 dark:text-yellow-400">+{ach.xpReward} XP</span>
                       </div>
                     </div>
-                  </motion.div>
+                  </MotionItem>
                 ))}
               </div>
             </>
@@ -185,11 +178,9 @@ export default function AchievementsPage() {
               <LearnerSurfaceSectionHeader title={`Locked (${locked.length})`} />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {locked.map((ach, i) => (
-                  <motion.div
+                  <MotionItem
                     key={ach.achievementId}
-                    initial={{ opacity: 0 }}
-                    animate={{ opacity: 1 }}
-                    transition={{ delay: i * 0.02 }}
+                    delayIndex={i}
                     className="bg-gray-50 dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-700 flex items-start gap-3 opacity-60"
                   >
                     <div className="p-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-400">
@@ -203,7 +194,7 @@ export default function AchievementsPage() {
                         <span className="text-xs text-gray-400">+{ach.xpReward} XP</span>
                       </div>
                     </div>
-                  </motion.div>
+                  </MotionItem>
                 ))}
               </div>
             </>

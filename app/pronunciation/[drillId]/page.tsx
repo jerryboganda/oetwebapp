@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { Mic, ArrowLeft, Volume2, Play } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -181,15 +181,13 @@ export default function PronunciationDrillPage() {
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Example words</h2>
             <div className="flex flex-wrap gap-2">
               {exampleWords.map((word, i) => (
-                <motion.div
+                <MotionItem
                   key={`${word}-${i}`}
-                  initial={{ opacity: 0, scale: 0.9 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: i * 0.04 }}
+                  delayIndex={i}
                   className="rounded-lg border border-gray-200 bg-white px-3 py-1.5 text-sm font-medium text-gray-800 shadow-sm dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
                 >
                   {word}
-                </motion.div>
+                </MotionItem>
               ))}
             </div>
           </div>

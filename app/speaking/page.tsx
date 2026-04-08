@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
 import { ArrowRight, Clock, Heart, Mic, Star, Volume2 } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -160,10 +159,10 @@ export default function SpeakingHome() {
 
         {recommendedCard ? (
           <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+            <MotionSection>
               <LearnerSurfaceCard card={recommendedCard} />
-            </motion.div>
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }}>
+            </MotionSection>
+            <MotionSection delayIndex={1}>
               <LearnerSurfaceCard card={drillFocusCard}>
                 <div className="space-y-2.5">
                   {(home?.commonIssuesToImprove ?? ['Build smoother openings for role plays.', 'Keep the professional tone consistent.']).slice(0, 3).map((issue: string) => (
@@ -173,7 +172,7 @@ export default function SpeakingHome() {
                   ))}
                 </div>
               </LearnerSurfaceCard>
-            </motion.div>
+            </MotionSection>
           </section>
         ) : null}
 
@@ -219,11 +218,9 @@ export default function SpeakingHome() {
                     );
 
                     return (
-                      <motion.div
+                      <MotionItem
                         key={taskId}
-                        initial={{ opacity: 0, y: 16 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.08 + index * 0.05 }}
+                        delayIndex={index}
                       >
                         <Card className="border-gray-200/70">
                           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -263,7 +260,7 @@ export default function SpeakingHome() {
                             </Link>
                           </div>
                         </Card>
-                      </motion.div>
+                      </MotionItem>
                     );
                   })}
                 </div>

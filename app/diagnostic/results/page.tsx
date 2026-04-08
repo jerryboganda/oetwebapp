@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { AsyncStateWrapper } from '@/components/state';
+import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { ReadinessMeter } from '@/components/domain/readiness-meter';
 import { WeakestLinkCard } from '@/components/domain/weakest-link-card';
 import { CriterionBreakdownCard } from '@/components/domain/criterion-breakdown-card';
@@ -105,6 +106,7 @@ export default function DiagnosticResultsPage() {
           </InlineAlert>
 
           {/* Overall readiness hero */}
+          <MotionSection delayIndex={0}>
           <Card className="text-center py-8">
             <ReadinessMeter
               value={overallReadiness}
@@ -113,8 +115,10 @@ export default function DiagnosticResultsPage() {
               size={140}
             />
           </Card>
+          </MotionSection>
 
           {/* Sub-test result cards */}
+          <MotionSection delayIndex={1}>
           <div className="grid gap-4 sm:grid-cols-2">
             {results.map((result) => {
               const config = SUBTEST_CONFIG[result.subTest];
@@ -197,18 +201,22 @@ export default function DiagnosticResultsPage() {
               );
             })}
           </div>
+          </MotionSection>
 
           {/* Weakest link card */}
           {weakest && (
+            <MotionSection delayIndex={2}>
             <WeakestLinkCard
               criterion={weakest.issues[0] ?? 'General skills'}
               subtest={weakest.subTest}
               description={`${weakest.subTest} had the lowest readiness at ${weakest.readiness}%. Focus here first for maximum improvement.`}
               score={weakest.scoreRange}
             />
+            </MotionSection>
           )}
 
           {/* Action plan */}
+          <MotionSection delayIndex={3}>
           <Card className="border-primary/20 bg-primary/5">
             <div className="flex items-start gap-4">
               <div className="w-12 h-12 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
@@ -230,6 +238,7 @@ export default function DiagnosticResultsPage() {
               </div>
             </div>
           </Card>
+          </MotionSection>
 
           {/* Quick actions */}
           <div className="flex flex-wrap gap-3 justify-center">

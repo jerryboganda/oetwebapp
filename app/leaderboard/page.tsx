@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { Trophy, Medal, Crown } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
@@ -124,11 +124,9 @@ export default function LeaderboardPage() {
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
           {entries.map((entry, i) => (
-            <motion.div
+            <MotionItem
               key={entry.rank}
-              initial={{ opacity: 0, x: -10 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: i * 0.03 }}
+              delayIndex={i}
               className={`flex items-center gap-4 px-5 py-3.5 border-b border-gray-100 dark:border-gray-700 last:border-0 ${entry.isCurrentUser ? 'bg-indigo-50 dark:bg-indigo-900/20' : ''}`}
             >
               <div className="w-8 text-center">
@@ -147,7 +145,7 @@ export default function LeaderboardPage() {
                 <div className="text-xs text-gray-400">Level {entry.level}</div>
               </div>
               <div className="text-sm font-semibold text-gray-700 dark:text-gray-300">{entry.totalXp.toLocaleString()} XP</div>
-            </motion.div>
+            </MotionItem>
           ))}
         </div>
       )}

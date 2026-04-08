@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { Layers, CheckCircle2, RotateCcw, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -89,7 +90,7 @@ export default function FlashcardsPage() {
       {loading ? (
         <Skeleton className="h-64 rounded-2xl" />
       ) : done ? (
-        <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="max-w-md mx-auto text-center py-16">
+        <MotionSection className="max-w-md mx-auto text-center py-16">
           <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">All done!</h2>
           <p className="text-gray-500 mb-6">{stats.reviewed} cards reviewed · {stats.easy} marked easy</p>
@@ -101,7 +102,7 @@ export default function FlashcardsPage() {
               <RotateCcw className="w-4 h-4" /> Review Again
             </button>
           </div>
-        </motion.div>
+        </MotionSection>
       ) : cards.length === 0 ? (
         <div className="text-center py-16">
           <CheckCircle2 className="w-12 h-12 text-green-400 mx-auto mb-3" />
@@ -150,7 +151,7 @@ export default function FlashcardsPage() {
           </AnimatePresence>
 
           {flipped && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="grid grid-cols-4 gap-2">
+            <MotionSection className="grid grid-cols-4 gap-2">
               {QUALITY_OPTIONS.map(opt => (
                 <button
                   key={opt.q}
@@ -161,7 +162,7 @@ export default function FlashcardsPage() {
                   {opt.label}
                 </button>
               ))}
-            </motion.div>
+            </MotionSection>
           )}
         </div>
       ) : null}

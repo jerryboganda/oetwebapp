@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useMemo } from 'react';
-import { motion } from 'motion/react';
 import {
   ChevronLeft,
   MessageSquare,
@@ -13,6 +12,7 @@ import {
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/layout/app-shell';
+import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { CriterionBreakdownCard } from '@/components/domain/criterion-breakdown-card';
 import { WritingIssueList, type IssueType } from '@/components/domain/writing-issue-list';
 import { Card } from '@/components/ui/card';
@@ -117,9 +117,9 @@ export default function WritingDetailedFeedback() {
                           &quot;{ac.text}&quot;
                         </Highlight>
                         {activeComment === ac.id && (
-                          <motion.div initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} className="mt-2 ml-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900">
+                          <MotionItem className="mt-2 ml-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900">
                             <span className="font-semibold">{criterion.name}:</span> {ac.comment}
-                          </motion.div>
+                          </MotionItem>
                         )}
                       </div>
                     ))
@@ -136,7 +136,7 @@ export default function WritingDetailedFeedback() {
         <div className="w-full md:w-1/2 bg-gray-50 p-6 md:overflow-y-auto md:p-8">
           <div className="max-w-2xl mx-auto space-y-6">
             {result.criteria.map((criterion, index) => (
-              <motion.div key={criterion.name} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.08 }}>
+              <MotionItem key={criterion.name} delayIndex={index}>
                 <Card className="p-6">
                   {/* Header with score */}
                   <div className="flex items-start justify-between mb-5 pb-5 border-b border-gray-100">
@@ -199,7 +199,7 @@ export default function WritingDetailedFeedback() {
                     </div>
                   )}
                 </Card>
-              </motion.div>
+              </MotionItem>
             ))}
 
             {/* Aggregated Issues (WritingIssueList) */}

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Trophy, X, Sparkles } from 'lucide-react';
+import { getCelebrateMotion } from '@/lib/motion';
 import type { Achievement } from '@/lib/types/gamification';
 
 interface AchievementToastProps {
@@ -37,10 +38,7 @@ export function AchievementToast({
     <AnimatePresence>
       {visible && (
         <motion.div
-          initial={{ opacity: 0, y: -40, scale: 0.95 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          exit={{ opacity: 0, y: -20, scale: 0.95 }}
-          transition={{ type: 'spring', damping: 20, stiffness: 300 }}
+          {...getCelebrateMotion()}
           className="fixed top-4 right-4 z-[100] max-w-sm"
         >
           <div className="relative overflow-hidden rounded-2xl border border-yellow-200/60 bg-gradient-to-br from-yellow-50 via-amber-50 to-orange-50 p-4 shadow-xl shadow-yellow-500/10 dark:border-yellow-800/40 dark:from-yellow-950/80 dark:via-amber-950/80 dark:to-orange-950/80">

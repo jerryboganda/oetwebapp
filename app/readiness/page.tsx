@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
+import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import {
   Calendar,
   Clock,
@@ -115,9 +116,7 @@ export default function ReadinessCenter() {
 
         {/* 1. Risk Probability Gauge + Recommended Study + Risk Factors */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
+          <MotionSection
             className={`rounded-[32px] p-8 text-white relative overflow-hidden shadow-lg ${riskBg}`}
           >
             <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
@@ -152,12 +151,10 @@ export default function ReadinessCenter() {
                 With {data.weeksRemaining} weeks remaining until your exam, you are at a {data.overallRisk.toLowerCase()} risk of not meeting your target scores.
               </p>
             </div>
-          </motion.section>
+          </MotionSection>
 
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
+          <MotionSection
+            delayIndex={1}
             className="bg-navy rounded-[32px] p-8 text-white relative overflow-hidden shadow-lg flex flex-col justify-center"
           >
             <div className="absolute bottom-0 left-0 w-64 h-64 bg-primary opacity-20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3" />
@@ -174,13 +171,11 @@ export default function ReadinessCenter() {
                 Estimated remaining study time to reach target readiness levels before {data.targetDate}.
               </p>
             </div>
-          </motion.section>
+          </MotionSection>
 
           {/* ── Risk Factors Breakdown ── */}
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.15 }}
+          <MotionSection
+            delayIndex={2}
             className="bg-surface rounded-[32px] border border-gray-200 p-6 shadow-sm"
           >
             <div className="flex items-center gap-2 mb-5">
@@ -206,7 +201,7 @@ export default function ReadinessCenter() {
                 </div>
               ))}
             </div>
-          </motion.section>
+          </MotionSection>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -225,11 +220,9 @@ export default function ReadinessCenter() {
                 {data.subTests.map((test, idx) => {
                   const Icon = SUBTEST_ICONS[test.id] ?? FileText;
                   return (
-                    <motion.div
+                    <MotionItem
                       key={test.id}
-                      initial={{ opacity: 0, x: -20 }}
-                      animate={{ opacity: 1, x: 0 }}
-                      transition={{ delay: 0.2 + idx * 0.1 }}
+                      delayIndex={idx}
                     >
                       <div className="flex items-center justify-between mb-3">
                         <div className="flex items-center gap-3">
@@ -265,7 +258,7 @@ export default function ReadinessCenter() {
                           className={`h-full rounded-full ${test.barColor}`}
                         />
                       </div>
-                    </motion.div>
+                    </MotionItem>
                   );
                 })}
               </div>
@@ -280,16 +273,14 @@ export default function ReadinessCenter() {
               />
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {data.blockers.map((blocker, idx) => (
-                  <motion.div
+                  <MotionItem
                     key={blocker.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.4 + idx * 0.1 }}
+                    delayIndex={idx}
                     className="bg-rose-50 rounded-2xl border border-rose-100 p-5"
                   >
                     <h3 className="text-sm font-bold text-rose-900 mb-2">{blocker.title}</h3>
                     <p className="text-xs text-rose-800/80 leading-relaxed">{blocker.description}</p>
-                  </motion.div>
+                  </MotionItem>
                 ))}
               </div>
             </section>
@@ -303,10 +294,8 @@ export default function ReadinessCenter() {
               description="Readiness should feel earned by visible practice, mock, and expert-review evidence."
               className="mb-4"
             />
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              transition={{ delay: 0.3 }}
+            <MotionSection
+              delayIndex={1}
               className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm"
             >
               <p className="text-sm text-muted mb-6 leading-relaxed">
@@ -338,7 +327,7 @@ export default function ReadinessCenter() {
               <div className="mt-6 flex items-center gap-2 text-[10px] font-bold text-muted uppercase tracking-widest">
                 <Info className="w-3 h-3" /> Updated: {data.evidence.lastUpdated}
               </div>
-            </motion.div>
+            </MotionSection>
           </div>
         </div>
 

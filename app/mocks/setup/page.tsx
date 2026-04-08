@@ -1,7 +1,6 @@
 'use client';
 
 import { useMemo, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
 import {
   FileText,
   Headphones,
@@ -18,6 +17,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
+import { MotionCollapse, MotionSection, MotionPresence } from '@/components/ui/motion-primitives';
 import { createMockSession } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
@@ -138,9 +138,7 @@ export default function MockSetup() {
               </button>
             ))}
           </div>
-          <AnimatePresence>
-            {mockType === 'sub' && (
-              <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }} className="overflow-hidden">
+          <MotionCollapse open={mockType === 'sub'}>
                 <div className="pt-2">
                   <h3 className="text-xs font-bold text-navy uppercase tracking-widest mb-3">Which Sub-test?</h3>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -163,15 +161,13 @@ export default function MockSetup() {
                     ))}
                   </div>
                 </div>
-              </motion.div>
-            )}
-          </AnimatePresence>
+          </MotionCollapse>
         </section>
 
         {/* 2. Profession (Conditional) */}
-        <AnimatePresence>
+        <MotionPresence>
           {showProfession && (
-            <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm">
+            <MotionSection className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
                   <Stethoscope className="w-4 h-4 text-indigo-600" />
@@ -186,9 +182,9 @@ export default function MockSetup() {
               >
                 {PROFESSIONS.map(p => <option key={p} value={p}>{p}</option>)}
               </select>
-            </motion.section>
+            </MotionSection>
           )}
-        </AnimatePresence>
+        </MotionPresence>
 
         {/* 3. Mode & Timer */}
         <section className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm">

@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { Search } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -89,11 +89,9 @@ export default function SpeakingTaskSelection() {
         ) : (
           <div className="grid grid-cols-1 gap-4">
             {filtered.map((task, i) => (
-              <motion.div
+              <MotionItem
                 key={task.id}
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: i * 0.04 }}
+                delayIndex={i}
               >
                 <TaskCard
                   id={task.id}
@@ -109,7 +107,7 @@ export default function SpeakingTaskSelection() {
                     window.location.href = `/speaking/check?taskId=${task.id}`;
                   }}
                 />
-              </motion.div>
+              </MotionItem>
             ))}
           </div>
         )}

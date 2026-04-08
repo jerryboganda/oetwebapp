@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { MotionItem, MotionPresence } from '@/components/ui/motion-primitives';
 import { MessageSquare, Plus, Clock, ChevronRight, Mic, Zap, History } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -95,15 +95,15 @@ export default function ConversationPage() {
         </h2>
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {TASK_TYPES.map((task, i) => (
-            <motion.button
+            <MotionItem
               key={task.code}
-              initial={{ opacity: 0, y: 12 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.06 }}
-              onClick={() => handleStart(task.code)}
-              disabled={creating}
-              className="group text-left bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 hover:border-purple-300 dark:hover:border-purple-600 hover:shadow-lg hover:shadow-purple-500/5 transition-all disabled:opacity-50"
+              delayIndex={i}
             >
+              <button
+                onClick={() => handleStart(task.code)}
+                disabled={creating}
+                className="group text-left bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 hover:border-purple-300 dark:hover:border-purple-600 hover:shadow-lg hover:shadow-purple-500/5 transition-all disabled:opacity-50 w-full"
+              >
               <div className="flex items-start gap-3">
                 <div className="p-2.5 rounded-xl bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 group-hover:bg-purple-200 dark:group-hover:bg-purple-900/50 transition-colors">
                   <task.icon className="w-5 h-5" />
@@ -116,7 +116,8 @@ export default function ConversationPage() {
                 </div>
                 <ChevronRight className="w-4 h-4 mt-1 text-gray-300 group-hover:text-purple-400 transition-colors" />
               </div>
-            </motion.button>
+              </button>
+            </MotionItem>
           ))}
         </div>
       </section>
@@ -141,17 +142,15 @@ export default function ConversationPage() {
             <p className="text-xs text-gray-400 mt-1">Start your first AI conversation above</p>
           </div>
         ) : (
-          <AnimatePresence>
+          <MotionPresence>
             <div className="space-y-3">
               {history.map((session, i) => {
                 const stateInfo = STATE_LABELS[session.state] ?? STATE_LABELS.preparing;
                 const isViewable = session.state === 'evaluated' || session.state === 'completed';
                 return (
-                  <motion.div
+                  <MotionItem
                     key={session.id}
-                    initial={{ opacity: 0, y: 8 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: i * 0.04 }}
+                    delayIndex={i}
                   >
                     <Link
                       href={isViewable ? `/conversation/${session.id}/results` : `/conversation/${session.id}`}
@@ -186,11 +185,11 @@ export default function ConversationPage() {
                         </div>
                       </div>
                     </Link>
-                  </motion.div>
+                  </MotionItem>
                 );
               })}
             </div>
-          </AnimatePresence>
+          </MotionPresence>
         )}
       </section>
     </LearnerDashboardShell>

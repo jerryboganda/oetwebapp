@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import {
   ChevronRight,
   User,
@@ -175,11 +175,9 @@ export default function Settings() {
         ) : null}
 
         {settingsGroups.map((group, groupIndex) => (
-          <motion.section
+          <MotionSection
             key={group.title}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: groupIndex * 0.08 }}
+            delayIndex={groupIndex}
           >
             <LearnerSurfaceSectionHeader
               eyebrow="Settings Group"
@@ -234,7 +232,7 @@ export default function Settings() {
                 })}
               </div>
             </div>
-          </motion.section>
+          </MotionSection>
         ))}
       </div>
     </LearnerDashboardShell>

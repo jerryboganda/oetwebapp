@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { fetchSpeakingResult } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { SpeakingResult } from '@/lib/mock-data';
@@ -138,7 +139,7 @@ export default function SpeakingResultSummary() {
           </InlineAlert>
         ) : null}
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+        <MotionSection>
           <Card className="p-8 flex flex-col md:flex-row items-center gap-8">
             <div className="flex-1 text-center md:text-left">
               <div className="flex items-center justify-center md:justify-start gap-2 mb-2">
@@ -170,10 +171,10 @@ export default function SpeakingResultSummary() {
               </Link>
             </div>
           </Card>
-        </motion.div>
+        </MotionSection>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.1 }}>
+          <MotionSection delayIndex={1}>
             <Card className="p-8 h-full">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
@@ -190,9 +191,9 @@ export default function SpeakingResultSummary() {
                 ))}
               </ul>
             </Card>
-          </motion.div>
+          </MotionSection>
 
-          <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.2 }}>
+          <MotionSection delayIndex={2}>
             <Card className="p-8 h-full">
               <div className="flex items-center gap-3 mb-6">
                 <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
@@ -209,14 +210,12 @@ export default function SpeakingResultSummary() {
                 ))}
               </ul>
             </Card>
-          </motion.div>
+          </MotionSection>
         </div>
 
         {result.nextDrill && (
-          <motion.section
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.3 }}
+          <MotionSection
+            delayIndex={3}
             className="bg-navy rounded-3xl p-8 text-white flex flex-col md:flex-row items-center justify-between gap-8"
           >
             <div className="flex items-center gap-6">
@@ -234,7 +233,7 @@ export default function SpeakingResultSummary() {
                 Start Drill <ChevronRight className="w-5 h-5" />
               </Button>
             </Link>
-          </motion.section>
+          </MotionSection>
         )}
       </div>
     </LearnerDashboardShell>

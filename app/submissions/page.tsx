@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { motion } from 'motion/react';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import {
   FileText,
   Headphones,
@@ -141,11 +141,9 @@ export default function SubmissionHistory() {
                 const Icon = meta.icon;
                 const canRequest = sub.canRequestReview;
                 return (
-                  <motion.div
+                  <MotionItem
                     key={sub.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: idx * 0.05 }}
+                    delayIndex={idx}
                     className="bg-surface rounded-[24px] border border-gray-200 p-5 sm:p-6 shadow-sm flex flex-col md:flex-row gap-6 justify-between hover:border-gray-300 transition-colors"
                   >
                     <div className="flex-1 space-y-4">
@@ -199,7 +197,7 @@ export default function SubmissionHistory() {
                         Request Review
                       </button>
                     </div>
-                  </motion.div>
+                  </MotionItem>
                 );
               })}
             </div>

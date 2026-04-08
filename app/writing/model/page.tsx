@@ -70,7 +70,7 @@ export default function ModelAnswerExplainer() {
           <p className="text-blue-100 leading-relaxed max-w-3xl">
             This model answer demonstrates a high-scoring response. Below, the letter is broken down paragraph by paragraph. Review the annotations to understand the <strong>rationale</strong>, <strong>scoring criteria</strong>, <strong>included / excluded details</strong>, and <strong>profession-specific language</strong> choices.
           </p>
-        </motion.div>
+        </MotionSection>
 
         {/* Paragraph Cards */}
         <div className="space-y-12">
