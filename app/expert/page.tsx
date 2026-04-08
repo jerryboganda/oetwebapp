@@ -67,7 +67,7 @@ function ExpertReviewRow({
     <button
       type="button"
       onClick={onOpen}
-      className="flex w-full items-start justify-between gap-4 rounded-xl border border-gray-200 bg-surface p-4 text-left transition-[border-color,box-shadow,transform] duration-200 hover:border-primary/40 hover:shadow-sm active:scale-[0.99]"
+      className="pressable flex w-full items-start justify-between gap-4 rounded-xl border border-gray-200 bg-surface p-4 text-left hover:border-primary/40 hover:shadow-sm"
     >
       <div className="space-y-1">
         <p className="text-sm font-semibold text-navy">{review.learnerName}</p>

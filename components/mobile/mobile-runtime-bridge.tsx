@@ -3,6 +3,7 @@
 import { useEffect, useRef } from 'react';
 import { useAuth } from '@/contexts/auth-context';
 import { initializeMobileRuntime } from '@/lib/mobile/runtime';
+import { triggerResumeMotion } from '@/lib/mobile/lifecycle-motion';
 
 export function MobileRuntimeBridge() {
   const { refreshSession, isAuthenticated, loading } = useAuth();
@@ -19,6 +20,7 @@ export function MobileRuntimeBridge() {
     void (async () => {
       cleanup = await initializeMobileRuntime({
         onResume: () => {
+          triggerResumeMotion();
           const currentState = authStateRef.current;
           if (!currentState.loading && currentState.isAuthenticated) {
             void currentState.refreshSession();

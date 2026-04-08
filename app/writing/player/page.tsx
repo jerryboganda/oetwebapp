@@ -141,7 +141,7 @@ export default function WritingPlayer() {
                 <div className="flex min-w-0 items-center gap-3">
                   <button
                     onClick={() => (hasUnsavedChanges.current ? setShowLeaveModal(true) : router.push('/writing'))}
-                    className="touch-target rounded-2xl p-2 text-gray-500 transition-[background-color,color,transform] duration-150 hover:bg-gray-100 hover:text-navy active:scale-[0.98]"
+                    className="pressable touch-target rounded-2xl p-2 text-gray-500 hover:bg-gray-100 hover:text-navy"
                     aria-label="Leave writing task"
                   >
                     <ChevronLeft className="h-5 w-5" />
@@ -160,7 +160,7 @@ export default function WritingPlayer() {
                   <Timer mode="countdown" initialSeconds={45 * 60} running={timerRunning} size={isMobile ? 'sm' : 'md'} showWarning />
                   <button
                     onClick={() => setIsDistractionFree(true)}
-                    className="hidden touch-target rounded-2xl p-2 text-gray-500 transition-[background-color,color,transform] duration-150 hover:bg-gray-100 hover:text-navy active:scale-[0.98] lg:inline-flex"
+                    className="pressable hidden touch-target rounded-2xl p-2 text-gray-500 hover:bg-gray-100 hover:text-navy lg:inline-flex"
                     title="Distraction Free"
                     aria-label="Enter distraction-free mode"
                   >
@@ -208,7 +208,7 @@ export default function WritingPlayer() {
                   onClick={() => setMobileView('notes')}
                   aria-pressed={mobileView === 'notes'}
                   className={cn(
-                    'touch-target rounded-[16px] px-3 py-2.5 text-sm font-semibold transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.98]',
+                    'pressable touch-target rounded-[16px] px-3 py-2.5 text-sm font-semibold',
                     mobileView === 'notes' ? 'bg-surface text-primary shadow-sm' : 'text-muted hover:text-navy',
                   )}
                 >
@@ -219,7 +219,7 @@ export default function WritingPlayer() {
                   onClick={() => setMobileView('editor')}
                   aria-pressed={mobileView === 'editor'}
                   className={cn(
-                    'touch-target rounded-[16px] px-3 py-2.5 text-sm font-semibold transition-[background-color,color,box-shadow,transform] duration-150 active:scale-[0.98]',
+                    'pressable touch-target rounded-[16px] px-3 py-2.5 text-sm font-semibold',
                     mobileView === 'editor' ? 'bg-surface text-primary shadow-sm' : 'text-muted hover:text-navy',
                   )}
                 >

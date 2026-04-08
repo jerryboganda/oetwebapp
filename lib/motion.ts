@@ -344,3 +344,28 @@ export function getFadeSwitchVariants(reducedMotion = false, direction: 1 | -1 =
     exit: { opacity: 0, y: -y * 0.5 },
   };
 }
+
+/* ─── Desktop lifecycle transitions ─── */
+
+/** CSS transition spec for desktop window focus/blur visual feedback. */
+export function getDesktopFocusTransitionCSS() {
+  return {
+    property: 'opacity, filter',
+    duration: `${motionTokens.duration.base}s`,
+    easing: `cubic-bezier(${motionTokens.ease.standard.join(',')})`,
+  } as const;
+}
+
+/* ─── Mobile resume transition ─── */
+
+/** Subtle fade-in for Capacitor mobile app resume. */
+export function getMobileResumeMotion(reducedMotion = false) {
+  if (reducedMotion) {
+    return { initial: { opacity: 1 }, animate: { opacity: 1 } };
+  }
+  return {
+    initial: { opacity: 0.92 },
+    animate: { opacity: 1 },
+    transition: { duration: motionTokens.duration.fast, ease: motionTokens.ease.entrance },
+  };
+}

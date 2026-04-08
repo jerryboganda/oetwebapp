@@ -5,6 +5,8 @@ import {
   getCollapseTransition,
   getFadeSwitchTransition,
   getFadeSwitchVariants,
+  getMicroHover,
+  getMicroTap,
   getMotionDelay,
   getMotionPresenceMode,
   getSurfaceMotion,
@@ -62,6 +64,18 @@ export function MotionList(props: Omit<MotionRevealProps, 'surface'>) {
 
 export function MotionItem(props: Omit<MotionRevealProps, 'surface'>) {
   return <MotionReveal surface="item" {...props} />;
+}
+
+/** Animated card wrapper using the `item` surface with optional hover/tap microinteractions. */
+export function MotionCard({
+  interactive,
+  ...props
+}: Omit<MotionRevealProps, 'surface'> & { interactive?: boolean }) {
+  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const micro = interactive
+    ? { whileHover: getMicroHover(reducedMotion), whileTap: getMicroTap(reducedMotion) }
+    : {};
+  return <MotionReveal surface="item" {...micro} {...props} />;
 }
 
 /* ─── MotionPresence ─── */

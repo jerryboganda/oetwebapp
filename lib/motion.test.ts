@@ -2,11 +2,13 @@ import { afterEach, describe, expect, it } from 'vitest';
 import {
   getCelebrateMotion,
   getCollapseTransition,
+  getDesktopFocusTransitionCSS,
   getFadeSwitchTransition,
   getFadeSwitchVariants,
   getMicroFocus,
   getMicroHover,
   getMicroTap,
+  getMobileResumeMotion,
   getMotionDelay,
   getMotionPresenceMode,
   getSharedLayoutId,
@@ -189,5 +191,73 @@ describe('motion helpers', () => {
     expect(hover.scale).toBeGreaterThan(1);
     expect(tap.scale).toBeGreaterThan(0.97);
     expect(tap.scale).toBeLessThan(1);
+  });
+
+  /* ─── Desktop lifecycle transition ─── */
+
+  it('returns desktop focus transition CSS specs', () => {
+    const css = getDesktopFocusTransitionCSS();
+    expect(css.property).toBe('opacity, filter');
+    expect(css.duration).toMatch(/^\d+\.\d+s$/);
+    expect(css.easing).toContain('cubic-bezier');
+  });
+
+  /* ─── Mobile resume motion ─── */
+
+  it('returns subtle opacity fade-in for mobile resume', () => {
+    const motion = getMobileResumeMotion(false);
+    expect(motion.initial).toEqual({ opacity: 0.92 });
+    expect(motion.animate).toEqual({ opacity: 1 });
+    expect(motion.transition).toBeDefined();
+  });
+
+  it('collapses mobile resume to no-op for reduced motion', () => {
+    const motion = getMobileResumeMotion(true);
+    expect(motion.initial).toEqual({ opacity: 1 });
+    expect(motion.animate).toEqual({ opacity: 1 });
+    expect(motion.transition).toBeUndefined();
+  });
+
+  /* ─── Cross-platform consistency verification ─── */
+
+  it('maintains consistent motion language across all three runtimes', () => {
+    // Web baseline
+    const webRoute = getSurfaceMotion('route', false);
+    const webHidden = webRoute.variants.hidden as { y?: number };
+
+    // Desktop
+    document.documentElement.dataset.runtimeKind = 'desktop';
+    const desktopRoute = getSurfaceMotion('route', false);
+    const desktopHidden = desktopRoute.variants.hidden as { y?: number };
+
+    // Native
+    document.documentElement.dataset.runtimeKind = 'capacitor-native';
+    const nativeRoute = getSurfaceMotion('route', false);
+    const nativeHidden = nativeRoute.variants.hidden as { y?: number };
+
+    // All three share the same structure
+    expect(webHidden.y).toBeDefined();
+    expect(desktopHidden.y).toBeDefined();
+    expect(nativeHidden.y).toBeDefined();
+
+    // Desktop < web, native < desktop (progressively tighter)
+    expect(desktopHidden.y!).toBeLessThan(webHidden.y!);
+    expect(nativeHidden.y!).toBeLessThan(desktopHidden.y!);
+  });
+
+  it('stagger caps are progressively tighter across platforms', () => {
+    const delays: number[] = [];
+
+    delete document.documentElement.dataset.runtimeKind;
+    delays.push(getMotionDelay(20, false)); // web
+
+    document.documentElement.dataset.runtimeKind = 'desktop';
+    delays.push(getMotionDelay(20, false)); // desktop
+
+    document.documentElement.dataset.runtimeKind = 'capacitor-native';
+    delays.push(getMotionDelay(20, false)); // native
+
+    expect(delays[0]).toBeGreaterThan(delays[1]); // web > desktop
+    expect(delays[1]).toBeGreaterThan(delays[2]); // desktop > native
   });
 });

@@ -174,6 +174,27 @@
     --pressable-active-scale: 1;
   }
 
+  /* Desktop focus/blur lifecycle: subtle opacity shift for premium feel */
+  html[data-runtime-kind='desktop'] body {
+    transition: opacity 0.22s cubic-bezier(0.22, 1, 0.36, 1),
+                filter 0.22s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  html[data-runtime-kind='desktop'][data-app-active='false'] body {
+    opacity: 0.94;
+    filter: saturate(0.92);
+  }
+
+  /* Capacitor mobile resume: brief fade-in after foregrounding */
+  html[data-runtime-kind='capacitor-native'][data-app-resuming='true'] body {
+    animation: mobile-resume-fade 0.16s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+
+  @keyframes mobile-resume-fade {
+    from { opacity: 0.92; }
+    to   { opacity: 1; }
+  }
+
 
   html[data-runtime-kind='desktop'] {
     --surface-blur: 28px;
@@ -183,12 +204,36 @@
     --page-enter-distance: 8px;
   }
 
+  /* Desktop dense surfaces: subtler hover for table rows and data-dense cards */
+  html[data-runtime-kind='desktop'] tr.hoverable-row:hover {
+    background-color: rgba(15, 118, 110, 0.04);
+    transition: background-color 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
+  html[data-runtime-kind='desktop'] .card-hover-subtle:hover {
+    transform: translateY(-1px);
+    box-shadow: var(--shadow-clinical);
+    transition: transform 0.16s cubic-bezier(0.22, 1, 0.36, 1),
+                box-shadow 0.16s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+
   html[data-runtime-kind='capacitor-native'] {
     --surface-blur: 18px;
     --pressable-transition-duration: 140ms;
     --pressable-active-scale: 0.975;
     --page-enter-duration: 240ms;
     --page-enter-distance: 6px;
+  }
+
+  /* Capacitor mobile: active press feedback for touch-first interaction */
+  html[data-runtime-kind='capacitor-native'] .pressable:active {
+    transform: translateY(0) scale(var(--pressable-active-scale, 0.975));
+    transition-duration: 80ms;
+  }
+
+  /* Mobile: ensure safe-area padding during motion transitions */
+  html[data-runtime-kind='capacitor-native'] .safe-area-inset-bottom {
+    transition: padding-bottom 0.14s cubic-bezier(0.22, 1, 0.36, 1);
   }
   body {
     position: relative;
@@ -303,6 +348,18 @@
     .pressable:hover,
     .pressable:active {
       transform: none !important;
+    }
+
+    /* Disable desktop focus/blur transition in reduced-motion */
+    html[data-runtime-kind='desktop'] body {
+      transition: none !important;
+      opacity: 1 !important;
+      filter: none !important;
+    }
+
+    /* Disable mobile resume animation in reduced-motion */
+    html[data-runtime-kind='capacitor-native'][data-app-resuming='true'] body {
+      animation: none !important;
     }
   }
 
