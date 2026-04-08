@@ -3,6 +3,7 @@ node_modules/
 coverage/
 .DS_Store
 *.log
+.tmp-*
 .playwright-cli/
 .playwright/
 playwright/.auth/
@@ -13,9 +14,15 @@ output/playwright/
 .tmp-*.png
 .agents/
 .claude/
+.github/context-mode/
 backend/**/bin/
 backend/**/obj/
 backend/src/OetLearner.Api/App_Data/
+backend/oet_learner_dev.sqlite
+backend/src/OetLearner.Api/oet_learner_dev.db
+backend/src/OetLearner.Api/oet_learner_dev.db-shm
+backend/src/OetLearner.Api/oet_learner_dev.db-wal
+backend/src/OetLearner.Api/Data/Migrations/__PendingProbe/
 **/bin/
 **/obj/
 build-*.txt
