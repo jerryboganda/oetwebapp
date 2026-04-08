@@ -71,6 +71,34 @@ const allowPackagedLoopbackApiTarget = !app.isPackaged || process.env.ELECTRON_A
 let activeBackendUrl = null;
 let ignoredPackagedLoopbackApiTarget = null;
 
+function getMainWindowState() {
+  if (!mainWindow) {
+    return {
+      isFocused: false,
+      isVisible: false,
+      isMinimized: false,
+      isMaximized: false,
+      isFullScreen: false,
+    };
+  }
+
+  return {
+    isFocused: mainWindow.isFocused(),
+    isVisible: mainWindow.isVisible(),
+    isMinimized: mainWindow.isMinimized(),
+    isMaximized: mainWindow.isMaximized(),
+    isFullScreen: mainWindow.isFullScreen(),
+  };
+}
+
+function broadcastMainWindowState() {
+  if (!mainWindow || mainWindow.isDestroyed()) {
+    return;
+  }
+
+  mainWindow.webContents.send('desktop:window-state-changed', getMainWindowState());
+}
+
 function getDesktopRuntimeConfig() {
   if (desktopRuntimeConfig) {
     return desktopRuntimeConfig;
@@ -181,6 +209,7 @@ function focusMainWindow() {
   }
 
   mainWindow.focus();
+  broadcastMainWindowState();
 }
 
 function reloadCurrentWindow() {
@@ -570,6 +599,7 @@ async function createWindow() {
     title: 'OET Prep',
     show: false,
     webPreferences: {
+      backgroundThrottling: true,
       preload: path.join(__dirname, 'preload.cjs'),
       contextIsolation: true,
       nodeIntegration: false,
@@ -588,8 +618,24 @@ async function createWindow() {
     mainWindow = null;
   });
 
+  const syncWindowState = () => {
+    broadcastMainWindowState();
+  };
+
+  mainWindow.on('show', syncWindowState);
+  mainWindow.on('hide', syncWindowState);
+  mainWindow.on('focus', syncWindowState);
+  mainWindow.on('blur', syncWindowState);
+  mainWindow.on('minimize', syncWindowState);
+  mainWindow.on('restore', syncWindowState);
+  mainWindow.on('maximize', syncWindowState);
+  mainWindow.on('unmaximize', syncWindowState);
+  mainWindow.on('enter-full-screen', syncWindowState);
+  mainWindow.on('leave-full-screen', syncWindowState);
+
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
+    broadcastMainWindowState();
   });
 
   mainWindow.webContents.on('did-fail-load', (_event, errorCode, errorDescription, validatedURL) => {
@@ -603,6 +649,7 @@ async function createWindow() {
   });
 
   await mainWindow.loadURL(getRendererUrl());
+  broadcastMainWindowState();
 }
 
 function refreshApplicationMenu() {
@@ -778,4 +825,5 @@ ipcMain.handle('desktop:runtime-info', async () => ({
   isPackaged: app.isPackaged,
   activeBackendUrl,
   ignoredPackagedLoopbackApiTarget,
+  windowState: getMainWindowState(),
 }));

@@ -237,8 +237,8 @@ export default function ConversationSessionPage() {
     return (
       <LearnerDashboardShell>
         <div className="max-w-4xl mx-auto space-y-4">
-          <Skeleton className="h-48 rounded-2xl" />
-          <Skeleton className="h-96 rounded-2xl" />
+          <Skeleton className="h-40 rounded-2xl" />
+          <Skeleton className="h-[280px] rounded-2xl sm:h-[340px] lg:h-96" />
         </div>
       </LearnerDashboardShell>
     );
@@ -299,7 +299,7 @@ export default function ConversationSessionPage() {
 
         {/* Active Conversation */}
         {state === 'active' && (
-          <div className="flex flex-col h-[calc(100vh-200px)]">
+          <div className="flex flex-col h-[calc(100dvh-200px)]">
             {/* Timer bar */}
             <div className="flex items-center justify-between mb-3 px-1">
               <div className="flex items-center gap-2 text-sm text-gray-500">

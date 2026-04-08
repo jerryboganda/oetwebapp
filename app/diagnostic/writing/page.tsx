@@ -39,6 +39,7 @@ export default function DiagnosticWritingPage() {
   // Modals
   const [showLeaveModal, setShowLeaveModal] = useState(false);
   const [showSubmitModal, setShowSubmitModal] = useState(false);
+  const [showCaseNotesModal, setShowCaseNotesModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
 
   // Timer
@@ -139,7 +140,7 @@ export default function DiagnosticWritingPage() {
       pageTitle="Diagnostic — Writing"
       distractionFree
       navActions={
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <Timer
             mode="countdown"
             initialSeconds={45 * 60}
@@ -154,9 +155,9 @@ export default function DiagnosticWritingPage() {
     >
       <AsyncStateWrapper status={status} onRetry={load} errorMessage={error}>
         {task && (
-          <div className="flex flex-1 h-[calc(100vh-4rem)] overflow-hidden">
+          <div className="flex flex-1 min-h-0 h-[calc(100dvh-4rem)] flex-col overflow-hidden md:flex-row">
             {/* Case Notes Panel — left side on desktop */}
-            <div className="hidden lg:flex w-[380px] shrink-0 border-r border-gray-200">
+            <div className="hidden md:flex md:w-[320px] lg:w-[380px] shrink-0 border-r border-gray-200">
               <WritingCaseNotesPanel
                 caseNotes={task.caseNotes}
                 scratchpad={scratchpad}
@@ -222,13 +223,11 @@ export default function DiagnosticWritingPage() {
                 </div>
 
                 {/* Mobile: toggle case notes */}
-                <div className="lg:hidden">
+                <div className="md:hidden">
                   <Button
                     variant="outline"
                     size="sm"
-                    onClick={() =>
-                      setCaseNotesTab(caseNotesTab === 'notes' ? 'notes' : 'notes')
-                    }
+                    onClick={() => setShowCaseNotesModal(true)}
                   >
                     Case Notes
                   </Button>
@@ -270,6 +269,35 @@ export default function DiagnosticWritingPage() {
               <Send className="w-3.5 h-3.5" /> Submit
             </Button>
           </div>
+        </div>
+      </Modal>
+
+      <Modal
+        open={showCaseNotesModal}
+        onClose={() => setShowCaseNotesModal(false)}
+        title="Case Notes"
+        size="lg"
+      >
+        <div className="h-[70dvh]">
+          <WritingCaseNotesPanel
+            caseNotes={task?.caseNotes ?? ''}
+            scratchpad={scratchpad}
+            onScratchpadChange={setScratchpad}
+            checklist={checklist.map((c) => ({
+              id: String(c.id),
+              label: c.text,
+              checked: c.completed,
+            }))}
+            onChecklistChange={(id, checked) => {
+              setChecklist((prev) =>
+                prev.map((c) =>
+                  String(c.id) === id ? { ...c, completed: checked } : c,
+                ),
+              );
+            }}
+            activeTab={caseNotesTab}
+            onTabChange={setCaseNotesTab}
+          />
         </div>
       </Modal>
 

@@ -3,6 +3,8 @@
 import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { AnimatePresence, motion } from 'motion/react';
+import { motionTokens } from '@/lib/motion';
 import {
   IconBrandFacebook,
   IconBrandGoogle,
@@ -231,9 +233,18 @@ export function SignInForm({ nextHref, initialEmail, externalError }: SignInForm
         </div>
 
         {error ? (
-          <p className={`${styles.notice} ${styles.noticeDanger}`.trim()}>
-            {error}
-          </p>
+          <AnimatePresence mode="wait">
+            <motion.p
+              key="error"
+              initial={{ opacity: 0, y: -6, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: 'auto' }}
+              exit={{ opacity: 0, y: -6, height: 0 }}
+              transition={{ duration: motionTokens.duration.fast, ease: motionTokens.ease.entrance }}
+              className={`${styles.notice} ${styles.noticeDanger}`.trim()}
+            >
+              {error}
+            </motion.p>
+          </AnimatePresence>
         ) : null}
 
         <button

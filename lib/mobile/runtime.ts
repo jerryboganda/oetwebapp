@@ -118,10 +118,21 @@ export async function initializeMobileRuntime(handlers: MobileRuntimeHandlers = 
     return () => undefined;
   }
 
+  if (window.desktopBridge || document.documentElement.dataset.desktopNative === 'true') {
+    return () => undefined;
+  }
+
   setViewportMetrics();
+  document.documentElement.dataset.runtimeKind = 'capacitor-native';
   document.documentElement.dataset.colorScheme = getPreferredColorScheme();
   document.documentElement.dataset.capacitorPlatform = Capacitor.getPlatform();
   document.documentElement.dataset.capacitorNative = String(Capacitor.isNativePlatform());
+  document.documentElement.dataset.appActive = 'true';
+  document.documentElement.dataset.windowFocused = 'true';
+  document.documentElement.dataset.windowVisible = 'true';
+  document.documentElement.dataset.windowMinimized = 'false';
+  document.documentElement.dataset.windowMaximized = 'false';
+  document.documentElement.dataset.windowFullscreen = 'false';
   document.documentElement.style.colorScheme = getPreferredColorScheme();
 
   const cleanup: Array<() => Promise<void> | void> = [];
@@ -196,6 +207,9 @@ export async function initializeMobileRuntime(handlers: MobileRuntimeHandlers = 
   try {
     const appStateListener = await App.addListener('appStateChange', (state) => {
       document.documentElement.dataset.appActive = state.isActive ? 'true' : 'false';
+      document.documentElement.dataset.windowFocused = state.isActive ? 'true' : 'false';
+      document.documentElement.dataset.windowVisible = state.isActive ? 'true' : 'false';
+      document.documentElement.dataset.windowMinimized = state.isActive ? 'false' : 'true';
       if (state.isActive) {
         scheduleViewportMetrics();
         void syncNativeChrome();

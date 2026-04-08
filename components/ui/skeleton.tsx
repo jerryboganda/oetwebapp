@@ -1,6 +1,10 @@
-import { cn } from '@/lib/utils';
+'use client';
 
-/* ─── Skeleton Loader ─── */
+import { motion, useReducedMotion } from 'motion/react';
+import { cn } from '@/lib/utils';
+import { getSurfaceMotion, prefersReducedMotion } from '@/lib/motion';
+
+/* Skeleton Loader */
 interface SkeletonProps {
   className?: string;
   variant?: 'text' | 'rectangle' | 'circle';
@@ -10,13 +14,15 @@ interface SkeletonProps {
 }
 
 export function Skeleton({ className, variant = 'rectangle', width, height, lines }: SkeletonProps) {
+  const pulseClassName = 'motion-safe:animate-pulse motion-reduce:animate-none';
+
   if (lines && lines > 1) {
     return (
       <div className={cn('flex flex-col gap-2', className)} role="status" aria-busy="true" aria-label="Loading">
         {Array.from({ length: lines }).map((_, i) => (
           <div
             key={i}
-            className={cn('animate-pulse rounded-xl bg-gray-200/80', i === lines - 1 && 'w-3/4')}
+            className={cn('rounded-xl bg-gray-200/80 dark:bg-gray-700/50', pulseClassName, i === lines - 1 && 'w-3/4')}
             style={{ height: height ?? 16 }}
           />
         ))}
@@ -28,11 +34,11 @@ export function Skeleton({ className, variant = 'rectangle', width, height, line
     text: 'h-4 rounded',
     rectangle: 'rounded',
     circle: 'rounded-full',
-  };
+  } as const;
 
   return (
     <div
-      className={cn('animate-pulse bg-gray-200/80', variantStyles[variant], className)}
+      className={cn('bg-gray-200/80 dark:bg-gray-700/50', pulseClassName, variantStyles[variant], className)}
       style={{ width, height }}
       role="status"
       aria-busy="true"
@@ -41,24 +47,44 @@ export function Skeleton({ className, variant = 'rectangle', width, height, line
   );
 }
 
-/* ─── Card Skeleton ─── */
+/* Card Skeleton */
 export function CardSkeleton({ className }: { className?: string }) {
+  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const motionProps = getSurfaceMotion('item', reducedMotion);
+
   return (
-    <div className={cn('rounded-[24px] border border-gray-200 bg-surface p-5 shadow-sm', className)} role="status" aria-busy="true" aria-label="Loading card">
+    <motion.div
+      layout
+      {...motionProps}
+      className={cn('rounded-[24px] border border-gray-200 bg-surface p-5 shadow-sm', className)}
+      role="status"
+      aria-busy="true"
+      aria-label="Loading card"
+    >
       <Skeleton variant="text" className="mb-3 h-5 w-1/3" />
       <Skeleton lines={3} className="mb-4" />
       <div className="flex gap-2">
         <Skeleton className="h-10 w-24 rounded-2xl" />
         <Skeleton className="h-10 w-24 rounded-2xl" />
       </div>
-    </div>
+    </motion.div>
   );
 }
 
-/* ─── Page Skeleton ─── */
+/* Page Skeleton */
 export function PageSkeleton({ className }: { className?: string }) {
+  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const motionProps = getSurfaceMotion('section', reducedMotion);
+
   return (
-    <div className={cn('flex flex-col gap-8', className)} role="status" aria-busy="true" aria-label="Loading page">
+    <motion.div
+      layout
+      {...motionProps}
+      className={cn('flex flex-col gap-8', className)}
+      role="status"
+      aria-busy="true"
+      aria-label="Loading page"
+    >
       <div className="rounded-[24px] border border-gray-200 bg-surface px-5 py-5 shadow-sm sm:px-6 sm:py-6">
         <div className="space-y-4">
           <div className="flex items-start gap-4">
@@ -81,6 +107,6 @@ export function PageSkeleton({ className }: { className?: string }) {
         <CardSkeleton />
         <CardSkeleton />
       </div>
-    </div>
+    </motion.div>
   );
 }

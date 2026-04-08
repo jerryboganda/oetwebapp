@@ -5,5 +5,5 @@ export { LearnerDashboardShell } from './learner-dashboard-shell';
 export { LearnerWorkspaceContainer } from './learner-workspace-container';
 export { NotificationCenter } from './notification-center';
 export { NotificationPreferencesPanel } from './notification-preferences-panel';
-export { TopNav } from './top-nav';
+export { TopNav, type MobileMenuSection } from './top-nav';
 export { Sidebar, BottomNav, mainNavItems, mobileNavItems, type NavItem } from './sidebar';

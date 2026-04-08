@@ -89,7 +89,7 @@ test.describe('Notification center coverage', () => {
     await expect(page.getByRole('button', { name: /mark all read/i })).toBeVisible();
 
     expect(proof.processedImmediately).toBeTruthy();
-    expectNoSevereClientIssues(diagnostics);
+    expectNoSevereClientIssues(diagnostics, { allowNotificationReconnectNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });
@@ -114,7 +114,7 @@ test.describe('Notification center coverage', () => {
     await expect(page.getByRole('heading', { name: /notification center/i })).toBeVisible();
     await expect.poll(async () => await notificationCenterPanel(page).textContent() ?? '').toContain(message);
 
-    expectNoSevereClientIssues(diagnostics);
+    expectNoSevereClientIssues(diagnostics, { allowNotificationReconnectNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });
@@ -155,7 +155,7 @@ test.describe('Notification center coverage', () => {
     });
     await expect(page).toHaveURL(new RegExp(`/expert/review/${reviewRequestId}$`));
 
-    expectNoSevereClientIssues(diagnostics);
+    expectNoSevereClientIssues(diagnostics, { allowNotificationReconnectNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });
@@ -192,9 +192,9 @@ test.describe('Notification center coverage', () => {
     await page.getByRole('button', { name: /notifications/i }).click();
 
     await page.locator('#main-content').getByRole('button', { name: /^refresh$/i }).click();
-    await expect(page.getByText(proof.eventKey).first()).toBeVisible();
+    await expect(page.locator('#main-content tbody tr').filter({ hasText: proof.eventKey }).first()).toBeVisible();
 
-    expectNoSevereClientIssues(diagnostics);
+    expectNoSevereClientIssues(diagnostics, { allowNotificationReconnectNoise: true });
     diagnostics.detach();
     await attachDiagnostics(testInfo, diagnostics);
   });

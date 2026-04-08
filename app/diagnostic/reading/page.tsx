@@ -108,7 +108,7 @@ export default function DiagnosticReadingPage() {
       pageTitle="Diagnostic — Reading"
       distractionFree
       navActions={
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {task && (
             <Timer
               mode="countdown"
@@ -125,12 +125,14 @@ export default function DiagnosticReadingPage() {
     >
       <AsyncStateWrapper status={status} onRetry={load} errorMessage={error}>
         {task && (
-          <div className="flex flex-1 h-[calc(100vh-4rem)] overflow-hidden">
+          <div className="flex flex-1 min-h-0 h-[calc(100dvh-4rem)] flex-col overflow-hidden lg:flex-row">
             {/* Passage panel — left */}
             <div
               className={cn(
-                'border-r border-gray-200 overflow-y-auto transition-all',
-                showPassage ? 'w-1/2 lg:w-[55%]' : 'w-0 overflow-hidden',
+                    'border-b border-gray-200 overflow-y-auto transition-all lg:border-b-0 lg:border-r',
+                    showPassage
+                      ? 'block w-full max-h-[45dvh] lg:max-h-none lg:w-[55%]'
+                      : 'hidden lg:block lg:w-0 overflow-hidden',
               )}
             >
               <div className="p-6">
@@ -150,7 +152,7 @@ export default function DiagnosticReadingPage() {
             </div>
 
             {/* Questions panel — right */}
-            <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+            <div className="flex-1 flex min-h-0 flex-col min-w-0 overflow-hidden">
               {/* Toggle passage on mobile */}
               <div className="lg:hidden px-4 py-2 border-b border-gray-200 bg-gray-50">
                 <Button

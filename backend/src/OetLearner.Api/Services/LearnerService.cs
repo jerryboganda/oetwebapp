@@ -491,7 +491,11 @@ public partial class LearnerService(
         await EnsureUserAsync(userId, cancellationToken);
         var goal = await db.Goals.AsNoTracking().FirstAsync(x => x.UserId == userId, cancellationToken);
         var examFamilyLabel = FormatExamFamilyLabel(goal.ExamFamilyCode);
-        var session = await db.DiagnosticSessions.Where(x => x.UserId == userId).OrderByDescending(x => x.StartedAt).FirstOrDefaultAsync(cancellationToken);
+        var session = (await db.DiagnosticSessions
+            .Where(x => x.UserId == userId)
+            .ToListAsync(cancellationToken))
+            .OrderByDescending(x => x.StartedAt)
+            .FirstOrDefault();
         if (session is null)
         {
             return new
@@ -626,15 +630,20 @@ public partial class LearnerService(
         var diagnosticSubtests = await db.DiagnosticSubtests
             .Where(x => x.DiagnosticSessionId == diagnosticId)
             .ToListAsync(cancellationToken);
-        var readiness = await db.ReadinessSnapshots.Where(x => x.UserId == session.UserId).OrderByDescending(x => x.ComputedAt).FirstAsync(cancellationToken);
+        var readiness = (await db.ReadinessSnapshots
+            .Where(x => x.UserId == session.UserId)
+            .ToListAsync(cancellationToken))
+            .OrderByDescending(x => x.ComputedAt)
+            .First();
         var attemptIds = diagnosticSubtests
             .Where(x => !string.IsNullOrWhiteSpace(x.AttemptId))
             .Select(x => x.AttemptId!)
             .ToList();
-        var evaluations = await db.Evaluations
+        var evaluations = (await db.Evaluations
             .Where(x => attemptIds.Contains(x.AttemptId))
+            .ToListAsync(cancellationToken))
             .OrderByDescending(x => x.GeneratedAt)
-            .ToListAsync(cancellationToken);
+            .ToList();
         var readinessPayload = JsonSupport.Deserialize<Dictionary<string, object?>>(readiness.PayloadJson, new Dictionary<string, object?>());
         var readinessBySubtest = readinessPayload.TryGetValue("subTests", out var subtestsValue) && subtestsValue is not null
             ? JsonSupport.Deserialize<List<Dictionary<string, object?>>>(JsonSupport.Serialize(subtestsValue), [])
@@ -892,10 +901,11 @@ public partial class LearnerService(
         await EnsureUserAsync(userId, cancellationToken);
         var submissions = await db.Attempts.Where(x => x.UserId == userId && x.State == AttemptState.Completed).ToListAsync(cancellationToken);
         var attemptIds = submissions.Select(x => x.Id).ToList();
-        var evaluations = await db.Evaluations
-            .Where(x => x.State == AsyncState.Completed && attemptIds.Contains(x.AttemptId))
+        var evaluations = (await db.Evaluations
+                .Where(x => x.State == AsyncState.Completed && attemptIds.Contains(x.AttemptId))
+                .ToListAsync(cancellationToken))
             .OrderBy(x => x.GeneratedAt)
-            .ToListAsync(cancellationToken);
+            .ToList();
         var criterionTrend = evaluations
             .SelectMany(evaluation =>
                 JsonSupport.Deserialize<List<Dictionary<string, object?>>>(evaluation.CriterionScoresJson, [])
@@ -908,10 +918,11 @@ public partial class LearnerService(
                         subtest = evaluation.SubtestCode
                     }))
             .ToList();
-        var reviews = await db.ReviewRequests
-            .Where(x => attemptIds.Contains(x.AttemptId))
+        var reviews = (await db.ReviewRequests
+                .Where(x => attemptIds.Contains(x.AttemptId))
+                .ToListAsync(cancellationToken))
             .OrderBy(x => x.CreatedAt)
-            .ToListAsync(cancellationToken);
+            .ToList();
         var completedReviews = reviews.Where(x => x.CompletedAt.HasValue).ToList();
         var averageTurnaroundHours = completedReviews.Count == 0
             ? (double?)null
@@ -959,14 +970,26 @@ public partial class LearnerService(
     public async Task<object> GetSubmissionsAsync(string userId, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
-        var attempts = await db.Attempts.Where(x => x.UserId == userId).OrderByDescending(x => x.SubmittedAt ?? x.StartedAt).ToListAsync(cancellationToken);
+        var attempts = (await db.Attempts
+            .Where(x => x.UserId == userId)
+            .ToListAsync(cancellationToken))
+            .OrderByDescending(x => x.SubmittedAt ?? x.StartedAt)
+            .ToList();
         var items = new List<object>();
 
         foreach (var attempt in attempts)
         {
             var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
-            var eval = await db.Evaluations.Where(x => x.AttemptId == attempt.Id).OrderByDescending(x => x.GeneratedAt).FirstOrDefaultAsync(cancellationToken);
-            var review = await db.ReviewRequests.Where(x => x.AttemptId == attempt.Id).OrderByDescending(x => x.CreatedAt).FirstOrDefaultAsync(cancellationToken);
+            var eval = (await db.Evaluations
+                .Where(x => x.AttemptId == attempt.Id)
+                .ToListAsync(cancellationToken))
+                .OrderByDescending(x => x.GeneratedAt)
+                .FirstOrDefault();
+            var review = (await db.ReviewRequests
+                .Where(x => x.AttemptId == attempt.Id)
+                .ToListAsync(cancellationToken))
+                .OrderByDescending(x => x.CreatedAt)
+                .FirstOrDefault();
             var canRequestReview = attempt.State == AttemptState.Completed && attempt.SubtestCode is "writing" or "speaking";
             items.Add(new
             {
@@ -1049,19 +1072,22 @@ public partial class LearnerService(
         var tasks = await GetTasksBySubtestAsync("writing", cancellationToken);
         var attemptIds = await db.Attempts.Where(x => x.UserId == userId && x.SubtestCode == "writing").Select(x => x.Id).ToListAsync(cancellationToken);
         var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId, cancellationToken);
-        var attempts = await db.Attempts
+        var attempts = (await db.Attempts
             .Where(x => x.UserId == userId && x.SubtestCode == "writing")
+            .ToListAsync(cancellationToken))
             .OrderByDescending(x => x.SubmittedAt ?? x.StartedAt)
             .Take(4)
-            .ToListAsync(cancellationToken);
-        var draftAttempt = await db.Attempts
+            .ToList();
+        var draftAttempt = (await db.Attempts
             .Where(x => x.UserId == userId && x.SubtestCode == "writing" && x.State == AttemptState.InProgress)
+            .ToListAsync(cancellationToken))
             .OrderByDescending(x => x.LastClientSyncAt ?? x.StartedAt)
-            .FirstOrDefaultAsync(cancellationToken);
-        var latestEvaluation = await db.Evaluations
+            .FirstOrDefault();
+        var latestEvaluation = (await db.Evaluations
             .Where(x => x.SubtestCode == "writing" && attemptIds.Contains(x.AttemptId))
+            .ToListAsync(cancellationToken))
             .OrderByDescending(x => x.GeneratedAt)
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefault();
         var criterionDrillLibrary = latestEvaluation is not null
             ? JsonSupport.Deserialize<List<Dictionary<string, object?>>>(latestEvaluation.CriterionScoresJson, [])
                 .OrderBy(x => ParseCriterionScore(x.GetValueOrDefault("scoreRange")?.ToString()))
@@ -1077,10 +1103,11 @@ public partial class LearnerService(
             : tasks.Take(3).Select(task => task).ToList();
         var practiceLibrary = tasks.Take(4).ToList();
         var recommendedTask = practiceLibrary.FirstOrDefault();
-        var evaluations = await db.Evaluations
+        var evaluations = (await db.Evaluations
             .Where(x => attemptIds.Contains(x.AttemptId))
+            .ToListAsync(cancellationToken))
             .OrderByDescending(x => x.GeneratedAt)
-            .ToListAsync(cancellationToken);
+            .ToList();
         var evaluationByAttemptId = evaluations
             .GroupBy(x => x.AttemptId)
             .ToDictionary(group => group.Key, group => group.First());
@@ -1452,21 +1479,27 @@ public partial class LearnerService(
         var tasks = await GetTasksBySubtestAsync("speaking", cancellationToken);
         var attemptIds = await db.Attempts.Where(x => x.UserId == userId && x.SubtestCode == "speaking").Select(x => x.Id).ToListAsync(cancellationToken);
         var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId, cancellationToken);
-        var attempts = await db.Attempts
+        var attempts = (await db.Attempts
             .Where(x => x.UserId == userId && x.SubtestCode == "speaking")
+            .ToListAsync(cancellationToken))
             .OrderByDescending(x => x.SubmittedAt ?? x.StartedAt)
             .Take(4)
-            .ToListAsync(cancellationToken);
-        var latestEvaluation = await db.Evaluations.Where(x => x.SubtestCode == "speaking" && attemptIds.Contains(x.AttemptId)).OrderByDescending(x => x.GeneratedAt).FirstOrDefaultAsync(cancellationToken);
+            .ToList();
+        var latestEvaluation = (await db.Evaluations
+            .Where(x => x.SubtestCode == "speaking" && attemptIds.Contains(x.AttemptId))
+            .ToListAsync(cancellationToken))
+            .OrderByDescending(x => x.GeneratedAt)
+            .FirstOrDefault();
         var commonIssues = latestEvaluation is null
             ? new[] { "Build smoother openings for role plays.", "Keep the professional tone consistent." }
             : JsonSupport.Deserialize<List<string>>(latestEvaluation.IssuesJson, [])
                 .DefaultIfEmpty("Build smoother openings for role plays.")
                 .ToArray();
-        var evaluationByAttempt = await db.Evaluations
+        var evaluationByAttempt = (await db.Evaluations
             .Where(x => attemptIds.Contains(x.AttemptId))
+            .ToListAsync(cancellationToken))
             .OrderByDescending(x => x.GeneratedAt)
-            .ToListAsync(cancellationToken);
+            .ToList();
         var evaluationLookup = evaluationByAttempt
             .GroupBy(x => x.AttemptId)
             .ToDictionary(group => group.Key, group => group.First());
@@ -2582,7 +2615,11 @@ public partial class LearnerService(
     public async Task<object> GetInvoicesAsync(string userId, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
-        var invoices = await db.Invoices.Where(x => x.UserId == userId).OrderByDescending(x => x.IssuedAt).ToListAsync(cancellationToken);
+        var invoices = (await db.Invoices
+            .Where(x => x.UserId == userId)
+            .ToListAsync(cancellationToken))
+            .OrderByDescending(x => x.IssuedAt)
+            .ToList();
         return new
         {
             items = invoices.Select(x => new
@@ -2635,11 +2672,12 @@ public partial class LearnerService(
             .Where(x => x.UserId == userId)
             .Select(x => x.Id)
             .ToListAsync(cancellationToken);
-        var reports = await db.MockReports.AsNoTracking()
+        var reports = (await db.MockReports.AsNoTracking()
             .Where(report => attemptIds.Contains(report.MockAttemptId))
+            .ToListAsync(cancellationToken))
             .OrderByDescending(report => report.GeneratedAt)
             .Take(6)
-            .ToListAsync(cancellationToken);
+            .ToList();
 
         var reportItems = reports
             .Select(report => JsonSupport.Deserialize<Dictionary<string, object?>>(report.PayloadJson, new Dictionary<string, object?>()))
@@ -5151,10 +5189,14 @@ public partial class LearnerService(
             return new { balance = 0, transactions = Array.Empty<object>() };
         }
 
-        var transactions = await db.WalletTransactions.AsNoTracking()
+        var maxTransactions = Math.Min(limit, 100);
+        var walletTransactions = await db.WalletTransactions.AsNoTracking()
             .Where(x => x.WalletId == wallet.Id)
+            .ToListAsync(ct);
+
+        var transactions = walletTransactions
             .OrderByDescending(x => x.CreatedAt)
-            .Take(Math.Min(limit, 100))
+            .Take(maxTransactions)
             .Select(x => new
             {
                 id = x.Id,
@@ -5166,7 +5208,7 @@ public partial class LearnerService(
                 description = x.Description,
                 createdAt = x.CreatedAt
             })
-            .ToListAsync(ct);
+            .ToList();
 
         return new
         {

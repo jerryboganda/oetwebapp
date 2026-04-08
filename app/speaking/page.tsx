@@ -10,6 +10,7 @@ import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { fetchSpeakingHome, fetchSubmissions } from '@/lib/api';
 import type { Submission } from '@/lib/mock-data';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';

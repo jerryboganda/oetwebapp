@@ -8,12 +8,18 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./vitest.setup.ts'],
+    server: {
+      deps: {
+        inline: [/^@testing-library\/react/, /^react-dom\/test-utils$/],
+      },
+    },
     include: ['**/__tests__/**/*.{test,spec}.{ts,tsx}', '**/*.{test,spec}.{ts,tsx}'],
     exclude: ['**/node_modules/**', 'tests/e2e/**', 'OET Web App Login only screens take from here/**'],
   },
   resolve: {
     alias: {
       '@': path.resolve(__dirname, '.'),
+      'react-dom/test-utils': path.resolve(__dirname, 'tests/shims/react-dom-test-utils.ts'),
     },
   },
 });

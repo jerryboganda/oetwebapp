@@ -19,7 +19,7 @@ test.describe('Learner player workflows @learner @smoke', () => {
     await page.getByRole('button', { name: /flag this question for review/i }).click();
     await expect(page.getByRole('button', { name: /remove flag from this question/i })).toBeVisible();
 
-    await page.getByRole('button', { name: /next/i }).click();
+    await page.getByRole('button', { name: /^next$/i }).click();
     await expect(page.getByText(/question 2 of 3/i)).toBeVisible();
 
     await page.getByRole('button', { name: /previous/i }).click();

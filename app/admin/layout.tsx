@@ -1,8 +1,8 @@
 'use client';
 
 import { PrivilegedMfaBanner } from '@/components/auth/privileged-mfa-banner';
-import { AdminDashboardShell, AppShell, LearnerWorkspaceContainer } from '@/components/layout';
-import { NavItem } from '@/components/layout/sidebar';
+import { AdminDashboardShell, AppShell, LearnerWorkspaceContainer, type MobileMenuSection } from '@/components/layout';
+import type { NavItem } from '@/components/layout/sidebar';
 import { 
   LayoutDashboard,
   Library, 
@@ -32,6 +32,29 @@ const adminNavItems: NavItem[] = [
   { href: '/admin/billing', label: 'Billing Ops', icon: <CreditCard className="w-5 h-5" />, matchPrefix: '/admin/billing' },
   { href: '/admin/flags', label: 'Feature Flags', icon: <Flag className="w-5 h-5" />, matchPrefix: '/admin/flags' },
   { href: '/admin/audit-logs', label: 'Audit Logs', icon: <ShieldCheck className="w-5 h-5" />, matchPrefix: '/admin/audit-logs' },
+];
+
+const adminMobileNavItems: NavItem[] = [
+  adminNavItems[0],
+  adminNavItems[1],
+  adminNavItems[5],
+  adminNavItems[8],
+  adminNavItems[9],
+];
+
+const adminMobileMenuSections: MobileMenuSection[] = [
+  {
+    label: 'Operations',
+    items: [adminNavItems[0], adminNavItems[5], adminNavItems[6], adminNavItems[7]],
+  },
+  {
+    label: 'Governance',
+    items: [adminNavItems[1], adminNavItems[2], adminNavItems[3], adminNavItems[4], adminNavItems[10], adminNavItems[11]],
+  },
+  {
+    label: 'People & billing',
+    items: [adminNavItems[8], adminNavItems[9]],
+  },
 ];
 
 function isContentWorkspace(pathname: string | null) {
@@ -114,7 +137,10 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
         distractionFree
         pageTitle={pageTitle}
         navItems={adminNavItems}
+        mobileNavItems={adminMobileNavItems}
+        mobileMenuSections={adminMobileMenuSections}
         requiredRole="admin"
+        workspaceRole="admin"
       >
         <LearnerWorkspaceContainer>{bannerBlock}</LearnerWorkspaceContainer>
       </AppShell>
@@ -125,7 +151,8 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
     <AdminDashboardShell
       pageTitle={pageTitle}
       navItems={adminNavItems}
-      mobileNavItems={adminNavItems}
+      mobileNavItems={adminMobileNavItems}
+      mobileMenuSections={adminMobileMenuSections}
       requiredRole="admin"
     >
       {bannerBlock}

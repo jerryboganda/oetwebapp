@@ -2,7 +2,7 @@
 
 import { useState, useEffect, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence, useReducedMotion } from 'motion/react';
 import {
   Clock,
   ChevronLeft,
@@ -17,10 +17,12 @@ import {
 import Link from 'next/link';
 import { AppShell } from '@/components/layout/app-shell';
 import { Button } from '@/components/ui/button';
+import { Modal } from '@/components/ui/modal';
 import { Timer } from '@/components/ui/timer';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchReadingTask, submitReadingAnswers } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { getMotionPresenceMode, getSurfaceMotion, prefersReducedMotion } from '@/lib/motion';
 import type { ReadingTask } from '@/lib/mock-data';
 
 function ReadingPlayerContent() {
@@ -40,6 +42,10 @@ function ReadingPlayerContent() {
   const [isPaused, setIsPaused] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [timerExpired, setTimerExpired] = useState(false);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const overlayMotion = getSurfaceMotion('overlay', reducedMotion);
+  const questionMotion = getSurfaceMotion('section', reducedMotion);
 
   useEffect(() => {
     fetchReadingTask(id)
@@ -82,10 +88,8 @@ function ReadingPlayerContent() {
     }
   };
 
-  const handleSubmit = async () => {
-    if (window.confirm('Are you sure you want to submit? You cannot change answers after submitting.')) {
-      await doSubmit();
-    }
+  const handleSubmit = () => {
+    setShowSubmitConfirm(true);
   };
 
   const handleTimerExpired = async () => {
@@ -130,7 +134,7 @@ function ReadingPlayerContent() {
   }
 
   const timerNavActions = (
-    <div className="flex items-center gap-3">
+    <div className="flex flex-wrap items-center gap-2 sm:gap-3">
       <Timer
         mode="countdown"
         initialSeconds={task.timeLimit}
@@ -158,15 +162,13 @@ function ReadingPlayerContent() {
       distractionFree
       navActions={timerNavActions}
     >
-      <div className="flex-1 flex flex-col lg:flex-row overflow-hidden relative h-full">
+      <div className="relative flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:overflow-hidden">
 
         {/* Pause Overlay */}
-        <AnimatePresence>
+        <AnimatePresence mode={getMotionPresenceMode(reducedMotion)}>
           {isPaused && (
             <motion.div
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              exit={{ opacity: 0 }}
+              {...overlayMotion}
               className="absolute inset-0 bg-white/80 backdrop-blur-sm z-30 flex flex-col items-center justify-center"
             >
               <Pause className="w-16 h-16 text-muted mb-4" />
@@ -178,7 +180,7 @@ function ReadingPlayerContent() {
         </AnimatePresence>
 
         {/* Left Pane: Reading Text */}
-        <div className="flex-1 lg:w-1/2 lg:border-r border-gray-200 bg-surface overflow-y-auto p-6 sm:p-8 lg:p-12">
+        <div className="flex-1 border-gray-200 bg-surface p-6 sm:p-8 md:w-1/2 md:border-r md:overflow-y-auto md:p-12">
           <div className="max-w-2xl mx-auto space-y-12">
             {task.texts.map((text) => (
               <article key={text.id} className="prose prose-gray max-w-none">
@@ -192,11 +194,11 @@ function ReadingPlayerContent() {
         </div>
 
         {/* Right Pane: Questions */}
-        <div className="flex-1 lg:w-1/2 flex flex-col bg-background-light">
+        <div className="flex-1 flex flex-col bg-background-light md:w-1/2">
 
           {/* Question Navigator Grid */}
           <div className="bg-surface border-b border-gray-200 p-4 shrink-0">
-            <div className="flex flex-wrap gap-2 max-w-2xl mx-auto">
+            <div className="mx-auto flex max-w-2xl flex-wrap gap-2">
               {task.questions.map((q, idx) => {
                 const isAnswered = !!answers[q.id];
                 const isFlagged = flagged[q.id];
@@ -230,14 +232,12 @@ function ReadingPlayerContent() {
 
           {/* Active Question Area */}
           {currentQuestion && (
-            <div className="flex-1 overflow-y-auto p-6 sm:p-8">
+            <div className="flex-1 p-6 sm:p-8 md:overflow-y-auto">
               <div className="max-w-2xl mx-auto">
-                <AnimatePresence mode="wait">
+                <AnimatePresence mode={getMotionPresenceMode(reducedMotion)}>
                   <motion.div
                     key={currentQuestion.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, y: -10 }}
+                    {...questionMotion}
                     className="bg-surface rounded-[32px] border border-gray-200 p-8 shadow-sm"
                   >
                     <div className="flex items-center justify-between mb-6">
@@ -322,6 +322,26 @@ function ReadingPlayerContent() {
 
         </div>
       </div>
+      <Modal open={showSubmitConfirm} onClose={() => setShowSubmitConfirm(false)} title="Submit reading task?" size="sm">
+        <div className="space-y-4">
+          <p className="text-sm text-muted">
+            Submit your current answers now? You will not be able to change them after submission.
+          </p>
+          <div className="flex justify-end gap-3">
+            <Button variant="outline" onClick={() => setShowSubmitConfirm(false)}>
+              Keep reviewing
+            </Button>
+            <Button
+              onClick={async () => {
+                setShowSubmitConfirm(false);
+                await doSubmit();
+              }}
+            >
+              Submit now
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </AppShell>
   );
 }
@@ -339,4 +359,3 @@ export default function ReadingPlayer() {
     </Suspense>
   );
 }
-

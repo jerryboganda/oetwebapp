@@ -10,6 +10,17 @@ contextBridge.exposeInMainWorld('desktopBridge', {
   openExternal: (url) => ipcRenderer.invoke('desktop:open-external', url),
   runtime: {
     info: () => ipcRenderer.invoke('desktop:runtime-info'),
+    onWindowStateChange: (listener) => {
+      const handler = (_event, windowState) => {
+        listener(windowState);
+      };
+
+      ipcRenderer.on('desktop:window-state-changed', handler);
+
+      return () => {
+        ipcRenderer.removeListener('desktop:window-state-changed', handler);
+      };
+    },
   },
   secureSecrets: {
     get: (namespace, key) => ipcRenderer.invoke('desktop:secret-storage:get', { namespace, key }),

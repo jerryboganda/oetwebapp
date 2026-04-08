@@ -78,7 +78,7 @@ test.describe('Accessibility smoke @a11y', () => {
 
     const diagnostics = observePage(page);
     await page.goto('/expert/queue', { waitUntil: 'domcontentloaded' });
-    await expect(page.getByRole('heading', { name: /review queue/i })).toBeVisible();
+    await expect(page.locator('main').getByRole('heading', { name: /^review queue$/i })).toBeVisible();
     await expectNoSeriousAxeViolations(page);
 
     expectNoSevereClientIssues(diagnostics);

@@ -7,6 +7,7 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { fetchXP, fetchStreak, fetchAchievements } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 

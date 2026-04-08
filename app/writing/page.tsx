@@ -18,6 +18,7 @@ import {
 import { useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
+import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Badge, StatusBadge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';

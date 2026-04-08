@@ -352,7 +352,7 @@ export default function Dashboard() {
                         <div className="text-xs text-muted">Day Streak</div>
                       </div>
                       <div className="text-center">
-                        <div className="flex items-center gap-1 text-lg font-bold text-amber-600">
+                        <div className="flex items-center gap-1 text-lg font-bold text-amber-800">
                           <Trophy className="h-4 w-4" />
                           {engagement.longestStreak}
                         </div>

@@ -147,7 +147,7 @@ export default function PerformanceMetricsPage() {
             />
             <Card className="border-slate-200 shadow-sm">
               <CardContent className="p-5">
-                <div className="h-[300px] w-full min-w-0" role="img" aria-label="Reviews completed bar chart">
+                <div className="h-[240px] w-full min-w-0 sm:h-[280px] lg:h-[320px]" role="img" aria-label="Reviews completed bar chart">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={completionData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }} aria-label="Reviews completed bar chart">
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />

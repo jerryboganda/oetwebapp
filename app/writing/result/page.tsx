@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
 import { FileText, BarChart3, ShieldAlert, ThumbsUp, AlertTriangle, Edit3, Star, Info } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
@@ -9,6 +8,7 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { fetchWritingResult } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { WritingResult } from '@/lib/mock-data';
@@ -89,14 +89,14 @@ export default function WritingResultSummary() {
       </header>
 
       <main className="-mt-16 relative z-20">
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-start gap-3 shadow-sm">
+        <MotionSection className="bg-blue-50 border border-blue-200 rounded-xl p-4 mb-6 flex items-start gap-3 shadow-sm">
           <Info className="w-5 h-5 text-blue-600 shrink-0 mt-0.5" />
           <p className="text-sm text-blue-800 leading-relaxed">
             <strong>{result.methodLabel}:</strong> {result.learnerDisclaimer}
           </p>
-        </motion.div>
+        </MotionSection>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.05 }} className="grid grid-cols-1 gap-4 md:grid-cols-3 mb-8">
+        <MotionSection delayIndex={1} className="grid grid-cols-1 gap-4 md:grid-cols-3 mb-8">
           <Card className="p-4">
             <p className="text-xs font-bold uppercase tracking-wider text-muted">Exam Family</p>
             <p className="mt-2 text-base font-bold text-navy">{result.examFamilyLabel}</p>
@@ -109,18 +109,18 @@ export default function WritingResultSummary() {
             <p className="text-xs font-bold uppercase tracking-wider text-muted">Provenance</p>
             <p className="mt-2 text-base font-bold text-navy">{result.provenanceLabel}</p>
           </Card>
-        </motion.div>
+        </MotionSection>
 
         {result.humanReviewRecommended ? (
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.08 }} className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 flex items-start gap-3 shadow-sm">
+          <MotionSection delayIndex={2} className="bg-amber-50 border border-amber-200 rounded-xl p-4 mb-6 flex items-start gap-3 shadow-sm">
             <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
             <p className="text-sm text-amber-900 leading-relaxed">
               Human review is recommended here because the AI score is still a practice estimate. Use expert review for higher-stakes decisions and borderline readiness calls.
             </p>
-          </motion.div>
+          </MotionSection>
         ) : null}
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+        <MotionSection delayIndex={3}>
           <Card className="p-8 mb-8 text-center">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-8 divide-y md:divide-y-0 md:divide-x divide-gray-100">
               <div className="flex flex-col items-center justify-center pt-4 md:pt-0">
@@ -144,10 +144,10 @@ export default function WritingResultSummary() {
               </div>
             </div>
           </Card>
-        </motion.div>
+        </MotionSection>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+          <MotionSection delayIndex={4}>
             <Card className="p-6">
               <div className="flex items-center gap-2 mb-6">
                 <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center shrink-0">
@@ -164,8 +164,8 @@ export default function WritingResultSummary() {
                 ))}
               </ul>
             </Card>
-          </motion.div>
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}>
+          </MotionSection>
+          <MotionSection delayIndex={5}>
             <Card className="p-6">
               <div className="flex items-center gap-2 mb-6">
                 <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
@@ -182,10 +182,10 @@ export default function WritingResultSummary() {
                 ))}
               </ul>
             </Card>
-          </motion.div>
+          </MotionSection>
         </div>
 
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }} className="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-8">
+        <MotionSection delayIndex={6} className="grid grid-cols-1 sm:grid-cols-3 gap-4 pb-8">
           <Link href={`/writing/feedback?id=${resultId}`} className="group bg-primary hover:bg-primary/90 text-white rounded-xl p-4 flex flex-col items-center justify-center text-center transition-all shadow-sm hover:shadow-md">
             <BarChart3 className="w-6 h-6 mb-2 opacity-80 group-hover:opacity-100 transition-opacity" />
             <span className="font-bold">View Detailed Feedback</span>
@@ -201,7 +201,7 @@ export default function WritingResultSummary() {
             <span className="font-bold group-hover:text-amber-600 transition-colors">Request Expert Review</span>
             <span className="text-xs text-muted mt-1">Get human feedback</span>
           </Link>
-        </motion.div>
+        </MotionSection>
       </main>
     </LearnerDashboardShell>
   );

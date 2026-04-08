@@ -145,6 +145,51 @@ export default function AdminContentLibraryPage() {
     { key: 'updatedAt', header: 'Updated', render: (row) => <span className="text-xs text-muted">{new Date(row.updatedAt).toLocaleString()}</span> },
   ];
 
+  const mobileCardRender = (row: AdminContentRow) => (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{row.id}</p>
+          <button className="truncate text-left font-semibold text-blue-600 hover:underline" onClick={() => router.push(`/admin/content/${row.id}`)}>
+            {row.title}
+          </button>
+        </div>
+        <Badge variant={row.status === 'published' ? 'success' : row.status === 'archived' ? 'muted' : 'warning'}>
+          {row.status}
+        </Badge>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Type</p>
+          <p className="mt-1 font-medium capitalize text-navy">{row.type.replace('_', ' ')}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Profession</p>
+          <p className="mt-1 font-medium capitalize text-navy">{row.profession || 'All'}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Author</p>
+          <p className="mt-1 font-medium text-navy">{row.author}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Updated</p>
+          <p className="mt-1 font-medium text-navy">{new Date(row.updatedAt).toLocaleString()}</p>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Button variant="outline" size="sm" className="w-full sm:flex-1" onClick={() => router.push(`/admin/content/${row.id}`)}>
+          Open
+        </Button>
+        <Button variant="outline" size="sm" className="w-full sm:flex-1" onClick={() => router.push(`/admin/content/${row.id}/revisions`)}>
+          <History className="h-4 w-4" />
+          Revisions ({row.revisionCount})
+        </Button>
+      </div>
+    </div>
+  );
+
   function handleFilterChange(groupId: string, optionId: string) {
     setPage(1);
     setFilters((current) => {
@@ -235,7 +280,7 @@ export default function AdminContentLibraryPage() {
             />
           ) : (
             <div className="space-y-4">
-              <DataTable columns={columns} data={rows} keyExtractor={(row) => row.id} />
+              <DataTable columns={columns} data={rows} keyExtractor={(row) => row.id} mobileCardRender={mobileCardRender} />
               <div className="flex flex-col gap-3 border-t border-gray-200 pt-4 text-sm text-muted sm:flex-row sm:items-center sm:justify-between">
                 <p>
                   Page {page} of {Math.max(1, Math.ceil(total / PAGE_SIZE))}

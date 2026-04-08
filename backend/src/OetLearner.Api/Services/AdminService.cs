@@ -1010,7 +1010,7 @@ public partial class AdminService(
             query = query.Where(f => f.FlagType == parsedType);
         }
 
-        var flags = await query.OrderByDescending(f => f.UpdatedAt).ToListAsync(ct);
+        var flags = await ToOrderedListDescendingAsync(query, f => f.UpdatedAt, ct);
         var items = flags.Select(f => new
         {
             f.Id,
@@ -1112,8 +1112,14 @@ public partial class AdminService(
                                       || (e.ResourceId != null && e.ResourceId.Contains(search)));
 
         var total = await query.CountAsync(ct);
-        var items = await query.OrderByDescending(e => e.OccurredAt)
-            .Skip((page - 1) * pageSize).Take(pageSize)
+        var events = await ToOrderedListDescendingAsync(
+            query,
+            e => e.OccurredAt,
+            ct,
+            skip: (page - 1) * pageSize,
+            take: pageSize);
+
+        var items = events
             .Select(e => new
             {
                 e.Id,
@@ -1122,7 +1128,8 @@ public partial class AdminService(
                 action = e.Action,
                 resource = e.ResourceId,
                 details = e.Details
-            }).ToListAsync(ct);
+            })
+            .ToList();
 
         return new { total, page, pageSize, items };
     }
@@ -1145,10 +1152,7 @@ public partial class AdminService(
                                       || e.ActorName.Contains(search)
                                       || (e.ResourceId != null && e.ResourceId.Contains(search)));
 
-        var items = await query
-            .OrderByDescending(e => e.OccurredAt)
-            .Take(5000)
-            .ToListAsync(ct);
+        var items = await ToOrderedListDescendingAsync(query, e => e.OccurredAt, ct, take: 5000);
 
         var builder = new StringBuilder();
         builder.AppendLine("Id,Timestamp,Actor,Action,ResourceType,ResourceId,Details");
@@ -1791,10 +1795,21 @@ public partial class AdminService(
             query = query.Where(p => p.Status == parsedStatus);
         }
 
-        var plans = await query
-            .OrderBy(p => p.DisplayOrder)
-            .ThenByDescending(p => p.UpdatedAt)
-            .ToListAsync(ct);
+        List<BillingPlan> plans;
+        if (!db.Database.IsSqlite())
+        {
+            plans = await query
+                .OrderBy(p => p.DisplayOrder)
+                .ThenByDescending(p => p.UpdatedAt)
+                .ToListAsync(ct);
+        }
+        else
+        {
+            plans = (await query.ToListAsync(ct))
+                .OrderBy(p => p.DisplayOrder)
+                .ThenByDescending(p => p.UpdatedAt)
+                .ToList();
+        }
 
         return plans.Select(MapBillingPlan);
     }
@@ -1881,10 +1896,21 @@ public partial class AdminService(
             query = query.Where(addOn => addOn.Status == parsedStatus);
         }
 
-        var addOns = await query
-            .OrderBy(addOn => addOn.DisplayOrder)
-            .ThenByDescending(addOn => addOn.UpdatedAt)
-            .ToListAsync(ct);
+        List<BillingAddOn> addOns;
+        if (!db.Database.IsSqlite())
+        {
+            addOns = await query
+                .OrderBy(addOn => addOn.DisplayOrder)
+                .ThenByDescending(addOn => addOn.UpdatedAt)
+                .ToListAsync(ct);
+        }
+        else
+        {
+            addOns = (await query.ToListAsync(ct))
+                .OrderBy(addOn => addOn.DisplayOrder)
+                .ThenByDescending(addOn => addOn.UpdatedAt)
+                .ToList();
+        }
 
         return addOns.Select(MapBillingAddOn);
     }
@@ -1969,9 +1995,7 @@ public partial class AdminService(
             query = query.Where(coupon => coupon.Status == parsedStatus);
         }
 
-        var coupons = await query
-            .OrderByDescending(coupon => coupon.CreatedAt)
-            .ToListAsync(ct);
+        var coupons = await ToOrderedListDescendingAsync(query, coupon => coupon.CreatedAt, ct);
 
         return coupons.Select(MapBillingCoupon);
     }
@@ -2063,11 +2087,12 @@ public partial class AdminService(
         }
 
         var total = await query.CountAsync(ct);
-        var subscriptions = await query
-            .OrderByDescending(subscription => subscription.ChangedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync(ct);
+        var subscriptions = await ToOrderedListDescendingAsync(
+            query,
+            subscription => subscription.ChangedAt,
+            ct,
+            skip: (page - 1) * pageSize,
+            take: pageSize);
 
         var userIds = subscriptions.Select(subscription => subscription.UserId).Distinct().ToList();
         var userNames = await db.Users.AsNoTracking()
@@ -2113,11 +2138,12 @@ public partial class AdminService(
         }
 
         var total = await query.CountAsync(ct);
-        var redemptions = await query
-            .OrderByDescending(redemption => redemption.RedeemedAt)
-            .Skip((page - 1) * pageSize)
-            .Take(pageSize)
-            .ToListAsync(ct);
+        var redemptions = await ToOrderedListDescendingAsync(
+            query,
+            redemption => redemption.RedeemedAt,
+            ct,
+            skip: (page - 1) * pageSize,
+            take: pageSize);
 
         var items = redemptions.Select(redemption => new
         {
@@ -2147,9 +2173,12 @@ public partial class AdminService(
             query = query.Where(i => i.UserId.Contains(search) || i.Description.Contains(search));
 
         var total = await query.CountAsync(ct);
-        var invoices = await query.OrderByDescending(i => i.IssuedAt)
-            .Skip((page - 1) * pageSize).Take(pageSize)
-            .ToListAsync(ct);
+        var invoices = await ToOrderedListDescendingAsync(
+            query,
+            i => i.IssuedAt,
+            ct,
+            skip: (page - 1) * pageSize,
+            take: pageSize);
 
         var userIds = invoices.Select(i => i.UserId).Distinct().ToList();
         var learnerNames = await db.Users.AsNoTracking()

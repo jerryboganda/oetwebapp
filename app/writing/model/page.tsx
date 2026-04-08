@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
 import {
   ChevronLeft,
   CheckCircle2,
@@ -13,6 +12,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
+import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -65,7 +65,7 @@ export default function ModelAnswerExplainer() {
 
       <main className="py-8">
         {/* Intro Banner */}
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-gradient-to-br from-navy to-primary/80 rounded-2xl p-6 sm:p-8 mb-8 text-white shadow-md">
+        <MotionSection className="bg-gradient-to-br from-navy to-primary/80 rounded-2xl p-6 sm:p-8 mb-8 text-white shadow-md">
           <h2 className="text-2xl font-bold mb-3">Why this is a strong response</h2>
           <p className="text-blue-100 leading-relaxed max-w-3xl">
             This model answer demonstrates a high-scoring response. Below, the letter is broken down paragraph by paragraph. Review the annotations to understand the <strong>rationale</strong>, <strong>scoring criteria</strong>, <strong>included / excluded details</strong>, and <strong>profession-specific language</strong> choices.
@@ -75,7 +75,7 @@ export default function ModelAnswerExplainer() {
         {/* Paragraph Cards */}
         <div className="space-y-12">
           {model.paragraphs.map((paragraph, index) => (
-            <motion.div key={paragraph.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }} className="flex flex-col lg:flex-row gap-6 lg:gap-8">
+            <MotionItem key={paragraph.id} delayIndex={index} className="flex flex-col lg:flex-row gap-6 lg:gap-8">
 
               {/* Left: Paragraph text */}
               <div className="w-full lg:w-5/12 shrink-0">
@@ -125,7 +125,7 @@ export default function ModelAnswerExplainer() {
                   <p className="text-blue-800 leading-relaxed text-sm">{paragraph.languageNotes}</p>
                 </div>
               </div>
-            </motion.div>
+            </MotionItem>
           ))}
         </div>
       </main>

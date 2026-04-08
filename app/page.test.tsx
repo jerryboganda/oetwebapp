@@ -18,6 +18,7 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('motion/react', () => ({
+  AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   motion: {
     div: ({ children, initial: _initial, animate: _animate, transition: _transition, whileHover: _whileHover, whileTap: _whileTap, ...props }: any) => (
       <div {...props}>{children}</div>

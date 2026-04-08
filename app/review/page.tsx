@@ -7,6 +7,7 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection, MotionItem, MotionPage } from '@/components/ui/motion-primitives';
 import { fetchReviewSummary, fetchDueReviewItems, submitReview } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
@@ -163,7 +164,7 @@ export default function ReviewPage() {
                   Tap to reveal answer
                 </button>
               ) : (
-                <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}>
+                <MotionItem>
                   <div className="p-4 bg-gray-50 dark:bg-gray-900 rounded-xl border border-gray-200 dark:border-gray-700 text-gray-800 dark:text-gray-200 mb-5">
                     {(() => { try { const a = JSON.parse(currentItem.answerJson); return a.text ?? currentItem.answerJson; } catch { return currentItem.answerJson; } })()}
                   </div>
@@ -180,7 +181,7 @@ export default function ReviewPage() {
                       </button>
                     ))}
                   </div>
-                </motion.div>
+                </MotionItem>
               )}
             </motion.div>
           </AnimatePresence>
@@ -188,11 +189,7 @@ export default function ReviewPage() {
       )}
 
       {done && (
-        <motion.div
-          initial={{ opacity: 0, scale: 0.95 }}
-          animate={{ opacity: 1, scale: 1 }}
-          className="max-w-md mx-auto text-center py-12"
-        >
+        <MotionPage className="max-w-md mx-auto text-center py-12">
           <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
           <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Session Complete!</h2>
           <p className="text-gray-500 mb-6">{sessionStats.reviewed} items reviewed · {sessionStats.correct} correct ({sessionStats.reviewed > 0 ? Math.round((sessionStats.correct / sessionStats.reviewed) * 100) : 0}%)</p>
@@ -202,7 +199,7 @@ export default function ReviewPage() {
           >
             <RotateCcw className="w-4 h-4" /> Review Again
           </button>
-        </motion.div>
+        </MotionPage>
       )}
     </LearnerDashboardShell>
   );

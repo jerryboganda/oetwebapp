@@ -99,6 +99,16 @@ beforeEach(() => {
   navigation.pathname = '/expert';
   navigation.searchParams = new URLSearchParams();
   navigation.params = {};
+  vi.mocked(window.matchMedia).mockImplementation((query: string) => ({
+    matches: true,
+    media: query,
+    onchange: null,
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  }));
 });
 
 describe('Expert Non-Review Pages', () => {
@@ -149,7 +159,7 @@ describe('Expert Non-Review Pages', () => {
     expect(await screen.findByRole('heading', { name: /^review queue$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /find the right work fast/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/review queue table/i)).toBeInTheDocument();
-    expect(screen.getByText('Dr Amina Khan')).toBeInTheDocument();
+    expect(screen.getAllByText('Dr Amina Khan').length).toBeGreaterThan(0);
   });
 
   it('renders the calibration center inside the learner-style route surface', async () => {

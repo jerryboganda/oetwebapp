@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
 import { MessageSquare, ArrowLeft, Send } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { fetchForumCategories, createForumThread } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
@@ -55,7 +55,8 @@ export default function NewThreadPage() {
       {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
 
       <div className="max-w-2xl mx-auto">
-        <motion.form initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} onSubmit={handleSubmit} className="space-y-4">
+        <MotionSection>
+          <form onSubmit={handleSubmit} className="space-y-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Category</label>
             <select
@@ -106,7 +107,8 @@ export default function NewThreadPage() {
               {submitting ? 'Posting...' : 'Post Thread'}
             </button>
           </div>
-        </motion.form>
+          </form>
+        </MotionSection>
       </div>
     </LearnerDashboardShell>
   );

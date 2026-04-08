@@ -59,12 +59,37 @@
     min-height: 44px;
   }
 
+  .scrollbar-hide {
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  @media (max-width: 767px) {
+    .mobile-stack {
+      flex-direction: column !important;
+    }
+
+    .mobile-full-width {
+      width: 100% !important;
+    }
+
+    .mobile-card-view {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+  }
+
   .pressable {
     transition:
-      transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
-      box-shadow 180ms cubic-bezier(0.22, 1, 0.36, 1),
-      background-color 180ms cubic-bezier(0.22, 1, 0.36, 1),
-      color 180ms cubic-bezier(0.22, 1, 0.36, 1);
+      transform var(--pressable-transition-duration, 180ms) cubic-bezier(0.22, 1, 0.36, 1),
+      box-shadow var(--pressable-transition-duration, 180ms) cubic-bezier(0.22, 1, 0.36, 1),
+      background-color var(--pressable-transition-duration, 180ms) cubic-bezier(0.22, 1, 0.36, 1),
+      color var(--pressable-transition-duration, 180ms) cubic-bezier(0.22, 1, 0.36, 1);
   }
 
   @media (hover: hover) {
@@ -74,14 +99,14 @@
   }
 
   .pressable:active {
-    transform: translateY(0) scale(0.98);
+    transform: translateY(0) scale(var(--pressable-active-scale, 0.98));
   }
 
   .glass-panel {
     background: rgba(255, 255, 255, 0.82);
     border: 1px solid rgba(148, 163, 184, 0.22);
-    backdrop-filter: blur(24px);
-    -webkit-backdrop-filter: blur(24px);
+    backdrop-filter: blur(var(--surface-blur, 24px));
+    -webkit-backdrop-filter: blur(var(--surface-blur, 24px));
     box-shadow: 0 18px 48px rgba(15, 23, 42, 0.1);
   }
 
@@ -100,7 +125,7 @@
   }
 
   .page-enter {
-    animation: page-enter 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+    animation: page-enter var(--page-enter-duration, 320ms) cubic-bezier(0.22, 1, 0.36, 1) both;
   }
 }
 
@@ -108,6 +133,7 @@
   :root {
     --app-viewport-height: 100dvh;
     --app-keyboard-offset: 0px;
+    --bottom-nav-height: 5.5rem;
     color-scheme: light;
   }
 
@@ -135,17 +161,43 @@
     min-height: 100%;
     background-color: var(--color-background-light);
     color-scheme: light dark;
+    --surface-blur: 24px;
+    --pressable-transition-duration: 180ms;
+    --pressable-active-scale: 0.98;
+    --page-enter-duration: 320ms;
+    --page-enter-distance: 10px;
   }
 
+  html[data-app-active='false'] {
+    --surface-blur: 0px;
+    --pressable-transition-duration: 1ms;
+    --pressable-active-scale: 1;
+  }
+
+
+  html[data-runtime-kind='desktop'] {
+    --surface-blur: 28px;
+    --pressable-transition-duration: 160ms;
+    --pressable-active-scale: 0.985;
+    --page-enter-duration: 280ms;
+    --page-enter-distance: 8px;
+  }
+
+  html[data-runtime-kind='capacitor-native'] {
+    --surface-blur: 18px;
+    --pressable-transition-duration: 140ms;
+    --pressable-active-scale: 0.975;
+    --page-enter-duration: 240ms;
+    --page-enter-distance: 6px;
+  }
   body {
     position: relative;
-    isolation: isolate;
+    transform: none;
     background-color: var(--color-background-light);
     color: var(--color-navy);
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
     min-height: var(--app-viewport-height);
-    overscroll-behavior-y: none;
     scroll-behavior: smooth;
   }
 
@@ -232,6 +284,11 @@
   @media (prefers-reduced-motion: reduce) {
     html {
       scroll-behavior: auto;
+      --surface-blur: 0px;
+      --pressable-transition-duration: 1ms;
+      --pressable-active-scale: 1;
+      --page-enter-duration: 1ms;
+      --page-enter-distance: 0px;
     }
 
     *,
@@ -242,6 +299,19 @@
       transition-duration: 0.01ms !important;
       scroll-behavior: auto !important;
     }
+
+    .pressable:hover,
+    .pressable:active {
+      transform: none !important;
+    }
+  }
+
+  html[data-app-active='false'] *,
+  html[data-app-active='false'] *::before,
+  html[data-app-active='false'] *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

@@ -47,7 +47,7 @@ test.describe('Expert review completion workflows @expert', () => {
 
     await expect(page.getByText(/review submitted successfully\./i)).toBeVisible();
     await expect(page).toHaveURL(/\/expert\/queue$/);
-    await expect(page.getByText(/review queue|queue/i).first()).toBeVisible();
+    await expect(page.locator('main').getByRole('heading', { name: /^review queue$/i })).toBeVisible();
 
     expectNoSevereClientIssues(diagnostics);
     diagnostics.detach();
@@ -80,7 +80,7 @@ test.describe('Expert review completion workflows @expert', () => {
 
     await expect(page.getByText(/review submitted successfully\./i)).toBeVisible();
     await expect(page).toHaveURL(/\/expert\/queue$/);
-    await expect(page.getByText(/review queue|queue/i).first()).toBeVisible();
+    await expect(page.locator('main').getByRole('heading', { name: /^review queue$/i })).toBeVisible();
 
     expectNoSevereClientIssues(diagnostics);
     diagnostics.detach();
@@ -107,7 +107,7 @@ test.describe('Expert review completion workflows @expert', () => {
 
     await expect(page.getByText(/rework request submitted\./i)).toBeVisible();
     await expect(page).toHaveURL(/\/expert\/queue$/);
-    await expect(page.getByText(/review queue|queue/i).first()).toBeVisible();
+    await expect(page.locator('main').getByRole('heading', { name: /^review queue$/i })).toBeVisible();
 
     expectNoSevereClientIssues(diagnostics);
     diagnostics.detach();

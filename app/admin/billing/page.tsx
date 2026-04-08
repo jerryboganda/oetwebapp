@@ -408,7 +408,7 @@ export default function BillingPage() {
       render: (plan) => (
         <div className="space-y-1 text-muted">
           <p>{formatCurrency(plan.price, plan.currency)} / {plan.interval}</p>
-          <p className="text-xs">{plan.includedCredits} included credits</p>
+          <p className="text-xs">{plan.includedCredits ?? 0} included credits</p>
         </div>
       ),
     },
@@ -652,6 +652,220 @@ export default function BillingPage() {
       ),
     },
   ];
+
+  const planMobileCardRender = (plan: AdminBillingPlan) => (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-navy">{plan.name}</p>
+          <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{plan.code ?? plan.id}</p>
+        </div>
+        <Badge variant={plan.status === 'active' ? 'success' : plan.status === 'archived' ? 'danger' : 'muted'}>
+          {plan.status}
+        </Badge>
+      </div>
+
+      {plan.description ? <p className="text-sm text-muted">{plan.description}</p> : null}
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Pricing</p>
+          <p className="mt-1 font-medium text-navy">{formatCurrency(plan.price, plan.currency)} / {plan.interval}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Subscribers</p>
+          <p className="mt-1 font-medium text-navy">{plan.activeSubscribers.toLocaleString()}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Credits</p>
+          <p className="mt-1 font-medium text-navy">{(plan.includedCredits ?? 0).toLocaleString()}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Visibility</p>
+          <p className="mt-1 font-medium text-navy">{plan.isVisible ? 'Visible' : 'Hidden'}</p>
+        </div>
+      </div>
+
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => openPlanEditor(plan)}>
+          Edit
+        </Button>
+      </div>
+    </div>
+  );
+
+  const addOnMobileCardRender = (addOn: AdminBillingAddOn) => (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-navy">{addOn.name}</p>
+          <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{addOn.code}</p>
+        </div>
+        <Badge variant={addOn.status === 'active' ? 'success' : addOn.status === 'archived' ? 'danger' : 'muted'}>
+          {addOn.status}
+        </Badge>
+      </div>
+
+      {addOn.description ? <p className="text-sm text-muted">{addOn.description}</p> : null}
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Pricing</p>
+          <p className="mt-1 font-medium text-navy">{formatCurrency(addOn.price, addOn.currency)} / {addOn.interval}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Credits</p>
+          <p className="mt-1 font-medium text-navy">{addOn.grantCredits.toLocaleString()}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Scope</p>
+          <p className="mt-1 font-medium text-navy">{addOn.appliesToAllPlans ? 'All plans' : (addOn.compatiblePlanCodes.join(', ') || 'Restricted')}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Type</p>
+          <p className="mt-1 font-medium text-navy">{addOn.isRecurring ? 'Recurring' : 'One-time'}</p>
+        </div>
+      </div>
+
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => openAddOnEditor(addOn)}>
+          Edit
+        </Button>
+      </div>
+    </div>
+  );
+
+  const couponMobileCardRender = (coupon: AdminBillingCoupon) => (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-navy">{coupon.code}</p>
+          <p className="truncate text-sm text-muted">{coupon.name}</p>
+        </div>
+        <Badge variant={coupon.status === 'active' ? 'success' : coupon.status === 'archived' ? 'danger' : 'muted'}>
+          {coupon.status}
+        </Badge>
+      </div>
+
+      {coupon.description ? <p className="text-sm text-muted">{coupon.description}</p> : null}
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Discount</p>
+          <p className="mt-1 font-medium text-navy">
+            {coupon.discountType === 'percentage'
+              ? `${coupon.discountValue}%`
+              : formatCurrency(coupon.discountValue, coupon.currency)}
+          </p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Redemptions</p>
+          <p className="mt-1 font-medium text-navy">{coupon.redemptionCount.toLocaleString()}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Usage limit</p>
+          <p className="mt-1 font-medium text-navy">{coupon.usageLimitTotal == null ? 'Unlimited' : coupon.usageLimitTotal.toLocaleString()}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Scope</p>
+          <p className="mt-1 font-medium text-navy">{coupon.isStackable ? 'Stackable' : 'Single use'}</p>
+        </div>
+      </div>
+
+      <div className="flex justify-end">
+        <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => openCouponEditor(coupon)}>
+          Edit
+        </Button>
+      </div>
+    </div>
+  );
+
+  const subscriptionMobileCardRender = (subscription: AdminBillingSubscription) => (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-navy">{subscription.userName}</p>
+          <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{subscription.userId}</p>
+        </div>
+        <Badge variant={subscription.status === 'active' ? 'success' : subscription.status === 'trial' ? 'info' : 'muted'}>
+          {subscription.status}
+        </Badge>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Plan</p>
+          <p className="mt-1 font-medium text-navy">{subscription.planName}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Billing</p>
+          <p className="mt-1 font-medium text-navy">{formatCurrency(subscription.price, subscription.currency)} / {subscription.interval}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Add-ons</p>
+          <p className="mt-1 font-medium text-navy">{subscription.addOnCount.toLocaleString()}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Renewal</p>
+          <p className="mt-1 font-medium text-navy">{subscription.nextRenewalAt ? new Date(subscription.nextRenewalAt).toLocaleString() : 'N/A'}</p>
+        </div>
+      </div>
+    </div>
+  );
+
+  const redemptionMobileCardRender = (redemption: AdminBillingCouponRedemption) => (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-navy">{redemption.couponCode}</p>
+          <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{redemption.userId}</p>
+        </div>
+        <Badge variant={redemption.status === 'applied' ? 'success' : redemption.status === 'rejected' ? 'danger' : 'muted'}>
+          {redemption.status}
+        </Badge>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Discount</p>
+          <p className="mt-1 font-medium text-navy">{formatCurrency(redemption.discountAmount, redemption.currency)}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Redeemed</p>
+          <p className="mt-1 font-medium text-navy">{new Date(redemption.redeemedAt).toLocaleString()}</p>
+        </div>
+      </div>
+    </div>
+  );
+
+  const invoiceMobileCardRender = (invoice: AdminBillingInvoice) => (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-navy">{invoice.userName}</p>
+          <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{invoice.plan}</p>
+        </div>
+        <Badge variant={invoice.status === 'paid' ? 'success' : invoice.status === 'failed' ? 'danger' : 'warning'}>
+          {invoice.status}
+        </Badge>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Invoice</p>
+          <p className="mt-1 font-mono text-xs text-navy">{invoice.id}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Amount</p>
+          <p className="mt-1 font-medium text-navy">{formatCurrency(invoice.amount, invoice.currency)}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Issued</p>
+          <p className="mt-1 font-medium text-navy">{new Date(invoice.date).toLocaleString()}</p>
+        </div>
+      </div>
+    </div>
+  );
 
   const planFilterGroups: FilterGroup[] = [
     {
@@ -975,7 +1189,7 @@ export default function BillingPage() {
           actions={<Button variant="outline" size="sm" onClick={() => openPlanEditor()}>Create Plan</Button>}
         >
           <FilterBar groups={planFilterGroups} selected={planFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setPlanFilters, groupId, optionId)} onClear={() => setPlanFilters({ status: [] })} />
-          <DataTable columns={planColumns} data={plans} keyExtractor={(plan) => plan.id} />
+          <DataTable columns={planColumns} data={plans} keyExtractor={(plan) => plan.id} mobileCardRender={planMobileCardRender} />
         </AdminRoutePanel>
 
         <AdminRoutePanel
@@ -984,7 +1198,7 @@ export default function BillingPage() {
           actions={<Button variant="outline" size="sm" onClick={() => openAddOnEditor()}>Create Add-on</Button>}
         >
           <FilterBar groups={addOnFilterGroups} selected={addOnFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setAddOnFilters, groupId, optionId)} onClear={() => setAddOnFilters({ status: [] })} />
-          <DataTable columns={addOnColumns} data={addOns} keyExtractor={(addOn) => addOn.id} />
+          <DataTable columns={addOnColumns} data={addOns} keyExtractor={(addOn) => addOn.id} mobileCardRender={addOnMobileCardRender} />
         </AdminRoutePanel>
 
         <AdminRoutePanel
@@ -993,7 +1207,7 @@ export default function BillingPage() {
           actions={<Button variant="outline" size="sm" onClick={() => openCouponEditor()}>Create Coupon</Button>}
         >
           <FilterBar groups={couponFilterGroups} selected={couponFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setCouponFilters, groupId, optionId)} onClear={() => setCouponFilters({ status: [] })} />
-          <DataTable columns={couponColumns} data={coupons} keyExtractor={(coupon) => coupon.id} />
+          <DataTable columns={couponColumns} data={coupons} keyExtractor={(coupon) => coupon.id} mobileCardRender={couponMobileCardRender} />
         </AdminRoutePanel>
 
         <AdminRoutePanel
@@ -1007,7 +1221,7 @@ export default function BillingPage() {
             </div>
           </div>
           <FilterBar groups={subscriptionFilterGroups} selected={subscriptionFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setSubscriptionFilters, groupId, optionId)} onClear={() => setSubscriptionFilters({ status: [] })} />
-          <DataTable columns={subscriptionColumns} data={subscriptions} keyExtractor={(subscription) => subscription.id} />
+          <DataTable columns={subscriptionColumns} data={subscriptions} keyExtractor={(subscription) => subscription.id} mobileCardRender={subscriptionMobileCardRender} />
         </AdminRoutePanel>
 
         <AdminRoutePanel
@@ -1021,7 +1235,7 @@ export default function BillingPage() {
             </div>
           </div>
           <FilterBar groups={redemptionFilterGroups} selected={redemptionFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setRedemptionFilters, groupId, optionId)} onClear={() => setRedemptionFilters({ status: [] })} />
-          <DataTable columns={redemptionColumns} data={redemptions} keyExtractor={(redemption) => redemption.id} />
+          <DataTable columns={redemptionColumns} data={redemptions} keyExtractor={(redemption) => redemption.id} mobileCardRender={redemptionMobileCardRender} />
         </AdminRoutePanel>
 
         <AdminRoutePanel title="Invoices" description="Search and filter real invoice records by status and learner reference.">
@@ -1032,7 +1246,7 @@ export default function BillingPage() {
             </div>
           </div>
           <FilterBar groups={invoiceFilterGroups} selected={invoiceFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setInvoiceFilters, groupId, optionId)} onClear={() => { setInvoiceFilters({ status: [] }); setInvoiceSearch(''); }} />
-          <DataTable columns={invoiceColumns} data={invoices} keyExtractor={(invoice) => invoice.id} />
+          <DataTable columns={invoiceColumns} data={invoices} keyExtractor={(invoice) => invoice.id} mobileCardRender={invoiceMobileCardRender} />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 

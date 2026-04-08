@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { Download, FileText, Search } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
@@ -33,6 +33,7 @@ export default function AuditLogsPage() {
   const [isExporting, setIsExporting] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
   const lastOpenedLogIdRef = useRef<string | null>(null);
+  const lastOpenedRowRef = useRef<HTMLElement | null>(null);
 
   const selectedAction = filters.action?.[0];
   const selectedActor = filters.actor?.[0];
@@ -157,6 +158,32 @@ export default function AuditLogsPage() {
     [],
   );
 
+  const mobileCardRender = (log: AdminAuditLogRow) => (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-navy">{log.actor}</p>
+          <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{log.resource}</p>
+        </div>
+        <span className="rounded-full bg-background-light px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">
+          {new Date(log.timestamp).toLocaleDateString()}
+        </span>
+      </div>
+
+      <div className="rounded-2xl bg-background-light px-3 py-2 text-sm">
+        <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Action</p>
+        <p className="mt-1 font-medium text-navy">{log.action}</p>
+      </div>
+
+      <div className="rounded-2xl bg-background-light px-3 py-2 text-sm">
+        <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Details</p>
+        <p className="mt-1 line-clamp-3 text-muted">{log.details}</p>
+      </div>
+
+      <p className="text-xs font-medium text-primary">Tap to inspect the full event.</p>
+    </div>
+  );
+
   function handleFilterChange(groupId: string, optionId: string) {
     setFilters((current) => ({
       ...current,
@@ -164,32 +191,53 @@ export default function AuditLogsPage() {
     }));
   }
 
-  function handleRowClick(log: AdminAuditLogRow) {
+  function handleRowClick(
+    log: AdminAuditLogRow,
+    event: ReactMouseEvent<HTMLElement> | ReactKeyboardEvent<HTMLElement>,
+  ) {
     lastOpenedLogIdRef.current = log.id;
+    lastOpenedRowRef.current = event.currentTarget;
     setSelectedLogId(log.id);
   }
 
   function handleDrawerClose() {
+    const restoreRow = lastOpenedRowRef.current;
     const restoreLogId = lastOpenedLogIdRef.current;
     setSelectedLogId(null);
 
-    if (!restoreLogId) {
+    if (!restoreRow && !restoreLogId) {
       return;
     }
 
+    let attempts = 0;
     const focusRow = () => {
-      const row = document.querySelector<HTMLElement>(`[data-row-key="${restoreLogId}"]`);
+      const fallbackCandidates = restoreLogId
+        ? Array.from(document.querySelectorAll<HTMLElement>(`[data-row-key="${restoreLogId}"]`))
+        : [];
+      const row = restoreRow?.isConnected && restoreRow.getClientRects().length > 0
+        ? restoreRow
+        : fallbackCandidates.find((candidate) => candidate.getClientRects().length > 0) ?? fallbackCandidates[0];
       if (!row) {
+        if (attempts < 6) {
+          attempts += 1;
+          window.setTimeout(focusRow, 50);
+        }
         return;
       }
 
       row.focus();
-      if (document.activeElement !== row) {
-        requestAnimationFrame(() => row.focus());
+      if (document.activeElement !== row && attempts < 6) {
+        attempts += 1;
+        requestAnimationFrame(() => {
+          row.focus();
+          if (document.activeElement !== row) {
+            window.setTimeout(focusRow, 50);
+          }
+        });
       }
     };
 
-    window.setTimeout(focusRow, 0);
+    window.setTimeout(focusRow, 50);
   }
 
   async function handleExport() {
@@ -255,7 +303,7 @@ export default function AuditLogsPage() {
             </div>
           </div>
           <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => { setFilters({ action: [], actor: [] }); setSearchQuery(''); }} />
-          <DataTable columns={columns} data={rows} keyExtractor={(log) => log.id} onRowClick={handleRowClick} />
+          <DataTable columns={columns} data={rows} keyExtractor={(log) => log.id} onRowClick={handleRowClick} mobileCardRender={mobileCardRender} />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 

@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
 import {
   PlayCircle,
   FileText,
@@ -18,6 +17,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
+import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
@@ -114,9 +114,9 @@ export default function MockCenter() {
           <div className="text-center py-8 text-sm text-red-600">{error}</div>
         ) : (
           <>
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+            <MotionSection>
               <LearnerSurfaceCard card={recommendedCard} />
-            </motion.div>
+            </MotionSection>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
               <div className="lg:col-span-2 space-y-10">
@@ -129,11 +129,9 @@ export default function MockCenter() {
                   />
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {subTestMocks.map((mock: Record<string, any>, idx: number) => (
-                      <motion.div
+                      <MotionItem
                         key={mock.id}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.05 }}
+                        delayIndex={idx}
                       >
                         <Link href={mock.href} className="flex items-center gap-4 bg-surface rounded-[24px] border border-gray-200 p-5 hover:shadow-md hover:border-gray-300 transition-all group">
                           <div className={`w-12 h-12 rounded-2xl ${mock.bg} flex items-center justify-center shrink-0 group-hover:scale-105 transition-transform`}>
@@ -145,7 +143,7 @@ export default function MockCenter() {
                           </div>
                           <ArrowRight className="w-5 h-5 text-gray-300 group-hover:text-navy transition-colors" />
                         </Link>
-                      </motion.div>
+                      </MotionItem>
                     ))}
                   </div>
                 </section>
@@ -160,11 +158,9 @@ export default function MockCenter() {
                   <div className="bg-surface rounded-[24px] border border-gray-200 overflow-hidden shadow-sm">
                     <div className="divide-y divide-gray-100">
                       {fullMocks.map((mock: Record<string, any>, idx: number) => (
-                        <motion.div
+                        <MotionItem
                           key={mock.id}
-                          initial={{ opacity: 0, x: -10 }}
-                          animate={{ opacity: 1, x: 0 }}
-                          transition={{ delay: idx * 0.05 }}
+                          delayIndex={idx}
                           className={`p-5 flex items-center justify-between gap-4 transition-colors ${
                             mock.status === 'locked' ? 'bg-gray-50 opacity-75' : 'hover:bg-gray-50 cursor-pointer'
                           }`}
@@ -206,7 +202,7 @@ export default function MockCenter() {
                           {mock.status !== 'locked' ? (
                             <ArrowRight className="w-5 h-5 text-gray-300 hidden sm:block" />
                           ) : null}
-                        </motion.div>
+                        </MotionItem>
                       ))}
                     </div>
                   </div>
@@ -258,11 +254,9 @@ export default function MockCenter() {
                     <div className="bg-surface rounded-[24px] border border-gray-200 overflow-hidden shadow-sm">
                       <div className="divide-y divide-gray-100">
                         {reports.slice(0, 4).map((report, idx) => (
-                          <motion.div
+                          <MotionItem
                             key={report.id}
-                            initial={{ opacity: 0, x: 10 }}
-                            animate={{ opacity: 1, x: 0 }}
-                            transition={{ delay: idx * 0.1 }}
+                            delayIndex={idx}
                           >
                             <Link
                               href={`/mocks/report/${report.id}`}
@@ -279,7 +273,7 @@ export default function MockCenter() {
                               </div>
                               <span className="text-sm font-black text-navy">{report.overallScore}</span>
                             </Link>
-                          </motion.div>
+                          </MotionItem>
                         ))}
                       </div>
                     </div>

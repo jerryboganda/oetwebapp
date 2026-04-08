@@ -1,4 +1,4 @@
-export const DEFAULT_PROXY_TARGET = 'http://localhost:5198';
+export const DEFAULT_PROXY_TARGET = 'http://127.0.0.1:5198';
 
 const SENSITIVE_REQUEST_HEADERS = new Set([
   'host',

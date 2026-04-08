@@ -7,6 +7,7 @@ import type { APIRequestContext, Page } from '@playwright/test';
 import { authStatePaths, seededAccounts, type SeededRole } from './auth';
 
 const defaultApiBaseURL = (process.env.NEXT_PUBLIC_API_BASE_URL ?? 'http://localhost:5198').replace(/\/$/, '');
+const defaultAppOrigin = new URL(process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000').origin;
 const localSessionKey = 'oet.auth.session.local';
 const sessionSessionKey = 'oet.auth.session.session';
 const mfaChallengeKey = 'oet.auth.challenge.mfa';
@@ -71,6 +72,7 @@ type SessionCacheState = {
 
 type BootstrapSessionOptions = {
   useDiskCache?: boolean;
+  isolateSession?: boolean;
 };
 
 function mfaStatePathForRole(role: Extract<SeededRole, 'expert' | 'admin'>) {
@@ -544,8 +546,9 @@ export async function bootstrapSessionForRole(
   options?: BootstrapSessionOptions,
 ): Promise<AuthSessionResponse> {
   const useDiskCache = options?.useDiskCache ?? true;
+  const isolateSession = options?.isolateSession ?? false;
 
-  if (useDiskCache) {
+  if (useDiskCache && !isolateSession) {
     const cachedDiskSession = await readSessionCacheState(role, apiBaseURL);
     if (cachedDiskSession) {
       if (role !== 'learner') {
@@ -559,21 +562,30 @@ export async function bootstrapSessionForRole(
   if (role === 'learner') {
     const response = await signInRaw(request, role, apiBaseURL);
     const session = await expectJsonOk<AuthSessionResponse>(response, 'Expected learner sign-in bootstrap to succeed.');
-    await writeSessionCacheState(role, session, apiBaseURL);
+    if (!isolateSession) {
+      await writeSessionCacheState(role, session, apiBaseURL);
+    }
     return session;
   }
 
-  const cachedSession = getCachedPrivilegedSession(role, apiBaseURL);
-  if (cachedSession) {
-    return cachedSession;
+  if (!isolateSession) {
+    const cachedSession = getCachedPrivilegedSession(role, apiBaseURL);
+    if (cachedSession) {
+      return cachedSession;
+    }
+
+    const key = privilegedSessionCacheKey(role, apiBaseURL);
+    const inFlightBootstrap = privilegedSessionBootstrapPromises.get(key);
+    if (inFlightBootstrap) {
+      return inFlightBootstrap;
+    }
+  }
+
+  if (isolateSession) {
+    return resolvePrivilegedSession(request, role, apiBaseURL);
   }
 
   const key = privilegedSessionCacheKey(role, apiBaseURL);
-  const inFlightBootstrap = privilegedSessionBootstrapPromises.get(key);
-  if (inFlightBootstrap) {
-    return inFlightBootstrap;
-  }
-
   const bootstrapPromise = resolvePrivilegedSession(request, role, apiBaseURL)
     .then(async (session) => {
       cachePrivilegedSession(role, session, apiBaseURL);
@@ -604,13 +616,26 @@ export async function hydrateSessionStorage(page: Page, session: AuthSessionResp
   );
 }
 
-export async function persistSessionToStorageState(
-  page: Page,
-  role: SeededRole,
-  session: AuthSessionResponse,
-) {
-  await page.goto('/sign-in', { waitUntil: 'domcontentloaded' });
-  await hydrateSessionStorage(page, session);
+function buildStorageState(session: AuthSessionResponse) {
+  return {
+    cookies: [],
+    origins: [
+      {
+        origin: defaultAppOrigin,
+        localStorage: [
+          {
+            name: localSessionKey,
+            value: JSON.stringify(session),
+          },
+        ],
+      },
+    ],
+  };
+}
 
-  await page.context().storageState({ path: authStatePaths[role] });
+export async function persistSessionToStorageState(
+  session: AuthSessionResponse,
+  storageStatePath: string,
+) {
+  await writeJsonFile(storageStatePath, buildStorageState(session));
 }

@@ -165,6 +165,39 @@ export default function UsersPage() {
     [],
   );
 
+  const mobileCardRender = (user: AdminUserRow) => (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <Link href={`/admin/users/${user.id}`} className="truncate font-semibold text-blue-600 hover:underline">
+            {user.name}
+          </Link>
+          <p className="truncate text-sm text-muted">{user.email}</p>
+        </div>
+        <Badge variant={user.role === 'admin' ? 'danger' : user.role === 'expert' ? 'warning' : 'default'}>
+          {user.role}
+        </Badge>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Status</p>
+          <p className="mt-1 font-medium text-navy">{user.status}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Last login</p>
+          <p className="mt-1 font-medium text-navy">{user.lastLogin ? new Date(user.lastLogin).toLocaleString() : 'Never'}</p>
+        </div>
+      </div>
+
+      <div className="flex justify-end">
+        <Link href={`/admin/users/${user.id}`} className="inline-flex items-center justify-center rounded-2xl border border-border/60 bg-surface px-4 py-2 text-sm font-semibold text-navy shadow-sm hover:bg-white">
+          View profile
+        </Link>
+      </div>
+    </div>
+  );
+
   function handleFilterChange(groupId: string, optionId: string) {
     setPage(1);
     setFilters((current) => ({
@@ -286,7 +319,7 @@ export default function UsersPage() {
               </div>
             </div>
           </div>
-          <DataTable columns={columns} data={users} keyExtractor={(user) => user.id} />
+          <DataTable columns={columns} data={users} keyExtractor={(user) => user.id} mobileCardRender={mobileCardRender} />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 

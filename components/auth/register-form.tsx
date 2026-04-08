@@ -8,8 +8,11 @@ import {
 } from '@tabler/icons-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useForm } from 'react-hook-form';
+import { AnimatePresence, motion } from 'motion/react';
+import { motionTokens } from '@/lib/motion';
+import { MotionFadeSwitch } from '@/components/ui/motion-primitives';
 import { buildExternalAuthStartHref, registerLearner } from '@/lib/auth-client';
 import AuthModeSwitch from '@/components/auth/auth-mode-switch';
 import { AuthScreenShell } from '@/components/auth/auth-screen-shell';
@@ -39,6 +42,8 @@ export function RegisterForm() {
   const searchParams = useSearchParams();
   const flowLinks = getAuthFlowLinks('signUp');
   const [step, setStep] = useState<1 | 2 | 3>(1);
+  const prevStepRef = useRef(step);
+  const stepDirection: 1 | -1 = step >= prevStepRef.current ? 1 : -1;
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [selectedCountryCode, setSelectedCountryCode] = useState('pk');
   const [mobileLocalNumber, setMobileLocalNumber] = useState('');
@@ -185,11 +190,13 @@ export function RegisterForm() {
 
     const isValid = await form.trigger(fields);
     if (isValid) {
+      prevStepRef.current = step;
       setStep((current) => (current === 1 ? 2 : 3));
     }
   };
 
   const previousStep = () => {
+    prevStepRef.current = step;
     setStep((current) => (current === 3 ? 2 : 1));
   };
 
@@ -281,43 +288,54 @@ export function RegisterForm() {
 
         <RegisterStepProgress step={step} />
 
-        {step === 1 ? (
-          <RegisterPersonalStep
-            form={form}
-            mobileLocalNumber={mobileLocalNumber}
-            onCountryCodeChange={setSelectedCountryCode}
-            onMobileLocalNumberChange={setMobileLocalNumber}
-            selectedCountryCode={selectedCountryCode}
-          />
-        ) : null}
+        <MotionFadeSwitch activeKey={`step-${step}`} direction={stepDirection}>
+          {step === 1 ? (
+            <RegisterPersonalStep
+              form={form}
+              mobileLocalNumber={mobileLocalNumber}
+              onCountryCodeChange={setSelectedCountryCode}
+              onMobileLocalNumberChange={setMobileLocalNumber}
+              selectedCountryCode={selectedCountryCode}
+            />
+          ) : null}
 
-        {step === 2 ? (
-          <RegisterEnrollmentStep
-            availableCountries={availableCountries}
-            billingPlans={billingPlans}
-            examTypes={examTypes}
-            filteredProfessions={filteredProfessions}
-            filteredSessions={filteredSessions}
-            form={form}
-            selectedSession={selectedSession}
-          />
-        ) : null}
+          {step === 2 ? (
+            <RegisterEnrollmentStep
+              availableCountries={availableCountries}
+              billingPlans={billingPlans}
+              examTypes={examTypes}
+              filteredProfessions={filteredProfessions}
+              filteredSessions={filteredSessions}
+              form={form}
+              selectedSession={selectedSession}
+            />
+          ) : null}
 
-        {step === 3 ? (
-          <RegisterSecurityStep
-            examTypes={examTypes}
-            form={form}
-            selectedExamTypeId={selectedExamTypeId}
-            selectedProfession={selectedProfession}
-            selectedSession={selectedSession}
-          />
-        ) : null}
+          {step === 3 ? (
+            <RegisterSecurityStep
+              examTypes={examTypes}
+              form={form}
+              selectedExamTypeId={selectedExamTypeId}
+              selectedProfession={selectedProfession}
+              selectedSession={selectedSession}
+            />
+          ) : null}
+        </MotionFadeSwitch>
 
-        {errorMessage ? (
-          <p className={`${styles.notice} ${styles.noticeDanger}`.trim()}>
-            {errorMessage}
-          </p>
-        ) : null}
+        <AnimatePresence mode="wait">
+          {errorMessage ? (
+            <motion.p
+              key="error"
+              initial={{ opacity: 0, y: -6, height: 0 }}
+              animate={{ opacity: 1, y: 0, height: 'auto' }}
+              exit={{ opacity: 0, y: -6, height: 0 }}
+              transition={{ duration: motionTokens.duration.fast, ease: motionTokens.ease.entrance }}
+              className={`${styles.notice} ${styles.noticeDanger}`.trim()}
+            >
+              {errorMessage}
+            </motion.p>
+          ) : null}
+        </AnimatePresence>
 
         <div className={styles.actionsRow}>
           {step > 1 ? (

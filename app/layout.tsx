@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from 'next';
+import Script from 'next/script';
 import { Fraunces, Manrope } from 'next/font/google';
+import { getRuntimeBootstrapScript } from '@/lib/runtime-signals';
 import { AppProviders } from './providers';
 import './globals.css';
 
@@ -45,8 +47,9 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={`${bodyFont.variable} ${displayFont.variable}`}>
+    <html lang="en" className={`${bodyFont.variable} ${displayFont.variable}`} suppressHydrationWarning>
       <body className="font-sans antialiased min-h-[var(--app-viewport-height,100dvh)] bg-background-light text-navy overflow-x-hidden selection:bg-primary/15 selection:text-navy" suppressHydrationWarning>
+        <Script id="runtime-signals" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: getRuntimeBootstrapScript() }} />
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

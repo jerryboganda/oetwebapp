@@ -129,7 +129,7 @@ export default function ProgressDashboard() {
                   <p className="text-xs text-muted">Score progression across all skills</p>
                 </div>
               </div>
-              <div className="h-[300px] w-full" role="img" aria-label="Sub-test performance trend chart showing reading, listening, writing, and speaking scores over time">
+              <div className="h-[240px] w-full sm:h-[280px] lg:h-[300px]" role="img" aria-label="Sub-test performance trend chart showing reading, listening, writing, and speaking scores over time">
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={trendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
@@ -181,7 +181,7 @@ export default function ProgressDashboard() {
                   ))}
                 </div>
               </div>
-              <div className="h-[300px] w-full" role="img" aria-label={`Criterion trend chart for ${criterionFilter} skills`}>
+              <div className="h-[240px] w-full sm:h-[280px] lg:h-[300px]" role="img" aria-label={`Criterion trend chart for ${criterionFilter} skills`}>
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={trendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                     <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
@@ -226,7 +226,7 @@ export default function ProgressDashboard() {
                     <p className="text-xs text-muted">Tasks completed over the last 7 days</p>
                   </div>
                 </div>
-                <div className="h-[250px] w-full">
+                <div className="h-[220px] w-full sm:h-[240px] lg:h-[250px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <AreaChart data={completionData} margin={{ top: 5, right: 0, bottom: 5, left: -20 }}>
                       <defs>
@@ -267,7 +267,7 @@ export default function ProgressDashboard() {
                     <p className="text-xs text-muted">Writing and Speaking tasks submitted</p>
                   </div>
                 </div>
-                <div className="h-[250px] w-full">
+                <div className="h-[220px] w-full sm:h-[240px] lg:h-[250px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={volumeData} margin={{ top: 5, right: 0, bottom: 5, left: -20 }}>
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />

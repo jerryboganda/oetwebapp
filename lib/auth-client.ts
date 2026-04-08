@@ -155,10 +155,6 @@ async function refreshSessionInternal(refreshToken: string): Promise<AuthSession
   return postJson<AuthSession>('/v1/auth/refresh', { refreshToken });
 }
 
-async function fetchCurrentUser(accessToken: string): Promise<CurrentUser> {
-  return getJson<CurrentUser>('/v1/auth/me', accessToken);
-}
-
 export async function ensureFreshSession(): Promise<AuthSession | null> {
   await hydrateAuthStorage();
   const record = loadStoredSessionRecord();
@@ -198,19 +194,13 @@ export async function restoreSession(): Promise<AuthSession | null> {
     return null;
   }
 
-  try {
-    const currentUser = await fetchCurrentUser(session.accessToken);
-    const hydratedSession = { ...session, currentUser };
-    saveStoredSession(hydratedSession, record.persistence);
-    return hydratedSession;
-  } catch (error) {
-    if (error instanceof AuthClientError && (error.status === 401 || error.status === 403)) {
-      clearStoredSession();
-      return null;
-    }
-
-    throw error;
+  if (session.currentUser) {
+    saveStoredSession(session, record.persistence);
+    return session;
   }
+
+  clearStoredSession();
+  return null;
 }
 
 export async function signIn(input: { email: string; password: string; rememberMe: boolean }): Promise<SignInResult> {

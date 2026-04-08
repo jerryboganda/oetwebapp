@@ -8,6 +8,8 @@ export { Accordion } from './accordion';
 export { Modal, Drawer } from './modal';
 export { InlineAlert, Toast } from './alert';
 export { FilterBar, type FilterGroup, type FilterOption } from './filter-bar';
+export { MobileFilterSheet } from './mobile-filter-sheet';
+export { MotionItem, MotionList, MotionPage, MotionSection } from './motion-primitives';
 export { ProgressBar, CircularProgress } from './progress';
 export { Timer } from './timer';
 export { Stepper, type Step } from './stepper';

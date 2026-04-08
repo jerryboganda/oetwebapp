@@ -173,7 +173,7 @@ export default function QualityAnalyticsPage() {
 
             <div className="grid gap-6 xl:grid-cols-2">
               <AdminRoutePanel title="Quality Rates Trend" description="Agreement and appeals trends from the current analytics window.">
-                <div className="h-80 min-h-[20rem]">
+                <div className="h-[240px] w-full sm:h-[280px] lg:h-[320px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={rateChartData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
@@ -189,7 +189,7 @@ export default function QualityAnalyticsPage() {
               </AdminRoutePanel>
 
               <AdminRoutePanel title="Operations Trend" description="Review time and risk case trend lines from the live analytics response.">
-                <div className="h-80 min-h-[20rem]">
+                <div className="h-[240px] w-full sm:h-[280px] lg:h-[320px]">
                   <ResponsiveContainer width="100%" height="100%">
                     <LineChart data={operationsChartData}>
                       <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />

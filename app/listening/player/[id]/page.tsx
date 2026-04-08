@@ -2,15 +2,17 @@
 
 import { useState, useRef, useEffect, Suspense } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import { Play, Pause, Volume2, AlertCircle, CheckCircle2, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { AppShell } from '@/components/layout/app-shell';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Modal } from '@/components/ui/modal';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchListeningTask, submitListeningAnswers } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { getSurfaceMotion, prefersReducedMotion } from '@/lib/motion';
 import type { ListeningTask } from '@/lib/mock-data';
 
 function formatTime(seconds: number) {
@@ -38,6 +40,10 @@ function PlayerContent() {
   const [hasStarted, setHasStarted] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const sectionMotion = getSurfaceMotion('section', reducedMotion);
+  const listMotion = getSurfaceMotion('list', reducedMotion);
 
   useEffect(() => {
     fetchListeningTask(id)
@@ -77,7 +83,6 @@ function PlayerContent() {
 
   const handleSubmit = async () => {
     if (!task) return;
-    if (!window.confirm('Are you sure you want to submit your answers?')) return;
     setIsSubmitting(true);
     if (audioRef.current) audioRef.current.pause();
     try {
@@ -143,8 +148,7 @@ function PlayerContent() {
       <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-8 pb-24">
         {!hasStarted ? (
           <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
+            {...sectionMotion}
             className="bg-surface rounded-[32px] border border-gray-200 p-8 sm:p-12 text-center shadow-sm mt-8"
           >
             <div className="w-20 h-20 bg-blue-50 rounded-full flex items-center justify-center mx-auto mb-6">
@@ -188,7 +192,7 @@ function PlayerContent() {
             </Button>
           </motion.div>
         ) : (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="space-y-8">
+          <motion.div {...listMotion} className="space-y-8">
             {/* Sticky Audio Player */}
             <div className="bg-navy text-white p-4 sm:p-5 rounded-2xl flex items-center gap-4 sticky top-20 z-20 shadow-xl shadow-navy/10">
               <button
@@ -284,8 +288,28 @@ function PlayerContent() {
 
             {/* Submit Section */}
             <div className="flex justify-end pt-4">
-              <Button onClick={handleSubmit} size="lg">Submit Answers</Button>
+              <Button onClick={() => setShowSubmitConfirm(true)} size="lg">Submit Answers</Button>
             </div>
+            <Modal open={showSubmitConfirm} onClose={() => setShowSubmitConfirm(false)} title="Submit listening task?" size="sm">
+              <div className="space-y-4">
+                <p className="text-sm text-muted">
+                  Submit your answers now? This will finish the listening task and lock further changes.
+                </p>
+                <div className="flex justify-end gap-3">
+                  <Button variant="outline" onClick={() => setShowSubmitConfirm(false)}>
+                    Keep reviewing
+                  </Button>
+                  <Button
+                    onClick={async () => {
+                      setShowSubmitConfirm(false);
+                      await handleSubmit();
+                    }}
+                  >
+                    Submit now
+                  </Button>
+                </div>
+              </div>
+            </Modal>
           </motion.div>
         )}
       </div>

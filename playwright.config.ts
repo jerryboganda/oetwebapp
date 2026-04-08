@@ -1,4 +1,5 @@
 import { defineConfig, devices } from '@playwright/test';
+import { authStatePathsByProject } from './tests/e2e/fixtures/auth';
 
 const baseURL = process.env.PLAYWRIGHT_BASE_URL ?? 'http://localhost:3000';
 
@@ -40,7 +41,7 @@ export default defineConfig({
       dependencies: ['setup'],
       use: {
         ...devices['Desktop Chrome'],
-        storageState: 'playwright/.auth/learner.json',
+        storageState: authStatePathsByProject['chromium-learner'],
       },
     },
     {
@@ -48,7 +49,7 @@ export default defineConfig({
       dependencies: ['setup'],
       use: {
         ...devices['Desktop Chrome'],
-        storageState: 'playwright/.auth/expert.json',
+        storageState: authStatePathsByProject['chromium-expert'],
       },
     },
     {
@@ -56,7 +57,7 @@ export default defineConfig({
       dependencies: ['setup'],
       use: {
         ...devices['Desktop Chrome'],
-        storageState: 'playwright/.auth/admin.json',
+        storageState: authStatePathsByProject['chromium-admin'],
       },
     },
     {
@@ -64,7 +65,7 @@ export default defineConfig({
       dependencies: ['setup'],
       use: {
         ...devices['Desktop Firefox'],
-        storageState: 'playwright/.auth/learner.json',
+        storageState: authStatePathsByProject['firefox-learner'],
       },
     },
     {
@@ -72,7 +73,7 @@ export default defineConfig({
       dependencies: ['setup'],
       use: {
         ...devices['Desktop Firefox'],
-        storageState: 'playwright/.auth/expert.json',
+        storageState: authStatePathsByProject['firefox-expert'],
       },
     },
     {
@@ -80,7 +81,7 @@ export default defineConfig({
       dependencies: ['setup'],
       use: {
         ...devices['Desktop Firefox'],
-        storageState: 'playwright/.auth/admin.json',
+        storageState: authStatePathsByProject['firefox-admin'],
       },
     },
     {
@@ -88,7 +89,7 @@ export default defineConfig({
       dependencies: ['setup'],
       use: {
         ...devices['Desktop Safari'],
-        storageState: 'playwright/.auth/learner.json',
+        storageState: authStatePathsByProject['webkit-learner'],
       },
     },
     {
@@ -96,7 +97,7 @@ export default defineConfig({
       dependencies: ['setup'],
       use: {
         ...devices['Desktop Safari'],
-        storageState: 'playwright/.auth/expert.json',
+        storageState: authStatePathsByProject['webkit-expert'],
       },
     },
     {
@@ -104,7 +105,7 @@ export default defineConfig({
       dependencies: ['setup'],
       use: {
         ...devices['Desktop Safari'],
-        storageState: 'playwright/.auth/admin.json',
+        storageState: authStatePathsByProject['webkit-admin'],
       },
     },
     {
@@ -112,7 +113,7 @@ export default defineConfig({
       dependencies: ['setup'],
       use: {
         ...devices['Pixel 7'],
-        storageState: 'playwright/.auth/learner.json',
+        storageState: authStatePathsByProject['mobile-chromium-learner'],
       },
     },
     {
@@ -120,7 +121,7 @@ export default defineConfig({
       dependencies: ['setup'],
       use: {
         ...devices['iPhone 14'],
-        storageState: 'playwright/.auth/learner.json',
+        storageState: authStatePathsByProject['mobile-webkit-learner'],
       },
     },
     {
@@ -128,7 +129,7 @@ export default defineConfig({
       dependencies: ['setup'],
       use: {
         ...devices['Desktop Chrome'],
-        storageState: 'playwright/.auth/learner.json',
+        storageState: authStatePathsByProject['sydney-learner'],
         timezoneId: 'Australia/Sydney',
         locale: 'en-AU',
       },

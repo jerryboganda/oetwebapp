@@ -133,8 +133,8 @@ There are two important frontend API paths in this repo:
 - Frontend data client
 
   - [`lib/api.ts`](/C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/lib/api.ts) reads `NEXT_PUBLIC_API_BASE_URL`
-  - In development it falls back to `http://localhost:5198`
-  - In production it requires `NEXT_PUBLIC_API_BASE_URL`
+    - When `NEXT_PUBLIC_API_BASE_URL` is set, the app uses it directly
+    - Without it, browser requests fall back to `/api/backend` and server-side calls use `PUBLIC_API_BASE_URL`, `API_PROXY_TARGET_URL`, or the local default target
 
 - Auth client / backend proxy path
 

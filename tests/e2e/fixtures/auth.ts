@@ -8,10 +8,44 @@ export const seededAccounts: Record<SeededRole, { email: string; password: strin
   admin: { email: 'admin@oet-prep.dev', password: 'Password123!' },
 };
 
+export const authStatePathsByProject = {
+  'chromium-learner': 'playwright/.auth/chromium-learner.json',
+  'chromium-expert': 'playwright/.auth/chromium-expert.json',
+  'chromium-admin': 'playwright/.auth/chromium-admin.json',
+  'firefox-learner': 'playwright/.auth/firefox-learner.json',
+  'firefox-expert': 'playwright/.auth/firefox-expert.json',
+  'firefox-admin': 'playwright/.auth/firefox-admin.json',
+  'webkit-learner': 'playwright/.auth/webkit-learner.json',
+  'webkit-expert': 'playwright/.auth/webkit-expert.json',
+  'webkit-admin': 'playwright/.auth/webkit-admin.json',
+  'mobile-chromium-learner': 'playwright/.auth/mobile-chromium-learner.json',
+  'mobile-webkit-learner': 'playwright/.auth/mobile-webkit-learner.json',
+  'sydney-learner': 'playwright/.auth/sydney-learner.json',
+} as const;
+
+export const authStateTargets = [
+  { projectName: 'chromium-learner', role: 'learner', path: authStatePathsByProject['chromium-learner'] },
+  { projectName: 'chromium-expert', role: 'expert', path: authStatePathsByProject['chromium-expert'] },
+  { projectName: 'chromium-admin', role: 'admin', path: authStatePathsByProject['chromium-admin'] },
+  { projectName: 'firefox-learner', role: 'learner', path: authStatePathsByProject['firefox-learner'] },
+  { projectName: 'firefox-expert', role: 'expert', path: authStatePathsByProject['firefox-expert'] },
+  { projectName: 'firefox-admin', role: 'admin', path: authStatePathsByProject['firefox-admin'] },
+  { projectName: 'webkit-learner', role: 'learner', path: authStatePathsByProject['webkit-learner'] },
+  { projectName: 'webkit-expert', role: 'expert', path: authStatePathsByProject['webkit-expert'] },
+  { projectName: 'webkit-admin', role: 'admin', path: authStatePathsByProject['webkit-admin'] },
+  { projectName: 'mobile-chromium-learner', role: 'learner', path: authStatePathsByProject['mobile-chromium-learner'] },
+  { projectName: 'mobile-webkit-learner', role: 'learner', path: authStatePathsByProject['mobile-webkit-learner'] },
+  { projectName: 'sydney-learner', role: 'learner', path: authStatePathsByProject['sydney-learner'] },
+] as const satisfies ReadonlyArray<{
+  projectName: keyof typeof authStatePathsByProject;
+  role: SeededRole;
+  path: string;
+}>;
+
 export const authStatePaths: Record<SeededRole, string> = {
-  learner: 'playwright/.auth/learner.json',
-  expert: 'playwright/.auth/expert.json',
-  admin: 'playwright/.auth/admin.json',
+  learner: authStatePathsByProject['chromium-learner'],
+  expert: authStatePathsByProject['chromium-expert'],
+  admin: authStatePathsByProject['chromium-admin'],
 };
 
 export async function signInThroughUi(page: Page, role: SeededRole) {

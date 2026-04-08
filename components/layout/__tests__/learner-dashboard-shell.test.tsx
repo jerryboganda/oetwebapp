@@ -1,8 +1,10 @@
 import { render, screen } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 
+const appShellSpy = vi.fn(({ children }: { children: React.ReactNode }) => <div data-testid="app-shell">{children}</div>);
+
 vi.mock('../app-shell', () => ({
-  AppShell: ({ children }: { children: React.ReactNode }) => <div data-testid="app-shell">{children}</div>,
+  AppShell: (props: { children: React.ReactNode }) => appShellSpy(props),
 }));
 
 import { LearnerDashboardShell } from '../learner-dashboard-shell';
@@ -26,5 +28,10 @@ describe('LearnerDashboardShell', () => {
     expect(container).toHaveClass('lg:px-8');
     expect(container).toHaveClass('py-6');
     expect(container).toHaveClass('space-y-8');
+    expect(appShellSpy.mock.calls[0]?.[0].mobileMenuSections?.map((section: { label: string }) => section.label)).toEqual([
+      'Practice',
+      'Learn',
+      'Community',
+    ]);
   });
 });

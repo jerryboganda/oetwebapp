@@ -10,7 +10,7 @@ describe('backend proxy helpers', () => {
   it('builds a safe backend target for v1 paths', () => {
     const target = resolveProxyTarget(['v1', 'auth', 'me'], new URLSearchParams('includeProfile=true'));
 
-    expect(target).toBe('http://localhost:5198/v1/auth/me?includeProfile=true');
+    expect(target).toBe('http://127.0.0.1:5198/v1/auth/me?includeProfile=true');
   });
 
   it('rejects non-v1 and traversal paths', () => {

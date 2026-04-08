@@ -1,12 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
 import { CalendarDays, Plus, Trash2, ExternalLink } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { fetchExamBookings, createExamBooking, deleteExamBooking } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
@@ -110,7 +110,7 @@ export default function ExamBookingPage() {
 
       {/* Create form */}
       {showCreate && (
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-white dark:bg-gray-800 rounded-xl border border-teal-200 dark:border-teal-700 p-5 mb-6">
+        <MotionSection className="bg-white dark:bg-gray-800 rounded-xl border border-teal-200 dark:border-teal-700 p-5 mb-6">
           <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Add Exam Booking</h3>
           <form onSubmit={handleCreate} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
@@ -133,7 +133,7 @@ export default function ExamBookingPage() {
               <button type="button" onClick={() => setShowCreate(false)} className="px-5 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-600 dark:text-gray-400">Cancel</button>
             </div>
           </form>
-        </motion.div>
+        </MotionSection>
       )}
 
       {loading ? (
@@ -152,7 +152,7 @@ export default function ExamBookingPage() {
                 {upcoming.map((booking, i) => {
                   const days = daysUntil(booking.examDate);
                   return (
-                    <motion.div key={booking.id} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }}
+                    <MotionItem key={booking.id} delayIndex={i}
                       className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-4"
                     >
                       <div className={`flex-shrink-0 w-14 h-14 rounded-xl flex flex-col items-center justify-center text-white text-xs font-bold ${days <= 7 ? 'bg-red-500' : days <= 30 ? 'bg-orange-500' : 'bg-teal-500'}`}>
@@ -178,7 +178,7 @@ export default function ExamBookingPage() {
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>
-                    </motion.div>
+                    </MotionItem>
                   );
                 })}
               </div>

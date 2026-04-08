@@ -280,7 +280,7 @@ describe('Admin Non-Editor Pages', () => {
     expect(await screen.findByRole('main', { name: /content library/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^content library$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /content items/i })).toBeInTheDocument();
-    expect(screen.getByText('Discharge Letter Set A')).toBeInTheDocument();
+    expect(screen.getAllByText('Discharge Letter Set A').length).toBeGreaterThan(0);
   });
 
   it('renders the AI config registry inside the learner-style route surface and keeps activation controls visible', async () => {
@@ -304,9 +304,9 @@ describe('Admin Non-Editor Pages', () => {
     expect(await screen.findByRole('main', { name: /ai evaluation config/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^ai evaluation config$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /configuration registry/i })).toBeInTheDocument();
-    expect(screen.getByText('gpt-5-mini')).toBeInTheDocument();
+    expect(screen.getAllByText('gpt-5-mini').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /new configuration/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /activate/i })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /activate/i }).length).toBeGreaterThan(0);
   });
 
   it('renders the audit log registry inside the learner-style route surface', async () => {
@@ -339,10 +339,10 @@ describe('Admin Non-Editor Pages', () => {
     render(<AuditLogsPage />);
 
     expect(await screen.findByRole('main', { name: /audit logs/i })).toBeInTheDocument();
-    expect(await screen.findByText('Policy updated.')).toBeInTheDocument();
+    expect((await screen.findAllByText('Policy updated.')).length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: /^audit logs$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /audit stream/i })).toBeInTheDocument();
-    expect(screen.getByText('Admin User')).toBeInTheDocument();
+    expect(screen.getAllByText('Admin User').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /export csv/i })).toBeInTheDocument();
   });
 
@@ -363,7 +363,7 @@ describe('Admin Non-Editor Pages', () => {
     expect(await screen.findByRole('main', { name: /rubrics and criteria/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /rubrics & criteria/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /criteria library/i })).toBeInTheDocument();
-    expect(screen.getByText('Purpose')).toBeInTheDocument();
+    expect(screen.getAllByText('Purpose').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /add criterion/i })).toBeInTheDocument();
   });
 
@@ -386,9 +386,9 @@ describe('Admin Non-Editor Pages', () => {
     expect(await screen.findByRole('main', { name: /feature flags/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^feature flags$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /rollout registry/i })).toBeInTheDocument();
-    expect(screen.getByText('AI Review Pilot')).toBeInTheDocument();
+    expect(screen.getAllByText('AI Review Pilot').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /create flag/i })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /enable/i })).toBeInTheDocument();
+    expect(screen.getAllByRole('button', { name: /enable/i }).length).toBeGreaterThan(0);
   });
 
   it('renders the review operations page inside the learner-style route surface', async () => {
@@ -456,7 +456,7 @@ describe('Admin Non-Editor Pages', () => {
     expect(await screen.findByRole('main', { name: /review operations/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^review operations$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /live queue/i })).toBeInTheDocument();
-    expect(screen.getByText('Dr Amina Khan')).toBeInTheDocument();
+    expect(screen.getAllByText('Dr Amina Khan').length).toBeGreaterThan(0);
   });
 
   it('renders the billing page inside the learner-style route surface', async () => {
@@ -532,7 +532,7 @@ describe('Admin Non-Editor Pages', () => {
     render(<BillingPage />);
 
     expect(await screen.findByRole('main', { name: /billing operations/i })).toBeInTheDocument();
-    expect(await screen.findByText('Starter')).toBeInTheDocument();
+    expect((await screen.findAllByText('Starter')).length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: /^billing operations$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^subscription plans$/i })).toBeInTheDocument();
   });
@@ -656,7 +656,7 @@ describe('Admin Non-Editor Pages', () => {
     expect(await screen.findByRole('main', { name: /profession taxonomy/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^profession taxonomy$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^professions$/i })).toBeInTheDocument();
-    expect(screen.getByText('Nursing')).toBeInTheDocument();
+    expect(screen.getAllByText('Nursing').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /add profession/i })).toBeInTheDocument();
   });
 
@@ -680,7 +680,7 @@ describe('Admin Non-Editor Pages', () => {
     render(<UsersPage />);
 
     expect(await screen.findByRole('main', { name: /user operations/i })).toBeInTheDocument();
-    expect(await screen.findByRole('link', { name: /dr sana malik/i })).toBeInTheDocument();
+    expect((await screen.findAllByRole('link', { name: /dr sana malik/i })).length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: /^user operations$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^directory$/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /invite user/i })).toBeInTheDocument();
@@ -846,6 +846,6 @@ describe('Admin Non-Editor Pages', () => {
     expect(await screen.findByRole('main', { name: /revision history/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^revision history$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /saved revisions/i })).toBeInTheDocument();
-    expect(screen.getByText(/published revision\./i)).toBeInTheDocument();
+    expect(screen.getAllByText(/published revision\./i).length).toBeGreaterThan(0);
   });
 });

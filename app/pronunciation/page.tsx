@@ -1,13 +1,13 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
 import { Mic, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { fetchPronunciationDrills, fetchMyPronunciationProgress } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
@@ -111,7 +111,7 @@ export default function PronunciationPage() {
             const prog = progressMap[drill.targetPhoneme];
             const exampleWords = parseExampleWords(drill.exampleWordsJson).slice(0, 4);
             return (
-              <motion.div key={drill.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
+              <MotionItem key={drill.id} delayIndex={i}>
                 <Link href={`/pronunciation/${drill.id}`}>
                   <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 hover:border-rose-300 dark:hover:border-rose-600 hover:shadow-sm transition-all cursor-pointer group">
                     <div className="flex items-start gap-3">
@@ -145,7 +145,7 @@ export default function PronunciationPage() {
                     </div>
                   </div>
                 </Link>
-              </motion.div>
+              </MotionItem>
             );
           })}
         </div>

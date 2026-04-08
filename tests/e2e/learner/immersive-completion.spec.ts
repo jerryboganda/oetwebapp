@@ -22,6 +22,9 @@ test.describe('Learner immersive completion workflows @learner', () => {
     await page.getByRole('button', { name: /^Combination inhaler$/i }).click();
 
     await page.getByRole('button', { name: /submit answers/i }).click();
+    const submitDialog = page.getByRole('dialog', { name: /submit listening task\?/i });
+    await expect(submitDialog).toBeVisible();
+    await submitDialog.getByRole('button', { name: /submit now/i }).click();
 
     await expect(page).toHaveURL(/\/listening\/results\/lt-001$/);
     await expect(page.getByText(/detailed review/i)).toBeVisible();

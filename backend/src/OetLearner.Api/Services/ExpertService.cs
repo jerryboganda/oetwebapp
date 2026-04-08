@@ -1163,10 +1163,22 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
             .FirstOrDefaultAsync(rr => rr.Id == reviewRequestId, ct)
             ?? throw ApiException.NotFound("review_request_not_found", "The requested review does not exist.");
 
-        var assignments = await db.ExpertReviewAssignments.AsNoTracking()
-            .Where(a => a.ReviewRequestId == reviewRequestId)
-            .OrderBy(a => a.AssignedAt ?? DateTimeOffset.MinValue)
-            .ToListAsync(ct);
+        List<ExpertReviewAssignment> assignments;
+        var assignmentsQuery = db.ExpertReviewAssignments.AsNoTracking()
+            .Where(a => a.ReviewRequestId == reviewRequestId);
+
+        if (!db.Database.IsSqlite())
+        {
+            assignments = await assignmentsQuery
+                .OrderBy(a => a.AssignedAt ?? DateTimeOffset.MinValue)
+                .ToListAsync(ct);
+        }
+        else
+        {
+            assignments = (await assignmentsQuery.ToListAsync(ct))
+                .OrderBy(a => a.AssignedAt ?? DateTimeOffset.MinValue)
+                .ToList();
+        }
 
         // Verify the requesting expert has access (current or historical)
         var hasAccess = assignments.Any(a => string.Equals(a.AssignedReviewerId, reviewerId, StringComparison.Ordinal));
@@ -1188,16 +1200,41 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
                 .Where(e => reviewerIds.Contains(e.Id))
                 .ToDictionaryAsync(e => e.Id, ct);
 
-        var drafts = await db.ExpertReviewDrafts.AsNoTracking()
-            .Where(d => d.ReviewRequestId == reviewRequestId)
-            .OrderBy(d => d.DraftSavedAt)
-            .ToListAsync(ct);
+        List<ExpertReviewDraft> drafts;
+        var draftsQuery = db.ExpertReviewDrafts.AsNoTracking()
+            .Where(d => d.ReviewRequestId == reviewRequestId);
 
-        var auditEvents = await db.AuditEvents.AsNoTracking()
-            .Where(ae => ae.ResourceId == reviewRequestId && ae.ResourceType == "ExpertReview")
-            .OrderBy(ae => ae.OccurredAt)
-            .Take(100)
-            .ToListAsync(ct);
+        if (!db.Database.IsSqlite())
+        {
+            drafts = await draftsQuery
+                .OrderBy(d => d.DraftSavedAt)
+                .ToListAsync(ct);
+        }
+        else
+        {
+            drafts = (await draftsQuery.ToListAsync(ct))
+                .OrderBy(d => d.DraftSavedAt)
+                .ToList();
+        }
+
+        List<AuditEvent> auditEvents;
+        var auditEventsQuery = db.AuditEvents.AsNoTracking()
+            .Where(ae => ae.ResourceId == reviewRequestId && ae.ResourceType == "ExpertReview");
+
+        if (!db.Database.IsSqlite())
+        {
+            auditEvents = await auditEventsQuery
+                .OrderBy(ae => ae.OccurredAt)
+                .Take(100)
+                .ToListAsync(ct);
+        }
+        else
+        {
+            auditEvents = (await auditEventsQuery.ToListAsync(ct))
+                .OrderBy(ae => ae.OccurredAt)
+                .Take(100)
+                .ToList();
+        }
 
         var historyEntries = new List<ExpertReviewHistoryEntryResponse>();
 

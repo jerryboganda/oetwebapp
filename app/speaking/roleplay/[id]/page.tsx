@@ -46,9 +46,9 @@ export default function RoleCardPreview() {
   if (loading) {
     return (
       <AppShell pageTitle="Role Card">
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <Skeleton className="h-96 rounded-xl" />
-          <Skeleton className="h-96 rounded-xl" />
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-8">
+          <Skeleton className="h-[280px] rounded-xl sm:h-[340px] lg:h-96" />
+          <Skeleton className="h-[280px] rounded-xl sm:h-[340px] lg:h-96" />
         </div>
       </AppShell>
     );

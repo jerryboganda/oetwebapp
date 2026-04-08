@@ -1,4 +1,8 @@
+'use client';
+
 import { cn } from '@/lib/utils';
+import { motion, useReducedMotion } from 'motion/react';
+import { motionTokens, prefersReducedMotion } from '@/lib/motion';
 
 /* ─── Linear Progress Bar ─── */
 interface ProgressBarProps {
@@ -37,7 +41,12 @@ export function ProgressBar({ value, max = 100, label, ariaLabel, showValue, siz
         aria-valuemax={100}
         aria-label={ariaLabel ?? label}
       >
-        <div className={cn('h-full rounded-full transition-all duration-700 ease-out', colorStyles[color])} style={{ width: `${pct}%` }} />
+        <motion.div
+          className={cn('h-full rounded-full', colorStyles[color])}
+          initial={{ width: 0 }}
+          animate={{ width: `${pct}%` }}
+          transition={{ type: 'spring', stiffness: 100, damping: 20, mass: 0.8 }}
+        />
       </div>
     </div>
   );

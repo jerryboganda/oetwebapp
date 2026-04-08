@@ -410,7 +410,7 @@ export default function SpeakingReviewWorkspace() {
   );
 
   return (
-    <div className="min-h-screen flex flex-col md:flex-row bg-background-light">
+    <div className="min-h-[var(--app-viewport-height,100dvh)] flex flex-col lg:flex-row bg-background-light">
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
       <AsyncStateWrapper
@@ -419,7 +419,7 @@ export default function SpeakingReviewWorkspace() {
         errorMessage={errorMsg ?? undefined}
         partialMessage={partialMessage}
       >
-        <div className="flex-1 min-w-0 md:w-1/2 flex flex-col border-r border-gray-200 overflow-hidden">
+        <div className="flex-1 min-w-0 flex flex-col border-b border-gray-200 overflow-hidden lg:border-b-0 lg:border-r lg:w-1/2">
           <div className="p-4 bg-surface border-b border-gray-200 shrink-0">
             <h3 className="text-sm font-semibold text-navy mb-2">Candidate Audio Submission</h3>
             {reviewDetail && <AudioPlayerWaveform audioUrl={reviewDetail.audioUrl} onTimeUpdate={setCurrentTime} seekToTime={seekTo} />}
@@ -544,7 +544,7 @@ export default function SpeakingReviewWorkspace() {
           </div>
         </div>
 
-        <div className="w-full md:w-[460px] lg:w-[520px] flex flex-col bg-surface">
+        <div className="w-full lg:w-[520px] flex flex-col bg-surface">
           <div className="p-4 border-b border-gray-200 flex justify-between items-center bg-white shrink-0" role="banner">
             <div>
               <h2 className="font-semibold text-navy">Review Rubric</h2>

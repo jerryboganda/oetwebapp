@@ -152,7 +152,7 @@ export default function DiagnosticListeningPage() {
         </Button>
       }
     >
-      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 flex flex-col h-[calc(100vh-4rem)]">
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 flex flex-col h-[calc(100dvh-4rem)]">
         <AsyncStateWrapper status={status} onRetry={load} errorMessage={error}>
           {task && (
             <div className="flex flex-col flex-1 min-h-0">

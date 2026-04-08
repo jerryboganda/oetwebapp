@@ -23,6 +23,7 @@ import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Input } from '@/components/ui/form-controls';
 import { Skeleton } from '@/components/ui/skeleton';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import {
@@ -380,7 +381,7 @@ export default function BillingPage() {
             className="mb-4"
           />
           <div className="grid gap-6 lg:grid-cols-[1fr_1.5fr]">
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-[32px] border border-emerald-100 bg-gradient-to-br from-emerald-50 to-teal-50 p-6 shadow-sm">
+            <MotionSection className="rounded-[32px] border border-emerald-100 bg-gradient-to-br from-emerald-50 to-teal-50 p-6 shadow-sm">
               <div className="flex items-start gap-4">
                 <div className="rounded-2xl bg-emerald-600 p-3 text-white shadow-sm">
                   <Wallet className="h-5 w-5" />
@@ -411,9 +412,9 @@ export default function BillingPage() {
                   </motion.button>
                 ))}
               </div>
-            </motion.div>
+            </MotionSection>
 
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04 }} className="rounded-[32px] border border-gray-200 bg-surface p-6 shadow-sm">
+            <MotionSection delayIndex={1} className="rounded-[32px] border border-gray-200 bg-surface p-6 shadow-sm">
               <div className="flex items-center justify-between">
                 <p className="text-xs font-black uppercase tracking-widest text-muted">Transaction History</p>
                 <button type="button" onClick={() => loadWallet()} className="text-xs font-bold text-primary transition-colors hover:text-primary/80">Refresh</button>
@@ -446,13 +447,13 @@ export default function BillingPage() {
                   ))}
                 </div>
               )}
-            </motion.div>
+            </MotionSection>
           </div>
         </section>
 
         {/* ── Validated Checkout + Active Add-ons ── */}
         <section className="grid gap-6 lg:grid-cols-[1.15fr_0.85fr]">
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-[32px] border border-gray-200 bg-surface p-6 shadow-sm">
+          <MotionSection className="rounded-[32px] border border-gray-200 bg-surface p-6 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-black uppercase tracking-widest text-muted">Validated Checkout</p>
@@ -500,9 +501,9 @@ export default function BillingPage() {
                 <div className="text-sm text-muted">Select a plan or add-on below to calculate a server-validated quote.</div>
               )}
             </div>
-          </motion.div>
+          </MotionSection>
 
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04 }} className="rounded-[32px] border border-indigo-100 bg-indigo-50 p-6 shadow-sm">
+          <MotionSection delayIndex={1} className="rounded-[32px] border border-indigo-100 bg-indigo-50 p-6 shadow-sm">
             <div className="flex items-start gap-4">
               <div className="rounded-2xl bg-indigo-600 p-3 text-white shadow-sm"><Sparkles className="h-5 w-5" /></div>
               <div>
@@ -519,12 +520,12 @@ export default function BillingPage() {
               )}
             </div>
             <div className="mt-6 rounded-2xl border border-white/50 bg-white/70 p-4 text-sm leading-6 text-indigo-950/80">Add-on purchases are routed through the same quote workflow as plan changes, which keeps coupon validation and totals in sync with the backend.</div>
-          </motion.div>
+          </MotionSection>
         </section>
 
         {/* ── Current Plan + Entitlements ── */}
         <section className="grid gap-6 lg:grid-cols-[1.3fr_0.9fr]">
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="rounded-[32px] border border-gray-200 bg-surface p-6 shadow-sm">
+          <MotionSection className="rounded-[32px] border border-gray-200 bg-surface p-6 shadow-sm">
             <div className="flex flex-wrap items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-black uppercase tracking-widest text-muted">Current Plan</p>
@@ -538,8 +539,8 @@ export default function BillingPage() {
               <div className="rounded-2xl border border-gray-100 bg-background-light p-4"><p className="text-xs font-black uppercase tracking-widest text-muted">Review Coverage</p><p className="mt-2 text-sm font-bold text-navy">{supportedReviewSubtests.join(' + ') || 'None'}</p></div>
               <div className="rounded-2xl border border-gray-100 bg-background-light p-4"><p className="text-xs font-black uppercase tracking-widest text-muted">Invoices</p><p className="mt-2 text-sm font-bold text-navy">{invoiceDownloadsAvailable ? 'Downloads available' : 'Unavailable'}</p></div>
             </div>
-          </motion.div>
-          <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.04 }} className="rounded-[32px] border border-indigo-100 bg-indigo-50 p-6 shadow-sm">
+          </MotionSection>
+          <MotionSection delayIndex={1} className="rounded-[32px] border border-indigo-100 bg-indigo-50 p-6 shadow-sm">
             <div className="flex items-start gap-4">
               <div className="rounded-2xl bg-indigo-600 p-3 text-white shadow-sm"><Sparkles className="h-5 w-5" /></div>
               <div>
@@ -548,7 +549,7 @@ export default function BillingPage() {
                 <p className="mt-2 text-sm leading-6 text-indigo-900/80">Human review is available only for Writing and Speaking. Reading and Listening stay AI-evaluated and transcript-backed.</p>
               </div>
             </div>
-          </motion.div>
+          </MotionSection>
         </section>
 
         {/* ── Plan Cards ── */}
@@ -559,7 +560,7 @@ export default function BillingPage() {
               const isCurrent = plan.changeDirection === 'current';
               const isPreviewing = previewPlanId === plan.id && preview;
               return (
-                <motion.div key={plan.id} initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} className={`rounded-[28px] border p-5 shadow-sm ${isCurrent ? 'border-navy bg-navy text-white' : 'border-gray-200 bg-surface'}`}>
+                <MotionItem key={plan.id} delayIndex={index} className={`rounded-[28px] border p-5 shadow-sm ${isCurrent ? 'border-navy bg-navy text-white' : 'border-gray-200 bg-surface'}`}>
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className={`text-xs font-black uppercase tracking-widest ${isCurrent ? 'text-white/70' : 'text-muted'}`}>{plan.badge || plan.tier}</p>
@@ -586,7 +587,7 @@ export default function BillingPage() {
                       ) : null}
                     </div>
                   ) : null}
-                </motion.div>
+                </MotionItem>
               );
             })}
           </div>
@@ -659,62 +660,108 @@ export default function BillingPage() {
         <section>
           <LearnerSurfaceSectionHeader eyebrow="Compare" title="Feature-by-feature plan comparison" description="Understand exactly what each tier includes before making a change." className="mb-4" />
           {plans.length > 0 ? (
-            <motion.div initial={{ opacity: 0, y: 12 }} animate={{ opacity: 1, y: 0 }} className="overflow-hidden rounded-[32px] border border-gray-200 bg-surface shadow-sm">
-              <div className="overflow-x-auto">
-                <table className="w-full min-w-[760px] text-sm">
-                  <thead>
-                    <tr className="border-b border-gray-100">
-                      <th className="px-6 py-4 text-left text-xs font-black uppercase tracking-widest text-muted">Feature</th>
-                      {plans.map((plan) => (
-                        <th
-                          key={plan.id}
-                          className={`px-4 py-4 text-center text-xs font-black uppercase tracking-widest ${
-                            plan.changeDirection === 'current' ? 'bg-navy/5 text-navy' : 'text-muted'
-                          }`}
-                        >
-                          <div className="flex flex-col items-center gap-1">
-                            <span>{plan.label}</span>
-                            <span className="text-[10px] font-semibold tracking-normal normal-case">
-                              {plan.price} / {plan.interval}
+            <>
+              <div className="space-y-4 md:hidden">
+                {plans.map((plan, planIndex) => (
+                  <MotionItem
+                    key={plan.id}
+                    delayIndex={planIndex}
+                    className={`rounded-[28px] border p-4 shadow-sm ${plan.changeDirection === 'current' ? 'border-navy/10 bg-navy/5' : 'border-gray-200 bg-surface'}`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[11px] font-black uppercase tracking-widest text-muted">{plan.tier}</p>
+                        <h3 className="mt-1 text-lg font-black text-navy">{plan.label}</h3>
+                        <p className="mt-1 text-sm text-muted">
+                          {plan.price} / {plan.interval}
+                        </p>
+                      </div>
+                      {plan.changeDirection === 'current' ? (
+                        <span className="rounded-full bg-navy/10 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-navy">
+                          Current
+                        </span>
+                      ) : null}
+                    </div>
+
+                    <div className="mt-4 space-y-2">
+                      {planComparisonRows.map((row) => {
+                        const value = row.values[planIndex];
+
+                        return (
+                          <div key={`${plan.id}:${row.feature}`} className="flex items-start justify-between gap-3 rounded-2xl bg-background-light px-3 py-2">
+                            <span className="text-[10px] font-black uppercase tracking-[0.18em] text-muted">{row.feature}</span>
+                            <span className="text-right text-sm font-semibold text-navy">
+                              {typeof value === 'boolean' ? (
+                                value ? <Check className="inline-block h-4 w-4 text-emerald-600" /> : <X className="inline-block h-4 w-4 text-gray-300" />
+                              ) : (
+                                value
+                              )}
                             </span>
                           </div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-50">
-                    {planComparisonRows.map((row) => (
-                      <tr key={row.feature} className="transition-colors hover:bg-gray-50/50">
-                        <td className="px-6 py-3.5 font-semibold text-navy">{row.feature}</td>
-                        {row.values.map((value, index) => {
-                          const plan = plans[index];
-                          const isCurrent = plan?.changeDirection === 'current';
-
-                          return (
-                            <td
-                              key={`${row.feature}:${plan?.id ?? index}`}
-                              className={`px-4 py-3.5 text-center ${
-                                isCurrent ? 'bg-navy/5' : ''
-                              }`}
-                            >
-                              {typeof value === 'boolean' ? (
-                                value ? (
-                                  <Check className="mx-auto h-4.5 w-4.5 text-emerald-600" />
-                                ) : (
-                                  <X className="mx-auto h-4.5 w-4.5 text-gray-300" />
-                                )
-                              ) : (
-                                <span className="text-xs font-bold text-navy">{value}</span>
-                              )}
-                            </td>
-                          );
-                        })}
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        );
+                      })}
+                    </div>
+                  </MotionItem>
+                ))}
               </div>
-            </motion.div>
+
+              <MotionSection className="hidden overflow-hidden rounded-[32px] border border-gray-200 bg-surface shadow-sm md:block">
+                <div className="overflow-x-auto">
+                  <table className="w-full min-w-[760px] text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100">
+                        <th className="px-6 py-4 text-left text-xs font-black uppercase tracking-widest text-muted">Feature</th>
+                        {plans.map((plan) => (
+                          <th
+                            key={plan.id}
+                            className={`px-4 py-4 text-center text-xs font-black uppercase tracking-widest ${
+                              plan.changeDirection === 'current' ? 'bg-navy/5 text-navy' : 'text-muted'
+                            }`}
+                          >
+                            <div className="flex flex-col items-center gap-1">
+                              <span>{plan.label}</span>
+                              <span className="text-[10px] font-semibold tracking-normal normal-case">
+                                {plan.price} / {plan.interval}
+                              </span>
+                            </div>
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {planComparisonRows.map((row) => (
+                        <tr key={row.feature} className="transition-colors hover:bg-gray-50/50">
+                          <td className="px-6 py-3.5 font-semibold text-navy">{row.feature}</td>
+                          {row.values.map((value, index) => {
+                            const plan = plans[index];
+                            const isCurrent = plan?.changeDirection === 'current';
+
+                            return (
+                              <td
+                                key={`${row.feature}:${plan?.id ?? index}`}
+                                className={`px-4 py-3.5 text-center ${
+                                  isCurrent ? 'bg-navy/5' : ''
+                                }`}
+                              >
+                                {typeof value === 'boolean' ? (
+                                  value ? (
+                                    <Check className="mx-auto h-4.5 w-4.5 text-emerald-600" />
+                                  ) : (
+                                    <X className="mx-auto h-4.5 w-4.5 text-gray-300" />
+                                  )
+                                ) : (
+                                  <span className="text-xs font-bold text-navy">{value}</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </MotionSection>
+            </>
           ) : (
             <div className="rounded-[24px] border border-gray-200 bg-surface p-5 text-sm text-muted shadow-sm">
               No published billing plans are available yet.

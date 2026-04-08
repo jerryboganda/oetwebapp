@@ -35,6 +35,18 @@ type AdminCreditAdjustmentResponse = {
   creditBalance: number;
 };
 
+function sleep(milliseconds: number) {
+  return new Promise((resolve) => setTimeout(resolve, milliseconds));
+}
+
+function isOptimisticConcurrencyFailure(status: number, body: string) {
+  if (status !== 500) {
+    return false;
+  }
+
+  return /expected to affect 1 row\(s\)|optimistic concurrency/i.test(body);
+}
+
 async function readResponseBody(response: Awaited<ReturnType<APIRequestContext['get']>>) {
   try {
     return await response.text();
@@ -80,25 +92,43 @@ export async function ensureLearnerCredits(
   minimumBalance = 6,
   userId = 'mock-user-001',
 ) {
-  const current = await fetchAdminUserDetailApi(request, userId) as { creditBalance?: number };
-  const currentBalance = current.creditBalance ?? 0;
+  const headers = await authHeadersForRole(request, 'admin');
 
-  if (currentBalance >= minimumBalance) {
-    return currentBalance;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const current = await fetchAdminUserDetailApi(request, userId) as { creditBalance?: number };
+    const currentBalance = current.creditBalance ?? 0;
+
+    if (currentBalance >= minimumBalance) {
+      return currentBalance;
+    }
+
+    const response = await request.post(`${apiBaseURL}/v1/admin/users/${encodeURIComponent(userId)}/credits`, {
+      headers,
+      data: {
+        amount: minimumBalance - currentBalance,
+        reason: 'QA Playwright deep-flow credit top-up',
+      },
+    });
+
+    if (response.ok()) {
+      const updated = await response.json() as AdminCreditAdjustmentResponse;
+      return updated.creditBalance;
+    }
+
+    const body = await readResponseBody(response);
+    if (attempt < 2 && isOptimisticConcurrencyFailure(response.status(), body)) {
+      await sleep(250 * (attempt + 1));
+      continue;
+    }
+
+    expect(
+      response.ok(),
+      `Expected learner credit top-up to succeed for ${userId}\nStatus: ${response.status()}\nBody: ${body}`,
+    ).toBeTruthy();
   }
 
-  const headers = await authHeadersForRole(request, 'admin');
-  const response = await request.post(`${apiBaseURL}/v1/admin/users/${encodeURIComponent(userId)}/credits`, {
-    headers,
-    data: {
-      amount: minimumBalance - currentBalance,
-      reason: 'QA Playwright deep-flow credit top-up',
-    },
-  });
-
-  await expectOkResponse(response, `Expected learner credit top-up to succeed for ${userId}`);
-  const updated = await response.json() as AdminCreditAdjustmentResponse;
-  return updated.creditBalance;
+  const final = await fetchAdminUserDetailApi(request, userId) as { creditBalance?: number };
+  return final.creditBalance ?? 0;
 }
 
 async function createClaimedExpertReviewRequest(
@@ -112,21 +142,43 @@ async function createClaimedExpertReviewRequest(
 ) {
   await ensureLearnerCredits(request);
   const learnerHeaders = await authHeadersForRole(request, 'learner');
-  const reviewResponse = await request.post(`${apiBaseURL}/v1/reviews/requests`, {
-    headers: learnerHeaders,
-    data: {
-      attemptId: options.attemptId,
-      subtest: options.subtest,
-      turnaroundOption: 'standard',
-      focusAreas: options.focusAreas,
-      learnerNotes: options.learnerNotes,
-      paymentSource: 'credits',
-      idempotencyKey: `qa-review-request-${options.subtest}-${Date.now()}`,
-    },
-  });
+  let reviewResponse: Awaited<ReturnType<APIRequestContext['post']>> | null = null;
+  let reviewFailureBody = '<no response body>';
 
-  await expectOkResponse(reviewResponse, `Expected disposable ${options.subtest} review request creation to succeed`);
-  const review = await reviewResponse.json() as ReviewRequestResponse;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    reviewResponse = await request.post(`${apiBaseURL}/v1/reviews/requests`, {
+      headers: learnerHeaders,
+      data: {
+        attemptId: options.attemptId,
+        subtest: options.subtest,
+        turnaroundOption: 'standard',
+        focusAreas: options.focusAreas,
+        learnerNotes: options.learnerNotes,
+        paymentSource: 'credits',
+        idempotencyKey: `qa-review-request-${options.subtest}-${Date.now()}-${attempt}`,
+      },
+    });
+
+    if (reviewResponse.ok()) {
+      break;
+    }
+
+    reviewFailureBody = await readResponseBody(reviewResponse);
+    if (attempt < 2 && isOptimisticConcurrencyFailure(reviewResponse.status(), reviewFailureBody)) {
+      await sleep(250 * (attempt + 1));
+      continue;
+    }
+
+    break;
+  }
+
+  expect(reviewResponse, `Expected disposable ${options.subtest} review request creation to produce a response`).toBeTruthy();
+  expect(
+    reviewResponse?.ok(),
+    `Expected disposable ${options.subtest} review request creation to succeed\nStatus: ${reviewResponse?.status()}\nBody: ${reviewFailureBody}`,
+  ).toBeTruthy();
+  const resolvedReviewResponse = reviewResponse!;
+  const review = await resolvedReviewResponse.json() as ReviewRequestResponse;
 
   const expertHeaders = await authHeadersForRole(request, 'expert');
   const claimResponse = await request.post(`${apiBaseURL}/v1/expert/queue/${encodeURIComponent(review.reviewRequestId)}/claim`, {

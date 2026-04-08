@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
 import { Video, Clock, PlayCircle, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -9,6 +8,7 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { fetchVideoLessons } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
@@ -85,7 +85,7 @@ export default function LessonsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {lessons.map((lesson, i) => (
-            <motion.div key={lesson.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}>
+            <MotionItem key={lesson.id} delayIndex={i}>
               <Link href={`/lessons/${lesson.id}`}>
                 <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-md transition-shadow cursor-pointer group">
                   <div className="bg-gradient-to-br from-blue-500 to-indigo-600 h-36 flex items-center justify-center relative">
@@ -120,7 +120,7 @@ export default function LessonsPage() {
                   </div>
                 </div>
               </Link>
-            </motion.div>
+            </MotionItem>
           ))}
         </div>
       )}

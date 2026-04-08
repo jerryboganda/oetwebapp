@@ -1,13 +1,14 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence } from 'motion/react';
 import { Store, Search, Upload, ChevronRight, Filter, BookOpen, Mic, Pen, Headphones, Clock, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, ExamTypeBadge } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { analytics } from '@/lib/analytics';
 
 type Submission = {
@@ -205,7 +206,7 @@ export default function MarketplacePage() {
                 {browseItems.map((item, i) => {
                   const SubIcon = SUBTEST_ICONS[item.subtestCode] ?? BookOpen;
                   return (
-                    <motion.div key={item.id} initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+                    <MotionItem key={item.id} delayIndex={i}
                       className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 hover:border-cyan-300 dark:hover:border-cyan-600 hover:shadow-sm transition-all">
                       <div className="flex items-start gap-3">
                         <div className="p-2 rounded-lg bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400">
@@ -226,7 +227,7 @@ export default function MarketplacePage() {
                         </div>
                         <ChevronRight className="w-4 h-4 text-gray-300 mt-1" />
                       </div>
-                    </motion.div>
+                    </MotionItem>
                   );
                 })}
               </div>
@@ -326,7 +327,7 @@ export default function MarketplacePage() {
                 const statusInfo = STATUS_CONFIG[item.status] ?? STATUS_CONFIG.pending;
                 const StatusIcon = statusInfo.icon;
                 return (
-                  <motion.div key={item.id} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.04 }}
+                  <MotionItem key={item.id} delayIndex={i}
                     className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
                     <div className="flex items-center justify-between gap-3">
                       <div className="min-w-0">
@@ -344,7 +345,7 @@ export default function MarketplacePage() {
                         <StatusIcon className="w-3 h-3" /> {statusInfo.label}
                       </span>
                     </div>
-                  </motion.div>
+                  </MotionItem>
                 );
               })}
             </div>

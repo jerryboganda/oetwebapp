@@ -1,15 +1,16 @@
 'use client';
 
 import { Suspense, type ReactNode, useContext } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { AuthGuard } from '@/components/auth/auth-guard';
 import { AuthContext, AuthProvider } from '@/contexts/auth-context';
 import { NotificationCenterProvider } from '@/contexts/notification-center-context';
+import { getMotionPresenceMode, getSurfaceMotion, prefersReducedMotion } from '@/lib/motion';
 import type { UserRole } from '@/lib/types/auth';
 import { cn } from '@/lib/utils';
 import { usePathname } from 'next/navigation';
 import { BottomNav, type NavItem, type ShellUserSummary, Sidebar } from './sidebar';
-import { TopNav } from './top-nav';
+import { TopNav, type MobileMenuSection } from './top-nav';
 
 export interface AppShellProps {
   children: ReactNode;
@@ -21,9 +22,11 @@ export interface AppShellProps {
   className?: string;
   navItems?: NavItem[];
   mobileNavItems?: NavItem[];
+  mobileMenuSections?: MobileMenuSection[];
   userSummary?: ShellUserSummary;
   requireAuth?: boolean;
   requiredRole?: UserRole;
+  workspaceRole?: UserRole;
 }
 
 function ShellFallback() {
@@ -48,22 +51,18 @@ export function AppShell({
   className,
   navItems,
   mobileNavItems,
+  mobileMenuSections,
   userSummary,
   requireAuth = true,
   requiredRole,
+  workspaceRole,
 }: AppShellProps) {
   const authContext = useContext(AuthContext);
   const hasAuthProvider = authContext !== null;
   const pathname = usePathname() ?? 'root';
-  const prefersReducedMotion = useReducedMotion() ?? false;
-
-  const pageMotionProps = prefersReducedMotion
-    ? { initial: false, animate: { opacity: 1 }, transition: { duration: 0 } }
-    : {
-        initial: { opacity: 0, y: 10 },
-        animate: { opacity: 1, y: 0 },
-        transition: { duration: 0.32, ease: [0.22, 1, 0.36, 1] as const },
-      };
+  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const routeMotionProps = getSurfaceMotion('route', reducedMotion);
+  const presenceMode = getMotionPresenceMode(reducedMotion);
 
   const shellBackdrop = (
     <div aria-hidden="true" className="pointer-events-none absolute inset-0 overflow-hidden">
@@ -82,15 +81,25 @@ export function AppShell({
       >
         Skip to content
       </a>
-      <TopNav pageTitle={pageTitle} actions={navActions} items={navItems} userSummary={userSummary} />
-      <motion.main
-        id="main-content"
-        key={pathname}
-        className={cn('relative z-10 flex-1 flex flex-col px-4 py-4 sm:px-6 lg:px-8 lg:py-6', className)}
-        {...pageMotionProps}
-      >
-        {children}
-      </motion.main>
+      <TopNav
+        pageTitle={pageTitle}
+        actions={navActions}
+        items={mobileNavItems ?? navItems}
+        sectionedItems={mobileMenuSections}
+        userSummary={userSummary}
+        workspaceRole={workspaceRole}
+      />
+      <AnimatePresence initial={!reducedMotion} mode={presenceMode}>
+        <motion.main
+          id="main-content"
+          key={pathname}
+          layout="position"
+          className={cn('relative z-10 flex flex-1 min-h-0 flex-col px-4 py-4 sm:px-6 lg:px-8 lg:py-6', className)}
+          {...routeMotionProps}
+        >
+          {children}
+        </motion.main>
+      </AnimatePresence>
     </div>
   ) : (
     <div className="relative isolate flex min-h-[var(--app-viewport-height,100dvh)] flex-col overflow-hidden bg-background-light text-navy lg:flex-row">
@@ -106,9 +115,11 @@ export function AppShell({
         pageTitle={pageTitle}
         actions={navActions}
         items={mobileNavItems ?? navItems}
+        sectionedItems={mobileMenuSections}
         userSummary={userSummary}
+        workspaceRole={workspaceRole}
       />
-      <Sidebar items={navItems} userSummary={userSummary} />
+      <Sidebar items={navItems} userSummary={userSummary} workspaceRole={workspaceRole} />
       <div className="relative z-10 flex min-w-0 flex-1 flex-col">
         <TopNav
           className="hidden lg:flex"
@@ -116,15 +127,19 @@ export function AppShell({
           actions={navActions}
           items={navItems}
           userSummary={userSummary}
+          workspaceRole={workspaceRole}
         />
-        <motion.main
-          id="main-content"
-          key={pathname}
-          className={cn('relative flex-1 overflow-y-auto overscroll-contain px-4 py-4 sm:px-6 lg:px-8 lg:py-6 pb-[calc(6rem+env(safe-area-inset-bottom))] lg:pb-6', className)}
-          {...pageMotionProps}
-        >
-          {children}
-        </motion.main>
+        <AnimatePresence initial={!reducedMotion} mode={presenceMode}>
+          <motion.main
+            id="main-content"
+            key={pathname}
+            layout="position"
+            className={cn('relative flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4 pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom))] sm:px-6 lg:px-8 lg:py-6 lg:pb-6', className)}
+            {...routeMotionProps}
+          >
+            {children}
+          </motion.main>
+        </AnimatePresence>
       </div>
       <BottomNav items={mobileNavItems} />
     </div>

@@ -1,6 +1,8 @@
 'use client';
 
+import { getSharedLayoutId, motionTokens } from '@/lib/motion';
 import { cn } from '@/lib/utils';
+import { motion, useReducedMotion } from 'motion/react';
 import { type KeyboardEvent, type ReactNode } from 'react';
 
 export interface Tab {
@@ -15,9 +17,12 @@ interface TabsProps {
   activeTab: string;
   onChange: (id: string) => void;
   className?: string;
+  scrollable?: boolean;
 }
 
-export function Tabs({ tabs, activeTab, onChange, className }: TabsProps) {
+export function Tabs({ tabs, activeTab, onChange, className, scrollable = true }: TabsProps) {
+  const reducedMotion = useReducedMotion() ?? false;
+
   const handleKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
     if (event.key === 'ArrowRight') {
       event.preventDefault();
@@ -43,7 +48,8 @@ export function Tabs({ tabs, activeTab, onChange, className }: TabsProps) {
   return (
     <div
       className={cn(
-        'inline-flex w-full flex-wrap items-center gap-2 rounded-[20px] border border-gray-200 bg-background-light p-2',
+        'inline-flex w-full items-center gap-2 rounded-[20px] border border-gray-200 bg-background-light p-2',
+        scrollable ? 'flex-nowrap overflow-x-auto scrollbar-hide [-webkit-overflow-scrolling:touch]' : 'flex-wrap',
         className,
       )}
       role="tablist"
@@ -59,34 +65,70 @@ export function Tabs({ tabs, activeTab, onChange, className }: TabsProps) {
           onClick={() => onChange(tab.id)}
           onKeyDown={(event) => handleKeyDown(event, index)}
           className={cn(
-            'flex items-center gap-2 whitespace-nowrap rounded-2xl px-4 py-2.5 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-            activeTab === tab.id
-              ? 'bg-surface text-primary shadow-sm'
-              : 'text-muted hover:bg-white hover:text-navy',
+            'relative flex min-h-11 items-center gap-2 whitespace-nowrap rounded-2xl px-4 py-3 text-sm font-semibold transition-all focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+            activeTab === tab.id ? 'text-primary shadow-sm' : 'text-muted hover:bg-white hover:text-navy',
           )}
         >
-          {tab.icon}
-          {tab.label}
-          {tab.count !== undefined && (
-            <span className={cn(
-              'px-1.5 py-0.5 rounded-full text-xs',
-              activeTab === tab.id ? 'bg-primary/10 text-primary' : 'bg-white text-muted',
-            )}>
-              {tab.count}
-            </span>
+          {activeTab === tab.id && (
+            <motion.span
+              layoutId={getSharedLayoutId('tabs-active-pill', 'default')}
+              className="absolute inset-0 rounded-2xl bg-surface shadow-sm"
+              transition={reducedMotion ? { duration: motionTokens.duration.instant } : motionTokens.spring.item}
+            />
           )}
+          <span className="relative z-10 flex items-center gap-2">
+            {tab.icon}
+            {tab.label}
+            {tab.count !== undefined && (
+              <span
+                className={cn(
+                  'rounded-full px-1.5 py-0.5 text-xs',
+                  activeTab === tab.id ? 'bg-primary/10 text-primary' : 'bg-white text-muted',
+                )}
+              >
+                {tab.count}
+              </span>
+            )}
+          </span>
         </button>
       ))}
     </div>
   );
 }
 
-/* ─── Tab Panel ─── */
-export function TabPanel({ id, activeTab, children, className }: { id: string; activeTab: string; children: ReactNode; className?: string }) {
+export function TabPanel({
+  id,
+  activeTab,
+  children,
+  className,
+}: {
+  id: string;
+  activeTab: string;
+  children: ReactNode;
+  className?: string;
+}) {
+  const reducedMotion = useReducedMotion() ?? false;
+
   if (id !== activeTab) return null;
+
   return (
-    <div role="tabpanel" id={`tabpanel-${id}`} aria-labelledby={`tab-${id}`} className={className}>
+    <motion.div
+      role="tabpanel"
+      id={`tabpanel-${id}`}
+      aria-labelledby={`tab-${id}`}
+      className={className}
+      initial={reducedMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={
+        reducedMotion
+          ? { duration: motionTokens.duration.instant }
+          : {
+              duration: motionTokens.duration.fast,
+              ease: motionTokens.ease.entrance,
+            }
+      }
+    >
       {children}
-    </div>
+    </motion.div>
   );
 }

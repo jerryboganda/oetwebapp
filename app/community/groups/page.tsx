@@ -1,12 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { motion } from 'motion/react';
 import { Users, Plus, UserPlus, Lock } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { fetchStudyGroups, createStudyGroup, joinStudyGroup } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
@@ -92,7 +92,7 @@ export default function StudyGroupsPage() {
 
       {/* Create group form */}
       {showCreate && (
-        <motion.div initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} className="bg-white dark:bg-gray-800 rounded-xl border border-indigo-200 dark:border-indigo-700 p-5 mb-6">
+        <MotionSection className="bg-white dark:bg-gray-800 rounded-xl border border-indigo-200 dark:border-indigo-700 p-5 mb-6">
           <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Create New Study Group</h3>
           <form onSubmit={handleCreate} className="space-y-3">
             <input
@@ -134,7 +134,7 @@ export default function StudyGroupsPage() {
               </button>
             </div>
           </form>
-        </motion.div>
+        </MotionSection>
       )}
 
       {/* Filters */}
@@ -156,11 +156,9 @@ export default function StudyGroupsPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {groups.map((group, i) => (
-            <motion.div
+            <MotionItem
               key={group.id}
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: i * 0.04 }}
+              delayIndex={i}
               className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5"
             >
               <div className="flex items-start justify-between mb-2">
@@ -183,7 +181,7 @@ export default function StudyGroupsPage() {
                   {joined.has(group.id) ? 'Joined' : group.memberCount >= group.maxMembers ? <><Lock className="w-3.5 h-3.5" /> Full</> : <><UserPlus className="w-3.5 h-3.5" /> Join</>}
                 </button>
               </div>
-            </motion.div>
+            </MotionItem>
           ))}
         </div>
       )}

@@ -1,6 +1,11 @@
 export {};
 
 declare global {
+  interface CapacitorGlobal {
+    isNativePlatform?: () => boolean;
+    getPlatform?: () => string;
+  }
+
   interface DesktopBridge {
     platform: NodeJS.Platform;
     versions: {
@@ -14,7 +19,23 @@ declare global {
         isPackaged: boolean;
         activeBackendUrl: string | null;
         ignoredPackagedLoopbackApiTarget: string | null;
+        windowState?: {
+          isFocused: boolean;
+          isVisible: boolean;
+          isMinimized: boolean;
+          isMaximized: boolean;
+          isFullScreen: boolean;
+        };
       }>;
+      onWindowStateChange?: (
+        callback: (windowState: {
+          isFocused: boolean;
+          isVisible: boolean;
+          isMinimized: boolean;
+          isMaximized: boolean;
+          isFullScreen: boolean;
+        }) => void,
+      ) => () => void;
     };
     secureSecrets: {
       get: (namespace: string, key: string) => Promise<string | null>;
@@ -33,5 +54,6 @@ declare global {
 
   interface Window {
     desktopBridge?: DesktopBridge;
+    Capacitor?: CapacitorGlobal;
   }
 }

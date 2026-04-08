@@ -1,5 +1,16 @@
+'use client';
+
 import { cn } from '@/lib/utils';
 import { type InputHTMLAttributes, type SelectHTMLAttributes, type TextareaHTMLAttributes, forwardRef, type ReactNode } from 'react';
+import { AnimatePresence, motion } from 'motion/react';
+import { motionTokens } from '@/lib/motion';
+
+const errorReveal = {
+  initial: { opacity: 0, y: -4, height: 0 },
+  animate: { opacity: 1, y: 0, height: 'auto' },
+  exit: { opacity: 0, y: -4, height: 0 },
+  transition: { duration: motionTokens.duration.fast, ease: motionTokens.ease.entrance },
+};
 
 /* ─── Input ─── */
 export interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
@@ -27,8 +38,14 @@ export const Input = forwardRef<HTMLInputElement, InputProps>(
           aria-describedby={error ? `${inputId}-error` : undefined}
           {...props}
         />
-        {error && <p id={`${inputId}-error`} className="text-xs text-red-600">{error}</p>}
-        {hint && !error && <p className="text-xs leading-5 text-muted">{hint}</p>}
+        <AnimatePresence mode="wait" initial={false}>
+          {error && (
+            <motion.p key="error" {...errorReveal} id={`${inputId}-error`} className="text-xs text-red-600 overflow-hidden">{error}</motion.p>
+          )}
+          {hint && !error && (
+            <motion.p key="hint" {...errorReveal} className="text-xs leading-5 text-muted overflow-hidden">{hint}</motion.p>
+          )}
+        </AnimatePresence>
       </div>
     );
   },
@@ -61,8 +78,14 @@ export const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           aria-describedby={error ? `${inputId}-error` : undefined}
           {...props}
         />
-        {error && <p id={`${inputId}-error`} className="text-xs text-red-600">{error}</p>}
-        {hint && !error && <p className="text-xs leading-5 text-muted">{hint}</p>}
+        <AnimatePresence mode="wait" initial={false}>
+          {error && (
+            <motion.p key="error" {...errorReveal} id={`${inputId}-error`} className="text-xs text-red-600 overflow-hidden">{error}</motion.p>
+          )}
+          {hint && !error && (
+            <motion.p key="hint" {...errorReveal} className="text-xs leading-5 text-muted overflow-hidden">{hint}</motion.p>
+          )}
+        </AnimatePresence>
       </div>
     );
   },
@@ -101,8 +124,14 @@ export const Select = forwardRef<HTMLSelectElement, SelectProps>(
             <option key={opt.value} value={opt.value}>{opt.label}</option>
           ))}
         </select>
-        {error && <p className="text-xs text-red-600">{error}</p>}
-        {hint && !error && <p className="text-xs leading-5 text-muted">{hint}</p>}
+        <AnimatePresence mode="wait" initial={false}>
+          {error && (
+            <motion.p key="error" {...errorReveal} className="text-xs text-red-600 overflow-hidden">{error}</motion.p>
+          )}
+          {hint && !error && (
+            <motion.p key="hint" {...errorReveal} className="text-xs leading-5 text-muted overflow-hidden">{hint}</motion.p>
+          )}
+        </AnimatePresence>
       </div>
     );
   },

@@ -4,6 +4,8 @@ import * as Popover from '@radix-ui/react-popover';
 import { forwardRef, useMemo, useState, type ComponentPropsWithoutRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { Bell, CheckCheck, Clock3, Filter, RefreshCw } from 'lucide-react';
+import { motion, useReducedMotion } from 'motion/react';
+import { getMotionDelay, getSurfaceTransition, getSurfaceVariants, prefersReducedMotion } from '@/lib/motion';
 import { useNotificationCenter } from '@/contexts/notification-center-context';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -70,6 +72,9 @@ function NotificationCenterContent({ onNavigate }: { onNavigate?: () => void }) 
     markAllRead,
   } = useNotificationCenter();
   const router = useRouter();
+  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const itemVariants = getSurfaceVariants('item', reducedMotion);
+  const itemTransition = getSurfaceTransition('item', reducedMotion);
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [channelFilter, setChannelFilter] = useState<'all' | NotificationChannel>('all');
   const [unreadOnly, setUnreadOnly] = useState(false);
@@ -217,10 +222,14 @@ function NotificationCenterContent({ onNavigate }: { onNavigate?: () => void }) 
           </div>
         ) : null}
 
-        {filteredNotifications.map((item) => (
-          <button
+        {filteredNotifications.map((item, idx) => (
+          <motion.button
             key={item.id}
             type="button"
+            variants={itemVariants}
+            initial="hidden"
+            animate="visible"
+            transition={{ ...itemTransition, delay: getMotionDelay(idx, reducedMotion) }}
             onClick={() => void handleOpen(item)}
             className={cn(
               'w-full rounded-2xl border px-4 py-3 text-left transition-colors',
@@ -248,14 +257,20 @@ function NotificationCenterContent({ onNavigate }: { onNavigate?: () => void }) 
                 <p>{formatTimestamp(item.createdAt)}</p>
               </div>
             </div>
-          </button>
+          </motion.button>
         ))}
       </div>
 
       {hasMore ? (
         <div className="flex justify-center border-t border-gray-100 pt-3">
-          <Button type="button" variant="outline" onClick={() => void loadMore()} loading={isRefreshing}>
-            Load Older Notifications
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void loadMore()}
+            loading={isRefreshing}
+            aria-label="Load older items"
+          >
+            Load Older Items
           </Button>
         </div>
       ) : null}
@@ -291,7 +306,7 @@ const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellBut
       ref={ref}
       type="button"
       className={cn(
-        'relative rounded p-2 text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+        'relative touch-target rounded-2xl p-2 text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
         className,
       )}
       aria-label={buttonProps['aria-label'] ?? `Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}
@@ -323,7 +338,7 @@ export function NotificationCenter() {
             <Popover.Content
               align="end"
               sideOffset={12}
-              className="z-50 w-[28rem] rounded-[24px] border border-gray-200 bg-surface p-4 shadow-2xl"
+              className="z-50 w-[28rem] rounded-[24px] border border-gray-200 bg-surface p-4 shadow-2xl data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.98] data-[state=open]:slide-in-from-top-2 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.98] duration-200"
             >
               <NotificationCenterContent onNavigate={() => setDesktopOpen(false)} />
             </Popover.Content>

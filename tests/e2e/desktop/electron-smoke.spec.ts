@@ -49,6 +49,7 @@ async function launchDesktop(appDataRoot: string): Promise<ElectronApp> {
     args: ['.'],
     env: {
       ...process.env,
+      ELECTRON_ALLOW_BASIC_TEXT_SECRET_STORAGE: 'true',
       ELECTRON_RENDERER_URL: baseURL,
       ELECTRON_APPDATA_ROOT: appDataRoot,
       ELECTRON_RUNTIME_CHANNEL: 'test',
@@ -194,6 +195,19 @@ test.describe('Electron desktop shell', () => {
       const diagnostics = observePage(page);
 
       await expect(page.getByRole('heading', { name: /login to your account|access your workspace/i })).toBeVisible();
+      await expect.poll(
+        async () => await page.evaluate(() => document.documentElement.dataset.runtimeKind ?? null),
+        { timeout: 5_000, message: 'Expected the Electron renderer to mark itself as a desktop runtime.' },
+      ).toBe('desktop');
+
+      const runtimeInfo = await page.evaluate(() => window.desktopBridge.runtime.info());
+      expect(runtimeInfo.windowState.isVisible).toBe(true);
+      expect(runtimeInfo.windowState.isMinimized).toBe(false);
+      await expect.poll(
+        async () => await page.evaluate(() => document.documentElement.dataset.appActive ?? null),
+        { timeout: 5_000, message: 'Expected the desktop lifecycle bridge to mark the window active.' },
+      ).toBe('true');
+
       const bridgeDetails = await page.evaluate(() => ({
         hasBridge: typeof window.desktopBridge === 'object' && window.desktopBridge !== null,
         hasOpenExternal: typeof window.desktopBridge?.openExternal === 'function',

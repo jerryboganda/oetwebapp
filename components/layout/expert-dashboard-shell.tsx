@@ -13,7 +13,7 @@ export function ExpertDashboardShell({
   ...shellProps
 }: ExpertDashboardShellProps) {
   return (
-    <AppShell {...shellProps}>
+    <AppShell {...shellProps} workspaceRole="expert">
       <LearnerWorkspaceContainer className={workspaceClassName}>
         {children}
       </LearnerWorkspaceContainer>

@@ -395,7 +395,7 @@ function LiveSpeakingTaskContent() {
         </div>
 
         {/* Visualizer / AI State */}
-        <div className="relative z-10 flex flex-col items-center gap-12">
+        <div className="relative z-10 mb-24 flex flex-col items-center gap-12">
           <div className="relative">
             <motion.div 
               animate={recordingState === 'recording' ? { scale: [1, 1.05, 1] } : {}}
@@ -494,7 +494,7 @@ function LiveSpeakingTaskContent() {
         </div>
 
         {/* Role Card & Notes Toggles */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 flex gap-4 z-20">
+        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 flex gap-4 z-20">
           <button 
             onClick={() => setShowRoleCard(!showRoleCard)}
             className={`px-6 py-2 rounded-full text-xs font-bold flex items-center gap-2 transition-all ${

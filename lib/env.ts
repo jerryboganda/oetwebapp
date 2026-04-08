@@ -1,24 +1,35 @@
-/**
- * Runtime environment validation.
- * Import this at the app entry point to fail fast on missing config.
- */
+const PROXY_PATH = '/api/backend';
+const DEFAULT_PROXY_TARGET = 'http://127.0.0.1:5198';
 
-function requireEnv(name: string, value: string | undefined): string {
-  if (!value || value.trim() === '') {
-    throw new Error(`Missing required environment variable: ${name}`);
+function trimEnvValue(value: string | undefined): string | null {
+  if (!value) {
+    return null;
   }
-  return value;
+
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : null;
 }
 
-function optionalEnv(name: string, fallback: string): string {
-  return process.env[name] || fallback;
+export function resolveApiBaseUrl(envSource: NodeJS.ProcessEnv = process.env): string {
+  const explicitClientBaseUrl = trimEnvValue(envSource.NEXT_PUBLIC_API_BASE_URL);
+  if (explicitClientBaseUrl) {
+    return explicitClientBaseUrl.replace(/\/$/, '');
+  }
+
+  // Browser requests can safely use the same-origin proxy route.
+  if (typeof window !== 'undefined') {
+    return PROXY_PATH;
+  }
+
+  // Server-side fetches still need an absolute URL during SSR, tests, and route handlers.
+  return (
+    trimEnvValue(envSource.PUBLIC_API_BASE_URL) ??
+    trimEnvValue(envSource.API_PROXY_TARGET_URL) ??
+    DEFAULT_PROXY_TARGET
+  ).replace(/\/$/, '');
 }
 
 export const env = {
-  // API
-  apiBaseUrl:
-    process.env.NODE_ENV === 'production'
-      ? requireEnv('NEXT_PUBLIC_API_BASE_URL', process.env.NEXT_PUBLIC_API_BASE_URL).replace(/\/$/, '')
-      : optionalEnv('NEXT_PUBLIC_API_BASE_URL', 'http://localhost:5199').replace(/\/$/, ''),
+  apiBaseUrl: resolveApiBaseUrl(),
   webPushPublicKey: process.env.NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY?.trim() || '',
 } as const;

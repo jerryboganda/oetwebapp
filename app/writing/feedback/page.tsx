@@ -68,9 +68,9 @@ export default function WritingDetailedFeedback() {
   if (loading) {
     return (
       <AppShell pageTitle="Detailed Feedback">
-        <div className="flex flex-col lg:flex-row h-[calc(100vh-64px)]">
-          <div className="w-full lg:w-1/2 p-6"><Skeleton className="h-full rounded-2xl" /></div>
-          <div className="w-full lg:w-1/2 p-6 space-y-4">{[1,2,3].map(i => <Skeleton key={i} className="h-40 rounded-2xl" />)}</div>
+        <div className="flex min-h-[calc(100dvh-64px)] flex-col md:h-[calc(100dvh-64px)] md:flex-row">
+          <div className="w-full md:w-1/2 p-6"><Skeleton className="h-full rounded-2xl" /></div>
+          <div className="w-full md:w-1/2 p-6 space-y-4">{[1,2,3].map(i => <Skeleton key={i} className="h-40 rounded-2xl" />)}</div>
         </div>
       </AppShell>
     );
@@ -85,12 +85,12 @@ export default function WritingDetailedFeedback() {
   return (
     <AppShell pageTitle="Detailed Feedback" distractionFree>
       {/* Toolbar */}
-      <header className="bg-white border-b border-gray-200 shrink-0 px-4 sm:px-6 py-3 flex items-center justify-between z-10">
-        <div className="flex items-center gap-4">
+      <header className="bg-white border-b border-gray-200 shrink-0 px-4 py-3 sm:px-6 flex flex-wrap items-center justify-between gap-3 z-10">
+        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
           <Link href={`/writing/result?id=${resultId}`} className="text-gray-500 hover:text-navy transition-colors"><ChevronLeft className="w-5 h-5" /></Link>
-          <div>
+          <div className="min-w-0">
             <h1 className="font-bold text-lg text-navy leading-tight">Detailed Feedback</h1>
-            <div className="text-xs text-muted">{result.taskTitle}</div>
+            <div className="truncate text-xs text-muted">{result.taskTitle}</div>
           </div>
         </div>
         <Link href={`/writing/player?taskId=${result.taskId}`}>
@@ -98,9 +98,9 @@ export default function WritingDetailedFeedback() {
         </Link>
       </header>
 
-      <main className="flex-1 flex flex-col lg:flex-row overflow-hidden">
+      <main className="flex-1 min-h-0 flex flex-col overflow-y-auto md:flex-row md:overflow-hidden">
         {/* Left Pane: Submission Text (re-use the existing anchored-highlight inline pattern) */}
-        <div className="w-full lg:w-1/2 border-r border-gray-200 bg-white overflow-y-auto p-6 lg:p-10">
+        <div className="w-full md:w-1/2 border-r border-gray-200 bg-white p-6 md:overflow-y-auto md:p-10">
           <div className="max-w-2xl mx-auto">
             <div className="flex items-center justify-between mb-8">
               <h2 className="text-sm font-bold text-muted uppercase tracking-wider">Your Submission</h2>
@@ -133,7 +133,7 @@ export default function WritingDetailedFeedback() {
         </div>
 
         {/* Right Pane: Criteria Panels + Issue List */}
-        <div className="w-full lg:w-1/2 bg-gray-50 overflow-y-auto p-6 lg:p-8">
+        <div className="w-full md:w-1/2 bg-gray-50 p-6 md:overflow-y-auto md:p-8">
           <div className="max-w-2xl mx-auto space-y-6">
             {result.criteria.map((criterion, index) => (
               <motion.div key={criterion.name} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.08 }}>

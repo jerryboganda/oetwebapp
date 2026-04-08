@@ -33,7 +33,9 @@ export default function ForgotPasswordPage() {
 
     try {
       const normalizedEmail = email.trim();
-      await requestPasswordReset(normalizedEmail);
+      void requestPasswordReset(normalizedEmail).catch((error) => {
+        console.error('Password reset OTP request failed.', error);
+      });
       router.push(`${AUTH_ROUTES.passwordResetOtp}?email=${encodeURIComponent(normalizedEmail)}`);
     } catch (error) {
       setErrorMessage(readErrorMessage(error));
@@ -58,11 +60,12 @@ export default function ForgotPasswordPage() {
         </>
       }
     >
-      <form onSubmit={handleSubmit} className={styles.passwordFlowForm}>
+      <form action={AUTH_ROUTES.passwordResetOtp} method="get" onSubmit={handleSubmit} className={styles.passwordFlowForm}>
         <div className={styles.field}>
           <label htmlFor="email">Email Address</label>
           <input
             id="email"
+            name="email"
             type="email"
             className={styles.input}
             placeholder="Enter your registered email"

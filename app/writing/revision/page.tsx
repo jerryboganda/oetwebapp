@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
 import {
   ChevronLeft,
   ArrowRight,
@@ -13,6 +12,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/layout/app-shell';
 import { RevisionDiffViewer } from '@/components/domain/revision-diff-viewer';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -50,7 +50,7 @@ export default function WritingRevisionMode() {
       <AppShell pageTitle="Revision Mode">
         <div className="max-w-7xl mx-auto p-6 space-y-6">
           <Skeleton className="h-40 rounded-2xl" />
-          <Skeleton className="h-80 rounded-2xl" />
+          <Skeleton className="h-[240px] rounded-2xl sm:h-[280px] lg:h-80" />
         </div>
       </AppShell>
     );
@@ -86,7 +86,7 @@ export default function WritingRevisionMode() {
           {/* Top Section: Delta Summary + Unresolved Issues */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
             {/* Criterion Delta Summary */}
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="lg:col-span-2">
+            <MotionSection className="lg:col-span-2">
               <Card className="p-6">
                 <h2 className="text-lg font-bold text-navy mb-4 flex items-center gap-2"><TrendingUp className="w-5 h-5 text-primary" /> Criterion Delta Summary</h2>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
@@ -113,10 +113,10 @@ export default function WritingRevisionMode() {
                   })}
                 </div>
               </Card>
-            </motion.div>
+            </MotionSection>
 
             {/* Unresolved Issues */}
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+            <MotionSection delayIndex={1}>
               <div className="bg-amber-50 rounded-2xl border border-amber-200 p-6 shadow-sm flex flex-col h-full">
                 <h2 className="text-lg font-bold text-amber-900 mb-4 flex items-center gap-2"><AlertCircle className="w-5 h-5" /> Unresolved Issues</h2>
                 <ul className="space-y-3 flex-1">
@@ -128,13 +128,13 @@ export default function WritingRevisionMode() {
                   ))}
                 </ul>
               </div>
-            </motion.div>
+            </MotionSection>
           </div>
 
           {/* Diff Viewer */}
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
+          <MotionSection delayIndex={2}>
             <RevisionDiffViewer original={originalText} revised={revisedText} />
-          </motion.div>
+          </MotionSection>
         </div>
       </main>
     </AppShell>

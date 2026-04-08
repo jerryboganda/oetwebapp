@@ -176,6 +176,55 @@ export default function FlagsPage() {
     },
   ];
 
+  const mobileCardRender = (flag: AdminFlag) => (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-navy">{flag.name}</p>
+          <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{flag.key}</p>
+        </div>
+        <div className="flex flex-col items-end gap-1">
+          <Badge variant={flag.type === 'experiment' ? 'warning' : flag.type === 'operational' ? 'info' : 'default'}>
+            {flag.type}
+          </Badge>
+          <Badge variant={flag.enabled ? 'success' : 'muted'}>
+            {flag.enabled ? 'enabled' : 'disabled'}
+          </Badge>
+        </div>
+      </div>
+
+      <p className="text-sm text-muted">{flag.description || 'No rollout description yet.'}</p>
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Owner</p>
+          <p className="mt-1 font-medium text-navy">{flag.owner || 'Unassigned'}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Rollout</p>
+          <p className="mt-1 font-medium text-navy">{flag.rolloutPercentage}%</p>
+        </div>
+      </div>
+
+      <div className="flex flex-col gap-2 sm:flex-row">
+        <Button variant="outline" size="sm" className="w-full sm:flex-1" onClick={() => openEditModal(flag)}>
+          <Edit3 className="h-3.5 w-3.5" />
+          Edit
+        </Button>
+        <Button
+          size="sm"
+          className="w-full sm:flex-1"
+          variant={flag.enabled ? 'destructive' : 'primary'}
+          onClick={() => handleToggleFlag(flag)}
+          loading={togglingId === flag.id}
+        >
+          <Power className="h-3.5 w-3.5" />
+          {flag.enabled ? 'Disable' : 'Enable'}
+        </Button>
+      </div>
+    </div>
+  );
+
   function handleFilterChange(groupId: string, optionId: string) {
     setFilters((current) => ({
       ...current,
@@ -301,7 +350,7 @@ export default function FlagsPage() {
 
         <AdminRoutePanel title="Rollout Registry" description="All visible enable, disable, and edit controls are backed by the admin feature flag endpoints and audit events.">
           <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ type: [] })} />
-          <DataTable columns={columns} data={flags} keyExtractor={(flag) => flag.id} />
+          <DataTable columns={columns} data={flags} keyExtractor={(flag) => flag.id} mobileCardRender={mobileCardRender} />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 

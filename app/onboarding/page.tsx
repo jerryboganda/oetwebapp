@@ -110,6 +110,7 @@ export default function OnboardingPage() {
   const stepperSteps = STEPS.map((s) => ({
     id: s.id,
     label: s.title,
+    description: s.heading,
   }));
 
   if (loading) {
@@ -125,7 +126,13 @@ export default function OnboardingPage() {
       <div className="flex-1 flex items-center justify-center p-4 md:p-8">
         <div className="w-full max-w-2xl space-y-8">
           {/* Stepper */}
-          <Stepper steps={stepperSteps} currentStep={currentStep} />
+          <div className="md:hidden">
+            <Stepper steps={stepperSteps} currentStep={currentStep} orientation="vertical" />
+          </div>
+
+          <div className="hidden md:block">
+            <Stepper steps={stepperSteps} currentStep={currentStep} />
+          </div>
 
           {/* Card */}
           <AnimatePresence mode="wait" custom={direction}>

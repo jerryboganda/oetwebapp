@@ -68,6 +68,7 @@ async function launchPackagedDesktop(appDataRoot: string): Promise<ElectronApp> 
     executablePath,
     env: {
       ...process.env,
+      ELECTRON_ALLOW_BASIC_TEXT_SECRET_STORAGE: 'true',
       ELECTRON_APPDATA_ROOT: appDataRoot,
       ELECTRON_RUNTIME_CHANNEL: 'packaged-test',
       PORT: packagedRendererPort,
@@ -198,6 +199,9 @@ test.describe('Packaged Electron desktop shell', () => {
       expect(bridgeDetails.hasOpenExternal).toBe(true);
       expect(bridgeDetails.hasSecureSecrets).toBe(true);
       expect(bridgeDetails.electronVersion).toBeTruthy();
+      expect(runtimeInfo.windowState.isVisible).toBe(true);
+      expect(runtimeInfo.windowState.isMinimized).toBe(false);
+      await expect.poll(async () => page.evaluate(() => document.documentElement.dataset.appActive)).toBe('true');
 
       expectNoSevereClientIssues(diagnostics);
       diagnostics.detach();

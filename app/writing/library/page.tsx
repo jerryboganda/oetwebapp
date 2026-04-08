@@ -1,7 +1,6 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { motion } from 'motion/react';
 import { BookOpen } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -9,6 +8,7 @@ import { TaskCard } from '@/components/domain/task-card';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState, ErrorState } from '@/components/ui/empty-error';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { fetchWritingTasks } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { WritingTask } from '@/lib/mock-data';
@@ -87,7 +87,7 @@ export default function WritingTaskLibrary() {
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
             {filtered.map((task, index) => (
-              <motion.div key={task.id} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }}>
+              <MotionItem key={task.id} delayIndex={index}>
                 <TaskCard
                   id={task.id}
                   title={task.title}
@@ -101,7 +101,7 @@ export default function WritingTaskLibrary() {
                     router.push(`/writing/player?taskId=${task.id}`);
                   }}
                 />
-              </motion.div>
+              </MotionItem>
             ))}
           </div>
         )}

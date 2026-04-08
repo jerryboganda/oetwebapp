@@ -13,7 +13,7 @@ export function AdminDashboardShell({
   ...shellProps
 }: AdminDashboardShellProps) {
   return (
-    <AppShell {...shellProps}>
+    <AppShell {...shellProps} workspaceRole="admin">
       <LearnerWorkspaceContainer className={workspaceClassName}>
         {children}
       </LearnerWorkspaceContainer>

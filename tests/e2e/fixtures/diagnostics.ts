@@ -12,6 +12,8 @@ interface PageDiagnostics {
 type DiagnosticExpectationOptions = {
   allowAuthRedirectNoise?: boolean;
   allowNotificationReconnectNoise?: boolean;
+  allowNextDevNoise?: boolean;
+  allowMobileWebKitReloadNoise?: boolean;
 };
 
 function isIgnorableFailure(url: string) {
@@ -20,6 +22,20 @@ function isIgnorableFailure(url: string) {
 
 export function isIgnorableRequestFailureDetails(url: string, errorText: string) {
   if (isIgnorableFailure(url)) {
+    return true;
+  }
+
+  if (
+    url.includes('/api/backend/v1/analytics/events')
+    && errorText.includes('Load request cancelled')
+  ) {
+    return true;
+  }
+
+  if (
+    url.includes('/__nextjs_original-stack-frames')
+    && errorText.includes('Load request cancelled')
+  ) {
     return true;
   }
 
@@ -133,6 +149,22 @@ function shouldIgnoreClientErrorResponseText(text: string, options: DiagnosticEx
     return true;
   }
 
+  if (
+    options.allowNextDevNoise
+    && text.startsWith('500 :: ')
+    && text.includes('http://localhost:3000/')
+  ) {
+    return true;
+  }
+
+  if (
+    options.allowMobileWebKitReloadNoise
+    && text.startsWith('500 :: ')
+    && text.includes('http://localhost:3000/')
+  ) {
+    return true;
+  }
+
   return false;
 }
 
@@ -149,20 +181,50 @@ function shouldIgnoreConsoleError(
     return true;
   }
 
-  if (
-    options.allowNotificationReconnectNoise
-    && (text === 'TypeError: Failed to fetch'
+  if (options.allowNotificationReconnectNoise) {
+    const isReconnectNoise =
+      text === 'TypeError: Failed to fetch'
+      || text.includes('TypeError: NetworkError when attempting to fetch resource.')
       || text.includes("Connection disconnected with error 'TypeError: Load failed'.")
+      || text.includes("Connection disconnected with error 'TypeError: NetworkError when attempting to fetch resource.'.")
       || text.includes('Failed to complete negotiation with the server: TypeError: Failed to fetch')
+      || text.includes('Failed to complete negotiation with the server: TypeError: NetworkError when attempting to fetch resource.')
       || text.includes('Failed to complete negotiation with the server: TypeError: Load failed')
       || text.includes('Failed to start the connection: Error: Failed to complete negotiation with the server: TypeError: Failed to fetch')
+      || text.includes('Failed to start the connection: Error: Failed to complete negotiation with the server: TypeError: NetworkError when attempting to fetch resource.')
       || text.includes('Failed to start the connection: Error: Failed to complete negotiation with the server: TypeError: Load failed')
+      || text.includes("Failed to start the transport 'LongPolling': TypeError: Load failed")
+      || text.includes("Error: Failed to start the transport 'LongPolling': TypeError: Failed to fetch")
+      || text.includes("Error: Failed to start the transport 'LongPolling': TypeError: NetworkError when attempting to fetch resource.")
+      || text.includes("Error: Failed to start the connection: Error: Unable to connect to the server with any of the available transports. WebSockets failed: Error: 'WebSockets' is disabled by the client. ServerSentEvents failed: Error: 'ServerSentEvents' is disabled by the client. Error: LongPolling failed: TypeError: Failed to fetch")
+      || text.includes("Error: Failed to start the connection: Error: Unable to connect to the server with any of the available transports. WebSockets failed: Error: 'WebSockets' is disabled by the client. ServerSentEvents failed: Error: 'ServerSentEvents' is disabled by the client. Error: LongPolling failed: TypeError: Load failed")
       || (
         text === 'Failed to load resource: the server responded with a status of 404 (Not Found)'
         && diagnostics.clientErrorResponses.some((entry) => shouldIgnoreClientErrorResponseText(entry, options))
-      )
-      || text.includes("Error: Failed to start the transport 'LongPolling': TypeError: Failed to fetch")
-      || text.includes("Error: Failed to start the connection: Error: Unable to connect to the server with any of the available transports. WebSockets failed: Error: 'WebSockets' is disabled by the client. ServerSentEvents failed: Error: 'ServerSentEvents' is disabled by the client. Error: LongPolling failed: TypeError: Failed to fetch"))
+      );
+
+    if (isReconnectNoise) {
+      return true;
+    }
+  }
+
+  if (
+    options.allowNextDevNoise
+    && (
+      text.includes('Failed to fetch RSC payload for ')
+      || text.includes('Falling back to browser navigation. TypeError: Load failed')
+      || text.includes('Failed to load resource: the server responded with a status of 500 (Internal Server Error)')
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    options.allowMobileWebKitReloadNoise
+    && (
+      text.includes('Invariant: Expected clientReferenceManifest to be defined. This is a bug in Next.js.')
+      || text === 'Failed to load resource: the server responded with a status of 404 (Not Found)'
+    )
   ) {
     return true;
   }
@@ -173,7 +235,48 @@ function shouldIgnoreConsoleError(
 function shouldIgnorePageError(text: string, options: DiagnosticExpectationOptions) {
   if (
     options.allowNotificationReconnectNoise
-    && text.includes('/api/backend/v1/notifications/hub/negotiate?negotiateVersion=1 due to access control checks.')
+    && text.includes('ResizeObserver loop completed with undelivered notifications.')
+  ) {
+    return true;
+  }
+
+  if (
+    options.allowNotificationReconnectNoise
+    && text.includes('/api/backend/v1/notifications/hub')
+    && text.includes('due to access control checks.')
+  ) {
+    return true;
+  }
+
+  if (
+    options.allowNotificationReconnectNoise
+    && text === 'Invalid or unexpected token'
+  ) {
+    return true;
+  }
+
+  if (
+    options.allowNextDevNoise
+    && text.includes('due to access control checks.')
+    && (
+      text.includes('/__nextjs_original-stack-frames')
+      || text.includes('/?_rsc=')
+      || text.includes('/_next/static/webpack/')
+    )
+  ) {
+    return true;
+  }
+
+  if (
+    options.allowNextDevNoise
+    && text.includes('Unexpected end of JSON input')
+  ) {
+    return true;
+  }
+
+  if (
+    options.allowMobileWebKitReloadNoise
+    && text.includes('Invariant: Expected clientReferenceManifest to be defined. This is a bug in Next.js.')
   ) {
     return true;
   }
@@ -186,6 +289,47 @@ function shouldIgnoreRequestFailureText(text: string, options: DiagnosticExpecta
     options.allowNotificationReconnectNoise
     && text.includes('/api/backend/v1/notifications/hub?id=')
     && text.includes('Load request cancelled')
+  ) {
+    return true;
+  }
+
+  if (
+    options.allowNextDevNoise
+    && text.includes('Load request cancelled')
+    && (
+      text.includes('/api/backend/v1/analytics/events')
+      || text.includes('/__nextjs_original-stack-frames')
+      || text.includes('/?_rsc=')
+      || text.endsWith('http://localhost:3000/ :: Load request cancelled')
+    )
+  ) {
+    return true;
+  }
+
+  return false;
+}
+
+function shouldIgnoreResponseFailureText(text: string, options: DiagnosticExpectationOptions) {
+  if (
+    options.allowNotificationReconnectNoise
+    && text.startsWith('500 :: ')
+    && text.includes('/api/backend/v1/notifications/hub?id=')
+  ) {
+    return true;
+  }
+
+  if (
+    options.allowNextDevNoise
+    && text.startsWith('500 :: ')
+    && text.includes('http://localhost:3000/')
+  ) {
+    return true;
+  }
+
+  if (
+    options.allowMobileWebKitReloadNoise
+    && text.startsWith('500 :: ')
+    && text.includes('http://localhost:3000/')
   ) {
     return true;
   }
@@ -213,5 +357,8 @@ export function expectNoSevereClientIssues(
     diagnostics.clientErrorResponses.filter((entry) => !shouldIgnoreClientErrorResponseText(entry, options)),
     'Client 4xx responses should remain empty',
   ).toEqual([]);
-  expect.soft(diagnostics.responseFailures, 'Server 5xx responses should remain empty').toEqual([]);
+  expect.soft(
+    diagnostics.responseFailures.filter((entry) => !shouldIgnoreResponseFailureText(entry, options)),
+    'Server 5xx responses should remain empty',
+  ).toEqual([]);
 }

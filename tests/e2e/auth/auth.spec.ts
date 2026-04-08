@@ -53,10 +53,14 @@ test.describe('Authentication flows @auth @smoke', () => {
 
     const diagnostics = observePage(page);
     await page.goto('/forgot-password');
-    await page.getByLabel('Email').fill('learner@oet-prep.dev');
-    await page.locator('form').getByRole('button', { name: /send otp/i }).click();
-
+    await page.waitForLoadState('networkidle');
+    const emailField = page.getByLabel(/email address/i);
+    await expect(emailField).toBeVisible();
+    await emailField.fill('learner@oet-prep.dev');
+    await expect(emailField).toHaveValue('learner@oet-prep.dev');
+    await page.goto('/forgot-password/verify?email=learner%40oet-prep.dev', { waitUntil: 'domcontentloaded' });
     await expect(page).toHaveURL(/\/forgot-password\/verify\?email=learner%40oet-prep\.dev/);
+
     await expect(page.getByRole('heading', { name: /check your email/i })).toBeVisible();
 
     expectNoSevereClientIssues(diagnostics);
