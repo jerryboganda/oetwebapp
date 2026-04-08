@@ -44,5 +44,7 @@ jobs:
           script: |
             set -euo pipefail
             cd "${{ secrets.VPS_APP_DIR }}"
-            git pull --ff-only origin main
+            git fetch origin main
+            git reset --hard origin/main
+            git clean -fd
             bash ./scripts/deploy-production.sh
