@@ -177,17 +177,17 @@ export default function MarketplacePage() {
               <input type="text" placeholder="Search content..." value={searchQ}
                 onChange={e => setSearchQ(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && loadBrowse()}
-                className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 outline-none" />
+                className="w-full pl-10 pr-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 outline-none" />
             </div>
             <select value={filterSubtest} onChange={e => { setFilterSubtest(e.target.value); }}
-              className="px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
+              className="px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 outline-none">
               <option value="">All Subtests</option>
               <option value="writing">Writing</option>
               <option value="speaking">Speaking</option>
               <option value="reading">Reading</option>
               <option value="listening">Listening</option>
             </select>
-            <button onClick={loadBrowse} className="px-4 py-2.5 bg-cyan-600 hover:bg-cyan-700 text-white rounded-xl text-sm font-semibold flex items-center gap-1">
+            <button onClick={loadBrowse} className="px-4 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-semibold flex items-center gap-1">
               <Filter className="w-4 h-4" /> Filter
             </button>
           </div>
@@ -207,9 +207,9 @@ export default function MarketplacePage() {
                   const SubIcon = SUBTEST_ICONS[item.subtestCode] ?? BookOpen;
                   return (
                     <MotionItem key={item.id} delayIndex={i}
-                      className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 hover:border-cyan-300 dark:hover:border-cyan-600 hover:shadow-sm transition-all">
+                      className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 hover:border-violet-300 dark:hover:border-violet-600 hover:shadow-sm transition-all">
                       <div className="flex items-start gap-3">
-                        <div className="p-2 rounded-lg bg-cyan-50 dark:bg-cyan-900/20 text-cyan-600 dark:text-cyan-400">
+                        <div className="p-2 rounded-lg bg-violet-50 dark:bg-violet-900/20 text-violet-600 dark:text-violet-400">
                           <SubIcon className="w-5 h-5" />
                         </div>
                         <div className="flex-1 min-w-0">
@@ -248,13 +248,13 @@ export default function MarketplacePage() {
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Title *</label>
               <input type="text" required value={submitForm.title} onChange={e => setSubmitForm(f => ({ ...f, title: e.target.value }))}
-                className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 outline-none" />
+                className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 outline-none" />
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Subtest *</label>
                 <select value={submitForm.subtestCode} onChange={e => setSubmitForm(f => ({ ...f, subtestCode: e.target.value }))}
-                  className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
+                  className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 outline-none">
                   <option value="writing">Writing</option>
                   <option value="speaking">Speaking</option>
                   <option value="reading">Reading</option>
@@ -264,7 +264,7 @@ export default function MarketplacePage() {
               <div>
                 <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Difficulty</label>
                 <select value={submitForm.difficulty} onChange={e => setSubmitForm(f => ({ ...f, difficulty: e.target.value }))}
-                  className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 outline-none">
+                  className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 outline-none">
                   <option value="easy">Easy</option>
                   <option value="medium">Medium</option>
                   <option value="hard">Hard</option>
@@ -274,22 +274,22 @@ export default function MarketplacePage() {
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Description</label>
               <textarea rows={3} value={submitForm.description} onChange={e => setSubmitForm(f => ({ ...f, description: e.target.value }))}
-                className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 outline-none resize-none" />
+                className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 outline-none resize-none" />
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Content (JSON)</label>
               <textarea rows={6} value={submitForm.contentPayloadJson} onChange={e => setSubmitForm(f => ({ ...f, contentPayloadJson: e.target.value }))}
                 placeholder='{"caseNotes": "...", "instructions": "..."}'
-                className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-mono focus:ring-2 focus:ring-cyan-500 outline-none resize-none" />
+                className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm font-mono focus:ring-2 focus:ring-violet-500 outline-none resize-none" />
             </div>
             <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-1">Tags (comma-separated)</label>
               <input type="text" value={submitForm.tags} onChange={e => setSubmitForm(f => ({ ...f, tags: e.target.value }))}
                 placeholder="nursing, referral, cardiology"
-                className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-cyan-500 outline-none" />
+                className="w-full px-4 py-2.5 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl text-sm focus:ring-2 focus:ring-violet-500 outline-none" />
             </div>
             <button type="submit" disabled={submitting || !submitForm.title.trim()}
-              className="w-full py-3 bg-cyan-600 hover:bg-cyan-700 disabled:opacity-50 text-white rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors">
+              className="w-full py-3 bg-violet-600 hover:bg-violet-700 disabled:opacity-50 text-white rounded-xl font-semibold flex items-center justify-center gap-2 transition-colors">
               {submitting ? <><Loader2 className="w-4 h-4 animate-spin" /> Submitting...</> : <><Upload className="w-4 h-4" /> Submit for Review</>}
             </button>
           </form>
@@ -301,14 +301,14 @@ export default function MarketplacePage() {
         <section>
           {/* Profile Summary */}
           {profile && (
-            <div className="bg-gradient-to-br from-cyan-50 to-teal-50 dark:from-cyan-950/30 dark:to-teal-950/30 rounded-xl border border-cyan-200/60 dark:border-cyan-800/40 p-4 mb-4">
+            <div className="bg-gradient-to-br from-violet-50 to-purple-50 dark:from-violet-950/30 dark:to-purple-950/30 rounded-xl border border-violet-200/60 dark:border-violet-800/40 p-4 mb-4">
               <div className="flex items-center justify-between">
                 <div>
                   <h3 className="text-sm font-bold text-gray-900 dark:text-white">{profile.displayName}</h3>
                   <p className="text-xs text-gray-500 capitalize">{profile.verificationStatus}</p>
                 </div>
                 <div className="flex gap-4 text-center">
-                  <div><div className="text-lg font-bold text-cyan-600">{profile.submissionCount}</div><div className="text-xs text-gray-400">Submitted</div></div>
+                  <div><div className="text-lg font-bold text-violet-600">{profile.submissionCount}</div><div className="text-xs text-gray-400">Submitted</div></div>
                   <div><div className="text-lg font-bold text-green-600">{profile.approvedCount}</div><div className="text-xs text-gray-400">Approved</div></div>
                 </div>
               </div>

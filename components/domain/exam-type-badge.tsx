@@ -14,9 +14,9 @@ interface ExamTypeBadgeProps {
 const EXAM_CONFIG: Record<string, { label: string; bg: string; text: string; ring: string }> = {
   oet: {
     label: 'OET',
-    bg: 'bg-teal-100 dark:bg-teal-900/40',
-    text: 'text-teal-700 dark:text-teal-300',
-    ring: 'ring-teal-200/60 dark:ring-teal-800/50',
+    bg: 'bg-violet-100 dark:bg-violet-900/40',
+    text: 'text-violet-700 dark:text-violet-300',
+    ring: 'ring-violet-200/60 dark:ring-violet-800/50',
   },
   ielts: {
     label: 'IELTS',

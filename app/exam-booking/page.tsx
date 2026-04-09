@@ -100,7 +100,7 @@ export default function ExamBookingPage() {
         />
         <button
           onClick={() => setShowCreate(true)}
-          className="flex items-center gap-2 px-4 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-xl text-sm font-medium transition-colors"
+          className="flex items-center gap-2 px-4 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-medium transition-colors"
         >
           <Plus className="w-4 h-4" /> Add Booking
         </button>
@@ -110,7 +110,7 @@ export default function ExamBookingPage() {
 
       {/* Create form */}
       {showCreate && (
-        <MotionSection className="bg-white dark:bg-gray-800 rounded-xl border border-teal-200 dark:border-teal-700 p-5 mb-6">
+        <MotionSection className="bg-white dark:bg-gray-800 rounded-xl border border-violet-200 dark:border-violet-700 p-5 mb-6">
           <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Add Exam Booking</h3>
           <form onSubmit={handleCreate} className="space-y-3">
             <div className="grid grid-cols-2 gap-3">
@@ -127,7 +127,7 @@ export default function ExamBookingPage() {
             <input type="text" placeholder="Booking reference (optional)" value={form.bookingReference} onChange={e => setForm(p => ({ ...p, bookingReference: e.target.value }))} className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200" />
             <input type="url" placeholder="External booking URL (optional)" value={form.externalUrl} onChange={e => setForm(p => ({ ...p, externalUrl: e.target.value }))} className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200" />
             <div className="flex gap-2 pt-1">
-              <button type="submit" disabled={creating} className="px-5 py-2 bg-teal-600 hover:bg-teal-700 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+              <button type="submit" disabled={creating} className="px-5 py-2 bg-violet-600 hover:bg-violet-700 text-white rounded-lg text-sm font-medium disabled:opacity-50">
                 {creating ? 'Saving...' : 'Save Booking'}
               </button>
               <button type="button" onClick={() => setShowCreate(false)} className="px-5 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm text-gray-600 dark:text-gray-400">Cancel</button>
@@ -155,7 +155,7 @@ export default function ExamBookingPage() {
                     <MotionItem key={booking.id} delayIndex={i}
                       className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 flex items-center gap-4"
                     >
-                      <div className={`flex-shrink-0 w-14 h-14 rounded-xl flex flex-col items-center justify-center text-white text-xs font-bold ${days <= 7 ? 'bg-red-500' : days <= 30 ? 'bg-orange-500' : 'bg-teal-500'}`}>
+                      <div className={`flex-shrink-0 w-14 h-14 rounded-xl flex flex-col items-center justify-center text-white text-xs font-bold ${days <= 7 ? 'bg-red-500' : days <= 30 ? 'bg-orange-500' : 'bg-violet-500'}`}>
                         <div className="text-2xl font-bold leading-none">{days > 0 ? days : '—'}</div>
                         <div>days</div>
                       </div>
@@ -170,7 +170,7 @@ export default function ExamBookingPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         {booking.externalUrl && (
-                          <a href={booking.externalUrl} target="_blank" rel="noopener noreferrer" className="p-1.5 text-gray-400 hover:text-teal-600 transition-colors">
+                          <a href={booking.externalUrl} target="_blank" rel="noopener noreferrer" className="p-1.5 text-gray-400 hover:text-violet-600 transition-colors">
                             <ExternalLink className="w-4 h-4" />
                           </a>
                         )}

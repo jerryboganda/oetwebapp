@@ -10,6 +10,7 @@ import { fetchXP, fetchStreak } from '@/lib/api';
 import { motion, useReducedMotion } from 'motion/react';
 import { getSharedLayoutId, getSurfaceMotion, getSurfaceTransition, prefersReducedMotion } from '@/lib/motion';
 import type { UserRole } from '@/lib/types/auth';
+import { ThemeToggle } from '@/components/ui/theme-toggle';
 import {
   LayoutDashboard,
   FilePenLine,
@@ -136,7 +137,7 @@ function NavSection({
                 {!reducedMotion && active && (
                   <motion.span
                     aria-hidden="true"
-                    className="absolute inset-0 rounded-2xl bg-primary/12 shadow-[0_12px_28px_rgba(15,118,110,0.12)] ring-1 ring-primary/15"
+                    className="absolute inset-0 rounded-2xl bg-primary/12 shadow-[0_12px_28px_rgba(124,58,237,0.12)] ring-1 ring-primary/15"
                     layoutId={getSharedLayoutId('sidebar-nav-active', 'pill')}
                     transition={getSurfaceTransition('item', reducedMotion)}
                   />
@@ -283,6 +284,9 @@ export function Sidebar({
               Help & Support
             </button>
           </li>
+          <li>
+            <ThemeToggle className="w-full justify-start gap-3 rounded-2xl px-4 py-3 text-sm font-semibold" />
+          </li>
         </ul>
 
         <button
@@ -333,7 +337,7 @@ export function BottomNav({ className, items = mobileNavItems }: { className?: s
                 className={cn(
                   'pressable relative flex min-h-14 flex-col items-center justify-center gap-1 overflow-hidden rounded-[1rem] px-1 py-1 text-[10px] font-semibold',
                   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
-                  active ? 'text-white shadow-[0_10px_24px_rgba(15,118,110,0.28)]' : 'text-muted hover:bg-white/70 hover:text-navy dark:hover:bg-white/5',
+                  active ? 'text-white shadow-[0_10px_24px_rgba(124,58,237,0.28)]' : 'text-muted hover:bg-white/70 hover:text-navy dark:hover:bg-white/5',
                 )}
                 aria-current={active ? 'page' : undefined}
               >

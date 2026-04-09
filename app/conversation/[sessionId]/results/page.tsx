@@ -44,8 +44,8 @@ type Evaluation = {
 
 const GRADE_COLORS: Record<string, string> = {
   'A': 'from-emerald-400 to-green-500',
-  'B': 'from-teal-400 to-cyan-500',
-  'B+': 'from-teal-400 to-cyan-500',
+  'B': 'from-violet-400 to-purple-500',
+  'B+': 'from-violet-400 to-purple-500',
   'C+': 'from-yellow-400 to-amber-500',
   'C': 'from-orange-400 to-amber-500',
   'D': 'from-red-400 to-rose-500',

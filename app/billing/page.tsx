@@ -381,7 +381,7 @@ export default function BillingPage() {
             className="mb-4"
           />
           <div className="grid gap-6 lg:grid-cols-[1fr_1.5fr]">
-            <MotionSection className="rounded-[32px] border border-emerald-100 bg-gradient-to-br from-emerald-50 to-teal-50 p-6 shadow-sm">
+            <MotionSection className="rounded-[32px] border border-emerald-100 bg-gradient-to-br from-emerald-50 to-violet-50 p-6 shadow-sm">
               <div className="flex items-start gap-4">
                 <div className="rounded-2xl bg-emerald-600 p-3 text-white shadow-sm">
                   <Wallet className="h-5 w-5" />
