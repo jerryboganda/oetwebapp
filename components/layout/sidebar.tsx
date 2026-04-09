@@ -10,7 +10,6 @@ import { fetchXP, fetchStreak } from '@/lib/api';
 import { motion, useReducedMotion } from 'motion/react';
 import { getSharedLayoutId, getSurfaceMotion, getSurfaceTransition, prefersReducedMotion } from '@/lib/motion';
 import type { UserRole } from '@/lib/types/auth';
-import { ThemeToggle } from '@/components/ui/theme-toggle';
 import {
   LayoutDashboard,
   FilePenLine,
@@ -245,7 +244,7 @@ export function Sidebar({
             {visibleStreak !== null && (
               <Link
                 href="/achievements"
-                className="flex items-center gap-1 rounded-full bg-orange-100 px-2.5 py-1 text-xs font-semibold text-orange-800 transition-colors hover:bg-orange-200 dark:bg-orange-900/30 dark:text-orange-200 dark:hover:bg-orange-900/45"
+                className="flex items-center gap-1 rounded-full bg-orange-500 px-2.5 py-1 text-xs font-bold text-white shadow-sm transition-colors hover:bg-orange-600 dark:bg-orange-600 dark:text-white dark:hover:bg-orange-500"
               >
                 <Flame className="w-3.5 h-3.5" />
                 {visibleStreak}d
@@ -254,7 +253,7 @@ export function Sidebar({
             {visibleLevel !== null && (
               <Link
                 href="/achievements"
-                className="flex items-center gap-1 rounded-full bg-yellow-100 px-2.5 py-1 text-xs font-semibold text-yellow-900 transition-colors hover:bg-yellow-200 dark:bg-yellow-900/30 dark:text-yellow-200 dark:hover:bg-yellow-900/45"
+                className="flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-1 text-xs font-bold text-white shadow-sm transition-colors hover:bg-amber-600 dark:bg-amber-600 dark:text-white dark:hover:bg-amber-500"
               >
                 <Zap className="w-3.5 h-3.5" />
                 Lv.{visibleLevel}
@@ -283,9 +282,6 @@ export function Sidebar({
               <HelpCircle className="h-4 w-4" />
               Help & Support
             </button>
-          </li>
-          <li>
-            <ThemeToggle className="w-full justify-start gap-3 rounded-2xl px-4 py-3 text-sm font-semibold" />
           </li>
         </ul>
 
