@@ -2859,6 +2859,132 @@ export async function fetchDueFlashcards(limit = 20) {
   return apiRequest(`/v1/vocabulary/flashcards/due?limit=${limit}`);
 }
 
+// ── Content Hierarchy: Program Browser (Phase 8) ──
+
+export async function fetchContentPrograms(params?: { type?: string; language?: string; page?: number; pageSize?: number }) {
+  const p = new URLSearchParams();
+  if (params?.type) p.set('type', params.type);
+  if (params?.language) p.set('language', params.language);
+  if (params?.page) p.set('page', String(params.page));
+  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
+  const qs = p.toString();
+  return apiRequest(`/v1/programs${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchContentProgram(programId: string) {
+  return apiRequest(`/v1/programs/${encodeURIComponent(programId)}`);
+}
+
+export async function fetchContentTracks(programId: string) {
+  return apiRequest(`/v1/programs/${encodeURIComponent(programId)}/tracks`);
+}
+
+export async function fetchContentPackages(params?: { type?: string; page?: number; pageSize?: number }) {
+  const p = new URLSearchParams();
+  if (params?.type) p.set('type', params.type);
+  if (params?.page) p.set('page', String(params.page));
+  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
+  const qs = p.toString();
+  return apiRequest(`/v1/packages${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchContentPackage(packageId: string) {
+  return apiRequest(`/v1/packages/${encodeURIComponent(packageId)}`);
+}
+
+export async function fetchFreePreviewAssets() {
+  return apiRequest('/v1/free-previews');
+}
+
+export async function fetchFoundationResources(type?: string) {
+  return apiRequest(`/v1/foundation-resources${type ? `?type=${type}` : ''}`);
+}
+
+// ── Content Browser (access-aware) ──
+
+export async function fetchContentBrowser(params?: {
+  subtest?: string; profession?: string; difficulty?: string; language?: string;
+  provenance?: string; page?: number; pageSize?: number;
+}) {
+  const p = new URLSearchParams();
+  if (params?.subtest) p.set('subtest', params.subtest);
+  if (params?.profession) p.set('profession', params.profession);
+  if (params?.difficulty) p.set('difficulty', params.difficulty);
+  if (params?.language) p.set('language', params.language);
+  if (params?.provenance) p.set('provenance', params.provenance);
+  if (params?.page) p.set('page', String(params.page));
+  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
+  const qs = p.toString();
+  return apiRequest(`/v1/content-browser${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchContentAccess(contentId: string) {
+  return apiRequest(`/v1/content-browser/${encodeURIComponent(contentId)}/access`);
+}
+
+export async function fetchProgramsBrowser(params?: { type?: string; language?: string; page?: number; pageSize?: number }) {
+  const p = new URLSearchParams();
+  if (params?.type) p.set('type', params.type);
+  if (params?.language) p.set('language', params.language);
+  if (params?.page) p.set('page', String(params.page));
+  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
+  const qs = p.toString();
+  return apiRequest(`/v1/programs-browser${qs ? `?${qs}` : ''}`);
+}
+
+// ── Phase 6: Readiness & Skill-based Content ──
+
+export async function fetchReadinessScore() {
+  return apiRequest('/v1/readiness');
+}
+
+export async function fetchContentBySkill(subtest: string, skillTag?: string, page?: number, pageSize?: number) {
+  const p = new URLSearchParams({ subtest });
+  if (skillTag) p.set('skillTag', skillTag);
+  if (page) p.set('page', String(page));
+  if (pageSize) p.set('pageSize', String(pageSize));
+  return apiRequest(`/v1/content/by-skill?${p}`);
+}
+
+// ── Phase 9: Search & Recommendations ──
+
+export async function searchContent(params?: {
+  q?: string; subtest?: string; profession?: string; difficulty?: string;
+  language?: string; provenance?: string; contentType?: string;
+  minQuality?: number; mockEligible?: boolean; previewEligible?: boolean;
+  page?: number; pageSize?: number;
+}) {
+  const p = new URLSearchParams();
+  if (params?.q) p.set('q', params.q);
+  if (params?.subtest) p.set('subtest', params.subtest);
+  if (params?.profession) p.set('profession', params.profession);
+  if (params?.difficulty) p.set('difficulty', params.difficulty);
+  if (params?.language) p.set('language', params.language);
+  if (params?.provenance) p.set('provenance', params.provenance);
+  if (params?.contentType) p.set('contentType', params.contentType);
+  if (params?.minQuality) p.set('minQuality', String(params.minQuality));
+  if (params?.mockEligible) p.set('mockEligible', 'true');
+  if (params?.previewEligible) p.set('previewEligible', 'true');
+  if (params?.page) p.set('page', String(params.page));
+  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
+  const qs = p.toString();
+  return apiRequest(`/v1/search${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchSearchFacets() {
+  return apiRequest('/v1/search/facets');
+}
+
+export async function fetchRecommendations(count?: number) {
+  return apiRequest(`/v1/recommendations${count ? `?count=${count}` : ''}`);
+}
+
+// ── Phase 11: Media Access ──
+
+export async function fetchSignedMediaUrl(assetId: string) {
+  return apiRequest(`/v1/media/${encodeURIComponent(assetId)}/url`);
+}
+
 export async function submitFlashcardReview(lvId: string, quality: number) {
   return apiRequest(`/v1/vocabulary/flashcards/${encodeURIComponent(lvId)}/review`, {
     method: 'POST',
@@ -2868,6 +2994,116 @@ export async function submitFlashcardReview(lvId: string, quality: number) {
 
 export async function fetchVocabQuiz(count = 10) {
   return apiRequest(`/v1/vocabulary/quiz?count=${count}`);
+}
+
+// ── Admin: Content Hierarchy Management ──
+
+export async function fetchAdminContentPrograms(params?: { type?: string; language?: string; status?: string; page?: number; pageSize?: number }) {
+  const p = new URLSearchParams();
+  if (params?.type) p.set('type', params.type);
+  if (params?.language) p.set('language', params.language);
+  if (params?.status) p.set('status', params.status);
+  if (params?.page) p.set('page', String(params.page));
+  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
+  const qs = p.toString();
+  return apiRequest(`/v1/admin/programs${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchAdminContentPackages(params?: { type?: string; status?: string; page?: number; pageSize?: number }) {
+  const p = new URLSearchParams();
+  if (params?.type) p.set('type', params.type);
+  if (params?.status) p.set('status', params.status);
+  if (params?.page) p.set('page', String(params.page));
+  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
+  const qs = p.toString();
+  return apiRequest(`/v1/admin/packages${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchAdminContentInventory(params?: {
+  subtest?: string; profession?: string; language?: string; provenance?: string;
+  freshness?: string; qaStatus?: string; status?: string; packageId?: string;
+  importBatchId?: string; search?: string; page?: number; pageSize?: number;
+}) {
+  const p = new URLSearchParams();
+  if (params?.subtest) p.set('subtest', params.subtest);
+  if (params?.profession) p.set('profession', params.profession);
+  if (params?.language) p.set('language', params.language);
+  if (params?.provenance) p.set('provenance', params.provenance);
+  if (params?.freshness) p.set('freshness', params.freshness);
+  if (params?.qaStatus) p.set('qaStatus', params.qaStatus);
+  if (params?.status) p.set('status', params.status);
+  if (params?.packageId) p.set('packageId', params.packageId);
+  if (params?.importBatchId) p.set('importBatchId', params.importBatchId);
+  if (params?.search) p.set('search', params.search);
+  if (params?.page) p.set('page', String(params.page));
+  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
+  const qs = p.toString();
+  return apiRequest(`/v1/admin/content/inventory${qs ? `?${qs}` : ''}`);
+}
+
+export async function adminBulkImportContent(batchTitle: string, rows: unknown[]) {
+  return apiRequest('/v1/admin/content/bulk-import', {
+    method: 'POST',
+    body: JSON.stringify({ batchTitle, rows }),
+  });
+}
+
+export async function fetchAdminDedupGroups(page?: number, pageSize?: number) {
+  const p = new URLSearchParams();
+  if (page) p.set('page', String(page));
+  if (pageSize) p.set('pageSize', String(pageSize));
+  const qs = p.toString();
+  return apiRequest(`/v1/admin/dedup/groups${qs ? `?${qs}` : ''}`);
+}
+
+export async function adminDedupScan() {
+  return apiRequest('/v1/admin/dedup/scan', { method: 'POST' });
+}
+
+export async function adminDesignateCanonical(groupId: string, canonicalItemId: string) {
+  return apiRequest(`/v1/admin/dedup/groups/${encodeURIComponent(groupId)}/designate-canonical`, {
+    method: 'POST',
+    body: JSON.stringify({ canonicalItemId }),
+  });
+}
+
+export async function fetchAdminMediaAssets(params?: { mimeType?: string; status?: string; page?: number; pageSize?: number }) {
+  const p = new URLSearchParams();
+  if (params?.mimeType) p.set('mimeType', params.mimeType);
+  if (params?.status) p.set('status', params.status);
+  if (params?.page) p.set('page', String(params.page));
+  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
+  const qs = p.toString();
+  return apiRequest(`/v1/admin/media-assets${qs ? `?${qs}` : ''}`);
+}
+
+export async function adminProcessMediaAsset(assetId: string) {
+  return apiRequest(`/v1/admin/media/${encodeURIComponent(assetId)}/process`, { method: 'POST' });
+}
+
+export async function fetchAdminMediaAudit() {
+  return apiRequest('/v1/admin/media/audit');
+}
+
+export async function adminAssembleMockExam(professionId?: string, language?: string) {
+  return apiRequest('/v1/admin/mock/assemble', {
+    method: 'POST',
+    body: JSON.stringify({ professionId, language }),
+  });
+}
+
+export async function adminGenerateDiagnostic(professionId?: string) {
+  return apiRequest('/v1/admin/diagnostic/generate', {
+    method: 'POST',
+    body: JSON.stringify({ professionId }),
+  });
+}
+
+export async function adminUpdateContentEligibility(contentId: string, eligibility: { isMockEligible?: boolean; isDiagnosticEligible?: boolean }) {
+  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}/eligibility`, {
+    method: 'PATCH',
+    body: JSON.stringify(eligibility),
+  });
 }
 
 export async function submitVocabQuiz(payload: { answers: Array<{ termId: string; correct: boolean; userAnswer?: string }>; durationSeconds: number }) {

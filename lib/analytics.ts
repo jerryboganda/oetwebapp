@@ -93,6 +93,10 @@ const TRACKED_EVENTS = [
   // Marketplace events
   'marketplace_page_viewed',
   'marketplace_submission_created',
+  // Content discovery & hierarchy events
+  'discover_page_viewed',
+  'program_browser_viewed',
+  'packages_page_viewed',
 ] as const;
 
 export type AnalyticsEvent = typeof TRACKED_EVENTS[number];

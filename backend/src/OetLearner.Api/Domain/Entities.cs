@@ -235,6 +235,55 @@ public class ContentItem
     public DateTimeOffset? QaReviewedAt { get; set; }
 
     public string? PerformanceMetricsJson { get; set; }
+
+    // ── Content migration / hierarchy fields ──
+
+    [MaxLength(8)]
+    public string InstructionLanguage { get; set; } = "en";   // "en", "ar", "ar+en"
+
+    [MaxLength(8)]
+    public string ContentLanguage { get; set; } = "en";       // target language of the content
+
+    /// <summary>JSON array of profession codes for multi-profession content.</summary>
+    public string ProfessionIdsJson { get; set; } = "[]";
+
+    /// <summary>JSON array of package codes this item belongs to.</summary>
+    public string PackageEligibilityJson { get; set; } = "[]";
+
+    [MaxLength(64)]
+    public string? CohortRelevance { get; set; }   // batch/cohort code if cohort-specific
+
+    [MaxLength(32)]
+    public string SourceProvenance { get; set; } = "original";  // original, official_sample, recall, benchmark, contributed
+
+    [MaxLength(32)]
+    public string RightsStatus { get; set; } = "owned";  // owned, licensed, recall_unverified, official_attribution_required
+
+    [MaxLength(32)]
+    public string FreshnessConfidence { get; set; } = "current";  // current, likely_current, aging, superseded, archived
+
+    [MaxLength(64)]
+    public string? SupersededById { get; set; }
+
+    [MaxLength(64)]
+    public string? DuplicateGroupId { get; set; }
+
+    /// <summary>JSON array of {assetId, type, url, format, size, duration, thumbnailUrl}.</summary>
+    public string MediaManifestJson { get; set; } = "[]";
+
+    [MaxLength(512)]
+    public string? CanonicalSourcePath { get; set; }   // original Drive path for traceability
+
+    [MaxLength(64)]
+    public string? ImportBatchId { get; set; }
+
+    public bool IsPreviewEligible { get; set; }
+
+    public bool IsDiagnosticEligible { get; set; }
+
+    public bool IsMockEligible { get; set; }
+
+    public int QualityScore { get; set; }   // 0 = unrated, 1-5 admin-assigned quality
 }
 
 public class Attempt

@@ -27,7 +27,7 @@ const config: CapacitorConfig = {
     scrollEnabled: true,
   },
   android: {
-    allowMixedContent: true,
+    allowMixedContent: false,
   },
   plugins: {
     Keyboard: {

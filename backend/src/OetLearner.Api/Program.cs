@@ -364,6 +364,13 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddScoped<LearnerService>();
 builder.Services.AddScoped<ExpertService>();
 builder.Services.AddScoped<AdminService>();
+builder.Services.AddScoped<ContentHierarchyService>();
+builder.Services.AddScoped<ContentDeduplicationService>();
+builder.Services.AddScoped<ContentAccessService>();
+builder.Services.AddScoped<MockDiagnosticService>();
+builder.Services.AddScoped<ContentImportService>();
+builder.Services.AddScoped<ContentSearchService>();
+builder.Services.AddScoped<MediaNormalizationService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<AnalyticsIngestionService>();
 builder.Services.AddSingleton<PlatformLinkService>();
@@ -603,6 +610,7 @@ app.MapNotificationEndpoints();
 app.MapLearnerEndpoints();
 app.MapExpertEndpoints();
 app.MapAdminEndpoints();
+app.MapContentHierarchyEndpoints();
 
 // ── Phase 1 new endpoints ──
 app.MapGamificationEndpoints();

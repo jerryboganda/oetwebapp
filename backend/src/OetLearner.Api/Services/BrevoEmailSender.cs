@@ -10,6 +10,12 @@ public static class EmailTemplateKeys
 {
     public const string EmailVerificationOtp = "email_verification_otp";
     public const string PasswordResetOtp = "password_reset_otp";
+    public const string Welcome = "welcome";
+    public const string PasswordChanged = "password_changed";
+    public const string MfaEnabled = "mfa_enabled";
+    public const string AdminInvite = "admin_invite";
+    public const string SecurityAlert = "security_alert";
+    public const string ReviewCompleted = "review_completed";
 }
 
 public sealed class BrevoEmailSender(
@@ -79,6 +85,12 @@ public sealed class BrevoEmailSender(
         {
             EmailTemplateKeys.EmailVerificationOtp => _options.EmailVerificationTemplateId ?? throw new InvalidOperationException("Brevo:EmailVerificationTemplateId must be configured."),
             EmailTemplateKeys.PasswordResetOtp => _options.PasswordResetTemplateId ?? throw new InvalidOperationException("Brevo:PasswordResetTemplateId must be configured."),
+            EmailTemplateKeys.Welcome => _options.WelcomeTemplateId ?? throw new InvalidOperationException("Brevo:WelcomeTemplateId must be configured."),
+            EmailTemplateKeys.PasswordChanged => _options.PasswordChangedTemplateId ?? throw new InvalidOperationException("Brevo:PasswordChangedTemplateId must be configured."),
+            EmailTemplateKeys.MfaEnabled => _options.MfaEnabledTemplateId ?? throw new InvalidOperationException("Brevo:MfaEnabledTemplateId must be configured."),
+            EmailTemplateKeys.AdminInvite => _options.AdminInviteTemplateId ?? throw new InvalidOperationException("Brevo:AdminInviteTemplateId must be configured."),
+            EmailTemplateKeys.SecurityAlert => _options.SecurityAlertTemplateId ?? throw new InvalidOperationException("Brevo:SecurityAlertTemplateId must be configured."),
+            EmailTemplateKeys.ReviewCompleted => _options.ReviewCompletedTemplateId ?? throw new InvalidOperationException("Brevo:ReviewCompletedTemplateId must be configured."),
             _ => throw new InvalidOperationException($"Unsupported Brevo template key '{templateKey}'.")
         };
 

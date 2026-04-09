@@ -259,3 +259,10 @@ public enum SubscriptionItemStatus
     Cancelled,
     Expired
 }
+
+public enum MediaAssetStatus
+{
+    Processing,
+    Ready,
+    Failed
+}

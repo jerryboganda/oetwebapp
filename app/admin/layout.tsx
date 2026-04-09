@@ -15,7 +15,14 @@ import {
   CreditCard, 
   Bell,
   Flag, 
-  ShieldCheck 
+  ShieldCheck,
+  Upload,
+  Copy,
+  Image as ImageIcon,
+  Sparkles,
+  Store,
+  Snowflake,
+  GitBranch,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 
@@ -32,6 +39,13 @@ const adminNavItems: NavItem[] = [
   { href: '/admin/billing', label: 'Billing Ops', icon: <CreditCard className="w-5 h-5" />, matchPrefix: '/admin/billing' },
   { href: '/admin/flags', label: 'Feature Flags', icon: <Flag className="w-5 h-5" />, matchPrefix: '/admin/flags' },
   { href: '/admin/audit-logs', label: 'Audit Logs', icon: <ShieldCheck className="w-5 h-5" />, matchPrefix: '/admin/audit-logs' },
+  { href: '/admin/content-import', label: 'Content Import', icon: <Upload className="w-5 h-5" />, matchPrefix: '/admin/content-import' },
+  { href: '/admin/dedup', label: 'Deduplication', icon: <Copy className="w-5 h-5" />, matchPrefix: '/admin/dedup' },
+  { href: '/admin/media', label: 'Media Assets', icon: <ImageIcon className="w-5 h-5" />, matchPrefix: '/admin/media' },
+  { href: '/admin/content-generation', label: 'Content Generation', icon: <Sparkles className="w-5 h-5" />, matchPrefix: '/admin/content-generation' },
+  { href: '/admin/marketplace-review', label: 'Marketplace Review', icon: <Store className="w-5 h-5" />, matchPrefix: '/admin/marketplace-review' },
+  { href: '/admin/freeze', label: 'Content Freeze', icon: <Snowflake className="w-5 h-5" />, matchPrefix: '/admin/freeze' },
+  { href: '/admin/content-hierarchy', label: 'Content Hierarchy', icon: <GitBranch className="w-5 h-5" />, matchPrefix: '/admin/content-hierarchy' },
 ];
 
 const adminMobileNavItems: NavItem[] = [
@@ -48,8 +62,12 @@ const adminMobileMenuSections: MobileMenuSection[] = [
     items: [adminNavItems[0], adminNavItems[5], adminNavItems[6], adminNavItems[7]],
   },
   {
+    label: 'Content',
+    items: [adminNavItems[1], adminNavItems[12], adminNavItems[13], adminNavItems[14], adminNavItems[15], adminNavItems[18], adminNavItems[19]],
+  },
+  {
     label: 'Governance',
-    items: [adminNavItems[1], adminNavItems[2], adminNavItems[3], adminNavItems[4], adminNavItems[10], adminNavItems[11]],
+    items: [adminNavItems[2], adminNavItems[3], adminNavItems[4], adminNavItems[10], adminNavItems[11], adminNavItems[16], adminNavItems[17]],
   },
   {
     label: 'People & billing',
@@ -116,6 +134,34 @@ function getAdminPageTitle(pathname: string | null) {
 
   if (pathname.startsWith('/admin/audit-logs')) {
     return 'Audit Logs';
+  }
+
+  if (pathname.startsWith('/admin/content-import')) {
+    return 'Content Import';
+  }
+
+  if (pathname.startsWith('/admin/dedup')) {
+    return 'Deduplication';
+  }
+
+  if (pathname.startsWith('/admin/media')) {
+    return 'Media Assets';
+  }
+
+  if (pathname.startsWith('/admin/content-generation')) {
+    return 'Content Generation';
+  }
+
+  if (pathname.startsWith('/admin/marketplace-review')) {
+    return 'Marketplace Review';
+  }
+
+  if (pathname.startsWith('/admin/freeze')) {
+    return 'Content Freeze';
+  }
+
+  if (pathname.startsWith('/admin/content-hierarchy')) {
+    return 'Content Hierarchy';
   }
 
   return undefined;

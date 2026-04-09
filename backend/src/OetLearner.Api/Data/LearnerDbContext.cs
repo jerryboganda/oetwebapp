@@ -140,6 +140,34 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<BillingPlan> BillingPlans => Set<BillingPlan>();
 
+    // Content hierarchy entities
+    public DbSet<ContentProgram> ContentPrograms => Set<ContentProgram>();
+    public DbSet<ContentTrack> ContentTracks => Set<ContentTrack>();
+    public DbSet<ContentModule> ContentModules => Set<ContentModule>();
+    public DbSet<ContentLesson> ContentLessons => Set<ContentLesson>();
+    public DbSet<ContentReference> ContentReferences => Set<ContentReference>();
+
+    // Package / entitlement entities
+    public DbSet<ContentPackage> ContentPackages => Set<ContentPackage>();
+    public DbSet<PackageContentRule> PackageContentRules => Set<PackageContentRule>();
+
+    // Media asset entities
+    public DbSet<MediaAsset> MediaAssets => Set<MediaAsset>();
+
+    // Testimonial / marketing entities
+    public DbSet<TestimonialAsset> TestimonialAssets => Set<TestimonialAsset>();
+    public DbSet<MarketingAsset> MarketingAssets => Set<MarketingAsset>();
+    public DbSet<FreePreviewAsset> FreePreviewAssets => Set<FreePreviewAsset>();
+
+    // Foundation / remediation entities
+    public DbSet<FoundationResource> FoundationResources => Set<FoundationResource>();
+
+    // Content cohort overlay entities
+    public DbSet<ContentCohortOverlay> ContentCohortOverlays => Set<ContentCohortOverlay>();
+
+    // Content import entities
+    public DbSet<ContentImportBatch> ContentImportBatches => Set<ContentImportBatch>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ContentItem>().HasIndex(x => new { x.SubtestCode, x.Status });
@@ -306,5 +334,14 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<PaymentTransaction>().HasIndex(x => x.GatewayTransactionId).IsUnique();
         modelBuilder.Entity<PaymentWebhookEvent>().HasIndex(x => x.GatewayEventId).IsUnique();
         modelBuilder.Entity<PaymentWebhookEvent>().HasIndex(x => new { x.ProcessingStatus, x.ReceivedAt });
+
+        // ── Content hierarchy indexes ──
+        modelBuilder.Entity<ContentProgram>().HasIndex(x => x.Code).IsUnique();
+        modelBuilder.Entity<ContentItem>().HasIndex(x => x.InstructionLanguage);
+        modelBuilder.Entity<ContentItem>().HasIndex(x => x.SourceProvenance);
+        modelBuilder.Entity<ContentItem>().HasIndex(x => x.DuplicateGroupId);
+        modelBuilder.Entity<ContentItem>().HasIndex(x => x.ImportBatchId);
+        modelBuilder.Entity<ContentItem>().HasIndex(x => new { x.IsPreviewEligible, x.Status });
+        modelBuilder.Entity<ContentImportBatch>().HasIndex(x => x.CreatedBy);
     }
 }
