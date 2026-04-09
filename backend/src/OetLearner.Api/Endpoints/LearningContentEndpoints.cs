@@ -146,40 +146,7 @@ public static class LearningContentEndpoints
             return Results.Ok(new { id = guide.Id, title = guide.Title, summary = guide.Summary, contentHtml = guide.ContentHtml, examTypeCode = guide.ExamTypeCode, subtestCode = guide.SubtestCode, category = guide.Category, readingTimeMinutes = guide.ReadingTimeMinutes, publishedAt = guide.PublishedAt });
         });
 
-        // ── Pronunciation Drills ──────────────────────────────────────────
-        var pronunciation = v1.MapGroup("/pronunciation");
-
-        pronunciation.MapGet("/drills", async (
-            [FromQuery] string? difficulty,
-            LearnerDbContext db, CancellationToken ct) =>
-        {
-            var query = db.PronunciationDrills.Where(d => d.Status == "active");
-            if (!string.IsNullOrEmpty(difficulty)) query = query.Where(d => d.Difficulty == difficulty);
-            var drills = await query.ToListAsync(ct);
-            return Results.Ok(drills.Select(d => new { id = d.Id, targetPhoneme = d.TargetPhoneme, label = d.Label, exampleWordsJson = d.ExampleWordsJson, difficulty = d.Difficulty }));
-        });
-
-        pronunciation.MapGet("/drills/{drillId}", async (HttpContext http, string drillId, LearnerDbContext db, CancellationToken ct) =>
-        {
-            var drill = await db.PronunciationDrills.FindAsync([drillId], ct);
-            if (drill == null) return Results.NotFound(new { error = "NOT_FOUND" });
-
-            var progress = await db.LearnerPronunciationProgress.FirstOrDefaultAsync(p => p.UserId == http.UserId() && p.PhonemeCode == drill.TargetPhoneme, ct);
-            return Results.Ok(new
-            {
-                id = drill.Id, targetPhoneme = drill.TargetPhoneme, label = drill.Label,
-                exampleWordsJson = drill.ExampleWordsJson, minimalPairsJson = drill.MinimalPairsJson,
-                sentencesJson = drill.SentencesJson, audioModelUrl = drill.AudioModelUrl,
-                tipsHtml = drill.TipsHtml, difficulty = drill.Difficulty,
-                myProgress = progress == null ? null : new { averageScore = progress.AverageScore, attemptCount = progress.AttemptCount, lastPracticedAt = progress.LastPracticedAt }
-            });
-        });
-
-        pronunciation.MapGet("/my-progress", async (HttpContext http, LearnerDbContext db, CancellationToken ct) =>
-        {
-            var prog = await db.LearnerPronunciationProgress.Where(p => p.UserId == http.UserId()).ToListAsync(ct);
-            return Results.Ok(prog.Select(p => new { phonemeCode = p.PhonemeCode, averageScore = p.AverageScore, attemptCount = p.AttemptCount, lastPracticedAt = p.LastPracticedAt }));
-        });
+        // Pronunciation drills are already mapped in PronunciationEndpoints — removed duplicate
 
         return app;
     }

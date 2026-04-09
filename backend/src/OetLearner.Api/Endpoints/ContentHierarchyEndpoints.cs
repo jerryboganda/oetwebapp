@@ -225,8 +225,7 @@ public static class ContentHierarchyEndpoints
                 ? Results.Ok() : Results.NotFound())
             .RequireRateLimiting("PerUserWrite");
 
-        learner.MapGet("/readiness", async (HttpContext http, MockDiagnosticService service, CancellationToken ct)
-            => Results.Ok(await service.CalculateReadinessAsync(UserId(http), ct)));
+        // readiness is already mapped in LearnerEndpoints — removed duplicate
 
         learner.MapGet("/content/by-skill", async (MockDiagnosticService service, CancellationToken ct,
             string? skillTag, string subtest, int? page, int? pageSize)
