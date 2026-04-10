@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 
 namespace OetLearner.Api.Data;
 
@@ -37,6 +38,8 @@ public static class DatabaseConfiguration
         }
 
         optionsBuilder.UseNpgsql(connectionString);
+        optionsBuilder.ConfigureWarnings(w =>
+            w.Ignore(RelationalEventId.PendingModelChangesWarning));
     }
 
     private static bool IsSqliteConnectionString(string connectionString)
