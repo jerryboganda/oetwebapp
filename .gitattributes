@@ -1,0 +1,31 @@
+# Auto-detect text files and normalise line endings to LF in the repo
+* text=auto eol=lf
+
+# Force LF for shell scripts (critical for Linux deployment)
+*.sh text eol=lf
+
+# Force LF for other script/config files
+*.yml text eol=lf
+*.yaml text eol=lf
+*.json text eol=lf
+*.ts text eol=lf
+*.tsx text eol=lf
+*.js text eol=lf
+*.jsx text eol=lf
+*.mjs text eol=lf
+*.css text eol=lf
+*.html text eol=lf
+*.md text eol=lf
+Dockerfile text eol=lf
+docker-compose*.yml text eol=lf
+
+# Binary files
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.woff binary
+*.woff2 binary
+*.ttf binary
+*.eot binary
