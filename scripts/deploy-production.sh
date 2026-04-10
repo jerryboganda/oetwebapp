@@ -39,19 +39,15 @@ echo "[deploy] STEP 1/6: stopping old containers..."
 docker compose --env-file .env.production -f docker-compose.production.yml down --remove-orphans 2>&1 || echo "[deploy] STEP 1 warn: compose down returned non-zero (continuing)"
 echo "[deploy] STEP 1 done"
 
-# ── Step 2: Aggressive pre-build cleanup (free disk space) ──
+# ── Step 2: Pre-build cleanup (free disk space without destroying layer cache) ──
 echo ""
-echo "[deploy] STEP 2/6: aggressive pre-build cleanup..."
-echo "[deploy] removing ALL unused containers..."
+echo "[deploy] STEP 2/6: pre-build cleanup..."
+echo "[deploy] removing stopped containers..."
 docker container prune -f 2>&1 || true
-echo "[deploy] removing ALL unused images..."
-docker image prune -af 2>&1 || true
-echo "[deploy] removing ALL build cache..."
-docker builder prune -af 2>&1 || true
-echo "[deploy] removing ALL unused volumes (except named)..."
-docker volume prune -f 2>&1 || true
-echo "[deploy] removing ALL unused networks..."
-docker network prune -f 2>&1 || true
+echo "[deploy] removing dangling images (preserving tagged/cached images)..."
+docker image prune -f 2>&1 || true
+echo "[deploy] removing unused build cache older than 24h..."
+docker builder prune -f --filter "until=24h" 2>&1 || true
 echo "[deploy] disk space AFTER cleanup:"
 df -h / | tail -1 || true
 echo "[deploy] STEP 2 done"
