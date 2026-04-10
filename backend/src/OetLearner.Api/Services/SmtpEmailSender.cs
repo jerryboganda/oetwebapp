@@ -1,8 +1,10 @@
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using System.Diagnostics;
 using System.Net;
 using System.Net.Mail;
+using System.Text;
 using OetLearner.Api.Configuration;
 
 namespace OetLearner.Api.Services;
@@ -54,9 +56,16 @@ public sealed class SmtpEmailSender(
             throw new InvalidOperationException("SMTP:FromEmail must be configured when SMTP is enabled.");
         }
 
+        logger.LogInformation(
+            "SMTP sending email: To={To} Subject={Subject} Host={Host}:{Port} From={From} SSL={Ssl}",
+            message.To, message.Subject, _options.Host, _options.Port, _options.FromEmail, _options.EnableSsl);
+
+        var sw = Stopwatch.StartNew();
+
         using var smtpClient = new SmtpClient(_options.Host, _options.Port)
         {
-            EnableSsl = _options.EnableSsl
+            EnableSsl = _options.EnableSsl,
+            Timeout = 30_000
         };
 
         if (!string.IsNullOrWhiteSpace(_options.Username))
@@ -68,17 +77,48 @@ public sealed class SmtpEmailSender(
         {
             From = new MailAddress(_options.FromEmail, _options.FromName),
             Subject = message.Subject,
-            Body = message.TextBody,
-            IsBodyHtml = false
+            SubjectEncoding = Encoding.UTF8,
+            BodyEncoding = Encoding.UTF8
         };
         mailMessage.To.Add(new MailAddress(message.To));
 
         if (!string.IsNullOrWhiteSpace(message.HtmlBody))
         {
-            mailMessage.AlternateViews.Add(AlternateView.CreateAlternateViewFromString(message.HtmlBody, null, "text/html"));
-            mailMessage.IsBodyHtml = true;
+            // Multipart: text/plain body + text/html alternate view
+            mailMessage.Body = message.TextBody;
+            mailMessage.IsBodyHtml = false;
+            mailMessage.AlternateViews.Add(
+                AlternateView.CreateAlternateViewFromString(message.HtmlBody, Encoding.UTF8, "text/html"));
+        }
+        else
+        {
+            mailMessage.Body = message.TextBody;
+            mailMessage.IsBodyHtml = false;
         }
 
-        await smtpClient.SendMailAsync(mailMessage);
+        try
+        {
+            await smtpClient.SendMailAsync(mailMessage, cancellationToken);
+            sw.Stop();
+            logger.LogInformation(
+                "SMTP email sent successfully: To={To} Subject={Subject} ElapsedMs={ElapsedMs}",
+                message.To, message.Subject, sw.ElapsedMilliseconds);
+        }
+        catch (SmtpException ex)
+        {
+            sw.Stop();
+            logger.LogError(ex,
+                "SMTP send failed: To={To} Subject={Subject} StatusCode={StatusCode} ElapsedMs={ElapsedMs}",
+                message.To, message.Subject, ex.StatusCode, sw.ElapsedMilliseconds);
+            throw;
+        }
+        catch (Exception ex)
+        {
+            sw.Stop();
+            logger.LogError(ex,
+                "SMTP send error: To={To} Subject={Subject} Error={Error} ElapsedMs={ElapsedMs}",
+                message.To, message.Subject, ex.Message, sw.ElapsedMilliseconds);
+            throw;
+        }
     }
 }
