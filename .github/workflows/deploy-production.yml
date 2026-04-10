@@ -43,9 +43,13 @@ jobs:
           command_timeout: 30m
           script_stop: true
           script: |
-            set -euo pipefail
+            set -eo pipefail
+            echo "[ci] SSH connected at $(date -u)"
             cd "${{ secrets.VPS_APP_DIR }}"
+            echo "[ci] git pull..."
             git fetch origin main
             git reset --hard origin/main
             git clean -fd
+            echo "[ci] running deploy script..."
             bash ./scripts/deploy-production.sh
+            echo "[ci] SSH session complete at $(date -u)"
