@@ -5,10 +5,11 @@ import { Video, Clock, PlayCircle, ChevronRight } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
 import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero } from '@/components/domain';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { Card } from '@/components/ui/card';
 import { fetchVideoLessons } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
@@ -28,6 +29,11 @@ export default function LessonsPage() {
   const [error, setError] = useState<string | null>(null);
   const [examType, setExamType] = useState('oet');
   const [subtest, setSubtest] = useState('');
+  const heroHighlights = [
+    { icon: PlayCircle, label: 'Format', value: 'Video lessons' },
+    { icon: Clock, label: 'Filter', value: subtest || 'All subtests' },
+    { icon: ChevronRight, label: 'Library', value: 'Guided practice' },
+  ];
 
   useEffect(() => {
     analytics.track('lessons_page_viewed');
@@ -45,50 +51,70 @@ export default function LessonsPage() {
 
   return (
     <LearnerDashboardShell>
+      <div className="mx-auto max-w-6xl space-y-6 px-4 py-6">
       <LearnerPageHero
+        eyebrow="Learn"
         title="Video Lessons"
-        description="Watch expert-led OET preparation lessons"
+        description="Watch expert-led OET preparation lessons."
         icon={Video}
+        highlights={heroHighlights}
       />
 
       {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
 
-      <div className="flex flex-wrap gap-3 mb-6">
-        <select value={examType} onChange={e => {
-          setError(null);
-          setLoading(true);
-          setExamType(e.target.value);
-        }} className="px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-          <option value="oet">OET</option>
-          <option value="ielts">IELTS</option>
-          <option value="pte">PTE</option>
-        </select>
-        <select value={subtest} onChange={e => {
-          setError(null);
-          setLoading(true);
-          setSubtest(e.target.value);
-        }} className="px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-          <option value="">All Subtests</option>
-          <option value="writing">Writing</option>
-          <option value="speaking">Speaking</option>
-          <option value="reading">Reading</option>
-          <option value="listening">Listening</option>
-        </select>
-      </div>
+      <Card className="p-5 shadow-sm">
+        <LearnerSurfaceSectionHeader
+          eyebrow="Library filters"
+          title="Narrow the lesson set"
+          description="Use the same chip-and-card language as the dashboard instead of browser-style controls."
+          className="mb-4"
+        />
+        <div className="flex flex-wrap gap-3">
+          <select value={examType} onChange={e => {
+            setError(null);
+            setLoading(true);
+            setExamType(e.target.value);
+          }} className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-navy shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+            <option value="oet">OET</option>
+            <option value="ielts">IELTS</option>
+            <option value="pte">PTE</option>
+          </select>
+          <select value={subtest} onChange={e => {
+            setError(null);
+            setLoading(true);
+            setSubtest(e.target.value);
+          }} className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-navy shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+            <option value="">All Subtests</option>
+            <option value="writing">Writing</option>
+            <option value="speaking">Speaking</option>
+            <option value="reading">Reading</option>
+            <option value="listening">Listening</option>
+          </select>
+        </div>
+      </Card>
 
       {loading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-52 rounded-xl" />)}
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-52 rounded-3xl" />)}
         </div>
       ) : lessons.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">No video lessons available for this selection.</div>
+        <Card className="border-dashed border-border p-8 text-center shadow-sm">
+          <p className="text-sm text-muted">No video lessons available for this selection.</p>
+        </Card>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div>
+          <LearnerSurfaceSectionHeader
+            eyebrow="Lessons"
+            title="Curated video lessons"
+            description="Each card keeps the same border, radius, and shadow language as the dashboard."
+            className="mb-4"
+          />
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
           {lessons.map((lesson, i) => (
             <MotionItem key={lesson.id} delayIndex={i}>
               <Link href={`/lessons/${lesson.id}`}>
-                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden hover:shadow-md transition-shadow cursor-pointer group">
-                  <div className="bg-gradient-to-br from-blue-500 to-indigo-600 h-36 flex items-center justify-center relative">
+                <div className="group overflow-hidden rounded-3xl border border-border bg-surface shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical active:scale-[0.99]">
+                  <div className="relative flex h-36 items-center justify-center bg-gradient-to-br from-primary/90 to-indigo-600">
                     {lesson.thumbnailUrl ? (
                       <Image
                         src={lesson.thumbnailUrl}
@@ -99,31 +125,33 @@ export default function LessonsPage() {
                         className="object-cover"
                       />
                     ) : (
-                      <PlayCircle className="w-14 h-14 text-white/70 group-hover:text-white transition-colors" />
+                      <PlayCircle className="h-14 w-14 text-white/70 transition-colors group-hover:text-white" />
                     )}
-                    <div className="absolute bottom-2 right-2 bg-black/60 text-white text-xs px-1.5 py-0.5 rounded flex items-center gap-1">
-                      <Clock className="w-3 h-3" />
+                    <div className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-black/60 px-2 py-1 text-xs text-white">
+                      <Clock className="h-3 w-3" />
                       {formatDuration(lesson.durationSeconds)}
                     </div>
                   </div>
-                  <div className="p-4">
+                  <div className="p-5">
                     <div className="flex items-center gap-2 mb-1.5">
                       {lesson.subtestCode && (
-                        <span className="text-xs px-2 py-0.5 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 capitalize">
+                        <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs capitalize text-primary-dark">
                           {SUBTEST_LABELS[lesson.subtestCode] ?? lesson.subtestCode}
                         </span>
                       )}
-                      <span className="text-xs text-gray-400 capitalize">{lesson.difficultyLevel}</span>
+                      <span className="text-xs capitalize text-muted">{lesson.difficultyLevel}</span>
                     </div>
-                    <div className="font-semibold text-gray-900 dark:text-white text-sm group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors line-clamp-2">{lesson.title}</div>
-                    {lesson.description && <div className="text-xs text-gray-500 mt-1 line-clamp-2">{lesson.description}</div>}
+                    <div className="line-clamp-2 text-sm font-semibold text-navy transition-colors group-hover:text-primary-dark">{lesson.title}</div>
+                    {lesson.description && <div className="mt-1 line-clamp-2 text-xs text-muted">{lesson.description}</div>}
                   </div>
                 </div>
               </Link>
             </MotionItem>
           ))}
+          </div>
         </div>
       )}
+      </div>
     </LearnerDashboardShell>
   );
 }

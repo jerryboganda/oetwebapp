@@ -5,11 +5,12 @@ import { MotionItem } from '@/components/ui/motion-primitives';
 import { Lightbulb, ChevronRight, Clock } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero } from '@/components/domain';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { fetchStrategyGuides } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { Card } from '@/components/ui/card';
 
 type StrategyGuide = {
   id: string;
@@ -55,75 +56,101 @@ export default function StrategiesPage() {
 
   return (
     <LearnerDashboardShell>
+      <div className="mx-auto max-w-6xl space-y-6 px-4 py-6">
       <LearnerPageHero
+        eyebrow="Learn"
         title="Strategy Guides"
-        description="Expert strategies to improve your exam performance"
+        description="Expert strategies to improve your exam performance."
         icon={Lightbulb}
+        highlights={[
+          { icon: Lightbulb, label: 'Format', value: 'Expert guides' },
+          { icon: Clock, label: 'Filter', value: subtest || 'All subtests' },
+          { icon: ChevronRight, label: 'Focus', value: 'Actionable' },
+        ]}
       />
 
       {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
 
-      <div className="flex flex-wrap gap-3 mb-6">
-        <select value={examType} onChange={e => {
-          setError(null);
-          setLoading(true);
-          setExamType(e.target.value);
-        }} className="px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-          <option value="oet">OET</option>
-          <option value="ielts">IELTS</option>
-          <option value="pte">PTE</option>
-        </select>
-        <select value={subtest} onChange={e => {
-          setError(null);
-          setLoading(true);
-          setSubtest(e.target.value);
-        }} className="px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300">
-          <option value="">All Subtests</option>
-          <option value="writing">Writing</option>
-          <option value="speaking">Speaking</option>
-          <option value="reading">Reading</option>
-          <option value="listening">Listening</option>
-        </select>
-      </div>
+      <Card className="p-5 shadow-sm">
+        <LearnerSurfaceSectionHeader
+          eyebrow="Library filters"
+          title="Narrow the guide set"
+          description="Keep the controls consistent with the learner dashboard surface language."
+          className="mb-4"
+        />
+        <div className="flex flex-wrap gap-3">
+          <select value={examType} onChange={e => {
+            setError(null);
+            setLoading(true);
+            setExamType(e.target.value);
+          }} className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-navy shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+            <option value="oet">OET</option>
+            <option value="ielts">IELTS</option>
+            <option value="pte">PTE</option>
+          </select>
+          <select value={subtest} onChange={e => {
+            setError(null);
+            setLoading(true);
+            setSubtest(e.target.value);
+          }} className="rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-navy shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+            <option value="">All Subtests</option>
+            <option value="writing">Writing</option>
+            <option value="speaking">Speaking</option>
+            <option value="reading">Reading</option>
+            <option value="listening">Listening</option>
+          </select>
+        </div>
+      </Card>
 
       {loading ? (
         <div className="space-y-3">
-          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}
+          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-3xl" />)}
         </div>
       ) : guides.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">No strategy guides available for this selection.</div>
+        <Card className="border-dashed border-border p-8 text-center shadow-sm">
+          <p className="text-sm text-muted">No strategy guides available for this selection.</p>
+        </Card>
       ) : (
-        <div className="space-y-3">
+        <div>
+          <LearnerSurfaceSectionHeader
+            eyebrow="Guides"
+            title="Expert strategy cards"
+            description="Each guide is presented as a calm, actionable surface instead of a generic list item."
+            className="mb-4"
+          />
+          <div className="space-y-3">
           {guides.map((guide, i) => (
             <MotionItem key={guide.id} delayIndex={i}>
               <Link href={`/strategies/${guide.id}`}>
-                <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-5 hover:border-yellow-300 dark:hover:border-yellow-600 hover:shadow-sm transition-all cursor-pointer group flex items-center gap-4">
-                  <div className="p-2.5 bg-yellow-100 dark:bg-yellow-900/30 rounded-lg flex-shrink-0">
-                    <Lightbulb className="w-5 h-5 text-yellow-600 dark:text-yellow-400" />
+                <div className="group flex cursor-pointer items-center gap-4 rounded-3xl border border-border bg-surface p-5 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical active:scale-[0.99]">
+                  <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-yellow-50 text-yellow-600">
+                    <Lightbulb className="h-5 w-5" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="font-semibold text-gray-900 dark:text-white group-hover:text-yellow-700 dark:group-hover:text-yellow-400 transition-colors">{guide.title}</div>
-                    {guide.summary && <div className="text-sm text-gray-500 mt-0.5 line-clamp-1">{guide.summary}</div>}
+                    <div className="font-semibold text-navy transition-colors group-hover:text-yellow-700">{guide.title}</div>
+                    {guide.summary && <div className="mt-0.5 line-clamp-1 text-sm text-muted">{guide.summary}</div>}
                     <div className="flex items-center gap-3 mt-2">
                       {guide.subtestCode && (
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium capitalize ${SUBTEST_COLORS[guide.subtestCode] ?? 'bg-gray-100 text-gray-500'}`}>
+                        <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${SUBTEST_COLORS[guide.subtestCode] ?? 'bg-gray-100 text-gray-500'}`}>
                           {guide.subtestCode}
                         </span>
                       )}
-                      <div className="flex items-center gap-1 text-xs text-gray-400">
-                        <Clock className="w-3.5 h-3.5" />
+                      <div className="flex items-center gap-1 text-xs text-muted">
+                        <Clock className="h-3.5 w-3.5" />
                         {guide.estimatedMinutes ?? guide.readingTimeMinutes} min
                       </div>
-                      <span className="text-xs text-gray-400 capitalize">{formatCategory(guide.category)}</span>
+                      <span className="text-xs capitalize text-muted">{formatCategory(guide.category)}</span>
                     </div>
                   </div>
-                  <ChevronRight className="w-5 h-5 text-gray-300 group-hover:text-yellow-400 flex-shrink-0 transition-colors" />
+                  <ChevronRight className="h-5 w-5 shrink-0 text-muted transition-colors group-hover:text-yellow-400" />
                 </div>
               </Link>
             </MotionItem>
           ))}
+          </div>
         </div>
       )}
+      </div>
     </LearnerDashboardShell>
   );
 }

@@ -306,7 +306,7 @@ const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellBut
       ref={ref}
       type="button"
       className={cn(
-        'relative touch-target rounded-2xl p-2 text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+        'relative inline-flex h-9 w-9 items-center justify-center rounded-lg p-2 text-muted transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
         className,
       )}
       aria-label={buttonProps['aria-label'] ?? `Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}

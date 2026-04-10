@@ -6,9 +6,10 @@ import { MessageSquare, Plus, Clock, ChevronRight, Mic, Zap, History } from 'luc
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, ExamTypeBadge } from '@/components/domain';
+import { LearnerPageHero, LearnerSurfaceSectionHeader, ExamTypeBadge } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { Card } from '@/components/ui/card';
 import { analytics } from '@/lib/analytics';
 import {
   createConversation,
@@ -75,25 +76,35 @@ export default function ConversationPage() {
 
   const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
   const formatDuration = (s: number) => s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
+  const heroHighlights = [
+    { icon: MessageSquare, label: 'Sessions', value: `${history.length}` },
+    { icon: Mic, label: 'Mode', value: 'AI partner' },
+    { icon: History, label: 'Status', value: 'Live history' },
+  ];
 
   return (
     <LearnerDashboardShell>
+      <div className="mx-auto max-w-6xl space-y-6 px-4 py-6">
       <LearnerPageHero
+        eyebrow="Practice"
         title="AI Conversation Practice"
         description="Practise speaking with an AI partner. Get real-time transcription and detailed evaluation."
         icon={MessageSquare}
         accent="purple"
+        highlights={heroHighlights}
       />
 
       {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
 
       {/* Start New Session */}
       <section className="mb-8">
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-          <Plus className="w-5 h-5 text-purple-500" />
-          Start a New Conversation
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <LearnerSurfaceSectionHeader
+          eyebrow="Session builder"
+          title="Start a new conversation"
+          description="Keep the launch cards aligned with the rest of the learner dashboard."
+          className="mb-4"
+        />
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
           {TASK_TYPES.map((task, i) => (
             <MotionItem
               key={task.code}
@@ -102,19 +113,19 @@ export default function ConversationPage() {
               <button
                 onClick={() => handleStart(task.code)}
                 disabled={creating}
-                className="group text-left bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-5 hover:border-purple-300 dark:hover:border-purple-600 hover:shadow-lg hover:shadow-purple-500/5 transition-all disabled:opacity-50 w-full"
+                className="group w-full rounded-3xl border border-border bg-surface p-5 text-left shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical disabled:opacity-50"
               >
               <div className="flex items-start gap-3">
-                <div className="p-2.5 rounded-xl bg-purple-100 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400 group-hover:bg-purple-200 dark:group-hover:bg-purple-900/50 transition-colors">
+                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
                   <task.icon className="w-5 h-5" />
                 </div>
                 <div className="flex-1 min-w-0">
-                  <h3 className="font-semibold text-gray-900 dark:text-white text-sm group-hover:text-purple-600 dark:group-hover:text-purple-400 transition-colors">
+                  <h3 className="text-sm font-semibold text-navy transition-colors group-hover:text-primary-dark">
                     {task.label}
                   </h3>
-                  <p className="text-xs text-gray-500 mt-1">{task.description}</p>
+                  <p className="mt-1 text-xs text-muted">{task.description}</p>
                 </div>
-                <ChevronRight className="w-4 h-4 mt-1 text-gray-300 group-hover:text-purple-400 transition-colors" />
+                <ChevronRight className="mt-1 h-4 w-4 text-muted transition-colors group-hover:text-primary" />
               </div>
               </button>
             </MotionItem>
@@ -124,23 +135,25 @@ export default function ConversationPage() {
 
       {/* History */}
       <section>
-        <h2 className="text-lg font-bold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-          <History className="w-5 h-5 text-gray-400" />
-          Recent Conversations
-        </h2>
+        <LearnerSurfaceSectionHeader
+          eyebrow="History"
+          title="Recent conversations"
+          description="Keep the history items on soft surfaces so they match the dashboard language."
+          className="mb-4"
+        />
 
         {loading ? (
           <div className="space-y-3">
             {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-20 rounded-xl" />
+              <Skeleton key={i} className="h-20 rounded-3xl" />
             ))}
           </div>
         ) : history.length === 0 ? (
-          <div className="text-center py-12 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
-            <MessageSquare className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-            <p className="text-sm font-semibold text-gray-600 dark:text-gray-400">No conversations yet</p>
-            <p className="text-xs text-gray-400 mt-1">Start your first AI conversation above</p>
-          </div>
+          <Card className="border-dashed border-border p-8 text-center shadow-sm">
+            <MessageSquare className="mx-auto mb-3 h-10 w-10 text-gray-300" />
+            <p className="text-sm font-semibold text-navy">No conversations yet</p>
+            <p className="mt-1 text-xs text-muted">Start your first AI conversation above</p>
+          </Card>
         ) : (
           <MotionPresence>
             <div className="space-y-3">
@@ -154,34 +167,34 @@ export default function ConversationPage() {
                   >
                     <Link
                       href={isViewable ? `/conversation/${session.id}/results` : `/conversation/${session.id}`}
-                      className="block bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 hover:border-purple-300 dark:hover:border-purple-600 hover:shadow-sm transition-all"
+                      className="block rounded-3xl border border-border bg-surface p-4 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical"
                     >
                       <div className="flex items-center justify-between gap-3">
                         <div className="flex items-center gap-3 min-w-0">
-                          <div className="p-2 rounded-lg bg-purple-50 dark:bg-purple-900/20">
-                            <MessageSquare className="w-4 h-4 text-purple-500" />
+                          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                            <MessageSquare className="h-4 w-4" />
                           </div>
                           <div className="min-w-0">
                             <div className="flex items-center gap-2 mb-0.5">
-                              <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">
+                              <span className="truncate text-sm font-semibold text-navy">
                                 {session.taskTypeCode.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
                               </span>
                               <ExamTypeBadge examType={session.examTypeCode} size="sm" />
                             </div>
-                            <div className="flex items-center gap-3 text-xs text-gray-400">
+                            <div className="flex items-center gap-3 text-xs text-muted">
                               <span>{dateFormatter.format(new Date(session.createdAt))}</span>
                               <span className="flex items-center gap-1">
-                                <Clock className="w-3 h-3" />{formatDuration(session.durationSeconds)}
+                                <Clock className="h-3 w-3" />{formatDuration(session.durationSeconds)}
                               </span>
                               <span>{session.turnCount} turns</span>
                             </div>
                           </div>
                         </div>
                         <div className="flex items-center gap-2">
-                          <span className={`text-xs font-medium px-2 py-0.5 rounded-full ${stateInfo.color}`}>
+                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${stateInfo.color}`}>
                             {stateInfo.label}
                           </span>
-                          <ChevronRight className="w-4 h-4 text-gray-300" />
+                          <ChevronRight className="h-4 w-4 text-muted" />
                         </div>
                       </div>
                     </Link>
@@ -192,6 +205,7 @@ export default function ConversationPage() {
           </MotionPresence>
         )}
       </section>
+      </div>
     </LearnerDashboardShell>
   );
 }

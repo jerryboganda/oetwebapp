@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { InlineAlert } from '@/components/ui/alert';
@@ -248,6 +249,11 @@ function MicEnvironmentCheckContent() {
   }, [isNativePlatform]);
 
   const allChecksPassed = permissionStatus === 'success' && recordingStatus === 'finished' && !isNoisy && isCompatible;
+  const heroHighlights = [
+    { icon: Mic, label: 'Check type', value: 'Microphone setup' },
+    { icon: Volume2, label: 'Playback', value: 'Sample recording' },
+    { icon: BarChart3, label: 'Environment', value: 'Noise monitoring' },
+  ];
 
   const handleContinue = () => {
     if (allChecksPassed) {
@@ -259,29 +265,46 @@ function MicEnvironmentCheckContent() {
 
   return (
     <LearnerDashboardShell pageTitle="Readiness Check">
-      <div className="space-y-6">
+      <div className="mx-auto max-w-5xl space-y-6 px-4 py-6">
+        <LearnerPageHero
+          eyebrow="Practice"
+          icon={Mic}
+          title="Readiness Check"
+          description="Confirm that your microphone, playback, and surroundings are ready before you start speaking."
+          highlights={heroHighlights}
+        />
 
-        <InlineAlert variant="info">
-          These checks ensure the AI can accurately transcribe and evaluate your speech. If you encounter issues, check your device settings or try a different microphone.
-        </InlineAlert>
+        <Card className="border-border bg-surface p-5 shadow-sm">
+          <InlineAlert variant="info">
+            These checks ensure the AI can accurately transcribe and evaluate your speech. If you encounter issues, check your device settings or try a different microphone.
+          </InlineAlert>
+        </Card>
 
         {/* Compatibility Warning */}
         {isCompatible === false && (
-          <InlineAlert variant="error">
-            Your browser or device does not support the required audio recording features. Please try using a modern browser like Chrome or Safari.
-          </InlineAlert>
+          <Card className="border-rose-200 bg-rose-50/60 p-5 shadow-sm">
+            <InlineAlert variant="error">
+              Your browser or device does not support the required audio recording features. Please try using a modern browser like Chrome or Safari.
+            </InlineAlert>
+          </Card>
         )}
 
+        <LearnerSurfaceSectionHeader
+          eyebrow="System checks"
+          title="Complete each readiness step"
+          description="Each stage uses the same card rhythm and border language as the dashboard."
+        />
+
           {/* Step 1: Permission */}
-          <section className={`bg-white rounded-2xl border p-6 transition-all ${permissionStatus === 'success' ? 'border-green-200' : 'border-gray-200 shadow-sm'}`}>
+          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-all ${permissionStatus === 'success' ? 'border-green-200' : 'border-border'}`}>
             <div className="flex items-start justify-between mb-6">
               <div className="flex items-center gap-4">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${permissionStatus === 'success' ? 'bg-green-50' : 'bg-blue-50'}`}>
-                  <Mic className={`w-6 h-6 ${permissionStatus === 'success' ? 'text-green-600' : 'text-blue-600'}`} />
+                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${permissionStatus === 'success' ? 'bg-green-50' : 'bg-blue-50'}`}>
+                  <Mic className={`h-6 w-6 ${permissionStatus === 'success' ? 'text-green-600' : 'text-blue-600'}`} />
                 </div>
                 <div>
-                  <h2 className="font-bold text-gray-900">Microphone Access</h2>
-                  <p className="text-sm text-gray-500">Allow access to your microphone to record your speech.</p>
+                  <h2 className="font-bold text-navy">Microphone Access</h2>
+                  <p className="text-sm text-muted">Allow access to your microphone to record your speech.</p>
                 </div>
               </div>
               {permissionStatus === 'success' && <CheckCircle2 className="w-6 h-6 text-green-500" />}
@@ -301,15 +324,15 @@ function MicEnvironmentCheckContent() {
           </section>
 
           {/* Step 2: Recording & Playback Test */}
-          <section className={`bg-white rounded-2xl border p-6 transition-all ${recordingStatus === 'finished' ? 'border-green-200' : 'border-gray-200 shadow-sm'} ${permissionStatus !== 'success' ? 'opacity-50 pointer-events-none' : ''}`}>
+          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-all ${recordingStatus === 'finished' ? 'border-green-200' : 'border-border'} ${permissionStatus !== 'success' ? 'pointer-events-none opacity-50' : ''}`}>
             <div className="flex items-start justify-between mb-6">
               <div className="flex items-center gap-4">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${recordingStatus === 'finished' ? 'bg-green-50' : 'bg-purple-50'}`}>
-                  <Volume2 className={`w-6 h-6 ${recordingStatus === 'finished' ? 'text-green-600' : 'text-purple-600'}`} />
+                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${recordingStatus === 'finished' ? 'bg-green-50' : 'bg-purple-50'}`}>
+                  <Volume2 className={`h-6 w-6 ${recordingStatus === 'finished' ? 'text-green-600' : 'text-purple-600'}`} />
                 </div>
                 <div>
-                  <h2 className="font-bold text-gray-900">Recording & Playback</h2>
-                  <p className="text-sm text-gray-500">Record a 3-second sample to ensure your audio is clear.</p>
+                  <h2 className="font-bold text-navy">Recording & Playback</h2>
+                  <p className="text-sm text-muted">Record a 3-second sample to ensure your audio is clear.</p>
                 </div>
               </div>
               {recordingStatus === 'finished' && <CheckCircle2 className="w-6 h-6 text-green-500" />}
@@ -339,22 +362,22 @@ function MicEnvironmentCheckContent() {
           </section>
 
           {/* Step 3: Environment Check */}
-          <section className={`bg-white rounded-2xl border p-6 transition-all ${isNoisy ? 'border-amber-200' : 'border-gray-200 shadow-sm'} ${permissionStatus !== 'success' ? 'opacity-50 pointer-events-none' : ''}`}>
+          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-all ${isNoisy ? 'border-amber-200' : 'border-border'} ${permissionStatus !== 'success' ? 'pointer-events-none opacity-50' : ''}`}>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-4">
-                <div className={`w-12 h-12 rounded-2xl flex items-center justify-center transition-colors ${isNoisy ? 'bg-amber-50' : 'bg-blue-50'}`}>
-                  <BarChart3 className={`w-6 h-6 ${isNoisy ? 'text-amber-600' : 'text-blue-600'}`} />
+                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${isNoisy ? 'bg-amber-50' : 'bg-blue-50'}`}>
+                  <BarChart3 className={`h-6 w-6 ${isNoisy ? 'text-amber-600' : 'text-blue-600'}`} />
                 </div>
                 <div>
-                  <h2 className="font-bold text-gray-900">Environment Noise</h2>
-                  <p className="text-sm text-gray-500">We&apos;re monitoring background noise levels.</p>
+                  <h2 className="font-bold text-navy">Environment Noise</h2>
+                  <p className="text-sm text-muted">We&apos;re monitoring background noise levels.</p>
                 </div>
               </div>
               {!isNoisy && permissionStatus === 'success' && <CheckCircle2 className="w-6 h-6 text-green-500" />}
             </div>
 
             {/* Visualizer */}
-            <div className="h-12 bg-gray-100 rounded-xl overflow-hidden flex items-end gap-1 p-2">
+            <div className="flex h-12 items-end gap-1 overflow-hidden rounded-2xl bg-background-light p-2">
               {Array.from({ length: 40 }).map((_, i) => {
                 // Use a deterministic "random" variation based on index
                 const variation = (Math.sin(i * 0.5) + 1) / 2;
@@ -376,7 +399,7 @@ function MicEnvironmentCheckContent() {
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  className="mt-4 flex items-start gap-3 bg-amber-50 border border-amber-100 rounded-xl p-3"
+                  className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-100 bg-amber-50 p-3"
                 >
                   <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
                   <p className="text-xs text-amber-800 leading-relaxed">
@@ -402,7 +425,7 @@ function MicEnvironmentCheckContent() {
             )}
           </div>
 
-        </div>
+      </div>
       </LearnerDashboardShell>
   );
 }

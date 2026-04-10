@@ -47,56 +47,89 @@ export default function InterleavedPracticePage() {
     finally { setLoading(false); }
   };
 
+  const heroHighlights = [
+    { icon: Shuffle, label: 'Mixing rule', value: 'Spaced rotation' },
+    { icon: BookOpen, label: 'Focus', value: 'Retention' },
+    { icon: Lightbulb, label: 'Output', value: 'Adaptive session' },
+  ];
+
   return (
     <LearnerDashboardShell>
-      <LearnerPageHero title="Interleaved Practice" description="Mix different skill types in one session for better long-term retention." />
+      <div className="space-y-6">
+        <LearnerPageHero
+          eyebrow="Practice"
+          icon={Shuffle}
+          title="Interleaved Practice"
+          description="Mix different skill types in one session for better long-term retention."
+          highlights={heroHighlights}
+        />
 
-      <MotionSection className="px-4 py-6 space-y-6 max-w-4xl mx-auto">
+      <MotionSection className="mx-auto max-w-5xl space-y-6 px-4 py-6">
         <MotionItem>
-          <Card className="p-5">
-            <div className="flex items-center gap-3 mb-3"><Shuffle className="w-5 h-5 text-primary" /><h3 className="font-semibold">Generate a Mixed Practice Session</h3></div>
-            <div className="flex gap-3 items-end">
-              <div>
-                <label className="text-sm text-muted-foreground block mb-1">Duration (minutes)</label>
-                <select value={duration} onChange={e => setDuration(Number(e.target.value))} className="border rounded-lg px-3 py-2 text-sm">
+          <Card className="p-5 shadow-sm">
+            <LearnerSurfaceSectionHeader
+              eyebrow="Session builder"
+              title="Generate a mixed practice set"
+              description="Use the same dashboard cards and spacing so this page feels like part of the platform rather than a side tool."
+              className="mb-4"
+            />
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-end">
+              <div className="min-w-0 flex-1">
+                <label className="mb-1 block text-sm font-semibold text-navy">Duration (minutes)</label>
+                <select value={duration} onChange={e => setDuration(Number(e.target.value))} className="w-full rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-navy shadow-sm focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 lg:max-w-xs">
                   <option value={10}>10 min</option><option value={15}>15 min</option><option value={20}>20 min</option><option value={30}>30 min</option><option value={45}>45 min</option><option value={60}>60 min</option>
                 </select>
               </div>
-              <Button onClick={generate} disabled={loading}>{loading ? 'Generating...' : 'Generate Session'}</Button>
+              <Button onClick={generate} disabled={loading} size="lg" className="lg:min-w-48">{loading ? 'Generating...' : 'Generate Session'}</Button>
             </div>
           </Card>
         </MotionItem>
 
-        {loading && <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div>}
+        {loading && <div className="space-y-3">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-2xl" />)}</div>}
 
         {session && (
           <>
             <MotionItem>
-              <Card className="p-4 bg-muted/50">
-                <div className="flex items-start gap-2"><Lightbulb className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" /><p className="text-sm text-muted-foreground">{session.scienceBasis}</p></div>
-                <div className="flex gap-4 mt-2 text-sm"><span><strong>{session.taskCount}</strong> tasks</span><span><strong>{session.actualDurationMinutes}</strong> min total</span></div>
+              <Card className="p-5 shadow-sm">
+                <div className="flex items-start gap-3">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+                    <Lightbulb className="h-4 w-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">Why this mix works</p>
+                    <p className="mt-1 text-sm leading-6 text-muted">{session.scienceBasis}</p>
+                    <div className="mt-3 flex flex-wrap gap-2 text-sm text-navy">
+                      <span className="rounded-full bg-background-light px-3 py-1 font-semibold"><strong>{session.taskCount}</strong> tasks</span>
+                      <span className="rounded-full bg-background-light px-3 py-1 font-semibold"><strong>{session.actualDurationMinutes}</strong> min total</span>
+                    </div>
+                  </div>
+                </div>
               </Card>
             </MotionItem>
 
-            <LearnerSurfaceSectionHeader title="Session Tasks" />
+            <LearnerSurfaceSectionHeader
+              eyebrow="Session tasks"
+              title="Balanced task order"
+              description="The sequence intentionally rotates subtests so the learner does not settle into one mode too long."
+            />
             <div className="space-y-3">
               {session.tasks.map(task => {
                 const Icon = SUBTEST_ICON[task.subtestCode] ?? BookOpen;
                 return (
                   <MotionItem key={task.order}>
-                    <Card className="p-4 flex items-center gap-4">
-                      <div className={`w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 ${SUBTEST_COLOR[task.subtestCode] ?? ''}`}>
+                    <Card className="flex items-center gap-4 p-4 shadow-sm">
+                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${SUBTEST_COLOR[task.subtestCode] ?? 'bg-slate-100 text-slate-700'}`}>
                         <Icon className="w-5 h-5" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
-                          <span className="text-sm font-medium text-muted-foreground">#{task.order}</span>
-                          <h4 className="text-sm font-semibold truncate">{task.title}</h4>
-                          {task.isWeakArea && <Badge variant="destructive" className="text-[10px]">Weak Area</Badge>}
+                          <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">#{task.order}</span>
+                          <h4 className="truncate text-sm font-semibold text-navy">{task.title}</h4>
+                          {task.isWeakArea && <Badge variant="destructive" className="text-[10px]">Weak area</Badge>}
                         </div>
-                        <p className="text-xs text-muted-foreground capitalize">{task.subtestCode} • {task.taskType.replace(/-/g, ' ')} • {task.durationMinutes} min</p>
+                        <p className="text-xs capitalize text-muted">{task.subtestCode} • {task.taskType.replace(/-/g, ' ')} • {task.durationMinutes} min</p>
                       </div>
-                      <Button variant="outline" size="sm">Start</Button>
+                      <Button variant="outline" size="sm" className="shrink-0">Start</Button>
                     </Card>
                   </MotionItem>
                 );
@@ -104,14 +137,15 @@ export default function InterleavedPracticePage() {
             </div>
 
             {session.tips.length > 0 && (
-              <Card className="p-4 space-y-1">
-                <h4 className="text-sm font-semibold mb-2">Tips</h4>
-                {session.tips.map((tip, i) => <p key={i} className="text-sm text-muted-foreground">• {tip}</p>)}
+              <Card className="space-y-2 p-5 shadow-sm">
+                <h4 className="text-sm font-semibold text-navy">Tips</h4>
+                {session.tips.map((tip, i) => <p key={i} className="text-sm leading-6 text-muted">• {tip}</p>)}
               </Card>
             )}
           </>
         )}
       </MotionSection>
+      </div>
     </LearnerDashboardShell>
   );
 }

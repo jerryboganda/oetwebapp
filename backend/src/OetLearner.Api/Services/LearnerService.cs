@@ -2919,6 +2919,14 @@ public partial class LearnerService(
             changed = true;
         }
 
+        var wallet = await db.Wallets.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        if (wallet is null)
+        {
+            wallet = CreateDefaultWallet(userId, now);
+            db.Wallets.Add(wallet);
+            changed = true;
+        }
+
         if (changed)
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -3102,6 +3110,16 @@ public partial class LearnerService(
                 ["dailyGoalMinutes"] = 45,
                 ["studyHoursPerWeek"] = goal.StudyHoursPerWeek
             })
+        };
+
+    private static Wallet CreateDefaultWallet(string userId, DateTimeOffset now)
+        => new()
+        {
+            Id = Guid.NewGuid().ToString(),
+            UserId = userId,
+            CreditBalance = 0,
+            LastUpdatedAt = now,
+            LedgerSummaryJson = JsonSupport.Serialize(Array.Empty<object>())
         };
 
     private static ReadinessSnapshot CreateDefaultReadinessSnapshot(string userId, LearnerGoal goal, DateTimeOffset now)

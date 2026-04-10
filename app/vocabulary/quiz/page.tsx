@@ -5,7 +5,8 @@ import { MotionSection } from '@/components/ui/motion-primitives';
 import { HelpCircle, CheckCircle2, XCircle, ArrowLeft, RotateCcw } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero } from '@/components/domain';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { fetchVocabQuiz, submitVocabQuiz } from '@/lib/api';
@@ -76,8 +77,8 @@ export default function VocabQuizPage() {
 
   return (
     <LearnerDashboardShell>
-      <div className="flex items-center gap-3 mb-6">
-        <Link href="/vocabulary" className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+      <div className="mb-6 flex items-center gap-3">
+        <Link href="/vocabulary" className="text-muted transition-colors hover:text-navy">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <LearnerPageHero title="Vocabulary Quiz" description="Test your medical vocabulary knowledge" icon={HelpCircle} />
@@ -91,53 +92,61 @@ export default function VocabQuizPage() {
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-xl" />)}
         </div>
       ) : result ? (
-        <MotionSection className="max-w-md mx-auto text-center py-12">
-          <div className="text-6xl font-bold text-gray-900 dark:text-white mb-2">{result.score}/{result.total}</div>
-          <div className="text-xl text-gray-500 mb-4">{Math.round((result.score / result.total) * 100)}% correct</div>
+        <MotionSection className="mx-auto max-w-md py-12 text-center">
+          <Card className="border-gray-200 bg-surface p-8">
+            <div className="text-6xl font-bold text-navy mb-2">{result.score}/{result.total}</div>
+            <div className="text-xl text-muted mb-4">{Math.round((result.score / result.total) * 100)}% correct</div>
           {result.xpAwarded > 0 && (
-            <div className="inline-flex items-center gap-1.5 px-4 py-2 bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 rounded-full text-sm font-medium mb-6">
+            <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-4 py-2 text-sm font-medium text-amber-700 mb-6">
               +{result.xpAwarded} XP earned!
             </div>
           )}
           <div className="flex gap-3 justify-center">
-            <Link href="/vocabulary" className="px-5 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300">
+            <Link href="/vocabulary" className="rounded-xl border border-gray-200 bg-background-light px-5 py-2.5 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-surface">
               Back to Vocabulary
             </Link>
-            <button onClick={() => { setResult(null); setAnswers({}); setCurrent(0); setSelectedOption(null); setRevealed(false); setLoading(true); fetchVocabQuiz(10).then(d => { setQuestions((d as { questions: QuizQuestion[] }).questions ?? d as QuizQuestion[]); setLoading(false); }); }} className="px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl text-sm font-medium flex items-center gap-1.5">
+            <button onClick={() => { setResult(null); setAnswers({}); setCurrent(0); setSelectedOption(null); setRevealed(false); setLoading(true); fetchVocabQuiz(10).then(d => { setQuestions((d as { questions: QuizQuestion[] }).questions ?? d as QuizQuestion[]); setLoading(false); }); }} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90">
               <RotateCcw className="w-4 h-4" /> New Quiz
             </button>
           </div>
+          </Card>
         </MotionSection>
       ) : q ? (
-        <div className="max-w-xl mx-auto">
-          <div className="flex items-center justify-between mb-3 text-sm text-gray-500">
+        <div className="mx-auto max-w-xl">
+          <LearnerSurfaceSectionHeader
+            eyebrow="Quiz Progress"
+            title="Answer the question"
+            description="Choose the best meaning for the medical term."
+            className="mb-4"
+          />
+          <div className="mb-3 flex items-center justify-between text-sm text-muted">
             <span>Question {current + 1} of {questions.length}</span>
           </div>
-          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mb-6">
-            <div className="bg-green-500 h-1.5 rounded-full transition-all" style={{ width: `${Math.min(100, ((current + 1) / questions.length) * 100)}%` }} />
+          <div className="mb-6 h-1.5 w-full rounded-full bg-background-light">
+            <div className="h-1.5 rounded-full bg-primary transition-all" style={{ width: `${Math.min(100, ((current + 1) / questions.length) * 100)}%` }} />
           </div>
 
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6 mb-4">
-            <div className="text-xs font-medium text-gray-400 uppercase mb-2">What does this word mean?</div>
-            <div className="text-3xl font-bold text-gray-900 dark:text-white">{q.word}</div>
-          </div>
+          <Card className="mb-4 border-gray-200 bg-surface p-6">
+            <div className="mb-2 text-xs font-medium uppercase text-muted">What does this word mean?</div>
+            <div className="text-3xl font-bold text-navy">{q.word}</div>
+          </Card>
 
           <div className="space-y-2">
             {q.options.map((option, idx) => {
-              let cls = 'border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 hover:border-indigo-400 hover:bg-indigo-50 dark:hover:bg-indigo-900/20';
+              let cls = 'border border-gray-200 bg-surface text-navy hover:border-primary/30 hover:bg-background-light';
               if (revealed) {
-                if (idx === q.correctIndex) cls = 'border border-green-400 bg-green-50 dark:bg-green-900/20 text-green-800 dark:text-green-200';
-                else if (idx === selectedOption) cls = 'border border-red-400 bg-red-50 dark:bg-red-900/20 text-red-800 dark:text-red-200';
-                else cls = 'border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 text-gray-500 opacity-60';
+                if (idx === q.correctIndex) cls = 'border border-green-300 bg-green-50 text-green-900';
+                else if (idx === selectedOption) cls = 'border border-red-300 bg-red-50 text-red-900';
+                else cls = 'border border-gray-200 bg-background-light text-muted opacity-70';
               }
               return (
                 <button
                   key={idx}
                   onClick={() => handleSelect(idx)}
                   disabled={revealed}
-                  className={`w-full text-left px-4 py-3.5 rounded-xl transition-colors flex items-center gap-3 ${cls}`}
+                  className={`flex w-full items-center gap-3 rounded-2xl px-4 py-3.5 text-left transition-colors ${cls}`}
                 >
-                  <span className="flex-shrink-0 w-6 h-6 rounded-full border border-current flex items-center justify-center text-xs font-bold">
+                  <span className="flex h-6 w-6 flex-shrink-0 items-center justify-center rounded-full border border-current text-xs font-bold">
                     {String.fromCharCode(65 + idx)}
                   </span>
                   <span className="text-sm">{option}</span>
@@ -153,7 +162,7 @@ export default function VocabQuizPage() {
               <button
                 onClick={nextQuestion}
                 disabled={submitting}
-                className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium text-sm disabled:opacity-50"
+                className="rounded-xl bg-primary px-6 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90 disabled:opacity-50"
               >
                 {current + 1 >= questions.length ? 'Finish Quiz' : 'Next Question →'}
               </button>

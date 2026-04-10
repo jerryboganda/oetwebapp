@@ -414,7 +414,20 @@ public partial class LearnerService
         FreezeRequestRequest? request,
         CancellationToken cancellationToken)
     {
-        var subscription = await db.Subscriptions.AsNoTracking().FirstAsync(x => x.UserId == userId, cancellationToken);
+        var subscription = await db.Subscriptions.AsNoTracking().FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        if (subscription is null)
+        {
+            return new FreezeEligibilityResult(
+                false,
+                false,
+                false,
+                policy.MaxDurationDays,
+                policy.MinDurationDays,
+                "unknown",
+                ["subscription_missing"],
+                policy.Version);
+        }
+
         var currentPlan = await db.BillingPlans.AsNoTracking().FirstOrDefaultAsync(x => x.Code == subscription.PlanId, cancellationToken);
         var now = DateTimeOffset.UtcNow;
         var reasonCodes = new List<string>();

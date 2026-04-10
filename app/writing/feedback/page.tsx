@@ -12,6 +12,7 @@ import {
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/layout/app-shell';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { CriterionBreakdownCard } from '@/components/domain/criterion-breakdown-card';
 import { WritingIssueList, type IssueType } from '@/components/domain/writing-issue-list';
@@ -81,15 +82,29 @@ export default function WritingDetailedFeedback() {
   /* Build a map of anchored-comment id → AnchoredComment for quick lookup */
   const commentMap = new Map<string, AnchoredComment>();
   result.criteria.forEach(c => c.anchoredComments.forEach(ac => commentMap.set(ac.id, ac)));
+  const heroHighlights = [
+    { icon: MessageSquare, label: 'Criteria', value: `${result.criteria.length}` },
+    { icon: Lightbulb, label: 'Commentary', value: `${result.criteria.reduce((sum, c) => sum + c.anchoredComments.length, 0)}` },
+    { icon: ArrowRight, label: 'Revision', value: 'Actionable' },
+  ];
 
   return (
     <AppShell pageTitle="Detailed Feedback" distractionFree>
+      <div className="mx-auto flex h-full w-full max-w-[1440px] flex-col gap-6 px-4 py-6 sm:px-6 lg:px-8">
+      <LearnerPageHero
+        eyebrow="Writing"
+        icon={MessageSquare}
+        title="Detailed Feedback"
+        description="Review the submission, score explanation, and revision prompts in the same visual system as the dashboard."
+        highlights={heroHighlights}
+      />
+
       {/* Toolbar */}
-      <header className="bg-white border-b border-gray-200 shrink-0 px-4 py-3 sm:px-6 flex flex-wrap items-center justify-between gap-3 z-10">
+      <header className="shrink-0 rounded-3xl border border-border bg-surface px-4 py-3 shadow-sm sm:px-6 flex flex-wrap items-center justify-between gap-3 z-10">
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-          <Link href={`/writing/result?id=${resultId}`} className="text-gray-500 hover:text-navy transition-colors"><ChevronLeft className="w-5 h-5" /></Link>
+          <Link href={`/writing/result?id=${resultId}`} className="text-muted transition-colors hover:text-navy"><ChevronLeft className="w-5 h-5" /></Link>
           <div className="min-w-0">
-            <h1 className="font-bold text-lg text-navy leading-tight">Detailed Feedback</h1>
+            <h1 className="font-bold text-lg leading-tight text-navy">Detailed Feedback</h1>
             <div className="truncate text-xs text-muted">{result.taskTitle}</div>
           </div>
         </div>
@@ -98,16 +113,16 @@ export default function WritingDetailedFeedback() {
         </Link>
       </header>
 
-      <main className="flex-1 min-h-0 flex flex-col overflow-y-auto md:flex-row md:overflow-hidden">
+      <main className="flex min-h-0 flex-1 flex-col overflow-y-auto md:flex-row md:gap-6 md:overflow-hidden">
         {/* Left Pane: Submission Text (re-use the existing anchored-highlight inline pattern) */}
-        <div className="w-full md:w-1/2 border-r border-gray-200 bg-white p-6 md:overflow-y-auto md:p-10">
-          <div className="max-w-2xl mx-auto">
+        <div className="w-full rounded-3xl border border-border bg-surface p-6 shadow-sm md:w-1/2 md:overflow-y-auto md:p-10">
+          <div className="mx-auto max-w-2xl">
             <div className="flex items-center justify-between mb-8">
-              <h2 className="text-sm font-bold text-muted uppercase tracking-wider">Your Submission</h2>
-              <span className="text-xs font-medium bg-gray-100 text-gray-600 px-2 py-1 rounded">Click highlights to view comments</span>
+              <h2 className="text-sm font-bold uppercase tracking-wider text-muted">Your Submission</h2>
+              <span className="rounded bg-background-light px-2 py-1 text-xs font-medium text-muted">Click highlights to view comments</span>
             </div>
             {/* Render submission text with highlights for each anchored comment */}
-            <div className="text-lg leading-relaxed text-gray-800 space-y-6 font-serif">
+            <div className="space-y-6 font-serif text-lg leading-relaxed text-navy/80">
               {result.criteria.flatMap(c => c.anchoredComments).length > 0 ? (
                 <>
                   {result.criteria.map(criterion =>
@@ -126,20 +141,25 @@ export default function WritingDetailedFeedback() {
                   )}
                 </>
               ) : (
-                <p className="text-muted italic">No anchored comments available.</p>
+                <p className="italic text-muted">No anchored comments available.</p>
               )}
             </div>
           </div>
         </div>
 
         {/* Right Pane: Criteria Panels + Issue List */}
-        <div className="w-full md:w-1/2 bg-gray-50 p-6 md:overflow-y-auto md:p-8">
-          <div className="max-w-2xl mx-auto space-y-6">
+        <div className="w-full rounded-3xl border border-border bg-background-light p-6 shadow-sm md:w-1/2 md:overflow-y-auto md:p-8">
+          <div className="mx-auto max-w-2xl space-y-6">
+            <LearnerSurfaceSectionHeader
+              eyebrow="Feedback breakdown"
+              title="Score details and revision guidance"
+              description="Keep the score explanation readable at a glance, then let the detailed cards carry the nuance."
+            />
             {result.criteria.map((criterion, index) => (
               <MotionItem key={criterion.name} delayIndex={index}>
-                <Card className="p-6">
+                <Card className="p-6 shadow-sm">
                   {/* Header with score */}
-                  <div className="flex items-start justify-between mb-5 pb-5 border-b border-gray-100">
+                  <div className="mb-5 flex items-start justify-between border-b border-border pb-5">
                     <div>
                       <h3 className="text-xl font-bold text-navy mb-1">{criterion.name}</h3>
                       <div className="text-sm text-muted">Criterion Score</div>
@@ -150,7 +170,7 @@ export default function WritingDetailedFeedback() {
                   </div>
 
                   {/* Explanation */}
-                  <p className="text-gray-700 leading-relaxed mb-6">{criterion.explanation}</p>
+                  <p className="mb-6 leading-relaxed text-navy/80">{criterion.explanation}</p>
 
                   {/* Anchored Comments */}
                   {criterion.anchoredComments.length > 0 && (
@@ -163,10 +183,10 @@ export default function WritingDetailedFeedback() {
                           const isActive = activeComment === comment.id;
                           return (
                             <button key={comment.id} type="button" onClick={() => setActiveComment(isActive ? null : comment.id)}
-                              className={`w-full text-left p-4 rounded-xl border cursor-pointer transition-all ${isActive ? 'bg-blue-50 border-blue-300 shadow-sm' : 'bg-gray-50 border-gray-200 hover:border-gray-300'}`}>
-                              <div className="text-sm text-gray-500 mb-2 italic border-l-2 border-gray-300 pl-3">&quot;{comment.text}&quot;</div>
-                              <div className="text-sm text-navy font-medium">{comment.comment}</div>
-                            </button>
+                              className={`w-full cursor-pointer rounded-2xl border p-4 text-left transition-all ${isActive ? 'border-primary/20 bg-primary/5 shadow-sm' : 'border-border bg-background-light hover:border-border-hover'}`}>
+                               <div className="mb-2 border-l-2 border-border pl-3 text-sm italic text-muted">&quot;{comment.text}&quot;</div>
+                               <div className="text-sm font-medium text-navy">{comment.comment}</div>
+                              </button>
                           );
                         })}
                       </div>
@@ -177,13 +197,13 @@ export default function WritingDetailedFeedback() {
                   {(criterion.omissions.length > 0 || criterion.unnecessaryDetails.length > 0) && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                       {criterion.omissions.length > 0 && (
-                        <div className="bg-red-50 rounded-xl p-4 border border-red-100">
+                        <div className="rounded-2xl border border-red-100 bg-red-50 p-4">
                           <h4 className="text-xs font-bold text-red-700 uppercase tracking-wider mb-3 flex items-center gap-2"><MinusCircle className="w-4 h-4" /> Omissions</h4>
                           <ul className="space-y-2">{criterion.omissions.map((item, i) => (<li key={i} className="text-sm text-red-900 flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-red-400 mt-1.5 shrink-0" /><span className="leading-snug">{item}</span></li>))}</ul>
                         </div>
                       )}
                       {criterion.unnecessaryDetails.length > 0 && (
-                        <div className="bg-amber-50 rounded-xl p-4 border border-amber-100">
+                        <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
                           <h4 className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-3 flex items-center gap-2"><XCircle className="w-4 h-4" /> Unnecessary</h4>
                           <ul className="space-y-2">{criterion.unnecessaryDetails.map((item, i) => (<li key={i} className="text-sm text-amber-900 flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" /><span className="leading-snug">{item}</span></li>))}</ul>
                         </div>
@@ -193,7 +213,7 @@ export default function WritingDetailedFeedback() {
 
                   {/* Revision Suggestions */}
                   {criterion.revisionSuggestions.length > 0 && (
-                    <div className="bg-green-50 rounded-xl p-4 border border-green-100">
+                    <div className="rounded-2xl border border-green-100 bg-green-50 p-4">
                       <h4 className="text-xs font-bold text-green-700 uppercase tracking-wider mb-3 flex items-center gap-2"><Lightbulb className="w-4 h-4" /> Revision Suggestions</h4>
                       <ul className="space-y-3">{criterion.revisionSuggestions.map((item, i) => (<li key={i} className="text-sm text-green-900 flex items-start gap-2"><ArrowRight className="w-4 h-4 text-green-500 shrink-0 mt-0.5" /><span className="leading-snug">{item}</span></li>))}</ul>
                     </div>
@@ -205,13 +225,14 @@ export default function WritingDetailedFeedback() {
             {/* Aggregated Issues (WritingIssueList) */}
             {allIssues.length > 0 && (
               <div className="pt-4">
-                <h3 className="text-sm font-bold text-muted uppercase tracking-wider mb-3">All Issues Summary</h3>
+                <h3 className="mb-3 text-sm font-bold uppercase tracking-wider text-muted">All Issues Summary</h3>
                 <WritingIssueList issues={allIssues} />
               </div>
             )}
           </div>
         </div>
       </main>
+      </div>
     </AppShell>
   );
 }

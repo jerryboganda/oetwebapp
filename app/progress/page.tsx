@@ -73,6 +73,18 @@ export default function ProgressDashboard() {
   const averageTurnaroundLabel = progressSummary?.reviewUsage.averageTurnaroundHours
     ? `${progressSummary.reviewUsage.averageTurnaroundHours}h avg`
     : 'Pending';
+  const hasTrendData = trendData.length > 0;
+
+  const trendEmptyState = (
+    <div className="flex h-full min-h-[240px] items-center justify-center rounded-3xl border border-dashed border-gray-200 bg-background-light/60 px-6 text-center">
+      <div className="max-w-sm space-y-2">
+        <p className="text-sm font-black uppercase tracking-widest text-muted">No trend data yet</p>
+        <p className="text-sm text-muted">
+          Complete a few scored submissions to unlock the movement chart across Reading, Listening, Writing, and Speaking.
+        </p>
+      </div>
+    </div>
+  );
 
   return (
     <LearnerDashboardShell
@@ -129,19 +141,21 @@ export default function ProgressDashboard() {
                 </div>
               </div>
               <div className="h-[240px] w-full sm:h-[280px] lg:h-[300px]" role="img" aria-label="Sub-test performance trend chart showing reading, listening, writing, and speaking scores over time">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={trendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} dy={10} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} />
-                    <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
-                    <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
-                    <Line type="monotone" dataKey="reading"   name="Reading"   stroke="#2563eb" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                    <Line type="monotone" dataKey="listening" name="Listening" stroke="#4f46e5" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                    <Line type="monotone" dataKey="writing"   name="Writing"   stroke="#e11d48" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                    <Line type="monotone" dataKey="speaking"  name="Speaking"  stroke="#9333ea" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                  </LineChart>
-                </ResponsiveContainer>
+                {hasTrendData ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={trendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} dy={10} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} />
+                      <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
+                      <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
+                      <Line type="monotone" dataKey="reading" name="Reading" stroke="#2563eb" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="listening" name="Listening" stroke="#4f46e5" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="writing" name="Writing" stroke="#e11d48" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="speaking" name="Speaking" stroke="#9333ea" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : trendEmptyState}
               </div>
             </MotionSection>
 
@@ -179,24 +193,22 @@ export default function ProgressDashboard() {
                 </div>
               </div>
               <div className="h-[240px] w-full sm:h-[280px] lg:h-[300px]" role="img" aria-label={`Criterion trend chart for ${criterionFilter} skills`}>
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={trendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} dy={10} />
-                    <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} />
-                    <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
-                    <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
-                    {criterionFilter === 'Writing' ? (
-                      <>
+                {hasTrendData ? (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={trendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} dy={10} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} />
+                      <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
+                      <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
+                      {criterionFilter === 'Writing' ? (
                         <Line type="monotone" dataKey="writing" name="Writing Score" stroke="#e11d48" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      </>
-                    ) : (
-                      <>
+                      ) : (
                         <Line type="monotone" dataKey="speaking" name="Speaking Score" stroke="#9333ea" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      </>
-                    )}
-                  </LineChart>
-                </ResponsiveContainer>
+                      )}
+                    </LineChart>
+                  </ResponsiveContainer>
+                ) : trendEmptyState}
               </div>
             </MotionSection>
 

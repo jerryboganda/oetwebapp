@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from 'react';
 import {
-  ChevronLeft,
   CheckCircle2,
   XCircle,
   BookOpen,
@@ -14,6 +13,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -47,32 +47,38 @@ export default function ModelAnswerExplainer() {
 
   return (
     <LearnerDashboardShell pageTitle="Model Answer Explainer">
-      {/* Sticky header */}
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-20 px-4 sm:px-6 py-4 flex items-center justify-between shadow-sm">
-        <div className="flex items-center gap-4">
-          <Link href={`/writing/result?id=wr-001`} className="text-gray-500 hover:text-navy transition-colors"><ChevronLeft className="w-5 h-5" /></Link>
-          <div>
-            <h1 className="font-bold text-lg text-navy leading-tight flex items-center gap-2">
-              <FileCheck className="w-5 h-5 text-primary" /> Model Answer Explainer
-            </h1>
-            <div className="text-xs text-muted font-medium flex items-center gap-2 mt-0.5">
-              <Badge variant="info" size="sm">{model.profession}</Badge>
-              <span>{model.taskTitle}</span>
-            </div>
-          </div>
-        </div>
-      </header>
+      <main className="space-y-8">
+        <LearnerPageHero
+          eyebrow="Study Guide"
+          icon={FileCheck}
+          accent="primary"
+          title="Model Answer Explainer"
+          description={model.taskTitle}
+          highlights={[
+            { icon: Stethoscope, label: 'Profession', value: model.profession },
+            { icon: BookOpen, label: 'Format', value: 'Annotated response' },
+            { icon: Target, label: 'Goal', value: 'High-scoring writing' },
+          ]}
+          aside={
+            <Link href={`/writing/result?id=wr-001`} className="inline-flex items-center justify-center rounded-xl border border-gray-200 bg-surface px-4 py-2 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-background-light">
+              Back to result
+            </Link>
+          }
+        />
 
-      <main className="py-8">
-        {/* Intro Banner */}
-        <MotionSection className="bg-gradient-to-br from-navy to-primary/80 rounded-2xl p-6 sm:p-8 mb-8 text-white shadow-md">
-          <h2 className="text-2xl font-bold mb-3">Why this is a strong response</h2>
-          <p className="text-blue-100 leading-relaxed max-w-3xl">
+        <MotionSection className="rounded-[24px] border border-gray-200 bg-surface p-6 shadow-sm">
+          <h2 className="mb-3 text-2xl font-bold text-navy">Why this is a strong response</h2>
+          <p className="max-w-3xl leading-relaxed text-muted">
             This model answer demonstrates a high-scoring response. Below, the letter is broken down paragraph by paragraph. Review the annotations to understand the <strong>rationale</strong>, <strong>scoring criteria</strong>, <strong>included / excluded details</strong>, and <strong>profession-specific language</strong> choices.
           </p>
         </MotionSection>
 
-        {/* Paragraph Cards */}
+        <LearnerSurfaceSectionHeader
+          eyebrow="Paragraph Analysis"
+          title="Annotated breakdown"
+          description="Each paragraph is paired with rationale, inclusion logic, and profession-specific language notes."
+        />
+
         <div className="space-y-12">
           {model.paragraphs.map((paragraph, index) => (
             <MotionItem key={paragraph.id} delayIndex={index} className="flex flex-col lg:flex-row gap-6 lg:gap-8">
@@ -80,7 +86,7 @@ export default function ModelAnswerExplainer() {
               {/* Left: Paragraph text */}
               <div className="w-full lg:w-5/12 shrink-0">
                 <div className="sticky top-24">
-                  <Card className="p-6 relative">
+                  <Card className="relative border-gray-200 bg-background-light p-6">
                     <div className="absolute -left-3 -top-3 w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center font-bold text-sm shadow-sm border-2 border-white">{index + 1}</div>
                     <p className="text-lg leading-relaxed text-gray-800 font-serif">{paragraph.text}</p>
                   </Card>
@@ -90,7 +96,7 @@ export default function ModelAnswerExplainer() {
               {/* Right: Annotations */}
               <div className="w-full lg:w-7/12 space-y-4">
                 {/* Rationale */}
-                <Card className="p-5">
+                <Card className="border-gray-200 bg-surface p-5">
                   <div className="flex flex-wrap items-center justify-between gap-4 mb-3">
                     <h3 className="text-sm font-bold text-navy uppercase tracking-wider flex items-center gap-2"><BookOpen className="w-4 h-4 text-primary" /> Rationale</h3>
                     <div className="flex flex-wrap gap-2">
@@ -103,7 +109,7 @@ export default function ModelAnswerExplainer() {
                 </Card>
 
                 {/* Include / Exclude */}
-                <Card className="p-5">
+                <Card className="border-gray-200 bg-surface p-5">
                   <h3 className="text-sm font-bold text-navy uppercase tracking-wider mb-4">Include / Exclude Logic</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
@@ -120,7 +126,7 @@ export default function ModelAnswerExplainer() {
                 </Card>
 
                 {/* Language Notes */}
-                <div className="bg-blue-50 rounded-2xl border border-blue-100 p-5 shadow-sm">
+                <div className="rounded-2xl border border-blue-100 bg-blue-50/80 p-5 shadow-sm">
                   <h3 className="text-sm font-bold text-blue-900 uppercase tracking-wider mb-2 flex items-center gap-2"><Stethoscope className="w-4 h-4" /> {model.profession} Language Notes</h3>
                   <p className="text-blue-800 leading-relaxed text-sm">{paragraph.languageNotes}</p>
                 </div>

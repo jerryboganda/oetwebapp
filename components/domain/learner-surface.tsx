@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
-import type { ReactNode } from 'react';
+import { isValidElement, type ElementType, type ReactNode } from 'react';
 import { Badge, Button, Card } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import {
@@ -59,6 +59,19 @@ const actionVariantStyles = {
   outline: 'border border-gray-300 text-navy hover:bg-gray-50',
   ghost: 'text-navy hover:bg-gray-100',
 } as const;
+
+function renderIcon(icon: ElementType | ReactNode | undefined, className?: string) {
+  if (!icon) {
+    return null;
+  }
+
+  if (isValidElement(icon)) {
+    return icon;
+  }
+
+  const Icon = icon as ElementType;
+  return <Icon className={className} />;
+}
 
 function renderAction(action: LearnerSurfaceCardModel['primaryAction'] | LearnerSurfaceCardModel['secondaryAction'], fullWidth = false) {
   if (!action) return null;
@@ -120,7 +133,7 @@ export function LearnerSurfaceSectionHeader({
   className,
 }: {
   eyebrow?: string;
-  icon?: ReactNode;
+  icon?: ElementType | ReactNode;
   title: string;
   description?: string;
   action?: ReactNode;
@@ -133,7 +146,7 @@ export function LearnerSurfaceSectionHeader({
           <p className="text-sm font-black text-muted uppercase tracking-widest mb-1.5">{eyebrow}</p>
         ) : null}
         <div className="flex items-center gap-2">
-          {icon ? <span className="text-primary">{icon}</span> : null}
+          {icon ? <span className="text-primary">{renderIcon(icon, 'h-4 w-4')}</span> : null}
           <h2 className="text-xl font-bold text-navy">{title}</h2>
         </div>
         {description ? <p className="text-sm text-muted mt-1">{description}</p> : null}
@@ -183,7 +196,7 @@ export function LearnerPageHero({
           <div className="flex items-start gap-3 sm:gap-4">
           {Icon ? (
               <div className={cn('mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl', palette.icon)}>
-                {typeof Icon === 'function' ? <Icon className="h-6 w-6" /> : Icon}
+                {renderIcon(Icon, 'h-6 w-6')}
             </div>
           ) : null}
             <div className="min-w-0">

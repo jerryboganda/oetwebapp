@@ -29,16 +29,31 @@ const SPEAKING_CRITERIA = [
 export default function FeedbackGuidePage() {
   useEffect(() => { analytics.track('feedback_guide_viewed'); }, []);
 
+  const heroHighlights = [
+    { icon: CheckCircle2, label: 'Writing criteria', value: `${WRITING_CRITERIA.length}` },
+    { icon: Target, label: 'Speaking criteria', value: `${SPEAKING_CRITERIA.length}` },
+    { icon: TrendingUp, label: 'Score bands', value: '0-7 / 0-6' },
+  ];
+
   return (
     <LearnerDashboardShell>
-      <LearnerPageHero title="Feedback Interpretation Guide" description="Understand what each criterion score means and how to improve." />
+      <LearnerPageHero
+        title="Feedback Interpretation Guide"
+        description="Understand what each criterion score means and how to improve."
+        icon={HelpCircle}
+        highlights={heroHighlights}
+      />
 
-      <MotionSection className="px-4 py-6 space-y-8 max-w-4xl mx-auto">
-        <LearnerSurfaceSectionHeader title="Writing Criteria (6 Criteria)" />
+      <MotionSection className="mx-auto max-w-5xl space-y-6 px-4 py-6">
+        <LearnerSurfaceSectionHeader
+          eyebrow="Writing criteria"
+          title="How writing feedback is scored"
+          description="The writing rubric should feel like an extension of the dashboard: clear, calm, and easy to scan."
+        />
         <div className="space-y-3">
           {WRITING_CRITERIA.map(c => (
             <MotionItem key={c.code}>
-              <Card className="p-5">
+              <Card className="p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-2"><h3 className="font-semibold">{c.label}</h3><Badge variant="outline">Bands {c.bands}</Badge></div>
                 <p className="text-sm text-muted-foreground">{c.description}</p>
                 <div className="mt-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg p-3">
@@ -49,11 +64,15 @@ export default function FeedbackGuidePage() {
           ))}
         </div>
 
-        <LearnerSurfaceSectionHeader title="Speaking Criteria (5 Criteria)" />
+        <LearnerSurfaceSectionHeader
+          eyebrow="Speaking criteria"
+          title="How speaking feedback is scored"
+          description="Speaking feedback should feel like a guided review, not a separate design language."
+        />
         <div className="space-y-3">
           {SPEAKING_CRITERIA.map(c => (
             <MotionItem key={c.code}>
-              <Card className="p-5">
+              <Card className="p-5 shadow-sm">
                 <div className="flex items-center justify-between mb-2"><h3 className="font-semibold">{c.label}</h3><Badge variant="outline">Bands {c.bands}</Badge></div>
                 <p className="text-sm text-muted-foreground">{c.description}</p>
                 <div className="mt-3 bg-emerald-50 dark:bg-emerald-950/30 rounded-lg p-3">
@@ -64,8 +83,12 @@ export default function FeedbackGuidePage() {
           ))}
         </div>
 
-        <LearnerSurfaceSectionHeader title="Understanding Your Scores" />
-        <Card className="p-5 space-y-3">
+        <LearnerSurfaceSectionHeader
+          eyebrow="Score guide"
+          title="How to read the bands"
+          description="Keep the interpretation simple so learners can act on the score immediately."
+        />
+        <Card className="p-5 space-y-3 shadow-sm">
           <div className="flex items-start gap-2"><CheckCircle2 className="w-5 h-5 text-emerald-500 flex-shrink-0 mt-0.5" /><p className="text-sm"><strong>Score 5-7 (Writing) / 5-6 (Speaking):</strong> Strong performance. Focus on consistency and refinement.</p></div>
           <div className="flex items-start gap-2"><Target className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" /><p className="text-sm"><strong>Score 3-4:</strong> Adequate but needs improvement. Target specific criteria with focused practice.</p></div>
           <div className="flex items-start gap-2"><HelpCircle className="w-5 h-5 text-red-500 flex-shrink-0 mt-0.5" /><p className="text-sm"><strong>Score 0-2:</strong> Significant gaps. Start with foundation resources and work with an expert reviewer.</p></div>

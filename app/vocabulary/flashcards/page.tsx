@@ -6,7 +6,8 @@ import { MotionSection } from '@/components/ui/motion-primitives';
 import { Layers, CheckCircle2, RotateCcw, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero } from '@/components/domain';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { fetchDueFlashcards, submitFlashcardReview } from '@/lib/api';
@@ -74,8 +75,8 @@ export default function FlashcardsPage() {
 
   return (
     <LearnerDashboardShell>
-      <div className="flex items-center gap-3 mb-6">
-        <Link href="/vocabulary" className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
+      <div className="mb-6 flex items-center gap-3">
+        <Link href="/vocabulary" className="text-muted transition-colors hover:text-navy">
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <LearnerPageHero
@@ -90,33 +91,40 @@ export default function FlashcardsPage() {
       {loading ? (
         <Skeleton className="h-64 rounded-2xl" />
       ) : done ? (
-        <MotionSection className="max-w-md mx-auto text-center py-16">
-          <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">All done!</h2>
-          <p className="text-gray-500 mb-6">{stats.reviewed} cards reviewed · {stats.easy} marked easy</p>
+        <MotionSection className="mx-auto max-w-md py-16 text-center">
+          <Card className="border-gray-200 bg-surface p-8">
+            <CheckCircle2 className="mx-auto mb-4 h-16 w-16 text-green-500" />
+            <h2 className="mb-2 text-2xl font-bold text-navy">All done!</h2>
+            <p className="mb-6 text-muted">{stats.reviewed} cards reviewed · {stats.easy} marked easy</p>
           <div className="flex gap-3 justify-center">
-            <Link href="/vocabulary" className="px-5 py-2.5 border border-gray-300 dark:border-gray-600 rounded-xl text-sm font-medium text-gray-700 dark:text-gray-300">
+            <Link href="/vocabulary" className="rounded-xl border border-gray-200 bg-background-light px-5 py-2.5 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-surface">
               Back to Vocabulary
             </Link>
-            <button onClick={() => { setCurrent(0); setFlipped(false); setDone(false); setStats({ reviewed: 0, easy: 0 }); }} className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl text-sm font-medium flex items-center gap-1.5">
+            <button onClick={() => { setCurrent(0); setFlipped(false); setDone(false); setStats({ reviewed: 0, easy: 0 }); }} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90">
               <RotateCcw className="w-4 h-4" /> Review Again
             </button>
           </div>
+          </Card>
         </MotionSection>
       ) : cards.length === 0 ? (
-        <div className="text-center py-16">
-          <CheckCircle2 className="w-12 h-12 text-green-400 mx-auto mb-3" />
-          <p className="text-gray-500">No flashcards due right now. Come back later!</p>
-          <Link href="/vocabulary" className="mt-4 inline-block text-sm text-indigo-600 hover:underline">Back to Vocabulary</Link>
-        </div>
+        <Card className="border-gray-200 bg-surface px-8 py-16 text-center">
+          <CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-green-400" />
+          <p className="text-muted">No flashcards due right now. Come back later!</p>
+          <Link href="/vocabulary" className="mt-4 inline-block text-sm font-medium text-primary hover:underline">Back to Vocabulary</Link>
+        </Card>
       ) : card ? (
         <div className="max-w-xl mx-auto">
-          {/* Progress bar */}
-          <div className="flex items-center justify-between mb-3 text-sm text-gray-500">
+          <LearnerSurfaceSectionHeader
+            eyebrow="Review Session"
+            title="Flip the card"
+            description="Rate each term to keep your spaced repetition on track."
+            className="mb-4"
+          />
+          <div className="mb-3 flex items-center justify-between text-sm text-muted">
             <span>{current + 1} / {cards.length}</span>
           </div>
-          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-1.5 mb-6">
-            <div className="bg-indigo-500 h-1.5 rounded-full transition-all" style={{ width: `${Math.min(100, ((current + 1) / cards.length) * 100)}%` }} />
+          <div className="mb-6 h-1.5 w-full rounded-full bg-background-light">
+            <div className="h-1.5 rounded-full bg-primary transition-all" style={{ width: `${Math.min(100, ((current + 1) / cards.length) * 100)}%` }} />
           </div>
 
           <AnimatePresence mode="wait">
@@ -126,22 +134,22 @@ export default function FlashcardsPage() {
               animate={{ rotateY: 0, opacity: 1 }}
               exit={{ rotateY: flipped ? 90 : -90, opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-8 min-h-[220px] flex flex-col items-center justify-center text-center cursor-pointer select-none mb-4"
+              className="mb-4 flex min-h-[220px] cursor-pointer select-none flex-col items-center justify-center rounded-2xl border border-gray-200 bg-surface p-8 text-center"
               onClick={() => !flipped && setFlipped(true)}
             >
               {!flipped ? (
                 <>
-                  <div className="text-xs font-medium text-indigo-400 uppercase mb-4">WORD</div>
-                  <div className="text-3xl font-bold text-gray-900 dark:text-white mb-2">{card.word}</div>
-                  {card.pronunciation && <div className="text-gray-400 text-sm italic">{card.pronunciation}</div>}
-                  <div className="mt-6 text-xs text-gray-400">Tap to reveal definition</div>
+                  <div className="mb-4 text-xs font-medium uppercase text-primary">Word</div>
+                  <div className="mb-2 text-3xl font-bold text-navy">{card.word}</div>
+                  {card.pronunciation && <div className="text-sm italic text-muted">{card.pronunciation}</div>}
+                  <div className="mt-6 text-xs text-muted">Tap to reveal definition</div>
                 </>
               ) : (
                 <>
-                  <div className="text-xs font-medium text-green-400 uppercase mb-4">DEFINITION</div>
-                  <div className="text-lg text-gray-900 dark:text-white mb-4">{card.definition}</div>
+                  <div className="mb-4 text-xs font-medium uppercase text-green-500">Definition</div>
+                  <div className="mb-4 text-lg text-navy">{card.definition}</div>
                   {card.exampleSentence && (
-                    <div className="text-sm text-gray-500 italic border-t border-gray-100 dark:border-gray-700 pt-3 mt-2 w-full">
+                    <div className="mt-2 w-full border-t border-gray-100 pt-3 text-sm italic text-muted">
                       &quot;{card.exampleSentence}&quot;
                     </div>
                   )}
@@ -157,7 +165,7 @@ export default function FlashcardsPage() {
                   key={opt.q}
                   onClick={() => handleRate(opt.q)}
                   disabled={submitting}
-                  className={`py-3 rounded-xl font-medium text-sm transition-colors ${opt.color} disabled:opacity-50`}
+                  className={`rounded-xl py-3 text-sm font-medium transition-colors ${opt.color} disabled:opacity-50`}
                 >
                   {opt.label}
                 </button>

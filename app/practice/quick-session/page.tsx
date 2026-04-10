@@ -9,6 +9,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { ProgressBar } from '@/components/ui/progress';
 import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 
 /* ── types ─────────────────────────────────────── */
@@ -115,37 +116,49 @@ export default function MobileQuickSessionPage() {
   const correctCount = config ? answers.filter((a, i) => a === config.questions[i]?.correctIndex).length : 0;
   const progress = config ? ((currentQ + (revealed ? 1 : 0)) / config.questions.length) * 100 : 0;
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+  const heroHighlights = [
+    { icon: Timer, label: 'Session length', value: '5 mins' },
+    { icon: CheckCircle2, label: 'Format', value: 'Adaptive drills' },
+    { icon: Trophy, label: 'Outcome', value: 'Fast recall' },
+  ];
 
   /* ── render ────────────────────────────────── */
   return (
     <LearnerDashboardShell>
-      <div className="max-w-lg mx-auto px-4 py-6">
+      <div className="mx-auto max-w-5xl space-y-6 px-4 py-6">
+        <LearnerPageHero
+          eyebrow="Practice"
+          icon={Play}
+          title="Quick Practice"
+          description="Short, focused drills that fit into a small study window without losing the dashboard feel."
+          highlights={heroHighlights}
+        />
 
         {/* ── MENU ──────────────────────────── */}
         {step === 'menu' && (
           <>
-            <div className="mb-6">
-              <h1 className="text-xl font-bold mb-1">Quick Practice</h1>
-              <p className="text-sm text-muted-foreground">5-minute drills designed for mobile sessions</p>
-            </div>
-
-            <MotionSection className="space-y-3">
+            <MotionSection className="space-y-4">
+              <LearnerSurfaceSectionHeader
+                eyebrow="Choose a drill"
+                title="Start with a focused micro-session"
+                description="Each card below uses the same surface language as the dashboard, just in a denser format."
+              />
               {[
-                { mode: 'vocab', icon: BookOpen, label: 'Medical Vocabulary', desc: '8 questions · Fill-in & multiple choice', color: 'text-blue-500' },
-                { mode: 'listening', icon: Headphones, label: 'Listening Snap Quiz', desc: '5 audio clips with comprehension Qs', color: 'text-purple-500' },
-                { mode: 'grammar', icon: BookOpen, label: 'Grammar Quick-Fix', desc: '8 sentence correction exercises', color: 'text-emerald-500' },
+                { mode: 'vocab', icon: BookOpen, label: 'Medical Vocabulary', desc: '8 questions · Fill-in and multiple choice', color: 'bg-blue-50 text-blue-700 border-blue-200' },
+                { mode: 'listening', icon: Headphones, label: 'Listening Snap Quiz', desc: '5 audio clips with comprehension questions', color: 'bg-purple-50 text-purple-700 border-purple-200' },
+                { mode: 'grammar', icon: BookOpen, label: 'Grammar Quick-Fix', desc: '8 sentence correction exercises', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
               ].map(m => (
                 <MotionItem key={m.mode}>
-                  <Card className="p-4 active:scale-[0.98] transition-transform cursor-pointer" onClick={() => startSession(m.mode)}>
-                    <div className="flex items-center gap-3">
-                      <div className={`h-10 w-10 rounded-lg bg-muted/50 flex items-center justify-center ${m.color}`}>
+                  <Card className="p-5 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical active:scale-[0.99] cursor-pointer" onClick={() => startSession(m.mode)}>
+                    <div className="flex items-start gap-4">
+                      <div className={`flex h-11 w-11 items-center justify-center rounded-2xl border ${m.color}`}>
                         <m.icon className="h-5 w-5" />
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm">{m.label}</p>
-                        <p className="text-xs text-muted-foreground">{m.desc}</p>
+                      <div className="min-w-0 flex-1">
+                        <p className="text-sm font-semibold text-navy">{m.label}</p>
+                        <p className="mt-1 text-sm leading-6 text-muted">{m.desc}</p>
                       </div>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
+                      <ChevronRight className="mt-1 h-4 w-4 text-muted" />
                     </div>
                   </Card>
                 </MotionItem>
@@ -161,20 +174,26 @@ export default function MobileQuickSessionPage() {
           const q = config.questions[currentQ];
           const userAnswer = answers[currentQ];
           return (
-            <>
+            <MotionSection className="space-y-6">
               {/* progress bar */}
-              <div className="mb-4 space-y-2">
+              <LearnerSurfaceSectionHeader
+                eyebrow="Live session"
+                title="Answer, check, and move on"
+                description="The session keeps the same calm surface language as the rest of the learner workspace."
+              />
+
+              <Card className="p-5 shadow-sm">
                 <div className="flex items-center justify-between text-xs text-muted-foreground">
                   <span>Question {currentQ + 1} of {config.questions.length}</span>
                   <span className="flex items-center gap-1"><Timer className="h-3 w-3" />{formatTime(elapsed)}</span>
                 </div>
                 <ProgressBar value={progress} className="h-1.5" />
-              </div>
+              </Card>
 
               {/* question */}
-              <Card className="p-5 mb-4">
-                <Badge variant="outline" className="text-[10px] mb-3 capitalize">{q.type}</Badge>
-                <p className="text-sm font-medium leading-relaxed">{q.prompt}</p>
+              <Card className="p-5 shadow-sm">
+                <Badge variant="outline" className="mb-3 text-[10px] capitalize">{q.type}</Badge>
+                <p className="text-sm font-medium leading-relaxed text-navy">{q.prompt}</p>
                 {q.audioUrl && (
                   <button className="mt-3 flex items-center gap-2 text-sm text-primary">
                     <Volume2 className="h-4 w-4" /> Play audio
@@ -183,7 +202,7 @@ export default function MobileQuickSessionPage() {
               </Card>
 
               {/* options */}
-              <MotionSection className="space-y-2 mb-4">
+              <MotionSection className="space-y-2">
                 {q.options.map((opt, i) => {
                   let cls = 'border-border bg-muted/20';
                   if (revealed) {
@@ -197,7 +216,7 @@ export default function MobileQuickSessionPage() {
                       <button
                         onClick={() => selectAnswer(i)}
                         disabled={revealed}
-                        className={`w-full text-left px-4 py-3 rounded-lg border text-sm transition-all ${cls}`}
+                        className={`w-full rounded-2xl border px-4 py-3 text-left text-sm transition-[background-color,border-color,transform,box-shadow] duration-200 hover:shadow-sm active:scale-[0.99] ${cls}`}
                       >
                         <div className="flex items-center gap-3">
                           <span className="h-6 w-6 rounded-full border flex items-center justify-center text-xs font-medium shrink-0">
@@ -215,7 +234,7 @@ export default function MobileQuickSessionPage() {
 
               {/* explanation */}
               {revealed && (
-                <Card className="p-4 mb-4 border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/30">
+                <Card className="border-blue-200 bg-blue-50/50 p-4 shadow-sm dark:border-blue-800 dark:bg-blue-950/30">
                   <p className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">Explanation</p>
                   <p className="text-sm text-muted-foreground">{q.explanation}</p>
                 </Card>
@@ -227,20 +246,27 @@ export default function MobileQuickSessionPage() {
                   {currentQ + 1 >= config.questions.length ? 'See Results' : 'Next Question'} <ChevronRight className="h-4 w-4 ml-1" />
                 </Button>
               )}
-            </>
+            </MotionSection>
           );
         })()}
 
         {/* ── RESULTS ───────────────────────── */}
         {step === 'results' && config && (
-          <div className="py-8 text-center">
-            <div className="inline-flex items-center justify-center h-20 w-20 rounded-full bg-primary/10 mb-4">
-              <Trophy className="h-10 w-10 text-primary" />
-            </div>
-            <h2 className="text-xl font-bold mb-1">Session Complete</h2>
-            <p className="text-sm text-muted-foreground mb-6">in {formatTime(elapsed)}</p>
+          <MotionSection className="space-y-6 py-2">
+            <LearnerSurfaceSectionHeader
+              eyebrow="Session complete"
+              title="Quick practice results"
+              description="The summary follows the same surface and hierarchy rules as the main dashboard."
+            />
 
-            <Card className="p-5 mb-6 text-left">
+            <div className="rounded-3xl border border-border bg-surface p-6 text-center shadow-sm">
+              <div className="inline-flex items-center justify-center h-20 w-20 rounded-full bg-primary/10 mb-4">
+              <Trophy className="h-10 w-10 text-primary" />
+              </div>
+              <h2 className="text-xl font-bold mb-1 text-navy">Session Complete</h2>
+              <p className="text-sm text-muted mb-6">in {formatTime(elapsed)}</p>
+
+              <Card className="p-5 mb-6 text-left shadow-sm">
               <div className="grid grid-cols-3 gap-4 text-center">
                 <div>
                   <p className="text-2xl font-bold text-primary">{correctCount}</p>
@@ -254,8 +280,8 @@ export default function MobileQuickSessionPage() {
                   <p className="text-2xl font-bold">{Math.round((correctCount / config.questions.length) * 100)}%</p>
                   <p className="text-xs text-muted-foreground">Accuracy</p>
                 </div>
-              </div>
-            </Card>
+                </div>
+              </Card>
 
             {/* question breakdown */}
             <div className="space-y-2 mb-6 text-left">
@@ -278,7 +304,8 @@ export default function MobileQuickSessionPage() {
                 <Play className="h-4 w-4 mr-2" />Play Again
               </Button>
             </div>
-          </div>
+            </div>
+          </MotionSection>
         )}
       </div>
     </LearnerDashboardShell>

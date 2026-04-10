@@ -73,7 +73,7 @@ export function AppShell({
   );
 
   const shell = distractionFree ? (
-    <div className="relative isolate flex min-h-[var(--app-viewport-height,100dvh)] flex-col overflow-hidden bg-background-light text-navy">
+    <div className="relative isolate flex h-[var(--app-viewport-height,100dvh)] flex-col overflow-hidden bg-background-light text-navy">
       {shellBackdrop}
       <a
         href="#main-content"
@@ -94,7 +94,7 @@ export function AppShell({
           id="main-content"
           key={pathname}
           layout="position"
-          className={cn('relative z-10 flex flex-1 min-h-0 flex-col px-4 py-4 sm:px-6 lg:px-8 lg:py-6', className)}
+          className={cn('relative z-10 flex flex-1 min-h-0 flex-col overflow-y-auto px-4 py-4 sm:px-6 lg:px-8 lg:py-6', className)}
           {...routeMotionProps}
         >
           {children}
@@ -102,7 +102,7 @@ export function AppShell({
       </AnimatePresence>
     </div>
   ) : (
-    <div className="relative isolate flex min-h-[var(--app-viewport-height,100dvh)] flex-col overflow-hidden bg-background-light text-navy lg:flex-row">
+    <div className="relative isolate flex h-[var(--app-viewport-height,100dvh)] flex-col overflow-hidden bg-background-light text-navy lg:flex-row">
       {shellBackdrop}
       <a
         href="#main-content"
@@ -120,7 +120,7 @@ export function AppShell({
         workspaceRole={workspaceRole}
       />
       <Sidebar items={navItems} userSummary={userSummary} workspaceRole={workspaceRole} />
-      <div className="relative z-10 flex min-w-0 flex-1 flex-col">
+      <div className="relative z-10 flex min-w-0 flex-1 min-h-0 flex-col">
         <TopNav
           className="hidden lg:flex"
           pageTitle={pageTitle}

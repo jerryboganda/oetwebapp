@@ -199,7 +199,7 @@ export default function WritingPlayer() {
         </AnimatePresence>
 
         {/* Main Workspace */}
-        <main className="flex-1 min-h-0 overflow-hidden">
+        <main className="flex flex-1 min-h-0 flex-col overflow-hidden">
           <div className="flex h-full flex-col lg:hidden">
             <div className="border-b border-gray-200 bg-white/90 px-3 py-3 shadow-sm backdrop-blur">
               <div className="grid grid-cols-2 rounded-[20px] border border-gray-200 bg-background-light p-1">
@@ -275,10 +275,10 @@ export default function WritingPlayer() {
             </div>
           </div>
 
-          <div className="hidden h-full lg:flex">
+          <div className={cn('hidden flex-1 min-h-0 lg:grid', isDistractionFree ? 'lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]' : 'lg:grid-cols-2')}>
             <motion.div
               layout
-              className={cn('min-w-0', isDistractionFree ? 'w-1/3' : 'w-1/2')}
+              className="h-full min-h-0 min-w-0 w-full"
               transition={panelTransition}
             >
               <WritingCaseNotesPanel
@@ -293,7 +293,7 @@ export default function WritingPlayer() {
             </motion.div>
             <motion.div
               layout
-              className={cn('min-w-0', isDistractionFree ? 'w-2/3' : 'w-1/2')}
+              className="h-full min-h-0 min-w-0 w-full"
               transition={panelTransition}
             >
               <WritingEditor
