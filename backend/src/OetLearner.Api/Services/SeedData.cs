@@ -1911,7 +1911,8 @@ public static class SeedData
             new ForumCategory { Id = "fcat-005", ExamTypeCode = "oet", Name = "OET Listening", Description = "Tips and resources for the OET Listening subtest.", SortOrder = 50, Status = "active" },
             new ForumCategory { Id = "fcat-006", ExamTypeCode = null, Name = "Study Groups", Description = "Find and organise study partners and virtual study groups.", SortOrder = 60, Status = "active" },
             new ForumCategory { Id = "fcat-007", ExamTypeCode = null, Name = "Exam Experiences", Description = "Share your exam day experiences, scores, and re-sit strategies.", SortOrder = 70, Status = "active" },
-            new ForumCategory { Id = "fcat-008", ExamTypeCode = null, Name = "Resources & Tools", Description = "Share helpful resources, books, videos, and preparation tools.", SortOrder = 80, Status = "active" }
+            new ForumCategory { Id = "fcat-008", ExamTypeCode = null, Name = "Resources & Tools", Description = "Share helpful resources, books, videos, and preparation tools.", SortOrder = 80, Status = "active" },
+            new ForumCategory { Id = "fcat-009", ExamTypeCode = null, Name = "Ask an Expert", Description = "Post your OET preparation questions and get verified answers from certified expert reviewers.", SortOrder = 5, Status = "active" }
         );
     }
 

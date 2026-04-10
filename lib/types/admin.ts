@@ -414,3 +414,142 @@ export interface AdminQualityAnalytics {
     riskCases: AdminQualityPoint[];
   };
 }
+
+// ── Admin Permissions (RBAC) ────────────────────────────
+
+export interface AdminPermissionGrant {
+  permission: string;
+  grantedBy: string;
+  grantedAt: string;
+}
+
+export interface AdminPermissionsResponse {
+  userId: string;
+  permissions: AdminPermissionGrant[];
+  allPermissions: string[];
+}
+
+// ── Content Publishing Workflow ─────────────────────────
+
+export interface AdminPublishRequest {
+  id: string;
+  contentItemId: string;
+  requestedBy: string;
+  requestedByName: string;
+  reviewedBy: string | null;
+  reviewedByName: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  requestNote: string | null;
+  reviewNote: string | null;
+  requestedAt: string;
+  reviewedAt: string | null;
+}
+
+export interface AdminPublishRequestsResponse {
+  items: AdminPublishRequest[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+// ── Webhook Monitoring ──────────────────────────────────
+
+export interface AdminWebhookEvent {
+  id: string;
+  gateway: string;
+  eventType: string;
+  gatewayEventId: string;
+  processingStatus: 'received' | 'processing' | 'completed' | 'failed' | 'ignored';
+  errorMessage: string | null;
+  receivedAt: string;
+  processedAt: string | null;
+}
+
+export interface AdminWebhookEventsResponse {
+  items: AdminWebhookEvent[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface AdminWebhookSummary {
+  total: number;
+  recent24h: number;
+  failed: number;
+  failed24h: number;
+  byStatus: { status: string; count: number }[];
+  byGateway: { gateway: string; count: number }[];
+  recentFailures: { id: string; eventType: string; errorMessage: string | null; receivedAt: string }[];
+}
+
+// ── Review Escalation ───────────────────────────────────
+
+export interface AdminReviewEscalation {
+  id: string;
+  reviewRequestId: string;
+  originalReviewerId: string;
+  secondReviewerId: string | null;
+  subtestCode: string;
+  triggerCriterion: string;
+  aiScore: number;
+  humanScore: number;
+  divergence: number;
+  status: 'pending' | 'assigned' | 'resolved';
+  resolutionNote: string | null;
+  finalScore: number | null;
+  createdAt: string;
+  resolvedAt: string | null;
+}
+
+export interface AdminEscalationsResponse {
+  items: AdminReviewEscalation[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+// ── Score Guarantee Claims (Admin) ───────────────────
+
+export interface AdminScoreGuaranteeClaim {
+  id: string;
+  userId: string;
+  subscriptionId: string;
+  baselineScore: number;
+  guaranteedImprovement: number;
+  actualScore: number | null;
+  status: 'active' | 'claim_submitted' | 'claim_approved' | 'claim_rejected' | 'expired';
+  proofDocumentUrl: string | null;
+  claimNote: string | null;
+  reviewNote: string | null;
+  reviewedBy: string | null;
+  activatedAt: string;
+  expiresAt: string;
+}
+
+export interface AdminScoreGuaranteeClaimsResponse {
+  items: AdminScoreGuaranteeClaim[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
+// ── Business Intelligence (Admin) ────────────────────
+
+export interface AdminBIMetric {
+  label: string;
+  value: number;
+  change: number;
+  changeLabel: string;
+}
+
+export interface AdminBIDashboardData {
+  revenue: AdminBIMetric;
+  activeUsers: AdminBIMetric;
+  retention: AdminBIMetric;
+  churnRate: AdminBIMetric;
+  avgScoreImprovement: AdminBIMetric;
+  expertUtilization: AdminBIMetric;
+  topSubtests: Array<{ subtest: string; completions: number; avgScore: number }>;
+  revenueByMonth: Array<{ month: string; revenue: number; subscriptions: number }>;
+  userGrowth: Array<{ month: string; newUsers: number; totalUsers: number }>;
+}

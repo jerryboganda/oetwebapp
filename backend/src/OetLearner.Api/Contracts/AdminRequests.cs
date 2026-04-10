@@ -239,3 +239,56 @@ public record AdminBulkActionRequest(
     string Action,
     string[] ContentIds,
     bool DryRun = false);
+
+// ── RBAC Permissions ──
+
+public record AdminPermissionUpdateRequest(string[] Permissions);
+
+// ── Content Publishing Workflow ──
+
+public record AdminPublishRequestPayload(string? Note);
+
+public record AdminPublishReviewPayload(string? Note);
+
+// ── Review Escalation ──
+
+public record AdminEscalationAssignRequest(string SecondReviewerId);
+
+public record AdminEscalationResolveRequest(int FinalScore, string? ResolutionNote);
+
+// ── Phase 1 DTOs ─────────────────────────────────────
+
+public record ScoreGuaranteeActivateRequest(int BaselineScore);
+
+public record ScoreGuaranteeClaimRequest(int ActualScore, string? ProofDocumentUrl, string? Note);
+
+public record AdminScoreGuaranteeReviewRequest(string Decision, string? Note);
+// Decision: approved | rejected
+
+public record StudyCommitmentRequest(int DailyMinutes);
+
+public record ExpertAnnotationTemplateRequest(string SubtestCode, string CriterionCode, string Label, string TemplateText, bool IsShared);
+
+// ── Phase 2 DTOs ─────────────────────────────────────
+
+// L3 Profession Learning Paths
+public record LearningPathRequest(string ProfessionId, string ExamTypeCode);
+
+// L5 Weak-Area Remediation
+public record RemediationStartRequest(string SubtestCode, string? CriterionCode);
+
+// A4 Content Quality Scoring
+public record ContentQualityScoreRequest(string ContentId);
+
+// A6 Bulk Learner Operations
+public record AdminBulkCreditRequest(string[] UserIds, int CreditAmount, string Reason);
+public record AdminBulkNotificationRequest(string[] UserIds, string Title, string Message, string? Category);
+public record AdminBulkStatusRequest(string[] UserIds, string NewStatus, string Reason);
+
+// B3 Enterprise/Sponsor Channel
+public record SponsorCreateRequest(string Name, string Type, string ContactEmail, string? OrganizationName);
+public record SponsorUpdateRequest(string? Name, string? ContactEmail, string? OrganizationName, string? Status);
+public record CohortCreateRequest(string SponsorId, string Name, string ExamTypeCode, DateOnly? StartDate, DateOnly? EndDate, int MaxSeats);
+public record CohortUpdateRequest(string? Name, DateOnly? StartDate, DateOnly? EndDate, int? MaxSeats, string? Status);
+public record CohortMemberAddRequest(string LearnerId);
+public record SponsorLearnerLinkRequest(string SponsorId, string LearnerId);

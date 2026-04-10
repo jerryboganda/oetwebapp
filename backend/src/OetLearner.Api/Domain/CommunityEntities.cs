@@ -127,3 +127,57 @@ public class StudyGroupMember
 
     public DateTimeOffset JoinedAt { get; set; }
 }
+
+public class PeerReviewRequest
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string SubmitterUserId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string? ReviewerUserId { get; set; }
+
+    [MaxLength(64)]
+    public string AttemptId { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string SubtestCode { get; set; } = default!;           // writing, speaking
+
+    [MaxLength(32)]
+    public string Status { get; set; } = "open";                  // open, claimed, completed, expired
+
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? ClaimedAt { get; set; }
+    public DateTimeOffset? CompletedAt { get; set; }
+}
+
+public class PeerReviewFeedback
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string PeerReviewRequestId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ReviewerUserId { get; set; } = default!;
+
+    public int OverallRating { get; set; }                        // 1-5 stars
+
+    [MaxLength(2000)]
+    public string Comments { get; set; } = default!;
+
+    [MaxLength(1000)]
+    public string? StrengthNotes { get; set; }
+
+    [MaxLength(1000)]
+    public string? ImprovementNotes { get; set; }
+
+    public int HelpfulnessRating { get; set; }                    // 0 = unrated, 1-5 set by submitter
+
+    public DateTimeOffset CreatedAt { get; set; }
+}

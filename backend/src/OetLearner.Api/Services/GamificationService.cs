@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 
@@ -328,5 +329,103 @@ public class GamificationService(LearnerDbContext db)
         {
             return false;
         }
+    }
+
+    // ════════════════════════════════════════════
+    //  Study Commitment
+    // ════════════════════════════════════════════
+
+    public async Task<object> GetStudyCommitmentAsync(string userId, CancellationToken ct)
+    {
+        var commitment = await db.StudyCommitments
+            .AsNoTracking()
+            .Where(c => c.UserId == userId && c.IsActive)
+            .FirstOrDefaultAsync(ct);
+
+        var streak = await db.LearnerStreaks
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.UserId == userId, ct);
+
+        return new
+        {
+            hasCommitment = commitment is not null,
+            dailyMinutes = commitment?.DailyMinutes ?? 0,
+            freezeProtections = commitment?.FreezeProtections ?? 0,
+            freezeProtectionsUsed = commitment?.FreezeProtectionsUsed ?? 0,
+            currentStreak = streak?.CurrentStreak ?? 0,
+            longestStreak = streak?.LongestStreak ?? 0
+        };
+    }
+
+    public async Task<object> SetStudyCommitmentAsync(string userId, StudyCommitmentRequest request, CancellationToken ct)
+    {
+        if (request.DailyMinutes < 5 || request.DailyMinutes > 480)
+            throw ApiException.Validation("invalid_minutes", "Daily minutes must be between 5 and 480.");
+
+        var existing = await db.StudyCommitments
+            .FirstOrDefaultAsync(c => c.UserId == userId && c.IsActive, ct);
+
+        if (existing is not null)
+        {
+            existing.DailyMinutes = request.DailyMinutes;
+            existing.FreezeProtections = 3;
+        }
+        else
+        {
+            db.StudyCommitments.Add(new StudyCommitment
+            {
+                Id = $"SC-{Guid.NewGuid():N}",
+                UserId = userId,
+                DailyMinutes = request.DailyMinutes,
+                FreezeProtections = 3,
+                IsActive = true,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+        }
+
+        await db.SaveChangesAsync(ct);
+        return new { dailyMinutes = request.DailyMinutes, active = true };
+    }
+
+    // ════════════════════════════════════════════
+    //  Certificates
+    // ════════════════════════════════════════════
+
+    public async Task<object> GetCertificatesAsync(string userId, CancellationToken ct)
+    {
+        var certs = await db.LearnerCertificates
+            .AsNoTracking()
+            .Where(c => c.UserId == userId)
+            .OrderByDescending(c => c.IssuedAt)
+            .Select(c => new
+            {
+                id = c.Id,
+                type = c.CertificateType,
+                title = c.Title,
+                description = c.Description,
+                downloadUrl = c.DownloadUrl,
+                issuedAt = c.IssuedAt
+            })
+            .ToListAsync(ct);
+
+        return new { certificates = certs };
+    }
+
+    public async Task IssueCertificateAsync(string userId, string type, string title, string description, CancellationToken ct)
+    {
+        var existing = await db.LearnerCertificates
+            .AnyAsync(c => c.UserId == userId && c.CertificateType == type, ct);
+        if (existing) return;
+
+        db.LearnerCertificates.Add(new LearnerCertificate
+        {
+            Id = $"CERT-{Guid.NewGuid():N}",
+            UserId = userId,
+            CertificateType = type,
+            Title = title,
+            Description = description,
+            IssuedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync(ct);
     }
 }

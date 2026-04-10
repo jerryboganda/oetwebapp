@@ -113,6 +113,8 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<ForumReply> ForumReplies => Set<ForumReply>();
     public DbSet<StudyGroup> StudyGroups => Set<StudyGroup>();
     public DbSet<StudyGroupMember> StudyGroupMembers => Set<StudyGroupMember>();
+    public DbSet<PeerReviewRequest> PeerReviewRequests => Set<PeerReviewRequest>();
+    public DbSet<PeerReviewFeedback> PeerReviewFeedbacks => Set<PeerReviewFeedback>();
 
     // Tutoring entities
     public DbSet<TutoringSession> TutoringSessions => Set<TutoringSession>();
@@ -139,6 +141,14 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<FeatureFlag> FeatureFlags => Set<FeatureFlag>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<BillingPlan> BillingPlans => Set<BillingPlan>();
+    public DbSet<AdminPermissionGrant> AdminPermissionGrants => Set<AdminPermissionGrant>();
+    public DbSet<ContentPublishRequest> ContentPublishRequests => Set<ContentPublishRequest>();
+    public DbSet<ReviewEscalation> ReviewEscalations => Set<ReviewEscalation>();
+    public DbSet<ScoreGuaranteePledge> ScoreGuaranteePledges => Set<ScoreGuaranteePledge>();
+    public DbSet<ReferralRecord> ReferralRecords => Set<ReferralRecord>();
+    public DbSet<ExpertAnnotationTemplate> ExpertAnnotationTemplates => Set<ExpertAnnotationTemplate>();
+    public DbSet<StudyCommitment> StudyCommitments => Set<StudyCommitment>();
+    public DbSet<LearnerCertificate> LearnerCertificates => Set<LearnerCertificate>();
 
     // Content hierarchy entities
     public DbSet<ContentProgram> ContentPrograms => Set<ContentProgram>();
@@ -303,6 +313,9 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<ForumReply>().HasIndex(x => x.ThreadId);
         modelBuilder.Entity<StudyGroupMember>().HasIndex(x => new { x.GroupId, x.UserId }).IsUnique();
         modelBuilder.Entity<StudyGroupMember>().HasIndex(x => x.UserId);
+        modelBuilder.Entity<PeerReviewRequest>().HasIndex(x => x.SubmitterUserId);
+        modelBuilder.Entity<PeerReviewRequest>().HasIndex(x => new { x.Status, x.CreatedAt });
+        modelBuilder.Entity<PeerReviewFeedback>().HasIndex(x => x.PeerReviewRequestId);
 
         // Tutoring indexes
         modelBuilder.Entity<TutoringSession>().HasIndex(x => new { x.LearnerUserId, x.ScheduledAt });
@@ -343,5 +356,12 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<ContentItem>().HasIndex(x => x.ImportBatchId);
         modelBuilder.Entity<ContentItem>().HasIndex(x => new { x.IsPreviewEligible, x.Status });
         modelBuilder.Entity<ContentImportBatch>().HasIndex(x => x.CreatedBy);
+
+        // ── Phase 0: Foundation entities ──
+        modelBuilder.Entity<AdminPermissionGrant>().HasIndex(x => new { x.AdminUserId, x.Permission }).IsUnique();
+        modelBuilder.Entity<ContentPublishRequest>().HasIndex(x => new { x.ContentItemId, x.Status });
+        modelBuilder.Entity<ContentPublishRequest>().HasIndex(x => x.RequestedBy);
+        modelBuilder.Entity<ReviewEscalation>().HasIndex(x => new { x.ReviewRequestId, x.Status });
+        modelBuilder.Entity<ReviewEscalation>().HasIndex(x => x.SecondReviewerId);
     }
 }

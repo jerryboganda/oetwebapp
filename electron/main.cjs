@@ -827,3 +827,84 @@ ipcMain.handle('desktop:runtime-info', async () => ({
   ignoredPackagedLoopbackApiTarget,
   windowState: getMainWindowState(),
 }));
+
+// ---------- M3: Desktop Offline Content Cache ----------
+const OFFLINE_CACHE_DIR = path.join(app.getPath('userData'), 'offline-content');
+
+function ensureOfflineCacheDir() {
+  if (!fs.existsSync(OFFLINE_CACHE_DIR)) {
+    fs.mkdirSync(OFFLINE_CACHE_DIR, { recursive: true });
+  }
+}
+
+function sanitizeCacheKey(key) {
+  if (typeof key !== 'string' || key.trim() === '') {
+    throw new Error('A valid cache key is required.');
+  }
+  // Only allow alphanumeric, hyphens, underscores, and dots
+  return key.replace(/[^a-zA-Z0-9._-]/g, '_');
+}
+
+ipcMain.handle('desktop:offline-cache:store', async (_event, payload) => {
+  ensureOfflineCacheDir();
+  const key = sanitizeCacheKey(payload?.key);
+  const data = payload?.data;
+  if (data === undefined || data === null) {
+    throw new Error('Data is required for cache storage.');
+  }
+  const filePath = path.join(OFFLINE_CACHE_DIR, `${key}.json`);
+  const resolved = path.resolve(filePath);
+  if (!resolved.startsWith(OFFLINE_CACHE_DIR)) {
+    throw new Error('Invalid cache key.');
+  }
+  fs.writeFileSync(resolved, JSON.stringify({ cachedAt: Date.now(), data }), 'utf-8');
+  return { success: true, key };
+});
+
+ipcMain.handle('desktop:offline-cache:get', async (_event, payload) => {
+  ensureOfflineCacheDir();
+  const key = sanitizeCacheKey(payload?.key);
+  const filePath = path.join(OFFLINE_CACHE_DIR, `${key}.json`);
+  const resolved = path.resolve(filePath);
+  if (!resolved.startsWith(OFFLINE_CACHE_DIR)) {
+    throw new Error('Invalid cache key.');
+  }
+  if (!fs.existsSync(resolved)) {
+    return null;
+  }
+  const raw = fs.readFileSync(resolved, 'utf-8');
+  return JSON.parse(raw);
+});
+
+ipcMain.handle('desktop:offline-cache:delete', async (_event, payload) => {
+  ensureOfflineCacheDir();
+  const key = sanitizeCacheKey(payload?.key);
+  const filePath = path.join(OFFLINE_CACHE_DIR, `${key}.json`);
+  const resolved = path.resolve(filePath);
+  if (!resolved.startsWith(OFFLINE_CACHE_DIR)) {
+    throw new Error('Invalid cache key.');
+  }
+  if (fs.existsSync(resolved)) {
+    fs.unlinkSync(resolved);
+  }
+  return { success: true, key };
+});
+
+ipcMain.handle('desktop:offline-cache:list', async () => {
+  ensureOfflineCacheDir();
+  const files = fs.readdirSync(OFFLINE_CACHE_DIR).filter((f) => f.endsWith('.json'));
+  return files.map((f) => {
+    const key = f.replace(/\.json$/, '');
+    const stat = fs.statSync(path.join(OFFLINE_CACHE_DIR, f));
+    return { key, sizeBytes: stat.size, modifiedAt: stat.mtimeMs };
+  });
+});
+
+ipcMain.handle('desktop:offline-cache:clear', async () => {
+  ensureOfflineCacheDir();
+  const files = fs.readdirSync(OFFLINE_CACHE_DIR).filter((f) => f.endsWith('.json'));
+  for (const f of files) {
+    fs.unlinkSync(path.join(OFFLINE_CACHE_DIR, f));
+  }
+  return { success: true, cleared: files.length };
+});

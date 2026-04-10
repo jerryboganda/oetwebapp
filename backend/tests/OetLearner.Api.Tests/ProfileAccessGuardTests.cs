@@ -77,7 +77,7 @@ public class ProfileAccessGuardTests
         var storageOptions = Options.Create(new StorageOptions { LocalRootPath = storageRoot });
         var mediaStorage = new MediaStorageService(new TestHostEnvironment(storageRoot), storageOptions);
 
-        return new ExpertService(db, NullLogger<ExpertService>.Instance, mediaStorage, platformLinks, null!);
+        return new ExpertService(db, NullLogger<ExpertService>.Instance, mediaStorage, platformLinks, null!, new PronunciationService(db));
     }
 
     private static PaymentGatewayService CreatePaymentGatewayService(IOptions<BillingOptions> billingOptions)

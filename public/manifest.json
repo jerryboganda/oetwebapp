@@ -2,15 +2,43 @@
   "name": "OET Prep — Learner Platform",
   "short_name": "OET Prep",
   "description": "Prepare for the OET with personalised practice, AI feedback, and expert review.",
-  "start_url": "/",
+  "start_url": "/dashboard",
+  "scope": "/",
   "display": "standalone",
+  "orientation": "any",
   "background_color": "#ffffff",
   "theme_color": "#1e3a5f",
+  "categories": ["education", "medical"],
+  "lang": "en",
+  "dir": "ltr",
   "icons": [
     {
       "src": "/icon.svg",
       "sizes": "any",
-      "type": "image/svg+xml"
+      "type": "image/svg+xml",
+      "purpose": "any"
     }
-  ]
+  ],
+  "screenshots": [],
+  "shortcuts": [
+    {
+      "name": "Dashboard",
+      "short_name": "Dashboard",
+      "url": "/dashboard",
+      "icons": [{ "src": "/icon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Practice",
+      "short_name": "Practice",
+      "url": "/study-plan",
+      "icons": [{ "src": "/icon.svg", "sizes": "any" }]
+    },
+    {
+      "name": "Progress",
+      "short_name": "Progress",
+      "url": "/progress",
+      "icons": [{ "src": "/icon.svg", "sizes": "any" }]
+    }
+  ],
+  "prefer_related_applications": false
 }

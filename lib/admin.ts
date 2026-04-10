@@ -15,6 +15,7 @@ import {
   fetchAdminCriteria,
   fetchAdminDashboard,
   fetchAdminFlags,
+  fetchAdminPermissions,
   fetchAdminQualityAnalytics,
   fetchAdminReviewFailures,
   fetchAdminReviewOpsQueue,
@@ -23,6 +24,11 @@ import {
   fetchAdminTaxonomyImpact,
   fetchAdminUserDetail,
   fetchAdminUsers,
+  fetchPublishRequests,
+  fetchReviewEscalations,
+  fetchWebhookEvents,
+  fetchWebhookSummary,
+  fetchAdminScoreGuaranteeClaims,
 } from './api';
 import type {
   AdminAIConfig,
@@ -39,7 +45,10 @@ import type {
   AdminContentRow,
   AdminCriterion,
   AdminDashboardData,
+  AdminEscalationsResponse,
   AdminFlag,
+  AdminPermissionsResponse,
+  AdminPublishRequestsResponse,
   AdminQualityAnalytics,
   AdminRevisionRow,
   AdminReviewFailures,
@@ -50,6 +59,10 @@ import type {
   AdminUserDetail,
   AdminUserRow,
   AdminUsersPageData,
+  AdminWebhookEventsResponse,
+  AdminWebhookSummary,
+  AdminScoreGuaranteeClaim,
+  AdminScoreGuaranteeClaimsResponse,
 } from './types/admin';
 
 type ApiRecord = Record<string, any>;
@@ -697,4 +710,185 @@ export async function getAdminQualityAnalyticsData(params?: Parameters<typeof fe
       })),
     },
   };
+}
+
+// ── Admin Permissions (RBAC) ────────────────────────────
+
+export async function getAdminPermissionsData(userId: string): Promise<AdminPermissionsResponse> {
+  const raw = asRecord(await fetchAdminPermissions(userId));
+  return {
+    userId: toStringValue(raw.userId),
+    permissions: asArray(raw.permissions).map((g) => ({
+      permission: toStringValue(g.permission),
+      grantedBy: toStringValue(g.grantedBy),
+      grantedAt: toStringValue(g.grantedAt),
+    })),
+    allPermissions: asArray(raw.allPermissions).map((p) => toStringValue(p)),
+  };
+}
+
+// ── Content Publishing Workflow ─────────────────────────
+
+export async function getAdminPublishRequestsData(
+  params?: Parameters<typeof fetchPublishRequests>[0],
+): Promise<AdminPublishRequestsResponse> {
+  const raw = asRecord(await fetchPublishRequests(params));
+  return {
+    items: asArray(raw.items).map((r) => ({
+      id: toStringValue(r.id),
+      contentItemId: toStringValue(r.contentItemId),
+      requestedBy: toStringValue(r.requestedBy),
+      requestedByName: toStringValue(r.requestedByName),
+      reviewedBy: toNullableString(r.reviewedBy),
+      reviewedByName: toNullableString(r.reviewedByName),
+      status: normalizePublishRequestStatus(r.status),
+      requestNote: toNullableString(r.requestNote),
+      reviewNote: toNullableString(r.reviewNote),
+      requestedAt: toStringValue(r.requestedAt),
+      reviewedAt: toNullableString(r.reviewedAt),
+    })),
+    total: toNumberValue(raw.total),
+    page: toNumberValue(raw.page, 1),
+    pageSize: toNumberValue(raw.pageSize, 20),
+  };
+}
+
+function normalizePublishRequestStatus(value: unknown): 'pending' | 'approved' | 'rejected' {
+  const normalized = toStringValue(value, 'pending').toLowerCase();
+  if (normalized === 'approved') return 'approved';
+  if (normalized === 'rejected') return 'rejected';
+  return 'pending';
+}
+
+// ── Webhook Monitoring ──────────────────────────────────
+
+export async function getAdminWebhookEventsData(
+  params?: Parameters<typeof fetchWebhookEvents>[0],
+): Promise<AdminWebhookEventsResponse> {
+  const raw = asRecord(await fetchWebhookEvents(params));
+  return {
+    items: asArray(raw.items).map((e) => ({
+      id: toStringValue(e.id),
+      gateway: toStringValue(e.gateway),
+      eventType: toStringValue(e.eventType),
+      gatewayEventId: toStringValue(e.gatewayEventId),
+      processingStatus: normalizeWebhookStatus(e.processingStatus),
+      errorMessage: toNullableString(e.errorMessage),
+      receivedAt: toStringValue(e.receivedAt),
+      processedAt: toNullableString(e.processedAt),
+    })),
+    total: toNumberValue(raw.total),
+    page: toNumberValue(raw.page, 1),
+    pageSize: toNumberValue(raw.pageSize, 20),
+  };
+}
+
+function normalizeWebhookStatus(value: unknown): 'received' | 'processing' | 'completed' | 'failed' | 'ignored' {
+  const normalized = toStringValue(value, 'received').toLowerCase();
+  if (normalized === 'processing') return 'processing';
+  if (normalized === 'completed') return 'completed';
+  if (normalized === 'failed') return 'failed';
+  if (normalized === 'ignored') return 'ignored';
+  return 'received';
+}
+
+export async function getAdminWebhookSummaryData(): Promise<AdminWebhookSummary> {
+  const raw = asRecord(await fetchWebhookSummary());
+  return {
+    total: toNumberValue(raw.total),
+    recent24h: toNumberValue(raw.recent24h),
+    failed: toNumberValue(raw.failed),
+    failed24h: toNumberValue(raw.failed24h),
+    byStatus: asArray(raw.byStatus).map((s) => ({
+      status: toStringValue(s.status),
+      count: toNumberValue(s.count),
+    })),
+    byGateway: asArray(raw.byGateway).map((g) => ({
+      gateway: toStringValue(g.gateway),
+      count: toNumberValue(g.count),
+    })),
+    recentFailures: asArray(raw.recentFailures).map((f) => ({
+      id: toStringValue(f.id),
+      eventType: toStringValue(f.eventType),
+      errorMessage: toNullableString(f.errorMessage),
+      receivedAt: toStringValue(f.receivedAt),
+    })),
+  };
+}
+
+// ── Review Escalation ───────────────────────────────────
+
+export async function getAdminEscalationsData(
+  params?: Parameters<typeof fetchReviewEscalations>[0],
+): Promise<AdminEscalationsResponse> {
+  const raw = asRecord(await fetchReviewEscalations(params));
+  return {
+    items: asArray(raw.items).map((e) => ({
+      id: toStringValue(e.id),
+      reviewRequestId: toStringValue(e.reviewRequestId),
+      originalReviewerId: toStringValue(e.originalReviewerId),
+      secondReviewerId: toNullableString(e.secondReviewerId),
+      subtestCode: toStringValue(e.subtestCode),
+      triggerCriterion: toStringValue(e.triggerCriterion),
+      aiScore: toNumberValue(e.aiScore),
+      humanScore: toNumberValue(e.humanScore),
+      divergence: toNumberValue(e.divergence),
+      status: normalizeEscalationStatus(e.status),
+      resolutionNote: toNullableString(e.resolutionNote),
+      finalScore: e.finalScore != null ? toNumberValue(e.finalScore) : null,
+      createdAt: toStringValue(e.createdAt),
+      resolvedAt: toNullableString(e.resolvedAt),
+    })),
+    total: toNumberValue(raw.total),
+    page: toNumberValue(raw.page, 1),
+    pageSize: toNumberValue(raw.pageSize, 20),
+  };
+}
+
+function normalizeEscalationStatus(value: unknown): 'pending' | 'assigned' | 'resolved' {
+  const normalized = toStringValue(value, 'pending').toLowerCase();
+  if (normalized === 'assigned') return 'assigned';
+  if (normalized === 'resolved') return 'resolved';
+  return 'pending';
+}
+
+// ── Score Guarantee Claims (Admin) ──────────────────
+
+export async function getAdminScoreGuaranteeClaimsData(
+  params?: Parameters<typeof fetchAdminScoreGuaranteeClaims>[0],
+): Promise<AdminScoreGuaranteeClaimsResponse> {
+  const raw = asRecord(await fetchAdminScoreGuaranteeClaims(params));
+  return {
+    items: asArray(raw.items).map(
+      (p): AdminScoreGuaranteeClaim => ({
+        id: toStringValue(p.id),
+        userId: toStringValue(p.userId),
+        subscriptionId: toStringValue(p.subscriptionId),
+        baselineScore: toNumberValue(p.baselineScore),
+        guaranteedImprovement: toNumberValue(p.guaranteedImprovement),
+        actualScore: p.actualScore != null ? toNumberValue(p.actualScore) : null,
+        status: normalizeGuaranteeClaimStatus(p.status),
+        proofDocumentUrl: toNullableString(p.proofDocumentUrl),
+        claimNote: toNullableString(p.claimNote),
+        reviewNote: toNullableString(p.reviewNote),
+        reviewedBy: toNullableString(p.reviewedBy),
+        activatedAt: toStringValue(p.activatedAt),
+        expiresAt: toStringValue(p.expiresAt),
+      }),
+    ),
+    total: toNumberValue(raw.total),
+    page: toNumberValue(raw.page, 1),
+    pageSize: toNumberValue(raw.pageSize, 20),
+  };
+}
+
+function normalizeGuaranteeClaimStatus(
+  value: unknown,
+): 'active' | 'claim_submitted' | 'claim_approved' | 'claim_rejected' | 'expired' {
+  const s = toStringValue(value, 'active').toLowerCase();
+  if (s === 'claim_submitted') return 'claim_submitted';
+  if (s === 'claim_approved') return 'claim_approved';
+  if (s === 'claim_rejected') return 'claim_rejected';
+  if (s === 'expired') return 'expired';
+  return 'active';
 }

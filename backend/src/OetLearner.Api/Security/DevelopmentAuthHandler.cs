@@ -29,14 +29,20 @@ public class DevelopmentAuthHandler(
         var emailVerifiedHeader = Request.Headers["X-Debug-EmailVerified"].FirstOrDefault();
         var isEmailVerified = !bool.TryParse(emailVerifiedHeader, out var parsedEmailVerified) || parsedEmailVerified;
 
-        var claims = new[]
+        var claims = new List<Claim>
         {
-            new Claim(ClaimTypes.NameIdentifier, userId),
-            new Claim(ClaimTypes.Role, role),
-            new Claim(ClaimTypes.Email, email),
-            new Claim(ClaimTypes.Name, name),
-            new Claim(AuthTokenService.IsEmailVerifiedClaimType, isEmailVerified.ToString().ToLowerInvariant())
+            new(ClaimTypes.NameIdentifier, userId),
+            new(ClaimTypes.Role, role),
+            new(ClaimTypes.Email, email),
+            new(ClaimTypes.Name, name),
+            new(AuthTokenService.IsEmailVerifiedClaimType, isEmailVerified.ToString().ToLowerInvariant())
         };
+
+        var adminPerms = Request.Headers["X-Debug-AdminPermissions"].FirstOrDefault();
+        if (!string.IsNullOrWhiteSpace(adminPerms))
+        {
+            claims.Add(new Claim(AuthTokenService.AdminPermissionsClaimType, adminPerms));
+        }
 
         var identity = new ClaimsIdentity(claims, SchemeName);
         var principal = new ClaimsPrincipal(identity);

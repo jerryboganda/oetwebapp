@@ -223,3 +223,34 @@ public class ExpertMetricSnapshot
 
     public string CompletionDataJson { get; set; } = "[]";
 }
+
+/// <summary>Reusable comment template for expert review annotations.</summary>
+[Index(nameof(CreatedByExpertId))]
+public class ExpertAnnotationTemplate
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string CreatedByExpertId { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string SubtestCode { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string CriterionCode { get; set; } = default!;
+
+    [MaxLength(128)]
+    public string Label { get; set; } = default!;
+
+    [MaxLength(1500)]
+    public string TemplateText { get; set; } = default!;
+
+    public int UsageCount { get; set; }
+
+    public bool IsShared { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}

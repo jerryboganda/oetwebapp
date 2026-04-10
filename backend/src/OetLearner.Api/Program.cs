@@ -3,6 +3,7 @@ using System.Threading.RateLimiting;
 using System.Security.Claims;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Diagnostics;
 using Microsoft.AspNetCore.Identity;
@@ -359,6 +360,35 @@ builder.Services.AddAuthorization(options =>
         .RequireAuthenticatedUser()
         .RequireRole("admin")
         .RequireClaim(AuthTokenService.IsEmailVerifiedClaimType, bool.TrueString.ToLowerInvariant()));
+
+    // Granular admin permission policies
+    options.AddPolicy("AdminContentRead", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "content:read", "system_admin")));
+    options.AddPolicy("AdminContentWrite", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "content:write", "system_admin")));
+    options.AddPolicy("AdminContentPublish", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "content:publish", "system_admin")));
+    options.AddPolicy("AdminBillingRead", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:read", "system_admin")));
+    options.AddPolicy("AdminBillingWrite", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:write", "system_admin")));
+    options.AddPolicy("AdminUsersRead", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "users:read", "system_admin")));
+    options.AddPolicy("AdminUsersWrite", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "users:write", "system_admin")));
+    options.AddPolicy("AdminReviewOps", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "review_ops", "system_admin")));
+    options.AddPolicy("AdminSystemAdmin", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "system_admin")));
 });
 
 builder.Services.AddScoped<LearnerService>();
@@ -642,5 +672,13 @@ await using (var scope = app.Services.CreateAsyncScope())
 }
 
 app.Run();
+
+static bool HasAdminPermission(AuthorizationHandlerContext ctx, params string[] anyOf)
+{
+    var perms = ctx.User.FindFirstValue(AuthTokenService.AdminPermissionsClaimType);
+    if (string.IsNullOrEmpty(perms)) return false;
+    var granted = perms.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+    return anyOf.Any(p => granted.Contains(p, StringComparer.OrdinalIgnoreCase));
+}
 
 public partial class Program;

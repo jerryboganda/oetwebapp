@@ -23,6 +23,10 @@ import {
   Store,
   Snowflake,
   GitBranch,
+  KeyRound,
+  FileCheck2,
+  Webhook,
+  Scale,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 
@@ -46,6 +50,10 @@ const adminNavItems: NavItem[] = [
   { href: '/admin/marketplace-review', label: 'Marketplace Review', icon: <Store className="w-5 h-5" />, matchPrefix: '/admin/marketplace-review' },
   { href: '/admin/freeze', label: 'Content Freeze', icon: <Snowflake className="w-5 h-5" />, matchPrefix: '/admin/freeze' },
   { href: '/admin/content-hierarchy', label: 'Content Hierarchy', icon: <GitBranch className="w-5 h-5" />, matchPrefix: '/admin/content-hierarchy' },
+  { href: '/admin/permissions', label: 'Permissions', icon: <KeyRound className="w-5 h-5" />, matchPrefix: '/admin/permissions' },
+  { href: '/admin/publish-requests', label: 'Publish Requests', icon: <FileCheck2 className="w-5 h-5" />, matchPrefix: '/admin/publish-requests' },
+  { href: '/admin/webhooks', label: 'Webhooks', icon: <Webhook className="w-5 h-5" />, matchPrefix: '/admin/webhooks' },
+  { href: '/admin/escalations', label: 'Escalations', icon: <Scale className="w-5 h-5" />, matchPrefix: '/admin/escalations' },
 ];
 
 const adminMobileNavItems: NavItem[] = [

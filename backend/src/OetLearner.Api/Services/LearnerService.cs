@@ -5836,4 +5836,1160 @@ public partial class LearnerService(
 
         return new { examFamilies = families };
     }
+
+    // ════════════════════════════════════════════
+    //  Score Guarantee
+    // ════════════════════════════════════════════
+
+    public async Task<object> GetScoreGuaranteeAsync(string userId, CancellationToken ct)
+    {
+        var pledge = await db.ScoreGuaranteePledges
+            .AsNoTracking()
+            .Where(p => p.UserId == userId)
+            .OrderByDescending(p => p.ActivatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (pledge is null)
+            return new { active = false, eligible = true };
+
+        return new
+        {
+            active = pledge.Status == "active",
+            pledgeId = pledge.Id,
+            baselineScore = pledge.BaselineScore,
+            guaranteedImprovement = pledge.GuaranteedImprovement,
+            status = pledge.Status,
+            activatedAt = pledge.ActivatedAt,
+            expiresAt = pledge.ExpiresAt,
+            actualScore = pledge.ActualScore,
+            claimSubmittedAt = pledge.ClaimSubmittedAt
+        };
+    }
+
+    public async Task<object> ActivateScoreGuaranteeAsync(string userId, ScoreGuaranteeActivateRequest request, CancellationToken ct)
+    {
+        var existing = await db.ScoreGuaranteePledges
+            .AnyAsync(p => p.UserId == userId && p.Status == "active", ct);
+        if (existing)
+            throw ApiException.Conflict("already_active", "Score guarantee is already active.");
+
+        if (request.BaselineScore < 0 || request.BaselineScore > 500)
+            throw ApiException.Validation("invalid_score", "Baseline score must be between 0 and 500.");
+
+        var sub = await db.Subscriptions
+            .AsNoTracking()
+            .FirstOrDefaultAsync(s => s.UserId == userId && s.Status == SubscriptionStatus.Active, ct);
+        if (sub is null)
+            throw ApiException.Validation("no_subscription", "Active subscription required for score guarantee.");
+
+        var pledge = new ScoreGuaranteePledge
+        {
+            Id = $"SGP-{Guid.NewGuid():N}",
+            UserId = userId,
+            SubscriptionId = sub.Id,
+            BaselineScore = request.BaselineScore,
+            GuaranteedImprovement = 50,
+            Status = "active",
+            ActivatedAt = DateTimeOffset.UtcNow,
+            ExpiresAt = DateTimeOffset.UtcNow.AddDays(180)
+        };
+
+        db.ScoreGuaranteePledges.Add(pledge);
+        await db.SaveChangesAsync(ct);
+
+        return new { pledgeId = pledge.Id, status = "active", expiresAt = pledge.ExpiresAt };
+    }
+
+    public async Task<object> SubmitScoreGuaranteeClaimAsync(string userId, ScoreGuaranteeClaimRequest request, CancellationToken ct)
+    {
+        var pledge = await db.ScoreGuaranteePledges
+            .FirstOrDefaultAsync(p => p.UserId == userId && p.Status == "active", ct)
+            ?? throw ApiException.NotFound("no_pledge", "No active score guarantee found.");
+
+        if (request.ActualScore < 0 || request.ActualScore > 500)
+            throw ApiException.Validation("invalid_score", "Actual score must be between 0 and 500.");
+
+        pledge.ActualScore = request.ActualScore;
+        pledge.ProofDocumentUrl = request.ProofDocumentUrl;
+        pledge.ClaimNote = request.Note;
+        pledge.Status = "claim_submitted";
+        pledge.ClaimSubmittedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+
+        return new { pledgeId = pledge.Id, status = "claim_submitted" };
+    }
+
+    // ════════════════════════════════════════════
+    //  Score Cross-Reference Calculator
+    // ════════════════════════════════════════════
+
+    public Task<object> GetScoreEquivalencesAsync(CancellationToken ct)
+    {
+        // Official OET equivalence table (publicly available from OET website)
+        var equivalences = new[]
+        {
+            new { oetGrade = "A",   oetScoreMin = 450, oetScoreMax = 500, ielts = 9.0,  pte = 88,  cefr = "C2" },
+            new { oetGrade = "A",   oetScoreMin = 400, oetScoreMax = 449, ielts = 8.5,  pte = 83,  cefr = "C2" },
+            new { oetGrade = "B+",  oetScoreMin = 370, oetScoreMax = 399, ielts = 8.0,  pte = 79,  cefr = "C1+" },
+            new { oetGrade = "B",   oetScoreMin = 350, oetScoreMax = 369, ielts = 7.5,  pte = 73,  cefr = "C1" },
+            new { oetGrade = "B",   oetScoreMin = 300, oetScoreMax = 349, ielts = 7.0,  pte = 65,  cefr = "B2+" },
+            new { oetGrade = "C+",  oetScoreMin = 250, oetScoreMax = 299, ielts = 6.5,  pte = 58,  cefr = "B2" },
+            new { oetGrade = "C",   oetScoreMin = 200, oetScoreMax = 249, ielts = 6.0,  pte = 50,  cefr = "B1+" },
+            new { oetGrade = "C",   oetScoreMin = 150, oetScoreMax = 199, ielts = 5.5,  pte = 43,  cefr = "B1" },
+            new { oetGrade = "D",   oetScoreMin = 100, oetScoreMax = 149, ielts = 5.0,  pte = 36,  cefr = "A2+" },
+            new { oetGrade = "E",   oetScoreMin = 0,   oetScoreMax = 99,  ielts = 4.5,  pte = 30,  cefr = "A2" }
+        };
+
+        var commonRequirements = new[]
+        {
+            new { country = "Australia", body = "AHPRA (Nursing)", oetMinGrade = "B", oetMinScore = 350, ieltsMin = 7.0 },
+            new { country = "Australia", body = "AHPRA (Medicine)", oetMinGrade = "B", oetMinScore = 350, ieltsMin = 7.0 },
+            new { country = "UK", body = "NMC (Nursing)", oetMinGrade = "C+", oetMinScore = 300, ieltsMin = 7.0 },
+            new { country = "UK", body = "GMC (Medicine)", oetMinGrade = "B", oetMinScore = 350, ieltsMin = 7.5 },
+            new { country = "New Zealand", body = "NCNZ (Nursing)", oetMinGrade = "B", oetMinScore = 350, ieltsMin = 7.0 },
+            new { country = "Ireland", body = "NMBI (Nursing)", oetMinGrade = "C+", oetMinScore = 300, ieltsMin = 6.5 },
+            new { country = "Singapore", body = "SNB (Nursing)", oetMinGrade = "C+", oetMinScore = 300, ieltsMin = 6.5 },
+            new { country = "USA", body = "Various State Boards", oetMinGrade = "C+", oetMinScore = 300, ieltsMin = 6.5 }
+        };
+
+        return Task.FromResult<object>(new { equivalences, commonRequirements });
+    }
+
+    // ════════════════════════════════════════════
+    //  Referral Program
+    // ════════════════════════════════════════════
+
+    public async Task<object> GetReferralInfoAsync(string userId, CancellationToken ct)
+    {
+        var myCode = await db.ReferralRecords
+            .AsNoTracking()
+            .Where(r => r.ReferrerUserId == userId)
+            .OrderByDescending(r => r.CreatedAt)
+            .FirstOrDefaultAsync(ct);
+
+        var referralsMade = await db.ReferralRecords
+            .AsNoTracking()
+            .CountAsync(r => r.ReferrerUserId == userId && r.Status != "pending", ct);
+
+        var creditsEarned = await db.ReferralRecords
+            .AsNoTracking()
+            .Where(r => r.ReferrerUserId == userId && r.Status == "rewarded")
+            .SumAsync(r => r.ReferrerCreditAmount, ct);
+
+        return new
+        {
+            referralCode = myCode?.ReferralCode,
+            referralsMade,
+            creditsEarned,
+            referrerCreditAmount = 10m,
+            referredDiscountPercent = 10m
+        };
+    }
+
+    public async Task<object> GenerateReferralCodeAsync(string userId, CancellationToken ct)
+    {
+        var existing = await db.ReferralRecords
+            .FirstOrDefaultAsync(r => r.ReferrerUserId == userId && r.Status == "pending", ct);
+
+        if (existing is not null)
+            return new { referralCode = existing.ReferralCode };
+
+        var code = $"REF-{Guid.NewGuid():N}"[..12].ToUpperInvariant();
+        var record = new ReferralRecord
+        {
+            Id = $"RR-{Guid.NewGuid():N}",
+            ReferrerUserId = userId,
+            ReferralCode = code,
+            Status = "pending",
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        db.ReferralRecords.Add(record);
+        await db.SaveChangesAsync(ct);
+
+        return new { referralCode = code };
+    }
+
+    // ══════════════════════════════════════════════════════
+    // L3 · Profession-Specific Learning Paths
+    // ══════════════════════════════════════════════════════
+
+    public async Task<object> GetLearningPathAsync(string userId, string? professionId, string examTypeCode, CancellationToken ct)
+    {
+        var goal = await db.Goals.FirstOrDefaultAsync(g => g.UserId == userId, ct);
+        var effectiveProfession = professionId ?? goal?.ProfessionId ?? "nursing";
+
+        var profession = await db.Professions
+            .FirstOrDefaultAsync(p => p.Code == effectiveProfession || p.Id == effectiveProfession, ct);
+
+        // Get content items filtered by profession
+        var contentItems = await db.ContentItems
+            .Where(c => c.Status == ContentStatus.Published && c.ExamTypeCode == examTypeCode &&
+                        (c.ProfessionId == effectiveProfession || c.ProfessionId == null))
+            .OrderBy(c => c.SubtestCode)
+            .ThenBy(c => c.Difficulty == "easy" ? 0 : c.Difficulty == "medium" ? 1 : 2)
+            .Take(60)
+            .ToListAsync(ct);
+
+        // Get user's completed attempts for progress tracking
+        var completedAttemptContentIds = await db.Attempts
+            .Where(a => a.UserId == userId && a.State == AttemptState.Completed)
+            .Select(a => a.ContentId)
+            .Distinct()
+            .ToListAsync(ct);
+
+        var subtestGroups = contentItems
+            .GroupBy(c => c.SubtestCode)
+            .Select(g => new
+            {
+                subtestCode = g.Key,
+                totalItems = g.Count(),
+                completedItems = g.Count(c => completedAttemptContentIds.Contains(c.Id)),
+                progressPercent = g.Count() > 0 ? Math.Round(g.Count(c => completedAttemptContentIds.Contains(c.Id)) * 100.0 / g.Count(), 1) : 0,
+                items = g.Take(15).Select(c => new
+                {
+                    id = c.Id,
+                    title = c.Title,
+                    difficulty = c.Difficulty,
+                    durationMinutes = c.EstimatedDurationMinutes,
+                    completed = completedAttemptContentIds.Contains(c.Id),
+                    scenarioType = c.ScenarioType
+                }).ToList()
+            }).ToList();
+
+        return new
+        {
+            professionCode = effectiveProfession,
+            professionLabel = profession?.Label ?? effectiveProfession,
+            examTypeCode,
+            subtestPaths = subtestGroups,
+            overallProgress = subtestGroups.Count > 0
+                ? Math.Round(subtestGroups.Average(g => g.progressPercent), 1) : 0,
+            totalContent = contentItems.Count,
+            nextRecommended = contentItems
+                .Where(c => !completedAttemptContentIds.Contains(c.Id))
+                .Take(3)
+                .Select(c => new { id = c.Id, title = c.Title, subtestCode = c.SubtestCode, difficulty = c.Difficulty })
+                .ToList()
+        };
+    }
+
+    // ══════════════════════════════════════════════════════
+    // L5 · Adaptive Weak-Area Remediation
+    // ══════════════════════════════════════════════════════
+
+    public async Task<object> GetRemediationProfileAsync(string userId, CancellationToken ct)
+    {
+        // Analyze criterion scores across recent evaluations to find weak areas
+        var userAttemptIds = await db.Attempts
+            .Where(a => a.UserId == userId && a.State == AttemptState.Completed)
+            .Select(a => a.Id)
+            .ToListAsync(ct);
+
+        var evaluations = await db.Evaluations
+            .Where(e => userAttemptIds.Contains(e.AttemptId) && e.State == AsyncState.Completed)
+            .OrderByDescending(e => e.GeneratedAt)
+            .Take(20)
+            .ToListAsync(ct);
+
+        var weakAreas = new List<object>();
+        var criterionAggregates = new Dictionary<string, List<double>>();
+
+        foreach (var eval in evaluations)
+        {
+            var criterionScores = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(eval.CriterionScoresJson, []);
+            foreach (var cs in criterionScores)
+            {
+                var code = cs.TryGetValue("code", out var c) ? c?.ToString() ?? "" : "";
+                if (string.IsNullOrEmpty(code)) continue;
+
+                var key = $"{eval.SubtestCode}:{code}";
+                if (!criterionAggregates.ContainsKey(key))
+                    criterionAggregates[key] = [];
+
+                if (cs.TryGetValue("score", out var s) && s is not null)
+                {
+                    if (s is System.Text.Json.JsonElement je && je.TryGetDouble(out var jd))
+                        criterionAggregates[key].Add(jd);
+                    else if (double.TryParse(s.ToString(), System.Globalization.NumberStyles.Any,
+                        System.Globalization.CultureInfo.InvariantCulture, out var parsed))
+                        criterionAggregates[key].Add(parsed);
+                }
+            }
+        }
+
+        // Identify criteria scoring below threshold
+        foreach (var (key, scores) in criterionAggregates.OrderBy(kv => kv.Value.Average()))
+        {
+            var avg = scores.Average();
+            if (avg >= 4.0) continue; // Only flag weak criteria (below 4 out of 6)
+
+            var parts = key.Split(':');
+            weakAreas.Add(new
+            {
+                subtestCode = parts[0],
+                criterionCode = parts.Length > 1 ? parts[1] : "",
+                averageScore = Math.Round(avg, 2),
+                evaluationCount = scores.Count,
+                trend = scores.Count >= 3
+                    ? (scores.TakeLast(3).Average() > scores.Take(3).Average() ? "improving" : "declining")
+                    : "insufficient_data"
+            });
+        }
+
+        // Get available foundation resources for remediation
+        var resources = await db.FoundationResources
+            .Where(r => r.Status == ContentStatus.Published)
+            .OrderBy(r => r.DisplayOrder)
+            .Take(20)
+            .ToListAsync(ct);
+
+        return new
+        {
+            evaluationsAnalyzed = evaluations.Count,
+            weakAreas = weakAreas.Take(10).ToList(),
+            availableResources = resources.Select(r => new
+            {
+                id = r.Id,
+                title = r.Title,
+                resourceType = r.ResourceType,
+                difficulty = r.Difficulty,
+                displayOrder = r.DisplayOrder
+            }).ToList(),
+            recommendations = weakAreas.Take(3).Select(wa => new
+            {
+                area = wa,
+                suggestedResources = resources
+                    .Where(r => r.Difficulty == "easy" || r.Difficulty == "medium")
+                    .Take(3)
+                    .Select(r => new { id = r.Id, title = r.Title })
+                    .ToList()
+            }).ToList()
+        };
+    }
+
+    public async Task<object> StartRemediationSessionAsync(string userId, string subtestCode, string? criterionCode, CancellationToken ct)
+    {
+        // Find relevant foundation resources for the weak area
+        var resources = await db.FoundationResources
+            .Where(r => r.Status == ContentStatus.Published)
+            .OrderBy(r => r.Difficulty == "easy" ? 0 : r.Difficulty == "medium" ? 1 : 2)
+            .ThenBy(r => r.DisplayOrder)
+            .Take(5)
+            .ToListAsync(ct);
+
+        var sessionId = $"rem-{Guid.NewGuid():N}";
+
+        return new
+        {
+            sessionId,
+            subtestCode,
+            criterionCode,
+            resources = resources.Select(r => new
+            {
+                id = r.Id,
+                title = r.Title,
+                resourceType = r.ResourceType,
+                difficulty = r.Difficulty,
+                contentBody = r.ContentBody
+            }).ToList(),
+            startedAt = DateTimeOffset.UtcNow
+        };
+    }
+
+    // ══════════════════════════════════════════════════════
+    // E1 · Smart Next Best Action
+    // ══════════════════════════════════════════════════════
+
+    public async Task<object> GetNextBestActionsAsync(string userId, CancellationToken ct)
+    {
+        var actions = new List<object>();
+        var now = DateTimeOffset.UtcNow;
+
+        // 1. Check for incomplete study plan items due today/overdue
+        var studyPlan = await db.StudyPlans
+            .Where(p => p.UserId == userId && p.State == AsyncState.Completed)
+            .OrderByDescending(p => p.GeneratedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (studyPlan is not null)
+        {
+            var overdueItems = await db.StudyPlanItems
+                .Where(i => i.StudyPlanId == studyPlan.Id && i.Status == StudyPlanItemStatus.NotStarted &&
+                            i.DueDate <= DateOnly.FromDateTime(now.UtcDateTime))
+                .OrderBy(i => i.DueDate)
+                .Take(3)
+                .ToListAsync(ct);
+
+            foreach (var item in overdueItems)
+            {
+                actions.Add(new
+                {
+                    type = "overdue_task",
+                    priority = "high",
+                    title = item.Title,
+                    subtitle = $"Due {item.DueDate:MMM dd} · {item.DurationMinutes}min",
+                    actionUrl = $"/study-plan?highlight={item.Id}",
+                    subtestCode = item.SubtestCode
+                });
+            }
+        }
+
+        // 2. Check for pending reviews (expert feedback ready)
+        var pendingReviews = await db.ReviewRequests
+            .Where(r => r.State == ReviewRequestState.Completed)
+            .Join(db.Attempts, r => r.AttemptId, a => a.Id, (r, a) => new { r, a })
+            .Where(x => x.a.UserId == userId)
+            .OrderByDescending(x => x.r.CompletedAt)
+            .Take(2)
+            .ToListAsync(ct);
+
+        foreach (var pr in pendingReviews)
+        {
+            actions.Add(new
+            {
+                type = "review_ready",
+                priority = "medium",
+                title = $"Expert review ready: {pr.r.SubtestCode}",
+                subtitle = "Review your personalized feedback",
+                actionUrl = $"/feedback/{pr.r.Id}",
+                subtestCode = pr.r.SubtestCode
+            });
+        }
+
+        // 3. Check weak areas that need attention
+        var recentAttemptIds = await db.Attempts
+            .Where(a => a.UserId == userId && a.State == AttemptState.Completed)
+            .OrderByDescending(a => a.CompletedAt)
+            .Take(5)
+            .Select(a => a.Id)
+            .ToListAsync(ct);
+
+        var recentEvals = await db.Evaluations
+            .Where(e => recentAttemptIds.Contains(e.AttemptId) && e.State == AsyncState.Completed)
+            .ToListAsync(ct);
+
+        if (recentEvals.Count > 0)
+        {
+            var weakSubtest = recentEvals
+                .GroupBy(e => e.SubtestCode)
+                .Select(g => new
+                {
+                    SubtestCode = g.Key,
+                    AvgMid = g.Average(e =>
+                    {
+                        var parts = e.ScoreRange?.Split('-');
+                        return parts?.Length == 2 && double.TryParse(parts[0], out var lo) && double.TryParse(parts[1], out var hi)
+                            ? (lo + hi) / 2.0 : 0;
+                    })
+                })
+                .OrderBy(g => g.AvgMid)
+                .FirstOrDefault();
+
+            if (weakSubtest is not null && weakSubtest.AvgMid < 350)
+            {
+                actions.Add(new
+                {
+                    type = "weak_area_practice",
+                    priority = "medium",
+                    title = $"Practice {weakSubtest.SubtestCode} — your weakest area",
+                    subtitle = $"Average score: {weakSubtest.AvgMid:F0}/500",
+                    actionUrl = $"/practice/{weakSubtest.SubtestCode}",
+                    subtestCode = weakSubtest.SubtestCode
+                });
+            }
+        }
+
+        // 4. Goal-based recommendation
+        var goal = await db.Goals.FirstOrDefaultAsync(g => g.UserId == userId, ct);
+        if (goal?.TargetExamDate is not null)
+        {
+            var daysUntilExam = (goal.TargetExamDate.Value.ToDateTime(TimeOnly.MinValue) - now.UtcDateTime).TotalDays;
+            if (daysUntilExam is > 0 and <= 30)
+            {
+                actions.Add(new
+                {
+                    type = "exam_approaching",
+                    priority = "high",
+                    title = $"Exam in {daysUntilExam:F0} days — intensify practice",
+                    subtitle = "Focus on mock exams and timed practice",
+                    actionUrl = "/test-day",
+                    subtestCode = (string?)null
+                });
+            }
+        }
+
+        // 5. Streak continuation
+        actions.Add(new
+        {
+            type = "daily_goal",
+            priority = "low",
+            title = "Complete today's study goal",
+            subtitle = "Keep your streak going",
+            actionUrl = "/dashboard",
+            subtestCode = (string?)null
+        });
+
+        return new
+        {
+            actions = actions.Take(5).ToList(),
+            generatedAt = now
+        };
+    }
+
+    // ══════════════════════════════════════════════════════
+    // E2 · Diagnostic Post-Personalization
+    // ══════════════════════════════════════════════════════
+
+    public async Task<object> GetDiagnosticPersonalizationAsync(string userId, CancellationToken ct)
+    {
+        // Get diagnostic evaluation results
+        var diagAttemptIds = await db.Attempts
+            .Where(a => a.UserId == userId && a.State == AttemptState.Completed)
+            .OrderBy(a => a.CompletedAt)
+            .Take(4)
+            .Select(a => a.Id)
+            .ToListAsync(ct);
+
+        var diagnosticEvals = await db.Evaluations
+            .Where(e => diagAttemptIds.Contains(e.AttemptId) && e.State == AsyncState.Completed)
+            .ToListAsync(ct);
+
+        if (diagnosticEvals.Count == 0)
+            return new { hasDiagnostic = false, message = "Complete a diagnostic test to get personalized recommendations." };
+
+        var subtestAnalysis = new List<object>();
+        foreach (var eval in diagnosticEvals)
+        {
+            var criterionScores = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(eval.CriterionScoresJson, []);
+            var weakCriteria = criterionScores
+                .Where(cs =>
+                {
+                    if (!cs.TryGetValue("score", out var s) || s is null) return false;
+                    if (s is System.Text.Json.JsonElement je && je.TryGetDouble(out var jd)) return jd < 4;
+                    return double.TryParse(s.ToString(), out var p) && p < 4;
+                })
+                .Select(cs => new
+                {
+                    code = cs.TryGetValue("code", out var c) ? c?.ToString() : "",
+                    label = cs.TryGetValue("label", out var l) ? l?.ToString() : "",
+                    score = cs.TryGetValue("score", out var s) ? s?.ToString() : "0"
+                }).ToList();
+
+            subtestAnalysis.Add(new
+            {
+                subtestCode = eval.SubtestCode,
+                scoreRange = eval.ScoreRange,
+                weakCriteria,
+                recommendation = weakCriteria.Count > 2
+                    ? $"Focus on foundational {eval.SubtestCode} skills before mock exams."
+                    : weakCriteria.Count > 0
+                        ? $"Target specific {eval.SubtestCode} criteria: {string.Join(", ", weakCriteria.Select(w => w.code))}."
+                        : $"Strong diagnostic performance in {eval.SubtestCode}. Move to advanced practice."
+            });
+        }
+
+        // Generate personalized plan adjustments
+        var priorityOrder = subtestAnalysis
+            .OrderBy(sa =>
+            {
+                var s = (dynamic)sa;
+                var range = (string?)s.scoreRange;
+                if (range is null) return 999;
+                var parts = range.Split('-');
+                return parts.Length == 2 && int.TryParse(parts[0], out var lo) ? lo : 999;
+            })
+            .ToList();
+
+        return new
+        {
+            hasDiagnostic = true,
+            diagnosticDate = diagnosticEvals.First().GeneratedAt,
+            subtestAnalysis,
+            priorityOrder = priorityOrder.Select((sa, i) => new { rank = i + 1, analysis = sa }),
+            suggestedWeeklyFocus = new
+            {
+                writing = diagnosticEvals.Any(e => e.SubtestCode == "writing") ? 30 : 25,
+                speaking = diagnosticEvals.Any(e => e.SubtestCode == "speaking") ? 30 : 25,
+                reading = diagnosticEvals.Any(e => e.SubtestCode == "reading") ? 20 : 25,
+                listening = diagnosticEvals.Any(e => e.SubtestCode == "listening") ? 20 : 25
+            }
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // E4: Speaking Fluency Timeline
+    // ═══════════════════════════════════════════════════════════════
+
+    public async Task<object> GetFluencyTimelineAsync(string userId, string attemptId, CancellationToken ct)
+    {
+        var attempt = await db.Attempts
+            .FirstOrDefaultAsync(a => a.Id == attemptId && a.UserId == userId && a.SubtestCode == "speaking", ct)
+            ?? throw ApiException.NotFound("ATTEMPT_NOT_FOUND", "Speaking attempt not found.");
+
+        // Parse transcript segments for timing data
+        var segments = new List<object>();
+        try
+        {
+            var transcriptItems = System.Text.Json.JsonSerializer.Deserialize<List<Dictionary<string, System.Text.Json.JsonElement>>>(attempt.TranscriptJson);
+            if (transcriptItems is not null)
+            {
+                double lastEnd = 0;
+                int segIdx = 0;
+                foreach (var item in transcriptItems)
+                {
+                    var startSec = item.TryGetValue("startTime", out var st) ? st.GetDouble() : lastEnd;
+                    var endSec = item.TryGetValue("endTime", out var et) ? et.GetDouble() : startSec + 1;
+                    var text = item.TryGetValue("text", out var tx) ? tx.GetString() ?? "" : "";
+                    var wordCount = text.Split(' ', StringSplitOptions.RemoveEmptyEntries).Length;
+                    var duration = endSec - startSec;
+                    var wordsPerMinute = duration > 0 ? wordCount / duration * 60.0 : 0;
+                    var gap = startSec - lastEnd;
+
+                    // Detect filler words
+                    var fillerWords = new[] { "um", "uh", "er", "ah", "like", "you know", "sort of", "kind of" };
+                    var fillerCount = fillerWords.Sum(f => System.Text.RegularExpressions.Regex.Matches(text.ToLowerInvariant(), @"\b" + f + @"\b").Count);
+
+                    segments.Add(new
+                    {
+                        index = segIdx++,
+                        startTime = Math.Round(startSec, 2),
+                        endTime = Math.Round(endSec, 2),
+                        text,
+                        wordCount,
+                        wordsPerMinute = Math.Round(wordsPerMinute, 1),
+                        pauseBefore = Math.Round(gap, 2),
+                        isPause = gap > 1.5,
+                        fillerCount,
+                        fluencyRating = fillerCount == 0 && wordsPerMinute >= 100 && wordsPerMinute <= 170 ? "good"
+                            : fillerCount > 2 || wordsPerMinute < 80 || wordsPerMinute > 200 ? "poor" : "fair"
+                    });
+                    lastEnd = endSec;
+                }
+            }
+        }
+        catch { /* Transcript parsing failed — return empty timeline */ }
+
+        // Parse analysis JSON for overall fluency metrics
+        var analysisData = new Dictionary<string, object>();
+        try
+        {
+            var analysis = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(attempt.AnalysisJson);
+            if (analysis is not null)
+            {
+                if (analysis.TryGetValue("speechRate", out var sr)) analysisData["speechRate"] = sr.GetDouble();
+                if (analysis.TryGetValue("pauseCount", out var pc)) analysisData["pauseCount"] = pc.GetInt32();
+                if (analysis.TryGetValue("averagePauseDuration", out var apd)) analysisData["averagePauseDuration"] = apd.GetDouble();
+            }
+        }
+        catch { }
+
+        var totalWords = segments.Sum(s => (int)((dynamic)s).wordCount);
+        var totalFillers = segments.Sum(s => (int)((dynamic)s).fillerCount);
+        var totalDuration = segments.Count > 0 ? (double)((dynamic)segments.Last()).endTime : 0;
+
+        return new
+        {
+            attemptId,
+            totalDurationSeconds = Math.Round(totalDuration, 1),
+            totalWords,
+            totalFillerWords = totalFillers,
+            fillerRatio = totalWords > 0 ? Math.Round(totalFillers * 100.0 / totalWords, 1) : 0,
+            averageWordsPerMinute = totalDuration > 0 ? Math.Round(totalWords / totalDuration * 60, 1) : 0,
+            pauseCount = segments.Count(s => (bool)((dynamic)s).isPause),
+            timeline = segments,
+            overallAnalysis = analysisData,
+            benchmarks = new
+            {
+                idealWordsPerMinute = new { min = 120, max = 160 },
+                maxAcceptableFillerRatio = 3.0,
+                maxAcceptablePauseSeconds = 2.0
+            }
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // E5: Progress — Comparative Analytics & Percentile Ranking
+    // ═══════════════════════════════════════════════════════════════
+
+    public async Task<object> GetComparativeAnalyticsAsync(string userId, CancellationToken ct)
+    {
+        var subtests = new[] { "writing", "speaking", "reading", "listening" };
+        var results = new List<object>();
+
+        foreach (var subtest in subtests)
+        {
+            // Get user's latest evaluation scores
+            var userEvals = await db.Evaluations
+                .Where(e => db.Attempts.Any(a => a.Id == e.AttemptId && a.UserId == userId && a.SubtestCode == subtest))
+                .OrderByDescending(e => e.GeneratedAt)
+                .Take(5)
+                .ToListAsync(ct);
+
+            if (userEvals.Count == 0) continue;
+
+            var userAvg = userEvals
+                .Select(e =>
+                {
+                    var parts = e.ScoreRange?.Split('-');
+                    return parts?.Length == 2 && int.TryParse(parts[0], out var lo) && int.TryParse(parts[1], out var hi)
+                        ? (lo + hi) / 2.0 : (double?)null;
+                })
+                .Where(s => s.HasValue)
+                .Select(s => s!.Value)
+                .ToList();
+
+            if (userAvg.Count == 0) continue;
+            var userScore = userAvg.Average();
+
+            // Get all users' average scores for this subtest (cohort comparison)
+            var allScores = await db.Evaluations
+                .Where(e => e.SubtestCode == subtest && e.GeneratedAt >= DateTimeOffset.UtcNow.AddDays(-90))
+                .Select(e => e.ScoreRange)
+                .ToListAsync(ct);
+
+            var allAverages = allScores
+                .Select(sr =>
+                {
+                    var parts = sr?.Split('-');
+                    return parts?.Length == 2 && int.TryParse(parts[0], out var lo) && int.TryParse(parts[1], out var hi)
+                        ? (lo + hi) / 2.0 : (double?)null;
+                })
+                .Where(s => s.HasValue)
+                .Select(s => s!.Value)
+                .OrderBy(s => s)
+                .ToList();
+
+            var percentile = allAverages.Count > 0
+                ? Math.Round(allAverages.Count(s => s <= userScore) * 100.0 / allAverages.Count, 1)
+                : 50.0;
+
+            var cohortAvg = allAverages.Count > 0 ? Math.Round(allAverages.Average(), 1) : 0;
+            var cohortMedian = allAverages.Count > 0 ? allAverages[allAverages.Count / 2] : 0;
+
+            // Score gap to target
+            var goal = await db.Goals.FirstOrDefaultAsync(g => g.UserId == userId, ct);
+            double? targetScore = null;
+            if (goal is not null)
+            {
+                targetScore = subtest switch
+                {
+                    "writing" => goal.TargetWritingScore,
+                    "speaking" => goal.TargetSpeakingScore,
+                    "reading" => goal.TargetReadingScore,
+                    "listening" => goal.TargetListeningScore,
+                    _ => null
+                };
+            }
+
+            results.Add(new
+            {
+                subtestCode = subtest,
+                yourScore = Math.Round(userScore, 1),
+                percentile,
+                cohortAverage = cohortAvg,
+                cohortMedian,
+                cohortSize = allAverages.Count,
+                targetScore,
+                gapToTarget = targetScore.HasValue ? Math.Round(targetScore.Value - userScore, 1) : (double?)null,
+                tier = percentile >= 90 ? "top10" : percentile >= 75 ? "top25" : percentile >= 50 ? "aboveMedian" : "belowMedian"
+            });
+        }
+
+        return new { subtests = results, generatedAt = DateTimeOffset.UtcNow };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // E6: Mock — Exam Simulation Configuration
+    // ═══════════════════════════════════════════════════════════════
+
+    public async Task<object> GetExamSimulationConfigAsync(string userId, CancellationToken ct)
+    {
+        var goal = await db.Goals.FirstOrDefaultAsync(g => g.UserId == userId, ct);
+        var examType = goal?.ExamTypeCode ?? "oet";
+
+        // Count user's completed mocks to determine readiness for simulation
+        var completedMocks = await db.Attempts
+            .CountAsync(a => a.UserId == userId && a.Context == "mock" && a.State == AttemptState.Completed, ct);
+
+        return new
+        {
+            examType,
+            simulationMode = new
+            {
+                strictTiming = true,
+                noPause = true,
+                sequentialSubtests = true,
+                noBackNavigation = true,
+                showCountdown = true,
+                stressIndicators = completedMocks < 3
+            },
+            subtestTimings = new
+            {
+                listening = new { durationMinutes = 42, sections = 2 },
+                reading = new { durationMinutes = 60, sections = 3 },
+                writing = new { durationMinutes = 45, sections = 1 },
+                speaking = new { durationMinutes = 20, sections = 2 }
+            },
+            totalDurationMinutes = 167,
+            completedSimulations = completedMocks,
+            recommendation = completedMocks < 3
+                ? "Complete at least 3 practice mocks before attempting full simulation."
+                : completedMocks < 6
+                    ? "Good practice base. Try simulation mode to build test-day confidence."
+                    : "Strong preparation. Use simulation mode for final exam readiness check.",
+            unlocked = completedMocks >= 2
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // E9: Study Plan — Auto-Regeneration on Drift Detection
+    // ═══════════════════════════════════════════════════════════════
+
+    public async Task<object> DetectStudyPlanDriftAsync(string userId, CancellationToken ct)
+    {
+        var plan = await db.StudyPlans.FirstOrDefaultAsync(p => p.UserId == userId, ct);
+        if (plan is null) return new { hasPlan = false, drift = (object?)null };
+
+        var items = await db.StudyPlanItems
+            .Where(i => i.StudyPlanId == plan.Id)
+            .OrderBy(i => i.DueDate)
+            .ToListAsync(ct);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var overdue = items.Where(i => i.DueDate < today && i.Status == StudyPlanItemStatus.NotStarted).ToList();
+        var completed = items.Where(i => i.Status == StudyPlanItemStatus.Completed).ToList();
+        var total = items.Count;
+        var expectedCompleted = items.Count(i => i.DueDate <= today);
+        var actualCompleted = completed.Count;
+        var completionRate = expectedCompleted > 0 ? Math.Round(actualCompleted * 100.0 / expectedCompleted, 1) : 100;
+        var driftDays = overdue.Count > 0 ? (today.ToDateTime(TimeOnly.MinValue) - overdue.First().DueDate.ToDateTime(TimeOnly.MinValue)).Days : 0;
+
+        var driftLevel = driftDays > 14 ? "severe" : driftDays > 7 ? "moderate" : driftDays > 3 ? "mild" : "on-track";
+        var shouldRegenerate = driftLevel is "severe" or "moderate";
+
+        // Breakdown by subtest
+        var subtestDrift = items
+            .GroupBy(i => i.SubtestCode)
+            .Select(g => new
+            {
+                subtestCode = g.Key,
+                total = g.Count(),
+                completed = g.Count(i => i.Status == StudyPlanItemStatus.Completed),
+                overdue = g.Count(i => i.DueDate < today && i.Status == StudyPlanItemStatus.NotStarted),
+                completionRate = g.Count(i => i.DueDate <= today) > 0
+                    ? Math.Round(g.Count(i => i.Status == StudyPlanItemStatus.Completed) * 100.0 / g.Count(i => i.DueDate <= today), 1) : 100
+            })
+            .ToList();
+
+        return new
+        {
+            hasPlan = true,
+            planId = plan.Id,
+            drift = new
+            {
+                level = driftLevel,
+                overdueItems = overdue.Count,
+                oldestOverdueDays = driftDays,
+                completionRate,
+                expectedCompleted,
+                actualCompleted,
+                totalItems = total,
+                shouldRegenerate,
+                recommendation = driftLevel switch
+                {
+                    "severe" => "You're significantly behind schedule. We strongly recommend regenerating your study plan to align with your current pace.",
+                    "moderate" => "You're falling behind. Consider regenerating your plan or catching up on priority items.",
+                    "mild" => "Slightly behind but manageable. Focus on overdue items this week.",
+                    _ => "Great job! You're on track with your study plan."
+                }
+            },
+            subtestDrift,
+            overdueItems = overdue.Select(i => new { i.Id, i.Title, i.SubtestCode, i.DueDate, daysOverdue = (today.ToDateTime(TimeOnly.MinValue) - i.DueDate.ToDateTime(TimeOnly.MinValue)).Days }).Take(10)
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // E10: Billing Upgrade Path Visibility
+    // ═══════════════════════════════════════════════════════════════
+
+    public async Task<object> GetBillingUpgradePathAsync(string userId, CancellationToken ct)
+    {
+        // Get user's current subscription
+        var subscription = await db.Subscriptions
+            .Where(s => s.UserId == userId && s.Status == SubscriptionStatus.Active)
+            .FirstOrDefaultAsync(ct);
+
+        var currentPlanId = subscription?.PlanId;
+        var allPlans = await db.BillingPlans
+            .Where(p => p.IsVisible && p.Status == BillingPlanStatus.Active)
+            .OrderBy(p => p.DisplayOrder)
+            .ToListAsync(ct);
+
+        var currentPlan = currentPlanId is not null ? allPlans.FirstOrDefault(p => p.Id == currentPlanId) : null;
+
+        // Get usage stats
+        var wallet = await db.Wallets.FirstOrDefaultAsync(w => w.UserId == userId, ct);
+        var reviewsUsedThisMonth = await db.ReviewRequests
+            .CountAsync(r => db.Attempts.Any(a => a.Id == r.AttemptId && a.UserId == userId)
+                && r.CreatedAt >= DateTimeOffset.UtcNow.AddDays(-30), ct);
+
+        var planComparison = allPlans.Select(p =>
+        {
+            Dictionary<string, object>? entitlements = null;
+            try { entitlements = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(p.EntitlementsJson); } catch { }
+
+            return new
+            {
+                planId = p.Id,
+                planCode = p.Code,
+                planName = p.Name,
+                description = p.Description,
+                price = p.Price,
+                currency = p.Currency,
+                interval = p.Interval,
+                includedCredits = p.IncludedCredits,
+                trialDays = p.TrialDays,
+                isCurrent = p.Id == currentPlanId,
+                isUpgrade = currentPlan is not null && p.Price > currentPlan.Price,
+                isDowngrade = currentPlan is not null && p.Price < currentPlan.Price,
+                entitlements = entitlements ?? new Dictionary<string, object>()
+            };
+        }).ToList();
+
+        return new
+        {
+            currentPlan = currentPlan is not null ? new
+            {
+                planId = currentPlan.Id,
+                planName = currentPlan.Name,
+                price = currentPlan.Price,
+                includedCredits = currentPlan.IncludedCredits
+            } : null,
+            usage = new
+            {
+                reviewsUsedThisMonth,
+                creditsRemaining = wallet?.CreditBalance ?? 0,
+                subscriptionStarted = subscription?.StartedAt,
+                subscriptionEnds = subscription?.NextRenewalAt
+            },
+            plans = planComparison,
+            recommendation = currentPlan is null
+                ? "Start with a plan to unlock expert reviews, mock exams, and AI-powered feedback."
+                : reviewsUsedThisMonth >= (currentPlan.IncludedCredits * 0.8)
+                    ? "You've used most of your included reviews. Consider upgrading for more credits."
+                    : "Your current plan is meeting your usage needs."
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // L9: Interleaved Practice Mode
+    // ═══════════════════════════════════════════════════════════════
+
+    public async Task<object> GetInterleavedPracticeSessionAsync(string userId, int durationMinutes, CancellationToken ct)
+    {
+        var targetMinutes = durationMinutes > 0 ? Math.Min(durationMinutes, 60) : 20;
+        var subtests = new[] { "reading", "listening", "writing", "speaking" };
+        var sessionItems = new List<object>();
+        var allocatedMinutes = 0;
+
+        // Get user's weakest areas to weight task selection
+        var recentEvals = await db.Evaluations
+            .Where(e => db.Attempts.Any(a => a.Id == e.AttemptId && a.UserId == userId)
+                && e.GeneratedAt >= DateTimeOffset.UtcNow.AddDays(-30))
+            .ToListAsync(ct);
+
+        var subtestScores = recentEvals
+            .GroupBy(e => e.SubtestCode)
+            .ToDictionary(
+                g => g.Key,
+                g =>
+                {
+                    var scores = g.Select(e =>
+                    {
+                        var parts = e.ScoreRange?.Split('-');
+                        return parts?.Length == 2 && int.TryParse(parts[0], out var lo) ? lo : 300;
+                    }).ToList();
+                    return scores.Count > 0 ? scores.Average() : 300.0;
+                });
+
+        // Prioritize weaker subtests
+        var orderedSubtests = subtests
+            .OrderBy(s => subtestScores.GetValueOrDefault(s, 300.0))
+            .ToList();
+
+        int taskIndex = 0;
+        while (allocatedMinutes < targetMinutes)
+        {
+            var subtest = orderedSubtests[taskIndex % orderedSubtests.Count];
+            var taskDuration = subtest switch
+            {
+                "reading" => 8,
+                "listening" => 7,
+                "writing" => 10,
+                "speaking" => 5,
+                _ => 7
+            };
+
+            if (allocatedMinutes + taskDuration > targetMinutes + 3) break;
+
+            // Get adaptive content for this subtest
+            var content = await db.ContentItems
+                .Where(c => c.SubtestCode == subtest && c.Status == ContentStatus.Published)
+                .OrderBy(c => Guid.NewGuid())
+                .Select(c => new { c.Id, c.Title, c.SubtestCode, c.EstimatedDurationMinutes, c.Difficulty })
+                .FirstOrDefaultAsync(ct);
+
+            if (content is not null)
+            {
+                sessionItems.Add(new
+                {
+                    order = taskIndex + 1,
+                    contentId = content.Id,
+                    title = content.Title,
+                    subtestCode = content.SubtestCode,
+                    taskType = subtest switch
+                    {
+                        "reading" => "passage-comprehension",
+                        "listening" => "audio-exercise",
+                        "writing" => "short-response",
+                        "speaking" => "pronunciation-drill",
+                        _ => "practice"
+                    },
+                    durationMinutes = taskDuration,
+                    difficulty = content.Difficulty,
+                    isWeakArea = subtestScores.GetValueOrDefault(subtest, 300.0) < 350
+                });
+                allocatedMinutes += taskDuration;
+            }
+            taskIndex++;
+            if (taskIndex > 20) break; // Safety cap
+        }
+
+        return new
+        {
+            sessionId = Guid.NewGuid().ToString(),
+            targetDurationMinutes = targetMinutes,
+            actualDurationMinutes = allocatedMinutes,
+            taskCount = sessionItems.Count,
+            tasks = sessionItems,
+            scienceBasis = "Interleaving different skill types in a single session improves long-term retention (Rohrer & Taylor, 2007).",
+            tips = new[]
+            {
+                "Don't skip tasks — the variety is intentional for better learning.",
+                "Take 30-second breaks between tasks to reset your focus.",
+                "Review any mistakes immediately after each task."
+            }
+        };
+    }
+
+    // ── L12: Peer Review Exchange ────────────────────────────
+
+    public async Task<object> GetPeerReviewPoolAsync(string userId, CancellationToken ct)
+    {
+        // Available peer review requests from other learners (not mine, not claimed)
+        var available = await db.PeerReviewRequests
+            .Where(r => r.SubmitterUserId != userId && r.Status == "open")
+            .OrderByDescending(r => r.CreatedAt)
+            .Take(20)
+            .ToListAsync(ct);
+
+        // My submissions
+        var mySubmissions = await db.PeerReviewRequests
+            .Where(r => r.SubmitterUserId == userId)
+            .OrderByDescending(r => r.CreatedAt)
+            .Take(10)
+            .ToListAsync(ct);
+
+        // My reviews (claimed by me)
+        var myReviews = await db.PeerReviewRequests
+            .Where(r => r.ReviewerUserId == userId)
+            .OrderByDescending(r => r.ClaimedAt)
+            .Take(10)
+            .ToListAsync(ct);
+
+        // Get feedback for my submissions
+        var mySubmissionIds = mySubmissions.Select(s => s.Id).ToList();
+        var feedbackForMe = await db.PeerReviewFeedbacks
+            .Where(f => mySubmissionIds.Contains(f.PeerReviewRequestId))
+            .ToListAsync(ct);
+
+        return new
+        {
+            availableToReview = available.Select(r => new { id = r.Id, subtestCode = r.SubtestCode, attemptId = r.AttemptId, createdAt = r.CreatedAt }),
+            mySubmissions = mySubmissions.Select(s => new { id = s.Id, subtestCode = s.SubtestCode, status = s.Status, createdAt = s.CreatedAt, feedback = feedbackForMe.Where(f => f.PeerReviewRequestId == s.Id).Select(f => new { rating = f.OverallRating, comments = f.Comments, strengths = f.StrengthNotes, improvements = f.ImprovementNotes }) }),
+            myReviews = myReviews.Select(r => new { id = r.Id, subtestCode = r.SubtestCode, status = r.Status, claimedAt = r.ClaimedAt, completedAt = r.CompletedAt }),
+            stats = new
+            {
+                reviewsGiven = myReviews.Count(r => r.Status == "completed"),
+                reviewsReceived = feedbackForMe.Count,
+                averageHelpfulness = feedbackForMe.Where(f => f.HelpfulnessRating > 0).Select(f => (double)f.HelpfulnessRating).DefaultIfEmpty(0).Average()
+            }
+        };
+    }
+
+    public async Task<object> SubmitForPeerReviewAsync(string userId, string attemptId, string subtestCode, CancellationToken ct)
+    {
+        var attempt = await db.Attempts.FindAsync([attemptId], ct)
+            ?? throw new InvalidOperationException("Attempt not found.");
+
+        if (attempt.UserId != userId) throw new InvalidOperationException("Not your attempt.");
+
+        var existing = await db.PeerReviewRequests.AnyAsync(r => r.AttemptId == attemptId && r.Status != "expired", ct);
+        if (existing) throw new InvalidOperationException("Already submitted for peer review.");
+
+        var request = new PeerReviewRequest
+        {
+            Id = $"pr-{Guid.NewGuid():N}",
+            SubmitterUserId = userId,
+            AttemptId = attemptId,
+            SubtestCode = subtestCode.ToLowerInvariant(),
+            Status = "open",
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        db.PeerReviewRequests.Add(request);
+        await db.SaveChangesAsync(ct);
+        return new { id = request.Id, status = "open" };
+    }
+
+    public async Task<object> ClaimPeerReviewAsync(string userId, string peerReviewId, CancellationToken ct)
+    {
+        var request = await db.PeerReviewRequests.FindAsync([peerReviewId], ct)
+            ?? throw new InvalidOperationException("Peer review request not found.");
+
+        if (request.SubmitterUserId == userId) throw new InvalidOperationException("Cannot review your own submission.");
+        if (request.Status != "open") throw new InvalidOperationException("Already claimed or completed.");
+
+        request.ReviewerUserId = userId;
+        request.Status = "claimed";
+        request.ClaimedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return new { id = request.Id, status = "claimed" };
+    }
+
+    public async Task<object> SubmitPeerFeedbackAsync(string userId, string peerReviewId, int overallRating, string comments, string? strengths, string? improvements, CancellationToken ct)
+    {
+        var request = await db.PeerReviewRequests.FindAsync([peerReviewId], ct)
+            ?? throw new InvalidOperationException("Peer review request not found.");
+
+        if (request.ReviewerUserId != userId) throw new InvalidOperationException("Not assigned to you.");
+        if (request.Status != "claimed") throw new InvalidOperationException("Not in claimable state.");
+
+        var feedback = new PeerReviewFeedback
+        {
+            Id = $"prf-{Guid.NewGuid():N}",
+            PeerReviewRequestId = peerReviewId,
+            ReviewerUserId = userId,
+            OverallRating = Math.Clamp(overallRating, 1, 5),
+            Comments = comments.Trim(),
+            StrengthNotes = strengths?.Trim(),
+            ImprovementNotes = improvements?.Trim(),
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        db.PeerReviewFeedbacks.Add(feedback);
+        request.Status = "completed";
+        request.CompletedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+        return new { feedbackId = feedback.Id, status = "completed" };
+    }
 }

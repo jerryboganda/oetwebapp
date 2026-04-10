@@ -3479,3 +3479,200 @@ export async function reviewMarketplaceSubmission(submissionId: string, data: { 
 export async function fetchPendingMarketplaceSubmissions(page = 1, pageSize = 20) {
   return apiRequest(`/v1/admin/marketplace/pending?page=${page}&pageSize=${pageSize}`);
 }
+
+// ── Admin Permissions (RBAC) ──────────────────────────
+
+export async function fetchAdminPermissions(userId: string) {
+  return apiRequest(`/v1/admin/permissions/${encodeURIComponent(userId)}`);
+}
+
+export async function updateAdminPermissions(userId: string, permissions: string[]) {
+  return apiRequest(`/v1/admin/permissions/${encodeURIComponent(userId)}`, {
+    method: 'PUT',
+    body: JSON.stringify({ permissions }),
+  });
+}
+
+// ── Content Publishing Workflow ────────────────────────
+
+export async function requestContentPublish(contentId: string, note?: string) {
+  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}/request-publish`, {
+    method: 'POST',
+    body: JSON.stringify({ note }),
+  });
+}
+
+export async function fetchPublishRequests(params?: { status?: string; page?: number; pageSize?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  qs.set('page', String(params?.page ?? 1));
+  qs.set('pageSize', String(params?.pageSize ?? 20));
+  return apiRequest(`/v1/admin/publish-requests?${qs}`);
+}
+
+export async function approvePublishRequest(requestId: string, note?: string) {
+  return apiRequest(`/v1/admin/publish-requests/${encodeURIComponent(requestId)}/approve`, {
+    method: 'POST',
+    body: JSON.stringify({ note }),
+  });
+}
+
+export async function rejectPublishRequest(requestId: string, note?: string) {
+  return apiRequest(`/v1/admin/publish-requests/${encodeURIComponent(requestId)}/reject`, {
+    method: 'POST',
+    body: JSON.stringify({ note }),
+  });
+}
+
+// ── Webhook Monitoring ────────────────────────────────
+
+export async function fetchWebhookEvents(params?: { gateway?: string; status?: string; page?: number; pageSize?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.gateway) qs.set('gateway', params.gateway);
+  if (params?.status) qs.set('status', params.status);
+  qs.set('page', String(params?.page ?? 1));
+  qs.set('pageSize', String(params?.pageSize ?? 20));
+  return apiRequest(`/v1/admin/webhooks?${qs}`);
+}
+
+export async function fetchWebhookSummary() {
+  return apiRequest('/v1/admin/webhooks/summary');
+}
+
+export async function retryWebhook(eventId: string) {
+  return apiRequest(`/v1/admin/webhooks/${encodeURIComponent(eventId)}/retry`, {
+    method: 'POST',
+  });
+}
+
+// ── Review Escalations ────────────────────────────────
+
+export async function fetchReviewEscalations(params?: { status?: string; page?: number; pageSize?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  qs.set('page', String(params?.page ?? 1));
+  qs.set('pageSize', String(params?.pageSize ?? 20));
+  return apiRequest(`/v1/admin/escalations?${qs}`);
+}
+
+export async function assignEscalationReviewer(escalationId: string, secondReviewerId: string) {
+  return apiRequest(`/v1/admin/escalations/${encodeURIComponent(escalationId)}/assign`, {
+    method: 'POST',
+    body: JSON.stringify({ secondReviewerId }),
+  });
+}
+
+export async function resolveEscalation(escalationId: string, finalScore: number, resolutionNote?: string) {
+  return apiRequest(`/v1/admin/escalations/${encodeURIComponent(escalationId)}/resolve`, {
+    method: 'POST',
+    body: JSON.stringify({ finalScore, resolutionNote }),
+  });
+}
+
+// ── Score Guarantee (Learner) ─────────────────────────
+
+export async function fetchScoreGuarantee() {
+  return apiRequest('/v1/learner/score-guarantee');
+}
+
+export async function activateScoreGuarantee(baselineScore: number) {
+  return apiRequest('/v1/learner/score-guarantee/activate', {
+    method: 'POST',
+    body: JSON.stringify({ baselineScore }),
+  });
+}
+
+export async function submitScoreGuaranteeClaim(actualScore: number, proofDocumentUrl?: string, note?: string) {
+  return apiRequest('/v1/learner/score-guarantee/claim', {
+    method: 'POST',
+    body: JSON.stringify({ actualScore, proofDocumentUrl, note }),
+  });
+}
+
+// ── Score Equivalences ────────────────────────────────
+
+export async function fetchScoreEquivalences() {
+  return apiRequest('/v1/reference/score-equivalences');
+}
+
+// ── Study Commitment ──────────────────────────────────
+
+export async function fetchStudyCommitment() {
+  return apiRequest('/v1/learner/study-commitment');
+}
+
+export async function setStudyCommitment(dailyMinutes: number) {
+  return apiRequest('/v1/learner/study-commitment', {
+    method: 'POST',
+    body: JSON.stringify({ dailyMinutes }),
+  });
+}
+
+// ── Certificates ──────────────────────────────────────
+
+export async function fetchCertificates() {
+  return apiRequest('/v1/learner/certificates');
+}
+
+// ── Referral ──────────────────────────────────────────
+
+export async function fetchReferralInfo() {
+  return apiRequest('/v1/learner/referral');
+}
+
+export async function generateReferralCode() {
+  return apiRequest('/v1/learner/referral/generate', {
+    method: 'POST',
+  });
+}
+
+// ── Expert Annotation Templates ───────────────────────
+
+export async function fetchAnnotationTemplates(params?: { subtestCode?: string; criterionCode?: string }) {
+  const qs = new URLSearchParams();
+  if (params?.subtestCode) qs.set('subtestCode', params.subtestCode);
+  if (params?.criterionCode) qs.set('criterionCode', params.criterionCode);
+  const q = qs.toString();
+  return apiRequest(`/v1/expert/annotation-templates${q ? `?${q}` : ''}`);
+}
+
+export async function createAnnotationTemplate(payload: {
+  subtestCode: string; criterionCode: string; label: string; templateText: string; isShared: boolean;
+}) {
+  return apiRequest('/v1/expert/annotation-templates', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateAnnotationTemplate(templateId: string, payload: {
+  subtestCode: string; criterionCode: string; label: string; templateText: string; isShared: boolean;
+}) {
+  return apiRequest(`/v1/expert/annotation-templates/${encodeURIComponent(templateId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteAnnotationTemplate(templateId: string) {
+  return apiRequest(`/v1/expert/annotation-templates/${encodeURIComponent(templateId)}`, {
+    method: 'DELETE',
+  });
+}
+
+// ── Admin: Score Guarantee Claims ─────────────────────
+
+export async function fetchAdminScoreGuaranteeClaims(params?: { status?: string; page?: number; pageSize?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  qs.set('page', String(params?.page ?? 1));
+  qs.set('pageSize', String(params?.pageSize ?? 20));
+  return apiRequest(`/v1/admin/score-guarantee-claims?${qs}`);
+}
+
+export async function reviewScoreGuaranteeClaim(pledgeId: string, decision: 'approve' | 'reject', note?: string) {
+  return apiRequest(`/v1/admin/score-guarantee-claims/${encodeURIComponent(pledgeId)}/review`, {
+    method: 'POST',
+    body: JSON.stringify({ decision, note }),
+  });
+}

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using Microsoft.EntityFrameworkCore;
 
 namespace OetLearner.Api.Domain;
 
@@ -95,4 +96,60 @@ public class LeaderboardEntry
     public long XP { get; set; }
     public int Rank { get; set; }
     public bool OptedIn { get; set; } = true;
+}
+
+/// <summary>Daily study commitment contract for streak enhancement.</summary>
+[Index(nameof(UserId))]
+public class StudyCommitment
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string UserId { get; set; } = default!;
+
+    /// <summary>Committed daily study time in minutes.</summary>
+    public int DailyMinutes { get; set; } = 30;
+
+    /// <summary>Number of streak freeze protections remaining.</summary>
+    public int FreezeProtections { get; set; } = 3;
+
+    /// <summary>Number of freeze protections used.</summary>
+    public int FreezeProtectionsUsed { get; set; }
+
+    public bool IsActive { get; set; } = true;
+
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? DeactivatedAt { get; set; }
+}
+
+/// <summary>Downloadable certificate for completed milestones.</summary>
+[Index(nameof(UserId))]
+public class LearnerCertificate
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string UserId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string CertificateType { get; set; } = default!;
+    // study_plan_complete | mock_exam | readiness_threshold | streak_milestone
+
+    [MaxLength(256)]
+    public string Title { get; set; } = default!;
+
+    [MaxLength(512)]
+    public string Description { get; set; } = string.Empty;
+
+    [MaxLength(512)]
+    public string? DownloadUrl { get; set; }
+
+    [MaxLength(2048)]
+    public string MetadataJson { get; set; } = "{}";
+
+    public DateTimeOffset IssuedAt { get; set; }
 }

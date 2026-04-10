@@ -45,6 +45,7 @@ public enum StudyPlanItemStatus
 public enum ContentStatus
 {
     Draft,
+    InReview,
     Published,
     Archived
 }
@@ -153,6 +154,7 @@ public enum ExpertReviewStatus
     DraftSaved,
     Submitted,
     ReworkRequested,
+    SecondReviewRequired,
     Completed,
     Cancelled
 }

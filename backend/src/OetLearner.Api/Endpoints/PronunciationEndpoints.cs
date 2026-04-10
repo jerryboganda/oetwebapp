@@ -26,6 +26,9 @@ public static class PronunciationEndpoints
         pron.MapGet("/assessment/{assessmentId}", async (string assessmentId, HttpContext http, PronunciationService svc, CancellationToken ct) =>
             Results.Ok(await svc.GetAssessmentAsync(http.UserId(), assessmentId, ct)));
 
+        pron.MapGet("/speaking-linked", async (HttpContext http, [FromQuery] int? limit, PronunciationService svc, CancellationToken ct) =>
+            Results.Ok(await svc.GetSpeakingLinkedAssessmentsAsync(http.UserId(), limit ?? 20, ct)));
+
         return app;
     }
 }

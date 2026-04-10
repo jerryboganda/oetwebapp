@@ -132,6 +132,83 @@ public class AuditEvent
     public ApplicationUserAccount? ActorAuthAccount { get; set; }
 }
 
+/// <summary>Content publish request requiring approval before going live.</summary>
+public class ContentPublishRequest
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ContentItemId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string RequestedBy { get; set; } = default!;
+
+    [MaxLength(128)]
+    public string RequestedByName { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string? ReviewedBy { get; set; }
+
+    [MaxLength(128)]
+    public string? ReviewedByName { get; set; }
+
+    [MaxLength(32)]
+    public string Status { get; set; } = "pending";
+    // pending | approved | rejected
+
+    [MaxLength(512)]
+    public string? RequestNote { get; set; }
+
+    [MaxLength(512)]
+    public string? ReviewNote { get; set; }
+
+    public DateTimeOffset RequestedAt { get; set; }
+    public DateTimeOffset? ReviewedAt { get; set; }
+}
+
+/// <summary>Expert review escalation when AI and human scores significantly diverge.</summary>
+public class ReviewEscalation
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ReviewRequestId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string OriginalReviewerId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string? SecondReviewerId { get; set; }
+
+    [MaxLength(32)]
+    public string SubtestCode { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string TriggerCriterion { get; set; } = default!;
+
+    public int AiScore { get; set; }
+
+    public int HumanScore { get; set; }
+
+    public int Divergence { get; set; }
+
+    [MaxLength(32)]
+    public string Status { get; set; } = "pending";
+    // pending | assigned | resolved
+
+    [MaxLength(512)]
+    public string? ResolutionNote { get; set; }
+
+    public int? FinalScore { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? ResolvedAt { get; set; }
+}
+
 /// <summary>Subscription plan definition for billing administration.</summary>
 public class BillingPlan
 {

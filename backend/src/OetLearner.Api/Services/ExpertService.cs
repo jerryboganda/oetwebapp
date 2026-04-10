@@ -8,7 +8,7 @@ using OetLearner.Api.Domain;
 
 namespace OetLearner.Api.Services;
 
-public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, MediaStorageService mediaStorage, PlatformLinkService platformLinks, NotificationService notifications)
+public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, MediaStorageService mediaStorage, PlatformLinkService platformLinks, NotificationService notifications, PronunciationService pronunciationService)
 {
     private static readonly string[] WritingCriteria = ["purpose", "content", "conciseness", "genre", "organization", "language"];
     private static readonly string[] SpeakingCriteria = ["intelligibility", "fluency", "appropriateness", "grammar", "clinicalCommunication"];
@@ -703,6 +703,24 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         }
 
         await SubmitReviewAsync(context, reviewerId, request, ct, "Submitted Speaking Review", "expert_speaking_review_submitted");
+
+        // ── L8: Bridge speaking review → pronunciation assessment ──
+        try
+        {
+            var criterionScores = new Dictionary<string, object?>();
+            if (request.Scores is not null)
+            {
+                foreach (var score in request.Scores)
+                    criterionScores[score.Key] = (double)score.Value;
+            }
+            await pronunciationService.CreateFromSpeakingReviewAsync(
+                context.Attempt.UserId, context.Attempt.Id, criterionScores, ct);
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Non-critical: failed to create pronunciation assessment from speaking review {ReviewRequestId}", reviewRequestId);
+        }
+
         logger.LogInformation("Expert {ReviewerId} submitted speaking review for {ReviewRequestId}", reviewerId, reviewRequestId);
         return new { success = true, reviewRequestId };
     }
@@ -1429,6 +1447,67 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
                 ["message"] = $"Your {context.ReviewRequest.SubtestCode} expert review is now ready."
             },
             ct);
+
+        // ── Escalation auto-trigger: compare AI vs human scores ──
+        await TryCreateEscalationAsync(context, reviewerId, request.Scores, ct);
+    }
+
+    /// <summary>
+    /// Creates a ReviewEscalation if the average divergence between AI-suggested and human scores exceeds the threshold.
+    /// </summary>
+    private async Task TryCreateEscalationAsync(TrackedWriteContext context, string reviewerId, Dictionary<string, int> humanScores, CancellationToken ct)
+    {
+        const int DivergenceThreshold = 40; // OET 0-500 scale; ~1 band difference across criteria
+
+        try
+        {
+            var evaluation = await db.Evaluations
+                .AsNoTracking()
+                .FirstOrDefaultAsync(e => e.AttemptId == context.Attempt.Id, ct);
+
+            if (evaluation is null || evaluation.State != AsyncState.Completed)
+                return;
+
+            var isWriting = string.Equals(context.ReviewRequest.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase);
+            var aiScores = NormalizeAiSuggestedScores(evaluation, isWriting);
+
+            if (aiScores.Count == 0 || humanScores.Count == 0)
+                return;
+
+            var aiAvg = aiScores.Values.Average();
+            var humanAvg = humanScores.Values.Average();
+            var scaledAi = (int)Math.Round(aiAvg * (500.0 / (isWriting ? 7.0 : 6.0)));
+            var scaledHuman = (int)Math.Round(humanAvg * (500.0 / (isWriting ? 7.0 : 6.0)));
+            var divergence = Math.Abs(scaledAi - scaledHuman);
+
+            if (divergence < DivergenceThreshold)
+                return;
+
+            var escalation = new ReviewEscalation
+            {
+                Id = $"ESC-{Guid.NewGuid():N}",
+                ReviewRequestId = context.ReviewRequest.Id,
+                OriginalReviewerId = reviewerId,
+                SubtestCode = context.ReviewRequest.SubtestCode,
+                TriggerCriterion = "average_divergence",
+                AiScore = scaledAi,
+                HumanScore = scaledHuman,
+                Divergence = divergence,
+                Status = "pending",
+                CreatedAt = DateTimeOffset.UtcNow
+            };
+
+            db.ReviewEscalations.Add(escalation);
+            await db.SaveChangesAsync(ct);
+
+            logger.LogWarning(
+                "Escalation {EscalationId} created: AI={AiScore} Human={HumanScore} Divergence={Divergence} for ReviewRequest={ReviewRequestId}",
+                escalation.Id, scaledAi, scaledHuman, divergence, context.ReviewRequest.Id);
+        }
+        catch (Exception ex)
+        {
+            logger.LogError(ex, "Failed to check/create escalation for review {ReviewRequestId}", context.ReviewRequest.Id);
+        }
     }
 
     private async Task<ExpertUser> EnsureExpertAsync(string reviewerId, CancellationToken ct)
@@ -2673,6 +2752,470 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
             ["saturday"] = new(false, "09:00", "12:00"),
             ["sunday"] = new(false, "09:00", "12:00")
         };
+    }
+
+    // ── Annotation Templates ─────────────────────────────────────────
+
+    public async Task<List<ExpertAnnotationTemplate>> GetAnnotationTemplatesAsync(
+        string expertId, string? subtestCode, string? criterionCode, CancellationToken ct)
+    {
+        var query = db.ExpertAnnotationTemplates
+            .Where(t => t.CreatedByExpertId == expertId || t.IsShared)
+            .AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(subtestCode))
+            query = query.Where(t => t.SubtestCode == subtestCode);
+        if (!string.IsNullOrWhiteSpace(criterionCode))
+            query = query.Where(t => t.CriterionCode == criterionCode);
+
+        return await query.OrderByDescending(t => t.UsageCount).ThenBy(t => t.Label).ToListAsync(ct);
+    }
+
+    public async Task<ExpertAnnotationTemplate> CreateAnnotationTemplateAsync(
+        string expertId, ExpertAnnotationTemplateRequest request, CancellationToken ct)
+    {
+        var template = new ExpertAnnotationTemplate
+        {
+            Id = $"annot-{Guid.NewGuid():N}",
+            CreatedByExpertId = expertId,
+            SubtestCode = request.SubtestCode.Trim(),
+            CriterionCode = request.CriterionCode.Trim(),
+            Label = request.Label.Trim(),
+            TemplateText = request.TemplateText.Trim(),
+            IsShared = request.IsShared,
+            UsageCount = 0,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        };
+
+        db.ExpertAnnotationTemplates.Add(template);
+        await db.SaveChangesAsync(ct);
+        return template;
+    }
+
+    public async Task<ExpertAnnotationTemplate> UpdateAnnotationTemplateAsync(
+        string templateId, string expertId, ExpertAnnotationTemplateRequest request, CancellationToken ct)
+    {
+        var template = await db.ExpertAnnotationTemplates.FirstOrDefaultAsync(t => t.Id == templateId, ct)
+            ?? throw new KeyNotFoundException($"Template {templateId} not found.");
+
+        if (template.CreatedByExpertId != expertId)
+            throw new UnauthorizedAccessException("You can only edit your own templates.");
+
+        template.SubtestCode = request.SubtestCode.Trim();
+        template.CriterionCode = request.CriterionCode.Trim();
+        template.Label = request.Label.Trim();
+        template.TemplateText = request.TemplateText.Trim();
+        template.IsShared = request.IsShared;
+        template.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+        return template;
+    }
+
+    public async Task<object> DeleteAnnotationTemplateAsync(
+        string templateId, string expertId, CancellationToken ct)
+    {
+        var template = await db.ExpertAnnotationTemplates.FirstOrDefaultAsync(t => t.Id == templateId, ct)
+            ?? throw new KeyNotFoundException($"Template {templateId} not found.");
+
+        if (template.CreatedByExpertId != expertId)
+            throw new UnauthorizedAccessException("You can only delete your own templates.");
+
+        db.ExpertAnnotationTemplates.Remove(template);
+        await db.SaveChangesAsync(ct);
+        return new { deleted = true };
+    }
+
+    // ══════════════════════════════════════════════════════
+    // X3 · Expert Scoring Quality Metrics
+    // ══════════════════════════════════════════════════════
+
+    public async Task<object> GetScoringQualityMetricsAsync(string reviewerId, int days, CancellationToken ct)
+    {
+        await EnsureExpertAsync(reviewerId, ct);
+
+        var windowStart = DateTimeOffset.UtcNow.Date.AddDays(-(Math.Clamp(days, 1, 180) - 1));
+
+        // Get this expert's completed reviews within window
+        var assignments = await db.ExpertReviewAssignments
+            .Where(a => a.AssignedReviewerId == reviewerId && a.ClaimState == ExpertAssignmentState.Released
+                        && a.ReleasedAt >= windowStart && a.ReasonCode == "submitted")
+            .ToListAsync(ct);
+
+        var reviewRequestIds = assignments.Select(a => a.ReviewRequestId).ToList();
+
+        // Get all drafts for these reviews
+        var drafts = await db.ExpertReviewDrafts
+            .Where(d => d.ReviewerId == reviewerId && reviewRequestIds.Contains(d.ReviewRequestId) && d.State == "submitted")
+            .ToListAsync(ct);
+
+        // Get evaluations for these review requests (AI scores for comparison)
+        var attemptIds = await db.ReviewRequests
+            .Where(r => reviewRequestIds.Contains(r.Id))
+            .Select(r => r.AttemptId)
+            .ToListAsync(ct);
+
+        var evaluations = await db.Evaluations
+            .Where(e => attemptIds.Contains(e.AttemptId) && e.State == AsyncState.Completed)
+            .ToListAsync(ct);
+
+        // Calculate scoring distribution per criterion
+        var scoringDistribution = new Dictionary<string, List<int>>();
+        foreach (var draft in drafts)
+        {
+            var rubricEntries = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(draft.RubricEntriesJson ?? "[]", []);
+            foreach (var entry in rubricEntries)
+            {
+                var criterion = entry.TryGetValue("criterionCode", out var cc) ? cc?.ToString() ?? "" : "";
+                if (string.IsNullOrEmpty(criterion)) continue;
+
+                if (!scoringDistribution.ContainsKey(criterion))
+                    scoringDistribution[criterion] = [];
+
+                if (entry.TryGetValue("score", out var sv) && sv is not null)
+                {
+                    if (sv is System.Text.Json.JsonElement je && je.TryGetInt32(out var intVal))
+                        scoringDistribution[criterion].Add(intVal);
+                    else if (int.TryParse(sv.ToString(), out var parsed))
+                        scoringDistribution[criterion].Add(parsed);
+                }
+            }
+        }
+
+        // AI-Human agreement: compare expert scores to AI evaluation scores
+        var aiHumanDifferences = new List<double>();
+        foreach (var draft in drafts)
+        {
+            var rr = await db.ReviewRequests.FirstOrDefaultAsync(r => r.Id == draft.ReviewRequestId, ct);
+            if (rr == null) continue;
+
+            var eval = evaluations.FirstOrDefault(e => e.AttemptId == rr.AttemptId);
+            if (eval == null) continue;
+
+            var expertScores = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(draft.RubricEntriesJson ?? "[]", []);
+            var aiScores = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(eval.CriterionScoresJson, []);
+
+            var expertAvg = expertScores.Average(s =>
+            {
+                if (s.TryGetValue("score", out var sv) && sv is not null)
+                {
+                    if (sv is System.Text.Json.JsonElement je && je.TryGetDouble(out var d)) return d;
+                    if (double.TryParse(sv.ToString(), out var p)) return p;
+                }
+                return 0.0;
+            });
+            var aiAvg = aiScores.Average(s =>
+            {
+                if (s.TryGetValue("score", out var sv) && sv is not null)
+                {
+                    if (sv is System.Text.Json.JsonElement je && je.TryGetDouble(out var d)) return d;
+                    if (double.TryParse(sv.ToString(), out var p)) return p;
+                }
+                return 0.0;
+            });
+
+            aiHumanDifferences.Add(Math.Abs(expertAvg - aiAvg));
+        }
+
+        // Calibration drift — track average score over time
+        var chronologicalDrafts = drafts.OrderBy(d => d.DraftSavedAt).ToList();
+        var calibrationTrend = new List<object>();
+        for (var i = 0; i < chronologicalDrafts.Count; i += Math.Max(1, chronologicalDrafts.Count / 10))
+        {
+            var d = chronologicalDrafts[i];
+            var rubric = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(d.RubricEntriesJson ?? "[]", []);
+            var avg = rubric.Count > 0 ? rubric.Average(r =>
+            {
+                if (r.TryGetValue("score", out var sv) && sv is not null)
+                {
+                    if (sv is System.Text.Json.JsonElement je && je.TryGetDouble(out var dd)) return dd;
+                    if (double.TryParse(sv.ToString(), out var p)) return p;
+                }
+                return 0.0;
+            }) : 0;
+
+            calibrationTrend.Add(new { date = d.DraftSavedAt, averageScore = Math.Round(avg, 2) });
+        }
+
+        return new
+        {
+            totalReviewsInWindow = drafts.Count,
+            days,
+            scoringDistribution = scoringDistribution.Select(kv => new
+            {
+                criterion = kv.Key,
+                mean = kv.Value.Count > 0 ? Math.Round(kv.Value.Average(), 2) : 0,
+                stdDev = kv.Value.Count > 1 ? Math.Round(Math.Sqrt(kv.Value.Average(v => Math.Pow(v - kv.Value.Average(), 2))), 2) : 0,
+                min = kv.Value.Count > 0 ? kv.Value.Min() : 0,
+                max = kv.Value.Count > 0 ? kv.Value.Max() : 0,
+                count = kv.Value.Count
+            }).ToList(),
+            aiHumanAgreement = new
+            {
+                comparisons = aiHumanDifferences.Count,
+                averageDifference = aiHumanDifferences.Count > 0 ? Math.Round(aiHumanDifferences.Average(), 2) : 0,
+                maxDifference = aiHumanDifferences.Count > 0 ? Math.Round(aiHumanDifferences.Max(), 2) : 0,
+                agreementRate = aiHumanDifferences.Count > 0
+                    ? Math.Round(aiHumanDifferences.Count(d => d <= 1.0) * 100.0 / aiHumanDifferences.Count, 1) : 0
+            },
+            calibrationTrend,
+            reworkRate = assignments.Count > 0
+                ? Math.Round(assignments.Count(a => a.ReasonCode != "submitted") * 100.0 / assignments.Count, 1) : 0
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // XE1: Queue Priority Visibility — WHY an item is high priority
+    // ═══════════════════════════════════════════════════════════════
+
+    public async Task<object> GetQueueWithPriorityReasonsAsync(string expertId, CancellationToken ct)
+    {
+        var assignments = await db.ExpertReviewAssignments
+            .Where(a => a.AssignedReviewerId == expertId && a.ClaimState == ExpertAssignmentState.Assigned)
+            .ToListAsync(ct);
+
+        var items = new List<object>();
+        foreach (var assignment in assignments)
+        {
+            var review = await db.ReviewRequests.FindAsync([assignment.ReviewRequestId], ct);
+            if (review is null) continue;
+
+            var attempt = await db.Attempts.FindAsync([review.AttemptId], ct);
+            if (attempt is null) continue;
+
+            // Check learner's exam date for urgency
+            var learnerGoal = await db.Goals.FirstOrDefaultAsync(g => g.UserId == attempt.UserId, ct);
+            DateOnly? examDate = learnerGoal?.TargetExamDate;
+
+            var daysToExam = examDate.HasValue
+                ? (examDate.Value.ToDateTime(TimeOnly.MinValue) - DateTime.UtcNow).Days
+                : (int?)null;
+
+            // Check if re-submission
+            var isResubmission = await db.ReviewRequests
+                .CountAsync(r => r.AttemptId == review.AttemptId && r.CreatedAt < review.CreatedAt, ct) > 0;
+
+            // SLA time remaining
+            var hoursWaiting = (DateTimeOffset.UtcNow - review.CreatedAt).TotalHours;
+            var slaHours = review.TurnaroundOption == "express" ? 24.0 : 48.0;
+            var slaRemaining = slaHours - hoursWaiting;
+
+            // Build priority reasons
+            var reasons = new List<string>();
+            var priority = "normal";
+
+            if (slaRemaining < 6) { reasons.Add($"SLA expires in {Math.Round(slaRemaining, 1)}h"); priority = "critical"; }
+            else if (slaRemaining < 12) { reasons.Add($"SLA at risk ({Math.Round(slaRemaining, 1)}h remaining)"); priority = "high"; }
+
+            if (daysToExam.HasValue && daysToExam.Value <= 7) { reasons.Add($"Learner exam in {daysToExam.Value} days"); priority = "critical"; }
+            else if (daysToExam.HasValue && daysToExam.Value <= 14) { reasons.Add($"Learner exam in {daysToExam.Value} days"); if (priority == "normal") priority = "high"; }
+
+            if (isResubmission) { reasons.Add("Re-submission after revision"); if (priority == "normal") priority = "high"; }
+            if (review.TurnaroundOption == "express") { reasons.Add("Express turnaround requested"); if (priority == "normal") priority = "high"; }
+
+            if (reasons.Count == 0) reasons.Add("Standard review");
+
+            items.Add(new
+            {
+                assignmentId = assignment.Id,
+                reviewRequestId = review.Id,
+                attemptId = review.AttemptId,
+                subtestCode = review.SubtestCode,
+                priority,
+                reasons,
+                daysToExam,
+                slaRemainingHours = Math.Round(slaRemaining, 1),
+                isResubmission,
+                turnaround = review.TurnaroundOption,
+                hoursWaiting = Math.Round(hoursWaiting, 1),
+                createdAt = review.CreatedAt
+            });
+        }
+
+        return new
+        {
+            items = items.OrderBy(i => ((dynamic)i).priority == "critical" ? 0 : ((dynamic)i).priority == "high" ? 1 : 2)
+                        .ThenBy(i => ((dynamic)i).slaRemainingHours)
+                        .ToList(),
+            summary = new
+            {
+                total = items.Count,
+                critical = items.Count(i => ((dynamic)i).priority == "critical"),
+                high = items.Count(i => ((dynamic)i).priority == "high"),
+                normal = items.Count(i => ((dynamic)i).priority == "normal")
+            }
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // XE2: AI Pre-Fill for Expert Reviews
+    // ═══════════════════════════════════════════════════════════════
+
+    public async Task<object> GetAiPreFillForReviewAsync(string expertId, string reviewRequestId, CancellationToken ct)
+    {
+        var review = await db.ReviewRequests.FindAsync([reviewRequestId], ct)
+            ?? throw ApiException.NotFound("REVIEW_NOT_FOUND", "Review request not found.");
+
+        // Verify expert is assigned
+        var assignment = await db.ExpertReviewAssignments
+            .FirstOrDefaultAsync(a => a.ReviewRequestId == reviewRequestId && a.AssignedReviewerId == expertId, ct)
+            ?? throw ApiException.Forbidden("NOT_ASSIGNED", "You are not assigned to this review.");
+
+        var attempt = await db.Attempts.FindAsync([review.AttemptId], ct);
+
+        // Get AI evaluation if available
+        var aiEval = await db.Evaluations
+            .Where(e => e.AttemptId == review.AttemptId && e.ConfidenceBand != null)
+            .OrderByDescending(e => e.GeneratedAt)
+            .FirstOrDefaultAsync(ct);
+
+        if (aiEval is null)
+        {
+            return new
+            {
+                reviewRequestId,
+                hasAiPreFill = false,
+                message = "No AI evaluation available for pre-fill. Score from scratch."
+            };
+        }
+
+        // Parse AI criterion scores
+        var aiCriteria = new List<object>();
+        try
+        {
+            var criterionScores = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, System.Text.Json.JsonElement>>(aiEval.CriterionScoresJson ?? "{}");
+            if (criterionScores is not null)
+            {
+                foreach (var kv in criterionScores)
+                {
+                    var score = kv.Value.ValueKind == System.Text.Json.JsonValueKind.Number ? kv.Value.GetDouble() : 0;
+                    aiCriteria.Add(new
+                    {
+                        criterionCode = kv.Key,
+                        aiScore = score,
+                        aiConfidence = aiEval.ConfidenceBand.ToString().ToLowerInvariant(),
+                        note = "AI-suggested starting point. Accept, adjust, or override."
+                    });
+                }
+            }
+        }
+        catch { }
+
+        // Parse AI feedback items
+        var aiCommentary = new List<object>();
+        try
+        {
+            var comments = System.Text.Json.JsonSerializer.Deserialize<List<Dictionary<string, System.Text.Json.JsonElement>>>(aiEval.FeedbackItemsJson ?? "[]");
+            if (comments is not null)
+            {
+                foreach (var comment in comments)
+                {
+                    aiCommentary.Add(new
+                    {
+                        criterion = comment.TryGetValue("criterion", out var c) ? c.GetString() : null,
+                        text = comment.TryGetValue("text", out var t) ? t.GetString() : null,
+                        type = comment.TryGetValue("type", out var tp) ? tp.GetString() : "suggestion"
+                    });
+                }
+            }
+        }
+        catch { }
+
+        return new
+        {
+            reviewRequestId,
+            hasAiPreFill = true,
+            aiEvaluationId = aiEval.Id,
+            aiScoreRange = aiEval.ScoreRange,
+            aiConfidence = aiEval.ConfidenceBand,
+            aiGeneratedAt = aiEval.GeneratedAt,
+            subtestCode = review.SubtestCode,
+            suggestedScores = aiCriteria,
+            suggestedComments = aiCommentary,
+            instructions = new
+            {
+                guidance = "Use AI scores as a starting point. Validate each criterion independently.",
+                actions = new[] { "Accept", "Adjust (modify score)", "Override (score from scratch)" },
+                note = "Your expert judgment always takes priority over AI suggestions."
+            }
+        };
+    }
+
+    // ── E7: Ask an Expert — Community Q&A ────────────────────────
+
+    public async Task<object> GetAskAnExpertThreadsAsync(int page, int pageSize, CancellationToken ct)
+    {
+        var askAnExpertCategory = await db.ForumCategories
+            .FirstOrDefaultAsync(c => c.Name == "Ask an Expert" && c.Status == "active", ct);
+
+        if (askAnExpertCategory == null)
+            return new { total = 0, threads = Array.Empty<object>() };
+
+        var query = db.ForumThreads.Where(t => t.CategoryId == askAnExpertCategory.Id);
+        var total = await query.CountAsync(ct);
+        var threads = await query
+            .OrderByDescending(t => t.IsPinned)
+            .ThenByDescending(t => t.LastActivityAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        // Check which threads already have an expert-verified reply
+        var threadIds = threads.Select(t => t.Id).ToList();
+        var threadsWithExpertReply = await db.ForumReplies
+            .Where(r => threadIds.Contains(r.ThreadId) && r.IsExpertVerified)
+            .Select(r => r.ThreadId)
+            .Distinct()
+            .ToListAsync(ct);
+        var answeredSet = threadsWithExpertReply.ToHashSet();
+
+        return new
+        {
+            total,
+            categoryId = askAnExpertCategory.Id,
+            threads = threads.Select(t => new
+            {
+                id = t.Id,
+                title = t.Title,
+                authorDisplayName = t.AuthorDisplayName,
+                replyCount = t.ReplyCount,
+                viewCount = t.ViewCount,
+                hasExpertAnswer = answeredSet.Contains(t.Id),
+                createdAt = t.CreatedAt,
+                lastActivityAt = t.LastActivityAt
+            })
+        };
+    }
+
+    public async Task<object> PostVerifiedReplyAsync(string expertId, string threadId, string body, CancellationToken ct)
+    {
+        var thread = await db.ForumThreads.FindAsync([threadId], ct)
+            ?? throw new InvalidOperationException("Thread not found.");
+
+        if (thread.IsLocked)
+            throw new InvalidOperationException("Thread is locked.");
+
+        var expert = await db.ExpertUsers.FindAsync([expertId], ct);
+
+        var reply = new ForumReply
+        {
+            Id = $"fr-{Guid.NewGuid():N}",
+            ThreadId = threadId,
+            AuthorUserId = expertId,
+            AuthorDisplayName = expert?.DisplayName ?? "Expert",
+            AuthorRole = "expert",
+            Body = body,
+            IsExpertVerified = true,
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        db.ForumReplies.Add(reply);
+        thread.ReplyCount++;
+        thread.LastActivityAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+
+        return new { id = reply.Id, isExpertVerified = true };
     }
 
     private sealed record ReadContext(

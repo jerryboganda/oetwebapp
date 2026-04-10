@@ -217,4 +217,138 @@ public class PronunciationService(LearnerDbContext db)
             createdAt = assessment.CreatedAt
         };
     }
+
+    /// <summary>
+    /// Creates a pronunciation assessment record linked to a completed speaking attempt.
+    /// Called automatically after expert speaking review submission to bridge both modules.
+    /// Derives pronunciation metrics from the expert's criterion scores.
+    /// </summary>
+    public async Task CreateFromSpeakingReviewAsync(
+        string userId,
+        string attemptId,
+        Dictionary<string, object?> criterionScores,
+        CancellationToken ct)
+    {
+        // Avoid duplicate assessments for the same attempt
+        var exists = await db.PronunciationAssessments
+            .AnyAsync(a => a.AttemptId == attemptId, ct);
+        if (exists) return;
+
+        // Map speaking criterion scores to pronunciation dimensions
+        double intelligibility = ExtractScore(criterionScores, "intelligibility");
+        double fluency = ExtractScore(criterionScores, "fluency");
+        double appropriateness = ExtractScore(criterionScores, "appropriateness");
+        double grammar = ExtractScore(criterionScores, "grammar");
+
+        // Derive pronunciation scores from expert criteria (normalize to 0-100 scale)
+        double accuracy = NormalizeTo100(intelligibility);
+        double fluencyScore = NormalizeTo100(fluency);
+        double completeness = NormalizeTo100((appropriateness + grammar) / 2.0);
+        double prosody = NormalizeTo100((intelligibility + fluency) / 2.0);
+        double overall = (accuracy + fluencyScore + completeness + prosody) / 4.0;
+
+        var assessment = new PronunciationAssessment
+        {
+            Id = $"pa-spk-{Guid.NewGuid():N}",
+            UserId = userId,
+            AttemptId = attemptId,
+            AccuracyScore = Math.Round(accuracy, 1),
+            FluencyScore = Math.Round(fluencyScore, 1),
+            CompletenessScore = Math.Round(completeness, 1),
+            ProsodyScore = Math.Round(prosody, 1),
+            OverallScore = Math.Round(overall, 1),
+            WordScoresJson = "[]",
+            ProblematicPhonemesJson = "[]",
+            FluencyMarkersJson = JsonSupport.Serialize(new
+            {
+                source = "expert_review",
+                intelligibilityRaw = intelligibility,
+                fluencyRaw = fluency,
+                appropriatenessRaw = appropriateness,
+                grammarRaw = grammar
+            }),
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        db.PronunciationAssessments.Add(assessment);
+
+        // Update aggregated pronunciation progress for the overall speaking phoneme
+        var progress = await db.LearnerPronunciationProgress
+            .FirstOrDefaultAsync(p => p.UserId == userId && p.PhonemeCode == "_speech_overall", ct);
+        if (progress == null)
+        {
+            progress = new LearnerPronunciationProgress
+            {
+                Id = Guid.NewGuid(),
+                UserId = userId,
+                PhonemeCode = "_speech_overall",
+                AverageScore = overall,
+                AttemptCount = 1,
+                ScoreHistoryJson = JsonSupport.Serialize(new[] { Math.Round(overall, 1) }),
+                LastPracticedAt = DateTimeOffset.UtcNow
+            };
+            db.LearnerPronunciationProgress.Add(progress);
+        }
+        else
+        {
+            progress.AttemptCount++;
+            progress.AverageScore = (progress.AverageScore * (progress.AttemptCount - 1) + overall) / progress.AttemptCount;
+            progress.LastPracticedAt = DateTimeOffset.UtcNow;
+            var history = JsonSupport.Deserialize(progress.ScoreHistoryJson, new List<double>());
+            history.Add(Math.Round(overall, 1));
+            if (history.Count > 20) history.RemoveRange(0, history.Count - 20);
+            progress.ScoreHistoryJson = JsonSupport.Serialize(history);
+        }
+
+        await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Gets pronunciation assessments linked to speaking attempts for a user.
+    /// </summary>
+    public async Task<object> GetSpeakingLinkedAssessmentsAsync(string userId, int limit, CancellationToken ct)
+    {
+        var assessments = await db.PronunciationAssessments
+            .Where(a => a.UserId == userId && a.AttemptId != null)
+            .OrderByDescending(a => a.CreatedAt)
+            .Take(limit)
+            .ToListAsync(ct);
+
+        return assessments.Select(a => new
+        {
+            id = a.Id,
+            attemptId = a.AttemptId,
+            accuracy = a.AccuracyScore,
+            fluency = a.FluencyScore,
+            completeness = a.CompletenessScore,
+            prosody = a.ProsodyScore,
+            overall = a.OverallScore,
+            createdAt = a.CreatedAt
+        }).ToList();
+    }
+
+    private static double ExtractScore(Dictionary<string, object?> scores, string key)
+    {
+        if (scores.TryGetValue(key, out var val) && val is not null)
+        {
+            if (val is double d) return d;
+            if (val is int i) return i;
+            if (val is long l) return l;
+            if (val is decimal m) return (double)m;
+            if (val is System.Text.Json.JsonElement je && je.TryGetDouble(out var jd)) return jd;
+            if (double.TryParse(val.ToString(), System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var parsed)) return parsed;
+        }
+        return 0;
+    }
+
+    /// <summary>
+    /// Normalizes an OET criterion score (typically 0-6 or 0-500 range) to a 0-100 scale.
+    /// </summary>
+    private static double NormalizeTo100(double score)
+    {
+        if (score <= 0) return 0;
+        if (score <= 6) return Math.Min(100, score / 6.0 * 100);    // OET criterion 0-6
+        if (score <= 100) return Math.Min(100, score);                // Already 0-100
+        if (score <= 500) return Math.Min(100, score / 500.0 * 100); // OET score 0-500
+        return 100;
+    }
 }

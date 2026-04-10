@@ -357,3 +357,78 @@ public class PaymentWebhookEvent
     public DateTimeOffset ReceivedAt { get; set; }
     public DateTimeOffset? ProcessedAt { get; set; }
 }
+
+/// <summary>Score guarantee pledge — learner claims money-back if score doesn't improve.</summary>
+[Index(nameof(UserId))]
+public class ScoreGuaranteePledge
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string UserId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string SubscriptionId { get; set; } = default!;
+
+    /// <summary>Baseline OET score at pledge activation (0-500).</summary>
+    public int BaselineScore { get; set; }
+
+    /// <summary>Guaranteed minimum improvement (points).</summary>
+    public int GuaranteedImprovement { get; set; } = 50;
+
+    /// <summary>OET score after exam (uploaded by learner).</summary>
+    public int? ActualScore { get; set; }
+
+    [MaxLength(32)]
+    public string Status { get; set; } = "active";
+    // active | claim_submitted | claim_approved | claim_rejected | expired
+
+    [MaxLength(512)]
+    public string? ProofDocumentUrl { get; set; }
+
+    [MaxLength(512)]
+    public string? ClaimNote { get; set; }
+
+    [MaxLength(512)]
+    public string? ReviewNote { get; set; }
+
+    [MaxLength(64)]
+    public string? ReviewedBy { get; set; }
+
+    public DateTimeOffset ActivatedAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
+    public DateTimeOffset? ClaimSubmittedAt { get; set; }
+    public DateTimeOffset? ReviewedAt { get; set; }
+}
+
+/// <summary>Referral tracking for the referral program.</summary>
+[Index(nameof(ReferrerUserId))]
+[Index(nameof(ReferralCode), IsUnique = true)]
+public class ReferralRecord
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ReferrerUserId { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string ReferralCode { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string? ReferredUserId { get; set; }
+
+    [MaxLength(32)]
+    public string Status { get; set; } = "pending";
+    // pending | activated | rewarded | expired
+
+    public decimal ReferrerCreditAmount { get; set; } = 10m;
+    public decimal ReferredDiscountPercent { get; set; } = 10m;
+
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? ActivatedAt { get; set; }
+    public DateTimeOffset? RewardedAt { get; set; }
+}

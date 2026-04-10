@@ -2890,4 +2890,1359 @@ public partial class AdminService(
             windowDays
         };
     }
+
+    // ════════════════════════════════════════════
+    //  Admin Permissions (RBAC)
+    // ════════════════════════════════════════════
+
+    public async Task<object> GetAdminPermissionsAsync(string userId, CancellationToken ct)
+    {
+        var user = await db.ApplicationUserAccounts.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct)
+                   ?? throw ApiException.NotFound("user_not_found", "User not found.");
+
+        if (user.Role != ApplicationUserRoles.Admin)
+            throw ApiException.Validation("not_admin", "User is not an admin.");
+
+        var grants = await db.AdminPermissionGrants
+            .AsNoTracking()
+            .Where(g => g.AdminUserId == userId)
+            .OrderBy(g => g.Permission)
+            .ToListAsync(ct);
+
+        return new
+        {
+            userId,
+            permissions = grants.Select(g => new
+            {
+                permission = g.Permission,
+                grantedBy = g.GrantedBy,
+                grantedAt = g.GrantedAt
+            }),
+            allPermissions = AdminPermissions.All
+        };
+    }
+
+    public async Task<object> UpdateAdminPermissionsAsync(
+        string actorId, string actorName, string userId,
+        AdminPermissionUpdateRequest request, CancellationToken ct)
+    {
+        var user = await db.ApplicationUserAccounts.FirstOrDefaultAsync(u => u.Id == userId, ct)
+                   ?? throw ApiException.NotFound("user_not_found", "User not found.");
+
+        if (user.Role != ApplicationUserRoles.Admin)
+            throw ApiException.Validation("not_admin", "User is not an admin.");
+
+        var invalid = request.Permissions.Except(AdminPermissions.All).ToArray();
+        if (invalid.Length > 0)
+            throw ApiException.Validation("invalid_permissions", $"Invalid permissions: {string.Join(", ", invalid)}");
+
+        var tx = await BeginTransactionIfNeededAsync(ct);
+        try
+        {
+            var existing = await db.AdminPermissionGrants
+                .Where(g => g.AdminUserId == userId)
+                .ToListAsync(ct);
+
+            db.AdminPermissionGrants.RemoveRange(existing);
+
+            var now = timeProvider.GetUtcNow();
+            foreach (var perm in request.Permissions.Distinct())
+            {
+                db.AdminPermissionGrants.Add(new AdminPermissionGrant
+                {
+                    Id = $"APG-{Guid.NewGuid():N}",
+                    AdminUserId = userId,
+                    Permission = perm,
+                    GrantedBy = actorId,
+                    GrantedAt = now
+                });
+            }
+
+            await db.SaveChangesAsync(ct);
+            await CommitIfOwnedAsync(tx, ct);
+        }
+        catch
+        {
+            if (tx is not null) await tx.RollbackAsync(ct);
+            throw;
+        }
+
+        await LogAuditAsync(actorId, actorName, "UpdatePermissions", "AdminPermission", userId,
+            $"Set permissions: [{string.Join(", ", request.Permissions)}]", ct);
+
+        return new { userId, permissions = request.Permissions, updated = true };
+    }
+
+    // ════════════════════════════════════════════
+    //  Content Publishing Workflow
+    // ════════════════════════════════════════════
+
+    public async Task<object> RequestContentPublishAsync(
+        string actorId, string actorName, string contentId,
+        AdminPublishRequestPayload request, CancellationToken ct)
+    {
+        var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId, ct)
+                   ?? throw ApiException.NotFound("content_not_found", "Content item not found.");
+
+        if (item.Status != ContentStatus.Draft && item.Status != ContentStatus.InReview)
+            throw ApiException.Validation("invalid_status", "Content must be in Draft or InReview status to request publishing.");
+
+        var pending = await db.ContentPublishRequests
+            .AnyAsync(r => r.ContentItemId == contentId && r.Status == "pending", ct);
+        if (pending)
+            throw ApiException.Conflict("already_pending", "A publish request is already pending for this content.");
+
+        item.Status = ContentStatus.InReview;
+        item.UpdatedAt = DateTimeOffset.UtcNow;
+
+        var pr = new ContentPublishRequest
+        {
+            Id = $"CPR-{Guid.NewGuid():N}",
+            ContentItemId = contentId,
+            RequestedBy = actorId,
+            RequestedByName = actorName,
+            RequestNote = request.Note,
+            RequestedAt = DateTimeOffset.UtcNow,
+            Status = "pending"
+        };
+
+        db.ContentPublishRequests.Add(pr);
+        await db.SaveChangesAsync(ct);
+
+        await LogAuditAsync(actorId, actorName, "RequestPublish", "Content", contentId,
+            $"Publish requested for: {item.Title}", ct);
+
+        return new { requestId = pr.Id, contentId, status = "pending" };
+    }
+
+    public async Task<object> GetPublishRequestsAsync(
+        string? status, int page, int pageSize, CancellationToken ct)
+    {
+        var query = db.ContentPublishRequests.AsNoTracking().AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(status))
+            query = query.Where(r => r.Status == status);
+
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .OrderByDescending(r => r.RequestedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return new
+        {
+            items = items.Select(r => new
+            {
+                id = r.Id,
+                contentItemId = r.ContentItemId,
+                requestedBy = r.RequestedBy,
+                requestedByName = r.RequestedByName,
+                reviewedBy = r.ReviewedBy,
+                reviewedByName = r.ReviewedByName,
+                status = r.Status,
+                requestNote = r.RequestNote,
+                reviewNote = r.ReviewNote,
+                requestedAt = r.RequestedAt,
+                reviewedAt = r.ReviewedAt
+            }),
+            total,
+            page,
+            pageSize
+        };
+    }
+
+    public async Task<object> ApprovePublishRequestAsync(
+        string actorId, string actorName, string requestId,
+        AdminPublishReviewPayload request, CancellationToken ct)
+    {
+        var pr = await db.ContentPublishRequests.FirstOrDefaultAsync(r => r.Id == requestId, ct)
+                 ?? throw ApiException.NotFound("request_not_found", "Publish request not found.");
+
+        if (pr.Status != "pending")
+            throw ApiException.Validation("not_pending", "Publish request is not pending.");
+
+        if (pr.RequestedBy == actorId)
+            throw ApiException.Validation("self_approve", "Cannot approve your own publish request.");
+
+        var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == pr.ContentItemId, ct)
+                   ?? throw ApiException.NotFound("content_not_found", "Content item not found.");
+
+        pr.Status = "approved";
+        pr.ReviewedBy = actorId;
+        pr.ReviewedByName = actorName;
+        pr.ReviewNote = request.Note;
+        pr.ReviewedAt = DateTimeOffset.UtcNow;
+
+        item.Status = ContentStatus.Published;
+        item.PublishedAt = DateTimeOffset.UtcNow;
+        item.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+
+        await LogAuditAsync(actorId, actorName, "ApprovePublish", "Content", pr.ContentItemId,
+            $"Approved publish for: {item.Title}", ct);
+
+        return new { requestId, contentId = pr.ContentItemId, status = "approved" };
+    }
+
+    public async Task<object> RejectPublishRequestAsync(
+        string actorId, string actorName, string requestId,
+        AdminPublishReviewPayload request, CancellationToken ct)
+    {
+        var pr = await db.ContentPublishRequests.FirstOrDefaultAsync(r => r.Id == requestId, ct)
+                 ?? throw ApiException.NotFound("request_not_found", "Publish request not found.");
+
+        if (pr.Status != "pending")
+            throw ApiException.Validation("not_pending", "Publish request is not pending.");
+
+        var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == pr.ContentItemId, ct);
+
+        pr.Status = "rejected";
+        pr.ReviewedBy = actorId;
+        pr.ReviewedByName = actorName;
+        pr.ReviewNote = request.Note;
+        pr.ReviewedAt = DateTimeOffset.UtcNow;
+
+        if (item is not null)
+        {
+            item.Status = ContentStatus.Draft;
+            item.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        await LogAuditAsync(actorId, actorName, "RejectPublish", "Content", pr.ContentItemId,
+            $"Rejected publish{(request.Note is not null ? $": {request.Note}" : "")}", ct);
+
+        return new { requestId, contentId = pr.ContentItemId, status = "rejected" };
+    }
+
+    // ════════════════════════════════════════════
+    //  Webhook Monitoring
+    // ════════════════════════════════════════════
+
+    public async Task<object> GetWebhookEventsAsync(
+        string? gateway, string? status, int page, int pageSize, CancellationToken ct)
+    {
+        var query = db.PaymentWebhookEvents.AsNoTracking().AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(gateway))
+            query = query.Where(e => e.Gateway == gateway);
+        if (!string.IsNullOrWhiteSpace(status))
+            query = query.Where(e => e.ProcessingStatus == status);
+
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .OrderByDescending(e => e.ReceivedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(e => new
+            {
+                id = e.Id,
+                gateway = e.Gateway,
+                eventType = e.EventType,
+                gatewayEventId = e.GatewayEventId,
+                processingStatus = e.ProcessingStatus,
+                errorMessage = e.ErrorMessage,
+                receivedAt = e.ReceivedAt,
+                processedAt = e.ProcessedAt
+            })
+            .ToListAsync(ct);
+
+        return new { items, total, page, pageSize };
+    }
+
+    public async Task<object> GetWebhookSummaryAsync(CancellationToken ct)
+    {
+        var events = db.PaymentWebhookEvents.AsNoTracking();
+        var now = DateTimeOffset.UtcNow;
+        var last24h = now.AddHours(-24);
+        var last7d = now.AddDays(-7);
+
+        var total = await events.CountAsync(ct);
+        var recent24h = await events.CountAsync(e => e.ReceivedAt >= last24h, ct);
+        var failed = await events.CountAsync(e => e.ProcessingStatus == "failed", ct);
+        var failed24h = await events.CountAsync(e => e.ProcessingStatus == "failed" && e.ReceivedAt >= last24h, ct);
+
+        var byStatus = await events
+            .GroupBy(e => e.ProcessingStatus)
+            .Select(g => new { status = g.Key, count = g.Count() })
+            .ToListAsync(ct);
+
+        var byGateway = await events
+            .GroupBy(e => e.Gateway)
+            .Select(g => new { gateway = g.Key, count = g.Count() })
+            .ToListAsync(ct);
+
+        var recentFailures = await events
+            .Where(e => e.ProcessingStatus == "failed")
+            .OrderByDescending(e => e.ReceivedAt)
+            .Take(5)
+            .Select(e => new
+            {
+                id = e.Id,
+                eventType = e.EventType,
+                errorMessage = e.ErrorMessage,
+                receivedAt = e.ReceivedAt
+            })
+            .ToListAsync(ct);
+
+        return new
+        {
+            total,
+            recent24h,
+            failed,
+            failed24h,
+            byStatus,
+            byGateway,
+            recentFailures
+        };
+    }
+
+    public async Task<object> RetryWebhookAsync(
+        string actorId, string actorName, string eventId, CancellationToken ct)
+    {
+        var evt = await db.PaymentWebhookEvents.FirstOrDefaultAsync(e => e.Id.ToString() == eventId, ct)
+                  ?? throw ApiException.NotFound("webhook_not_found", "Webhook event not found.");
+
+        if (evt.ProcessingStatus != "failed")
+            throw ApiException.Validation("not_failed", "Only failed webhooks can be retried.");
+
+        evt.ProcessingStatus = "received";
+        evt.ErrorMessage = null;
+        evt.ProcessedAt = null;
+        await db.SaveChangesAsync(ct);
+
+        await LogAuditAsync(actorId, actorName, "RetryWebhook", "PaymentWebhookEvent", eventId,
+            $"Retried webhook: {evt.EventType} ({evt.GatewayEventId})", ct);
+
+        return new { eventId, status = "queued_for_retry" };
+    }
+
+    // ════════════════════════════════════════════
+    //  Review Escalation (Disagreement Resolution)
+    // ════════════════════════════════════════════
+
+    public async Task<object> GetReviewEscalationsAsync(
+        string? status, int page, int pageSize, CancellationToken ct)
+    {
+        var query = db.ReviewEscalations.AsNoTracking().AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(status))
+            query = query.Where(e => e.Status == status);
+
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .OrderByDescending(e => e.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .Select(e => new
+            {
+                id = e.Id,
+                reviewRequestId = e.ReviewRequestId,
+                originalReviewerId = e.OriginalReviewerId,
+                secondReviewerId = e.SecondReviewerId,
+                subtestCode = e.SubtestCode,
+                triggerCriterion = e.TriggerCriterion,
+                aiScore = e.AiScore,
+                humanScore = e.HumanScore,
+                divergence = e.Divergence,
+                status = e.Status,
+                resolutionNote = e.ResolutionNote,
+                finalScore = e.FinalScore,
+                createdAt = e.CreatedAt,
+                resolvedAt = e.ResolvedAt
+            })
+            .ToListAsync(ct);
+
+        return new { items, total, page, pageSize };
+    }
+
+    public async Task<object> AssignEscalationReviewerAsync(
+        string actorId, string actorName, string escalationId,
+        AdminEscalationAssignRequest request, CancellationToken ct)
+    {
+        var esc = await db.ReviewEscalations.FirstOrDefaultAsync(e => e.Id == escalationId, ct)
+                  ?? throw ApiException.NotFound("escalation_not_found", "Escalation not found.");
+
+        if (esc.Status != "pending")
+            throw ApiException.Validation("not_pending", "Escalation is not pending.");
+
+        if (request.SecondReviewerId == esc.OriginalReviewerId)
+            throw ApiException.Validation("same_reviewer", "Second reviewer must be different from the original reviewer.");
+
+        var reviewer = await db.ApplicationUserAccounts.AsNoTracking()
+            .FirstOrDefaultAsync(u => u.Id == request.SecondReviewerId && u.Role == ApplicationUserRoles.Expert, ct)
+            ?? throw ApiException.NotFound("reviewer_not_found", "Expert reviewer not found.");
+
+        esc.SecondReviewerId = request.SecondReviewerId;
+        esc.Status = "assigned";
+        await db.SaveChangesAsync(ct);
+
+        await LogAuditAsync(actorId, actorName, "AssignEscalation", "ReviewEscalation", escalationId,
+            $"Assigned to expert: {request.SecondReviewerId}", ct);
+
+        return new { escalationId, status = "assigned", secondReviewerId = request.SecondReviewerId };
+    }
+
+    public async Task<object> ResolveEscalationAsync(
+        string actorId, string actorName, string escalationId,
+        AdminEscalationResolveRequest request, CancellationToken ct)
+    {
+        var esc = await db.ReviewEscalations.FirstOrDefaultAsync(e => e.Id == escalationId, ct)
+                  ?? throw ApiException.NotFound("escalation_not_found", "Escalation not found.");
+
+        if (esc.Status == "resolved")
+            throw ApiException.Validation("already_resolved", "Escalation is already resolved.");
+
+        if (request.FinalScore < 0 || request.FinalScore > 500)
+            throw ApiException.Validation("invalid_score", "OET score must be between 0 and 500.");
+
+        esc.FinalScore = request.FinalScore;
+        esc.ResolutionNote = request.ResolutionNote;
+        esc.Status = "resolved";
+        esc.ResolvedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(ct);
+
+        await LogAuditAsync(actorId, actorName, "ResolveEscalation", "ReviewEscalation", escalationId,
+            $"Resolved with final score: {request.FinalScore}", ct);
+
+        return new { escalationId, status = "resolved", finalScore = request.FinalScore };
+    }
+
+    // ── Score Guarantee Claims ──────────────────────────────────────
+
+    public async Task<object> GetScoreGuaranteeClaimsAsync(string? status, int page, int pageSize, CancellationToken ct)
+    {
+        var query = db.ScoreGuaranteePledges.AsQueryable();
+        if (!string.IsNullOrWhiteSpace(status))
+            query = query.Where(p => p.Status == status);
+
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .OrderByDescending(p => p.ActivatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return new { items, total, page, pageSize };
+    }
+
+    public async Task<object> ReviewScoreGuaranteeClaimAsync(
+        string actorId, string actorName, string pledgeId, AdminScoreGuaranteeReviewRequest request, CancellationToken ct)
+    {
+        var pledge = await db.ScoreGuaranteePledges.FirstOrDefaultAsync(p => p.Id == pledgeId, ct)
+            ?? throw ApiException.NotFound("pledge_not_found", $"Pledge {pledgeId} not found.");
+
+        if (pledge.Status != "claim_submitted")
+            throw ApiException.Validation("invalid_status", "Only submitted claims can be reviewed.");
+
+        var decision = request.Decision.ToLowerInvariant();
+        if (decision is not ("approve" or "reject"))
+            throw ApiException.Validation("invalid_decision", "Decision must be 'approve' or 'reject'.");
+
+        pledge.Status = decision == "approve" ? "claim_approved" : "claim_rejected";
+        pledge.ReviewNote = request.Note;
+        pledge.ReviewedBy = actorId;
+
+        if (decision == "approve")
+        {
+            var wallet = await db.Wallets.FirstOrDefaultAsync(w => w.UserId == pledge.UserId, ct);
+            if (wallet != null)
+            {
+                var refundCredits = 50; // standard guarantee refund credits
+                wallet.CreditBalance += refundCredits;
+                wallet.LastUpdatedAt = DateTimeOffset.UtcNow;
+                db.WalletTransactions.Add(new WalletTransaction
+                {
+                    Id = Guid.NewGuid(),
+                    WalletId = wallet.Id,
+                    TransactionType = "refund",
+                    Amount = refundCredits,
+                    BalanceAfter = wallet.CreditBalance,
+                    ReferenceType = "manual",
+                    ReferenceId = pledge.Id,
+                    Description = "Score guarantee claim approved — refund",
+                    CreatedBy = actorId,
+                    CreatedAt = DateTimeOffset.UtcNow
+                });
+            }
+        }
+
+        await db.SaveChangesAsync(ct);
+
+        await LogAuditAsync(actorId, actorName, "ReviewScoreGuaranteeClaim", "ScoreGuaranteePledge", pledgeId,
+            $"Decision: {decision}", ct);
+
+        return new { pledgeId, status = pledge.Status, decision };
+    }
+
+    // ══════════════════════════════════════════════════════
+    // A4 · Content Quality Scoring
+    // ══════════════════════════════════════════════════════
+
+    public async Task<object> GetContentQualityOverviewAsync(int page, int pageSize, CancellationToken ct)
+    {
+        var content = await db.ContentItems
+            .OrderByDescending(c => c.UpdatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        var total = await db.ContentItems.CountAsync(ct);
+
+        return new
+        {
+            items = content.Select(c => new
+            {
+                id = c.Id,
+                title = c.Title,
+                subtestCode = c.SubtestCode,
+                contentType = c.ContentType,
+                qaStatus = c.QaStatus,
+                qaReviewedBy = c.QaReviewedBy,
+                qaReviewedAt = c.QaReviewedAt,
+                sourceType = c.SourceType,
+                performanceMetrics = c.PerformanceMetricsJson,
+                difficultyRating = c.DifficultyRating,
+                status = c.Status.ToString().ToLower(),
+                updatedAt = c.UpdatedAt
+            }).ToList(),
+            total,
+            page,
+            pageSize
+        };
+    }
+
+    public async Task<object> ScoreContentQualityAsync(string actorId, string actorName, string contentId, CancellationToken ct)
+    {
+        var content = await db.ContentItems.FindAsync([contentId], ct)
+            ?? throw ApiException.NotFound("CONTENT_NOT_FOUND", "Content item not found.");
+
+        // Compute quality score based on completeness metrics
+        var score = 0;
+        var factors = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(content.Title) && content.Title.Length >= 10) { score += 15; factors.Add("title_quality"); }
+        if (!string.IsNullOrWhiteSpace(content.CaseNotes)) { score += 15; factors.Add("case_notes_present"); }
+        if (content.DetailJson != "{}") { score += 20; factors.Add("detail_populated"); }
+        if (content.ModelAnswerJson != "{}") { score += 20; factors.Add("model_answer_present"); }
+        if (content.CriteriaFocusJson != "[]") { score += 10; factors.Add("criteria_focus_set"); }
+        if (content.EstimatedDurationMinutes > 0) { score += 10; factors.Add("duration_set"); }
+        if (!string.IsNullOrWhiteSpace(content.ScenarioType)) { score += 10; factors.Add("scenario_typed"); }
+
+        content.QaStatus = score >= 80 ? "approved" : score >= 50 ? "needs_review" : "rejected";
+        content.QaReviewedBy = actorId;
+        content.QaReviewedAt = DateTimeOffset.UtcNow;
+        content.PerformanceMetricsJson = JsonSupport.Serialize(new { qualityScore = score, factors, scoredAt = DateTimeOffset.UtcNow });
+        content.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(actorId, actorName, "ContentQualityScore", "ContentItem", contentId, $"Score: {score}/100 → {content.QaStatus}", ct);
+
+        return new { contentId, qualityScore = score, qaStatus = content.QaStatus, factors };
+    }
+
+    // ══════════════════════════════════════════════════════
+    // A6 · Bulk Learner Operations
+    // ══════════════════════════════════════════════════════
+
+    public async Task<object> BulkCreditAdjustmentAsync(string actorId, string actorName, string[] userIds, int creditAmount, string reason, CancellationToken ct)
+    {
+        if (userIds.Length == 0 || userIds.Length > 500)
+            throw ApiException.Validation("INVALID_BATCH", "Provide between 1 and 500 user IDs.");
+
+        var wallets = await db.Wallets
+            .Where(w => userIds.Contains(w.UserId))
+            .ToListAsync(ct);
+
+        var results = new List<object>();
+        foreach (var wallet in wallets)
+        {
+            wallet.CreditBalance += creditAmount;
+            wallet.LastUpdatedAt = DateTimeOffset.UtcNow;
+            db.WalletTransactions.Add(new WalletTransaction
+            {
+                Id = Guid.NewGuid(),
+                WalletId = wallet.Id,
+                TransactionType = creditAmount >= 0 ? "bulk_credit" : "bulk_debit",
+                Amount = Math.Abs(creditAmount),
+                BalanceAfter = wallet.CreditBalance,
+                ReferenceType = "manual",
+                ReferenceId = "bulk",
+                Description = reason,
+                CreatedBy = actorId,
+                CreatedAt = DateTimeOffset.UtcNow
+            });
+            results.Add(new { userId = wallet.UserId, newBalance = wallet.CreditBalance });
+        }
+
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(actorId, actorName, "BulkCreditAdjustment", "Wallet", "bulk",
+            $"Adjusted {wallets.Count} wallets by {creditAmount} credits. Reason: {reason}", ct);
+
+        return new { processed = wallets.Count, skipped = userIds.Length - wallets.Count, results };
+    }
+
+    public async Task<object> BulkNotificationAsync(string actorId, string actorName, string[] userIds, string title, string message, string? category, CancellationToken ct)
+    {
+        if (userIds.Length == 0 || userIds.Length > 1000)
+            throw ApiException.Validation("INVALID_BATCH", "Provide between 1 and 1000 user IDs.");
+
+        var sent = 0;
+        foreach (var userId in userIds)
+        {
+            await notifications.CreateForLearnerAsync(
+                NotificationEventKey.LearnerAccountStatusChanged,
+                userId,
+                category ?? "admin_broadcast",
+                $"bulk-{Guid.NewGuid():N}",
+                DateTimeOffset.UtcNow.Ticks.ToString(),
+                new Dictionary<string, object?> { ["title"] = title, ["message"] = message },
+                ct);
+            sent++;
+        }
+
+        await LogAuditAsync(actorId, actorName, "BulkNotification", "Notification", "bulk",
+            $"Sent to {sent} users. Title: {title}", ct);
+
+        return new { sent, total = userIds.Length };
+    }
+
+    public async Task<object> BulkStatusChangeAsync(string actorId, string actorName, string[] userIds, string newStatus, string reason, CancellationToken ct)
+    {
+        if (userIds.Length == 0 || userIds.Length > 200)
+            throw ApiException.Validation("INVALID_BATCH", "Provide between 1 and 200 user IDs.");
+
+        var accounts = await db.Users
+            .Where(a => userIds.Contains(a.Id))
+            .ToListAsync(ct);
+
+        foreach (var acct in accounts)
+        {
+            acct.AccountStatus = newStatus;
+        }
+
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(actorId, actorName, "BulkStatusChange", "LearnerUser", "bulk",
+            $"Changed {accounts.Count} accounts to '{newStatus}'. Reason: {reason}", ct);
+
+        return new { processed = accounts.Count, skipped = userIds.Length - accounts.Count, newStatus };
+    }
+
+    // ══════════════════════════════════════════════════════
+    // B3 · Enterprise / Sponsor Channel
+    // ══════════════════════════════════════════════════════
+
+    public async Task<object> GetSponsorsAsync(string? status, int page, int pageSize, CancellationToken ct)
+    {
+        var query = db.SponsorAccounts.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(status))
+            query = query.Where(s => s.Status == status);
+
+        var total = await query.CountAsync(ct);
+        var sponsors = await query
+            .OrderByDescending(s => s.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return new
+        {
+            items = sponsors.Select(s => new
+            {
+                id = s.Id, name = s.Name, type = s.Type, contactEmail = s.ContactEmail,
+                organizationName = s.OrganizationName, status = s.Status, createdAt = s.CreatedAt
+            }).ToList(),
+            total, page, pageSize
+        };
+    }
+
+    public async Task<object> CreateSponsorAsync(string actorId, string actorName, SponsorCreateRequest req, CancellationToken ct)
+    {
+        var sponsor = new SponsorAccount
+        {
+            Id = $"spon-{Guid.NewGuid():N}",
+            AuthAccountId = $"auth-{Guid.NewGuid():N}",
+            Name = req.Name,
+            Type = req.Type,
+            ContactEmail = req.ContactEmail,
+            OrganizationName = req.OrganizationName,
+            Status = "active",
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        db.SponsorAccounts.Add(sponsor);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(actorId, actorName, "CreateSponsor", "SponsorAccount", sponsor.Id, $"Created sponsor: {req.Name}", ct);
+        return new { id = sponsor.Id, name = sponsor.Name, status = sponsor.Status };
+    }
+
+    public async Task<object> UpdateSponsorAsync(string actorId, string actorName, string sponsorId, SponsorUpdateRequest req, CancellationToken ct)
+    {
+        var sponsor = await db.SponsorAccounts.FindAsync([sponsorId], ct)
+            ?? throw ApiException.NotFound("SPONSOR_NOT_FOUND", "Sponsor not found.");
+
+        if (req.Name is not null) sponsor.Name = req.Name;
+        if (req.ContactEmail is not null) sponsor.ContactEmail = req.ContactEmail;
+        if (req.OrganizationName is not null) sponsor.OrganizationName = req.OrganizationName;
+        if (req.Status is not null) sponsor.Status = req.Status;
+
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(actorId, actorName, "UpdateSponsor", "SponsorAccount", sponsorId, "Updated sponsor", ct);
+        return new { id = sponsor.Id, name = sponsor.Name, status = sponsor.Status };
+    }
+
+    public async Task<object> GetCohortsAsync(string? sponsorId, string? status, int page, int pageSize, CancellationToken ct)
+    {
+        var query = db.Cohorts.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(sponsorId))
+            query = query.Where(c => c.SponsorId == sponsorId);
+        if (!string.IsNullOrWhiteSpace(status))
+            query = query.Where(c => c.Status == status);
+
+        var total = await query.CountAsync(ct);
+        var cohorts = await query
+            .OrderByDescending(c => c.CreatedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return new
+        {
+            items = cohorts.Select(c => new
+            {
+                id = c.Id, sponsorId = c.SponsorId, name = c.Name, examTypeCode = c.ExamTypeCode,
+                startDate = c.StartDate, endDate = c.EndDate, maxSeats = c.MaxSeats,
+                enrolledCount = c.EnrolledCount, status = c.Status, createdAt = c.CreatedAt
+            }).ToList(),
+            total, page, pageSize
+        };
+    }
+
+    public async Task<object> CreateCohortAsync(string actorId, string actorName, CohortCreateRequest req, CancellationToken ct)
+    {
+        var sponsor = await db.SponsorAccounts.FindAsync([req.SponsorId], ct)
+            ?? throw ApiException.NotFound("SPONSOR_NOT_FOUND", "Sponsor not found.");
+
+        var cohort = new Cohort
+        {
+            Id = $"coh-{Guid.NewGuid():N}",
+            SponsorId = req.SponsorId,
+            Name = req.Name,
+            ExamTypeCode = req.ExamTypeCode,
+            StartDate = req.StartDate,
+            EndDate = req.EndDate,
+            MaxSeats = req.MaxSeats,
+            EnrolledCount = 0,
+            Status = "active",
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+        db.Cohorts.Add(cohort);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(actorId, actorName, "CreateCohort", "Cohort", cohort.Id, $"Created cohort: {req.Name}", ct);
+        return new { id = cohort.Id, name = cohort.Name, status = cohort.Status };
+    }
+
+    public async Task<object> UpdateCohortAsync(string actorId, string actorName, string cohortId, CohortUpdateRequest req, CancellationToken ct)
+    {
+        var cohort = await db.Cohorts.FindAsync([cohortId], ct)
+            ?? throw ApiException.NotFound("COHORT_NOT_FOUND", "Cohort not found.");
+
+        if (req.Name is not null) cohort.Name = req.Name;
+        if (req.StartDate is not null) cohort.StartDate = req.StartDate;
+        if (req.EndDate is not null) cohort.EndDate = req.EndDate;
+        if (req.MaxSeats is not null) cohort.MaxSeats = req.MaxSeats.Value;
+        if (req.Status is not null) cohort.Status = req.Status;
+
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(actorId, actorName, "UpdateCohort", "Cohort", cohortId, "Updated cohort", ct);
+        return new { id = cohort.Id, name = cohort.Name, status = cohort.Status };
+    }
+
+    public async Task<object> GetCohortMembersAsync(string cohortId, int page, int pageSize, CancellationToken ct)
+    {
+        var members = await db.CohortMembers
+            .Where(m => m.CohortId == cohortId)
+            .OrderByDescending(m => m.EnrolledAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        var total = await db.CohortMembers.CountAsync(m => m.CohortId == cohortId, ct);
+
+        return new
+        {
+            items = members.Select(m => new
+            {
+                id = m.Id, cohortId = m.CohortId, learnerId = m.LearnerId,
+                status = m.Status, enrolledAt = m.EnrolledAt
+            }).ToList(),
+            total, page, pageSize
+        };
+    }
+
+    public async Task<object> AddCohortMemberAsync(string actorId, string actorName, string cohortId, string learnerId, CancellationToken ct)
+    {
+        var cohort = await db.Cohorts.FindAsync([cohortId], ct)
+            ?? throw ApiException.NotFound("COHORT_NOT_FOUND", "Cohort not found.");
+
+        if (cohort.EnrolledCount >= cohort.MaxSeats)
+            throw ApiException.Validation("COHORT_FULL", "Cohort is at maximum capacity.");
+
+        var existing = await db.CohortMembers
+            .AnyAsync(m => m.CohortId == cohortId && m.LearnerId == learnerId, ct);
+        if (existing) throw ApiException.Validation("ALREADY_ENROLLED", "Learner is already enrolled.");
+
+        var member = new CohortMember
+        {
+            Id = Guid.NewGuid(),
+            CohortId = cohortId,
+            LearnerId = learnerId,
+            Status = "active",
+            EnrolledAt = DateTimeOffset.UtcNow
+        };
+        db.CohortMembers.Add(member);
+        cohort.EnrolledCount++;
+
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(actorId, actorName, "AddCohortMember", "CohortMember", member.Id.ToString(),
+            $"Added learner {learnerId} to cohort {cohortId}", ct);
+
+        return new { id = member.Id, cohortId, learnerId, status = member.Status };
+    }
+
+    public async Task<object> GetSponsorLearnersAsync(string sponsorId, int page, int pageSize, CancellationToken ct)
+    {
+        var links = await db.SponsorLearnerLinks
+            .Where(l => l.SponsorId == sponsorId)
+            .OrderByDescending(l => l.LinkedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        var total = await db.SponsorLearnerLinks.CountAsync(l => l.SponsorId == sponsorId, ct);
+
+        return new
+        {
+            items = links.Select(l => new
+            {
+                id = l.Id, sponsorId = l.SponsorId, learnerId = l.LearnerId,
+                learnerConsented = l.LearnerConsented, linkedAt = l.LinkedAt, consentedAt = l.ConsentedAt
+            }).ToList(),
+            total, page, pageSize
+        };
+    }
+
+    public async Task<object> LinkSponsorLearnerAsync(string actorId, string actorName, string sponsorId, string learnerId, CancellationToken ct)
+    {
+        var sponsor = await db.SponsorAccounts.FindAsync([sponsorId], ct)
+            ?? throw ApiException.NotFound("SPONSOR_NOT_FOUND", "Sponsor not found.");
+
+        var existing = await db.SponsorLearnerLinks
+            .AnyAsync(l => l.SponsorId == sponsorId && l.LearnerId == learnerId, ct);
+        if (existing)
+            throw ApiException.Validation("ALREADY_LINKED", "Learner is already linked to this sponsor.");
+
+        var link = new SponsorLearnerLink
+        {
+            Id = Guid.NewGuid(),
+            SponsorId = sponsorId,
+            LearnerId = learnerId,
+            LearnerConsented = false,
+            LinkedAt = DateTimeOffset.UtcNow
+        };
+        db.SponsorLearnerLinks.Add(link);
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(actorId, actorName, "LinkSponsorLearner", "SponsorLearnerLink", link.Id.ToString(),
+            $"Linked learner {learnerId} to sponsor {sponsorId}", ct);
+
+        return new { id = link.Id, sponsorId, learnerId, learnerConsented = false };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // AE1: Content Usage Analytics Per Item
+    // ═══════════════════════════════════════════════════════════════
+
+    public async Task<object> GetContentItemAnalyticsAsync(string contentId, CancellationToken ct)
+    {
+        var content = await db.ContentItems.FindAsync([contentId], ct)
+            ?? throw ApiException.NotFound("CONTENT_NOT_FOUND", "Content item not found.");
+
+        var attempts = await db.Attempts.Where(a => a.ContentId == contentId).ToListAsync(ct);
+        var completedAttempts = attempts.Where(a => a.State == AttemptState.Completed).ToList();
+        var evaluations = await db.Evaluations
+            .Where(e => attempts.Select(a => a.Id).Contains(e.AttemptId))
+            .ToListAsync(ct);
+
+        // Score distribution
+        var scores = evaluations
+            .Select(e =>
+            {
+                var parts = e.ScoreRange?.Split('-');
+                return parts?.Length == 2 && int.TryParse(parts[0], out var lo) && int.TryParse(parts[1], out var hi)
+                    ? (lo + hi) / 2.0 : (double?)null;
+            })
+            .Where(s => s.HasValue)
+            .Select(s => s!.Value)
+            .OrderBy(s => s)
+            .ToList();
+
+        var avgTime = completedAttempts.Count > 0
+            ? Math.Round(completedAttempts.Average(a => a.ElapsedSeconds) / 60.0, 1) : 0;
+
+        // Monthly usage trend
+        var monthlyUsage = attempts
+            .Where(a => a.StartedAt >= DateTimeOffset.UtcNow.AddMonths(-6))
+            .GroupBy(a => new { a.StartedAt.Year, a.StartedAt.Month })
+            .OrderBy(g => g.Key.Year).ThenBy(g => g.Key.Month)
+            .Select(g => new { month = $"{g.Key.Year}-{g.Key.Month:D2}", attempts = g.Count(), completed = g.Count(a => a.State == AttemptState.Completed) })
+            .ToList();
+
+        return new
+        {
+            contentId,
+            title = content.Title,
+            subtestCode = content.SubtestCode,
+            status = content.Status.ToString(),
+            metrics = new
+            {
+                totalAttempts = attempts.Count,
+                completedAttempts = completedAttempts.Count,
+                completionRate = attempts.Count > 0 ? Math.Round(completedAttempts.Count * 100.0 / attempts.Count, 1) : 0,
+                averageTimeMinutes = avgTime,
+                uniqueLearners = attempts.Select(a => a.UserId).Distinct().Count(),
+                averageScore = scores.Count > 0 ? Math.Round(scores.Average(), 1) : (double?)null,
+                medianScore = scores.Count > 0 ? scores[scores.Count / 2] : (double?)null,
+                scoreStdDev = scores.Count > 1 ? Math.Round(Math.Sqrt(scores.Average(s => Math.Pow(s - scores.Average(), 2))), 1) : (double?)null
+            },
+            monthlyTrend = monthlyUsage,
+            evaluationCount = evaluations.Count
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // AE3: SLA Health Check & Alert Triggers
+    // ═══════════════════════════════════════════════════════════════
+
+    public async Task<object> CheckSlaHealthAsync(CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var openReviews = await db.ReviewRequests
+            .Where(r => r.State == ReviewRequestState.Queued || r.State == ReviewRequestState.InReview)
+            .ToListAsync(ct);
+
+        var alerts = new List<object>();
+        var breached = 0;
+        var atRisk = 0;
+        var healthy = 0;
+
+        foreach (var review in openReviews)
+        {
+            var slaHours = review.TurnaroundOption == "express" ? 24.0 : 48.0;
+            var hoursElapsed = (now - review.CreatedAt).TotalHours;
+            var remaining = slaHours - hoursElapsed;
+
+            if (remaining < 0)
+            {
+                breached++;
+                alerts.Add(new
+                {
+                    reviewId = review.Id, severity = "breached",
+                    message = $"SLA breached by {Math.Round(-remaining, 1)}h",
+                    turnaround = review.TurnaroundOption, subtestCode = review.SubtestCode,
+                    createdAt = review.CreatedAt, hoursOverdue = Math.Round(-remaining, 1)
+                });
+            }
+            else if (remaining < 6)
+            {
+                atRisk++;
+                alerts.Add(new
+                {
+                    reviewId = review.Id, severity = "at-risk",
+                    message = $"Only {Math.Round(remaining, 1)}h remaining",
+                    turnaround = review.TurnaroundOption, subtestCode = review.SubtestCode,
+                    createdAt = review.CreatedAt, hoursRemaining = Math.Round(remaining, 1)
+                });
+            }
+            else healthy++;
+        }
+
+        // Queue depth analysis
+        var assignedExperts = await db.ExpertReviewAssignments
+            .Where(a => a.ClaimState == ExpertAssignmentState.Assigned)
+            .Select(a => a.AssignedReviewerId)
+            .Distinct()
+            .CountAsync(ct);
+
+        var unassigned = await db.ReviewRequests
+            .CountAsync(r => (r.State == ReviewRequestState.Queued || r.State == ReviewRequestState.InReview)
+                && !db.ExpertReviewAssignments.Any(a => a.ReviewRequestId == r.Id && a.ClaimState == ExpertAssignmentState.Assigned), ct);
+
+        // SLA health also for second query
+        _ = unassigned;
+
+        var queueDepthPerExpert = assignedExperts > 0
+            ? Math.Round((double)openReviews.Count / assignedExperts, 1) : openReviews.Count;
+
+        return new
+        {
+            timestamp = now,
+            overallHealth = breached > 0 ? "critical" : atRisk > 3 ? "warning" : "healthy",
+            summary = new
+            {
+                totalOpen = openReviews.Count,
+                breached, atRisk, healthy, unassigned,
+                activeExperts = assignedExperts,
+                queueDepthPerExpert,
+                capacityAlert = queueDepthPerExpert > 8
+            },
+            alerts = alerts.OrderBy(a => ((dynamic)a).severity == "breached" ? 0 : 1).ToList(),
+            recommendations = new List<string>
+            {
+                breached > 0 ? $"URGENT: {breached} reviews have breached SLA. Assign immediately." : null!,
+                unassigned > 5 ? $"High unassigned backlog ({unassigned}). Consider activating more experts." : null!,
+                queueDepthPerExpert > 8 ? "Expert capacity stretched. Consider load balancing or recruitment." : null!
+            }.Where(r => r is not null).ToList()
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // B2: Review Credit Lifecycle Policy
+    // ═══════════════════════════════════════════════════════════════
+
+    public async Task<object> GetCreditLifecyclePolicyAsync(CancellationToken ct)
+    {
+        // Get current policy from feature flags or config
+        var expiryFlag = await db.FeatureFlags.FirstOrDefaultAsync(f => f.Key == "credit_expiry_days", ct);
+        var rolloverFlag = await db.FeatureFlags.FirstOrDefaultAsync(f => f.Key == "credit_rollover_enabled", ct);
+        var refundFlag = await db.FeatureFlags.FirstOrDefaultAsync(f => f.Key == "credit_refund_on_failed_review", ct);
+
+        var expiryDays = expiryFlag?.Enabled == true ? 365 : 0; // 0 = no expiry
+        var rolloverEnabled = rolloverFlag?.Enabled ?? false;
+        var refundOnFailed = refundFlag?.Enabled ?? true;
+
+        // Aggregate wallet stats
+        var totalCreditsInSystem = await db.Wallets.SumAsync(w => w.CreditBalance, ct);
+        var walletsWithCredits = await db.Wallets.CountAsync(w => w.CreditBalance > 0, ct);
+        var recentTransactions = await db.WalletTransactions
+            .Where(t => t.CreatedAt >= DateTimeOffset.UtcNow.AddDays(-30))
+            .GroupBy(t => t.TransactionType)
+            .Select(g => new { type = g.Key, count = g.Count(), totalAmount = g.Sum(t => t.Amount) })
+            .ToListAsync(ct);
+
+        return new
+        {
+            policy = new
+            {
+                expiryDays,
+                expiryEnabled = expiryDays > 0,
+                rolloverEnabled,
+                rolloverPercentage = rolloverEnabled ? 50 : 0,
+                refundOnFailedReview = refundOnFailed,
+                refundOnCancelledReview = true,
+                proRataOnDowngrade = true,
+                minimumCreditPurchase = 1,
+                maximumCreditBalance = 100
+            },
+            systemStats = new
+            {
+                totalCreditsInCirculation = totalCreditsInSystem,
+                walletsWithCredits,
+                last30DaysTransactions = recentTransactions
+            },
+            notes = new[]
+            {
+                expiryDays > 0 ? $"Credits expire {expiryDays} days after purchase." : "Credits do not expire.",
+                rolloverEnabled ? "Unused credits roll over at plan renewal (50%)." : "Credits do not roll over at plan renewal.",
+                refundOnFailed ? "Credits are refunded when a review fails quality check." : "No auto-refund on failed reviews."
+            }
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // R1: Learner Cohort Analysis
+    // ═══════════════════════════════════════════════════════════════
+
+    public async Task<object> GetLearnerCohortAnalysisAsync(string? groupBy, CancellationToken ct)
+    {
+        var groupKey = groupBy ?? "profession";
+        var users = await db.Users.ToListAsync(ct);
+        var goals = await db.Goals.ToListAsync(ct);
+        var goalsByUser = goals.ToDictionary(g => g.UserId, g => g);
+
+        var cohorts = new List<object>();
+
+        if (groupKey == "profession")
+        {
+            var professions = await db.Professions.ToListAsync(ct);
+            foreach (var prof in professions)
+            {
+                var learners = goals.Where(g => g.ProfessionId == prof.Id).Select(g => g.UserId).ToList();
+                if (learners.Count == 0) continue;
+
+                var evals = await db.Evaluations
+                    .Where(e => db.Attempts.Any(a => a.Id == e.AttemptId && learners.Contains(a.UserId)))
+                    .ToListAsync(ct);
+
+                var avgScores = evals
+                    .Select(e => { var p = e.ScoreRange?.Split('-'); return p?.Length == 2 && int.TryParse(p[0], out var lo) ? lo : (int?)null; })
+                    .Where(s => s.HasValue).Select(s => (double)s!.Value).ToList();
+
+                cohorts.Add(new
+                {
+                    cohortKey = prof.Id,
+                    cohortName = prof.Label,
+                    learnerCount = learners.Count,
+                    averageScore = avgScores.Count > 0 ? Math.Round(avgScores.Average(), 1) : (double?)null,
+                    evaluationCount = evals.Count,
+                    activeLastMonth = users.Count(u => learners.Contains(u.Id) && u.LastActiveAt >= DateTimeOffset.UtcNow.AddDays(-30))
+                });
+            }
+        }
+        else
+        {
+            // Group by subscription tier
+            var subs = await db.Subscriptions.Where(s => s.Status == SubscriptionStatus.Active).ToListAsync(ct);
+            var plans = await db.BillingPlans.ToListAsync(ct);
+            foreach (var plan in plans)
+            {
+                var planSubs = subs.Where(s => s.PlanId == plan.Id).ToList();
+                var learnerIds = planSubs.Select(s => s.UserId).ToList();
+                if (learnerIds.Count == 0) continue;
+
+                var evals = await db.Evaluations
+                    .Where(e => db.Attempts.Any(a => a.Id == e.AttemptId && learnerIds.Contains(a.UserId)))
+                    .ToListAsync(ct);
+
+                var avgScores = evals
+                    .Select(e => { var p = e.ScoreRange?.Split('-'); return p?.Length == 2 && int.TryParse(p[0], out var lo) ? lo : (int?)null; })
+                    .Where(s => s.HasValue).Select(s => (double)s!.Value).ToList();
+
+                cohorts.Add(new
+                {
+                    cohortKey = plan.Id,
+                    cohortName = plan.Name,
+                    learnerCount = learnerIds.Count,
+                    averageScore = avgScores.Count > 0 ? Math.Round(avgScores.Average(), 1) : (double?)null,
+                    evaluationCount = evals.Count,
+                    activeLastMonth = users.Count(u => learnerIds.Contains(u.Id) && u.LastActiveAt >= DateTimeOffset.UtcNow.AddDays(-30))
+                });
+            }
+        }
+
+        return new
+        {
+            groupBy = groupKey,
+            cohorts = cohorts.OrderByDescending(c => ((dynamic)c).learnerCount).ToList(),
+            totalLearners = users.Count,
+            generatedAt = DateTimeOffset.UtcNow
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // R2: Content Effectiveness Metrics
+    // ═══════════════════════════════════════════════════════════════
+
+    public async Task<object> GetContentEffectivenessAsync(string? subtestCode, int top, CancellationToken ct)
+    {
+        var query = db.ContentItems.Where(c => c.Status == ContentStatus.Published);
+        if (!string.IsNullOrEmpty(subtestCode)) query = query.Where(c => c.SubtestCode == subtestCode);
+
+        var items = await query.Take(top > 0 ? top : 50).ToListAsync(ct);
+        var results = new List<object>();
+
+        foreach (var item in items)
+        {
+            var attempts = await db.Attempts.Where(a => a.ContentId == item.Id).ToListAsync(ct);
+            var completedCount = attempts.Count(a => a.State == AttemptState.Completed);
+            var evals = await db.Evaluations
+                .Where(e => attempts.Select(a => a.Id).Contains(e.AttemptId))
+                .ToListAsync(ct);
+
+            var scores = evals
+                .Select(e => { var p = e.ScoreRange?.Split('-'); return p?.Length == 2 && int.TryParse(p[0], out var lo) ? lo : (int?)null; })
+                .Where(s => s.HasValue).Select(s => (double)s!.Value).ToList();
+
+            results.Add(new
+            {
+                contentId = item.Id,
+                title = item.Title,
+                subtestCode = item.SubtestCode,
+                difficulty = item.Difficulty,
+                totalAttempts = attempts.Count,
+                completionRate = attempts.Count > 0 ? Math.Round(completedCount * 100.0 / attempts.Count, 1) : 0,
+                averageScore = scores.Count > 0 ? Math.Round(scores.Average(), 1) : (double?)null,
+                avgTimeSeconds = completedCount > 0 ? Math.Round(attempts.Where(a => a.State == AttemptState.Completed).Average(a => a.ElapsedSeconds), 0) : (double?)null,
+                effectivenessScore = scores.Count >= 3
+                    ? Math.Round((completedCount * 100.0 / Math.Max(attempts.Count, 1) * 0.4) + (scores.Average() / 5.0 * 0.6), 1) : (double?)null
+            });
+        }
+
+        return new
+        {
+            subtestFilter = subtestCode,
+            items = results.OrderByDescending(r => ((dynamic)r).effectivenessScore ?? 0.0).ToList(),
+            generatedAt = DateTimeOffset.UtcNow
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // R3: Expert Efficiency Report
+    // ═══════════════════════════════════════════════════════════════
+
+    public async Task<object> GetExpertEfficiencyReportAsync(int days, CancellationToken ct)
+    {
+        var since = DateTimeOffset.UtcNow.AddDays(-days);
+        var experts = await db.ExpertUsers.ToListAsync(ct);
+        var results = new List<object>();
+
+        foreach (var expert in experts)
+        {
+            var assignments = await db.ExpertReviewAssignments
+                .Where(a => a.AssignedReviewerId == expert.Id && a.AssignedAt >= since)
+                .ToListAsync(ct);
+
+            var drafts = await db.ExpertReviewDrafts
+                .Where(d => d.ReviewerId == expert.Id && d.DraftSavedAt >= since)
+                .ToListAsync(ct);
+
+            var completedCount = drafts.Count;
+var draftTimeEstimates = drafts.Select(d =>
+                {
+                    // Estimate time from draft save patterns — no explicit TimeSpentSeconds field
+                    return 15.0; // Default estimate in minutes per review
+                }).ToList();
+                var avgReviewMinutes = draftTimeEstimates.Count > 0 ? Math.Round(draftTimeEstimates.Average(), 1) : (double?)null;
+
+            // Quality alignment — compare with AI
+            var aiDiffs = new List<double>();
+            foreach (var draft in drafts.Take(20))
+            {
+                var request = await db.ReviewRequests.FindAsync([draft.ReviewRequestId], ct);
+                if (request is null) continue;
+                var aiEval = await db.Evaluations
+                    .FirstOrDefaultAsync(e => e.AttemptId == request.AttemptId && e.ConfidenceBand != null, ct);
+                if (aiEval is null) continue;
+
+                try
+                {
+                    var aiScores = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, double>>(aiEval.CriterionScoresJson ?? "{}");
+                    if (aiScores is not null && draft.RubricEntriesJson is not null)
+                    {
+                        var expertScores = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, double>>(draft.RubricEntriesJson);
+                        if (expertScores is not null)
+                        {
+                            foreach (var kv in aiScores)
+                            {
+                                if (expertScores.TryGetValue(kv.Key, out var es))
+                                    aiDiffs.Add(Math.Abs(kv.Value - es));
+                            }
+                        }
+                    }
+                }
+                catch { }
+            }
+
+            results.Add(new
+            {
+                expertId = expert.Id,
+                expertName = expert.DisplayName,
+                period = days,
+                assignmentsReceived = assignments.Count,
+                reviewsCompleted = completedCount,
+                averageReviewTimeMinutes = avgReviewMinutes,
+                reviewsPerDay = Math.Round(completedCount / (double)Math.Max(days, 1), 1),
+                aiAlignmentScore = aiDiffs.Count > 0 ? Math.Round(100 - aiDiffs.Average() * 10, 1) : (double?)null,
+                efficiency = completedCount > 0 && avgReviewMinutes.HasValue
+                    ? avgReviewMinutes.Value <= 15 ? "high" : avgReviewMinutes.Value <= 25 ? "medium" : "low"
+                    : "no-data"
+            });
+        }
+
+        return new
+        {
+            period = days,
+            experts = results.OrderByDescending(r => ((dynamic)r).reviewsCompleted).ToList(),
+            summary = new
+            {
+                totalExperts = experts.Count,
+                activeExperts = results.Count(r => ((dynamic)r).reviewsCompleted > 0),
+                totalReviewsCompleted = results.Sum(r => (int)((dynamic)r).reviewsCompleted),
+                averageReviewsPerExpertPerDay = experts.Count > 0
+                    ? Math.Round(results.Sum(r => (int)((dynamic)r).reviewsCompleted) / (double)(experts.Count * Math.Max(days, 1)), 1) : 0
+            },
+            generatedAt = DateTimeOffset.UtcNow
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    // R4: Subscription Health Dashboard
+    // ═══════════════════════════════════════════════════════════════
+
+    public async Task<object> GetSubscriptionHealthAsync(CancellationToken ct)
+    {
+        var now = DateTimeOffset.UtcNow;
+        var activeSubs = await db.Subscriptions.Where(s => s.Status == SubscriptionStatus.Active).ToListAsync(ct);
+        var allSubs = await db.Subscriptions.ToListAsync(ct);
+        var plans = await db.BillingPlans.ToDictionaryAsync(p => p.Id, ct);
+
+        // MRR calculation
+        var mrr = activeSubs.Sum(s => plans.TryGetValue(s.PlanId, out var p) ? p.Price : 0);
+
+        // Churn — subscriptions that changed away from Active in last 30 days
+        var recentCancellations = allSubs.Count(s => s.Status == SubscriptionStatus.Cancelled && s.ChangedAt >= now.AddDays(-30));
+        var activeStart = allSubs.Count(s => s.StartedAt < now.AddDays(-30) && (s.Status == SubscriptionStatus.Active || (s.Status == SubscriptionStatus.Cancelled && s.ChangedAt >= now.AddDays(-30))));
+        var churnRate = activeStart > 0 ? Math.Round(recentCancellations * 100.0 / activeStart, 1) : 0;
+
+        // New subs this month
+        var newThisMonth = activeSubs.Count(s => s.StartedAt >= now.AddDays(-30));
+
+        // Trial conversions — estimate from plans with TrialDays > 0
+        var planIdsWithTrials = plans.Where(p => p.Value.TrialDays > 0).Select(p => p.Key).ToHashSet();
+        var trialSubs = allSubs.Where(s => planIdsWithTrials.Contains(s.PlanId) && s.StartedAt.AddDays(plans[s.PlanId].TrialDays) <= now).ToList();
+        var trialConverted = trialSubs.Count(s => s.Status == SubscriptionStatus.Active);
+        var trialConversionRate = trialSubs.Count > 0 ? Math.Round(trialConverted * 100.0 / trialSubs.Count, 1) : 0;
+
+        // Revenue by plan
+        var revenueByPlan = activeSubs
+            .GroupBy(s => s.PlanId)
+            .Select(g => new
+            {
+                planId = g.Key,
+                planName = plans.TryGetValue(g.Key, out var p) ? p.Name : g.Key,
+                subscribers = g.Count(),
+                monthlyRevenue = g.Sum(s => plans.TryGetValue(s.PlanId, out var pl) ? pl.Price : 0)
+            })
+            .OrderByDescending(r => r.monthlyRevenue)
+            .ToList();
+
+        // Monthly trend
+        var monthlyTrend = Enumerable.Range(0, 6).Select(i =>
+        {
+            var monthStart = now.AddMonths(-i).Date;
+            var monthEnd = now.AddMonths(-i + 1).Date;
+            var monthStartOffset = new DateTimeOffset(monthStart, TimeSpan.Zero);
+            var monthEndOffset = new DateTimeOffset(monthEnd, TimeSpan.Zero);
+            return new
+            {
+                month = monthStart.ToString("yyyy-MM"),
+                newSubscriptions = allSubs.Count(s => s.StartedAt >= monthStartOffset && s.StartedAt < monthEndOffset),
+                cancellations = allSubs.Count(s => s.Status == SubscriptionStatus.Cancelled && s.ChangedAt >= monthStartOffset && s.ChangedAt < monthEndOffset)
+            };
+        }).Reverse().ToList();
+
+        return new
+        {
+            mrr,
+            activeSubscriptions = activeSubs.Count,
+            churnRate,
+            newSubscriptionsThisMonth = newThisMonth,
+            trialConversionRate,
+            arpu = activeSubs.Count > 0 ? Math.Round(mrr / activeSubs.Count, 2) : 0,
+            revenueByPlan,
+            monthlyTrend,
+            generatedAt = now
+        };
+    }
 }

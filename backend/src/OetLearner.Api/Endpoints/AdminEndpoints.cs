@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Mvc;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Services;
 
@@ -279,6 +280,183 @@ public static class AdminEndpoints
 
         admin.MapGet("/quality-analytics", async (AdminService service, CancellationToken ct, string? timeRange, string? subtest, string? profession)
             => Results.Ok(await service.GetQualityAnalyticsAsync(timeRange, subtest, profession, ct)));
+
+        // ── Admin Permissions (RBAC) ────────────────────────
+
+        admin.MapGet("/permissions/{userId}", async (string userId, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GetAdminPermissionsAsync(userId, ct)));
+
+        admin.MapPut("/permissions/{userId}", async (string userId, HttpContext http, AdminPermissionUpdateRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.UpdateAdminPermissionsAsync(http.AdminId(), http.AdminName(), userId, request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        // ── Content Publishing Workflow ─────────────────────
+
+        admin.MapPost("/content/{contentId}/request-publish", async (string contentId, HttpContext http, AdminPublishRequestPayload request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.RequestContentPublishAsync(http.AdminId(), http.AdminName(), contentId, request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        admin.MapGet("/publish-requests", async (AdminService service, CancellationToken ct, string? status, int? page, int? pageSize)
+            => Results.Ok(await service.GetPublishRequestsAsync(status, page ?? 1, pageSize ?? 20, ct)));
+
+        admin.MapPost("/publish-requests/{requestId}/approve", async (string requestId, HttpContext http, AdminPublishReviewPayload request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ApprovePublishRequestAsync(http.AdminId(), http.AdminName(), requestId, request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        admin.MapPost("/publish-requests/{requestId}/reject", async (string requestId, HttpContext http, AdminPublishReviewPayload request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.RejectPublishRequestAsync(http.AdminId(), http.AdminName(), requestId, request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        // ── Webhook Monitoring ──────────────────────────────
+
+        admin.MapGet("/webhooks", async (AdminService service, CancellationToken ct,
+            string? gateway, string? status, int? page, int? pageSize)
+            => Results.Ok(await service.GetWebhookEventsAsync(gateway, status, page ?? 1, pageSize ?? 20, ct)));
+
+        admin.MapGet("/webhooks/summary", async (AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GetWebhookSummaryAsync(ct)));
+
+        admin.MapPost("/webhooks/{eventId}/retry", async (string eventId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.RetryWebhookAsync(http.AdminId(), http.AdminName(), eventId, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        // ── Review Escalation (Disagreement Resolution) ─────
+
+        admin.MapGet("/escalations", async (AdminService service, CancellationToken ct,
+            string? status, int? page, int? pageSize)
+            => Results.Ok(await service.GetReviewEscalationsAsync(status, page ?? 1, pageSize ?? 20, ct)));
+
+        admin.MapPost("/escalations/{escalationId}/assign", async (string escalationId, HttpContext http,
+            AdminEscalationAssignRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.AssignEscalationReviewerAsync(http.AdminId(), http.AdminName(), escalationId, request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        admin.MapPost("/escalations/{escalationId}/resolve", async (string escalationId, HttpContext http,
+            AdminEscalationResolveRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ResolveEscalationAsync(http.AdminId(), http.AdminName(), escalationId, request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        // ── Score Guarantee Claims ──────────────────────
+
+        admin.MapGet("/score-guarantee-claims", async (AdminService service, CancellationToken ct,
+            string? status, int? page, int? pageSize)
+            => Results.Ok(await service.GetScoreGuaranteeClaimsAsync(status, page ?? 1, pageSize ?? 20, ct)));
+
+        admin.MapPost("/score-guarantee-claims/{pledgeId}/review", async (string pledgeId, HttpContext http,
+            AdminScoreGuaranteeReviewRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ReviewScoreGuaranteeClaimAsync(http.AdminId(), http.AdminName(), pledgeId, request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        // ── A4: Content Quality Scoring ─────────────────
+
+        admin.MapGet("/content-quality", async (AdminService service, CancellationToken ct,
+            int? page, int? pageSize)
+            => Results.Ok(await service.GetContentQualityOverviewAsync(page ?? 1, pageSize ?? 20, ct)));
+
+        admin.MapPost("/content-quality/{contentId}/score", async (string contentId, HttpContext http,
+            AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ScoreContentQualityAsync(http.AdminId(), http.AdminName(), contentId, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        // ── A6: Bulk Learner Operations ─────────────────
+
+        admin.MapPost("/bulk/credits", async (HttpContext http,
+            AdminBulkCreditRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.BulkCreditAdjustmentAsync(http.AdminId(), http.AdminName(), request.UserIds, request.CreditAmount, request.Reason, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        admin.MapPost("/bulk/notifications", async (HttpContext http,
+            AdminBulkNotificationRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.BulkNotificationAsync(http.AdminId(), http.AdminName(), request.UserIds, request.Title, request.Message, request.Category, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        admin.MapPost("/bulk/status", async (HttpContext http,
+            AdminBulkStatusRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.BulkStatusChangeAsync(http.AdminId(), http.AdminName(), request.UserIds, request.NewStatus, request.Reason, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        // ── B3: Enterprise / Sponsor Channel ────────────
+
+        admin.MapGet("/sponsors", async (AdminService service, CancellationToken ct,
+            string? status, int? page, int? pageSize)
+            => Results.Ok(await service.GetSponsorsAsync(status, page ?? 1, pageSize ?? 20, ct)));
+
+        admin.MapPost("/sponsors", async (HttpContext http,
+            SponsorCreateRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.CreateSponsorAsync(http.AdminId(), http.AdminName(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        admin.MapPatch("/sponsors/{sponsorId}", async (string sponsorId, HttpContext http,
+            SponsorUpdateRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.UpdateSponsorAsync(http.AdminId(), http.AdminName(), sponsorId, request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        admin.MapGet("/sponsors/{sponsorId}/learners", async (string sponsorId, AdminService service, CancellationToken ct,
+            int? page, int? pageSize)
+            => Results.Ok(await service.GetSponsorLearnersAsync(sponsorId, page ?? 1, pageSize ?? 20, ct)));
+
+        admin.MapPost("/sponsors/{sponsorId}/learners", async (string sponsorId, HttpContext http,
+            CohortMemberAddRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.LinkSponsorLearnerAsync(http.AdminId(), http.AdminName(), sponsorId, request.LearnerId, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        admin.MapGet("/cohorts", async (AdminService service, CancellationToken ct,
+            string? sponsorId, string? status, int? page, int? pageSize)
+            => Results.Ok(await service.GetCohortsAsync(sponsorId, status, page ?? 1, pageSize ?? 20, ct)));
+
+        admin.MapPost("/cohorts", async (HttpContext http,
+            CohortCreateRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.CreateCohortAsync(http.AdminId(), http.AdminName(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        admin.MapPatch("/cohorts/{cohortId}", async (string cohortId, HttpContext http,
+            CohortUpdateRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.UpdateCohortAsync(http.AdminId(), http.AdminName(), cohortId, request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        admin.MapGet("/cohorts/{cohortId}/members", async (string cohortId, AdminService service, CancellationToken ct,
+            int? page, int? pageSize)
+            => Results.Ok(await service.GetCohortMembersAsync(cohortId, page ?? 1, pageSize ?? 20, ct)));
+
+        admin.MapPost("/cohorts/{cohortId}/members", async (string cohortId, HttpContext http,
+            CohortMemberAddRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.AddCohortMemberAsync(http.AdminId(), http.AdminName(), cohortId, request.LearnerId, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        // ── AE1: Content Item Analytics ─────────────────
+
+        admin.MapGet("/content-analytics/{contentId}", async (string contentId, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GetContentItemAnalyticsAsync(contentId, ct)));
+
+        // ── AE3: SLA Health Check ───────────────────────
+
+        admin.MapGet("/sla-health", async (AdminService service, CancellationToken ct)
+            => Results.Ok(await service.CheckSlaHealthAsync(ct)));
+
+        // ── B2: Credit Lifecycle Policy ─────────────────
+
+        admin.MapGet("/credit-lifecycle", async (AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GetCreditLifecyclePolicyAsync(ct)));
+
+        // ── R1: Learner Cohort Analysis ─────────────────
+
+        admin.MapGet("/analytics/cohort", async ([FromQuery] string? groupBy, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GetLearnerCohortAnalysisAsync(groupBy, ct)));
+
+        // ── R2: Content Effectiveness ───────────────────
+
+        admin.MapGet("/analytics/content-effectiveness", async ([FromQuery] string? subtestCode, [FromQuery] int? top, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GetContentEffectivenessAsync(subtestCode, top ?? 50, ct)));
+
+        // ── R3: Expert Efficiency Report ────────────────
+
+        admin.MapGet("/analytics/expert-efficiency", async ([FromQuery] int? days, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GetExpertEfficiencyReportAsync(days ?? 30, ct)));
+
+        // ── R4: Subscription Health ─────────────────────
+
+        admin.MapGet("/analytics/subscription-health", async (AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GetSubscriptionHealthAsync(ct)));
 
         return app;
     }

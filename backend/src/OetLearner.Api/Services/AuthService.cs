@@ -610,7 +610,18 @@ public sealed class AuthService(
             return await BuildSubjectAsync(account, expert.Id, expert.DisplayName, cancellationToken);
         }
 
-        return await BuildSubjectAsync(account, account.Id, BuildDefaultDisplayName(account.Email), cancellationToken);
+        // Admin: load granular permissions
+        string[]? adminPerms = null;
+        if (string.Equals(account.Role, ApplicationUserRoles.Admin, StringComparison.Ordinal))
+        {
+            adminPerms = await db.AdminPermissionGrants
+                .AsNoTracking()
+                .Where(g => g.AdminUserId == account.Id)
+                .Select(g => g.Permission)
+                .ToArrayAsync(cancellationToken);
+        }
+
+        return await BuildSubjectAsync(account, account.Id, BuildDefaultDisplayName(account.Email), cancellationToken, adminPerms);
     }
 
     private async Task<ApplicationUserAccount> ResolveAccountFromPrincipalAsync(
@@ -884,7 +895,8 @@ public sealed class AuthService(
         ApplicationUserAccount account,
         string userId,
         string displayName,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string[]? adminPermissions = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
 
@@ -906,7 +918,8 @@ public sealed class AuthService(
             account.EmailVerifiedAt is null,
             requiresMfa,
             account.EmailVerifiedAt,
-            account.AuthenticatorEnabledAt));
+            account.AuthenticatorEnabledAt,
+            AdminPermissions: adminPermissions));
     }
 
     private static CurrentUserResponse BuildCurrentUserResponse(AuthenticatedSessionSubject subject)

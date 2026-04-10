@@ -108,6 +108,50 @@ public static class ExpertEndpoints
         expert.MapGet("/metrics", async (HttpContext http, ExpertService service, CancellationToken ct, int? days)
             => Results.Ok(await service.GetMetricsAsync(http.ExpertId(), days ?? 7, ct)));
 
+        // ── Annotation Templates ────────────────────────
+
+        expert.MapGet("/annotation-templates", async (HttpContext http, ExpertService service, CancellationToken ct, string? subtestCode, string? criterionCode)
+            => Results.Ok(await service.GetAnnotationTemplatesAsync(http.ExpertId(), subtestCode, criterionCode, ct)));
+
+        expert.MapPost("/annotation-templates", async (HttpContext http, ExpertAnnotationTemplateRequest request, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.CreateAnnotationTemplateAsync(http.ExpertId(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        expert.MapPut("/annotation-templates/{templateId}", async (string templateId, HttpContext http, ExpertAnnotationTemplateRequest request, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.UpdateAnnotationTemplateAsync(templateId, http.ExpertId(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        expert.MapDelete("/annotation-templates/{templateId}", async (string templateId, HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.DeleteAnnotationTemplateAsync(templateId, http.ExpertId(), ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        // ── X3: Scoring Quality Metrics ─────────────────
+
+        expert.MapGet("/scoring-quality", async (HttpContext http, [FromQuery] int? days, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetScoringQualityMetricsAsync(http.ExpertId(), days ?? 30, ct)));
+
+        // ── XE1: Queue Priority Visibility ──────────────
+
+        expert.MapGet("/queue-priority", async (HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetQueueWithPriorityReasonsAsync(http.ExpertId(), ct)));
+
+        // ── XE2: AI Pre-Fill for Reviews ────────────────
+
+        expert.MapGet("/reviews/{reviewRequestId}/ai-prefill", async (string reviewRequestId, HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetAiPreFillForReviewAsync(http.ExpertId(), reviewRequestId, ct)));
+
+        // ── E7: Expert Q&A — Verified Reply to Community Thread ─────────
+
+        expert.MapGet("/community/ask-an-expert", async (
+            [FromQuery] int page, [FromQuery] int pageSize,
+            ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetAskAnExpertThreadsAsync(page <= 0 ? 1 : page, pageSize <= 0 ? 20 : pageSize, ct)));
+
+        expert.MapPost("/community/threads/{threadId}/verified-reply", async (
+            string threadId, ExpertVerifiedReplyRequest req,
+            HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.PostVerifiedReplyAsync(http.ExpertId(), threadId, req.Body, ct)));
+
         return app;
     }
 
@@ -115,3 +159,5 @@ public static class ExpertEndpoints
         => httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
            ?? throw new InvalidOperationException("Authenticated expert id is required.");
 }
+
+public record ExpertVerifiedReplyRequest(string Body);

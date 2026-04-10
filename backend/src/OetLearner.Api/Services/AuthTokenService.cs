@@ -20,7 +20,8 @@ public sealed record AuthenticatedSessionSubject(
     bool RequiresEmailVerification,
     bool RequiresMfa,
     DateTimeOffset? EmailVerifiedAt,
-    DateTimeOffset? AuthenticatorEnabledAt);
+    DateTimeOffset? AuthenticatorEnabledAt,
+    string[]? AdminPermissions = null);
 
 public sealed record IssuedAuthSession(
     string AccessToken,
@@ -38,6 +39,7 @@ public sealed class AuthTokenService(IOptions<AuthTokenOptions> authTokenOptions
     public const string RequiresMfaClaimType = "requires_mfa";
     public const string EmailVerifiedAtClaimType = "email_verified_at";
     public const string AuthenticatorEnabledAtClaimType = "authenticator_enabled_at";
+    public const string AdminPermissionsClaimType = "admin_permissions";
 
     private readonly AuthTokenOptions _options = authTokenOptions.Value;
 
@@ -73,6 +75,11 @@ public sealed class AuthTokenService(IOptions<AuthTokenOptions> authTokenOptions
         if (subject.AuthenticatorEnabledAt is not null)
         {
             claims.Add(new Claim(AuthenticatorEnabledAtClaimType, subject.AuthenticatorEnabledAt.Value.ToString("O")));
+        }
+
+        if (subject.AdminPermissions is { Length: > 0 })
+        {
+            claims.Add(new Claim(AdminPermissionsClaimType, string.Join(",", subject.AdminPermissions)));
         }
 
         var accessTokenDescriptor = new SecurityTokenDescriptor

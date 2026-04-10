@@ -28,4 +28,11 @@ contextBridge.exposeInMainWorld('desktopBridge', {
     delete: (namespace, key) => ipcRenderer.invoke('desktop:secret-storage:delete', { namespace, key }),
     status: () => ipcRenderer.invoke('desktop:secret-storage:status'),
   },
+  offlineCache: {
+    store: (key, data) => ipcRenderer.invoke('desktop:offline-cache:store', { key, data }),
+    get: (key) => ipcRenderer.invoke('desktop:offline-cache:get', { key }),
+    delete: (key) => ipcRenderer.invoke('desktop:offline-cache:delete', { key }),
+    list: () => ipcRenderer.invoke('desktop:offline-cache:list'),
+    clear: () => ipcRenderer.invoke('desktop:offline-cache:clear'),
+  },
 });

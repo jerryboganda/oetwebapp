@@ -204,6 +204,138 @@ public static class LearnerEndpoints
             return Results.Ok(new { applied = result, message = result ? "Streak freeze applied." : "No streak freeze needed or available." });
         });
 
+        // ── Score Guarantee ─────────────────────────────
+
+        v1.MapGet("/learner/score-guarantee", async (HttpContext http, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.GetScoreGuaranteeAsync(http.UserId(), ct)))
+            .RequireAuthorization("LearnerOnly");
+
+        v1.MapPost("/learner/score-guarantee/activate", async (HttpContext http, ScoreGuaranteeActivateRequest request, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.ActivateScoreGuaranteeAsync(http.UserId(), request, ct)))
+            .RequireAuthorization("LearnerOnly")
+            .RequireRateLimiting("PerUserWrite");
+
+        v1.MapPost("/learner/score-guarantee/claim", async (HttpContext http, ScoreGuaranteeClaimRequest request, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.SubmitScoreGuaranteeClaimAsync(http.UserId(), request, ct)))
+            .RequireAuthorization("LearnerOnly")
+            .RequireRateLimiting("PerUserWrite");
+
+        // ── Score Cross-Reference Calculator ────────────
+
+        v1.MapGet("/reference/score-equivalences", async (LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.GetScoreEquivalencesAsync(ct)));
+
+        // ── Study Commitment ────────────────────────────
+
+        v1.MapGet("/learner/study-commitment", async (HttpContext http, GamificationService gamification, CancellationToken ct)
+            => Results.Ok(await gamification.GetStudyCommitmentAsync(http.UserId(), ct)))
+            .RequireAuthorization("LearnerOnly");
+
+        v1.MapPost("/learner/study-commitment", async (HttpContext http, StudyCommitmentRequest request, GamificationService gamification, CancellationToken ct)
+            => Results.Ok(await gamification.SetStudyCommitmentAsync(http.UserId(), request, ct)))
+            .RequireAuthorization("LearnerOnly")
+            .RequireRateLimiting("PerUserWrite");
+
+        // ── Certificates ────────────────────────────────
+
+        v1.MapGet("/learner/certificates", async (HttpContext http, GamificationService gamification, CancellationToken ct)
+            => Results.Ok(await gamification.GetCertificatesAsync(http.UserId(), ct)))
+            .RequireAuthorization("LearnerOnly");
+
+        // ── Referral Program ────────────────────────────
+
+        v1.MapGet("/learner/referral", async (HttpContext http, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.GetReferralInfoAsync(http.UserId(), ct)))
+            .RequireAuthorization("LearnerOnly");
+
+        v1.MapPost("/learner/referral/generate", async (HttpContext http, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.GenerateReferralCodeAsync(http.UserId(), ct)))
+            .RequireAuthorization("LearnerOnly")
+            .RequireRateLimiting("PerUserWrite");
+
+        // ── L3: Profession-Specific Learning Paths ──────
+
+        v1.MapGet("/learner/learning-path", async (HttpContext http, [FromQuery] string? professionId, [FromQuery] string? examTypeCode, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.GetLearningPathAsync(http.UserId(), professionId, examTypeCode ?? "oet", ct)))
+            .RequireAuthorization("LearnerOnly");
+
+        // ── L5: Adaptive Weak-Area Remediation ──────────
+
+        v1.MapGet("/learner/remediation", async (HttpContext http, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.GetRemediationProfileAsync(http.UserId(), ct)))
+            .RequireAuthorization("LearnerOnly");
+
+        v1.MapPost("/learner/remediation/start", async (HttpContext http, RemediationStartRequest request, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.StartRemediationSessionAsync(http.UserId(), request.SubtestCode, request.CriterionCode, ct)))
+            .RequireAuthorization("LearnerOnly")
+            .RequireRateLimiting("PerUserWrite");
+
+        // ── E1: Smart Next Best Action ──────────────────
+
+        v1.MapGet("/learner/next-actions", async (HttpContext http, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.GetNextBestActionsAsync(http.UserId(), ct)))
+            .RequireAuthorization("LearnerOnly");
+
+        // ── E2: Diagnostic Post-Personalization ─────────
+
+        v1.MapGet("/learner/diagnostic-personalization", async (HttpContext http, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.GetDiagnosticPersonalizationAsync(http.UserId(), ct)))
+            .RequireAuthorization("LearnerOnly");
+
+        // ── E4: Speaking Fluency Timeline ───────────────
+
+        v1.MapGet("/learner/speaking/{attemptId}/fluency-timeline", async (string attemptId, HttpContext http, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.GetFluencyTimelineAsync(http.UserId(), attemptId, ct)))
+            .RequireAuthorization("LearnerOnly");
+
+        // ── E5: Comparative Analytics ───────────────────
+
+        v1.MapGet("/learner/comparative-analytics", async (HttpContext http, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.GetComparativeAnalyticsAsync(http.UserId(), ct)))
+            .RequireAuthorization("LearnerOnly");
+
+        // ── E6: Exam Simulation Mode ────────────────────
+
+        v1.MapGet("/learner/exam-simulation-config", async (HttpContext http, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.GetExamSimulationConfigAsync(http.UserId(), ct)))
+            .RequireAuthorization("LearnerOnly");
+
+        // ── E9: Study Plan Drift Detection ──────────────
+
+        v1.MapGet("/learner/study-plan/drift", async (HttpContext http, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.DetectStudyPlanDriftAsync(http.UserId(), ct)))
+            .RequireAuthorization("LearnerOnly");
+
+        // ── E10: Billing Upgrade Path ───────────────────
+
+        v1.MapGet("/learner/billing/upgrade-path", async (HttpContext http, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.GetBillingUpgradePathAsync(http.UserId(), ct)))
+            .RequireAuthorization("LearnerOnly");
+
+        // ── L9: Interleaved Practice Session ────────────
+
+        v1.MapGet("/learner/interleaved-practice", async (HttpContext http, [FromQuery] int? durationMinutes, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.GetInterleavedPracticeSessionAsync(http.UserId(), durationMinutes ?? 20, ct)))
+            .RequireAuthorization("LearnerOnly");
+
+        // ── L12: Peer Review Exchange ───────────────────
+
+        v1.MapGet("/learner/peer-reviews", async (HttpContext http, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.GetPeerReviewPoolAsync(http.UserId(), ct)))
+            .RequireAuthorization("LearnerOnly");
+
+        v1.MapPost("/learner/peer-reviews/submit", async (HttpContext http, PeerReviewSubmitRequest req, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.SubmitForPeerReviewAsync(http.UserId(), req.AttemptId, req.SubtestCode, ct)))
+            .RequireAuthorization("LearnerOnly");
+
+        v1.MapPost("/learner/peer-reviews/{peerReviewId}/claim", async (string peerReviewId, HttpContext http, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.ClaimPeerReviewAsync(http.UserId(), peerReviewId, ct)))
+            .RequireAuthorization("LearnerOnly");
+
+        v1.MapPost("/learner/peer-reviews/{peerReviewId}/feedback", async (string peerReviewId, HttpContext http, PeerReviewFeedbackRequest req, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.SubmitPeerFeedbackAsync(http.UserId(), peerReviewId, req.OverallRating, req.Comments, req.Strengths, req.Improvements, ct)))
+            .RequireAuthorization("LearnerOnly");
+
         return app;
     }
 
@@ -211,3 +343,6 @@ public static class LearnerEndpoints
         => httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
            ?? throw new InvalidOperationException("Authenticated user id is required.");
 }
+
+public record PeerReviewSubmitRequest(string AttemptId, string SubtestCode);
+public record PeerReviewFeedbackRequest(int OverallRating, string Comments, string? Strengths, string? Improvements);
