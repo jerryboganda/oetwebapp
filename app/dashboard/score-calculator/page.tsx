@@ -6,8 +6,8 @@ import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import LearnerDashboardShell from '@/components/learner/LearnerDashboardShell';
-import { LearnerPageHero } from '@/components/learner/LearnerPageHero';
+import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 
 /* ── types ─────────────────────────────────────── */
@@ -82,7 +82,7 @@ export default function ScoreCalculatorPage() {
     <LearnerDashboardShell>
       <LearnerPageHero
         title="Score Cross-Reference Calculator"
-        subtitle="Compare OET scores with IELTS, PTE, and CEFR equivalents · Check institution requirements"
+        description="Compare OET scores with IELTS, PTE, and CEFR equivalents · Check institution requirements"
       />
 
       <div className="max-w-3xl mx-auto px-4 pb-12 space-y-8">

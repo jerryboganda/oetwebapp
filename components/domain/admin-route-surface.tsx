@@ -49,7 +49,7 @@ export function AdminRouteSectionHeader({
 }: LearnerSurfaceSectionHeaderProps & {
   actions?: ReactNode;
   meta?: string;
-  icon?: ElementType;
+  icon?: ElementType | ReactNode;
   accent?: LearnerSurfaceAccent;
   highlights?: LearnerPageHeroHighlight[];
 }) {
@@ -150,7 +150,7 @@ export function AdminRoutePanel({
   className,
   contentClassName,
 }: {
-  title: string;
+  title?: string;
   description?: string;
   actions?: ReactNode;
   children: ReactNode;
@@ -160,13 +160,15 @@ export function AdminRoutePanel({
   return (
     <Card className={cn('overflow-hidden', className)} padding="lg">
       <div className="space-y-5">
+        {(title || description || actions) && (
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="space-y-1.5">
-            <h2 className="text-xl font-bold tracking-tight text-navy">{title}</h2>
+            {title && <h2 className="text-xl font-bold tracking-tight text-navy">{title}</h2>}
             {description ? <p className="max-w-3xl text-sm leading-6 text-muted">{description}</p> : null}
           </div>
           {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
         </div>
+        )}
         <div className={cn('space-y-4', contentClassName)}>{children}</div>
       </div>
     </Card>

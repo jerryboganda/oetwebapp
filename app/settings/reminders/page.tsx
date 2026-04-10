@@ -67,7 +67,7 @@ export default function SmartRemindersPage() {
 
   return (
     <LearnerDashboardShell>
-      {toast && <Toast variant={toast.variant} onDismiss={() => setToast(null)}>{toast.message}</Toast>}
+      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
       <LearnerPageHero
         title="Smart Study Reminders"

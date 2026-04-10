@@ -57,7 +57,7 @@ export default function ComparativeAnalyticsPage() {
 
   return (
     <LearnerDashboardShell>
-      <LearnerPageHero title="Comparative Analytics" subtitle="See how your performance compares to the cohort. Percentile rankings and score gap analysis." />
+      <LearnerPageHero title="Comparative Analytics" description="See how your performance compares to the cohort. Percentile rankings and score gap analysis." />
 
       <MotionSection className="px-4 py-6 space-y-6 max-w-5xl mx-auto">
         {loading ? (

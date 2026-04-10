@@ -30,6 +30,7 @@ export default function CohortAnalysisPage() {
     apiRequest<CohortData>(`/v1/admin/analytics/cohort?groupBy=${g}`).then(setData).catch(() => {}).finally(() => setLoading(false));
   };
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { analytics.track('admin_cohort_analysis_viewed'); load('profession'); }, []);
 
   return (

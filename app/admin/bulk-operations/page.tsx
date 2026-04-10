@@ -113,13 +113,13 @@ export default function BulkOperationsPage() {
 
   return (
     <AdminRouteWorkspace>
-      {toast && <Toast variant={toast.variant} onDismiss={() => setToast(null)}>{toast.message}</Toast>}
+      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
       <AdminRouteSectionHeader title="Bulk Learner Operations" icon={<Users className="w-5 h-5" />} />
 
       <div className="flex gap-2 mb-6">
         {tabs.map((t) => (
-          <Button key={t.key} variant={tab === t.key ? 'default' : 'outline'} size="sm" onClick={() => setTab(t.key)}>
+          <Button key={t.key} variant={tab === t.key ? 'primary' : 'outline'} size="sm" onClick={() => setTab(t.key)}>
             {t.icon} <span className="ml-1">{t.label}</span>
           </Button>
         ))}
@@ -194,10 +194,7 @@ export default function BulkOperationsPage() {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="text-sm font-medium">New Status</label>
-                  <Select value={newStatus} onChange={(e) => setNewStatus(e.target.value)}>
-                    <option value="active">Active</option>
-                    <option value="suspended">Suspended</option>
-                  </Select>
+                  <Select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} options={[{ value: 'active', label: 'Active' }, { value: 'suspended', label: 'Suspended' }]} />
                 </div>
                 <div>
                   <label className="text-sm font-medium">Reason</label>

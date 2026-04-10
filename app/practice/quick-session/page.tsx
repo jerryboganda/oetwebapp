@@ -7,8 +7,8 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Progress } from '@/components/ui/progress';
-import LearnerDashboardShell from '@/components/learner/LearnerDashboardShell';
+import { ProgressBar } from '@/components/ui/progress';
+import { LearnerDashboardShell } from '@/components/layout';
 import { analytics } from '@/lib/analytics';
 
 /* ── types ─────────────────────────────────────── */
@@ -168,7 +168,7 @@ export default function MobileQuickSessionPage() {
                   <span>Question {currentQ + 1} of {config.questions.length}</span>
                   <span className="flex items-center gap-1"><Timer className="h-3 w-3" />{formatTime(elapsed)}</span>
                 </div>
-                <Progress value={progress} className="h-1.5" />
+                <ProgressBar value={progress} className="h-1.5" />
               </div>
 
               {/* question */}

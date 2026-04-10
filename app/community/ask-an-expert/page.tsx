@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { InlineAlert } from '@/components/ui/inline-alert';
+import { InlineAlert } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
 
 type AskThread = {
@@ -33,7 +33,7 @@ type ThreadsResponse = {
 type Category = { id: string; name: string };
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const { ensureFreshAccessToken } = await import('@/lib/auth/token-manager');
+  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
   const { env } = await import('@/lib/env');
   const token = await ensureFreshAccessToken();
   const res = await fetch(`${env.apiBaseUrl}${path}`, { ...init, headers: { ...init?.headers, Authorization: `Bearer ${token}` } });
@@ -100,7 +100,7 @@ export default function AskAnExpertLearnerPage() {
 
   return (
     <LearnerDashboardShell>
-      <LearnerPageHero title="Ask an Expert" subtitle="Get verified answers from certified OET expert reviewers." />
+      <LearnerPageHero title="Ask an Expert" description="Get verified answers from certified OET expert reviewers." />
 
       <MotionSection className="px-4 py-6 max-w-4xl mx-auto space-y-6">
         {error && <InlineAlert variant="error">{error}</InlineAlert>}

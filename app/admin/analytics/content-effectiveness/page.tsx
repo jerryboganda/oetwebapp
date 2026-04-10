@@ -31,6 +31,7 @@ export default function ContentEffectivenessPage() {
     apiRequest<EffectivenessData>(`/v1/admin/analytics/content-effectiveness${q}`).then(setData).catch(() => {}).finally(() => setLoading(false));
   };
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { analytics.track('admin_content_effectiveness_viewed'); load(''); }, []);
 
   return (

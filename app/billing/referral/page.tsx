@@ -7,8 +7,8 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import LearnerDashboardShell from '@/components/learner/LearnerDashboardShell';
-import { LearnerPageHero } from '@/components/learner/LearnerPageHero';
+import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 
 /* ── types ─────────────────────────────────────── */
@@ -66,7 +66,7 @@ export default function ReferralPage() {
       analytics.track('referral_code_copied');
       setTimeout(() => setCopied(false), 2000);
     } catch { /* */ }
-  }, [info?.referralCode]);
+  }, [info]);
 
   /* share */
   const shareCode = useCallback(async () => {

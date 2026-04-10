@@ -7,7 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { InlineAlert } from '@/components/ui/inline-alert';
+import { InlineAlert } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
 
 type AskThread = {
@@ -28,7 +28,7 @@ type ThreadsResponse = {
 };
 
 async function apiRequest<T>(path: string, init?: RequestInit): Promise<T> {
-  const { ensureFreshAccessToken } = await import('@/lib/auth/token-manager');
+  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
   const { env } = await import('@/lib/env');
   const token = await ensureFreshAccessToken();
   const res = await fetch(`${env.apiBaseUrl}${path}`, { ...init, headers: { ...init?.headers, Authorization: `Bearer ${token}` } });
@@ -129,7 +129,7 @@ export default function AskAnExpertPage() {
                       </p>
                     </div>
                     {!thread.hasExpertAnswer && (
-                      <Button size="sm" variant="default" onClick={() => { setReplyingTo(replyingTo === thread.id ? null : thread.id); setReplyBody(''); }}>
+                      <Button size="sm" variant="primary" onClick={() => { setReplyingTo(replyingTo === thread.id ? null : thread.id); setReplyBody(''); }}>
                         <Send className="w-4 h-4 mr-1" /> Reply
                       </Button>
                     )}

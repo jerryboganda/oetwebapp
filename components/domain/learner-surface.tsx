@@ -113,12 +113,14 @@ export function LearnerSurfaceMetaRow({ items, className }: { items?: LearnerSur
 
 export function LearnerSurfaceSectionHeader({
   eyebrow,
+  icon,
   title,
   description,
   action,
   className,
 }: {
   eyebrow?: string;
+  icon?: ReactNode;
   title: string;
   description?: string;
   action?: ReactNode;
@@ -130,7 +132,10 @@ export function LearnerSurfaceSectionHeader({
         {eyebrow ? (
           <p className="text-sm font-black text-muted uppercase tracking-widest mb-1.5">{eyebrow}</p>
         ) : null}
-        <h2 className="text-xl font-bold text-navy">{title}</h2>
+        <div className="flex items-center gap-2">
+          {icon ? <span className="text-primary">{icon}</span> : null}
+          <h2 className="text-xl font-bold text-navy">{title}</h2>
+        </div>
         {description ? <p className="text-sm text-muted mt-1">{description}</p> : null}
       </div>
       {action}
@@ -178,7 +183,7 @@ export function LearnerPageHero({
           <div className="flex items-start gap-3 sm:gap-4">
           {Icon ? (
               <div className={cn('mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl', palette.icon)}>
-                <Icon className="h-6 w-6" />
+                {typeof Icon === 'function' ? <Icon className="h-6 w-6" /> : Icon}
             </div>
           ) : null}
             <div className="min-w-0">

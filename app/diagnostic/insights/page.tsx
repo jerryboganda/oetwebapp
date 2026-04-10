@@ -66,7 +66,7 @@ export default function DiagnosticInsightsPage() {
     <LearnerDashboardShell>
       <LearnerPageHero
         title="Diagnostic Insights"
-        subtitle="Personalized analysis and study recommendations based on your diagnostic evaluation."
+        description="Personalized analysis and study recommendations based on your diagnostic evaluation."
         icon={<Compass className="w-7 h-7" />}
       />
 

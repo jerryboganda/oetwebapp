@@ -49,7 +49,7 @@ export default function InterleavedPracticePage() {
 
   return (
     <LearnerDashboardShell>
-      <LearnerPageHero title="Interleaved Practice" subtitle="Mix different skill types in one session for better long-term retention." />
+      <LearnerPageHero title="Interleaved Practice" description="Mix different skill types in one session for better long-term retention." />
 
       <MotionSection className="px-4 py-6 space-y-6 max-w-4xl mx-auto">
         <MotionItem>

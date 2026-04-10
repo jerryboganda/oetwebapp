@@ -97,6 +97,73 @@ const TRACKED_EVENTS = [
   'discover_page_viewed',
   'program_browser_viewed',
   'packages_page_viewed',
+  // Admin analytics events
+  'admin_cohort_analysis_viewed',
+  'admin_content_analytics_viewed',
+  'admin_content_effectiveness_viewed',
+  'admin_credit_lifecycle_viewed',
+  'admin_expert_efficiency_viewed',
+  'admin_flag_toggled',
+  'admin_free_tier_saved',
+  'admin_free_tier_viewed',
+  'admin_permissions_updated',
+  'admin_playbook_viewed',
+  'admin_roles_viewed',
+  'admin_sla_health_viewed',
+  'admin_subscription_health_viewed',
+  'admin_view',
+  // Billing events
+  'billing_upgrade_path_viewed',
+  // Certificate events
+  'certificate_downloaded',
+  'certificates_viewed',
+  // Comparative analytics
+  'comparative_analytics_viewed',
+  // Exam & feedback events
+  'exam_guide_viewed',
+  'exam_simulation_viewed',
+  'feedback_guide_viewed',
+  // Expert extended events
+  'expert_ai_prefill_viewed',
+  'expert_ask_an_expert_viewed',
+  'expert_mobile_review_opened',
+  'expert_mobile_review_submitted',
+  'expert_queue_priority_viewed',
+  'expert_rubric_reference_viewed',
+  'expert_verified_reply_posted',
+  // Fluency events
+  'fluency_timeline_viewed',
+  // Interleaved practice
+  'interleaved_practice_viewed',
+  // Learner ask-an-expert events
+  'learner_ask_an_expert_viewed',
+  'learner_expert_question_posted',
+  // Onboarding tour events
+  'onboarding_tour_completed',
+  'onboarding_tour_started',
+  // Peer review events
+  'peer_review_claimed',
+  'peer_review_viewed',
+  // Phrase suggestions events
+  'phrase_suggestion_resolved',
+  'phrase_suggestions_check',
+  // Quick session events
+  'quick_session_completed',
+  'quick_session_started',
+  // Referral events
+  'referral_code_copied',
+  'referral_code_generated',
+  'referral_page_viewed',
+  'referral_shared_native',
+  // Study & reminders events
+  'reminders_preferences_saved',
+  'score_calculator_viewed',
+  'score_guarantee_activated',
+  'score_guarantee_claim_submitted',
+  'study_commitment_set',
+  'study_plan_drift_viewed',
+  // Test day events
+  'test_day_checklist_toggle',
 ] as const;
 
 export type AnalyticsEvent = typeof TRACKED_EVENTS[number];

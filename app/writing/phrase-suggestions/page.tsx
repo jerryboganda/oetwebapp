@@ -7,9 +7,8 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { Progress } from '@/components/ui/progress';
-import LearnerDashboardShell from '@/components/learner/LearnerDashboardShell';
-import { LearnerPageHero } from '@/components/learner/LearnerPageHero';
+import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 
 /* ── types ─────────────────────────────────────── */
@@ -127,7 +126,7 @@ export default function PhraseSuggestionsPage() {
     <LearnerDashboardShell>
       <LearnerPageHero
         title="AI Phrase Coach"
-        subtitle="Get intelligent suggestions to upgrade your vocabulary, fix grammar, and improve writing tone"
+        description="Get intelligent suggestions to upgrade your vocabulary, fix grammar, and improve writing tone"
       />
 
       <div className="max-w-3xl mx-auto px-4 pb-12 space-y-6">
@@ -254,7 +253,7 @@ export default function PhraseSuggestionsPage() {
                       <div className="flex gap-2">
                         <Button
                           size="sm"
-                          variant="default"
+                          variant="primary"
                           disabled={resolving === s.id}
                           onClick={() => resolve(s.id, 'accepted')}
                           className="flex-1 h-8 text-xs"

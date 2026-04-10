@@ -31,7 +31,7 @@ export default function FeedbackGuidePage() {
 
   return (
     <LearnerDashboardShell>
-      <LearnerPageHero title="Feedback Interpretation Guide" subtitle="Understand what each criterion score means and how to improve." />
+      <LearnerPageHero title="Feedback Interpretation Guide" description="Understand what each criterion score means and how to improve." />
 
       <MotionSection className="px-4 py-6 space-y-8 max-w-4xl mx-auto">
         <LearnerSurfaceSectionHeader title="Writing Criteria (6 Criteria)" />

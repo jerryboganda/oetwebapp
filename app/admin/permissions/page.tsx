@@ -94,7 +94,7 @@ export default function PermissionsPage() {
 
   return (
     <AdminRouteWorkspace>
-      {toast && <Toast variant={toast.variant} onClose={() => setToast(null)}>{toast.message}</Toast>}
+      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
       <AdminRouteSectionHeader
         title="Admin Permissions"
         description="Manage granular access control for admin users."

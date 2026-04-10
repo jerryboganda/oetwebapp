@@ -100,11 +100,11 @@ export default function ScoreGuaranteePage() {
 
   return (
     <LearnerDashboardShell>
-      {toast && <Toast variant={toast.variant} onDismiss={() => setToast(null)}>{toast.message}</Toast>}
+      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
       <LearnerPageHero
         title="Score Guarantee"
-        subtitle="We guarantee a 50-point improvement or your money back."
+        description="We guarantee a 50-point improvement or your money back."
         icon={<Shield className="w-7 h-7" />}
       />
 
@@ -117,7 +117,7 @@ export default function ScoreGuaranteePage() {
             <LearnerSurfaceSectionHeader
               icon={<Shield className="w-5 h-5" />}
               title="Activate Your Score Guarantee"
-              subtitle="Enter your current OET score to activate the 50-point improvement guarantee."
+              description="Enter your current OET score to activate the 50-point improvement guarantee."
             />
             <div className="mt-4 flex items-end gap-3 max-w-md">
               <div className="flex-1">
@@ -194,7 +194,7 @@ export default function ScoreGuaranteePage() {
                 <LearnerSurfaceSectionHeader
                   icon={<Upload className="w-5 h-5" />}
                   title="Submit a Claim"
-                  subtitle="If you took the OET and didn't improve by 50 points, submit your actual score."
+                  description="If you took the OET and didn't improve by 50 points, submit your actual score."
                 />
                 <div className="mt-4 space-y-3 max-w-md">
                   <div>

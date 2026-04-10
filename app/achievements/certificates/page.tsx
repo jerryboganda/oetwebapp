@@ -53,7 +53,7 @@ export default function CertificatesPage() {
     <LearnerDashboardShell>
       <LearnerPageHero
         title="My Certificates"
-        subtitle="Certificates earned through your study achievements and milestones."
+        description="Certificates earned through your study achievements and milestones."
         icon={<Award className="w-7 h-7" />}
       />
 
@@ -89,11 +89,9 @@ export default function CertificatesPage() {
                         {new Date(cert.issuedAt).toLocaleDateString()}
                       </span>
                       {cert.downloadUrl && (
-                        <Button size="sm" variant="outline" asChild>
-                          <a href={cert.downloadUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1">
+                        <a href={cert.downloadUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold hover:bg-muted transition-colors">
                             <Download className="w-3.5 h-3.5" /> Download
-                          </a>
-                        </Button>
+                        </a>
                       )}
                     </div>
                   </Card>

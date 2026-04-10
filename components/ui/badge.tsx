@@ -3,7 +3,7 @@ import { type HTMLAttributes } from 'react';
 
 /* ─── Generic Badge ─── */
 export interface BadgeProps extends HTMLAttributes<HTMLSpanElement> {
-  variant?: 'default' | 'success' | 'warning' | 'danger' | 'info' | 'muted';
+  variant?: 'default' | 'success' | 'warning' | 'danger' | 'info' | 'muted' | 'outline';
   size?: 'sm' | 'md';
 }
 
@@ -14,6 +14,7 @@ const badgeVariants: Record<string, string> = {
   danger: 'bg-red-50 text-red-700 border border-red-200/60',
   info: 'bg-blue-50 text-blue-700 border border-blue-200/60',
   muted: 'bg-gray-100 text-gray-600 border border-gray-200',
+  outline: 'bg-transparent text-foreground border border-border',
 };
 
 export function Badge({ variant = 'default', size = 'sm', className, children, ...props }: BadgeProps) {

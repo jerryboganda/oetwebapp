@@ -122,7 +122,7 @@ export default function AnnotationTemplatesPage() {
 
   return (
     <div className="space-y-6 p-6">
-      {toast && <Toast variant={toast.variant} onDismiss={() => setToast(null)}>{toast.message}</Toast>}
+      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
       <LearnerPageHero
         title="Annotation Templates"

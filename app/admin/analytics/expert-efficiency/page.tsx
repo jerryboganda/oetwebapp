@@ -32,6 +32,7 @@ export default function ExpertEfficiencyPage() {
     apiRequest<EfficiencyData>(`/v1/admin/analytics/expert-efficiency?days=${d}`).then(setData).catch(() => {}).finally(() => setLoading(false));
   };
 
+  // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { analytics.track('admin_expert_efficiency_viewed'); load(30); }, []);
 
   return (

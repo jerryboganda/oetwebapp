@@ -9,7 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { InlineAlert } from '@/components/ui/inline-alert';
+import { InlineAlert } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
 
 interface PeerItem { id: string; subtestCode: string; attemptId?: string; status?: string; createdAt?: string; claimedAt?: string; completedAt?: string; feedback?: { rating: number; comments: string; strengths?: string; improvements?: string }[] }
@@ -43,7 +43,7 @@ export default function PeerReviewPage() {
 
   return (
     <LearnerDashboardShell>
-      <LearnerPageHero title="Peer Review Exchange" subtitle="Give and receive feedback from fellow OET learners." />
+      <LearnerPageHero title="Peer Review Exchange" description="Give and receive feedback from fellow OET learners." />
 
       <MotionSection className="px-4 py-6 max-w-4xl mx-auto space-y-6">
         {error && <InlineAlert variant="error">{error}</InlineAlert>}

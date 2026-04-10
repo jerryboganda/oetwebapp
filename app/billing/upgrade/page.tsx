@@ -44,7 +44,7 @@ export default function BillingUpgradePage() {
 
   return (
     <LearnerDashboardShell>
-      <LearnerPageHero title="Plan Comparison" subtitle="Compare plans and find the best fit for your OET preparation goals." />
+      <LearnerPageHero title="Plan Comparison" description="Compare plans and find the best fit for your OET preparation goals." />
 
       <MotionSection className="px-4 py-6 space-y-6 max-w-5xl mx-auto">
         {loading ? (

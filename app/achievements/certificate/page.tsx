@@ -7,8 +7,8 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import LearnerDashboardShell from '@/components/learner/LearnerDashboardShell';
-import { LearnerPageHero } from '@/components/learner/LearnerPageHero';
+import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 
 /* ── types ─────────────────────────────────────── */
@@ -69,7 +69,7 @@ export default function CertificatePage() {
     <LearnerDashboardShell>
       <LearnerPageHero
         title="My Certificates"
-        subtitle="Downloadable certificates for study plan milestones, mock exams, and readiness achievements"
+        description="Downloadable certificates for study plan milestones, mock exams, and readiness achievements"
       />
 
       <div className="max-w-3xl mx-auto px-4 pb-12">

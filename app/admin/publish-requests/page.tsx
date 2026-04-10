@@ -132,7 +132,7 @@ export default function PublishRequestsPage() {
 
   return (
     <AdminRouteWorkspace>
-      {toast && <Toast variant={toast.variant} onClose={() => setToast(null)}>{toast.message}</Toast>}
+      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
       <AdminRouteSectionHeader
         title="Publish Requests"
         description="Review and approve content publish requests. Content must be approved by a different admin."

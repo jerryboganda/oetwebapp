@@ -112,11 +112,9 @@ export default function NextActionsPage() {
                           {action.subtestCode && <Badge variant="outline" className="capitalize">{action.subtestCode}</Badge>}
                         </div>
                       </div>
-                      <Button size="sm" asChild>
-                        <a href={action.actionUrl}>
+                      <a href={action.actionUrl} className="inline-flex items-center rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-primary-foreground hover:bg-primary/90 transition-colors">
                           Go <ArrowRight className="w-4 h-4 ml-1" />
-                        </a>
-                      </Button>
+                      </a>
                     </div>
                   </Card>
                 </MotionItem>

@@ -57,7 +57,7 @@ export interface LearnerPageHeroModel {
   title: string;
   description: string;
   eyebrow?: string;
-  icon?: ElementType;
+  icon?: ElementType | ReactNode;
   accent?: LearnerSurfaceAccent;
   highlights?: LearnerPageHeroHighlight[];
   aside?: ReactNode;

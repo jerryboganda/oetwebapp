@@ -56,7 +56,7 @@ export default function StudyPlanDriftPage() {
 
   return (
     <LearnerDashboardShell>
-      <LearnerPageHero title="Study Plan Health" subtitle="Detect drift from your study plan and get recommendations to get back on track." />
+      <LearnerPageHero title="Study Plan Health" description="Detect drift from your study plan and get recommendations to get back on track." />
 
       <MotionSection className="px-4 py-6 space-y-6 max-w-4xl mx-auto">
         {loading ? (
@@ -79,7 +79,7 @@ export default function StudyPlanDriftPage() {
                       <span className="text-sm">Progress: <strong>{data.drift.actualCompleted}/{data.drift.totalItems}</strong></span>
                     </div>
                     {data.drift.shouldRegenerate && (
-                      <Button variant="default" size="sm" className="mt-3"><RefreshCw className="w-4 h-4 mr-1" /> Regenerate Plan</Button>
+                      <Button variant="primary" size="sm" className="mt-3"><RefreshCw className="w-4 h-4 mr-1" /> Regenerate Plan</Button>
                     )}
                   </div>
                 </div>

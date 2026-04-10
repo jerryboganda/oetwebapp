@@ -63,7 +63,7 @@ export default function FluencyTimelinePage() {
 
   return (
     <LearnerDashboardShell>
-      <LearnerPageHero title="Fluency Timeline" subtitle="Visualize your speaking pace, pauses, and filler words across the recording." />
+      <LearnerPageHero title="Fluency Timeline" description="Visualize your speaking pace, pauses, and filler words across the recording." />
 
       <MotionSection className="px-4 py-6 space-y-6 max-w-5xl mx-auto">
         <div className="flex gap-3 items-end">

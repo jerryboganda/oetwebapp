@@ -40,7 +40,7 @@ export default function ExamSimulationPage() {
 
   return (
     <LearnerDashboardShell>
-      <LearnerPageHero title="Exam Simulation Mode" subtitle="Practice under real exam conditions — strict timing, no pauses, sequential subtests." />
+      <LearnerPageHero title="Exam Simulation Mode" description="Practice under real exam conditions — strict timing, no pauses, sequential subtests." />
 
       <MotionSection className="px-4 py-6 space-y-6 max-w-4xl mx-auto">
         {loading ? (

@@ -115,7 +115,7 @@ export default function ScoreGuaranteeClaimsPage() {
 
   return (
     <AdminRouteWorkspace>
-      {toast && <Toast variant={toast.variant} onDismiss={() => setToast(null)}>{toast.message}</Toast>}
+      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
       <AdminRouteSectionHeader
         title="Score Guarantee Claims"

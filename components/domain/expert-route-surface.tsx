@@ -1,6 +1,7 @@
 'use client';
 
-import type { ComponentProps, ElementType, HTMLAttributes } from 'react';
+import { cloneElement, isValidElement } from 'react';
+import type { ComponentProps, ElementType, HTMLAttributes, ReactNode } from 'react';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import type {
   LearnerPageHeroModel,
@@ -51,17 +52,27 @@ export function ExpertRouteSummaryCard({
   value: string | number;
   hint?: string;
   accent?: LearnerSurfaceAccent;
-  icon?: ElementType;
+  icon?: ElementType | ReactNode;
   statusLabel?: string;
   primaryAction?: LearnerSurfaceAction;
   secondaryAction?: LearnerSurfaceAction;
   className?: string;
 }) {
+  const normalizedIcon =
+    !icon ? undefined
+    : typeof icon === 'function' || typeof icon === 'string' ? (icon as ElementType)
+    : isValidElement<{ className?: string }>(icon)
+      ? ({ className }: { className?: string }) =>
+          cloneElement(icon, {
+            className: cn(icon.props.className, className),
+          })
+      : undefined;
+
   const card: LearnerSurfaceCardModel = {
     kind: 'status',
     sourceType: 'frontend_status',
     eyebrow: label,
-    eyebrowIcon: icon,
+    eyebrowIcon: normalizedIcon,
     title: String(value),
     description: hint ?? '',
     accent,

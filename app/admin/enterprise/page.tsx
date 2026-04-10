@@ -159,7 +159,7 @@ export default function EnterprisePage() {
 
   return (
     <AdminRouteWorkspace>
-      {toast && <Toast variant={toast.variant} onDismiss={() => setToast(null)}>{toast.message}</Toast>}
+      {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
       <AdminRouteSectionHeader title="Enterprise Channel" icon={<Building2 className="w-5 h-5" />} />
 
