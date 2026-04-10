@@ -686,7 +686,7 @@ function normalizeRouteValues<T>(value: T): T {
 export async function fetchUserProfile(): Promise<UserProfile> {
   const bootstrap = await apiRequest<ApiRecord>('/v1/me/bootstrap');
   const user = bootstrap.user;
-  const goals = bootstrap.goals;
+  const goals = bootstrap.goals ?? {};
 
   return {
     id: user.userId,
