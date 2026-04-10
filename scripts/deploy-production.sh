@@ -58,9 +58,9 @@ echo "[deploy] STEP 2 done"
 
 # ── Step 3: Build images ──
 echo ""
-echo "[deploy] STEP 3/6: building images (--no-cache --pull)..."
+echo "[deploy] STEP 3/6: building images..."
 echo "[deploy] build started at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-if docker compose --env-file .env.production -f docker-compose.production.yml build --no-cache --pull 2>&1; then
+if docker compose --env-file .env.production -f docker-compose.production.yml build --pull 2>&1; then
   echo "[deploy] STEP 3 OK: build succeeded at $(date -u +%Y-%m-%dT%H:%M:%SZ)"
 else
   BUILD_EXIT=$?
