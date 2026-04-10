@@ -11,11 +11,20 @@ if [ ! -f ".env.production" ]; then
   exit 1
 fi
 
+echo "[deploy-production] stopping old containers..."
 docker compose --env-file .env.production -f docker-compose.production.yml down --remove-orphans || true
+
+echo "[deploy-production] building images (--no-cache --pull)..."
 docker compose --env-file .env.production -f docker-compose.production.yml build --no-cache --pull
+
+echo "[deploy-production] starting containers..."
 docker compose --env-file .env.production -f docker-compose.production.yml up -d --force-recreate --remove-orphans
 
-docker builder prune -af
-docker image prune -af
+echo "[deploy-production] cleaning up old images..."
+docker builder prune -af || true
+docker image prune -af || true
 
+echo "[deploy-production] container status:"
 docker compose --env-file .env.production -f docker-compose.production.yml ps
+
+echo "[deploy-production] deploy complete"
