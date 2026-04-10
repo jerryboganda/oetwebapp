@@ -17,6 +17,7 @@ ARG APP_URL
 ENV NEXT_PUBLIC_API_BASE_URL=${NEXT_PUBLIC_API_BASE_URL}
 ENV APP_URL=${APP_URL}
 ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_OPTIONS="--max-old-space-size=1536"
 
 RUN --mount=type=cache,target=/app/.next/cache npm run build
 
