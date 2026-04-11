@@ -7,12 +7,6 @@ const { mockFetchSettingsData, mockFetchUserProfile, mockUpdateSettingsSection, 
   mockPush: vi.fn(),
 }));
 
-vi.mock('motion/react', () => ({
-  motion: {
-    section: ({ children, initial: _initial, animate: _animate, transition: _transition, ...props }: any) => <section {...props}>{children}</section>,
-  },
-  useReducedMotion: () => false,
-}));
 
 vi.mock('@/components/layout', () => ({
   LearnerDashboardShell: ({ children, workspaceClassName }: { children: React.ReactNode; workspaceClassName?: string }) => (

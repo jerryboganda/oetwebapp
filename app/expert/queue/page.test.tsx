@@ -6,18 +6,6 @@ const { mockFetchReviewQueue, mockFetchExpertQueueFilterMetadata, mockTrack } = 
   mockTrack: vi.fn(),
 }));
 
-vi.mock('motion/react', () => ({
-  motion: {
-    div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
-    button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
-    span: ({ children, ...props }: any) => <span {...props}>{children}</span>,
-    section: ({ children, ...props }: any) => <section {...props}>{children}</section>,
-    p: ({ children, ...props }: any) => <p {...props}>{children}</p>,
-    tbody: ({ children, ...props }: any) => <tbody {...props}>{children}</tbody>,
-  },
-  useReducedMotion: () => false,
-  AnimatePresence: ({ children }: any) => <div>{children}</div>,
-}));
 
 vi.mock('@/lib/analytics', () => ({ analytics: { track: mockTrack } }));
 vi.mock('@/lib/api', () => ({

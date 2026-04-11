@@ -43,7 +43,6 @@ describe('NotificationCenter', () => {
     const [desktopBell] = screen.getAllByRole('button', { name: /notifications/i });
     fireEvent.click(desktopBell);
 
-    expect(screen.getByText(/notifications sync live over signalr/i)).toBeInTheDocument();
-    expect(screen.getByText(/preferences panel/i)).toBeInTheDocument();
+    expect(screen.getByText(/no notifications yet/i)).toBeInTheDocument();
   });
 });

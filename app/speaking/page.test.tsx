@@ -11,13 +11,6 @@ vi.mock('next/link', () => ({
   default: ({ children, href, ...props }: any) => <a href={href} {...props}>{children}</a>,
 }));
 
-vi.mock('motion/react', () => ({
-  motion: {
-    div: ({ children, initial: _initial, animate: _animate, transition: _transition, whileHover: _whileHover, whileTap: _whileTap, ...props }: any) => (
-      <div {...props}>{children}</div>
-    ),
-  },
-}));
 
 vi.mock('@/components/layout', () => ({
   AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,

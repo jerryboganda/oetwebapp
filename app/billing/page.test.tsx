@@ -17,16 +17,6 @@ const {
   mockTrack: vi.fn(),
 }));
 
-vi.mock('motion/react', () => ({
-  motion: {
-    div: ({ children, initial: _initial, animate: _animate, transition: _transition, whileHover: _whileHover, whileTap: _whileTap, ...props }: any) => (
-      <div {...props}>{children}</div>
-    ),
-    button: ({ children, initial: _initial, animate: _animate, transition: _transition, whileHover: _whileHover, whileTap: _whileTap, ...props }: any) => (
-      <button {...props}>{children}</button>
-    ),
-  },
-}));
 
 vi.mock('@/components/layout', () => ({
   LearnerDashboardShell: ({ children, workspaceClassName }: { children: React.ReactNode; workspaceClassName?: string }) => (
