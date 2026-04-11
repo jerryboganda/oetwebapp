@@ -147,6 +147,30 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             case JobType.PronunciationAnalysis:
                 await CompletePronunciationAnalysisAsync(db, job, cancellationToken);
                 break;
+            case JobType.PrivateSpeakingZoomCreate:
+            {
+                var psSvc = services.GetRequiredService<PrivateSpeakingService>();
+                await psSvc.CreateZoomMeetingForBookingAsync(job.ResourceId!, cancellationToken);
+                break;
+            }
+            case JobType.PrivateSpeakingBookingConfirmation:
+            {
+                var psSvc = services.GetRequiredService<PrivateSpeakingService>();
+                await psSvc.SendBookingConfirmationNotificationsAsync(job.ResourceId!, cancellationToken);
+                break;
+            }
+            case JobType.PrivateSpeakingReminder:
+            {
+                var psSvc = services.GetRequiredService<PrivateSpeakingService>();
+                await psSvc.ProcessRemindersAsync(cancellationToken);
+                break;
+            }
+            case JobType.PrivateSpeakingReservationExpiry:
+            {
+                var psSvc = services.GetRequiredService<PrivateSpeakingService>();
+                await psSvc.ExpireStaleReservationsAsync(cancellationToken);
+                break;
+            }
         }
     }
 

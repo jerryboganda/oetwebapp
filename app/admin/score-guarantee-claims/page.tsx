@@ -104,7 +104,7 @@ export default function ScoreGuaranteeClaimsPage() {
         <Badge variant={statusBadge[r.status]?.variant ?? 'default'}>{statusBadge[r.status]?.label ?? r.status}</Badge>
       ),
     },
-    { key: 'activatedAt', header: 'Activated', render: (r) => <span className="text-sm text-gray-500">{new Date(r.activatedAt).toLocaleDateString()}</span> },
+    { key: 'activatedAt', header: 'Activated', render: (r) => <span className="text-sm text-muted">{new Date(r.activatedAt).toLocaleDateString()}</span> },
     {
       key: 'actions', header: '', render: (r) =>
         r.status === 'claim_submitted' ? (
@@ -135,7 +135,7 @@ export default function ScoreGuaranteeClaimsPage() {
         errorMessage="Unable to load score guarantee claims."
         emptySlot={
           <EmptyState
-            icon={<Shield className="w-12 h-12 text-gray-400" />}
+            icon={<Shield className="w-12 h-12 text-muted" />}
             title="No claims found"
             description="No score guarantee claims match the current filters."
           />
@@ -159,18 +159,18 @@ export default function ScoreGuaranteeClaimsPage() {
         <Modal title="Review Score Guarantee Claim" onClose={() => setReviewTarget(null)}>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4 text-sm">
-              <div><span className="text-gray-500">Baseline:</span> <strong>{reviewTarget.baselineScore}</strong></div>
-              <div><span className="text-gray-500">Actual:</span> <strong>{reviewTarget.actualScore ?? '—'}</strong></div>
-              <div><span className="text-gray-500">Target:</span> <strong>{reviewTarget.baselineScore + reviewTarget.guaranteedImprovement}</strong></div>
-              <div><span className="text-gray-500">Improvement needed:</span> <strong>+{reviewTarget.guaranteedImprovement}</strong></div>
+              <div><span className="text-muted">Baseline:</span> <strong>{reviewTarget.baselineScore}</strong></div>
+              <div><span className="text-muted">Actual:</span> <strong>{reviewTarget.actualScore ?? '—'}</strong></div>
+              <div><span className="text-muted">Target:</span> <strong>{reviewTarget.baselineScore + reviewTarget.guaranteedImprovement}</strong></div>
+              <div><span className="text-muted">Improvement needed:</span> <strong>+{reviewTarget.guaranteedImprovement}</strong></div>
             </div>
             {reviewTarget.claimNote && (
-              <div className="p-3 bg-gray-50 dark:bg-gray-800 rounded-lg text-sm">
-                <span className="text-gray-500">Learner note:</span> {reviewTarget.claimNote}
+              <div className="p-3 bg-background-light dark:bg-surface rounded-lg text-sm">
+                <span className="text-muted">Learner note:</span> {reviewTarget.claimNote}
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Review Note (optional)</label>
+              <label className="block text-sm font-medium text-navy dark:text-navy mb-1">Review Note (optional)</label>
               <Input value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} placeholder="Add a note…" />
             </div>
             <div className="flex justify-end gap-2 pt-2">

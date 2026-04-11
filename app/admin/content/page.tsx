@@ -112,7 +112,7 @@ export default function AdminContentLibraryPage() {
       key: 'title',
       header: 'Title',
       render: (row) => (
-        <button className="text-left font-medium text-blue-600 hover:underline" onClick={() => router.push(`/admin/content/${row.id}`)}>
+        <button className="text-left font-medium text-primary hover:underline" onClick={() => router.push(`/admin/content/${row.id}`)}>
           {row.title}
         </button>
       ),
@@ -150,7 +150,7 @@ export default function AdminContentLibraryPage() {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{row.id}</p>
-          <button className="truncate text-left font-semibold text-blue-600 hover:underline" onClick={() => router.push(`/admin/content/${row.id}`)}>
+          <button className="truncate text-left font-semibold text-primary hover:underline" onClick={() => router.push(`/admin/content/${row.id}`)}>
             {row.title}
           </button>
         </div>
@@ -281,7 +281,7 @@ export default function AdminContentLibraryPage() {
           ) : (
             <div className="space-y-4">
               <DataTable columns={columns} data={rows} keyExtractor={(row) => row.id} mobileCardRender={mobileCardRender} />
-              <div className="flex flex-col gap-3 border-t border-gray-200 pt-4 text-sm text-muted sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-3 border-t border-border pt-4 text-sm text-muted sm:flex-row sm:items-center sm:justify-between">
                 <p>
                   Page {page} of {Math.max(1, Math.ceil(total / PAGE_SIZE))}
                 </p>

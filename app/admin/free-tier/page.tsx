@@ -131,7 +131,7 @@ export default function FreeTierStrategyPage() {
   /* ── render ────────────────────────────────── */
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-background-light">
         <div className="max-w-5xl mx-auto px-4 py-8 space-y-4">
           <Skeleton className="h-8 w-64" /><Skeleton className="h-4 w-96" />
           <div className="grid sm:grid-cols-3 gap-4">{[1,2,3].map(i => <Skeleton key={i} className="h-20" />)}</div>
@@ -142,13 +142,13 @@ export default function FreeTierStrategyPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background-light">
       <div className="max-w-5xl mx-auto px-4 py-8">
 
         {/* header */}
         <div className="mb-8">
           <h1 className="text-2xl font-bold flex items-center gap-2"><Shield className="h-6 w-6" />Free Tier Strategy</h1>
-          <p className="text-muted-foreground mt-1">Configure feature access limits for free-tier learners vs premium subscribers</p>
+          <p className="text-muted mt-1">Configure feature access limits for free-tier learners vs premium subscribers</p>
         </div>
 
         {/* summary cards */}
@@ -156,24 +156,24 @@ export default function FreeTierStrategyPage() {
           <Card className="p-4 text-center">
             <Layers className="h-5 w-5 mx-auto mb-1.5 text-primary" />
             <p className="text-2xl font-bold">{flags.length}</p>
-            <p className="text-xs text-muted-foreground">Total Flags</p>
+            <p className="text-xs text-muted">Total Flags</p>
           </Card>
           <Card className="p-4 text-center">
-            <CheckCircle2 className="h-5 w-5 mx-auto mb-1.5 text-green-600" />
+            <CheckCircle2 className="h-5 w-5 mx-auto mb-1.5 text-success" />
             <p className="text-2xl font-bold">{enabledCount}</p>
-            <p className="text-xs text-muted-foreground">Active</p>
+            <p className="text-xs text-muted">Active</p>
           </Card>
           <Card className="p-4 text-center">
             <AlertTriangle className="h-5 w-5 mx-auto mb-1.5 text-amber-600" />
             <p className="text-2xl font-bold">{freeTierBlockedCount}</p>
-            <p className="text-xs text-muted-foreground">Blocked for Free Tier</p>
+            <p className="text-xs text-muted">Blocked for Free Tier</p>
           </Card>
         </div>
 
         {/* search + filters */}
         <div className="flex flex-col sm:flex-row gap-3 mb-6">
           <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
             <input
               type="text"
               value={search}
@@ -218,7 +218,7 @@ export default function FreeTierStrategyPage() {
                         <Badge variant="outline" className="text-[10px] capitalize">{flag.flagType}</Badge>
                         {preset && <Badge variant="secondary" className="text-[10px]">Tier-configured</Badge>}
                       </div>
-                      <p className="text-xs text-muted-foreground truncate">{flag.description || flag.key}</p>
+                      <p className="text-xs text-muted truncate">{flag.description || flag.key}</p>
                     </div>
                     <button
                       onClick={() => toggleFlag(flag)}
@@ -227,8 +227,8 @@ export default function FreeTierStrategyPage() {
                       aria-label={flag.enabled ? 'Disable flag' : 'Enable flag'}
                     >
                       {flag.enabled
-                        ? <ToggleRight className="h-7 w-7 text-green-600" />
-                        : <ToggleLeft className="h-7 w-7 text-muted-foreground" />
+                        ? <ToggleRight className="h-7 w-7 text-success" />
+                        : <ToggleLeft className="h-7 w-7 text-muted" />
                       }
                     </button>
                   </div>
@@ -237,9 +237,9 @@ export default function FreeTierStrategyPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-3 border-t">
                     {/* rollout */}
                     <div className="flex items-center gap-2">
-                      <Percent className="h-3.5 w-3.5 text-muted-foreground shrink-0" />
+                      <Percent className="h-3.5 w-3.5 text-muted shrink-0" />
                       <div className="flex-1">
-                        <p className="text-[10px] text-muted-foreground mb-1">Rollout %</p>
+                        <p className="text-[10px] text-muted mb-1">Rollout %</p>
                         <input
                           type="range"
                           min={0} max={100}
@@ -252,13 +252,13 @@ export default function FreeTierStrategyPage() {
                           onTouchEnd={() => updateRollout(flag.id, flag.rolloutPercentage)}
                           className="w-full h-1.5 accent-primary"
                         />
-                        <span className="text-[10px] text-muted-foreground">{flag.rolloutPercentage}%</span>
+                        <span className="text-[10px] text-muted">{flag.rolloutPercentage}%</span>
                       </div>
                     </div>
 
                     {/* free tier limit */}
                     <div>
-                      <p className="text-[10px] text-muted-foreground mb-1">Free Tier Limit</p>
+                      <p className="text-[10px] text-muted mb-1">Free Tier Limit</p>
                       <select
                         value={limits.freeLimit}
                         onChange={e => setTierLimits(prev => ({
@@ -280,7 +280,7 @@ export default function FreeTierStrategyPage() {
 
                     {/* premium tier limit */}
                     <div>
-                      <p className="text-[10px] text-muted-foreground mb-1">Premium Limit</p>
+                      <p className="text-[10px] text-muted mb-1">Premium Limit</p>
                       <select
                         value={limits.premiumLimit}
                         onChange={e => setTierLimits(prev => ({
@@ -305,7 +305,7 @@ export default function FreeTierStrategyPage() {
         </MotionSection>
 
         {filtered.length === 0 && (
-          <div className="text-center py-12 text-muted-foreground">
+          <div className="text-center py-12 text-muted">
             <Tag className="h-10 w-10 mx-auto mb-3 opacity-30" />
             <p className="text-sm">No flags match your search</p>
           </div>
@@ -314,7 +314,7 @@ export default function FreeTierStrategyPage() {
         {/* save bar */}
         <div className="sticky bottom-0 bg-background/95 backdrop-blur border-t py-4 -mx-4 px-4">
           <div className="max-w-5xl mx-auto flex items-center justify-between">
-            <p className="text-xs text-muted-foreground">Changes are applied in real-time for toggles and rollout. Tier limits save separately.</p>
+            <p className="text-xs text-muted">Changes are applied in real-time for toggles and rollout. Tier limits save separately.</p>
             <Button onClick={saveTierConfig} disabled={saving}>
               {saving ? 'Saving…' : <><Save className="h-4 w-4 mr-1.5" />Save Tier Config</>}
             </Button>

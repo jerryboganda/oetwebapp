@@ -17,9 +17,9 @@ export interface ButtonProps extends Omit<ButtonHTMLAttributes<HTMLButtonElement
 const variantStyles: Record<string, string> = {
   primary: 'bg-primary text-white hover:bg-primary/90 shadow-sm',
   secondary: 'bg-navy text-white hover:bg-navy/90 shadow-sm',
-  ghost: 'text-navy hover:bg-gray-100',
-  destructive: 'bg-red-600 text-white hover:bg-red-700 shadow-sm',
-  outline: 'border border-gray-300 text-navy hover:bg-gray-50',
+  ghost: 'text-navy hover:bg-lavender/40 dark:hover:bg-white/5',
+  destructive: 'bg-danger text-white hover:bg-danger/90 shadow-sm',
+  outline: 'border border-border text-navy hover:bg-surface hover:border-border-hover',
 };
 
 const sizeStyles: Record<string, string> = {

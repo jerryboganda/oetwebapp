@@ -153,19 +153,19 @@ export default function AdminFreezePage() {
               description="Use this workspace to update policy, create manual freezes, and approve or end existing requests with an immutable audit trail."
               highlights={policyHighlights}
               aside={(
-                <div className="space-y-3 rounded-2xl border border-gray-200 bg-background-light p-4 shadow-sm">
+                <div className="space-y-3 rounded-2xl border border-border bg-background-light p-4 shadow-sm">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Quick Links</p>
                   <div className="space-y-2">
                     <Link
                       href="/admin/users"
-                      className="inline-flex w-full items-center justify-between rounded-lg border border-gray-300 px-4 py-3 text-sm font-medium text-navy transition-colors hover:bg-gray-50"
+                      className="inline-flex w-full items-center justify-between rounded-lg border border-border px-4 py-3 text-sm font-medium text-navy transition-colors hover:bg-surface"
                     >
                       <span>User directory</span>
                       <SquarePen className="h-4 w-4" />
                     </Link>
                     <Link
                       href="/freeze"
-                      className="inline-flex w-full items-center justify-between rounded-lg border border-gray-300 px-4 py-3 text-sm font-medium text-navy transition-colors hover:bg-gray-50"
+                      className="inline-flex w-full items-center justify-between rounded-lg border border-border px-4 py-3 text-sm font-medium text-navy transition-colors hover:bg-surface"
                     >
                       <span>Learner freeze page</span>
                       <PlayCircle className="h-4 w-4" />
@@ -223,7 +223,7 @@ export default function AdminFreezePage() {
                 {records.length > 0 ? records.map((record: any) => {
                   const status = String(record.status ?? '').toLowerCase();
                   return (
-                  <div key={record.id} className="flex flex-col gap-3 rounded-2xl border border-gray-200 bg-surface p-4 md:flex-row md:items-center md:justify-between">
+                  <div key={record.id} className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 md:flex-row md:items-center md:justify-between">
                     <div>
                       <p className="text-sm font-semibold text-navy">{record.id}</p>
                       <p className="text-xs text-muted">
@@ -247,7 +247,7 @@ export default function AdminFreezePage() {
                   </div>
                 );
                 }) : (
-                  <div className="rounded-2xl border border-dashed border-gray-200 bg-background-light p-4 text-sm text-muted">
+                  <div className="rounded-2xl border border-dashed border-border bg-background-light p-4 text-sm text-muted">
                     No freeze records found.
                   </div>
                 )}

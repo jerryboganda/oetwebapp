@@ -137,7 +137,7 @@ export default function FlagsPage() {
       render: (flag) => (
         <div className="min-w-[140px] space-y-2">
           <div className="h-2 rounded-full bg-background-light">
-            <div className="h-2 rounded-full bg-blue-600" style={{ width: `${flag.rolloutPercentage}%` }} />
+            <div className="h-2 rounded-full bg-primary" style={{ width: `${flag.rolloutPercentage}%` }} />
           </div>
           <p className="font-mono text-xs text-muted">{flag.rolloutPercentage}%</p>
         </div>
@@ -388,7 +388,7 @@ export default function FlagsPage() {
             ]}
           />
 
-          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+          <div className="flex justify-end gap-3 border-t border-border pt-4">
             <Button variant="outline" onClick={() => setIsModalOpen(false)}>
               Cancel
             </Button>

@@ -83,6 +83,7 @@ export const communityNavItems: NavItem[] = [
   { href: '/leaderboard', label: 'Leaderboard', icon: <Trophy className="w-5 h-5" />, matchPrefix: '/leaderboard' },
   { href: '/achievements', label: 'Achievements', icon: <Zap className="w-5 h-5" />, matchPrefix: '/achievements' },
   { href: '/tutoring', label: 'Tutoring', icon: <GraduationCap className="w-5 h-5" />, matchPrefix: '/tutoring' },
+  { href: '/private-speaking', label: 'Private Speaking', icon: <Video className="w-5 h-5" />, matchPrefix: '/private-speaking' },
   { href: '/exam-booking', label: 'Exam Dates', icon: <CalendarDays className="w-5 h-5" />, matchPrefix: '/exam-booking' },
   { href: '/marketplace', label: 'Marketplace', icon: <Store className="w-5 h-5" />, matchPrefix: '/marketplace' },
 ];

@@ -102,14 +102,14 @@ export default function AdminMarketplaceReviewPage() {
           {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)}
         </div>
       ) : items.length === 0 ? (
-        <div className="text-center py-16 bg-gray-50 dark:bg-gray-800/50 rounded-2xl border border-dashed border-gray-200 dark:border-gray-700">
+        <div className="text-center py-16 bg-background-light dark:bg-surface/50 rounded-2xl border border-dashed border-border dark:border-border">
           <CheckCircle2 className="w-12 h-12 text-green-400 mx-auto mb-3" />
-          <p className="text-sm font-bold text-gray-600 dark:text-gray-400">All caught up!</p>
-          <p className="text-xs text-gray-400 mt-1">No pending submissions to review.</p>
+          <p className="text-sm font-bold text-muted dark:text-muted">All caught up!</p>
+          <p className="text-xs text-muted mt-1">No pending submissions to review.</p>
         </div>
       ) : (
         <div className="space-y-4">
-          <div className="text-sm text-gray-500">
+          <div className="text-sm text-muted">
             <Clock className="w-4 h-4 inline mr-1" /> {items.length} submission{items.length !== 1 ? 's' : ''} pending review
           </div>
 
@@ -126,11 +126,11 @@ export default function AdminMarketplaceReviewPage() {
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, x: -50 }}
                   transition={{ delay: i * 0.04 }}
-                  className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden"
+                  className="bg-surface dark:bg-surface rounded-xl border border-border dark:border-border overflow-hidden"
                 >
                   <button
                     onClick={() => { setExpandedId(isExpanded ? null : item.id); setReviewNotes(''); }}
-                    className="w-full text-left p-4 flex items-center justify-between gap-3 hover:bg-gray-50 dark:hover:bg-gray-750 transition-colors"
+                    className="w-full text-left p-4 flex items-center justify-between gap-3 hover:bg-surface dark:hover:bg-surface transition-colors"
                   >
                     <div className="flex items-center gap-3 min-w-0">
                       <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400">
@@ -138,35 +138,35 @@ export default function AdminMarketplaceReviewPage() {
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-sm font-semibold text-gray-900 dark:text-white truncate">{item.title}</span>
+                          <span className="text-sm font-semibold text-navy dark:text-navy truncate">{item.title}</span>
                           <ExamTypeBadge examType={item.examFamilyCode} size="sm" />
-                          <span className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-500 px-1.5 py-0.5 rounded capitalize">{item.difficulty}</span>
+                          <span className="text-xs bg-lavender/30 dark:bg-surface text-muted px-1.5 py-0.5 rounded capitalize">{item.difficulty}</span>
                         </div>
-                        <div className="text-xs text-gray-400">
+                        <div className="text-xs text-muted">
                           {item.subtestCode} • {item.contentType.replace(/_/g, ' ')} • Submitted {dateFormatter.format(new Date(item.submittedAt))}
                         </div>
                       </div>
                     </div>
-                    <ChevronDown className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                    <ChevronDown className={`w-4 h-4 text-muted transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                   </button>
 
                   {isExpanded && (
                     <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                      className="border-t border-gray-100 dark:border-gray-700">
+                      className="border-t border-border dark:border-border">
                       <div className="p-4 space-y-4">
                         {item.description && (
                           <div>
-                            <div className="text-xs font-semibold text-gray-500 mb-1 uppercase">Description</div>
-                            <p className="text-sm text-gray-700 dark:text-gray-300">{item.description}</p>
+                            <div className="text-xs font-semibold text-muted mb-1 uppercase">Description</div>
+                            <p className="text-sm text-navy dark:text-navy">{item.description}</p>
                           </div>
                         )}
 
                         {item.tags && (
                           <div>
-                            <div className="text-xs font-semibold text-gray-500 mb-1 uppercase">Tags</div>
+                            <div className="text-xs font-semibold text-muted mb-1 uppercase">Tags</div>
                             <div className="flex flex-wrap gap-1">
                               {item.tags.split(',').map(tag => (
-                                <span key={tag} className="text-xs bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 px-2 py-0.5 rounded-full">
+                                <span key={tag} className="text-xs bg-lavender/30 dark:bg-surface text-muted dark:text-muted px-2 py-0.5 rounded-full">
                                   {tag.trim()}
                                 </span>
                               ))}
@@ -175,16 +175,16 @@ export default function AdminMarketplaceReviewPage() {
                         )}
 
                         <div>
-                          <div className="text-xs font-semibold text-gray-500 mb-1 uppercase">Review Notes (optional)</div>
+                          <div className="text-xs font-semibold text-muted mb-1 uppercase">Review Notes (optional)</div>
                           <textarea rows={2} value={reviewNotes} onChange={e => setReviewNotes(e.target.value)}
                             placeholder="Add feedback for the contributor..."
-                            className="w-full px-3 py-2 bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 rounded-lg text-sm outline-none focus:ring-2 focus:ring-amber-500 resize-none" />
+                            className="w-full px-3 py-2 bg-background-light dark:bg-surface border border-border dark:border-border rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary resize-none" />
                         </div>
 
                         <div className="flex items-center gap-2">
                           <input type="checkbox" id={`ci-${item.id}`} checked={createContentItem} onChange={e => setCreateContentItem(e.target.checked)}
                             className="w-4 h-4 text-amber-600 rounded" />
-                          <label htmlFor={`ci-${item.id}`} className="text-xs text-gray-600 dark:text-gray-400">
+                          <label htmlFor={`ci-${item.id}`} className="text-xs text-muted dark:text-muted">
                             Create ContentItem (Draft) on approval
                           </label>
                         </div>
@@ -195,7 +195,7 @@ export default function AdminMarketplaceReviewPage() {
                             {processing === item.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} Approve
                           </button>
                           <button onClick={() => handleReview(item.id, 'rejected')} disabled={processing === item.id}
-                            className="flex-1 py-2.5 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors">
+                            className="flex-1 py-2.5 bg-danger hover:bg-danger/90 disabled:opacity-50 text-white rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors">
                             {processing === item.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />} Reject
                           </button>
                         </div>

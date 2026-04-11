@@ -27,6 +27,7 @@ import {
   FileCheck2,
   Webhook,
   Scale,
+  Mic,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 
@@ -54,6 +55,7 @@ const adminNavItems: NavItem[] = [
   { href: '/admin/publish-requests', label: 'Publish Requests', icon: <FileCheck2 className="w-5 h-5" />, matchPrefix: '/admin/publish-requests' },
   { href: '/admin/webhooks', label: 'Webhooks', icon: <Webhook className="w-5 h-5" />, matchPrefix: '/admin/webhooks' },
   { href: '/admin/escalations', label: 'Escalations', icon: <Scale className="w-5 h-5" />, matchPrefix: '/admin/escalations' },
+  { href: '/admin/private-speaking', label: 'Private Speaking', icon: <Mic className="w-5 h-5" />, matchPrefix: '/admin/private-speaking' },
 ];
 
 const adminMobileNavItems: NavItem[] = [
@@ -170,6 +172,10 @@ function getAdminPageTitle(pathname: string | null) {
 
   if (pathname.startsWith('/admin/content-hierarchy')) {
     return 'Content Hierarchy';
+  }
+
+  if (pathname.startsWith('/admin/private-speaking')) {
+    return 'Private Speaking';
   }
 
   return undefined;

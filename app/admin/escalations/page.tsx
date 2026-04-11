@@ -128,7 +128,7 @@ export default function EscalationsPage() {
       key: 'divergence',
       header: 'Divergence',
       render: (e) => (
-        <span className={`font-mono font-semibold ${e.divergence >= 50 ? 'text-red-600' : 'text-amber-600'}`}>
+        <span className={`font-mono font-semibold ${e.divergence >= 50 ? 'text-danger' : 'text-amber-600'}`}>
           {e.divergence}
         </span>
       ),
@@ -141,7 +141,7 @@ export default function EscalationsPage() {
         return <Badge variant={badge.variant}>{badge.label}</Badge>;
       },
     },
-    { key: 'finalScore', header: 'Final', render: (e) => e.finalScore != null ? <span className="font-mono font-semibold">{e.finalScore}</span> : <span className="text-neutral-400">—</span> },
+    { key: 'finalScore', header: 'Final', render: (e) => e.finalScore != null ? <span className="font-mono font-semibold">{e.finalScore}</span> : <span className="text-muted">—</span> },
     {
       key: 'actions' as any,
       header: '',
@@ -212,7 +212,7 @@ export default function EscalationsPage() {
           title="Assign Second Reviewer"
         >
           <div className="space-y-4 p-4">
-            <p className="text-sm text-neutral-500">
+            <p className="text-sm text-muted">
               Subtest: <Badge variant="secondary">{assignTarget.subtestCode}</Badge>
               {' '}AI: {assignTarget.aiScore} | Human: {assignTarget.humanScore} (Divergence: {assignTarget.divergence})
             </p>
@@ -229,7 +229,7 @@ export default function EscalationsPage() {
                 ))}
             </Select>
           </div>
-          <div className="flex justify-end gap-2 pt-4 border-t border-neutral-200 dark:border-neutral-700 px-4 pb-4">
+          <div className="flex justify-end gap-2 pt-4 border-t border-border dark:border-border px-4 pb-4">
             <Button variant="ghost" onClick={() => setAssignTarget(null)}>Cancel</Button>
             <Button onClick={handleAssign} disabled={isMutating || !selectedExpertId}>
               {isMutating ? 'Assigning...' : 'Assign'}
@@ -245,7 +245,7 @@ export default function EscalationsPage() {
           title="Resolve Escalation"
         >
           <div className="space-y-4 p-4">
-            <p className="text-sm text-neutral-500">
+            <p className="text-sm text-muted">
               AI: {resolveTarget.aiScore} | Human: {resolveTarget.humanScore} (Divergence: {resolveTarget.divergence})
             </p>
             <Input
@@ -264,7 +264,7 @@ export default function EscalationsPage() {
               placeholder="Explain the resolution..."
             />
           </div>
-          <div className="flex justify-end gap-2 pt-4 border-t border-neutral-200 dark:border-neutral-700 px-4 pb-4">
+          <div className="flex justify-end gap-2 pt-4 border-t border-border dark:border-border px-4 pb-4">
             <Button variant="ghost" onClick={() => setResolveTarget(null)}>Cancel</Button>
             <Button onClick={handleResolve} disabled={isMutating || !finalScore}>
               {isMutating ? 'Resolving...' : 'Resolve'}

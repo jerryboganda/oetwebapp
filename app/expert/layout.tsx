@@ -2,7 +2,7 @@
 
 import { AppShell, ExpertDashboardShell, type MobileMenuSection } from '@/components/layout';
 import type { NavItem } from '@/components/layout/sidebar';
-import { LayoutDashboard, Inbox, CheckCircle, BarChart3, CalendarClock, Users } from 'lucide-react';
+import { LayoutDashboard, Inbox, CheckCircle, BarChart3, CalendarClock, Users, Mic } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useExpertAuth } from '@/lib/hooks/use-expert-auth';
 
@@ -13,6 +13,7 @@ const expertNavItems: NavItem[] = [
   { href: '/expert/metrics', label: 'Metrics', icon: <BarChart3 className="w-5 h-5" />, matchPrefix: '/expert/metrics' },
   { href: '/expert/schedule', label: 'Schedule', icon: <CalendarClock className="w-5 h-5" />, matchPrefix: '/expert/schedule' },
   { href: '/expert/learners', label: 'Learners', icon: <Users className="w-5 h-5" />, matchPrefix: '/expert/learners' },
+  { href: '/expert/private-speaking', label: 'Private Speaking', icon: <Mic className="w-5 h-5" />, matchPrefix: '/expert/private-speaking' },
 ];
 
 const expertMobileNavItems: NavItem[] = [
@@ -57,6 +58,10 @@ function getExpertPageTitle(pathname: string | null): string | undefined {
 
   if (pathname.startsWith('/expert/schedule')) {
     return 'Schedule';
+  }
+
+  if (pathname.startsWith('/expert/private-speaking')) {
+    return 'Private Speaking';
   }
 
   return undefined;

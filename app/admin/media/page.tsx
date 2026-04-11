@@ -103,7 +103,7 @@ export default function AdminMediaPage() {
               <RefreshCw className="w-4 h-4 mr-1" /> Refresh
             </Button>
           </div>
-          <span className="text-xs text-muted-foreground">{total} asset{total !== 1 ? 's' : ''}</span>
+          <span className="text-xs text-muted">{total} asset{total !== 1 ? 's' : ''}</span>
         </div>
 
         {audit && (
@@ -125,7 +125,7 @@ export default function AdminMediaPage() {
 
         <AsyncStateWrapper status={pageStatus} errorMessage="Failed to load media assets.">
           {pageStatus === 'empty' ? (
-            <EmptyState icon={<Film className="w-8 h-8 text-muted-foreground" />} title="No media assets" description="Media assets will appear here when content is imported." />
+            <EmptyState icon={<Film className="w-8 h-8 text-muted" />} title="No media assets" description="Media assets will appear here when content is imported." />
           ) : (
             <DataTable columns={columns} data={assets} keyExtractor={(r) => r.id} />
           )}
@@ -134,7 +134,7 @@ export default function AdminMediaPage() {
         {total > PAGE_SIZE && (
           <div className="flex justify-center gap-2 mt-4">
             <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Previous</Button>
-            <span className="text-sm text-muted-foreground self-center">Page {page} of {Math.ceil(total / PAGE_SIZE)}</span>
+            <span className="text-sm text-muted self-center">Page {page} of {Math.ceil(total / PAGE_SIZE)}</span>
             <Button variant="outline" size="sm" disabled={page >= Math.ceil(total / PAGE_SIZE)} onClick={() => setPage(p => p + 1)}>Next</Button>
           </div>
         )}

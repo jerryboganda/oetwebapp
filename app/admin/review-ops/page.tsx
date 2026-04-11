@@ -559,7 +559,7 @@ export default function ReviewOpsPage() {
                 <div className="space-y-3">
                   <div className="flex h-3 overflow-hidden rounded-full bg-background-light">
                     <motion.div
-                      className="bg-gray-300"
+                      className="bg-border"
                       initial={{ width: 0 }}
                       animate={{ width: `${(summary.statusDistribution.pending / totalReviews) * 100}%` }}
                       transition={cardTransition}
@@ -657,7 +657,7 @@ export default function ReviewOpsPage() {
 
         <Modal open={Boolean(assignTarget)} onClose={() => setAssignTarget(null)} title="Assign Review">
           <div className="space-y-4 py-2">
-            <div className="rounded-xl border border-gray-200 bg-background-light p-3 text-sm text-muted">
+            <div className="rounded-xl border border-border bg-background-light p-3 text-sm text-muted">
               {assignTarget ? `Assign review ${assignTarget.id} for ${assignTarget.learnerName} (${assignTarget.subtestCode}).` : 'Select an expert to continue.'}
             </div>
             <Select
@@ -666,7 +666,7 @@ export default function ReviewOpsPage() {
               onChange={(event) => setSelectedExpertId(event.target.value)}
               options={experts.map((expert) => ({ value: expert.id, label: `${expert.name} (${expert.email})` }))}
             />
-            <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+            <div className="flex justify-end gap-3 border-t border-border pt-4">
               <Button variant="outline" onClick={() => setAssignTarget(null)}>
                 Cancel
               </Button>
@@ -681,7 +681,7 @@ export default function ReviewOpsPage() {
         <Modal open={Boolean(cancelTarget)} onClose={() => setCancelTarget(null)} title="Cancel Review">
           <div className="space-y-4 py-2">
             <Input label="Reason" value={cancelReason} onChange={(event) => setCancelReason(event.target.value)} hint="This reason is stored in audit history." />
-            <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+            <div className="flex justify-end gap-3 border-t border-border pt-4">
               <Button variant="outline" onClick={() => setCancelTarget(null)}>
                 Keep Review
               </Button>

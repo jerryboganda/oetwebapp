@@ -35,10 +35,10 @@ export default function ContentEffectivenessPage() {
   useEffect(() => { analytics.track('admin_content_effectiveness_viewed'); load(''); }, []);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background-light">
       <div className="max-w-5xl mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold mb-1">Content Effectiveness</h1>
-        <p className="text-muted-foreground mb-6">Which content produces the most improvement and engagement?</p>
+        <p className="text-muted mb-6">Which content produces the most improvement and engagement?</p>
 
         <div className="flex gap-2 mb-6 flex-wrap">
           {['', 'writing', 'speaking', 'reading', 'listening'].map(s => (
@@ -58,17 +58,17 @@ export default function ContentEffectivenessPage() {
                       <div className="flex gap-2 mt-1 flex-wrap"><Badge variant="outline" className="capitalize text-[10px]">{item.subtestCode}</Badge><Badge variant="outline" className="text-[10px]">{item.difficulty}</Badge></div>
                     </div>
                     <div className="grid grid-cols-4 gap-4 text-center flex-shrink-0">
-                      <div><p className="text-sm font-bold">{item.totalAttempts}</p><p className="text-[10px] text-muted-foreground">Attempts</p></div>
-                      <div><p className="text-sm font-bold">{item.completionRate}%</p><p className="text-[10px] text-muted-foreground">Complete</p></div>
-                      <div><p className="text-sm font-bold">{item.averageScore ?? '--'}</p><p className="text-[10px] text-muted-foreground">Avg Score</p></div>
-                      <div><p className="text-sm font-bold">{item.effectivenessScore ?? '--'}</p><p className="text-[10px] text-muted-foreground">Score</p></div>
+                      <div><p className="text-sm font-bold">{item.totalAttempts}</p><p className="text-[10px] text-muted">Attempts</p></div>
+                      <div><p className="text-sm font-bold">{item.completionRate}%</p><p className="text-[10px] text-muted">Complete</p></div>
+                      <div><p className="text-sm font-bold">{item.averageScore ?? '--'}</p><p className="text-[10px] text-muted">Avg Score</p></div>
+                      <div><p className="text-sm font-bold">{item.effectivenessScore ?? '--'}</p><p className="text-[10px] text-muted">Score</p></div>
                     </div>
                   </div>
                 </Card>
               </MotionItem>
             ))}
           </MotionSection>
-        ) : <Card className="p-8 text-center text-muted-foreground"><p>No data available.</p></Card>}
+        ) : <Card className="p-8 text-center text-muted"><p>No data available.</p></Card>}
       </div>
     </div>
   );

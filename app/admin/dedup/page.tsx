@@ -80,18 +80,18 @@ export default function AdminDedupPage() {
             <RefreshCw className={`w-4 h-4 mr-1 ${scanning ? 'animate-spin' : ''}`} />
             {scanning ? 'Scanning…' : 'Run Dedup Scan'}
           </Button>
-          <span className="text-xs text-muted-foreground">{total} duplicate group{total !== 1 ? 's' : ''}</span>
+          <span className="text-xs text-muted">{total} duplicate group{total !== 1 ? 's' : ''}</span>
         </div>
 
         <AsyncStateWrapper status={pageStatus} errorMessage="Failed to load duplicate groups.">
           {pageStatus === 'empty' ? (
-            <EmptyState icon={<Copy className="w-8 h-8 text-muted-foreground" />} title="No duplicates found" description="Run a scan to detect duplicate content items." />
+            <EmptyState icon={<Copy className="w-8 h-8 text-muted" />} title="No duplicates found" description="Run a scan to detect duplicate content items." />
           ) : (
             <div className="space-y-4">
               {groups.map((group) => (
                 <div key={group.duplicateGroupId} className="rounded-lg border p-4">
                   <div className="flex items-center gap-2 mb-3">
-                    <Copy className="w-4 h-4 text-muted-foreground" />
+                    <Copy className="w-4 h-4 text-muted" />
                     <span className="text-sm font-medium">Group: {group.duplicateGroupId}</span>
                     <Badge variant="muted">{group.count} items</Badge>
                   </div>
@@ -100,7 +100,7 @@ export default function AdminDedupPage() {
                       <div key={item.id} className="flex items-center justify-between rounded-md border p-2 text-sm">
                         <div className="flex-1">
                           <span className="font-medium">{item.title}</span>
-                          <div className="flex gap-2 mt-0.5 text-xs text-muted-foreground">
+                          <div className="flex gap-2 mt-0.5 text-xs text-muted">
                             <span>{item.subtestCode}</span>
                             <span>·</span>
                             <span>{item.sourceProvenance}</span>

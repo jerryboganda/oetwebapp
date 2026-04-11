@@ -216,7 +216,7 @@ export default function UserDetailPage() {
                   ) : null}
                   <Link
                     href={`/admin/freeze?userId=${encodeURIComponent(user.id)}`}
-                    className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-navy transition-colors hover:bg-gray-50"
+                    className="inline-flex items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-medium text-navy transition-colors hover:bg-surface"
                   >
                     Freeze Controls
                   </Link>
@@ -237,7 +237,7 @@ export default function UserDetailPage() {
             <div className="grid gap-6 lg:grid-cols-[280px,1fr]">
               <AdminRoutePanel title="Identity" description="Primary account identity and role context.">
                 <div className="flex flex-col items-center gap-4 text-center">
-                  <div className="flex h-20 w-20 items-center justify-center rounded-full bg-blue-50 text-blue-600">
+                  <div className="flex h-20 w-20 items-center justify-center rounded-full bg-lavender text-primary">
                     <UserIcon className="h-8 w-8" />
                   </div>
                   <div className="space-y-2">
@@ -313,19 +313,19 @@ export default function UserDetailPage() {
 
                 <AdminRoutePanel title="Access Controls" description="Actions hidden here are not available in the current backend account model.">
                   <div className="grid gap-3 md:grid-cols-4">
-                    <div className="rounded-[20px] border border-gray-200 bg-background-light p-4 shadow-sm">
+                    <div className="rounded-[20px] border border-border bg-background-light p-4 shadow-sm">
                       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Suspend / Reactivate</p>
                       <p className="mt-2 text-sm text-muted">{user.availableActions.canSuspend ? 'Supported' : 'Not supported for this account type'}</p>
                     </div>
-                    <div className="rounded-[20px] border border-gray-200 bg-background-light p-4 shadow-sm">
+                    <div className="rounded-[20px] border border-border bg-background-light p-4 shadow-sm">
                       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Delete / Restore</p>
                       <p className="mt-2 text-sm text-muted">{user.availableActions.canDelete || user.availableActions.canRestore ? 'Supported' : 'Not supported for this account type'}</p>
                     </div>
-                    <div className="rounded-[20px] border border-gray-200 bg-background-light p-4 shadow-sm">
+                    <div className="rounded-[20px] border border-border bg-background-light p-4 shadow-sm">
                       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Credit Adjustment</p>
                       <p className="mt-2 text-sm text-muted">{user.availableActions.canAdjustCredits ? 'Supported' : 'Not applicable for this account type'}</p>
                     </div>
-                    <div className="rounded-[20px] border border-gray-200 bg-background-light p-4 shadow-sm">
+                    <div className="rounded-[20px] border border-border bg-background-light p-4 shadow-sm">
                       <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Password Reset</p>
                       <p className="mt-2 text-sm text-muted">{user.availableActions.canTriggerPasswordReset ? 'Supported' : 'No linked auth account available'}</p>
                     </div>
@@ -347,7 +347,7 @@ export default function UserDetailPage() {
             hint="Use a negative number to remove credits when the current balance allows it."
           />
           <Input label="Reason" value={creditReason} onChange={(event) => setCreditReason(event.target.value)} />
-          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+          <div className="flex justify-end gap-3 border-t border-border pt-4">
             <Button variant="outline" onClick={() => setIsCreditModalOpen(false)}>
               Cancel
             </Button>
@@ -364,7 +364,7 @@ export default function UserDetailPage() {
         title={lifecycleAction === 'delete' ? 'Delete Account' : 'Restore Account'}
       >
         <div className="space-y-4 py-2">
-          <div className="rounded-[20px] border border-gray-200 bg-background-light p-3 text-sm text-muted">
+          <div className="rounded-[20px] border border-border bg-background-light p-3 text-sm text-muted">
             {lifecycleAction === 'delete'
               ? 'Deleting the account removes it from active operation, blocks sign-in, and can be reversed later from this screen.'
               : 'Restoring the account removes the deleted marker and returns it to active operation.'}
@@ -375,7 +375,7 @@ export default function UserDetailPage() {
             onChange={(event) => setLifecycleReason(event.target.value)}
             hint="Optional, but helpful for the audit trail."
           />
-          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+          <div className="flex justify-end gap-3 border-t border-border pt-4">
             <Button variant="outline" onClick={closeLifecycleModal}>
               Cancel
             </Button>

@@ -145,19 +145,19 @@ export default function PerformanceMetricsPage() {
               title={`Reviews completed in the last ${dateRange} days`}
               description="A simple chart keeps the recent throughput trend visible without changing the underlying metrics model."
             />
-            <Card className="border-slate-200 shadow-sm">
+            <Card>
               <CardContent className="p-5">
                 <div className="h-[240px] w-full min-w-0 sm:h-[280px] lg:h-[320px]" role="img" aria-label="Reviews completed bar chart">
                   <ResponsiveContainer width="100%" height="100%">
                     <BarChart data={completionData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }} aria-label="Reviews completed bar chart">
                       <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                      <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} />
+                      <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#526072' }} dy={10} />
+                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#526072' }} />
                       <Tooltip
-                        cursor={{ fill: '#f9fafb' }}
+                        cursor={{ fill: '#f7f5ef' }}
                         contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                       />
-                      <Bar dataKey="count" fill="#3b82f6" radius={[4, 4, 0, 0]} maxBarSize={40} />
+                      <Bar dataKey="count" fill="#7c3aed" radius={[4, 4, 0, 0]} maxBarSize={40} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>

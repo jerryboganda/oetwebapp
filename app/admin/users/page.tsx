@@ -127,7 +127,7 @@ export default function UsersPage() {
         header: 'User',
         render: (user) => (
           <div className="space-y-1">
-            <Link href={`/admin/users/${user.id}`} className="font-medium text-blue-600 hover:underline">
+            <Link href={`/admin/users/${user.id}`} className="font-medium text-primary hover:underline">
               {user.name}
             </Link>
             <p className="text-sm text-muted">{user.email}</p>
@@ -169,7 +169,7 @@ export default function UsersPage() {
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
-          <Link href={`/admin/users/${user.id}`} className="truncate font-semibold text-blue-600 hover:underline">
+          <Link href={`/admin/users/${user.id}`} className="truncate font-semibold text-primary hover:underline">
             {user.name}
           </Link>
           <p className="truncate text-sm text-muted">{user.email}</p>
@@ -191,7 +191,7 @@ export default function UsersPage() {
       </div>
 
       <div className="flex justify-end">
-        <Link href={`/admin/users/${user.id}`} className="inline-flex items-center justify-center rounded-2xl border border-border/60 bg-surface px-4 py-2 text-sm font-semibold text-navy shadow-sm hover:bg-white">
+        <Link href={`/admin/users/${user.id}`} className="inline-flex items-center justify-center rounded-2xl border border-border/60 bg-surface px-4 py-2 text-sm font-semibold text-navy shadow-sm hover:bg-surface">
           View profile
         </Link>
       </div>
@@ -352,11 +352,11 @@ export default function UsersPage() {
             />
           ) : null}
 
-          <div className="rounded-xl border border-gray-200 bg-background-light p-3 text-sm text-muted">
+          <div className="rounded-xl border border-border bg-background-light p-3 text-sm text-muted">
             The backend will create the account, send a setup challenge, and log the invitation in audit history.
           </div>
 
-          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+          <div className="flex justify-end gap-3 border-t border-border pt-4">
             <Button variant="outline" onClick={() => setIsInviteOpen(false)}>
               Cancel
             </Button>

@@ -54,6 +54,10 @@ const learnerRoutes = [
     path: '/diagnostic',
     heading: /build your baseline before the study plan starts/i,
   },
+  {
+    path: '/private-speaking',
+    heading: /private speaking sessions/i,
+  },
 ];
 
 test.describe('Learner workspace smoke @learner @smoke', () => {

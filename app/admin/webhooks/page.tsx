@@ -142,14 +142,14 @@ export default function WebhooksPage() {
 
       {summary && summary.recentFailures.length > 0 && (
         <AdminRoutePanel className="mb-6">
-          <h3 className="text-sm font-semibold text-neutral-700 dark:text-neutral-300 mb-2 flex items-center gap-1.5">
-            <AlertTriangle className="w-4 h-4 text-red-500" /> Recent Failures
+          <h3 className="text-sm font-semibold text-navy dark:text-muted mb-2 flex items-center gap-1.5">
+            <AlertTriangle className="w-4 h-4 text-danger" /> Recent Failures
           </h3>
           <div className="space-y-2">
             {summary.recentFailures.map((f) => (
-              <div key={f.id} className="text-xs text-neutral-600 dark:text-neutral-400 border-l-2 border-red-300 pl-3">
+              <div key={f.id} className="text-xs text-muted dark:text-muted border-l-2 border-danger/40 pl-3">
                 <span className="font-mono">{f.eventType}</span>
-                {f.errorMessage && <span className="ml-2 text-red-500">{f.errorMessage}</span>}
+                {f.errorMessage && <span className="ml-2 text-danger">{f.errorMessage}</span>}
               </div>
             ))}
           </div>
@@ -174,7 +174,7 @@ export default function WebhooksPage() {
                   <Badge variant="secondary">{e.gateway}</Badge>
                   <Badge variant={statusColors[e.processingStatus] ?? 'default'}>{e.processingStatus}</Badge>
                 </div>
-                {e.errorMessage && <p className="text-xs text-red-500">{e.errorMessage}</p>}
+                {e.errorMessage && <p className="text-xs text-danger">{e.errorMessage}</p>}
               </div>
             )}
           />

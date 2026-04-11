@@ -336,7 +336,7 @@ export default function AuditLogsPage() {
             </div>
             <div>
               <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Details</p>
-              <p className="whitespace-pre-wrap rounded-xl border border-gray-200 bg-background-light p-4 text-navy">
+              <p className="whitespace-pre-wrap rounded-xl border border-border bg-background-light p-4 text-navy">
                 {selectedLogDetail.details || 'No additional details recorded.'}
               </p>
             </div>

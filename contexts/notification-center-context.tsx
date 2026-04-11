@@ -499,7 +499,7 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
         accessTokenFactory: async () => (await ensureFreshAccessToken()) ?? '',
         transport: PROXY_SAFE_SIGNALR_TRANSPORT,
       })
-      .configureLogging(LogLevel.Warning)
+      .configureLogging(LogLevel.None)
       .withAutomaticReconnect([0, 2_000, 5_000, 10_000])
       .build();
 

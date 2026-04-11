@@ -262,7 +262,7 @@ export default function ReviewQueuePage() {
       key: 'status',
       header: 'Status',
       render: (row) => {
-        const variant = row.status === 'overdue' ? 'bg-red-100 text-red-800' : row.status === 'assigned' ? 'bg-blue-100 text-blue-800' : row.status === 'in_progress' ? 'bg-emerald-100 text-emerald-800' : 'bg-gray-100 text-gray-700';
+        const variant = row.status === 'overdue' ? 'bg-red-50 text-red-700' : row.status === 'assigned' ? 'bg-blue-50 text-blue-700' : row.status === 'in_progress' ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-700';
         return <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${variant}`}>{row.status.replace('_', ' ')}</span>;
       },
     },
@@ -389,7 +389,7 @@ export default function ReviewQueuePage() {
               action={hasActiveFilters ? <Button variant="ghost" size="sm" onClick={clearFilters}>Clear filters</Button> : null}
             />
 
-            <Card className="overflow-hidden border-gray-200 shadow-sm">
+            <Card className="overflow-hidden">
               <CardContent className="space-y-4 p-5">
                 <div className="relative max-w-sm">
                   <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -401,7 +401,7 @@ export default function ReviewQueuePage() {
                       setSearchQuery(event.target.value);
                       setPage(1);
                     }}
-                    className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/30"
+                    className="w-full rounded-xl border border-border bg-surface py-2.5 pl-9 pr-3 text-sm focus:outline-none focus:ring-2 focus:ring-primary/20"
                     aria-label="Search reviews"
                   />
                 </div>

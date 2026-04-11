@@ -11,7 +11,7 @@ const PLAYBOOK_SECTIONS = [
   {
     title: 'Content Management',
     icon: FileText,
-    color: 'text-blue-600',
+    color: 'text-primary',
     workflows: [
       { name: 'Publish New Content', steps: ['Create content item with metadata (subtest, difficulty, profession)', 'Add questions/prompts and answer keys', 'Set status to "Draft" for review', 'Run quality checks (spelling, rubric alignment)', 'Move to "Published" — immediately available to learners'] },
       { name: 'Retire Content', steps: ['Check usage analytics for active learners', 'Set status to "Archived" (soft delete)', 'Content no longer appears in practice pools', 'Historical attempts and scores are preserved'] },
@@ -48,7 +48,7 @@ const PLAYBOOK_SECTIONS = [
   {
     title: 'Analytics & Reporting',
     icon: BarChart3,
-    color: 'text-indigo-600',
+    color: 'text-primary',
     workflows: [
       { name: 'Weekly Review', steps: ['Check Subscription Health for MRR and churn trends', 'Review Expert Efficiency for throughput bottlenecks', 'Scan Content Effectiveness for underperforming items', 'Review Cohort Analysis for engagement patterns', 'Export findings to stakeholder report'] },
     ],
@@ -56,7 +56,7 @@ const PLAYBOOK_SECTIONS = [
   {
     title: 'Incident Response',
     icon: AlertTriangle,
-    color: 'text-red-600',
+    color: 'text-danger',
     workflows: [
       { name: 'SLA Breach Escalation', steps: ['Identify affected learners from SLA Health alerts', 'Send apology notification with updated ETA', 'Reassign to available expert with shortest queue', 'Offer credit compensation per policy', 'Post-mortem: update capacity planning'] },
       { name: 'System Outage Impact', steps: ['Assess affected services (API, payments, reviews)', 'Pause SLA clocks for impacted reviews', 'Communicate status via system banner', 'Resume SLA tracking after resolution', 'Compensate affected users if warranted'] },
@@ -68,11 +68,11 @@ export default function AdminPlaybookPage() {
   useEffect(() => { analytics.track('admin_playbook_viewed'); }, []);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background-light">
       <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2"><BookOpen className="w-8 h-8" /> Admin Operational Playbook</h1>
-          <p className="text-muted-foreground mt-2">Standard workflows and procedures for platform operations.</p>
+          <p className="text-muted mt-2">Standard workflows and procedures for platform operations.</p>
         </div>
 
         {PLAYBOOK_SECTIONS.map(section => (
@@ -91,7 +91,7 @@ export default function AdminPlaybookPage() {
                   <ol className="space-y-2">
                     {wf.steps.map((step, i) => (
                       <li key={i} className="flex gap-3 items-start text-sm">
-                        <CheckCircle2 className="w-4 h-4 text-muted-foreground flex-shrink-0 mt-0.5" />
+                        <CheckCircle2 className="w-4 h-4 text-muted flex-shrink-0 mt-0.5" />
                         <span>{step}</span>
                       </li>
                     ))}

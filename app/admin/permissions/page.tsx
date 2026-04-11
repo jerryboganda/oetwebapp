@@ -106,12 +106,12 @@ export default function PermissionsPage() {
         error={<EmptyState variant="error" heading="Error loading admins" body="Unable to load admin users." />}
       >
         <AdminRoutePanel>
-          <div className="divide-y divide-neutral-200 dark:divide-neutral-700">
+          <div className="divide-y divide-border dark:divide-border">
             {admins.map((admin) => (
               <div key={admin.id} className="flex items-center justify-between py-3 px-4">
                 <div>
-                  <p className="text-sm font-medium text-neutral-900 dark:text-neutral-100">{admin.name}</p>
-                  <p className="text-xs text-neutral-500">{admin.email}</p>
+                  <p className="text-sm font-medium text-navy dark:text-navy">{admin.name}</p>
+                  <p className="text-xs text-muted">{admin.email}</p>
                 </div>
                 <Button size="sm" variant="outline" onClick={() => openPermissions(admin)}>
                   <KeyRound className="w-3.5 h-3.5 mr-1.5" />
@@ -132,7 +132,7 @@ export default function PermissionsPage() {
           <div className="space-y-4 max-h-[60vh] overflow-y-auto p-4">
             {groups.map((group) => (
               <div key={group}>
-                <h4 className="text-xs font-semibold uppercase tracking-wide text-neutral-500 mb-2">{group}</h4>
+                <h4 className="text-xs font-semibold uppercase tracking-wide text-muted mb-2">{group}</h4>
                 <div className="grid grid-cols-2 gap-2">
                   {ALL_PERMISSIONS.filter((p) => p.group === group).map((perm) => (
                     <label key={perm.key} className="flex items-center gap-2 text-sm cursor-pointer">
@@ -140,7 +140,7 @@ export default function PermissionsPage() {
                         type="checkbox"
                         checked={userPerms.includes(perm.key)}
                         onChange={() => togglePermission(perm.key)}
-                        className="rounded border-neutral-300 text-blue-600 focus:ring-blue-500"
+                        className="rounded border-border text-primary focus:ring-primary"
                       />
                       {perm.label}
                     </label>
@@ -149,7 +149,7 @@ export default function PermissionsPage() {
               </div>
             ))}
           </div>
-          <div className="flex justify-end gap-2 pt-4 border-t border-neutral-200 dark:border-neutral-700 px-4 pb-4">
+          <div className="flex justify-end gap-2 pt-4 border-t border-border dark:border-border px-4 pb-4">
             <Button variant="ghost" onClick={() => setSelectedUser(null)}>Cancel</Button>
             <Button onClick={savePermissions} disabled={isMutating}>
               {isMutating ? 'Saving...' : 'Save Permissions'}

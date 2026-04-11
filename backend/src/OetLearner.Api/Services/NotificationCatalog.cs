@@ -89,6 +89,13 @@ public static class NotificationCatalog
             NotificationEventKey.AdminNotificationDeliveryFailureAlert => "Notification delivery failures need attention",
             NotificationEventKey.AdminFreezePolicyChanged => "Freeze policy updated",
             NotificationEventKey.AdminFreezeLifecycleAction => "Freeze lifecycle action completed",
+            NotificationEventKey.LearnerPrivateSpeakingBooked => $"Private speaking session booked with {ReadToken(tokens, "tutorName", "your tutor")}",
+            NotificationEventKey.LearnerPrivateSpeakingReminder => $"Upcoming session with {ReadToken(tokens, "tutorName", "your tutor")} in {ReadToken(tokens, "hoursUntil", "a few")} hours",
+            NotificationEventKey.LearnerPrivateSpeakingCancelled => "Your private speaking session has been cancelled",
+            NotificationEventKey.ExpertPrivateSpeakingAssigned => $"New private speaking session booked for {ReadToken(tokens, "sessionTime", "upcoming")}",
+            NotificationEventKey.ExpertPrivateSpeakingReminder => $"Upcoming session in {ReadToken(tokens, "hoursUntil", "a few")} hours",
+            NotificationEventKey.ExpertPrivateSpeakingCancelled => "A private speaking session has been cancelled",
+            NotificationEventKey.AdminPrivateSpeakingBooked => $"Private speaking session booked: {ReadToken(tokens, "tutorName", "tutor")} at {ReadToken(tokens, "sessionTime", "TBD")}",
             _ => "Notification update"
         };
 
@@ -130,6 +137,13 @@ public static class NotificationCatalog
             NotificationEventKey.AdminNotificationDeliveryFailureAlert => ReadToken(tokens, "message", "Notification delivery failures crossed the alert threshold."),
             NotificationEventKey.AdminFreezePolicyChanged => ReadToken(tokens, "message", "Freeze policy settings were updated."),
             NotificationEventKey.AdminFreezeLifecycleAction => ReadToken(tokens, "message", "A freeze lifecycle action was processed."),
+            NotificationEventKey.LearnerPrivateSpeakingBooked => $"Your session with {ReadToken(tokens, "tutorName", "your tutor")} is confirmed for {ReadToken(tokens, "sessionTime", "the scheduled time")}. A Zoom link will be sent shortly.",
+            NotificationEventKey.LearnerPrivateSpeakingReminder => $"Your private speaking session starts in {ReadToken(tokens, "hoursUntil", "a few")} hours. Check your booking details for the Zoom link.",
+            NotificationEventKey.LearnerPrivateSpeakingCancelled => ReadToken(tokens, "message", "Your private speaking session has been cancelled. If you paid, a refund will be processed."),
+            NotificationEventKey.ExpertPrivateSpeakingAssigned => $"A learner has booked a private session for {ReadToken(tokens, "sessionTime", "an upcoming time")}. Check your schedule for details.",
+            NotificationEventKey.ExpertPrivateSpeakingReminder => $"Your private speaking session starts in {ReadToken(tokens, "hoursUntil", "a few")} hours. Use the Zoom start link in your session details.",
+            NotificationEventKey.ExpertPrivateSpeakingCancelled => ReadToken(tokens, "message", "A private speaking session has been cancelled by the learner or admin."),
+            NotificationEventKey.AdminPrivateSpeakingBooked => $"Private speaking session booked with {ReadToken(tokens, "tutorName", "a tutor")} at {ReadToken(tokens, "sessionTime", "TBD")}. Booking ID: {ReadToken(tokens, "bookingId", "unknown")}.",
             _ => "A new notification is available."
         };
 
@@ -171,6 +185,13 @@ public static class NotificationCatalog
             NotificationEventKey.AdminNotificationDeliveryFailureAlert => "/admin/notifications",
             NotificationEventKey.AdminFreezePolicyChanged => "/admin/freeze",
             NotificationEventKey.AdminFreezeLifecycleAction => "/admin/freeze",
+            NotificationEventKey.LearnerPrivateSpeakingBooked => $"/private-speaking/bookings/{ReadToken(tokens, "bookingId", string.Empty)}",
+            NotificationEventKey.LearnerPrivateSpeakingReminder => $"/private-speaking/bookings/{ReadToken(tokens, "bookingId", string.Empty)}",
+            NotificationEventKey.LearnerPrivateSpeakingCancelled => "/private-speaking",
+            NotificationEventKey.ExpertPrivateSpeakingAssigned => $"/expert/private-speaking/{ReadToken(tokens, "bookingId", string.Empty)}",
+            NotificationEventKey.ExpertPrivateSpeakingReminder => $"/expert/private-speaking/{ReadToken(tokens, "bookingId", string.Empty)}",
+            NotificationEventKey.ExpertPrivateSpeakingCancelled => "/expert/private-speaking",
+            NotificationEventKey.AdminPrivateSpeakingBooked => "/admin/private-speaking",
             _ => null
         };
 
@@ -212,7 +233,16 @@ public static class NotificationCatalog
             new(NotificationEventKey.AdminStuckJobAlert, ApplicationUserRoles.Admin, "operations", "Stuck Job Alert", "Notify admins when background jobs are stuck.", NotificationSeverity.Critical, new(true, true, false, NotificationEmailMode.Immediate)),
             new(NotificationEventKey.AdminNotificationDeliveryFailureAlert, ApplicationUserRoles.Admin, "operations", "Notification Delivery Failure Alert", "Notify admins when notification delivery failures cross alert thresholds.", NotificationSeverity.Critical, new(true, true, false, NotificationEmailMode.Immediate)),
             new(NotificationEventKey.AdminFreezePolicyChanged, ApplicationUserRoles.Admin, "operations", "Freeze Policy Changed", "Notify admins when freeze policy settings are updated.", NotificationSeverity.Info, new(true, false, false, NotificationEmailMode.Off)),
-            new(NotificationEventKey.AdminFreezeLifecycleAction, ApplicationUserRoles.Admin, "operations", "Freeze Lifecycle Action", "Notify admins when freeze requests are approved, rejected, started, ended, or force-ended.", NotificationSeverity.Info, new(true, false, false, NotificationEmailMode.Off))
+            new(NotificationEventKey.AdminFreezeLifecycleAction, ApplicationUserRoles.Admin, "operations", "Freeze Lifecycle Action", "Notify admins when freeze requests are approved, rejected, started, ended, or force-ended.", NotificationSeverity.Info, new(true, false, false, NotificationEmailMode.Off)),
+
+            // Private Speaking Session notifications
+            new(NotificationEventKey.LearnerPrivateSpeakingBooked, ApplicationUserRoles.Learner, "private_speaking", "Session Booked", "Notify learners when a private speaking session is booked.", NotificationSeverity.Success, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerPrivateSpeakingReminder, ApplicationUserRoles.Learner, "private_speaking", "Session Reminder", "Remind learners about upcoming private speaking sessions.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerPrivateSpeakingCancelled, ApplicationUserRoles.Learner, "private_speaking", "Session Cancelled", "Notify learners when a private speaking session is cancelled.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.ExpertPrivateSpeakingAssigned, ApplicationUserRoles.Expert, "private_speaking", "Session Assigned", "Notify experts when a learner books a private speaking session.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.ExpertPrivateSpeakingReminder, ApplicationUserRoles.Expert, "private_speaking", "Session Reminder", "Remind experts about upcoming private speaking sessions.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.ExpertPrivateSpeakingCancelled, ApplicationUserRoles.Expert, "private_speaking", "Session Cancelled", "Notify experts when a private speaking session is cancelled.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.AdminPrivateSpeakingBooked, ApplicationUserRoles.Admin, "operations", "Private Speaking Booked", "Notify admins when a private speaking session is booked.", NotificationSeverity.Info, new(true, false, false, NotificationEmailMode.Off))
         ];
     }
 

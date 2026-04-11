@@ -428,6 +428,13 @@ builder.Services.AddScoped<PronunciationService>();
 builder.Services.AddScoped<WritingCoachService>();
 builder.Services.AddScoped<MarketplaceService>();
 
+// ── Private Speaking Sessions ──
+builder.Services.Configure<ZoomOptions>(builder.Configuration.GetSection("Zoom"));
+builder.Services.AddHttpClient("ZoomApi");
+builder.Services.AddHttpClient("ZoomAuth");
+builder.Services.AddSingleton<ZoomMeetingService>();
+builder.Services.AddScoped<PrivateSpeakingService>();
+
 var app = builder.Build();
 
 if (trustForwardHeaders)
@@ -661,6 +668,9 @@ app.MapConversationEndpoints();
 app.MapPronunciationEndpoints();
 app.MapWritingCoachEndpoints();
 app.MapMarketplaceEndpoints();
+
+// ── Private Speaking Sessions ──
+app.MapPrivateSpeakingEndpoints();
 
 app.MapHub<NotificationHub>("/v1/notifications/hub").RequireAuthorization();
 app.MapHub<ConversationHub>("/v1/conversations/hub").RequireAuthorization();

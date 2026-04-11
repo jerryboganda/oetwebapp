@@ -39,7 +39,16 @@ public enum NotificationEventKey
     AdminStuckJobAlert,
     AdminNotificationDeliveryFailureAlert,
     AdminFreezePolicyChanged,
-    AdminFreezeLifecycleAction
+    AdminFreezeLifecycleAction,
+
+    // Private Speaking Session notifications
+    LearnerPrivateSpeakingBooked,
+    LearnerPrivateSpeakingReminder,
+    LearnerPrivateSpeakingCancelled,
+    ExpertPrivateSpeakingAssigned,
+    ExpertPrivateSpeakingReminder,
+    ExpertPrivateSpeakingCancelled,
+    AdminPrivateSpeakingBooked
 }
 
 public enum NotificationChannel

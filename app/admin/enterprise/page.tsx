@@ -146,7 +146,7 @@ export default function EnterprisePage() {
     { key: 'contactEmail', header: 'Email', render: (r) => <span className="text-sm">{r.contactEmail}</span> },
     { key: 'organizationName', header: 'Organization', render: (r) => <span className="text-sm">{r.organizationName || '—'}</span> },
     { key: 'status', header: 'Status', render: (r) => { const b = STATUS_BADGE[r.status] ?? { label: r.status, variant: 'outline' as const }; return <Badge variant={b.variant}>{b.label}</Badge>; } },
-    { key: 'createdAt', header: 'Created', render: (r) => <span className="text-xs text-gray-500">{new Date(r.createdAt).toLocaleDateString()}</span> },
+    { key: 'createdAt', header: 'Created', render: (r) => <span className="text-xs text-muted">{new Date(r.createdAt).toLocaleDateString()}</span> },
   ];
 
   const cohortColumns: Column<Cohort>[] = [
@@ -154,7 +154,7 @@ export default function EnterprisePage() {
     { key: 'examTypeCode', header: 'Exam', render: (r) => <span className="uppercase text-sm">{r.examTypeCode}</span> },
     { key: 'seats', header: 'Seats', render: (r) => <span className="text-sm">{r.enrolledCount}/{r.maxSeats}</span> },
     { key: 'status', header: 'Status', render: (r) => { const b = STATUS_BADGE[r.status] ?? { label: r.status, variant: 'outline' as const }; return <Badge variant={b.variant}>{b.label}</Badge>; } },
-    { key: 'dates', header: 'Period', render: (r) => <span className="text-xs text-gray-500">{r.startDate || '—'} → {r.endDate || '—'}</span> },
+    { key: 'dates', header: 'Period', render: (r) => <span className="text-xs text-muted">{r.startDate || '—'} → {r.endDate || '—'}</span> },
   ];
 
   return (

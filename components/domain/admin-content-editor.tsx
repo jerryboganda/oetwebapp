@@ -387,7 +387,7 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
               ) : (
                 <div className="grid gap-3 md:grid-cols-2">
                   {criteriaOptions.map((criterion) => (
-                    <div key={criterion.id} className="rounded-[20px] border border-gray-200 bg-background-light p-4 shadow-sm">
+                    <div key={criterion.id} className="rounded-[20px] border border-border bg-background-light p-4 shadow-sm">
                       <Checkbox
                         checked={form.criteriaFocus.includes(criterion.id)}
                         onChange={() => toggleCriterion(criterion.id)}

@@ -233,7 +233,7 @@ export default function AdminNotificationsPage() {
         const draft = drafts[key] ?? row;
         return (
           <select
-            className="w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-navy"
+            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-navy"
             value={draft.emailMode}
             onChange={(event) => setDrafts((current) => ({
               ...current,
@@ -466,7 +466,7 @@ export default function AdminNotificationsPage() {
         <AdminRoutePanel title="Global Email Governance" description="These switches suppress email only. In-app delivery remains active even when a role-wide email switch is off.">
           <div className="grid gap-3 md:grid-cols-3">
             {(['learner', 'expert', 'admin'] as NotificationAudienceRole[]).map((audienceRole) => (
-              <div key={audienceRole} className="rounded-[20px] border border-gray-200 bg-background-light p-4 shadow-sm">
+              <div key={audienceRole} className="rounded-[20px] border border-border bg-background-light p-4 shadow-sm">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between gap-3">
                     <div>
@@ -537,7 +537,7 @@ export default function AdminNotificationsPage() {
               }))}
             />
             {catalog.find((entry) => entry.eventKey === testEventKey && entry.audienceRole === testAudienceRole) ? (
-              <div className="rounded-2xl border border-gray-200 bg-background-light p-4 text-sm text-muted">
+              <div className="rounded-2xl border border-border bg-background-light p-4 text-sm text-muted">
                 <p className="font-semibold text-navy">
                   {catalog.find((entry) => entry.eventKey === testEventKey && entry.audienceRole === testAudienceRole)?.label}
                 </p>
@@ -562,7 +562,7 @@ export default function AdminNotificationsPage() {
             {health?.channels?.length ? (
               <div className="grid gap-3 sm:grid-cols-3">
                 {health.channels.map((channel) => (
-                  <div key={channel.channel} className="rounded-[20px] border border-gray-200 bg-background-light p-4 text-sm shadow-sm">
+                  <div key={channel.channel} className="rounded-[20px] border border-border bg-background-light p-4 text-sm shadow-sm">
                     <p className="font-semibold capitalize text-navy">{channel.channel}</p>
                     <p className="mt-2 text-muted">Sent {channel.sentLast24Hours}</p>
                     <p className="text-muted">Failed {channel.failedLast24Hours}</p>

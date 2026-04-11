@@ -120,6 +120,14 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<TutoringSession> TutoringSessions => Set<TutoringSession>();
     public DbSet<TutoringAvailability> TutoringAvailabilities => Set<TutoringAvailability>();
 
+    // Private Speaking session entities
+    public DbSet<PrivateSpeakingConfig> PrivateSpeakingConfigs => Set<PrivateSpeakingConfig>();
+    public DbSet<PrivateSpeakingTutorProfile> PrivateSpeakingTutorProfiles => Set<PrivateSpeakingTutorProfile>();
+    public DbSet<PrivateSpeakingAvailabilityRule> PrivateSpeakingAvailabilityRules => Set<PrivateSpeakingAvailabilityRule>();
+    public DbSet<PrivateSpeakingAvailabilityOverride> PrivateSpeakingAvailabilityOverrides => Set<PrivateSpeakingAvailabilityOverride>();
+    public DbSet<PrivateSpeakingBooking> PrivateSpeakingBookings => Set<PrivateSpeakingBooking>();
+    public DbSet<PrivateSpeakingAuditLog> PrivateSpeakingAuditLogs => Set<PrivateSpeakingAuditLog>();
+
     // Social / achievement entities
     public DbSet<Certificate> Certificates => Set<Certificate>();
     public DbSet<ReferralCode> ReferralCodes => Set<ReferralCode>();
@@ -321,6 +329,18 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<TutoringSession>().HasIndex(x => new { x.LearnerUserId, x.ScheduledAt });
         modelBuilder.Entity<TutoringSession>().HasIndex(x => new { x.ExpertUserId, x.ScheduledAt });
         modelBuilder.Entity<TutoringAvailability>().HasIndex(x => x.ExpertUserId);
+
+        // Private Speaking indexes
+        modelBuilder.Entity<PrivateSpeakingTutorProfile>().HasIndex(x => x.ExpertUserId).IsUnique();
+        modelBuilder.Entity<PrivateSpeakingAvailabilityRule>().HasIndex(x => new { x.TutorProfileId, x.DayOfWeek });
+        modelBuilder.Entity<PrivateSpeakingAvailabilityOverride>().HasIndex(x => new { x.TutorProfileId, x.Date });
+        modelBuilder.Entity<PrivateSpeakingBooking>().HasIndex(x => new { x.TutorProfileId, x.SessionStartUtc });
+        modelBuilder.Entity<PrivateSpeakingBooking>().HasIndex(x => new { x.LearnerUserId, x.SessionStartUtc });
+        modelBuilder.Entity<PrivateSpeakingBooking>().HasIndex(x => x.Status);
+        modelBuilder.Entity<PrivateSpeakingBooking>().HasIndex(x => x.IdempotencyKey).IsUnique();
+        modelBuilder.Entity<PrivateSpeakingBooking>().HasIndex(x => x.StripeCheckoutSessionId);
+        modelBuilder.Entity<PrivateSpeakingAuditLog>().HasIndex(x => x.BookingId);
+        modelBuilder.Entity<PrivateSpeakingAuditLog>().HasIndex(x => x.CreatedAt);
 
         // Social indexes
         modelBuilder.Entity<Certificate>().HasIndex(x => x.UserId);

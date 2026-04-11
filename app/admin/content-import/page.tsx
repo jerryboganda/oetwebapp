@@ -75,7 +75,7 @@ export default function AdminContentImportPage() {
     { key: 'title', header: 'Title', render: (r) => <span className="font-medium text-sm">{r.title}</span> },
     { key: 'subtestCode', header: 'Subtest', render: (r) => <Badge variant="muted">{r.subtestCode}</Badge> },
     { key: 'difficulty', header: 'Difficulty', render: (r) => <Badge variant="muted">{r.difficulty}</Badge> },
-    { key: 'sourceProvenance', header: 'Source', render: (r) => <span className="text-xs text-muted-foreground">{r.sourceProvenance}</span> },
+    { key: 'sourceProvenance', header: 'Source', render: (r) => <span className="text-xs text-muted">{r.sourceProvenance}</span> },
     { key: 'status', header: 'Status', render: (r) => <Badge variant={r.status === 'Published' ? 'default' : 'muted'}>{r.status}</Badge> },
     { key: 'qualityScore', header: 'Quality', render: (r) => <span className="text-xs">{r.qualityScore}</span> },
     {
@@ -111,7 +111,7 @@ export default function AdminContentImportPage() {
               <RefreshCw className="w-4 h-4 mr-1" /> Refresh
             </Button>
           </div>
-          <span className="text-xs text-muted-foreground">{total} item{total !== 1 ? 's' : ''}</span>
+          <span className="text-xs text-muted">{total} item{total !== 1 ? 's' : ''}</span>
         </div>
 
         {importResult && (
@@ -120,7 +120,7 @@ export default function AdminContentImportPage() {
               <Package className="w-4 h-4" />
               <strong>Last Import:</strong> Batch {importResult.batchId}
             </div>
-            <div className="text-muted-foreground">
+            <div className="text-muted">
               Created: {importResult.created} | Failed: {importResult.failed}
               {importResult.errors.length > 0 && (
                 <ul className="mt-1 list-disc list-inside text-destructive">
@@ -136,7 +136,7 @@ export default function AdminContentImportPage() {
 
         <AsyncStateWrapper status={pageStatus} errorMessage="Failed to load inventory.">
           {pageStatus === 'empty' ? (
-            <EmptyState icon={<Package className="w-8 h-8 text-muted-foreground" />} title="No content items yet" description="Import content using the button above." />
+            <EmptyState icon={<Package className="w-8 h-8 text-muted" />} title="No content items yet" description="Import content using the button above." />
           ) : (
             <DataTable columns={columns} data={items} keyExtractor={(r) => r.id} onRowClick={(r) => window.open(`/admin/content?id=${r.id}`, '_self')} />
           )}
@@ -145,7 +145,7 @@ export default function AdminContentImportPage() {
         {total > PAGE_SIZE && (
           <div className="flex justify-center gap-2 mt-4">
             <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Previous</Button>
-            <span className="text-sm text-muted-foreground self-center">Page {page} of {Math.ceil(total / PAGE_SIZE)}</span>
+            <span className="text-sm text-muted self-center">Page {page} of {Math.ceil(total / PAGE_SIZE)}</span>
             <Button variant="outline" size="sm" disabled={page >= Math.ceil(total / PAGE_SIZE)} onClick={() => setPage(p => p + 1)}>Next</Button>
           </div>
         )}

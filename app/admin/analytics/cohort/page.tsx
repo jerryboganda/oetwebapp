@@ -34,10 +34,10 @@ export default function CohortAnalysisPage() {
   useEffect(() => { analytics.track('admin_cohort_analysis_viewed'); load('profession'); }, []);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background-light">
       <div className="max-w-5xl mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold mb-1">Learner Cohort Analysis</h1>
-        <p className="text-muted-foreground mb-6">Compare outcomes across professions and subscription tiers.</p>
+        <p className="text-muted mb-6">Compare outcomes across professions and subscription tiers.</p>
 
         <div className="flex gap-2 mb-6">
           <button onClick={() => load('profession')} className={`px-4 py-2 rounded-lg text-sm font-medium ${groupBy === 'profession' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>By Profession</button>
@@ -46,7 +46,7 @@ export default function CohortAnalysisPage() {
 
         {loading ? <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div> : data ? (
           <MotionSection className="space-y-4">
-            <Card className="p-4"><p className="text-sm text-muted-foreground">Total learners: <strong>{data.totalLearners}</strong> • Grouped by: <strong className="capitalize">{data.groupBy}</strong></p></Card>
+            <Card className="p-4"><p className="text-sm text-muted">Total learners: <strong>{data.totalLearners}</strong> • Grouped by: <strong className="capitalize">{data.groupBy}</strong></p></Card>
             {data.cohorts.map(c => (
               <MotionItem key={c.cohortKey}>
                 <Card className="p-4">
@@ -55,15 +55,15 @@ export default function CohortAnalysisPage() {
                     <Badge variant="outline">{c.learnerCount} learners</Badge>
                   </div>
                   <div className="grid grid-cols-3 gap-4 text-center">
-                    <div><p className="text-lg font-bold">{c.averageScore ?? '--'}</p><p className="text-xs text-muted-foreground">Avg Score</p></div>
-                    <div><p className="text-lg font-bold">{c.evaluationCount}</p><p className="text-xs text-muted-foreground">Evaluations</p></div>
-                    <div><p className="text-lg font-bold">{c.activeLastMonth}</p><p className="text-xs text-muted-foreground">Active (30d)</p></div>
+                    <div><p className="text-lg font-bold">{c.averageScore ?? '--'}</p><p className="text-xs text-muted">Avg Score</p></div>
+                    <div><p className="text-lg font-bold">{c.evaluationCount}</p><p className="text-xs text-muted">Evaluations</p></div>
+                    <div><p className="text-lg font-bold">{c.activeLastMonth}</p><p className="text-xs text-muted">Active (30d)</p></div>
                   </div>
                 </Card>
               </MotionItem>
             ))}
           </MotionSection>
-        ) : <Card className="p-8 text-center text-muted-foreground"><p>No data available.</p></Card>}
+        ) : <Card className="p-8 text-center text-muted"><p>No data available.</p></Card>}
       </div>
     </div>
   );

@@ -60,7 +60,7 @@ export default function AdminDashboardPage() {
                 { icon: BarChart3, label: 'Agreement rate', value: `${dashboard.quality.agreementRate}%` },
               ]}
               aside={(
-                <div className="space-y-4 rounded-2xl border border-gray-200 bg-background-light p-4 shadow-sm">
+                  <div className="space-y-4 rounded-2xl border border-border bg-background-light p-4 shadow-sm">
                   <div>
                     <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Quick Actions</p>
                     <p className="mt-1 text-sm text-muted">Move straight into the admin areas that typically need action first.</p>
@@ -69,10 +69,10 @@ export default function AdminDashboardPage() {
                     <Link href="/admin/review-ops" className={`${quickActionLinkClassName} bg-primary text-white shadow-sm hover:bg-primary/90`}>
                       Open Review Ops
                     </Link>
-                    <Link href="/admin/freeze" className={`${quickActionLinkClassName} border border-gray-300 text-navy hover:bg-gray-50`}>
+                    <Link href="/admin/freeze" className={`${quickActionLinkClassName} border border-border text-navy hover:bg-surface hover:border-border-hover`}>
                       Open Freeze Center
                     </Link>
-                    <Link href="/admin/content" className={`${quickActionLinkClassName} border border-gray-300 text-navy hover:bg-gray-50`}>
+                    <Link href="/admin/content" className={`${quickActionLinkClassName} border border-border text-navy hover:bg-surface hover:border-border-hover`}>
                       Open Content Library
                     </Link>
                   </div>
@@ -95,7 +95,7 @@ export default function AdminDashboardPage() {
               <AdminRoutePanel
                 title="Content Health"
                 description="Surface stale drafts before they become invisible delivery debt."
-                actions={<Link href="/admin/content" className="text-sm font-medium text-blue-600 hover:underline">Open content library</Link>}
+                actions={<Link href="/admin/content" className="text-sm font-medium text-primary hover:text-primary-dark hover:underline">Open content library</Link>}
               >
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div>
@@ -116,7 +116,7 @@ export default function AdminDashboardPage() {
               <AdminRoutePanel
                 title="Review Risk"
                 description="Keep the productive-skill review pipeline honest and visible."
-                actions={<Link href="/admin/review-ops" className="text-sm font-medium text-blue-600 hover:underline">Open review ops</Link>}
+                actions={<Link href="/admin/review-ops" className="text-sm font-medium text-primary hover:text-primary-dark hover:underline">Open review ops</Link>}
               >
                 <div className="grid gap-4 sm:grid-cols-3">
                   <div>
@@ -174,7 +174,7 @@ export default function AdminDashboardPage() {
                   <Link
                     key={link.href}
                     href={link.href}
-                    className="inline-flex items-center justify-between gap-2 rounded-lg border border-gray-300 px-5 py-2 text-sm font-medium text-navy transition-all duration-200 hover:bg-gray-50"
+                    className="inline-flex items-center justify-between gap-2 rounded-lg border border-border px-5 py-2 text-sm font-medium text-navy transition-all duration-200 hover:bg-surface hover:border-border-hover"
                   >
                     {link.label}
                     <ArrowRight className="h-4 w-4" />

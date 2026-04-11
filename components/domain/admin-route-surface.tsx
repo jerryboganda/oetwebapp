@@ -55,7 +55,7 @@ export function AdminRouteSectionHeader({
 }) {
   const hasActions = Boolean(action) || Boolean(actions);
   const aside = hasActions || meta ? (
-    <div className="rounded-2xl border border-gray-200 bg-background-light p-4 shadow-sm">
+    <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
       {hasActions ? (
         <div className="flex flex-wrap items-center gap-2">
           {action}

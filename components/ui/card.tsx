@@ -72,7 +72,7 @@ export function CardContent({ className, children, ...props }: HTMLAttributes<HT
 
 export function CardFooter({ className, children, ...props }: HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn('mt-4 flex items-center gap-3 border-t border-gray-100 pt-4', className)} {...props}>
+    <div className={cn('mt-4 flex items-center gap-3 border-t border-border pt-4', className)} {...props}>
       {children}
     </div>
   );

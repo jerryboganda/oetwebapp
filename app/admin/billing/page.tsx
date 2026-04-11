@@ -1305,7 +1305,7 @@ export default function BillingPage() {
           </div>
           <Textarea label="Entitlements JSON" value={planForm.entitlementsJson} onChange={(event) => setPlanForm((current) => ({ ...current, entitlementsJson: event.target.value }))} />
 
-          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+          <div className="flex justify-end gap-3 border-t border-border pt-4">
             <Button
               variant="outline"
               onClick={() => {
@@ -1380,7 +1380,7 @@ export default function BillingPage() {
           <Input label="Compatible plan codes" value={addOnForm.compatiblePlanCodesText} onChange={(event) => setAddOnForm((current) => ({ ...current, compatiblePlanCodesText: event.target.value }))} hint="Comma-separated codes" />
           <Textarea label="Grant entitlements JSON" value={addOnForm.grantEntitlementsJson} onChange={(event) => setAddOnForm((current) => ({ ...current, grantEntitlementsJson: event.target.value }))} />
 
-          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+          <div className="flex justify-end gap-3 border-t border-border pt-4">
             <Button
               variant="outline"
               onClick={() => {
@@ -1455,7 +1455,7 @@ export default function BillingPage() {
           <Input label="Applicable plan codes" value={couponForm.applicablePlanCodesText} onChange={(event) => setCouponForm((current) => ({ ...current, applicablePlanCodesText: event.target.value }))} hint="Comma-separated codes" />
           <Input label="Applicable add-on codes" value={couponForm.applicableAddOnCodesText} onChange={(event) => setCouponForm((current) => ({ ...current, applicableAddOnCodesText: event.target.value }))} hint="Comma-separated codes" />
 
-          <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+          <div className="flex justify-end gap-3 border-t border-border pt-4">
             <Button
               variant="outline"
               onClick={() => {

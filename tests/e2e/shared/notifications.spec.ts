@@ -69,9 +69,6 @@ test.describe('Notification center coverage', () => {
     await openNotificationCenter(page);
     await expect.poll(async () => await notificationCenterPanel(page).textContent() ?? '').toContain(proof.body);
 
-    await page.getByLabel('Category').selectOption('reviews');
-    await page.getByLabel('Channel').selectOption('in_app');
-
     const notificationButton = notificationItemButton(page, proof);
     await expect(notificationButton).toBeVisible();
     await expect(notificationButton).toContainText(proof.title);
@@ -85,7 +82,7 @@ test.describe('Notification center coverage', () => {
 
     await openNotificationCenter(page);
     const notificationCard = notificationItemButton(page, proof);
-    await expect(notificationCard).toContainText(/read/i);
+    await expect(notificationCard).toHaveAttribute('data-read', 'true');
     await expect(page.getByRole('button', { name: /mark all read/i })).toBeVisible();
 
     expect(proof.processedImmediately).toBeTruthy();
@@ -111,7 +108,7 @@ test.describe('Notification center coverage', () => {
     });
 
     await openNotificationCenter(page);
-    await expect(page.getByRole('heading', { name: /notification center/i })).toBeVisible();
+    await expect(page.getByRole('heading', { name: /^notifications$/i })).toBeVisible();
     await expect.poll(async () => await notificationCenterPanel(page).textContent() ?? '').toContain(message);
 
     expectNoSevereClientIssues(diagnostics, { allowNotificationReconnectNoise: true });

@@ -170,8 +170,8 @@ export default function SchedulePage() {
               title="Schedule controls"
               description="Manage your regular review working hours and the timezone used for SLA calculations."
             />
-            <Card className="border-slate-200 shadow-sm">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-gray-200 p-4">
+            <Card>
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border p-4">
                 <div>
                   <h3 className="font-semibold text-navy">Weekly Availability</h3>
                 </div>
@@ -191,7 +191,7 @@ export default function SchedulePage() {
                   const error = validationErrors[day];
                   return (
                     <div key={day}>
-                      <div className="flex flex-col gap-4 border-b border-gray-100 py-2 last:border-0 md:flex-row md:items-center">
+                        <div className="flex flex-col gap-4 border-b border-border/60 py-2 last:border-0 md:flex-row md:items-center">
                         <div className="w-32">
                           <Checkbox
                             label={day.charAt(0).toUpperCase() + day.slice(1)}

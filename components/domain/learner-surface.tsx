@@ -56,8 +56,8 @@ const accentTokens = {
 const actionVariantStyles = {
   primary: 'bg-primary text-white hover:bg-primary/90 shadow-sm',
   secondary: 'bg-navy text-white hover:bg-navy/90 shadow-sm',
-  outline: 'border border-gray-300 text-navy hover:bg-gray-50',
-  ghost: 'text-navy hover:bg-gray-100',
+  outline: 'border border-border text-navy hover:bg-surface hover:border-border-hover',
+  ghost: 'text-navy hover:bg-lavender/40 dark:hover:bg-white/5',
 } as const;
 
 function renderIcon(icon: ElementType | ReactNode | undefined, className?: string) {
@@ -110,7 +110,7 @@ export function LearnerSurfaceMetaRow({ items, className }: { items?: LearnerSur
   }
 
   return (
-    <div className={cn('flex flex-wrap items-center gap-4 text-sm font-semibold text-gray-500', className)}>
+    <div className={cn('flex flex-wrap items-center gap-4 text-sm font-semibold text-muted', className)}>
       {safeItems.map((item) => {
         const Icon = item.icon;
         return (
@@ -174,7 +174,7 @@ export function LearnerPageHero({
     return (
       <div
         key={`${item.label}-${item.value}`}
-        className="inline-flex min-w-[160px] items-center gap-2 rounded-2xl border border-gray-200 bg-background-light px-3 py-2"
+        className="inline-flex min-w-[160px] items-center gap-2 rounded-2xl border border-border bg-background-light px-3 py-2"
       >
         {HighlightIcon ? (
           <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-xl', palette.icon)}>
@@ -190,7 +190,7 @@ export function LearnerPageHero({
   };
 
   return (
-    <section className="rounded-[24px] border border-gray-200 bg-surface px-5 py-5 shadow-sm sm:px-6 sm:py-6">
+    <section className="rounded-[24px] border border-border bg-surface px-5 py-5 shadow-sm sm:px-6 sm:py-6">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-3 sm:gap-4">

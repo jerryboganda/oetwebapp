@@ -142,7 +142,7 @@ export default function QualityAnalyticsPage() {
         }
       />
 
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
+      <div className="rounded-xl border border-border bg-surface p-4">
         <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ subtest: [], profession: [] })} />
       </div>
 

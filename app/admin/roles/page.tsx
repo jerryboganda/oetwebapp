@@ -137,7 +137,7 @@ export default function AdminRolesPage() {
   /* ── render ────────────────────────────────── */
   if (loading) {
     return (
-      <div className="min-h-screen bg-background">
+      <div className="min-h-screen bg-background-light">
         <div className="max-w-5xl mx-auto px-4 py-8 space-y-4">
           <Skeleton className="h-8 w-64" /><Skeleton className="h-4 w-96" />
           {[1,2,3,4].map(i => <Skeleton key={i} className="h-20" />)}
@@ -147,20 +147,20 @@ export default function AdminRolesPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background-light">
       <div className="max-w-5xl mx-auto px-4 py-8">
 
         {/* header */}
         <div className="mb-8">
           <h1 className="text-2xl font-bold flex items-center gap-2"><Shield className="h-6 w-6" />Admin Roles & Permissions</h1>
-          <p className="text-muted-foreground mt-1">Manage granular access control for admin team members</p>
+          <p className="text-muted mt-1">Manage granular access control for admin team members</p>
         </div>
 
         <div className="grid lg:grid-cols-5 gap-6">
           {/* left — admin list */}
           <div className="lg:col-span-2 space-y-3">
             <div className="relative mb-3">
-              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
               <input
                 type="text"
                 value={search}
@@ -180,15 +180,15 @@ export default function AdminRolesPage() {
                     <div className="flex items-center justify-between">
                       <div className="min-w-0 flex-1">
                         <p className="font-medium text-sm truncate">{admin.name}</p>
-                        <p className="text-xs text-muted-foreground truncate">{admin.email}</p>
+                        <p className="text-xs text-muted truncate">{admin.email}</p>
                       </div>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <ChevronRight className="h-4 w-4 text-muted shrink-0" />
                     </div>
                   </Card>
                 </MotionItem>
               ))}
               {filtered.length === 0 && (
-                <div className="text-center py-8 text-muted-foreground">
+                <div className="text-center py-8 text-muted">
                   <Users className="h-8 w-8 mx-auto mb-2 opacity-30" />
                   <p className="text-sm">No admins found</p>
                 </div>
@@ -199,7 +199,7 @@ export default function AdminRolesPage() {
           {/* right — permissions editor */}
           <div className="lg:col-span-3">
             {!selectedUser && (
-              <div className="flex items-center justify-center h-64 text-muted-foreground">
+              <div className="flex items-center justify-center h-64 text-muted">
                 <div className="text-center">
                   <ShieldCheck className="h-10 w-10 mx-auto mb-3 opacity-30" />
                   <p className="text-sm">Select an admin to manage permissions</p>
@@ -226,7 +226,7 @@ export default function AdminRolesPage() {
                   const perms = Object.entries(PERM_META).filter(([, m]) => m.group === group);
                   return (
                     <Card key={group} className="p-4">
-                      <p className="text-sm font-semibold mb-3 text-muted-foreground uppercase tracking-wider">{group}</p>
+                      <p className="text-sm font-semibold mb-3 text-muted uppercase tracking-wider">{group}</p>
                       <div className="space-y-2">
                         {perms.map(([key, meta]) => {
                           const checked = editPerms.has(key);
@@ -236,14 +236,14 @@ export default function AdminRolesPage() {
                                 type="checkbox"
                                 checked={checked}
                                 onChange={() => togglePerm(key)}
-                                className="mt-1 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary/50"
+                                className="mt-1 h-4 w-4 rounded border-border text-primary focus:ring-primary/50"
                               />
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
                                   <span className="text-sm font-medium">{meta.label}</span>
                                   {checked && <Badge variant="secondary" className="text-[10px]">Granted</Badge>}
                                 </div>
-                                <p className="text-xs text-muted-foreground">{meta.desc}</p>
+                                <p className="text-xs text-muted">{meta.desc}</p>
                               </div>
                             </label>
                           );
@@ -255,9 +255,9 @@ export default function AdminRolesPage() {
 
                 {/* save */}
                 <div className="flex items-center justify-between pt-2">
-                  <p className="text-xs text-muted-foreground">{editPerms.size} permissions selected</p>
+                  <p className="text-xs text-muted">{editPerms.size} permissions selected</p>
                   <div className="flex items-center gap-3">
-                    {saved && <span className="text-xs text-green-600 flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" />Saved</span>}
+                    {saved && <span className="text-xs text-success flex items-center gap-1"><CheckCircle2 className="h-3.5 w-3.5" />Saved</span>}
                     <Button onClick={savePermissions} disabled={saving}>
                       {saving ? 'Saving…' : <><Save className="h-4 w-4 mr-1.5" />Save Permissions</>}
                     </Button>

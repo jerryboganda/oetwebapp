@@ -128,7 +128,13 @@ public enum JobType
     VocabularyDailySet,        // Prepare daily vocabulary set per learner
 
     // ── Phase 4 ──
-    LeaderboardComputation     // Weekly/monthly leaderboard recalculation
+    LeaderboardComputation,    // Weekly/monthly leaderboard recalculation
+
+    // ── Private Speaking Sessions ──
+    PrivateSpeakingZoomCreate,           // Create Zoom meeting after payment confirmation
+    PrivateSpeakingBookingConfirmation,  // Send booking confirmation notifications
+    PrivateSpeakingReminder,             // Session reminder notifications
+    PrivateSpeakingReservationExpiry     // Expire unpaid reservations
 }
 
 public enum ConfidenceBand

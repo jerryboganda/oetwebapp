@@ -174,8 +174,8 @@ export default function PublishRequestsPage() {
         >
           <div className="space-y-4 p-4">
             <div>
-              <p className="text-sm text-neutral-500">Content: <span className="font-mono">{reviewTarget.contentItemId}</span></p>
-              <p className="text-sm text-neutral-500">Requested by: {reviewTarget.requestedByName}</p>
+              <p className="text-sm text-muted">Content: <span className="font-mono">{reviewTarget.contentItemId}</span></p>
+              <p className="text-sm text-muted">Requested by: {reviewTarget.requestedByName}</p>
               {reviewTarget.requestNote && <p className="text-sm mt-2 italic">&ldquo;{reviewTarget.requestNote}&rdquo;</p>}
             </div>
             <Input
@@ -185,7 +185,7 @@ export default function PublishRequestsPage() {
               placeholder="Add a note..."
             />
           </div>
-          <div className="flex justify-end gap-2 pt-4 border-t border-neutral-200 dark:border-neutral-700 px-4 pb-4">
+          <div className="flex justify-end gap-2 pt-4 border-t border-border dark:border-border px-4 pb-4">
             <Button variant="ghost" onClick={() => setReviewTarget(null)}>Cancel</Button>
             <Button variant="destructive" onClick={handleReject} disabled={isMutating}>
               <X className="w-3.5 h-3.5 mr-1" />

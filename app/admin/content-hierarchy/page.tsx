@@ -103,7 +103,7 @@ export default function AdminContentHierarchyPage() {
             <EmptyState
               title="No content hierarchy yet"
               description="Import content or create programs to build your hierarchy."
-              icon={<GitBranch className="w-8 h-8 text-muted-foreground" />}
+              icon={<GitBranch className="w-8 h-8 text-muted" />}
             />
           }
         >

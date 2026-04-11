@@ -103,8 +103,8 @@ export default function CalibrationCenterPage() {
       key: 'alignment',
       header: 'Alignment',
       render: (row) => row.status === 'pending'
-        ? <span className="text-xs text-slate-400">Awaiting submission</span>
-        : <span className="text-sm font-medium text-slate-700">{Math.abs((row.benchmarkScore ?? 0) - (row.reviewerScore ?? 0)) <= 20 ? 'Aligned' : 'Needs review'}</span>,
+        ? <span className="text-xs text-muted">Awaiting submission</span>
+        : <span className="text-sm font-medium text-navy">{Math.abs((row.benchmarkScore ?? 0) - (row.reviewerScore ?? 0)) <= 20 ? 'Aligned' : 'Needs review'}</span>,
     },
     {
       key: 'actions',
@@ -182,7 +182,7 @@ export default function CalibrationCenterPage() {
               title="Open benchmark workspaces"
               description="Use learner-style cards and a decision-first table to inspect exemplar materials and submit criterion-level scores."
             />
-            <Card className="space-y-4 border-slate-200 shadow-sm">
+            <Card className="space-y-4">
               <CardContent className="space-y-4 p-5">
                 <FilterBar
                   groups={FILTER_GROUPS}
@@ -222,23 +222,23 @@ export default function CalibrationCenterPage() {
               title="Calibration activity"
               description="Operational notes, completed calibrations, and system-assigned benchmark activity."
             />
-            <Card className="overflow-hidden border-slate-200 shadow-sm">
+            <Card className="overflow-hidden">
               <CardContent className="p-5">
                 {notes.length === 0 ? (
-                  <p className="text-sm italic text-slate-500">No calibration activity recorded yet.</p>
+                  <p className="text-sm italic text-muted">No calibration activity recorded yet.</p>
                 ) : (
-                  <ol className="relative ml-2 space-y-4 border-l border-slate-200">
+                  <ol className="relative ml-2 space-y-4 border-l border-border">
                     {notes.map((note) => (
                       <li key={note.id} className="ml-4">
-                        <span className={`absolute -left-2 h-4 w-4 rounded-full border-2 border-white ${note.type === 'completed' ? 'bg-emerald-400' : note.type === 'comment' ? 'bg-blue-400' : 'bg-slate-300'}`} />
+                        <span className={`absolute -left-2 h-4 w-4 rounded-full border-2 border-white ${note.type === 'completed' ? 'bg-emerald-400' : note.type === 'comment' ? 'bg-blue-400' : 'bg-border'}`} />
                         <div className="mb-0.5 flex items-center gap-2">
                           {note.type === 'completed' ? <CheckCircle className="h-3.5 w-3.5 text-emerald-600" /> : null}
                           {note.type === 'comment' ? <MessageSquare className="h-3.5 w-3.5 text-blue-600" /> : null}
-                          {note.type === 'system' ? <Settings className="h-3.5 w-3.5 text-slate-500" /> : null}
-                          <time className="text-xs text-slate-400">{new Date(note.createdAt).toLocaleString()}</time>
+                          {note.type === 'system' ? <Settings className="h-3.5 w-3.5 text-muted" /> : null}
+                          <time className="text-xs text-muted">{new Date(note.createdAt).toLocaleString()}</time>
                         </div>
                         <div className="flex items-start justify-between gap-3">
-                          <p className="text-sm text-slate-800">{note.message}</p>
+                          <p className="text-sm text-navy">{note.message}</p>
                           {note.caseId ? (
                             <button
                               type="button"

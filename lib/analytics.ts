@@ -147,6 +147,9 @@ const TRACKED_EVENTS = [
   // Phrase suggestions events
   'phrase_suggestion_resolved',
   'phrase_suggestions_check',
+  // Private speaking events
+  'private_speaking_booking_created',
+  'private_speaking_page_viewed',
   // Quick session events
   'quick_session_completed',
   'quick_session_started',

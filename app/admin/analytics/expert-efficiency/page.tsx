@@ -20,7 +20,7 @@ async function apiRequest<T = unknown>(path: string, init?: RequestInit): Promis
   return res.json();
 }
 
-const EFF_BADGE: Record<string, { label: string; color: string }> = { high: { label: 'High', color: 'bg-emerald-100 text-emerald-700' }, medium: { label: 'Medium', color: 'bg-amber-100 text-amber-700' }, low: { label: 'Low', color: 'bg-red-100 text-red-700' }, 'no-data': { label: 'No Data', color: 'bg-muted text-muted-foreground' } };
+const EFF_BADGE: Record<string, { label: string; color: string }> = { high: { label: 'High', color: 'bg-emerald-100 text-emerald-700' }, medium: { label: 'Medium', color: 'bg-amber-100 text-amber-700' }, low: { label: 'Low', color: 'bg-danger/15 text-danger' }, 'no-data': { label: 'No Data', color: 'bg-muted text-muted' } };
 
 export default function ExpertEfficiencyPage() {
   const [data, setData] = useState<EfficiencyData | null>(null);
@@ -36,10 +36,10 @@ export default function ExpertEfficiencyPage() {
   useEffect(() => { analytics.track('admin_expert_efficiency_viewed'); load(30); }, []);
 
   return (
-    <div className="min-h-screen bg-background">
+    <div className="min-h-screen bg-background-light">
       <div className="max-w-5xl mx-auto px-4 py-8">
         <h1 className="text-2xl font-bold mb-1">Expert Efficiency Report</h1>
-        <p className="text-muted-foreground mb-6">Review throughput, quality alignment, and operational efficiency per expert.</p>
+        <p className="text-muted mb-6">Review throughput, quality alignment, and operational efficiency per expert.</p>
 
         <div className="flex gap-2 mb-6">
           {[7, 14, 30, 60, 90].map(d => (
@@ -51,10 +51,10 @@ export default function ExpertEfficiencyPage() {
           <MotionSection className="space-y-6">
             {/* Summary */}
             <div className="grid grid-cols-4 gap-4">
-              <Card className="p-4 text-center"><p className="text-2xl font-bold">{data.summary.totalExperts}</p><p className="text-xs text-muted-foreground">Total Experts</p></Card>
-              <Card className="p-4 text-center"><p className="text-2xl font-bold">{data.summary.activeExperts}</p><p className="text-xs text-muted-foreground">Active</p></Card>
-              <Card className="p-4 text-center"><p className="text-2xl font-bold">{data.summary.totalReviewsCompleted}</p><p className="text-xs text-muted-foreground">Reviews Done</p></Card>
-              <Card className="p-4 text-center"><p className="text-2xl font-bold">{data.summary.averageReviewsPerExpertPerDay}</p><p className="text-xs text-muted-foreground">Avg/Expert/Day</p></Card>
+              <Card className="p-4 text-center"><p className="text-2xl font-bold">{data.summary.totalExperts}</p><p className="text-xs text-muted">Total Experts</p></Card>
+              <Card className="p-4 text-center"><p className="text-2xl font-bold">{data.summary.activeExperts}</p><p className="text-xs text-muted">Active</p></Card>
+              <Card className="p-4 text-center"><p className="text-2xl font-bold">{data.summary.totalReviewsCompleted}</p><p className="text-xs text-muted">Reviews Done</p></Card>
+              <Card className="p-4 text-center"><p className="text-2xl font-bold">{data.summary.averageReviewsPerExpertPerDay}</p><p className="text-xs text-muted">Avg/Expert/Day</p></Card>
             </div>
 
             {/* Expert list */}
@@ -65,15 +65,15 @@ export default function ExpertEfficiencyPage() {
                   <MotionItem key={e.expertId}>
                     <Card className="p-4">
                       <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2"><UserCheck className="w-4 h-4 text-blue-500" /><h3 className="font-semibold">{e.expertName}</h3></div>
+                        <div className="flex items-center gap-2"><UserCheck className="w-4 h-4 text-primary" /><h3 className="font-semibold">{e.expertName}</h3></div>
                         <Badge className={eff.color}>{eff.label} Efficiency</Badge>
                       </div>
                       <div className="grid grid-cols-5 gap-3 text-center text-sm">
-                        <div><p className="font-bold">{e.assignmentsReceived}</p><p className="text-[10px] text-muted-foreground">Assigned</p></div>
-                        <div><p className="font-bold">{e.reviewsCompleted}</p><p className="text-[10px] text-muted-foreground">Completed</p></div>
-                        <div><p className="font-bold">{e.averageReviewTimeMinutes ?? '--'}m</p><p className="text-[10px] text-muted-foreground">Avg Time</p></div>
-                        <div><p className="font-bold">{e.reviewsPerDay}/day</p><p className="text-[10px] text-muted-foreground">Throughput</p></div>
-                        <div><p className="font-bold">{e.aiAlignmentScore ?? '--'}</p><p className="text-[10px] text-muted-foreground">AI Align</p></div>
+                        <div><p className="font-bold">{e.assignmentsReceived}</p><p className="text-[10px] text-muted">Assigned</p></div>
+                        <div><p className="font-bold">{e.reviewsCompleted}</p><p className="text-[10px] text-muted">Completed</p></div>
+                        <div><p className="font-bold">{e.averageReviewTimeMinutes ?? '--'}m</p><p className="text-[10px] text-muted">Avg Time</p></div>
+                        <div><p className="font-bold">{e.reviewsPerDay}/day</p><p className="text-[10px] text-muted">Throughput</p></div>
+                        <div><p className="font-bold">{e.aiAlignmentScore ?? '--'}</p><p className="text-[10px] text-muted">AI Align</p></div>
                       </div>
                     </Card>
                   </MotionItem>
@@ -81,7 +81,7 @@ export default function ExpertEfficiencyPage() {
               })}
             </div>
           </MotionSection>
-        ) : <Card className="p-8 text-center text-muted-foreground"><p>No data available.</p></Card>}
+        ) : <Card className="p-8 text-center text-muted"><p>No data available.</p></Card>}
       </div>
     </div>
   );

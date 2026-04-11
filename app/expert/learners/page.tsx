@@ -124,11 +124,11 @@ export default function LearnersIndexPage() {
               title="Narrow learner scope"
               description="Use the filters below to narrow your learner context without leaving expert scope."
             />
-            <Card className="border-slate-200 shadow-sm">
+            <Card>
               <CardContent className="space-y-4 p-5">
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-[1.2fr_0.7fr_0.7fr_0.8fr]">
                   <label className="relative block">
-                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                    <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
                     <input
                       value={search}
                       onChange={(event) => {
@@ -136,7 +136,7 @@ export default function LearnersIndexPage() {
                         setPage(1);
                       }}
                       placeholder="Search learner or review id"
-                      className="w-full rounded-xl border border-gray-200 bg-white py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/10"
+                      className="w-full rounded-xl border border-border bg-surface py-2.5 pl-9 pr-3 text-sm outline-none transition focus:border-primary/40 focus:ring-2 focus:ring-primary/20"
                     />
                   </label>
                   <Select
@@ -167,7 +167,7 @@ export default function LearnersIndexPage() {
                     aria-label="Filter learners by review relevance"
                   />
                 </div>
-                <div className="flex items-center justify-between gap-3 text-xs text-slate-500">
+                <div className="flex items-center justify-between gap-3 text-xs text-muted">
                   <span>{directory ? `${directory.totalCount} learner${directory.totalCount === 1 ? '' : 's'} in scope.` : 'Loading learner scope.'}</span>
                   <Button
                     variant="ghost"
@@ -221,7 +221,7 @@ export default function LearnersIndexPage() {
             </div>
 
             {(directory?.totalCount ?? 0) > (directory?.pageSize ?? 0) ? (
-              <div className="flex items-center justify-between gap-3 pt-2 text-sm text-slate-500">
+              <div className="flex items-center justify-between gap-3 pt-2 text-sm text-muted">
                 <span>
                   Page {directory?.page ?? 1} of {Math.max(1, Math.ceil((directory?.totalCount ?? 1) / (directory?.pageSize ?? 1)))}
                 </span>

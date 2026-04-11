@@ -195,12 +195,12 @@ export default function AdminContentGenerationPage() {
     <AdminDashboardShell>
       <div className="max-w-5xl mx-auto">
         <div className="flex items-center gap-3 mb-6">
-          <div className="p-2.5 bg-indigo-100 dark:bg-indigo-900/30 rounded-xl">
-            <Wand2 className="w-6 h-6 text-indigo-600 dark:text-indigo-400" />
+          <div className="p-2.5 bg-lavender dark:bg-primary/15 rounded-xl">
+            <Wand2 className="w-6 h-6 text-primary dark:text-primary" />
           </div>
           <div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">AI Content Generation</h1>
-            <p className="text-sm text-gray-500">Generate learning content using AI for the OET platform</p>
+            <h1 className="text-2xl font-bold text-navy dark:text-navy">AI Content Generation</h1>
+            <p className="text-sm text-muted">Generate learning content using AI for the OET platform</p>
           </div>
         </div>
 
@@ -208,15 +208,15 @@ export default function AdminContentGenerationPage() {
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Form */}
-          <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 p-6">
-            <h2 className="font-semibold text-gray-900 dark:text-white mb-4">Generation Parameters</h2>
+          <div className="bg-surface dark:bg-surface rounded-2xl border border-border dark:border-border p-6">
+            <h2 className="font-semibold text-navy dark:text-navy mb-4">Generation Parameters</h2>
             <form onSubmit={handleGenerate} className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Content Type</label>
+                <label className="block text-sm font-medium text-navy dark:text-navy mb-1.5">Content Type</label>
                 <select
                   value={form.contentType}
                   onChange={e => setForm(p => ({ ...p, contentType: e.target.value as GenerationRequest['contentType'] }))}
-                  className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  className="w-full px-3 py-2.5 border border-border dark:border-border rounded-xl bg-surface dark:bg-surface text-navy dark:text-muted text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 >
                   {CONTENT_TYPES.map(ct => <option key={ct.value} value={ct.value}>{ct.label}</option>)}
                 </select>
@@ -224,11 +224,11 @@ export default function AdminContentGenerationPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Exam</label>
+                  <label className="block text-sm font-medium text-navy dark:text-navy mb-1.5">Exam</label>
                   <select
                     value={form.examTypeCode}
                     onChange={e => setForm(p => ({ ...p, examTypeCode: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 text-sm"
+                    className="w-full px-3 py-2 border border-border dark:border-border rounded-xl bg-surface dark:bg-surface text-navy dark:text-muted text-sm"
                   >
                     <option value="oet">OET</option>
                     <option value="ielts">IELTS</option>
@@ -236,11 +236,11 @@ export default function AdminContentGenerationPage() {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Subtest</label>
+                  <label className="block text-sm font-medium text-navy dark:text-navy mb-1.5">Subtest</label>
                   <select
                     value={form.subtestCode}
                     onChange={e => setForm(p => ({ ...p, subtestCode: e.target.value }))}
-                    className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 text-sm"
+                    className="w-full px-3 py-2 border border-border dark:border-border rounded-xl bg-surface dark:bg-surface text-navy dark:text-muted text-sm"
                   >
                     <option value="writing">Writing</option>
                     <option value="speaking">Speaking</option>
@@ -252,11 +252,11 @@ export default function AdminContentGenerationPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Difficulty</label>
+                <label className="block text-sm font-medium text-navy dark:text-navy mb-1.5">Difficulty</label>
                 <select
                   value={form.difficulty}
                   onChange={e => setForm(p => ({ ...p, difficulty: e.target.value }))}
-                  className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 text-sm"
+                  className="w-full px-3 py-2 border border-border dark:border-border rounded-xl bg-surface dark:bg-surface text-navy dark:text-muted text-sm"
                 >
                   <option value="beginner">Beginner</option>
                   <option value="intermediate">Intermediate</option>
@@ -265,32 +265,32 @@ export default function AdminContentGenerationPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Topic / Prompt</label>
+                <label className="block text-sm font-medium text-navy dark:text-navy mb-1.5">Topic / Prompt</label>
                 <input
                   type="text"
                   value={form.topic}
                   onChange={e => setForm(p => ({ ...p, topic: e.target.value }))}
                   required
                   placeholder="e.g. Passive voice in clinical reports"
-                  className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  className="w-full px-3 py-2.5 border border-border dark:border-border rounded-xl bg-surface dark:bg-surface text-navy dark:text-muted text-sm focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1.5">Additional Context</label>
+                <label className="block text-sm font-medium text-navy dark:text-navy mb-1.5">Additional Context</label>
                 <textarea
                   value={form.additionalContext}
                   onChange={e => setForm(p => ({ ...p, additionalContext: e.target.value }))}
                   rows={3}
                   placeholder="Any additional requirements or context..."
-                  className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-xl bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                  className="w-full px-3 py-2.5 border border-border dark:border-border rounded-xl bg-surface dark:bg-surface text-navy dark:text-muted text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
                 />
               </div>
 
               <button
                 type="submit"
                 disabled={submitting || !form.topic.trim()}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-semibold text-sm disabled:opacity-50 transition-colors"
+                className="w-full flex items-center justify-center gap-2 py-3 bg-primary hover:bg-primary-dark text-white rounded-xl font-semibold text-sm disabled:opacity-50 transition-colors"
               >
                 {submitting ? (
                   <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>
@@ -305,20 +305,20 @@ export default function AdminContentGenerationPage() {
           <div>
             <div className="mb-4 flex items-center justify-between gap-3">
               <div>
-                <h2 className="font-semibold text-gray-900 dark:text-white">Generation History</h2>
-                <p className="text-xs text-gray-500">{jobsTotal.toLocaleString()} queued jobs in the live admin catalogue.</p>
+                <h2 className="font-semibold text-navy dark:text-navy">Generation History</h2>
+                <p className="text-xs text-muted">{jobsTotal.toLocaleString()} queued jobs in the live admin catalogue.</p>
               </div>
               <button
                 type="button"
                 onClick={() => void loadJobs()}
-                className="inline-flex items-center gap-2 rounded-xl border border-gray-200 bg-white px-3 py-2 text-xs font-semibold text-gray-700 transition-colors hover:border-indigo-300 hover:text-indigo-700 dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
+                className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-xs font-semibold text-navy transition-colors hover:border-primary/40 hover:text-primary-dark dark:border-border dark:bg-surface dark:text-muted"
               >
                 <RefreshCw className={`h-3.5 w-3.5 ${loadingJobs ? 'animate-spin' : ''}`} />
                 Refresh jobs
               </button>
             </div>
             {results.length === 0 ? (
-              <div className="bg-gray-50 dark:bg-gray-900 rounded-2xl border border-dashed border-gray-300 dark:border-gray-700 p-8 text-center text-gray-400">
+              <div className="bg-background-light dark:bg-surface rounded-2xl border border-dashed border-border dark:border-border p-8 text-center text-muted">
                 <Wand2 className="w-8 h-8 mx-auto mb-2 opacity-40" />
                 <p className="text-sm">Queued generation jobs will appear here</p>
               </div>
@@ -327,18 +327,18 @@ export default function AdminContentGenerationPage() {
                 {results.map((result) => (
                   <MotionItem
                     key={result.id}
-                    className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4"
+                    className="bg-surface dark:bg-surface rounded-xl border border-border dark:border-border p-4"
                   >
                     <div className="flex items-start gap-3 mb-2">
                       <div className="flex-shrink-0 mt-0.5">
-                        {result.status === 'processing' && <Loader2 className="w-4 h-4 text-indigo-500 animate-spin" />}
+                        {result.status === 'processing' && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
                         {result.status === 'done' && <CheckCircle2 className="w-4 h-4 text-green-500" />}
-                        {result.status === 'error' && <AlertCircle className="w-4 h-4 text-red-500" />}
+                        {result.status === 'error' && <AlertCircle className="w-4 h-4 text-danger" />}
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm text-gray-900 dark:text-white truncate">{result.title}</div>
-                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-gray-400">
-                          <span className="rounded-full bg-gray-100 px-2 py-0.5 font-semibold text-gray-600 dark:bg-gray-700 dark:text-gray-300">
+                        <div className="font-medium text-sm text-navy dark:text-navy truncate">{result.title}</div>
+                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
+                          <span className="rounded-full bg-lavender/30 px-2 py-0.5 font-semibold text-muted dark:bg-surface dark:text-navy">
                             {prettyContentType(result.contentType)}
                           </span>
                           <span>{result.summary}</span>
@@ -346,13 +346,13 @@ export default function AdminContentGenerationPage() {
                             <span className="inline-flex items-center gap-1"><Clock3 className="h-3 w-3" /> {new Date(result.createdAt).toLocaleString()}</span>
                           )}
                         </div>
-                        {result.error && <div className="text-xs text-red-500 mt-1">{result.error}</div>}
+                        {result.error && <div className="text-xs text-danger mt-1">{result.error}</div>}
                       </div>
                       <div className="flex flex-shrink-0 items-center gap-1.5">
                         <button
                           type="button"
                           onClick={() => void inspectJob(result.id)}
-                          className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-indigo-600 dark:hover:bg-gray-700"
+                          className="rounded-lg p-1.5 text-muted transition-colors hover:bg-lavender/40 hover:text-primary dark:hover:bg-surface"
                           title="Refresh job details"
                         >
                           <FileJson2 className="w-4 h-4" />
@@ -361,7 +361,7 @@ export default function AdminContentGenerationPage() {
                           <button
                             type="button"
                             onClick={() => copyToClipboard(result.previewJson, result.id)}
-                            className="rounded-lg p-1.5 text-gray-400 transition-colors hover:bg-gray-100 hover:text-indigo-600 dark:hover:bg-gray-700"
+                            className="rounded-lg p-1.5 text-muted transition-colors hover:bg-lavender/40 hover:text-primary dark:hover:bg-surface"
                             title="Copy JSON"
                           >
                             {copied === result.id ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
@@ -370,7 +370,7 @@ export default function AdminContentGenerationPage() {
                       </div>
                     </div>
                     {result.previewJson && (
-                      <pre className="text-xs bg-gray-50 dark:bg-gray-900 rounded-lg p-3 overflow-x-auto max-h-48 text-gray-700 dark:text-gray-300">
+                      <pre className="text-xs bg-background-light dark:bg-surface rounded-lg p-3 overflow-x-auto max-h-48 text-navy dark:text-navy">
                         {result.previewJson}
                       </pre>
                     )}
