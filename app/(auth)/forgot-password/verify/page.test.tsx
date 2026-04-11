@@ -1,33 +1,13 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-
-const { mockGet } = vi.hoisted(() => ({
-  mockGet: vi.fn(),
-}));
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    replace: vi.fn(),
-    push: vi.fn(),
-  }),
-  useSearchParams: () => ({
-    get: mockGet,
-  }),
-}));
+import { screen } from '@testing-library/react';
 
 import ForgotPasswordVerifyPage from './page';
+import { renderWithRouter } from '@/tests/test-utils';
 
 describe('ForgotPasswordVerifyPage', () => {
   it('renders the reset-code verification step', () => {
-    mockGet.mockImplementation((key: string) => {
-      if (key === 'email') {
-        return 'learner@oet-prep.dev';
-      }
-
-      return null;
+    renderWithRouter(<ForgotPasswordVerifyPage />, {
+      searchParams: new URLSearchParams({ email: 'learner@oet-prep.dev' }),
     });
-
-    render(<ForgotPasswordVerifyPage />);
 
     expect(screen.getByRole('heading', { name: /check your email/i })).toBeInTheDocument();
     expect(screen.getByText(/learner@oet-prep\.dev/i)).toBeInTheDocument();

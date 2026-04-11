@@ -1,6 +1,4 @@
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { screen } from '@testing-library/react';
 const {
   mockFetchBilling,
   mockFetchBillingChangePreview,
@@ -30,10 +28,6 @@ vi.mock('motion/react', () => ({
   },
 }));
 
-vi.mock('next/navigation', () => ({
-  useSearchParams: () => new URLSearchParams(''),
-}));
-
 vi.mock('@/components/layout', () => ({
   LearnerDashboardShell: ({ children, workspaceClassName }: { children: React.ReactNode; workspaceClassName?: string }) => (
     <div data-testid="learner-dashboard-shell" data-workspace-class={workspaceClassName}>{children}</div>
@@ -60,6 +54,7 @@ vi.mock('@/lib/api', () => ({
 }));
 
 import BillingPage from './page';
+import { renderWithRouter } from '@/tests/test-utils';
 
 describe('Billing page', () => {
   beforeEach(() => {
@@ -165,7 +160,7 @@ describe('Billing page', () => {
   });
 
   it('renders inside the shared learner dashboard shell', async () => {
-    render(<BillingPage />);
+    renderWithRouter(<BillingPage />);
 
     expect(await screen.findByText('Manage subscriptions without billing surprises')).toBeInTheDocument();
     expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();

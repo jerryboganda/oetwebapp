@@ -1,7 +1,5 @@
 import { createContext } from 'react';
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-
+import { screen } from '@testing-library/react';
 const authProviderSpy = vi.fn(({ children }: { children: React.ReactNode }) => <div data-testid="auth-provider">{children}</div>);
 const authGuardSpy = vi.fn(({ children }: { children: React.ReactNode }) => <div data-testid="auth-guard">{children}</div>);
 const topNavSpy = vi.fn(({ children }: { children?: React.ReactNode }) => <div data-testid="top-nav">{children}</div>);
@@ -20,11 +18,6 @@ vi.mock('@/components/auth/auth-guard', () => ({
   AuthGuard: (props: { children: React.ReactNode; requiredRole?: 'learner' | 'expert' | 'admin' }) => authGuardSpy(props),
 }));
 
-vi.mock('next/navigation', () => ({
-  usePathname: () => '/',
-  useRouter: () => ({ push: vi.fn(), replace: vi.fn(), back: vi.fn(), refresh: vi.fn() }),
-}));
-
 vi.mock('../top-nav', () => ({
   TopNav: (props: { children?: React.ReactNode }) => topNavSpy(props),
 }));
@@ -35,10 +28,11 @@ vi.mock('../sidebar', () => ({
 }));
 
 import { AppShell } from '../app-shell';
+import { renderWithRouter } from '@/tests/test-utils';
 
 describe('AppShell', () => {
   it('wraps protected shells in AuthProvider and forwards requiredRole to AuthGuard', () => {
-    render(
+    renderWithRouter(
       <AppShell
         requiredRole="admin"
         mobileMenuSections={[

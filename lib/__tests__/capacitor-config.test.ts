@@ -1,5 +1,3 @@
-import { describe, expect, it } from 'vitest';
-
 import { requireCapacitorAppUrl, resolveCapacitorAppUrl } from '@/lib/mobile/capacitor-config';
 
 describe('capacitor-config', () => {

@@ -1,4 +1,3 @@
-import { describe, expect, it } from 'vitest';
 import { createLearnerMetaLabel, sanitizeLearnerSurfaceMetaItems } from '../learner-surface';
 
 describe('sanitizeLearnerSurfaceMetaItems', () => {

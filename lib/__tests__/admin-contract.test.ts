@@ -1,7 +1,5 @@
 import { readFileSync, readdirSync, statSync } from 'node:fs';
 import { join } from 'node:path';
-import { describe, expect, it } from 'vitest';
-
 function collectFiles(directory: string): string[] {
   return readdirSync(directory).flatMap((entry) => {
     const fullPath = join(directory, entry);

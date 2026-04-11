@@ -1,29 +1,7 @@
-import { render, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { waitFor } from '@testing-library/react';
 const { mockReplace, mockExchangeExternalAuth } = vi.hoisted(() => ({
   mockReplace: vi.fn(),
   mockExchangeExternalAuth: vi.fn(),
-}));
-
-vi.mock('next/navigation', () => ({
-  useParams: () => ({ provider: 'google' }),
-  useRouter: () => ({
-    replace: mockReplace,
-  }),
-  useSearchParams: () => ({
-    get: (key: string) => {
-      if (key === 'token') {
-        return 'exchange-token-1';
-      }
-
-      if (key === 'next') {
-        return '/expert/queue?assignment=assigned';
-      }
-
-      return null;
-    },
-  }),
 }));
 
 vi.mock('@/lib/auth-client', () => ({
@@ -35,6 +13,7 @@ vi.mock('@/components/auth/auth-screen-shell', () => ({
 }));
 
 import ExternalAuthCallbackPage from './page';
+import { renderWithRouter } from '@/tests/test-utils';
 
 describe('ExternalAuthCallbackPage', () => {
   beforeEach(() => {
@@ -65,7 +44,11 @@ describe('ExternalAuthCallbackPage', () => {
       registration: null,
     });
 
-    render(<ExternalAuthCallbackPage />);
+    renderWithRouter(<ExternalAuthCallbackPage />, {
+      router: { replace: mockReplace },
+      params: { provider: 'google' },
+      searchParams: new URLSearchParams({ token: 'oauth-exchange-token', next: '/expert/queue?assignment=assigned' }),
+    });
 
     await waitFor(() => {
       expect(mockReplace).toHaveBeenCalledWith('/expert/queue?assignment=assigned');

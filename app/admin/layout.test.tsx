@@ -1,13 +1,7 @@
 import type { ReactNode } from 'react';
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { screen } from '@testing-library/react';
 const state = vi.hoisted(() => ({
   pathname: '/admin',
-}));
-
-vi.mock('next/navigation', () => ({
-  usePathname: () => state.pathname,
 }));
 
 vi.mock('@/components/auth/privileged-mfa-banner', () => ({
@@ -49,6 +43,7 @@ vi.mock('@/components/layout', () => ({
 }));
 
 import AdminLayout from './layout';
+import { renderWithRouter } from '@/tests/test-utils';
 
 describe('AdminLayout', () => {
   beforeEach(() => {
@@ -56,12 +51,11 @@ describe('AdminLayout', () => {
   });
 
   it('routes standard admin pages through the learner-style admin shell', () => {
-    state.pathname = '/admin/users/user-1';
-
-    render(
+    renderWithRouter(
       <AdminLayout>
         <div>User detail workspace</div>
       </AdminLayout>,
+      { pathname: '/admin/users/user-1' },
     );
 
     expect(screen.getByTestId('admin-dashboard-shell')).toHaveAttribute('data-page-title', 'User Ops');
@@ -70,12 +64,11 @@ describe('AdminLayout', () => {
   });
 
   it('keeps content editor routes on the distraction-free app shell', () => {
-    state.pathname = '/admin/content/content-1';
-
-    render(
+    renderWithRouter(
       <AdminLayout>
         <div>Content editor workspace</div>
       </AdminLayout>,
+      { pathname: '/admin/content/content-1' },
     );
 
     expect(screen.getByTestId('app-shell')).toHaveAttribute('data-page-title', 'Content Workspace');
@@ -85,12 +78,11 @@ describe('AdminLayout', () => {
   });
 
   it('keeps the new content workspace route on the distraction-free app shell', () => {
-    state.pathname = '/admin/content/new';
-
-    render(
+    renderWithRouter(
       <AdminLayout>
         <div>New content workspace</div>
       </AdminLayout>,
+      { pathname: '/admin/content/new' },
     );
 
     expect(screen.getByTestId('app-shell')).toHaveAttribute('data-page-title', 'Content Workspace');
@@ -100,12 +92,11 @@ describe('AdminLayout', () => {
   });
 
   it('maps revision history routes back to the learner-style admin shell title', () => {
-    state.pathname = '/admin/content/content-1/revisions';
-
-    render(
+    renderWithRouter(
       <AdminLayout>
         <div>Revision history workspace</div>
       </AdminLayout>,
+      { pathname: '/admin/content/content-1/revisions' },
     );
 
     expect(screen.getByTestId('admin-dashboard-shell')).toHaveAttribute('data-page-title', 'Revision History');

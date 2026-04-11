@@ -10,7 +10,7 @@ export default defineConfig({
     setupFiles: ['./vitest.setup.ts'],
     server: {
       deps: {
-        inline: [/^@testing-library\/react/, /^react-dom\/test-utils$/],
+        inline: [/^@testing-library\/react/, /^react-dom\/test-utils$/, /^next\//],
       },
     },
     include: ['**/__tests__/**/*.{test,spec}.{ts,tsx}', '**/*.{test,spec}.{ts,tsx}'],

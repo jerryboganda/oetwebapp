@@ -371,9 +371,9 @@ export default function PrivateSpeakingPage() {
                 className="w-full px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors">
                 {bookingInProgress ? 'Processing...' : `Pay ${formatPrice(selectedSlot.priceMinorUnits, selectedSlot.currency)} & Book`}
               </button>
-              <p className="text-xs text-gray-400 text-center mt-2">
-                You'll be redirected to secure checkout. Slot reserved for {config.reservationTimeoutMinutes} minutes.
-              </p>
+                <p className="text-xs text-gray-400 text-center mt-2">
+                  You&apos;ll be redirected to secure checkout. Slot reserved for {config.reservationTimeoutMinutes} minutes.
+                </p>
             </MotionSection>
           )}
         </>

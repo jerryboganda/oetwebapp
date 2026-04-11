@@ -1,6 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { screen } from '@testing-library/react';
+import { renderWithRouter } from '@/tests/test-utils';
 const { mockFetchStudyPlan, mockFetchReadiness, mockFetchUserProfile, mockFetchDashboardHome, mockFetchEngagement, mockTrack, mockPush } = vi.hoisted(() => ({
   mockFetchStudyPlan: vi.fn(),
   mockFetchReadiness: vi.fn(),
@@ -9,12 +8,6 @@ const { mockFetchStudyPlan, mockFetchReadiness, mockFetchUserProfile, mockFetchD
   mockFetchEngagement: vi.fn(),
   mockTrack: vi.fn(),
   mockPush: vi.fn(),
-}));
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: mockPush,
-  }),
 }));
 
 vi.mock('motion/react', () => ({
@@ -122,7 +115,7 @@ describe('Dashboard page', () => {
   });
 
   it('renders through the shared learner dashboard shell', async () => {
-    render(<DashboardPage />);
+    renderWithRouter(<DashboardPage />, { router: { push: mockPush } });
 
     expect(await screen.findByText("Keep today's priorities and exam signals in view")).toBeInTheDocument();
     expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();

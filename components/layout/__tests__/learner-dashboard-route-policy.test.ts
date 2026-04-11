@@ -1,6 +1,5 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { describe, expect, it } from 'vitest';
 import {
   EXCLUDED_IMMERSIVE_LEARNER_PAGE_PATHS,
   INCLUDED_LEARNER_DASHBOARD_PAGE_PATHS,

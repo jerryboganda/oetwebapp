@@ -1,18 +1,7 @@
-import { render, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { waitFor } from '@testing-library/react';
 const { mockReplace, mockUseAuth } = vi.hoisted(() => ({
   mockReplace: vi.fn(),
   mockUseAuth: vi.fn(),
-}));
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    replace: mockReplace,
-  }),
-  useSearchParams: () => ({
-    get: (_key: string) => null,
-  }),
 }));
 
 vi.mock('@/components/auth/sign-in-form', () => ({
@@ -24,6 +13,7 @@ vi.mock('@/contexts/auth-context', () => ({
 }));
 
 import SignInPage from './page';
+import { renderWithRouter } from '@/tests/test-utils';
 
 describe('SignInPage', () => {
   beforeEach(() => {
@@ -42,7 +32,7 @@ describe('SignInPage', () => {
       },
     });
 
-    render(<SignInPage />);
+    renderWithRouter(<SignInPage />, { router: { replace: mockReplace } });
 
     await waitFor(() => {
       expect(mockReplace).toHaveBeenCalledWith('/expert');

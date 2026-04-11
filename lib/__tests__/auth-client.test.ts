@@ -1,5 +1,3 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-
 import type { AuthSession, CurrentUser, OtpChallenge } from '@/lib/types/auth';
 
 const realFetch = global.fetch;

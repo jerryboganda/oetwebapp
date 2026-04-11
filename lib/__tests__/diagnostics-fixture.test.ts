@@ -1,4 +1,3 @@
-import { describe, expect, it } from 'vitest';
 import { isIgnorableRequestFailureDetails } from '@/tests/e2e/fixtures/diagnostics';
 
 describe('isIgnorableRequestFailureDetails', () => {

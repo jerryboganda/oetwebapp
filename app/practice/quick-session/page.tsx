@@ -39,8 +39,8 @@ async function apiRequest<T = unknown>(path: string, init?: RequestInit): Promis
   return res.json();
 }
 
-/* ── mock data generator (until backend endpoint exists) ── */
-function generateMockSession(): SessionConfig {
+/* ── fallback question bank (used when /v1/learner/quick-session is unavailable) ── */
+function generateFallbackSession(): SessionConfig {
   const vocabWords = [
     { prompt: 'The patient presented with acute ___ in the lower abdomen.', options: ['pain', 'pane', 'bane', 'gain'], correctIndex: 0, explanation: '"Pain" is the correct medical term for physical discomfort.' },
     { prompt: 'Select the word that means "difficulty breathing":', options: ['Dysphagia', 'Dyspnoea', 'Dysuria', 'Dystonia'], correctIndex: 1, explanation: 'Dyspnoea refers to difficulty or laboured breathing.' },
@@ -68,6 +68,7 @@ export default function MobileQuickSessionPage() {
   const [revealed, setRevealed] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [usingFallback, setUsingFallback] = useState(false);
 
   /* timer */
   useEffect(() => {
@@ -81,15 +82,27 @@ export default function MobileQuickSessionPage() {
     setLoading(true);
     analytics.track('quick_session_started', { mode });
     try {
-      // Try backend first, fall back to mock
-      const data = await apiRequest<SessionConfig>(`/v1/learner/quick-session?mode=${mode}`).catch(() => generateMockSession());
+      let data: SessionConfig;
+      try {
+        data = await apiRequest<SessionConfig>(`/v1/learner/quick-session?mode=${mode}`);
+        setUsingFallback(false);
+      } catch {
+        data = generateFallbackSession();
+        setUsingFallback(true);
+      }
       setConfig(data);
       setAnswers(new Array(data.questions.length).fill(null));
       setCurrentQ(0);
       setElapsed(0);
       setRevealed(false);
       setStep('session');
-    } catch { setConfig(generateMockSession()); setStep('session'); }
+    } catch {
+      const fallback = generateFallbackSession();
+      setConfig(fallback);
+      setUsingFallback(true);
+      setAnswers(new Array(fallback.questions.length).fill(null));
+      setStep('session');
+    }
     setLoading(false);
   }, []);
 

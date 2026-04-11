@@ -1,7 +1,5 @@
-import type { ReactNode } from 'react';
-import { render, screen } from '@testing-library/react';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-
+﻿import type { ReactNode } from 'react';
+import { screen } from '@testing-library/react';
 const navigation = vi.hoisted(() => ({
   pathname: '/expert',
   searchParams: new URLSearchParams(),
@@ -28,18 +26,6 @@ const api = vi.hoisted(() => ({
   fetchExpertSchedule: vi.fn(),
   saveExpertSchedule: vi.fn(),
   track: vi.fn(),
-}));
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: navigation.push,
-    replace: navigation.replace,
-    back: navigation.back,
-    refresh: navigation.refresh,
-  }),
-  usePathname: () => navigation.pathname,
-  useSearchParams: () => navigation.searchParams,
-  useParams: () => navigation.params,
 }));
 
 vi.mock('recharts', () => ({
@@ -83,6 +69,16 @@ import LearnersIndexPage from './learners/page';
 import PerformanceMetricsPage from './metrics/page';
 import ReviewQueuePage from './queue/page';
 import SchedulePage from './schedule/page';
+import { renderWithRouter } from '@/tests/test-utils';
+
+function renderPage(ui: React.ReactElement) {
+  return renderWithRouter(ui, {
+    pathname: navigation.pathname,
+    searchParams: navigation.searchParams,
+    params: navigation.params,
+    router: { push: navigation.push, replace: navigation.replace, back: navigation.back, refresh: navigation.refresh },
+  });
+}
 
 beforeAll(() => {
   class ResizeObserverMock {
@@ -154,7 +150,7 @@ describe('Expert Non-Review Pages', () => {
       lastUpdatedAt: '2026-04-01T09:00:00.000Z',
     });
 
-    render(<ReviewQueuePage />);
+    renderPage(<ReviewQueuePage />);
 
     expect(await screen.findByRole('heading', { name: /^review queue$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /find the right work fast/i })).toBeInTheDocument();
@@ -186,7 +182,7 @@ describe('Expert Non-Review Pages', () => {
       },
     ]);
 
-    render(<CalibrationCenterPage />);
+    renderPage(<CalibrationCenterPage />);
 
     expect(await screen.findByRole('heading', { name: /^calibration$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /open benchmark workspaces/i })).toBeInTheDocument();
@@ -213,7 +209,7 @@ describe('Expert Non-Review Pages', () => {
       existingSubmission: null,
     });
 
-    render(<CalibrationCaseWorkspacePage />);
+    renderPage(<CalibrationCaseWorkspacePage />);
 
     expect(await screen.findByRole('heading', { name: /writing benchmark 1/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /back to calibration/i })).toBeInTheDocument();
@@ -252,7 +248,7 @@ describe('Expert Non-Review Pages', () => {
       lastUpdatedAt: '2026-04-01T09:15:00.000Z',
     });
 
-    render(<LearnersIndexPage />);
+    renderPage(<LearnersIndexPage />);
 
     expect(await screen.findByRole('heading', { name: /assigned learners/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /learner cards/i })).toBeInTheDocument();
@@ -293,7 +289,7 @@ describe('Expert Non-Review Pages', () => {
       priorReviews: [],
     });
 
-    render(<AssignedLearnerPage />);
+    renderPage(<AssignedLearnerPage />);
 
     expect(await screen.findByRole('heading', { name: /dr farah ali/i })).toBeInTheDocument();
     expect(screen.getByText(/privacy notice/i)).toBeInTheDocument();
@@ -314,7 +310,7 @@ describe('Expert Non-Review Pages', () => {
       generatedAt: '2026-04-01T09:30:00.000Z',
     });
 
-    render(<PerformanceMetricsPage />);
+    renderPage(<PerformanceMetricsPage />);
 
     expect(await screen.findByRole('heading', { name: /dashboard signals/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /operational metrics/i })).toBeInTheDocument();
@@ -339,7 +335,7 @@ describe('Expert Non-Review Pages', () => {
     });
     api.saveExpertSchedule.mockResolvedValue(null);
 
-    render(<SchedulePage />);
+    renderPage(<SchedulePage />);
 
     expect(await screen.findByRole('heading', { name: /schedule \/ availability/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /schedule controls/i })).toBeInTheDocument();

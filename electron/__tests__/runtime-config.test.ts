@@ -1,8 +1,6 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, describe, expect, it, vi } from 'vitest';
-
 const runtimeConfig = require('../runtime-config.cjs') as {
   RUNTIME_CONFIG_FILE: string;
   createDesktopRuntimeConfig: (environment?: NodeJS.ProcessEnv, options?: { allowLoopback?: boolean }) => Record<string, unknown>;

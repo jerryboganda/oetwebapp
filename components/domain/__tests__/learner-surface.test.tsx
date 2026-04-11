@@ -1,5 +1,4 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
 import { Clock, Sparkles } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceMetaRow } from '../learner-surface';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';

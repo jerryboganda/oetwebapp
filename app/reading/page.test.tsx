@@ -1,6 +1,4 @@
 import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
 const { mockFetchReadingHome, mockFetchMockReports, mockTrack, mockUseAuth } = vi.hoisted(() => ({
   mockFetchReadingHome: vi.fn(),
   mockFetchMockReports: vi.fn(),

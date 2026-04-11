@@ -1,6 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-
+import { screen } from '@testing-library/react';
+import { renderWithRouter } from '@/tests/test-utils';
 const appShellSpy = vi.fn(({ children }: { children: React.ReactNode }) => <div data-testid="app-shell">{children}</div>);
 
 vi.mock('../app-shell', () => ({
@@ -11,7 +10,7 @@ import { LearnerDashboardShell } from '../learner-dashboard-shell';
 
 describe('LearnerDashboardShell', () => {
   it('renders the dashboard gutter container inside the learner shell', () => {
-    render(
+    renderWithRouter(
       <LearnerDashboardShell pageTitle="Billing" workspaceClassName="space-y-8">
         <div>Billing Workspace</div>
       </LearnerDashboardShell>,

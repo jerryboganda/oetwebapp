@@ -1,15 +1,4 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: vi.fn(),
-  }),
-  useSearchParams: () => ({
-    get: (_key: string) => null,
-  }),
-}));
-
+import { screen } from '@testing-library/react';
 vi.mock('@/lib/auth-client', () => ({
   fetchSignupCatalog: vi.fn().mockResolvedValue({
     examTypes: [
@@ -44,10 +33,11 @@ vi.mock('@/lib/auth-client', () => ({
 }));
 
 import { RegisterForm } from '../register-form';
+import { renderWithRouter } from '@/tests/test-utils';
 
 describe('RegisterForm', () => {
   it('uses meaningful autocomplete and input attributes on signup fields', async () => {
-    render(<RegisterForm />);
+    renderWithRouter(<RegisterForm />);
 
     const firstNameInput = await screen.findByLabelText(/first name/i);
     const lastNameInput = screen.getByLabelText(/last name/i);

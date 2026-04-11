@@ -24,6 +24,7 @@ import {
   UserCog,
   WifiOff,
 } from 'lucide-react';
+import Link from 'next/link';
 import { motion, useReducedMotion } from 'motion/react';
 import { getMotionDelay, getSurfaceTransition, getSurfaceVariants, prefersReducedMotion } from '@/lib/motion';
 import { useNotificationCenter } from '@/contexts/notification-center-context';
@@ -247,14 +248,14 @@ function NotificationCenterContent({ onNavigate }: { onNavigate?: () => void }) 
             <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
           </button>
           {/* Settings */}
-          <a
+          <Link
             href="/settings/notifications"
-            onClick={(e) => { e.preventDefault(); onNavigate?.(); window.location.assign('/settings/notifications'); }}
+            onClick={() => { onNavigate?.(); }}
             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted/60 transition-colors hover:bg-gray-100 hover:text-navy"
             aria-label="Notification settings"
           >
             <Settings className="h-3.5 w-3.5" />
-          </a>
+          </Link>
         </div>
       </div>
 

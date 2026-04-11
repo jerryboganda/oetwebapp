@@ -1,6 +1,4 @@
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { screen } from '@testing-library/react';
 const { mockFetchMockSession, mockSubmitMockSession, mockTrack, mockPush } = vi.hoisted(() => ({
   mockFetchMockSession: vi.fn(),
   mockSubmitMockSession: vi.fn(),
@@ -8,26 +6,18 @@ const { mockFetchMockSession, mockSubmitMockSession, mockTrack, mockPush } = vi.
   mockPush: vi.fn(),
 }));
 
-vi.mock('next/navigation', () => ({
-  useParams: () => ({ id: 'mock-1' }),
-  useSearchParams: () => ({
-    get: (key: string) => (key === 'section' ? 'reading' : null),
-  }),
-  useRouter: () => ({
-    push: mockPush,
-  }),
-}));
-
 vi.mock('next/link', () => ({
   default: ({ children, href, ...props }: any) => <a href={href} {...props}>{children}</a>,
 }));
 
 vi.mock('motion/react', () => ({
+  AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   motion: {
     div: ({ children, initial: _initial, animate: _animate, transition: _transition, whileHover: _whileHover, whileTap: _whileTap, ...props }: any) => (
       <div {...props}>{children}</div>
     ),
   },
+  useReducedMotion: () => false,
 }));
 
 vi.mock('@/components/layout', () => ({
@@ -52,6 +42,7 @@ vi.mock('@/lib/api', () => ({
 }));
 
 import MockPlayerPage from './page';
+import { renderWithRouter } from '@/tests/test-utils';
 
 describe('Mock player page', () => {
   beforeEach(() => {
@@ -79,7 +70,10 @@ describe('Mock player page', () => {
   });
 
   it('renders the orchestrator route inside the shared learner dashboard shell', async () => {
-    render(<MockPlayerPage />);
+    renderWithRouter(<MockPlayerPage />, {
+      params: { id: 'mock-1' },
+      router: { push: mockPush },
+    });
 
     expect(await screen.findByText('Full OET Mock Test')).toBeInTheDocument();
     expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();

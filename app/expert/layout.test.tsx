@@ -1,13 +1,7 @@
 import type { ReactNode } from 'react';
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { screen } from '@testing-library/react';
 const state = vi.hoisted(() => ({
   pathname: '/expert',
-}));
-
-vi.mock('next/navigation', () => ({
-  usePathname: () => state.pathname,
 }));
 
 vi.mock('@/contexts/auth-context', () => ({
@@ -55,6 +49,7 @@ vi.mock('@/components/layout', () => ({
 }));
 
 import ExpertLayout from './layout';
+import { renderWithRouter } from '@/tests/test-utils';
 
 describe('ExpertLayout', () => {
   beforeEach(() => {
@@ -62,12 +57,11 @@ describe('ExpertLayout', () => {
   });
 
   it('routes non-review expert pages through the learner-style expert shell', () => {
-    state.pathname = '/expert/queue';
-
-    render(
+    renderWithRouter(
       <ExpertLayout>
         <div>Queue workspace</div>
       </ExpertLayout>,
+      { pathname: '/expert/queue' },
     );
 
     expect(screen.getByTestId('expert-dashboard-shell')).toHaveAttribute('data-page-title', 'Review Queue');
@@ -75,12 +69,11 @@ describe('ExpertLayout', () => {
   });
 
   it('keeps expert review workspaces on the distraction-free app shell', () => {
-    state.pathname = '/expert/review/writing/rev-1';
-
-    render(
+    renderWithRouter(
       <ExpertLayout>
         <div>Review workspace</div>
       </ExpertLayout>,
+      { pathname: '/expert/review/writing/rev-1' },
     );
 
     expect(screen.getByTestId('app-shell')).toHaveAttribute('data-page-title', 'Review Workspace');

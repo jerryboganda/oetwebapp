@@ -1,15 +1,16 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { Headphones, Play, Quote, RefreshCw, Volume2 } from 'lucide-react';
+import { Headphones, Quote, RefreshCw, Volume2 } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { AudioPlayerWaveform } from '@/components/domain/audio-player-waveform';
 import { analytics } from '@/lib/analytics';
-import { fetchAuthorizedObjectUrl, fetchSettingsSection, fetchTranscript } from '@/lib/api';
+import { fetchSettingsSection, fetchTranscript } from '@/lib/api';
 import type { MarkerType, SpeakingTranscriptReview, TranscriptMarker } from '@/lib/mock-data';
 
 const markerLabel: Record<MarkerType, string> = {
@@ -25,16 +26,14 @@ export default function SpeakingTranscriptPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
   const resultId = params?.id;
-  const audioRef = useRef<HTMLAudioElement | null>(null);
 
   const [review, setReview] = useState<SpeakingTranscriptReview | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [audioObjectUrl, setAudioObjectUrl] = useState<string | null>(null);
-  const [audioLoading, setAudioLoading] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [lowBandwidthMode, setLowBandwidthMode] = useState(false);
   const [selectedMarker, setSelectedMarker] = useState<TranscriptMarker | null>(null);
+  const [seekToTime, setSeekToTime] = useState<number | null>(null);
 
   useEffect(() => {
     if (!resultId) return;
@@ -66,42 +65,14 @@ export default function SpeakingTranscriptPage() {
     };
   }, [resultId]);
 
-  useEffect(() => {
-    return () => {
-      if (audioObjectUrl) {
-        URL.revokeObjectURL(audioObjectUrl);
-      }
-    };
-  }, [audioObjectUrl]);
-
   const allMarkers = useMemo(
     () => review?.transcript.flatMap((line) => line.markers ?? []) ?? [],
     [review],
   );
 
-  const waveformBars = useMemo(() => {
-    const peaks = review?.waveformPeaks?.length ? review.waveformPeaks : Array.from({ length: 48 }, (_, index) => 18 + ((index * 17) % 52));
-    return peaks.slice(0, 60);
-  }, [review]);
-
-  const loadAudio = useCallback(async () => {
-    if (!review?.audioAvailable || !review.audioUrl || audioObjectUrl) return;
-    setAudioLoading(true);
-    try {
-      const objectUrl = await fetchAuthorizedObjectUrl(review.audioUrl);
-      setAudioObjectUrl(objectUrl);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not load the speaking audio.');
-    } finally {
-      setAudioLoading(false);
-    }
-  }, [audioObjectUrl, review?.audioAvailable, review?.audioUrl]);
-
-  useEffect(() => {
-    if (review?.audioAvailable && review.audioUrl && !lowBandwidthMode && !audioObjectUrl) {
-      void loadAudio();
-    }
-  }, [audioObjectUrl, loadAudio, lowBandwidthMode, review?.audioAvailable, review?.audioUrl]);
+  const handleWaveformTimeUpdate = useCallback((time: number) => {
+    setCurrentTime(time);
+  }, []);
 
   if (loading) {
     return (
@@ -180,55 +151,33 @@ export default function SpeakingTranscriptPage() {
           </div>
 
           <div className="space-y-6">
-            <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
+                        <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
               <LearnerSurfaceSectionHeader
                 eyebrow="Audio Review"
-                title="Use the real waveform, not a placeholder"
-                description="Waveform bars are derived from stored evaluation peaks so the visual review surface matches the learner’s actual recording."
+                title="Real waveform from the learner’s recording"
+                description="The waveform is rendered from the actual audio file using wavesurfer.js so the visual review surface matches the learner’s real recording."
                 className="mb-4"
               />
-
+            
               <div className="rounded-2xl border border-gray-100 bg-background-light p-4">
-                <div className="mb-4 flex items-center justify-between text-sm text-muted">
-                  <span>Current time</span>
-                  <span>{Math.round(currentTime)} / {Math.round(review.duration)} sec</span>
-                </div>
-
-                <div className="flex h-28 items-end gap-1 rounded-2xl bg-white p-4">
-                  {waveformBars.map((peak, index) => (
-                    <div
-                      key={`${peak}-${index}`}
-                      className="flex-1 rounded-full bg-primary/70"
-                      style={{ height: `${peak}%` }}
-                    />
-                  ))}
-                </div>
-
-                {review.audioAvailable ? (
-                  <div className="mt-4 space-y-3">
-                    {!audioObjectUrl ? (
-                      <Button onClick={loadAudio} loading={audioLoading} fullWidth>
-                        <Headphones className="h-4 w-4" />
-                        {lowBandwidthMode ? 'Load speaking audio on demand' : 'Load speaking audio'}
-                      </Button>
-                    ) : (
-                      <>
-                        <audio
-                          ref={audioRef}
-                          controls
-                          className="w-full"
-                          src={audioObjectUrl}
-                          onTimeUpdate={() => setCurrentTime(audioRef.current?.currentTime ?? 0)}
-                        />
-                        <Button variant="outline" fullWidth onClick={() => audioRef.current?.play()}>
-                          <Play className="h-4 w-4" />
-                          Play audio
-                        </Button>
-                      </>
-                    )}
+                {review.audioAvailable && review.audioUrl && !lowBandwidthMode ? (
+                  <AudioPlayerWaveform
+                    audioUrl={review.audioUrl}
+                    onTimeUpdate={handleWaveformTimeUpdate}
+                    seekToTime={seekToTime}
+                  />
+                ) : review.audioAvailable && lowBandwidthMode ? (
+                  <div className="space-y-3">
+                    <div className="mb-4 flex items-center justify-between text-sm text-muted">
+                      <span>Low-bandwidth mode active</span>
+                      <span>{Math.round(currentTime)} / {Math.round(review.duration)} sec</span>
+                    </div>
+                    <InlineAlert variant="info">
+                      Audio waveform is hidden in low-bandwidth mode. Change this in audio settings.
+                    </InlineAlert>
                   </div>
                 ) : (
-                  <InlineAlert variant="info" className="mt-4">
+                  <InlineAlert variant="info">
                     Audio is not available for this evaluation, so this page remains transcript-first.
                   </InlineAlert>
                 )}

@@ -1,25 +1,14 @@
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { screen } from '@testing-library/react';
 const {
-  mockUseParams,
   mockPush,
   mockFetchSettingsSection,
   mockUpdateSettingsSection,
   mockTrack,
 } = vi.hoisted(() => ({
-  mockUseParams: vi.fn(),
   mockPush: vi.fn(),
   mockFetchSettingsSection: vi.fn(),
   mockUpdateSettingsSection: vi.fn(),
   mockTrack: vi.fn(),
-}));
-
-vi.mock('next/navigation', () => ({
-  useParams: () => mockUseParams(),
-  useRouter: () => ({
-    push: mockPush,
-  }),
 }));
 
 vi.mock('@/components/layout', () => ({
@@ -40,6 +29,7 @@ vi.mock('@/lib/api', () => ({
 }));
 
 import SettingsSectionPage from './page';
+import { renderWithRouter } from '@/tests/test-utils';
 
 describe('Settings section page', () => {
   beforeEach(() => {
@@ -48,7 +38,6 @@ describe('Settings section page', () => {
   });
 
   it('renders the profile section with a themed hero, helper card, tags, and field status pills', async () => {
-    mockUseParams.mockReturnValue({ section: 'profile' });
     mockFetchSettingsSection.mockResolvedValue({
       section: 'profile',
       values: {
@@ -59,7 +48,10 @@ describe('Settings section page', () => {
       },
     });
 
-    const { container } = render(<SettingsSectionPage />);
+    const { container } = renderWithRouter(<SettingsSectionPage />, {
+      params: { section: 'profile' },
+      router: { push: mockPush },
+    });
 
     expect(await screen.findByText('Keep profile settings clear before you change them')).toBeInTheDocument();
     expect(screen.getByText('What changes here')).toBeInTheDocument();
@@ -75,7 +67,6 @@ describe('Settings section page', () => {
   });
 
   it('renders the privacy section with toggle state pills, helper copy, and rose accents', async () => {
-    mockUseParams.mockReturnValue({ section: 'privacy' });
     mockFetchSettingsSection.mockResolvedValue({
       section: 'privacy',
       values: {
@@ -86,7 +77,10 @@ describe('Settings section page', () => {
       },
     });
 
-    const { container } = render(<SettingsSectionPage />);
+    const { container } = renderWithRouter(<SettingsSectionPage />, {
+      params: { section: 'privacy' },
+      router: { push: mockPush },
+    });
 
     expect(await screen.findByText('Keep privacy settings clear before you change them')).toBeInTheDocument();
     expect(screen.getByText('OET evidence privacy')).toBeInTheDocument();
@@ -101,7 +95,6 @@ describe('Settings section page', () => {
   });
 
   it('renders goals subtest tags and mixed configured states with purple accents', async () => {
-    mockUseParams.mockReturnValue({ section: 'goals' });
     mockFetchSettingsSection.mockResolvedValue({
       section: 'goals',
       values: {
@@ -116,8 +109,10 @@ describe('Settings section page', () => {
       },
     });
 
-    const { container } = render(<SettingsSectionPage />);
-
+    const { container } = renderWithRouter(<SettingsSectionPage />, {
+      params: { section: 'goals' },
+      router: { push: mockPush },
+    });
     expect(await screen.findByText('Keep goals settings clear before you change them')).toBeInTheDocument();
     expect(screen.getAllByText('Target Scores').length).toBeGreaterThan(0);
     expect(screen.getAllByText('Writing').length).toBeGreaterThan(0);

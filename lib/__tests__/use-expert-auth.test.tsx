@@ -1,6 +1,4 @@
-import { render, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { waitFor } from '@testing-library/react';
 const { mockReplace, mockUseCurrentUser, mockFetchExpertMe } = vi.hoisted(() => ({
   mockReplace: vi.fn(),
   mockUseCurrentUser: vi.fn(),
@@ -10,10 +8,6 @@ const { mockReplace, mockUseCurrentUser, mockFetchExpertMe } = vi.hoisted(() => 
 const mockRouter = {
   replace: mockReplace,
 };
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => mockRouter,
-}));
 
 vi.mock('@/lib/hooks/use-current-user', () => ({
   useCurrentUser: () => mockUseCurrentUser(),
@@ -29,6 +23,7 @@ vi.mock('@/lib/api', async () => {
 
 import { ApiError } from '@/lib/api';
 import { useExpertAuth } from '@/lib/hooks/use-expert-auth';
+import { renderWithRouter } from '@/tests/test-utils';
 
 function TestComponent() {
   useExpertAuth();
@@ -48,7 +43,7 @@ describe('useExpertAuth', () => {
     });
     mockFetchExpertMe.mockRejectedValueOnce(new ApiError(403, 'forbidden', 'Expert access is not available.', false));
 
-    render(<TestComponent />);
+    renderWithRouter(<TestComponent />, { router: { replace: mockReplace } });
 
     await waitFor(() => {
       expect(mockReplace).toHaveBeenCalledWith('/');

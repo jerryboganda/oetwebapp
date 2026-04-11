@@ -1,4 +1,3 @@
-import { afterEach, describe, expect, it } from 'vitest';
 import { initializeMobileRuntime } from '@/lib/mobile/runtime';
 
 describe('mobile runtime', () => {

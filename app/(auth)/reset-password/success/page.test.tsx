@@ -1,38 +1,22 @@
-import { render, screen } from '@testing-library/react';
+import { screen } from '@testing-library/react';
 import { act } from 'react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
-const { mockReplace, mockGet } = vi.hoisted(() => ({
-  mockReplace: vi.fn(),
-  mockGet: vi.fn(),
-}));
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    replace: mockReplace,
-  }),
-  useSearchParams: () => ({
-    get: mockGet,
-  }),
-}));
 
 import ResetPasswordSuccessPage from './page';
+import { renderWithRouter } from '@/tests/test-utils';
 
 describe('ResetPasswordSuccessPage', () => {
+  const mockReplace = vi.fn();
+
   beforeEach(() => {
     vi.clearAllMocks();
     vi.useFakeTimers();
-    mockGet.mockImplementation((key: string) => {
-      if (key === 'email') {
-        return 'learner@oet-prep.dev';
-      }
-
-      return null;
-    });
   });
 
   it('shows the password reset success state and redirects to sign in after 3 seconds', () => {
-    render(<ResetPasswordSuccessPage />);
+    renderWithRouter(<ResetPasswordSuccessPage />, {
+      router: { replace: mockReplace },
+      searchParams: new URLSearchParams({ email: 'learner@oet-prep.dev' }),
+    });
 
     expect(screen.getByRole('heading', { name: /reset complete/i })).toBeInTheDocument();
 

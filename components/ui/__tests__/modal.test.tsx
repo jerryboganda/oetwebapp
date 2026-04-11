@@ -1,5 +1,4 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { describe, expect, it } from 'vitest';
 import { useState } from 'react';
 import { Drawer, Modal } from '../modal';
 

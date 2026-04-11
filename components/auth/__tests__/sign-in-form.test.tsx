@@ -1,18 +1,10 @@
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { screen } from '@testing-library/react';
 const { mockSignIn } = vi.hoisted(() => ({
   mockSignIn: vi.fn(),
 }));
 
 const { mockUseSignupCatalog } = vi.hoisted(() => ({
   mockUseSignupCatalog: vi.fn(() => ({ externalAuthProviders: [] })),
-}));
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    replace: vi.fn(),
-  }),
 }));
 
 vi.mock('@/contexts/auth-context', () => ({
@@ -30,6 +22,7 @@ vi.mock('@/lib/hooks/use-signup-catalog', () => ({
 }));
 
 import { SignInForm } from '../sign-in-form';
+import { renderWithRouter } from '@/tests/test-utils';
 
 describe('SignInForm', () => {
   beforeEach(() => {
@@ -37,7 +30,7 @@ describe('SignInForm', () => {
   });
 
   it('uses explicit auth copy and ergonomic field attributes', () => {
-    render(<SignInForm nextHref="/study-plan" />);
+    renderWithRouter(<SignInForm nextHref="/study-plan" />);
 
     expect(screen.getByRole('button', { name: 'Sign In' })).toBeInTheDocument();
 
@@ -55,7 +48,7 @@ describe('SignInForm', () => {
   it('renders when the signup catalog omits external auth providers', () => {
     mockUseSignupCatalog.mockReturnValue({ externalAuthProviders: undefined } as never);
 
-    render(<SignInForm nextHref="/study-plan" />);
+    renderWithRouter(<SignInForm nextHref="/study-plan" />);
 
     expect(screen.getByRole('button', { name: 'Sign In' })).toBeInTheDocument();
   });

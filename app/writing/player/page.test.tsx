@@ -1,6 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
-
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 const routerPush = vi.fn();
 const fetchWritingTaskMock = vi.fn();
 const fetchWritingChecklistMock = vi.fn();
@@ -23,16 +21,6 @@ beforeAll(() => {
     })),
   });
 });
-
-vi.mock('next/navigation', () => ({
-  useSearchParams: () => new URLSearchParams('taskId=wt-001'),
-  useRouter: () => ({
-    push: routerPush,
-    replace: vi.fn(),
-    back: vi.fn(),
-    refresh: vi.fn(),
-  }),
-}));
 
 vi.mock('@/hooks/use-mobile', () => ({
   useIsMobile: () => true,
@@ -76,6 +64,7 @@ vi.mock('@/components/ui/skeleton', () => ({
 }));
 
 import WritingPlayer from './page';
+import { renderWithRouter } from '@/tests/test-utils';
 
 describe('WritingPlayer', () => {
   afterEach(() => {
@@ -96,7 +85,7 @@ describe('WritingPlayer', () => {
     submitWritingDraftMock.mockResolvedValue(undefined);
     submitWritingTaskMock.mockResolvedValue({ id: 'result-1' });
 
-    render(<WritingPlayer />);
+    renderWithRouter(<WritingPlayer />);
 
     await waitFor(() => expect(screen.getByText('Practice Writing Request')).toBeInTheDocument());
     expect(screen.getByRole('button', { name: /case notes/i })).toBeInTheDocument();

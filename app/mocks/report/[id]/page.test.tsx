@@ -1,13 +1,7 @@
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { screen } from '@testing-library/react';
 const { mockFetchMockReport, mockTrack } = vi.hoisted(() => ({
   mockFetchMockReport: vi.fn(),
   mockTrack: vi.fn(),
-}));
-
-vi.mock('next/navigation', () => ({
-  useParams: () => ({ id: 'mock-1' }),
 }));
 
 vi.mock('next/link', () => ({
@@ -15,10 +9,12 @@ vi.mock('next/link', () => ({
 }));
 
 vi.mock('motion/react', () => ({
+  AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
   motion: {
     div: ({ children, initial: _initial, animate: _animate, transition: _transition, ...props }: any) => <div {...props}>{children}</div>,
     section: ({ children, initial: _initial, animate: _animate, transition: _transition, ...props }: any) => <section {...props}>{children}</section>,
   },
+  useReducedMotion: () => false,
 }));
 
 vi.mock('@/components/layout', () => ({
@@ -38,6 +34,7 @@ vi.mock('@/lib/api', () => ({
 }));
 
 import MockReportPage from './page';
+import { renderWithRouter } from '@/tests/test-utils';
 
 describe('Mock report page', () => {
   beforeEach(() => {
@@ -66,7 +63,7 @@ describe('Mock report page', () => {
   });
 
   it('renders through the shared learner dashboard shell without a second page-root width wrapper', async () => {
-    const { container } = render(<MockReportPage />);
+    const { container } = renderWithRouter(<MockReportPage />);
 
     expect(await screen.findByText('Overall Performance')).toBeInTheDocument();
     expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();

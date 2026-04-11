@@ -1,16 +1,8 @@
-import { render, screen, waitFor } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { screen, waitFor } from '@testing-library/react';
 const { mockPush, mockTrack, mockFetchExpertDashboard } = vi.hoisted(() => ({
   mockPush: vi.fn(),
   mockTrack: vi.fn(),
   mockFetchExpertDashboard: vi.fn(),
-}));
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: mockPush,
-  }),
 }));
 
 vi.mock('@/lib/analytics', () => ({
@@ -25,6 +17,7 @@ vi.mock('@/lib/api', () => ({
 }));
 
 import ExpertDashboardPage from './page';
+import { renderWithRouter } from '@/tests/test-utils';
 
 describe('ExpertDashboardPage', () => {
   beforeEach(() => {
@@ -97,7 +90,7 @@ describe('ExpertDashboardPage', () => {
   });
 
   it('renders the learner-style expert dashboard surface and keeps the main routes intact', async () => {
-    render(<ExpertDashboardPage />);
+    renderWithRouter(<ExpertDashboardPage />, { router: { push: mockPush } });
 
     expect(await screen.findByRole('heading', { name: /keep owned reviews and exam signals in view/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /work to resume/i })).toBeInTheDocument();

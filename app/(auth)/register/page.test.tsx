@@ -1,17 +1,6 @@
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { screen } from '@testing-library/react';
 const { mockUseAuth } = vi.hoisted(() => ({
   mockUseAuth: vi.fn(),
-}));
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    replace: vi.fn(),
-  }),
-  useSearchParams: () => ({
-    get: (_key: string) => null,
-  }),
 }));
 
 vi.mock('@/contexts/auth-context', () => ({
@@ -53,6 +42,7 @@ vi.mock('@/lib/auth-client', () => ({
 }));
 
 import RegisterPage from './page';
+import { renderWithRouter } from '@/tests/test-utils';
 
 describe('RegisterPage', () => {
   beforeEach(() => {
@@ -65,7 +55,7 @@ describe('RegisterPage', () => {
   });
 
   it('renders the dedicated learner registration screen', async () => {
-    render(<RegisterPage />);
+    renderWithRouter(<RegisterPage />);
 
     expect(await screen.findByRole('heading', { name: /register your account/i })).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /next step/i })).toBeInTheDocument();

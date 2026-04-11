@@ -1,5 +1,4 @@
 import { render, screen } from '@testing-library/react';
-import { describe, expect, it, beforeEach, vi } from 'vitest';
 import type { Submission } from '@/lib/mock-data';
 
 const { mockFetchSpeakingHome, mockFetchSubmissions, mockTrack } = vi.hoisted(() => ({

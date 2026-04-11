@@ -1,6 +1,5 @@
-import { render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-
+import { screen } from '@testing-library/react';
+import { renderWithRouter } from '@/tests/test-utils';
 vi.mock('../app-shell', () => ({
   AppShell: ({ children, pageTitle }: { children: React.ReactNode; pageTitle?: string }) => (
     <div data-testid="app-shell" data-page-title={pageTitle ?? ''}>
@@ -24,7 +23,7 @@ import { ExpertDashboardShell } from '../expert-dashboard-shell';
 
 describe('ExpertDashboardShell', () => {
   it('renders the learner-style workspace container inside AppShell and forwards the page title', () => {
-    render(
+    renderWithRouter(
       <ExpertDashboardShell pageTitle="Dashboard" workspaceClassName="space-y-8">
         <div>Expert Workspace</div>
       </ExpertDashboardShell>,

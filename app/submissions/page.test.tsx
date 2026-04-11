@@ -1,16 +1,8 @@
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { screen } from '@testing-library/react';
 const { mockFetchSubmissions, mockTrack, mockPush } = vi.hoisted(() => ({
   mockFetchSubmissions: vi.fn(),
   mockTrack: vi.fn(),
   mockPush: vi.fn(),
-}));
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: mockPush,
-  }),
 }));
 
 vi.mock('motion/react', () => ({
@@ -36,6 +28,7 @@ vi.mock('@/lib/api', () => ({
 }));
 
 import SubmissionHistoryPage from './page';
+import { renderWithRouter } from '@/tests/test-utils';
 
 describe('Submission history page', () => {
   beforeEach(() => {
@@ -59,7 +52,7 @@ describe('Submission history page', () => {
   });
 
   it('renders through the shared learner dashboard shell without a second page-root width wrapper', async () => {
-    const { container } = render(<SubmissionHistoryPage />);
+    const { container } = renderWithRouter(<SubmissionHistoryPage />);
 
     expect(await screen.findByText('Reopen the attempts that need review or comparison')).toBeInTheDocument();
     expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
@@ -84,7 +77,7 @@ describe('Submission history page', () => {
       },
     ]);
 
-    render(<SubmissionHistoryPage />);
+    renderWithRouter(<SubmissionHistoryPage />);
 
     expect(await screen.findByText('Health Policy - Hospital-Acquired Infections')).toBeInTheDocument();
     expect(screen.queryByText('2026-03-25T18:08:24.830217+00:00')).not.toBeInTheDocument();

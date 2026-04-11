@@ -1,6 +1,4 @@
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { screen } from '@testing-library/react';
 const { mockFetchSettingsData, mockFetchUserProfile, mockUpdateSettingsSection, mockTrack, mockPush } = vi.hoisted(() => ({
   mockFetchSettingsData: vi.fn(),
   mockFetchUserProfile: vi.fn(),
@@ -9,16 +7,11 @@ const { mockFetchSettingsData, mockFetchUserProfile, mockUpdateSettingsSection, 
   mockPush: vi.fn(),
 }));
 
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: mockPush,
-  }),
-}));
-
 vi.mock('motion/react', () => ({
   motion: {
     section: ({ children, initial: _initial, animate: _animate, transition: _transition, ...props }: any) => <section {...props}>{children}</section>,
   },
+  useReducedMotion: () => false,
 }));
 
 vi.mock('@/components/layout', () => ({
@@ -40,6 +33,7 @@ vi.mock('@/lib/api', () => ({
 }));
 
 import SettingsPage from './page';
+import { renderWithRouter } from '@/tests/test-utils';
 
 describe('Settings page', () => {
   beforeEach(() => {
@@ -57,7 +51,7 @@ describe('Settings page', () => {
   });
 
   it('renders through the shared learner dashboard shell without a second page-root width wrapper', async () => {
-    const { container } = render(<SettingsPage />);
+    const { container } = renderWithRouter(<SettingsPage />);
 
     expect(await screen.findByText('Adjust account and study settings without hunting for them')).toBeInTheDocument();
     expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();

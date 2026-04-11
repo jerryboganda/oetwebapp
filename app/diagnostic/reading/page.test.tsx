@@ -1,17 +1,9 @@
-import { render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
-
+import { screen } from '@testing-library/react';
 const { mockFetchReadingTask, mockSubmitReadingAnswers, mockTrack, mockPush } = vi.hoisted(() => ({
   mockFetchReadingTask: vi.fn(),
   mockSubmitReadingAnswers: vi.fn(),
   mockTrack: vi.fn(),
   mockPush: vi.fn(),
-}));
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: mockPush,
-  }),
 }));
 
 vi.mock('@/components/layout', () => ({
@@ -35,6 +27,7 @@ vi.mock('@/lib/api', () => ({
 }));
 
 import DiagnosticReadingPage from './page';
+import { renderWithRouter } from '@/tests/test-utils';
 
 describe('Diagnostic reading page', () => {
   beforeEach(() => {
@@ -65,7 +58,7 @@ describe('Diagnostic reading page', () => {
   });
 
   it('stays on the immersive app shell instead of the learner dashboard shell', async () => {
-    render(<DiagnosticReadingPage />);
+    renderWithRouter(<DiagnosticReadingPage />);
 
     expect(await screen.findByText('Question 1 of 1')).toBeInTheDocument();
     expect(screen.getByTestId('app-shell')).toBeInTheDocument();

@@ -1,12 +1,4 @@
-import { fireEvent, render, screen } from '@testing-library/react';
-import { describe, expect, it, vi } from 'vitest';
-
-vi.mock('next/navigation', () => ({
-  useRouter: () => ({
-    push: vi.fn(),
-  }),
-}));
-
+import { fireEvent, screen } from '@testing-library/react';
 vi.mock('@/contexts/notification-center-context', () => ({
   useNotificationCenter: () => ({
     notifications: [],
@@ -42,10 +34,11 @@ vi.mock('../notification-preferences-panel', () => ({
 }));
 
 import { NotificationCenter } from '../notification-center';
+import { renderWithRouter } from '@/tests/test-utils';
 
 describe('NotificationCenter', () => {
   it('opens the notification popover when the desktop bell is clicked', () => {
-    render(<NotificationCenter />);
+    renderWithRouter(<NotificationCenter />);
 
     const [desktopBell] = screen.getAllByRole('button', { name: /notifications/i });
     fireEvent.click(desktopBell);
