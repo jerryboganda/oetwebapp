@@ -28,6 +28,7 @@ import {
   Webhook,
   Scale,
   Mic,
+  GraduationCap,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 
@@ -41,6 +42,7 @@ const adminNavItems: NavItem[] = [
   { href: '/admin/notifications', label: 'Notifications', icon: <Bell className="w-5 h-5" />, matchPrefix: '/admin/notifications' },
   { href: '/admin/analytics/quality', label: 'Quality Analytics', icon: <PieChart className="w-5 h-5" />, matchPrefix: '/admin/analytics' },
   { href: '/admin/users', label: 'User Ops', icon: <Users className="w-5 h-5" />, matchPrefix: '/admin/users' },
+  { href: '/admin/experts', label: 'Expert Management', icon: <GraduationCap className="w-5 h-5" />, matchPrefix: '/admin/experts' },
   { href: '/admin/billing', label: 'Billing Ops', icon: <CreditCard className="w-5 h-5" />, matchPrefix: '/admin/billing' },
   { href: '/admin/flags', label: 'Feature Flags', icon: <Flag className="w-5 h-5" />, matchPrefix: '/admin/flags' },
   { href: '/admin/audit-logs', label: 'Audit Logs', icon: <ShieldCheck className="w-5 h-5" />, matchPrefix: '/admin/audit-logs' },
@@ -64,6 +66,7 @@ const adminMobileNavItems: NavItem[] = [
   adminNavItems[5],
   adminNavItems[8],
   adminNavItems[9],
+  adminNavItems[10],
 ];
 
 const adminMobileMenuSections: MobileMenuSection[] = [
@@ -73,15 +76,15 @@ const adminMobileMenuSections: MobileMenuSection[] = [
   },
   {
     label: 'Content',
-    items: [adminNavItems[1], adminNavItems[12], adminNavItems[13], adminNavItems[14], adminNavItems[15], adminNavItems[18], adminNavItems[19]],
+    items: [adminNavItems[1], adminNavItems[13], adminNavItems[14], adminNavItems[15], adminNavItems[16], adminNavItems[19], adminNavItems[20]],
   },
   {
     label: 'Governance',
-    items: [adminNavItems[2], adminNavItems[3], adminNavItems[4], adminNavItems[10], adminNavItems[11], adminNavItems[16], adminNavItems[17]],
+    items: [adminNavItems[2], adminNavItems[3], adminNavItems[4], adminNavItems[11], adminNavItems[12], adminNavItems[17], adminNavItems[18]],
   },
   {
     label: 'People & billing',
-    items: [adminNavItems[8], adminNavItems[9]],
+    items: [adminNavItems[8], adminNavItems[9], adminNavItems[10]],
   },
 ];
 
@@ -132,6 +135,10 @@ function getAdminPageTitle(pathname: string | null) {
 
   if (pathname.startsWith('/admin/users')) {
     return 'User Ops';
+  }
+
+  if (pathname.startsWith('/admin/experts')) {
+    return 'Expert Management';
   }
 
   if (pathname.startsWith('/admin/billing')) {
