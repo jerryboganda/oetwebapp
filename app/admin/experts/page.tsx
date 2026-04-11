@@ -25,7 +25,7 @@ import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input, Select, TextArea } from '@/components/ui/form-controls';
+import { Input, Select, Textarea } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import {
   fetchAdminUsers,
@@ -729,7 +729,7 @@ export default function ExpertManagementPage() {
               <p className="text-sm text-muted">{selectedExpert.email}</p>
             </div>
           ) : null}
-          <TextArea
+          <Textarea
             label="Reason (optional)"
             value={statusReason}
             onChange={(e) => setStatusReason(e.target.value)}
@@ -785,7 +785,7 @@ export default function ExpertManagementPage() {
               { label: 'Asia/Dubai', value: 'Asia/Dubai' },
             ]}
           />
-          <TextArea
+          <Textarea
             label="Bio (optional)"
             value={psTutorForm.bio}
             onChange={(e) => setPsTutorForm({ ...psTutorForm, bio: e.target.value })}
