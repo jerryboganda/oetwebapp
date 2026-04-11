@@ -34,6 +34,7 @@ export const INCLUDED_LEARNER_DASHBOARD_PAGE_PATHS = [
   'app/writing/library/page.tsx',
   'app/writing/model/page.tsx',
   'app/writing/result/page.tsx',
+  'app/writing/revision/page.tsx',
 ] as const;
 
 export const EXCLUDED_IMMERSIVE_LEARNER_PAGE_PATHS = [
@@ -45,7 +46,6 @@ export const EXCLUDED_IMMERSIVE_LEARNER_PAGE_PATHS = [
   'app/listening/player/[id]/page.tsx',
   'app/writing/player/page.tsx',
   'app/writing/feedback/page.tsx',
-  'app/writing/revision/page.tsx',
   'app/speaking/task/[id]/page.tsx',
   'app/speaking/roleplay/[id]/page.tsx',
   'app/speaking/transcript/[id]/page.tsx',

@@ -46,6 +46,7 @@ export default function DiagnosticSpeakingPage() {
   const [showStopModal, setShowStopModal] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
 
   const recordingRef = useRef(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
@@ -83,8 +84,11 @@ export default function DiagnosticSpeakingPage() {
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
       }
+      if (previewUrl) {
+        URL.revokeObjectURL(previewUrl);
+      }
     };
-  }, [isNativePlatform]);
+  }, [isNativePlatform, previewUrl]);
 
   const handleMicCheckComplete = () => {
     track('task_started', { subTest: 'Speaking', mode: 'diagnostic', taskId: DIAGNOSTIC_SPEAKING_TASK_ID });
@@ -145,7 +149,12 @@ export default function DiagnosticSpeakingPage() {
 
       if (isNativePlatform) {
         const recording = await SpeakingRecorder.stop();
-        recordedBlobRef.current = base64ToBlob(recording.base64, recording.mimeType);
+        const blob = base64ToBlob(recording.base64, recording.mimeType);
+        recordedBlobRef.current = blob;
+        if (previewUrl) {
+          URL.revokeObjectURL(previewUrl);
+        }
+        setPreviewUrl(URL.createObjectURL(blob));
       } else {
         const recorder = mediaRecorderRef.current;
         if (recorder && recorder.state !== 'inactive') {
@@ -155,7 +164,12 @@ export default function DiagnosticSpeakingPage() {
           });
         }
 
-        recordedBlobRef.current = new Blob(audioChunksRef.current, { type: recorder?.mimeType || 'audio/webm' });
+        const blob = new Blob(audioChunksRef.current, { type: recorder?.mimeType || 'audio/webm' });
+        recordedBlobRef.current = blob;
+        if (previewUrl) {
+          URL.revokeObjectURL(previewUrl);
+        }
+        setPreviewUrl(URL.createObjectURL(blob));
       }
 
       if (streamRef.current) {
@@ -388,10 +402,13 @@ export default function DiagnosticSpeakingPage() {
                 <p className="text-sm text-muted mb-4">
                   Listen to your recording to check audio quality, then submit for evaluation.
                 </p>
-                {/* Simulated audio player */}
-                <div className="h-12 bg-gray-100 rounded-lg flex items-center justify-center text-xs text-muted">
-                  Audio Preview (simulated)
-                </div>
+                {previewUrl ? (
+                  <audio controls src={previewUrl} className="w-full" />
+                ) : (
+                  <div className="h-12 bg-gray-100 rounded-lg flex items-center justify-center text-xs text-muted">
+                    Audio preview will appear here after recording.
+                  </div>
+                )}
               </Card>
 
               <div className="flex gap-3 justify-center">

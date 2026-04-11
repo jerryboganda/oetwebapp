@@ -1,7 +1,7 @@
 import { type ReactNode } from 'react';
 import { AppShell, type AppShellProps } from './app-shell';
 import { LearnerWorkspaceContainer } from './learner-workspace-container';
-import { communityNavItems, learnNavItems, mainNavItems } from './sidebar';
+import { learnNavItems, mainNavItems } from './sidebar';
 
 export interface LearnerDashboardShellProps extends AppShellProps {
   workspaceClassName?: string;
@@ -19,7 +19,6 @@ export function LearnerDashboardShell({
   const learnerMobileMenuSections = mobileMenuSections ?? [
     { label: 'Practice', items: learnerNavItems },
     { label: 'Learn', items: learnNavItems },
-    { label: 'Community', items: communityNavItems },
   ];
 
   return (

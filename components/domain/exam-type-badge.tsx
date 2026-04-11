@@ -18,18 +18,6 @@ const EXAM_CONFIG: Record<string, { label: string; bg: string; text: string; rin
     text: 'text-violet-700 dark:text-violet-300',
     ring: 'ring-violet-200/60 dark:ring-violet-800/50',
   },
-  ielts: {
-    label: 'IELTS',
-    bg: 'bg-blue-100 dark:bg-blue-900/40',
-    text: 'text-blue-700 dark:text-blue-300',
-    ring: 'ring-blue-200/60 dark:ring-blue-800/50',
-  },
-  pte: {
-    label: 'PTE',
-    bg: 'bg-purple-100 dark:bg-purple-900/40',
-    text: 'text-purple-700 dark:text-purple-300',
-    ring: 'ring-purple-200/60 dark:ring-purple-800/50',
-  },
 };
 
 const SIZE_CLASSES: Record<BadgeSize, string> = {
@@ -40,7 +28,7 @@ const SIZE_CLASSES: Record<BadgeSize, string> = {
 export function ExamTypeBadge({ examType, size = 'sm', className }: ExamTypeBadgeProps) {
   const normalized = (examType ?? '').toLowerCase().trim();
   const config = EXAM_CONFIG[normalized] ?? {
-    label: examType?.toUpperCase() ?? 'EXAM',
+    label: 'OET',
     bg: 'bg-gray-100 dark:bg-gray-800',
     text: 'text-gray-600 dark:text-gray-400',
     ring: 'ring-gray-200/60 dark:ring-gray-700/50',

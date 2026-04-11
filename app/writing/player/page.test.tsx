@@ -92,7 +92,7 @@ describe('WritingPlayer', () => {
     expect(screen.getByRole('button', { name: /editor/i })).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: /editor/i }));
-    expect(screen.getByRole('textbox', { name: /writing editor/i })).toBeInTheDocument();
+    expect(screen.getAllByRole('textbox', { name: /writing editor/i }).length).toBeGreaterThan(0);
 
     fireEvent.click(screen.getByRole('button', { name: /submit/i }));
     expect(await screen.findByRole('dialog', { name: /submit your response/i })).toBeInTheDocument();

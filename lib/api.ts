@@ -2643,6 +2643,28 @@ export async function fetchAdminQualityAnalytics(params?: { timeRange?: string; 
   return apiRequest(`/v1/admin/quality-analytics${q ? `?${q}` : ''}`);
 }
 
+export async function fetchAdminCohortAnalysis(params?: { groupBy?: string }) {
+  const qs = params?.groupBy ? `?groupBy=${encodeURIComponent(params.groupBy)}` : '';
+  return apiRequest(`/v1/admin/analytics/cohort${qs}`);
+}
+
+export async function fetchAdminContentEffectiveness(params?: { subtestCode?: string; top?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.subtestCode) qs.set('subtestCode', params.subtestCode);
+  if (params?.top) qs.set('top', String(params.top));
+  const q = qs.toString();
+  return apiRequest(`/v1/admin/analytics/content-effectiveness${q ? `?${q}` : ''}`);
+}
+
+export async function fetchAdminExpertEfficiency(params?: { days?: number }) {
+  const qs = params?.days ? `?days=${encodeURIComponent(String(params.days))}` : '';
+  return apiRequest(`/v1/admin/analytics/expert-efficiency${qs}`);
+}
+
+export async function fetchAdminSubscriptionHealth() {
+  return apiRequest('/v1/admin/analytics/subscription-health');
+}
+
 export async function bulkAdminContentAction(payload: { action: string; contentIds: string[]; dryRun?: boolean }) {
   return apiRequest('/v1/admin/content/bulk-action', { method: 'POST', body: JSON.stringify(payload) });
 }

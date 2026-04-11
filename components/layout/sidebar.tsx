@@ -26,19 +26,14 @@ import {
   BriefcaseMedical,
   LogOut,
   HelpCircle,
-  Trophy,
   Brain,
   Layers,
   Video,
   Lightbulb,
   BookMarked,
-  Users,
   Flame,
   Zap,
-  CalendarDays,
-  GraduationCap,
   MessageSquare,
-  Store,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -76,16 +71,6 @@ export const learnNavItems: NavItem[] = [
   { href: '/vocabulary', label: 'Vocabulary', icon: <Layers className="w-5 h-5" />, matchPrefix: '/vocabulary' },
   { href: '/review', label: 'Review', icon: <Brain className="w-5 h-5" />, matchPrefix: '/review' },
   { href: '/conversation', label: 'AI Conversation', icon: <MessageSquare className="w-5 h-5" />, matchPrefix: '/conversation' },
-];
-
-export const communityNavItems: NavItem[] = [
-  { href: '/community', label: 'Community', icon: <Users className="w-5 h-5" />, matchPrefix: '/community' },
-  { href: '/leaderboard', label: 'Leaderboard', icon: <Trophy className="w-5 h-5" />, matchPrefix: '/leaderboard' },
-  { href: '/achievements', label: 'Achievements', icon: <Zap className="w-5 h-5" />, matchPrefix: '/achievements' },
-  { href: '/tutoring', label: 'Tutoring', icon: <GraduationCap className="w-5 h-5" />, matchPrefix: '/tutoring' },
-  { href: '/private-speaking', label: 'Private Speaking', icon: <Video className="w-5 h-5" />, matchPrefix: '/private-speaking' },
-  { href: '/exam-booking', label: 'Exam Dates', icon: <CalendarDays className="w-5 h-5" />, matchPrefix: '/exam-booking' },
-  { href: '/marketplace', label: 'Marketplace', icon: <Store className="w-5 h-5" />, matchPrefix: '/marketplace' },
 ];
 
 export const mobileNavItems: NavItem[] = [
@@ -233,7 +218,6 @@ export function Sidebar({
         {isLearnerWorkspace ? (
           <>
             <NavSection label="Learn" items={learnNavItems} pathname={pathname} reducedMotion={reducedMotion} />
-            <NavSection label="Community" items={communityNavItems} pathname={pathname} reducedMotion={reducedMotion} />
           </>
         ) : null}
       </nav>

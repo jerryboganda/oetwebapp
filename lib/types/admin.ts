@@ -553,3 +553,94 @@ export interface AdminBIDashboardData {
   revenueByMonth: Array<{ month: string; revenue: number; subscriptions: number }>;
   userGrowth: Array<{ month: string; newUsers: number; totalUsers: number }>;
 }
+
+export interface AdminSubscriptionHealthRevenuePlan {
+  planId: string;
+  planName: string;
+  subscribers: number;
+  monthlyRevenue: number;
+}
+
+export interface AdminSubscriptionHealthMonthlyTrend {
+  month: string;
+  newSubscriptions: number;
+  cancellations: number;
+}
+
+export interface AdminSubscriptionHealthData {
+  mrr: number;
+  activeSubscriptions: number;
+  churnRate: number;
+  newSubscriptionsThisMonth: number;
+  trialConversionRate: number;
+  arpu: number;
+  revenueByPlan: AdminSubscriptionHealthRevenuePlan[];
+  monthlyTrend: AdminSubscriptionHealthMonthlyTrend[];
+  generatedAt: string;
+}
+
+export interface AdminCohortAnalysisItem {
+  cohortKey: string;
+  cohortName: string;
+  learnerCount: number;
+  averageScore: number | null;
+  evaluationCount: number;
+  activeLastMonth: number;
+}
+
+export interface AdminCohortAnalysisData {
+  groupBy: string;
+  cohorts: AdminCohortAnalysisItem[];
+  totalLearners: number;
+  generatedAt: string;
+}
+
+export interface AdminContentEffectivenessItem {
+  contentId: string;
+  title: string;
+  subtestCode: string;
+  difficulty: string;
+  totalAttempts: number;
+  completionRate: number;
+  averageScore: number | null;
+  avgTimeSeconds: number | null;
+  effectivenessScore: number | null;
+}
+
+export interface AdminContentEffectivenessData {
+  subtestFilter: string | null;
+  items: AdminContentEffectivenessItem[];
+  generatedAt: string;
+}
+
+export interface AdminExpertEfficiencyItem {
+  expertId: string;
+  expertName: string;
+  period: number;
+  assignmentsReceived: number;
+  reviewsCompleted: number;
+  averageReviewTimeMinutes: number | null;
+  reviewsPerDay: number;
+  aiAlignmentScore: number | null;
+  efficiency: 'high' | 'medium' | 'low' | 'no-data';
+}
+
+export interface AdminExpertEfficiencyData {
+  period: number;
+  experts: AdminExpertEfficiencyItem[];
+  summary: {
+    totalExperts: number;
+    activeExperts: number;
+    totalReviewsCompleted: number;
+    averageReviewsPerExpertPerDay: number;
+  };
+  generatedAt: string;
+}
+
+export interface AdminBusinessIntelligenceData {
+  generatedAt: string;
+  subscriptionHealth: AdminSubscriptionHealthData;
+  cohortAnalysis: AdminCohortAnalysisData;
+  contentEffectiveness: AdminContentEffectivenessData;
+  expertEfficiency: AdminExpertEfficiencyData;
+}

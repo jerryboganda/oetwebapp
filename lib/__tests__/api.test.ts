@@ -1,6 +1,6 @@
 // Test the exported utilities from api.ts by importing them
 // We need to mock auth-client before importing api
-vi.mock('../auth-client', () => ({
+vi.mock('@/lib/auth-client', () => ({
   ensureFreshAccessToken: vi.fn(async () => null),
 }));
 

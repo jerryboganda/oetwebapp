@@ -20,6 +20,7 @@ export default defineConfig({
     alias: {
       '@': path.resolve(__dirname, '.'),
       'react-dom/test-utils': path.resolve(__dirname, 'tests/shims/react-dom-test-utils.ts'),
+      'recharts': path.resolve(__dirname, 'tests/mocks/recharts.tsx'),
     },
   },
 });

@@ -101,12 +101,12 @@ export default function VideoLessonPage() {
               onTimeUpdate={handleTimeUpdate}
               onEnded={handleEnded}
             />
-          ) : (
-            <div className="flex flex-col items-center gap-3 text-white/50">
-              <Video className="w-16 h-16" />
-              <span className="text-sm">Video content coming soon</span>
-            </div>
-          )}
+            ) : (
+              <div className="flex flex-col items-center gap-3 text-white/50">
+                <Video className="w-16 h-16" />
+                <span className="text-sm">Video is not available for this lesson yet.</span>
+              </div>
+            )}
         </div>
 
         {/* Description */}

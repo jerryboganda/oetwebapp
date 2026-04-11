@@ -26,7 +26,21 @@ vi.mock('motion/react', () => {
 
 	return {
 		motion: motionProxy,
-		AnimatePresence: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
+		AnimatePresence: ({ children, onExitComplete }: { children: React.ReactNode; onExitComplete?: () => void }) => {
+			const previousChildren = React.useRef(children);
+
+			React.useEffect(() => {
+				if (previousChildren.current && !children) {
+					window.setTimeout(() => {
+						onExitComplete?.();
+					}, 0);
+				}
+
+				previousChildren.current = children;
+			}, [children, onExitComplete]);
+
+			return React.createElement(React.Fragment, null, children);
+		},
 		MotionConfig: ({ children }: { children: React.ReactNode }) => React.createElement(React.Fragment, null, children),
 		useReducedMotion: () => false,
 		useAnimation: () => ({ start: vi.fn(), stop: vi.fn() }),

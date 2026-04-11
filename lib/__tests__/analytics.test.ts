@@ -2,7 +2,7 @@ const authClientMock = vi.hoisted(() => ({
   ensureFreshAccessToken: vi.fn(),
 }));
 
-vi.mock('../auth-client', () => authClientMock);
+vi.mock('@/lib/auth-client', () => authClientMock);
 
 describe('analytics transport', () => {
   const originalFetch = globalThis.fetch;

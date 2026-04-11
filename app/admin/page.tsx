@@ -75,6 +75,9 @@ export default function AdminDashboardPage() {
                     <Link href="/admin/content" className={`${quickActionLinkClassName} border border-border text-navy hover:bg-surface hover:border-border-hover`}>
                       Open Content Library
                     </Link>
+                    <Link href="/admin/business-intelligence" className={`${quickActionLinkClassName} border border-border text-navy hover:bg-surface hover:border-border-hover`}>
+                      Open BI Dashboard
+                    </Link>
                   </div>
                   <div className="space-y-1 text-xs text-muted">
                     <AdminRouteFreshnessBadge value={dashboard.generatedAt} />
@@ -169,6 +172,7 @@ export default function AdminDashboardPage() {
                   { href: '/admin/review-ops', label: 'Review Ops' },
                   { href: '/admin/freeze', label: 'Freeze Center' },
                   { href: '/admin/billing', label: 'Billing Ops' },
+                  { href: '/admin/business-intelligence', label: 'Business Intelligence' },
                   { href: '/admin/analytics/quality', label: 'Quality Analytics' },
                 ].map((link) => (
                   <Link

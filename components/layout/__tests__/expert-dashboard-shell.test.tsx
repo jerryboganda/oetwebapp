@@ -1,6 +1,6 @@
 import { screen } from '@testing-library/react';
 import { renderWithRouter } from '@/tests/test-utils';
-vi.mock('../app-shell', () => ({
+vi.mock('@/components/layout/app-shell', () => ({
   AppShell: ({ children, pageTitle }: { children: React.ReactNode; pageTitle?: string }) => (
     <div data-testid="app-shell" data-page-title={pageTitle ?? ''}>
       {children}
@@ -8,7 +8,7 @@ vi.mock('../app-shell', () => ({
   ),
 }));
 
-vi.mock('../learner-workspace-container', () => ({
+vi.mock('@/components/layout/learner-workspace-container', () => ({
   LearnerWorkspaceContainer: ({ children, className }: { children: React.ReactNode; className?: string }) => (
     <div
       data-testid="learner-workspace-container"

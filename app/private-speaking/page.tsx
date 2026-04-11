@@ -229,7 +229,7 @@ export default function PrivateSpeakingPage() {
     return (
       <LearnerDashboardShell>
         <LearnerPageHero title="Private Speaking Sessions" description="This feature is not currently available." icon={Mic} />
-        <InlineAlert variant="info" className="mt-4">Private speaking sessions are coming soon.</InlineAlert>
+        <InlineAlert variant="info" className="mt-4">Private speaking sessions are temporarily unavailable. Check back once tutor availability is enabled.</InlineAlert>
       </LearnerDashboardShell>
     );
   }

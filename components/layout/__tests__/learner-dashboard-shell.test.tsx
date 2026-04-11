@@ -2,7 +2,7 @@ import { screen } from '@testing-library/react';
 import { renderWithRouter } from '@/tests/test-utils';
 const appShellSpy = vi.fn(({ children }: { children: React.ReactNode }) => <div data-testid="app-shell">{children}</div>);
 
-vi.mock('../app-shell', () => ({
+vi.mock('@/components/layout/app-shell', () => ({
   AppShell: (props: { children: React.ReactNode }) => appShellSpy(props),
 }));
 
@@ -30,7 +30,6 @@ describe('LearnerDashboardShell', () => {
     expect(appShellSpy.mock.calls[0]?.[0].mobileMenuSections?.map((section: { label: string }) => section.label)).toEqual([
       'Practice',
       'Learn',
-      'Community',
     ]);
   });
 });

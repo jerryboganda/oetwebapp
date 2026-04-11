@@ -1,5 +1,6 @@
 import {
   fetchAdminAIConfig,
+  fetchAdminCohortAnalysis,
   fetchAdminAuditLogDetail,
   fetchAdminAuditLogs,
   fetchAdminBillingAddOns,
@@ -9,12 +10,14 @@ import {
   fetchAdminBillingPlans,
   fetchAdminBillingSubscriptions,
   fetchAdminContent,
+  fetchAdminContentEffectiveness,
   fetchAdminContentDetail,
   fetchAdminContentImpact,
   fetchAdminContentRevisions,
   fetchAdminCriteria,
   fetchAdminDashboard,
   fetchAdminFlags,
+  fetchAdminExpertEfficiency,
   fetchAdminPermissions,
   fetchAdminQualityAnalytics,
   fetchAdminReviewFailures,
@@ -22,6 +25,7 @@ import {
   fetchAdminReviewOpsSummary,
   fetchAdminTaxonomy,
   fetchAdminTaxonomyImpact,
+  fetchAdminSubscriptionHealth,
   fetchAdminUserDetail,
   fetchAdminUsers,
   fetchPublishRequests,
@@ -45,6 +49,10 @@ import type {
   AdminContentRow,
   AdminCriterion,
   AdminDashboardData,
+  AdminBusinessIntelligenceData,
+  AdminCohortAnalysisData,
+  AdminContentEffectivenessData,
+  AdminExpertEfficiencyData,
   AdminEscalationsResponse,
   AdminFlag,
   AdminPermissionsResponse,
@@ -54,6 +62,7 @@ import type {
   AdminReviewFailures,
   AdminReviewOpsSummary,
   AdminReviewQueueItem,
+  AdminSubscriptionHealthData,
   AdminTaxonomyImpact,
   AdminTaxonomyNode,
   AdminUserDetail,
@@ -891,4 +900,112 @@ function normalizeGuaranteeClaimStatus(
   if (s === 'claim_rejected') return 'claim_rejected';
   if (s === 'expired') return 'expired';
   return 'active';
+}
+
+export async function getAdminSubscriptionHealthData(): Promise<AdminSubscriptionHealthData> {
+  const raw = asRecord(await fetchAdminSubscriptionHealth());
+  return {
+    mrr: toNumberValue(raw.mrr),
+    activeSubscriptions: toNumberValue(raw.activeSubscriptions),
+    churnRate: toNumberValue(raw.churnRate),
+    newSubscriptionsThisMonth: toNumberValue(raw.newSubscriptionsThisMonth),
+    trialConversionRate: toNumberValue(raw.trialConversionRate),
+    arpu: toNumberValue(raw.arpu),
+    revenueByPlan: asArray(raw.revenueByPlan).map((item) => ({
+      planId: toStringValue(item.planId),
+      planName: toStringValue(item.planName),
+      subscribers: toNumberValue(item.subscribers),
+      monthlyRevenue: toNumberValue(item.monthlyRevenue),
+    })),
+    monthlyTrend: asArray(raw.monthlyTrend).map((item) => ({
+      month: toStringValue(item.month),
+      newSubscriptions: toNumberValue(item.newSubscriptions),
+      cancellations: toNumberValue(item.cancellations),
+    })),
+    generatedAt: toStringValue(raw.generatedAt, new Date().toISOString()),
+  };
+}
+
+export async function getAdminCohortAnalysisData(params?: Parameters<typeof fetchAdminCohortAnalysis>[0]): Promise<AdminCohortAnalysisData> {
+  const raw = asRecord(await fetchAdminCohortAnalysis(params));
+  return {
+    groupBy: toStringValue(raw.groupBy, params?.groupBy ?? 'profession'),
+    cohorts: asArray(raw.cohorts).map((item) => ({
+      cohortKey: toStringValue(item.cohortKey),
+      cohortName: toStringValue(item.cohortName),
+      learnerCount: toNumberValue(item.learnerCount),
+      averageScore: item.averageScore == null ? null : toNumberValue(item.averageScore),
+      evaluationCount: toNumberValue(item.evaluationCount),
+      activeLastMonth: toNumberValue(item.activeLastMonth),
+    })),
+    totalLearners: toNumberValue(raw.totalLearners),
+    generatedAt: toStringValue(raw.generatedAt, new Date().toISOString()),
+  };
+}
+
+export async function getAdminContentEffectivenessData(params?: Parameters<typeof fetchAdminContentEffectiveness>[0]): Promise<AdminContentEffectivenessData> {
+  const raw = asRecord(await fetchAdminContentEffectiveness(params));
+  return {
+    subtestFilter: toNullableString(raw.subtestFilter),
+    items: asArray(raw.items).map((item) => ({
+      contentId: toStringValue(item.contentId),
+      title: toStringValue(item.title),
+      subtestCode: toStringValue(item.subtestCode),
+      difficulty: toStringValue(item.difficulty),
+      totalAttempts: toNumberValue(item.totalAttempts),
+      completionRate: toNumberValue(item.completionRate),
+      averageScore: item.averageScore == null ? null : toNumberValue(item.averageScore),
+      avgTimeSeconds: item.avgTimeSeconds == null ? null : toNumberValue(item.avgTimeSeconds),
+      effectivenessScore: item.effectivenessScore == null ? null : toNumberValue(item.effectivenessScore),
+    })),
+    generatedAt: toStringValue(raw.generatedAt, new Date().toISOString()),
+  };
+}
+
+export async function getAdminExpertEfficiencyData(params?: Parameters<typeof fetchAdminExpertEfficiency>[0]): Promise<AdminExpertEfficiencyData> {
+  const raw = asRecord(await fetchAdminExpertEfficiency(params));
+  return {
+    period: toNumberValue(raw.period, params?.days ?? 30),
+    experts: asArray(raw.experts).map((item) => ({
+      expertId: toStringValue(item.expertId),
+      expertName: toStringValue(item.expertName),
+      period: toNumberValue(item.period, params?.days ?? 30),
+      assignmentsReceived: toNumberValue(item.assignmentsReceived),
+      reviewsCompleted: toNumberValue(item.reviewsCompleted),
+      averageReviewTimeMinutes: item.averageReviewTimeMinutes == null ? null : toNumberValue(item.averageReviewTimeMinutes),
+      reviewsPerDay: toNumberValue(item.reviewsPerDay),
+      aiAlignmentScore: item.aiAlignmentScore == null ? null : toNumberValue(item.aiAlignmentScore),
+      efficiency: normalizeEfficiency(item.efficiency),
+    })),
+    summary: {
+      totalExperts: toNumberValue(asRecord(raw.summary).totalExperts),
+      activeExperts: toNumberValue(asRecord(raw.summary).activeExperts),
+      totalReviewsCompleted: toNumberValue(asRecord(raw.summary).totalReviewsCompleted),
+      averageReviewsPerExpertPerDay: toNumberValue(asRecord(raw.summary).averageReviewsPerExpertPerDay),
+    },
+    generatedAt: toStringValue(raw.generatedAt, new Date().toISOString()),
+  };
+}
+
+export async function getAdminBusinessIntelligenceData(): Promise<AdminBusinessIntelligenceData> {
+  const [subscriptionHealth, cohortAnalysis, contentEffectiveness, expertEfficiency] = await Promise.all([
+    getAdminSubscriptionHealthData(),
+    getAdminCohortAnalysisData({ groupBy: 'profession' }),
+    getAdminContentEffectivenessData({ top: 4 }),
+    getAdminExpertEfficiencyData({ days: 30 }),
+  ]);
+
+  return {
+    generatedAt: subscriptionHealth.generatedAt,
+    subscriptionHealth,
+    cohortAnalysis,
+    contentEffectiveness,
+    expertEfficiency,
+  };
+}
+
+function normalizeEfficiency(value: unknown): AdminExpertEfficiencyData['experts'][number]['efficiency'] {
+  const normalized = toStringValue(value, 'no-data').toLowerCase();
+  if (normalized === 'high' || normalized === 'medium' || normalized === 'low') return normalized;
+  return 'no-data';
 }

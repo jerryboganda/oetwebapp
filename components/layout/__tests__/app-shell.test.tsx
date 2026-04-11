@@ -18,11 +18,11 @@ vi.mock('@/components/auth/auth-guard', () => ({
   AuthGuard: (props: { children: React.ReactNode; requiredRole?: 'learner' | 'expert' | 'admin' }) => authGuardSpy(props),
 }));
 
-vi.mock('../top-nav', () => ({
+vi.mock('@/components/layout/top-nav', () => ({
   TopNav: (props: { children?: React.ReactNode }) => topNavSpy(props),
 }));
 
-vi.mock('../sidebar', () => ({
+vi.mock('@/components/layout/sidebar', () => ({
   Sidebar: () => <div data-testid="sidebar" />,
   BottomNav: () => <div data-testid="bottom-nav" />,
 }));
