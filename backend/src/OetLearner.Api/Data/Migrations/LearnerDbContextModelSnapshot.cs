@@ -17,10 +17,9 @@ namespace OetLearner.Api.Data.Migrations
         {
 #pragma warning disable 612, 618
             modelBuilder
+                .HasAnnotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn)
                 .HasAnnotation("ProductVersion", "10.0.5")
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
-
-            NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
 
             modelBuilder.Entity("OetLearner.Api.Domain.AIConfigVersion", b =>
                 {
@@ -81,7 +80,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("TaskType", "Status");
 
-                    b.ToTable("AIConfigVersions");
+                    b.ToTable("AIConfigVersions", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.AccountFreezeEntitlement", b =>
@@ -122,7 +121,7 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("UserId")
                         .IsUnique();
 
-                    b.ToTable("AccountFreezeEntitlements");
+                    b.ToTable("AccountFreezeEntitlements", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.AccountFreezePolicy", b =>
@@ -212,7 +211,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("Version");
 
-                    b.ToTable("AccountFreezePolicies");
+                    b.ToTable("AccountFreezePolicies", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.AccountFreezeRecord", b =>
@@ -337,7 +336,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId", "Status");
 
-                    b.ToTable("AccountFreezeRecords");
+                    b.ToTable("AccountFreezeRecords", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.Achievement", b =>
@@ -389,7 +388,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("Status", "SortOrder");
 
-                    b.ToTable("Achievements");
+                    b.ToTable("Achievements", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.AnalyticsEventRecord", b =>
@@ -419,7 +418,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId", "EventName", "OccurredAt");
 
-                    b.ToTable("AnalyticsEvents");
+                    b.ToTable("AnalyticsEvents", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ApplicationUserAccount", b =>
@@ -479,7 +478,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("NormalizedEmail", "Role");
 
-                    b.ToTable("ApplicationUserAccounts");
+                    b.ToTable("ApplicationUserAccounts", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.Attempt", b =>
@@ -599,7 +598,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId", "SubtestCode", "State");
 
-                    b.ToTable("Attempts");
+                    b.ToTable("Attempts", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.AuditEvent", b =>
@@ -653,7 +652,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ResourceType", "ResourceId");
 
-                    b.ToTable("AuditEvents");
+                    b.ToTable("AuditEvents", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.BackgroundJobItem", b =>
@@ -708,7 +707,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("State", "AvailableAt");
 
-                    b.ToTable("BackgroundJobs");
+                    b.ToTable("BackgroundJobs", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.BillingAddOn", b =>
@@ -795,7 +794,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("Status", "DisplayOrder");
 
-                    b.ToTable("BillingAddOns");
+                    b.ToTable("BillingAddOns", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.BillingCoupon", b =>
@@ -881,7 +880,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("Status", "EndsAt");
 
-                    b.ToTable("BillingCoupons");
+                    b.ToTable("BillingCoupons", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.BillingCouponRedemption", b =>
@@ -931,7 +930,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("CouponCode", "UserId", "RedeemedAt");
 
-                    b.ToTable("BillingCouponRedemptions");
+                    b.ToTable("BillingCouponRedemptions", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.BillingEvent", b =>
@@ -980,7 +979,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("EntityType", "EntityId", "OccurredAt");
 
-                    b.ToTable("BillingEvents");
+                    b.ToTable("BillingEvents", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.BillingPlan", b =>
@@ -1067,7 +1066,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("Status", "DisplayOrder");
 
-                    b.ToTable("BillingPlans");
+                    b.ToTable("BillingPlans", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.BillingQuote", b =>
@@ -1140,7 +1139,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId", "CreatedAt");
 
-                    b.ToTable("BillingQuotes");
+                    b.ToTable("BillingQuotes", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.Certificate", b =>
@@ -1197,7 +1196,7 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("VerificationCode")
                         .IsUnique();
 
-                    b.ToTable("Certificates");
+                    b.ToTable("Certificates", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.Cohort", b =>
@@ -1243,7 +1242,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Cohorts");
+                    b.ToTable("Cohorts", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.CohortMember", b =>
@@ -1275,7 +1274,7 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("CohortId", "LearnerId")
                         .IsUnique();
 
-                    b.ToTable("CohortMembers");
+                    b.ToTable("CohortMembers", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ContentCohortOverlay", b =>
@@ -1322,7 +1321,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ProgramId", "CohortCode");
 
-                    b.ToTable("ContentCohortOverlays");
+                    b.ToTable("ContentCohortOverlays", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ContentContributor", b =>
@@ -1364,7 +1363,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ContentContributors");
+                    b.ToTable("ContentContributors", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ContentGenerationJob", b =>
@@ -1435,7 +1434,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("State", "CreatedAt");
 
-                    b.ToTable("ContentGenerationJobs");
+                    b.ToTable("ContentGenerationJobs", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ContentImportBatch", b =>
@@ -1482,7 +1481,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("Status", "CreatedAt");
 
-                    b.ToTable("ContentImportBatches");
+                    b.ToTable("ContentImportBatches", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ContentItem", b =>
@@ -1685,7 +1684,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("SubtestCode", "Status");
 
-                    b.ToTable("ContentItems");
+                    b.ToTable("ContentItems", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ContentLesson", b =>
@@ -1727,7 +1726,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ModuleId", "DisplayOrder");
 
-                    b.ToTable("ContentLessons");
+                    b.ToTable("ContentLessons", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ContentModule", b =>
@@ -1767,7 +1766,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("TrackId", "DisplayOrder");
 
-                    b.ToTable("ContentModules");
+                    b.ToTable("ContentModules", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ContentPackage", b =>
@@ -1848,7 +1847,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("Status", "DisplayOrder");
 
-                    b.ToTable("ContentPackages");
+                    b.ToTable("ContentPackages", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ContentProgram", b =>
@@ -1933,7 +1932,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("Status", "DisplayOrder");
 
-                    b.ToTable("ContentPrograms");
+                    b.ToTable("ContentPrograms", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ContentReference", b =>
@@ -1975,7 +1974,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ModuleId", "DisplayOrder");
 
-                    b.ToTable("ContentReferences");
+                    b.ToTable("ContentReferences", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ContentRevision", b =>
@@ -2017,7 +2016,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ContentItemId", "RevisionNumber");
 
-                    b.ToTable("ContentRevisions");
+                    b.ToTable("ContentRevisions", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ContentSubmission", b =>
@@ -2107,7 +2106,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ContributorId", "Status");
 
-                    b.ToTable("ContentSubmissions");
+                    b.ToTable("ContentSubmissions", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ContentTrack", b =>
@@ -2144,7 +2143,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ProgramId", "DisplayOrder");
 
-                    b.ToTable("ContentTracks");
+                    b.ToTable("ContentTracks", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ConversationSession", b =>
@@ -2213,7 +2212,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId", "State");
 
-                    b.ToTable("ConversationSessions");
+                    b.ToTable("ConversationSessions", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ConversationTurn", b =>
@@ -2260,7 +2259,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("SessionId", "TurnNumber");
 
-                    b.ToTable("ConversationTurns");
+                    b.ToTable("ConversationTurns", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.CriterionReference", b =>
@@ -2304,7 +2303,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Criteria");
+                    b.ToTable("Criteria", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.DiagnosticSession", b =>
@@ -2344,7 +2343,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId", "State");
 
-                    b.ToTable("DiagnosticSessions");
+                    b.ToTable("DiagnosticSessions", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.DiagnosticSubtestStatus", b =>
@@ -2377,7 +2376,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("DiagnosticSubtests");
+                    b.ToTable("DiagnosticSubtests", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.EmailOtpChallenge", b =>
@@ -2417,7 +2416,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ApplicationUserAccountId", "Purpose", "ExpiresAt");
 
-                    b.ToTable("EmailOtpChallenges");
+                    b.ToTable("EmailOtpChallenges", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.Evaluation", b =>
@@ -2502,7 +2501,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("AttemptId", "State");
 
-                    b.ToTable("Evaluations");
+                    b.ToTable("Evaluations", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ExamBooking", b =>
@@ -2548,7 +2547,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId", "ExamDate");
 
-                    b.ToTable("ExamBookings");
+                    b.ToTable("ExamBookings", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ExamFamily", b =>
@@ -2595,7 +2594,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("IsActive", "SortOrder");
 
-                    b.ToTable("ExamFamilies");
+                    b.ToTable("ExamFamilies", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ExamType", b =>
@@ -2642,7 +2641,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("Status", "SortOrder");
 
-                    b.ToTable("ExamTypes");
+                    b.ToTable("ExamTypes", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ExpertAvailability", b =>
@@ -2675,7 +2674,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ReviewerId");
 
-                    b.ToTable("ExpertAvailabilities");
+                    b.ToTable("ExpertAvailabilities", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ExpertCalibrationCase", b =>
@@ -2732,7 +2731,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ExpertCalibrationCases");
+                    b.ToTable("ExpertCalibrationCases", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ExpertCalibrationNote", b =>
@@ -2761,7 +2760,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ExpertCalibrationNotes");
+                    b.ToTable("ExpertCalibrationNotes", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ExpertCalibrationResult", b =>
@@ -2805,7 +2804,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("CalibrationCaseId", "ReviewerId");
 
-                    b.ToTable("ExpertCalibrationResults");
+                    b.ToTable("ExpertCalibrationResults", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ExpertMetricSnapshot", b =>
@@ -2851,7 +2850,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ReviewerId", "WindowStart");
 
-                    b.ToTable("ExpertMetricSnapshots");
+                    b.ToTable("ExpertMetricSnapshots", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ExpertReviewAssignment", b =>
@@ -2896,7 +2895,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ReviewRequestId", "ClaimState");
 
-                    b.ToTable("ExpertReviewAssignments");
+                    b.ToTable("ExpertReviewAssignments", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ExpertReviewDraft", b =>
@@ -2962,7 +2961,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ReviewRequestId", "ReviewerId");
 
-                    b.ToTable("ExpertReviewDrafts");
+                    b.ToTable("ExpertReviewDrafts", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ExpertUser", b =>
@@ -3011,7 +3010,7 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("AuthAccountId")
                         .IsUnique();
 
-                    b.ToTable("ExpertUsers");
+                    b.ToTable("ExpertUsers", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ExternalIdentityLink", b =>
@@ -3064,7 +3063,7 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("Provider", "ProviderSubject")
                         .IsUnique();
 
-                    b.ToTable("ExternalIdentityLinks");
+                    b.ToTable("ExternalIdentityLinks", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.FeatureFlag", b =>
@@ -3111,7 +3110,7 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("Key")
                         .IsUnique();
 
-                    b.ToTable("FeatureFlags");
+                    b.ToTable("FeatureFlags", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ForumCategory", b =>
@@ -3144,7 +3143,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("ForumCategories");
+                    b.ToTable("ForumCategories", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ForumReply", b =>
@@ -3193,7 +3192,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ThreadId");
 
-                    b.ToTable("ForumReplies");
+                    b.ToTable("ForumReplies", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ForumThread", b =>
@@ -3256,7 +3255,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("CategoryId", "LastActivityAt");
 
-                    b.ToTable("ForumThreads");
+                    b.ToTable("ForumThreads", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.FoundationResource", b =>
@@ -3307,7 +3306,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ResourceType", "Status");
 
-                    b.ToTable("FoundationResources");
+                    b.ToTable("FoundationResources", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.FreePreviewAsset", b =>
@@ -3355,7 +3354,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("Status", "DisplayOrder");
 
-                    b.ToTable("FreePreviewAssets");
+                    b.ToTable("FreePreviewAssets", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.GrammarLesson", b =>
@@ -3416,7 +3415,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ExamTypeCode", "Category", "Status");
 
-                    b.ToTable("GrammarLessons");
+                    b.ToTable("GrammarLessons", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.IdempotencyRecord", b =>
@@ -3447,7 +3446,7 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("Scope", "Key")
                         .IsUnique();
 
-                    b.ToTable("IdempotencyRecords");
+                    b.ToTable("IdempotencyRecords", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.Invoice", b =>
@@ -3483,7 +3482,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId", "IssuedAt");
 
-                    b.ToTable("Invoices");
+                    b.ToTable("Invoices", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.LeaderboardEntry", b =>
@@ -3530,7 +3529,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ExamTypeCode", "Period", "PeriodStart", "Rank");
 
-                    b.ToTable("LeaderboardEntries");
+                    b.ToTable("LeaderboardEntries", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.LearnerAchievement", b =>
@@ -3562,7 +3561,7 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("UserId", "AchievementId")
                         .IsUnique();
 
-                    b.ToTable("LearnerAchievements");
+                    b.ToTable("LearnerAchievements", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.LearnerGoal", b =>
@@ -3639,7 +3638,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Goals");
+                    b.ToTable("Goals", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.LearnerGrammarProgress", b =>
@@ -3681,7 +3680,7 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("UserId", "LessonId")
                         .IsUnique();
 
-                    b.ToTable("LearnerGrammarProgress");
+                    b.ToTable("LearnerGrammarProgress", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.LearnerPronunciationProgress", b =>
@@ -3717,7 +3716,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId", "PhonemeCode");
 
-                    b.ToTable("LearnerPronunciationProgress");
+                    b.ToTable("LearnerPronunciationProgress", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.LearnerRegistrationProfile", b =>
@@ -3794,7 +3793,7 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("LearnerUserId")
                         .IsUnique();
 
-                    b.ToTable("LearnerRegistrationProfiles");
+                    b.ToTable("LearnerRegistrationProfiles", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.LearnerSettings", b =>
@@ -3836,7 +3835,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Settings");
+                    b.ToTable("Settings", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.LearnerSkillProfile", b =>
@@ -3885,7 +3884,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId", "ExamTypeCode", "SubtestCode");
 
-                    b.ToTable("LearnerSkillProfiles");
+                    b.ToTable("LearnerSkillProfiles", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.LearnerStreak", b =>
@@ -3914,7 +3913,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasKey("UserId");
 
-                    b.ToTable("LearnerStreaks");
+                    b.ToTable("LearnerStreaks", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.LearnerUser", b =>
@@ -4015,7 +4014,7 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("AuthAccountId")
                         .IsUnique();
 
-                    b.ToTable("Users");
+                    b.ToTable("Users", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.LearnerVideoProgress", b =>
@@ -4048,7 +4047,7 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("UserId", "VideoLessonId")
                         .IsUnique();
 
-                    b.ToTable("LearnerVideoProgress");
+                    b.ToTable("LearnerVideoProgress", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.LearnerVocabulary", b =>
@@ -4100,7 +4099,7 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("UserId", "TermId")
                         .IsUnique();
 
-                    b.ToTable("LearnerVocabularies");
+                    b.ToTable("LearnerVocabularies", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.LearnerXP", b =>
@@ -4129,7 +4128,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasKey("UserId");
 
-                    b.ToTable("LearnerXPs");
+                    b.ToTable("LearnerXPs", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.MarketingAsset", b =>
@@ -4166,7 +4165,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("AssetType", "Status");
 
-                    b.ToTable("MarketingAssets");
+                    b.ToTable("MarketingAssets", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.MediaAsset", b =>
@@ -4226,7 +4225,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("Status");
 
-                    b.ToTable("MediaAssets");
+                    b.ToTable("MediaAssets", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.MfaRecoveryCode", b =>
@@ -4255,7 +4254,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ApplicationUserAccountId");
 
-                    b.ToTable("MfaRecoveryCodes");
+                    b.ToTable("MfaRecoveryCodes", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.MockAttempt", b =>
@@ -4302,7 +4301,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("MockAttempts");
+                    b.ToTable("MockAttempts", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.MockReport", b =>
@@ -4328,7 +4327,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("MockReports");
+                    b.ToTable("MockReports", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.NotificationDeliveryAttempt", b =>
@@ -4389,7 +4388,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("NotificationEventId", "Channel", "AttemptedAt");
 
-                    b.ToTable("NotificationDeliveryAttempts");
+                    b.ToTable("NotificationDeliveryAttempts", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.NotificationEvent", b =>
@@ -4480,7 +4479,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("State", "CreatedAt");
 
-                    b.ToTable("NotificationEvents");
+                    b.ToTable("NotificationEvents", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.NotificationInboxItem", b =>
@@ -4546,7 +4545,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("AuthAccountId", "IsRead", "CreatedAt");
 
-                    b.ToTable("NotificationInboxItems");
+                    b.ToTable("NotificationInboxItems", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.NotificationPolicyOverride", b =>
@@ -4593,7 +4592,7 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("AudienceRole", "EventKey")
                         .IsUnique();
 
-                    b.ToTable("NotificationPolicyOverrides");
+                    b.ToTable("NotificationPolicyOverrides", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.NotificationPreference", b =>
@@ -4645,7 +4644,7 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("AuthAccountId")
                         .IsUnique();
 
-                    b.ToTable("NotificationPreferences");
+                    b.ToTable("NotificationPreferences", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.PackageContentRule", b =>
@@ -4678,7 +4677,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("PackageId", "RuleType");
 
-                    b.ToTable("PackageContentRules");
+                    b.ToTable("PackageContentRules", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.PaymentTransaction", b =>
@@ -4746,7 +4745,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("LearnerUserId", "CreatedAt");
 
-                    b.ToTable("PaymentTransactions");
+                    b.ToTable("PaymentTransactions", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.PaymentWebhookEvent", b =>
@@ -4795,7 +4794,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ProcessingStatus", "ReceivedAt");
 
-                    b.ToTable("PaymentWebhookEvents");
+                    b.ToTable("PaymentWebhookEvents", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.PredictionSnapshot", b =>
@@ -4851,7 +4850,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId", "ExamTypeCode", "SubtestCode", "ComputedAt");
 
-                    b.ToTable("PredictionSnapshots");
+                    b.ToTable("PredictionSnapshots", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ProfessionReference", b =>
@@ -4880,7 +4879,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Professions");
+                    b.ToTable("Professions", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.PronunciationAssessment", b =>
@@ -4936,7 +4935,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("PronunciationAssessments");
+                    b.ToTable("PronunciationAssessments", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.PronunciationDrill", b =>
@@ -4988,7 +4987,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("PronunciationDrills");
+                    b.ToTable("PronunciationDrills", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.PushSubscription", b =>
@@ -5050,7 +5049,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("AuthAccountId", "IsActive");
 
-                    b.ToTable("PushSubscriptions");
+                    b.ToTable("PushSubscriptions", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ReadinessSnapshot", b =>
@@ -5078,7 +5077,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("ReadinessSnapshots");
+                    b.ToTable("ReadinessSnapshots", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.Referral", b =>
@@ -5125,7 +5124,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ReferrerUserId");
 
-                    b.ToTable("Referrals");
+                    b.ToTable("Referrals", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ReferralCode", b =>
@@ -5164,7 +5163,7 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("UserId")
                         .IsUnique();
 
-                    b.ToTable("ReferralCodes");
+                    b.ToTable("ReferralCodes", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.RefreshTokenRecord", b =>
@@ -5202,7 +5201,7 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("ApplicationUserAccountId", "TokenHash")
                         .IsUnique();
 
-                    b.ToTable("RefreshTokenRecords");
+                    b.ToTable("RefreshTokenRecords", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ReviewItem", b =>
@@ -5279,7 +5278,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId", "ExamTypeCode", "Status");
 
-                    b.ToTable("ReviewItems");
+                    b.ToTable("ReviewItems", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ReviewRequest", b =>
@@ -5337,7 +5336,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("AttemptId", "State");
 
-                    b.ToTable("ReviewRequests");
+                    b.ToTable("ReviewRequests", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.SignupExamTypeCatalog", b =>
@@ -5371,7 +5370,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("IsActive", "SortOrder");
 
-                    b.ToTable("SignupExamTypeCatalog");
+                    b.ToTable("SignupExamTypeCatalog", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.SignupProfessionCatalog", b =>
@@ -5408,7 +5407,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("IsActive", "SortOrder");
 
-                    b.ToTable("SignupProfessionCatalog");
+                    b.ToTable("SignupProfessionCatalog", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.SignupSessionCatalog", b =>
@@ -5467,7 +5466,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("IsActive", "SortOrder");
 
-                    b.ToTable("SignupSessionCatalog");
+                    b.ToTable("SignupSessionCatalog", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.SponsorAccount", b =>
@@ -5510,7 +5509,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("SponsorAccounts");
+                    b.ToTable("SponsorAccounts", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.SponsorLearnerLink", b =>
@@ -5543,7 +5542,7 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("SponsorId", "LearnerId")
                         .IsUnique();
 
-                    b.ToTable("SponsorLearnerLinks");
+                    b.ToTable("SponsorLearnerLinks", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.StrategyGuide", b =>
@@ -5598,7 +5597,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ExamTypeCode", "Category", "Status");
 
-                    b.ToTable("StrategyGuides");
+                    b.ToTable("StrategyGuides", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.StudyGroup", b =>
@@ -5646,7 +5645,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("StudyGroups");
+                    b.ToTable("StudyGroups", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.StudyGroupMember", b =>
@@ -5680,7 +5679,7 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("GroupId", "UserId")
                         .IsUnique();
 
-                    b.ToTable("StudyGroupMembers");
+                    b.ToTable("StudyGroupMembers", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.StudyPlan", b =>
@@ -5728,7 +5727,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("StudyPlans");
+                    b.ToTable("StudyPlans", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.StudyPlanItem", b =>
@@ -5784,7 +5783,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("StudyPlanId", "Section", "Status");
 
-                    b.ToTable("StudyPlanItems");
+                    b.ToTable("StudyPlanItems", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.Subscription", b =>
@@ -5830,7 +5829,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Subscriptions");
+                    b.ToTable("Subscriptions", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.SubscriptionItem", b =>
@@ -5886,7 +5885,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("SubscriptionId", "Status");
 
-                    b.ToTable("SubscriptionItems");
+                    b.ToTable("SubscriptionItems", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.SubtestReference", b =>
@@ -5910,7 +5909,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("Subtests");
+                    b.ToTable("Subtests", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.TaskType", b =>
@@ -5964,7 +5963,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ExamTypeCode", "SubtestCode", "Status");
 
-                    b.ToTable("TaskTypes");
+                    b.ToTable("TaskTypes", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.TestimonialAsset", b =>
@@ -6016,7 +6015,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("DisplayApproved", "DisplayOrder");
 
-                    b.ToTable("TestimonialAssets");
+                    b.ToTable("TestimonialAssets", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.TutoringAvailability", b =>
@@ -6055,7 +6054,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ExpertUserId");
 
-                    b.ToTable("TutoringAvailabilities");
+                    b.ToTable("TutoringAvailabilities", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.TutoringSession", b =>
@@ -6134,7 +6133,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("LearnerUserId", "ScheduledAt");
 
-                    b.ToTable("TutoringSessions");
+                    b.ToTable("TutoringSessions", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.UploadSession", b =>
@@ -6168,7 +6167,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("AttemptId");
 
-                    b.ToTable("UploadSessions");
+                    b.ToTable("UploadSessions", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.VideoLesson", b =>
@@ -6240,7 +6239,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ExamTypeCode", "Category", "Status");
 
-                    b.ToTable("VideoLessons");
+                    b.ToTable("VideoLessons", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.VocabularyQuizResult", b =>
@@ -6272,7 +6271,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasKey("Id");
 
-                    b.ToTable("VocabularyQuizResults");
+                    b.ToTable("VocabularyQuizResults", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.VocabularyTerm", b =>
@@ -6348,7 +6347,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ExamTypeCode", "Status", "Category");
 
-                    b.ToTable("VocabularyTerms");
+                    b.ToTable("VocabularyTerms", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.Wallet", b =>
@@ -6377,7 +6376,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId");
 
-                    b.ToTable("Wallets");
+                    b.ToTable("Wallets", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.WalletTransaction", b =>
@@ -6427,7 +6426,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("WalletId", "CreatedAt");
 
-                    b.ToTable("WalletTransactions");
+                    b.ToTable("WalletTransactions", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.WritingCoachSession", b =>
@@ -6462,7 +6461,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("AttemptId");
 
-                    b.ToTable("WritingCoachSessions");
+                    b.ToTable("WritingCoachSessions", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.WritingCoachSuggestion", b =>
@@ -6516,7 +6515,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("AttemptId", "Resolution");
 
-                    b.ToTable("WritingCoachSuggestions");
+                    b.ToTable("WritingCoachSuggestions", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.AuditEvent", b =>
