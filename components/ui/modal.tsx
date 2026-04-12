@@ -113,12 +113,12 @@ function queueFocusRestore(element: HTMLElement | null, descriptor: FocusRestore
 
 function getOverlayBackdropMotion(reducedMotion: boolean) {
   return reducedMotion
-    ? { initial: false, animate: { opacity: 1 }, exit: { opacity: 0 }, transition: getSurfaceTransition('state', true) }
+    ? { initial: false, animate: { opacity: 1 }, exit: { opacity: 0 }, transition: { duration: 0.12 } }
     : {
         initial: { opacity: 0 },
         animate: { opacity: 1 },
         exit: { opacity: 0 },
-        transition: getSurfaceTransition('state', false),
+        transition: { duration: 0.18 },
       };
 }
 
@@ -278,13 +278,13 @@ export function Drawer({ open, onClose, title, children, side = 'right', classNa
             initial: false,
             animate: { opacity: 1 },
             exit: { opacity: 0 },
-            transition: getSurfaceTransition('state', true),
+            transition: { duration: 0.12 },
           }
         : {
             initial: { opacity: 0, x: side === 'right' ? 24 : -24 },
             animate: { opacity: 1, x: 0 },
             exit: { opacity: 0, x: side === 'right' ? 24 : -24 },
-            transition: getSurfaceTransition('overlay', false),
+            transition: getSurfaceTransition('overlay', reducedMotion),
           },
     [reducedMotion, side],
   );

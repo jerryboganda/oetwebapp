@@ -12,10 +12,31 @@
 #   public *;
 #}
 
-# Uncomment this to preserve the line number information for
-# debugging stack traces.
-#-keepattributes SourceFile,LineNumberTable
+# Preserve line number information for debugging stack traces.
+-keepattributes SourceFile,LineNumberTable
 
-# If you keep the line number information, uncomment this to
-# hide the original source file name.
-#-renamesourcefileattribute SourceFile
+# Hide the original source file name.
+-renamesourcefileattribute SourceFile
+
+# ── Capacitor ────────────────────────────────────────────────────
+
+# Keep Capacitor plugin classes (bridge interface)
+-keep class com.getcapacitor.** { *; }
+-keep class com.oetprep.learner.** { *; }
+
+# Keep JavaScript interface annotations
+-keepclassmembers class * {
+    @android.webkit.JavascriptInterface <methods>;
+}
+
+# Keep Capacitor plugin annotations
+-keepattributes *Annotation*
+
+# ── Firebase / Push Notifications ────────────────────────────────
+
+-keep class com.google.firebase.** { *; }
+-keep class com.google.android.gms.** { *; }
+
+# ── SecureStoragePlugin ──────────────────────────────────────────
+
+-keep class com.nickyamanern.** { *; }

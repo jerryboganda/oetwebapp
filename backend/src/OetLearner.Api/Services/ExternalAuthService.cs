@@ -17,10 +17,10 @@ public sealed class ExternalAuthService(
 {
     private readonly PlatformOptions _platformOptions = platformOptions.Value;
 
-    public Uri BuildAuthorizationRedirect(string provider, string? nextPath)
+    public Uri BuildAuthorizationRedirect(string provider, string? nextPath, string? platform)
     {
         var normalizedProvider = NormalizeProvider(provider);
-        var state = ticketService.CreateStateToken(normalizedProvider, nextPath);
+        var state = ticketService.CreateStateToken(normalizedProvider, nextPath, platform);
         return providerClient.BuildAuthorizationUri(
             normalizedProvider,
             state,
@@ -35,6 +35,7 @@ public sealed class ExternalAuthService(
         CancellationToken cancellationToken = default)
     {
         var normalizedProvider = NormalizeProvider(provider);
+        string? detectedPlatform = null;
 
         try
         {
@@ -44,6 +45,7 @@ public sealed class ExternalAuthService(
             }
 
             var stateTicket = ticketService.ReadStateToken(normalizedProvider, state ?? string.Empty);
+            detectedPlatform = stateTicket.Platform;
             var profile = await providerClient.ExchangeCodeAsync(
                 normalizedProvider,
                 code ?? string.Empty,
@@ -58,7 +60,7 @@ public sealed class ExternalAuthService(
                     linkedAccount.Id,
                     stateTicket.NextPath);
 
-                return BuildFrontendCallbackRedirect(normalizedProvider, exchangeToken, stateTicket.NextPath);
+                return BuildFrontendCallbackRedirect(normalizedProvider, exchangeToken, stateTicket.NextPath, detectedPlatform);
             }
 
             var registrationToken = ticketService.CreateRegistrationExchangeToken(
@@ -69,15 +71,15 @@ public sealed class ExternalAuthService(
                 profile.LastName,
                 stateTicket.NextPath);
 
-            return BuildFrontendCallbackRedirect(normalizedProvider, registrationToken, stateTicket.NextPath);
+            return BuildFrontendCallbackRedirect(normalizedProvider, registrationToken, stateTicket.NextPath, detectedPlatform);
         }
         catch (ApiException apiException)
         {
-            return BuildFrontendErrorRedirect(apiException.ErrorCode);
+            return BuildFrontendErrorRedirect(apiException.ErrorCode, detectedPlatform);
         }
         catch
         {
-            return BuildFrontendErrorRedirect("external_auth_failed");
+            return BuildFrontendErrorRedirect("external_auth_failed", detectedPlatform);
         }
     }
 
@@ -186,9 +188,10 @@ public sealed class ExternalAuthService(
     private string BuildBackendCallbackUrl(string provider)
         => $"{ResolvePublicWebBaseUrl()}/api/backend/v1/auth/external/{provider}/callback";
 
-    private Uri BuildFrontendCallbackRedirect(string provider, string exchangeToken, string? nextPath)
+    private Uri BuildFrontendCallbackRedirect(string provider, string exchangeToken, string? nextPath, string? platform)
     {
-        var callbackUrl = $"{ResolvePublicWebBaseUrl()}/auth/callback/{provider}?token={Uri.EscapeDataString(exchangeToken)}";
+        var baseUrl = string.Equals(platform, "desktop", StringComparison.Ordinal) ? "oet-prep://" : ResolvePublicWebBaseUrl();
+        var callbackUrl = $"{baseUrl}/auth/callback/{provider}?token={Uri.EscapeDataString(exchangeToken)}";
         if (!string.IsNullOrWhiteSpace(nextPath))
         {
             callbackUrl += $"&next={Uri.EscapeDataString(nextPath)}";
@@ -197,8 +200,11 @@ public sealed class ExternalAuthService(
         return new Uri(callbackUrl);
     }
 
-    private Uri BuildFrontendErrorRedirect(string errorCode)
-        => new($"{ResolvePublicWebBaseUrl()}/sign-in?externalError={Uri.EscapeDataString(errorCode)}");
+    private Uri BuildFrontendErrorRedirect(string errorCode, string? platform = null)
+    {
+        var baseUrl = string.Equals(platform, "desktop", StringComparison.Ordinal) ? "oet-prep://" : ResolvePublicWebBaseUrl();
+        return new($"{baseUrl}/sign-in?externalError={Uri.EscapeDataString(errorCode)}");
+    }
 
     private string ResolvePublicWebBaseUrl()
     {

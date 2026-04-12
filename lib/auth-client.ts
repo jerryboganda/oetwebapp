@@ -257,9 +257,18 @@ export async function fetchSignupCatalog(): Promise<SignupCatalog> {
 }
 
 export function buildExternalAuthStartHref(provider: ExternalAuthProvider, nextPath?: string | null): string {
+  let platform: string | undefined;
+  if (typeof window !== 'undefined') {
+    if ((window as Record<string, unknown>).desktopBridge) {
+      platform = 'desktop';
+    } else if ((window as Record<string, unknown>).Capacitor && typeof (window as Record<string, unknown> & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform === 'function' && (window as Record<string, unknown> & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor!.isNativePlatform!()) {
+      platform = 'capacitor';
+    }
+  }
   return resolveUrl(
     buildPathWithQuery(`/v1/auth/external/${provider}/start`, {
       next: nextPath ?? undefined,
+      platform,
     })
   );
 }

@@ -22,8 +22,8 @@ public static class AuthEndpoints
                 => Results.Ok(await service.SignInAsync(request, ct)))
             .AllowAnonymous();
 
-        auth.MapGet("/external/{provider}/start", (string provider, string? next, ExternalAuthService service)
-                => Results.Redirect(service.BuildAuthorizationRedirect(provider, next).ToString()))
+        auth.MapGet("/external/{provider}/start", (string provider, string? next, string? platform, ExternalAuthService service)
+                => Results.Redirect(service.BuildAuthorizationRedirect(provider, next, platform).ToString()))
             .AllowAnonymous();
 
         auth.MapGet("/external/{provider}/callback", async (

@@ -164,6 +164,14 @@ function isTrustedRendererUrl(urlString) {
   }
 }
 
+function validateSenderFrame(event) {
+  const senderUrl = event?.senderFrame?.url;
+  if (!senderUrl) {
+    return false;
+  }
+  return isTrustedRendererUrl(senderUrl);
+}
+
 function isAllowedExternalUrl(urlString) {
   try {
     return ALLOWED_EXTERNAL_PROTOCOLS.has(new URL(urlString).protocol);
@@ -723,6 +731,27 @@ app.whenReady().then(async () => {
     app.setAppUserModelId('com.oetprep.desktop');
     applyApplicationSecurityPolicies();
     installCertificatePinning(session.defaultSession, { logger: console });
+
+    session.defaultSession.on('will-download', (_downloadEvent, item) => {
+      const suggestedFilename = item.getFilename();
+      const savePath = dialog.showSaveDialogSync(mainWindow, {
+        defaultPath: suggestedFilename,
+      });
+
+      if (!savePath) {
+        item.cancel();
+        return;
+      }
+
+      item.setSavePath(savePath);
+
+      item.on('done', (_doneEvent, state) => {
+        if (state === 'completed' && savePath) {
+          shell.showItemInFolder(savePath);
+        }
+      });
+    });
+
     secureSecretStore = createSecureSecretStore({ logger: console });
 
     if (!app.isPackaged) {
@@ -769,7 +798,10 @@ app.on('window-all-closed', () => {
   }
 });
 
-ipcMain.handle('desktop:open-external', async (_event, url) => {
+ipcMain.handle('desktop:open-external', async (event, url) => {
+  if (!validateSenderFrame(event)) {
+    throw new Error('Unauthorized IPC sender.');
+  }
   if (typeof url !== 'string' || url.trim() === '') {
     throw new Error('A valid URL is required.');
   }
@@ -782,7 +814,10 @@ ipcMain.handle('desktop:open-external', async (_event, url) => {
   return true;
 });
 
-ipcMain.handle('desktop:secret-storage:status', async () => {
+ipcMain.handle('desktop:secret-storage:status', async (event) => {
+  if (!validateSenderFrame(event)) {
+    throw new Error('Unauthorized IPC sender.');
+  }
   if (!secureSecretStore) {
     secureSecretStore = createSecureSecretStore({ logger: console });
   }
@@ -790,7 +825,10 @@ ipcMain.handle('desktop:secret-storage:status', async () => {
   return secureSecretStore.getStatus();
 });
 
-ipcMain.handle('desktop:secret-storage:get', async (_event, payload) => {
+ipcMain.handle('desktop:secret-storage:get', async (event, payload) => {
+  if (!validateSenderFrame(event)) {
+    throw new Error('Unauthorized IPC sender.');
+  }
   if (!secureSecretStore) {
     secureSecretStore = createSecureSecretStore({ logger: console });
   }
@@ -800,7 +838,10 @@ ipcMain.handle('desktop:secret-storage:get', async (_event, payload) => {
   return secureSecretStore.getSecret({ namespace, key });
 });
 
-ipcMain.handle('desktop:secret-storage:set', async (_event, payload) => {
+ipcMain.handle('desktop:secret-storage:set', async (event, payload) => {
+  if (!validateSenderFrame(event)) {
+    throw new Error('Unauthorized IPC sender.');
+  }
   if (!secureSecretStore) {
     secureSecretStore = createSecureSecretStore({ logger: console });
   }
@@ -811,7 +852,10 @@ ipcMain.handle('desktop:secret-storage:set', async (_event, payload) => {
   return secureSecretStore.setSecret({ namespace, key, value });
 });
 
-ipcMain.handle('desktop:secret-storage:delete', async (_event, payload) => {
+ipcMain.handle('desktop:secret-storage:delete', async (event, payload) => {
+  if (!validateSenderFrame(event)) {
+    throw new Error('Unauthorized IPC sender.');
+  }
   if (!secureSecretStore) {
     secureSecretStore = createSecureSecretStore({ logger: console });
   }
@@ -821,12 +865,17 @@ ipcMain.handle('desktop:secret-storage:delete', async (_event, payload) => {
   return secureSecretStore.deleteSecret({ namespace, key });
 });
 
-ipcMain.handle('desktop:runtime-info', async () => ({
-  isPackaged: app.isPackaged,
-  activeBackendUrl,
-  ignoredPackagedLoopbackApiTarget,
-  windowState: getMainWindowState(),
-}));
+ipcMain.handle('desktop:runtime-info', async (event) => {
+  if (!validateSenderFrame(event)) {
+    throw new Error('Unauthorized IPC sender.');
+  }
+  return {
+    isPackaged: app.isPackaged,
+    activeBackendUrl,
+    ignoredPackagedLoopbackApiTarget,
+    windowState: getMainWindowState(),
+  };
+});
 
 // ---------- M3: Desktop Offline Content Cache ----------
 const OFFLINE_CACHE_DIR = path.join(app.getPath('userData'), 'offline-content');
@@ -845,7 +894,10 @@ function sanitizeCacheKey(key) {
   return key.replace(/[^a-zA-Z0-9._-]/g, '_');
 }
 
-ipcMain.handle('desktop:offline-cache:store', async (_event, payload) => {
+ipcMain.handle('desktop:offline-cache:store', async (event, payload) => {
+  if (!validateSenderFrame(event)) {
+    throw new Error('Unauthorized IPC sender.');
+  }
   ensureOfflineCacheDir();
   const key = sanitizeCacheKey(payload?.key);
   const data = payload?.data;
@@ -861,7 +913,10 @@ ipcMain.handle('desktop:offline-cache:store', async (_event, payload) => {
   return { success: true, key };
 });
 
-ipcMain.handle('desktop:offline-cache:get', async (_event, payload) => {
+ipcMain.handle('desktop:offline-cache:get', async (event, payload) => {
+  if (!validateSenderFrame(event)) {
+    throw new Error('Unauthorized IPC sender.');
+  }
   ensureOfflineCacheDir();
   const key = sanitizeCacheKey(payload?.key);
   const filePath = path.join(OFFLINE_CACHE_DIR, `${key}.json`);
@@ -876,7 +931,10 @@ ipcMain.handle('desktop:offline-cache:get', async (_event, payload) => {
   return JSON.parse(raw);
 });
 
-ipcMain.handle('desktop:offline-cache:delete', async (_event, payload) => {
+ipcMain.handle('desktop:offline-cache:delete', async (event, payload) => {
+  if (!validateSenderFrame(event)) {
+    throw new Error('Unauthorized IPC sender.');
+  }
   ensureOfflineCacheDir();
   const key = sanitizeCacheKey(payload?.key);
   const filePath = path.join(OFFLINE_CACHE_DIR, `${key}.json`);
@@ -890,7 +948,10 @@ ipcMain.handle('desktop:offline-cache:delete', async (_event, payload) => {
   return { success: true, key };
 });
 
-ipcMain.handle('desktop:offline-cache:list', async () => {
+ipcMain.handle('desktop:offline-cache:list', async (event) => {
+  if (!validateSenderFrame(event)) {
+    throw new Error('Unauthorized IPC sender.');
+  }
   ensureOfflineCacheDir();
   const files = fs.readdirSync(OFFLINE_CACHE_DIR).filter((f) => f.endsWith('.json'));
   return files.map((f) => {
@@ -900,7 +961,10 @@ ipcMain.handle('desktop:offline-cache:list', async () => {
   });
 });
 
-ipcMain.handle('desktop:offline-cache:clear', async () => {
+ipcMain.handle('desktop:offline-cache:clear', async (event) => {
+  if (!validateSenderFrame(event)) {
+    throw new Error('Unauthorized IPC sender.');
+  }
   ensureOfflineCacheDir();
   const files = fs.readdirSync(OFFLINE_CACHE_DIR).filter((f) => f.endsWith('.json'));
   for (const f of files) {

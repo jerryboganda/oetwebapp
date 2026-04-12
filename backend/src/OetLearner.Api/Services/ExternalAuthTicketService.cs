@@ -18,10 +18,10 @@ public sealed class ExternalAuthTicketService(IDataProtectionProvider dataProtec
         .CreateProtector("ExternalAuth.Registration")
         .ToTimeLimitedDataProtector();
 
-    public string CreateStateToken(string provider, string? nextPath)
+    public string CreateStateToken(string provider, string? nextPath, string? platform)
         => Protect(
             _stateProtector,
-            new ExternalAuthStateTicket(provider, NormalizeNextPath(nextPath)),
+            new ExternalAuthStateTicket(provider, NormalizeNextPath(nextPath), NormalizePlatform(platform)),
             lifetime: TimeSpan.FromMinutes(10));
 
     public ExternalAuthStateTicket ReadStateToken(string provider, string token)
@@ -115,6 +115,9 @@ public sealed class ExternalAuthTicketService(IDataProtectionProvider dataProtec
             ? nextPath
             : null;
 
+    private static string? NormalizePlatform(string? platform)
+        => string.Equals(platform?.Trim(), "desktop", StringComparison.OrdinalIgnoreCase) ? "desktop" : null;
+
     private static string Protect<T>(ITimeLimitedDataProtector protector, T ticket, TimeSpan lifetime)
     {
         var json = JsonSupport.Serialize(ticket);
@@ -153,7 +156,7 @@ public static class ExternalAuthExchangeKinds
     public const string RegistrationRequired = "registration_required";
 }
 
-public sealed record ExternalAuthStateTicket(string Provider, string? NextPath);
+public sealed record ExternalAuthStateTicket(string Provider, string? NextPath, string? Platform);
 
 public sealed record ExternalAuthExchangeTicket(
     string Provider,

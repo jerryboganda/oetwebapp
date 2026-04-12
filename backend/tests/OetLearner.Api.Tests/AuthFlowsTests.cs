@@ -649,7 +649,8 @@ public class AuthFlowsTests
 
         var stateToken = harness.ExternalAuthTicketService.CreateStateToken(
             ExternalAuthProviders.Google,
-            "//evil.example.test");
+            "//evil.example.test",
+            null);
         var stateTicket = harness.ExternalAuthTicketService.ReadStateToken(ExternalAuthProviders.Google, stateToken);
 
         var registrationToken = harness.ExternalAuthTicketService.CreateRegistrationToken(

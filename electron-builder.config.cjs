@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { flipFuses, FuseVersion, FuseV1Options } = require('@electron/fuses');
 const { RUNTIME_CONFIG_FILE, createDesktopRuntimeConfig } = require('./electron/runtime-config.cjs');
 const packageJson = require('./package.json');
 
@@ -78,6 +79,36 @@ module.exports = {
     syncStandaloneRuntime(context);
     syncDesktopRuntimeConfig(context);
   },
+  afterSign: async (context) => {
+    const electronBinaryPath = (() => {
+      switch (context.electronPlatformName) {
+        case 'darwin':
+          return path.join(
+            context.appOutDir,
+            `${context.packager.appInfo.productFilename}.app`,
+            'Contents', 'Frameworks', 'Electron Framework.framework',
+            'Versions', 'A', 'Electron Framework',
+          );
+        case 'win32':
+          return path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.exe`);
+        default:
+          return path.join(context.appOutDir, context.packager.appInfo.productFilename);
+      }
+    })();
+
+    try {
+      await flipFuses(electronBinaryPath, {
+        version: FuseVersion.V1,
+        [FuseV1Options.RunAsNode]: false,
+        [FuseV1Options.EnableNodeCliInspectArguments]: false,
+        [FuseV1Options.EnableEmbeddedAsarIntegrityValidation]: true,
+        [FuseV1Options.OnlyLoadAppFromAsar]: true,
+      });
+    } catch (fuseError) {
+      console.error(`[electron-builder] Failed to flip fuses on ${electronBinaryPath}:`, fuseError);
+      throw fuseError;
+    }
+  },
   publish,
   win: {
     ...winBuildConfig,
@@ -101,5 +132,6 @@ module.exports = {
   linux: {
     target: ['AppImage', 'deb'],
     category: 'Education',
+    mimeTypes: ['x-scheme-handler/oet-prep'],
   },
 };
