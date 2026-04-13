@@ -11,12 +11,14 @@ import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { fetchXP, fetchStreak, fetchAchievements } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
-type XPData = { totalXp: number; level: number; xpToNextLevel: number; xpInCurrentLevel: number };
-type StreakData = { currentStreak: number; longestStreak: number; lastActivityDate: string | null };
-type Achievement = { achievementId: string; title: string; description: string; category: string; xpReward: number; unlockedAt: string | null; earnedAt?: string | null };
+type XPData = { totalXP: number; weeklyXP: number; monthlyXP: number; level: number; nextLevelXP: number; currentLevelXP: number };
+type StreakData = { currentStreak: number; longestStreak: number; lastActiveDate: string | null; streakFreezesAvailable: number };
+type Achievement = { id: string; code: string; label: string; description: string; category: string; iconUrl: string | null; xpReward: number; sortOrder: number; unlocked: boolean; unlockedAt: string | null };
 
-function XPBar({ xpInLevel, xpToNext }: { xpInLevel: number; xpToNext: number }) {
-  const pct = xpToNext > 0 ? Math.min(100, (xpInLevel / xpToNext) * 100) : 100;
+function XPBar({ currentLevelXP, totalXP, nextLevelXP }: { currentLevelXP: number; totalXP: number; nextLevelXP: number }) {
+  const progress = totalXP - currentLevelXP;
+  const needed = nextLevelXP - currentLevelXP;
+  const pct = needed > 0 ? Math.min(100, (progress / needed) * 100) : 100;
   return (
     <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
       <motion.div
@@ -69,8 +71,8 @@ export default function AchievementsPage() {
 
   const categories = ['all', ...Array.from(new Set(achievements.map(a => a.category)))];
   const filtered = filter === 'all' ? achievements : achievements.filter(a => a.category === filter);
-  const unlocked = filtered.filter(a => a.unlockedAt || a.earnedAt);
-  const locked = filtered.filter(a => !a.unlockedAt && !a.earnedAt);
+  const unlocked = filtered.filter(a => a.unlocked);
+  const locked = filtered.filter(a => !a.unlocked);
 
   return (
     <LearnerDashboardShell>
@@ -97,7 +99,7 @@ export default function AchievementsPage() {
                 <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Level</span>
               </div>
               <div className="text-3xl font-bold text-gray-900 dark:text-white">{xp?.level ?? '—'}</div>
-              <div className="text-xs text-gray-500 mt-1">{xp?.totalXp.toLocaleString()} total XP</div>
+              <div className="text-xs text-gray-500 mt-1">{xp?.totalXP?.toLocaleString() ?? '0'} total XP</div>
             </MotionItem>
 
             <MotionItem
@@ -108,8 +110,12 @@ export default function AchievementsPage() {
                 <Zap className="w-4 h-4 text-yellow-400" />
                 <span className="text-sm font-medium text-gray-500 dark:text-gray-400">XP Progress</span>
               </div>
-              {xp && <XPBar xpInLevel={xp.xpInCurrentLevel} xpToNext={xp.xpToNextLevel} />}
-              <div className="text-xs text-gray-500 mt-1">{xp?.xpInCurrentLevel} / {xp?.xpToNextLevel} to next level</div>
+              {xp && (
+                <>
+                  <XPBar currentLevelXP={xp.currentLevelXP} totalXP={xp.totalXP} nextLevelXP={xp.nextLevelXP} />
+                  <div className="text-xs text-gray-500 mt-1">{(xp.totalXP - xp.currentLevelXP).toLocaleString()} / {(xp.nextLevelXP - xp.currentLevelXP).toLocaleString()} to next level</div>
+                </>
+              )}
             </MotionItem>
 
             <MotionItem
@@ -152,7 +158,7 @@ export default function AchievementsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
                 {unlocked.map((ach, i) => (
                   <MotionItem
-                    key={ach.achievementId}
+                    key={ach.id}
                     delayIndex={i}
                     className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 flex items-start gap-3"
                   >
@@ -160,7 +166,7 @@ export default function AchievementsPage() {
                       {CATEGORY_ICONS[ach.category] ?? <Trophy className="w-5 h-5" />}
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-gray-900 dark:text-white text-sm">{ach.title}</div>
+                      <div className="font-semibold text-gray-900 dark:text-white text-sm">{ach.label}</div>
                       <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{ach.description}</div>
                       <div className="flex items-center gap-1 mt-1.5">
                         <Zap className="w-3 h-3 text-yellow-500" />
@@ -179,7 +185,7 @@ export default function AchievementsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {locked.map((ach, i) => (
                   <MotionItem
-                    key={ach.achievementId}
+                    key={ach.id}
                     delayIndex={i}
                     className="bg-gray-50 dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-700 flex items-start gap-3 opacity-60"
                   >
@@ -187,7 +193,7 @@ export default function AchievementsPage() {
                       <Lock className="w-5 h-5" />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-gray-600 dark:text-gray-400 text-sm">{ach.title}</div>
+                      <div className="font-semibold text-gray-600 dark:text-gray-400 text-sm">{ach.label}</div>
                       <div className="text-xs text-gray-400 mt-0.5">{ach.description}</div>
                       <div className="flex items-center gap-1 mt-1.5">
                         <Zap className="w-3 h-3 text-gray-400" />

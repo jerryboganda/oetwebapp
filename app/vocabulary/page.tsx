@@ -52,9 +52,9 @@ export default function VocabularyPage() {
   };
 
   const quickLinks = [
-    { href: '/vocabulary/flashcards', label: 'Flashcard Review', icon: <Layers className="w-6 h-6" />, badge: dueCount > 0 ? `${dueCount} due` : null, color: 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800 text-indigo-700 dark:text-indigo-300' },
-    { href: '/vocabulary/quiz', label: 'Vocabulary Quiz', icon: <HelpCircle className="w-6 h-6" />, badge: null, color: 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300' },
-    { href: '/vocabulary/browse', label: 'Browse Terms', icon: <BookOpen className="w-6 h-6" />, badge: null, color: 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800 text-blue-700 dark:text-blue-300' },
+    { href: '/vocabulary/flashcards', label: 'Flashcard Review', icon: <Layers className="w-6 h-6" />, badge: dueCount > 0 ? `${dueCount} due` : null, color: 'bg-indigo-100 dark:bg-indigo-900/40 border-indigo-300 dark:border-indigo-700 text-indigo-900 dark:text-indigo-200' },
+    { href: '/vocabulary/quiz', label: 'Vocabulary Quiz', icon: <HelpCircle className="w-6 h-6" />, badge: null, color: 'bg-emerald-100 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200' },
+    { href: '/vocabulary/browse', label: 'Browse Terms', icon: <BookOpen className="w-6 h-6" />, badge: null, color: 'bg-sky-100 dark:bg-sky-900/40 border-sky-300 dark:border-sky-700 text-sky-900 dark:text-sky-200' },
   ];
 
   const heroHighlights = [

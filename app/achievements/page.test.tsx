@@ -32,11 +32,11 @@ import AchievementsPage from './page';
 describe('Achievements page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockFetchXP.mockResolvedValue({ totalXp: 2450, level: 5, xpToNextLevel: 500, xpInCurrentLevel: 350 });
-    mockFetchStreak.mockResolvedValue({ currentStreak: 7, longestStreak: 14, lastActivityDate: '2026-04-01' });
+    mockFetchXP.mockResolvedValue({ totalXP: 2450, weeklyXP: 100, monthlyXP: 600, level: 5, nextLevelXP: 1500, currentLevelXP: 1000 });
+    mockFetchStreak.mockResolvedValue({ currentStreak: 7, longestStreak: 14, lastActiveDate: '2026-04-01', streakFreezesAvailable: 2 });
     mockFetchAchievements.mockResolvedValue([
-      { achievementId: 'ach-1', title: 'First Practice', description: 'Complete your first task', category: 'practice', xpReward: 50, unlockedAt: '2026-03-20', earnedAt: '2026-03-20' },
-      { achievementId: 'ach-2', title: 'Week Warrior', description: 'Maintain a 7-day streak', category: 'streak', xpReward: 100, unlockedAt: null, earnedAt: null },
+      { id: 'ach-1', code: 'first_practice', label: 'First Practice', description: 'Complete your first task', category: 'practice', iconUrl: null, xpReward: 50, sortOrder: 1, unlocked: true, unlockedAt: '2026-03-20' },
+      { id: 'ach-2', code: 'week_warrior', label: 'Week Warrior', description: 'Maintain a 7-day streak', category: 'streak', iconUrl: null, xpReward: 100, sortOrder: 2, unlocked: false, unlockedAt: null },
     ]);
   });
 
