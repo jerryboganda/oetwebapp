@@ -24,6 +24,14 @@ vi.mock('@/components/layout', () => ({
   ),
 }));
 
+vi.mock('@/components/ui/card', () => ({
+  Card: ({ children, className, ...props }: any) => <div data-testid="card" className={className} {...props}>{children}</div>,
+}));
+
+vi.mock('@/components/ui/progress', () => ({
+  ProgressBar: (props: any) => <div data-testid="progress-bar" role="progressbar" />,
+}));
+
 vi.mock('@/lib/analytics', () => ({ analytics: { track: mockTrack } }));
 vi.mock('@/lib/api', () => ({ fetchXP: mockFetchXP, fetchStreak: mockFetchStreak, fetchAchievements: mockFetchAchievements }));
 

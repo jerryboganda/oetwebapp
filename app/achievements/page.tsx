@@ -1,10 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
 import { Trophy, Flame, Star, Zap, Lock } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { Card } from '@/components/ui/card';
+import { ProgressBar } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
@@ -14,22 +15,6 @@ import { analytics } from '@/lib/analytics';
 type XPData = { totalXP: number; weeklyXP: number; monthlyXP: number; level: number; nextLevelXP: number; currentLevelXP: number };
 type StreakData = { currentStreak: number; longestStreak: number; lastActiveDate: string | null; streakFreezesAvailable: number };
 type Achievement = { id: string; code: string; label: string; description: string; category: string; iconUrl: string | null; xpReward: number; sortOrder: number; unlocked: boolean; unlockedAt: string | null };
-
-function XPBar({ currentLevelXP, totalXP, nextLevelXP }: { currentLevelXP: number; totalXP: number; nextLevelXP: number }) {
-  const progress = totalXP - currentLevelXP;
-  const needed = nextLevelXP - currentLevelXP;
-  const pct = needed > 0 ? Math.min(100, (progress / needed) * 100) : 100;
-  return (
-    <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
-      <motion.div
-        className="bg-gradient-to-r from-yellow-400 to-orange-500 h-3 rounded-full"
-        initial={{ width: 0 }}
-        animate={{ width: `${pct}%` }}
-        transition={{ duration: 0.8, ease: 'easeOut' }}
-      />
-    </div>
-  );
-}
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   practice: <Star className="w-5 h-5" />,
@@ -41,12 +26,12 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
-  practice: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-  streak: 'bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-300',
-  milestone: 'bg-purple-100 text-purple-700 dark:bg-purple-900/30 dark:text-purple-300',
-  mastery: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
-  social: 'bg-pink-100 text-pink-700 dark:bg-pink-900/30 dark:text-pink-300',
-  xp: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
+  practice: 'bg-blue-50 text-blue-700',
+  streak: 'bg-amber-50 text-amber-700',
+  milestone: 'bg-purple-50 text-purple-700',
+  mastery: 'bg-emerald-50 text-emerald-700',
+  social: 'bg-rose-50 text-rose-700',
+  xp: 'bg-primary/10 text-primary',
 };
 
 export default function AchievementsPage() {
@@ -87,59 +72,67 @@ export default function AchievementsPage() {
       {/* XP + Streak summary */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
         {loading ? (
-          Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)
+          Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)
         ) : (
           <>
-            <MotionItem
-              delayIndex={0}
-              className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700"
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <Zap className="w-5 h-5 text-yellow-500" />
-                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Level</span>
-              </div>
-              <div className="text-3xl font-bold text-gray-900 dark:text-white">{xp?.level ?? '—'}</div>
-              <div className="text-xs text-gray-500 mt-1">{xp?.totalXP?.toLocaleString() ?? '0'} total XP</div>
+            <MotionItem delayIndex={0}>
+              <Card>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                    <Zap className="w-4 h-4 text-primary" />
+                  </div>
+                  <span className="text-sm font-semibold text-muted">Level</span>
+                </div>
+                <div className="text-3xl font-bold text-navy">{xp?.level ?? '—'}</div>
+                <div className="text-xs text-muted mt-1">{xp?.totalXP?.toLocaleString() ?? '0'} total XP</div>
+              </Card>
             </MotionItem>
 
-            <MotionItem
-              delayIndex={1}
-              className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700"
-            >
-              <div className="flex items-center gap-2 mb-2">
-                <Zap className="w-4 h-4 text-yellow-400" />
-                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">XP Progress</span>
-              </div>
-              {xp && (
-                <>
-                  <XPBar currentLevelXP={xp.currentLevelXP} totalXP={xp.totalXP} nextLevelXP={xp.nextLevelXP} />
-                  <div className="text-xs text-gray-500 mt-1">{(xp.totalXP - xp.currentLevelXP).toLocaleString()} / {(xp.nextLevelXP - xp.currentLevelXP).toLocaleString()} to next level</div>
-                </>
-              )}
+            <MotionItem delayIndex={1}>
+              <Card>
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/10">
+                    <Zap className="w-4 h-4 text-primary" />
+                  </div>
+                  <span className="text-sm font-semibold text-muted">XP Progress</span>
+                </div>
+                {xp && (
+                  <>
+                    <ProgressBar
+                      value={xp.totalXP - xp.currentLevelXP}
+                      max={xp.nextLevelXP - xp.currentLevelXP}
+                      size="md"
+                      color="primary"
+                    />
+                    <div className="text-xs text-muted mt-1.5">{(xp.totalXP - xp.currentLevelXP).toLocaleString()} / {(xp.nextLevelXP - xp.currentLevelXP).toLocaleString()} to next level</div>
+                  </>
+                )}
+              </Card>
             </MotionItem>
 
-            <MotionItem
-              delayIndex={2}
-              className="bg-white dark:bg-gray-800 rounded-xl p-5 border border-gray-200 dark:border-gray-700"
-            >
-              <div className="flex items-center gap-2 mb-1">
-                <Flame className="w-5 h-5 text-orange-500" />
-                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Streak</span>
-              </div>
-              <div className="text-3xl font-bold text-gray-900 dark:text-white">{streak?.currentStreak ?? '—'} <span className="text-base font-normal text-gray-500">days</span></div>
-              <div className="text-xs text-gray-500 mt-1">Best: {streak?.longestStreak ?? 0} days</div>
+            <MotionItem delayIndex={2}>
+              <Card>
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50">
+                    <Flame className="w-4 h-4 text-amber-600" />
+                  </div>
+                  <span className="text-sm font-semibold text-muted">Streak</span>
+                </div>
+                <div className="text-3xl font-bold text-navy">{streak?.currentStreak ?? '—'} <span className="text-base font-normal text-muted">days</span></div>
+                <div className="text-xs text-muted mt-1">Best: {streak?.longestStreak ?? 0} days</div>
+              </Card>
             </MotionItem>
           </>
         )}
       </div>
 
       {/* Category filter */}
-      <div className="flex flex-wrap gap-2 mb-6">
+      <div className="flex flex-wrap items-center gap-2 bg-background-light p-1.5 rounded-xl border border-border mb-6">
         {categories.map(cat => (
           <button
             key={cat}
             onClick={() => setFilter(cat)}
-            className={`px-3 py-1.5 rounded-full text-sm font-medium capitalize transition-colors ${filter === cat ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600'}`}
+            className={`px-4 py-1.5 text-xs font-bold rounded-lg capitalize transition-colors ${filter === cat ? 'bg-surface text-navy shadow-sm' : 'text-muted hover:text-navy'}`}
           >
             {cat}
           </button>
@@ -148,7 +141,7 @@ export default function AchievementsPage() {
 
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-xl" />)}
+          {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-28 rounded-2xl" />)}
         </div>
       ) : (
         <>
@@ -157,22 +150,20 @@ export default function AchievementsPage() {
               <LearnerSurfaceSectionHeader title={`Unlocked (${unlocked.length})`} />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 mb-8">
                 {unlocked.map((ach, i) => (
-                  <MotionItem
-                    key={ach.id}
-                    delayIndex={i}
-                    className="bg-white dark:bg-gray-800 rounded-xl p-4 border border-gray-200 dark:border-gray-700 flex items-start gap-3"
-                  >
-                    <div className={`p-2 rounded-lg ${CATEGORY_COLORS[ach.category] ?? 'bg-gray-100 text-gray-600'}`}>
-                      {CATEGORY_ICONS[ach.category] ?? <Trophy className="w-5 h-5" />}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-gray-900 dark:text-white text-sm">{ach.label}</div>
-                      <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{ach.description}</div>
-                      <div className="flex items-center gap-1 mt-1.5">
-                        <Zap className="w-3 h-3 text-yellow-500" />
-                        <span className="text-xs font-medium text-yellow-600 dark:text-yellow-400">+{ach.xpReward} XP</span>
+                  <MotionItem key={ach.id} delayIndex={i}>
+                    <Card className="flex items-start gap-3">
+                      <div className={`p-2 rounded-lg ${CATEGORY_COLORS[ach.category] ?? 'bg-lavender text-primary'}`}>
+                        {CATEGORY_ICONS[ach.category] ?? <Trophy className="w-5 h-5" />}
                       </div>
-                    </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-navy text-sm">{ach.label}</div>
+                        <div className="text-xs text-muted mt-0.5">{ach.description}</div>
+                        <div className="flex items-center gap-1 mt-1.5">
+                          <Zap className="w-3 h-3 text-primary" />
+                          <span className="text-xs font-medium text-primary">+{ach.xpReward} XP</span>
+                        </div>
+                      </div>
+                    </Card>
                   </MotionItem>
                 ))}
               </div>
@@ -184,22 +175,20 @@ export default function AchievementsPage() {
               <LearnerSurfaceSectionHeader title={`Locked (${locked.length})`} />
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 {locked.map((ach, i) => (
-                  <MotionItem
-                    key={ach.id}
-                    delayIndex={i}
-                    className="bg-gray-50 dark:bg-gray-900 rounded-xl p-4 border border-gray-200 dark:border-gray-700 flex items-start gap-3 opacity-60"
-                  >
-                    <div className="p-2 rounded-lg bg-gray-200 dark:bg-gray-700 text-gray-400">
-                      <Lock className="w-5 h-5" />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="font-semibold text-gray-600 dark:text-gray-400 text-sm">{ach.label}</div>
-                      <div className="text-xs text-gray-400 mt-0.5">{ach.description}</div>
-                      <div className="flex items-center gap-1 mt-1.5">
-                        <Zap className="w-3 h-3 text-gray-400" />
-                        <span className="text-xs text-gray-400">+{ach.xpReward} XP</span>
+                  <MotionItem key={ach.id} delayIndex={i}>
+                    <Card className="flex items-start gap-3 opacity-60">
+                      <div className="p-2 rounded-lg bg-gray-100 text-muted">
+                        <Lock className="w-5 h-5" />
                       </div>
-                    </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-muted text-sm">{ach.label}</div>
+                        <div className="text-xs text-muted/70 mt-0.5">{ach.description}</div>
+                        <div className="flex items-center gap-1 mt-1.5">
+                          <Zap className="w-3 h-3 text-muted/50" />
+                          <span className="text-xs text-muted/50">+{ach.xpReward} XP</span>
+                        </div>
+                      </div>
+                    </Card>
                   </MotionItem>
                 ))}
               </div>
