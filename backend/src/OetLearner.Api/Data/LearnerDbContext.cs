@@ -152,6 +152,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<BillingPlan> BillingPlans => Set<BillingPlan>();
     public DbSet<AdminPermissionGrant> AdminPermissionGrants => Set<AdminPermissionGrant>();
+    public DbSet<AdminUser> AdminUsers => Set<AdminUser>();
     public DbSet<PermissionTemplate> PermissionTemplates => Set<PermissionTemplate>();
     public DbSet<ContentPublishRequest> ContentPublishRequests => Set<ContentPublishRequest>();
     public DbSet<ReviewEscalation> ReviewEscalations => Set<ReviewEscalation>();
@@ -190,6 +191,11 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
 
     // Content import entities
     public DbSet<ContentImportBatch> ContentImportBatches => Set<ContentImportBatch>();
+
+    // Admin content management entities
+    public DbSet<NotificationTemplate> NotificationTemplates => Set<NotificationTemplate>();
+    public DbSet<ConversationTemplate> ConversationTemplates => Set<ConversationTemplate>();
+    public DbSet<FreeTierConfig> FreeTierConfigs => Set<FreeTierConfig>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

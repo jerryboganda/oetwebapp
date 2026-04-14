@@ -307,4 +307,31 @@ public class MobilePushToken
 
     public bool IsActive { get; set; } = true;
     public DateTimeOffset CreatedAt { get; set; }
-    public DateTimeOffset UpdatedAt { get; set; }IND
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public class NotificationTemplate
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(128)]
+    public string EventKey { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string Channel { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string? Category { get; set; }
+
+    [MaxLength(256)]
+    public string SubjectTemplate { get; set; } = default!;
+
+    public string BodyTemplate { get; set; } = default!;
+
+    public bool IsActive { get; set; } = true;
+
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}

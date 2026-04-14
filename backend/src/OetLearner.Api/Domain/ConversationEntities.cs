@@ -64,3 +64,36 @@ public class ConversationTurn
 
     public string AnalysisJson { get; set; } = "{}";       // Per-turn analysis
 }
+
+public class ConversationTemplate
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(200)]
+    public string Title { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string? ProfessionId { get; set; }
+
+    public string Scenario { get; set; } = default!;
+
+    [MaxLength(512)]
+    public string? RoleDescription { get; set; }
+
+    public string? PatientContext { get; set; }
+
+    public string? ExpectedOutcomes { get; set; }
+
+    [MaxLength(16)]
+    public string Difficulty { get; set; } = "medium";
+
+    public int EstimatedDurationMinutes { get; set; } = 5;
+
+    [MaxLength(16)]
+    public string Status { get; set; } = "active";
+
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}

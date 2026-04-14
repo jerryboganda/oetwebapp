@@ -216,3 +216,24 @@ public class PermissionTemplate
 
     public DateTimeOffset CreatedAt { get; set; }
 }
+
+/// <summary>Admin user record for role-based management.</summary>
+public class AdminUser
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(256)]
+    public string DisplayName { get; set; } = default!;
+
+    [MaxLength(256)]
+    public string Email { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string Role { get; set; } = "unassigned";
+
+    public bool IsActive { get; set; } = true;
+
+    public DateTimeOffset CreatedAt { get; set; }
+}
