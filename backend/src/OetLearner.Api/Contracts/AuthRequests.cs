@@ -53,3 +53,5 @@ public record ResetPasswordRequest(
     string NewPassword);
 
 public record ExternalAuthExchangeRequest(string ExchangeToken);
+
+public record DeleteAccountRequest(string Password, string? Reason = null);

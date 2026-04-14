@@ -244,11 +244,21 @@ public record AdminBulkActionRequest(
 
 public record AdminPermissionUpdateRequest(string[] Permissions);
 
+public record CreatePermissionTemplateRequest(string Name, string? Description, string[] Permissions);
+
 // ── Content Publishing Workflow ──
 
 public record AdminPublishRequestPayload(string? Note);
 
 public record AdminPublishReviewPayload(string? Note);
+
+public record AdminEditorReviewPayload(string? Notes);
+
+public record AdminEditorRejectPayload(string Reason);
+
+public record AdminPublisherApprovePayload(string? Notes);
+
+public record AdminPublisherRejectPayload(string Reason);
 
 // ── Review Escalation ──
 
@@ -292,3 +302,114 @@ public record CohortCreateRequest(string SponsorId, string Name, string ExamType
 public record CohortUpdateRequest(string? Name, DateOnly? StartDate, DateOnly? EndDate, int? MaxSeats, string? Status);
 public record CohortMemberAddRequest(string LearnerId);
 public record SponsorLearnerLinkRequest(string SponsorId, string LearnerId);
+
+// ── Grammar Admin ──
+
+public record AdminGrammarLessonCreateRequest(
+    string Title,
+    string? ProfessionId,
+    string? Description,
+    string? Content,
+    string? Difficulty,
+    int? EstimatedDurationMinutes,
+    int? SortOrder);
+
+public record AdminGrammarLessonUpdateRequest(
+    string? Title,
+    string? ProfessionId,
+    string? Description,
+    string? Content,
+    string? Difficulty,
+    int? EstimatedDurationMinutes,
+    int? SortOrder,
+    string? Status);
+
+// ── Vocabulary Admin ──
+
+public record AdminVocabularyItemCreateRequest(
+    string Term,
+    string Definition,
+    string? ProfessionId,
+    string? Category,
+    string? Pronunciation,
+    string? ExampleSentence,
+    string? Difficulty);
+
+public record AdminVocabularyItemUpdateRequest(
+    string? Term,
+    string? Definition,
+    string? ProfessionId,
+    string? Category,
+    string? Pronunciation,
+    string? ExampleSentence,
+    string? Difficulty,
+    string? Status);
+
+// ── Conversation Template Admin ──
+
+public record AdminConversationTemplateCreateRequest(
+    string Title,
+    string? ProfessionId,
+    string Scenario,
+    string? RoleDescription,
+    string? PatientContext,
+    string? ExpectedOutcomes,
+    string? Difficulty,
+    int? EstimatedDurationMinutes);
+
+public record AdminConversationTemplateUpdateRequest(
+    string? Title,
+    string? ProfessionId,
+    string? Scenario,
+    string? RoleDescription,
+    string? PatientContext,
+    string? ExpectedOutcomes,
+    string? Difficulty,
+    int? EstimatedDurationMinutes,
+    string? Status);
+
+// ── Pronunciation Drill Admin ──
+
+public record AdminPronunciationDrillCreateRequest(
+    string Word,
+    string? PhoneticTranscription,
+    string? AudioUrl,
+    string? ProfessionId,
+    string? Difficulty,
+    string? Category);
+
+public record AdminPronunciationDrillUpdateRequest(
+    string? Word,
+    string? PhoneticTranscription,
+    string? AudioUrl,
+    string? ProfessionId,
+    string? Difficulty,
+    string? Category,
+    string? Status);
+
+// ── Notification Template Admin ──
+
+public record AdminNotificationTemplateCreateRequest(
+    string EventKey,
+    string Channel,
+    string? Category,
+    string SubjectTemplate,
+    string BodyTemplate,
+    bool IsActive);
+
+public record AdminNotificationTemplateUpdateRequest(
+    string? SubjectTemplate,
+    string? BodyTemplate,
+    bool? IsActive,
+    string? Category);
+
+// ── Free Tier ──
+
+public record AdminFreeTierConfigUpdateRequest(
+    bool Enabled,
+    int MaxWritingAttempts,
+    int MaxSpeakingAttempts,
+    int MaxReadingAttempts,
+    int MaxListeningAttempts,
+    int TrialDurationDays,
+    bool ShowUpgradePrompts);

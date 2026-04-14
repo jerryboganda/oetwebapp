@@ -96,7 +96,7 @@ export default function ComparativeAnalyticsPage() {
                         <div className="flex items-center gap-2 text-sm">
                           <Target className="w-4 h-4 text-muted-foreground" />
                           <span>Target: {s.targetScore}</span>
-                          <Badge variant={s.gapToTarget <= 0 ? 'default' : 'destructive'} className="text-xs">
+                          <Badge variant={s.gapToTarget <= 0 ? 'default' : 'danger'} className="text-xs">
                             {s.gapToTarget <= 0 ? 'Target reached!' : `${s.gapToTarget} pts to go`}
                           </Badge>
                         </div>

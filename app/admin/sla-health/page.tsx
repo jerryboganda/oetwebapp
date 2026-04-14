@@ -64,7 +64,7 @@ export default function SlaHealthPage() {
             <div className="grid grid-cols-3 gap-4">
               <Card className="p-4 text-center"><Users className="w-5 h-5 mx-auto mb-1 text-primary" /><p className="text-xl font-bold">{data.summary.activeExperts}</p><p className="text-xs text-muted">Active Experts</p></Card>
               <Card className="p-4 text-center"><ShieldAlert className="w-5 h-5 mx-auto mb-1 text-amber-500" /><p className="text-xl font-bold">{data.summary.unassigned}</p><p className="text-xs text-muted">Unassigned</p></Card>
-              <Card className="p-4 text-center"><Clock className="w-5 h-5 mx-auto mb-1 text-purple-500" /><p className="text-xl font-bold">{data.summary.queueDepthPerExpert}</p><p className="text-xs text-muted">Per Expert</p>{data.summary.capacityAlert && <Badge variant="destructive" className="mt-1 text-[10px]">Over Capacity</Badge>}</Card>
+              <Card className="p-4 text-center"><Clock className="w-5 h-5 mx-auto mb-1 text-purple-500" /><p className="text-xl font-bold">{data.summary.queueDepthPerExpert}</p><p className="text-xs text-muted">Per Expert</p>{data.summary.capacityAlert && <Badge variant="danger" className="mt-1 text-[10px]">Over Capacity</Badge>}</Card>
             </div>
 
             {/* Recommendations */}
@@ -84,7 +84,7 @@ export default function SlaHealthPage() {
                     <MotionItem key={alert.reviewId}>
                       <Card className={`p-3 border ${alert.severity === 'breached' ? 'border-danger/30 bg-danger/10/50 dark:bg-danger/10/20' : 'border-warning/30 bg-warning/5 dark:bg-warning/10'}`}>
                         <div className="flex items-center justify-between">
-                          <div><Badge variant={alert.severity === 'breached' ? 'destructive' : 'default'} className="text-[10px] uppercase">{alert.severity}</Badge><span className="text-sm ml-2">{alert.message}</span></div>
+                          <div><Badge variant={alert.severity === 'breached' ? 'danger' : 'default'} className="text-[10px] uppercase">{alert.severity}</Badge><span className="text-sm ml-2">{alert.message}</span></div>
                           <div className="text-xs text-muted capitalize">{alert.subtestCode} • {alert.turnaround}</div>
                         </div>
                       </Card>

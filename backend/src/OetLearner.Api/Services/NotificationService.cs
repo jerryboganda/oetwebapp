@@ -444,6 +444,57 @@ public sealed class NotificationService(
         await db.SaveChangesAsync(ct);
     }
 
+    private static readonly HashSet<string> ValidPlatforms = new(StringComparer.OrdinalIgnoreCase) { "android", "ios", "web" };
+
+    public async Task<object> RegisterPushTokenAsync(string authAccountId, RegisterPushTokenRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.Token))
+        {
+            throw ApiException.Validation(
+                "push_token_required",
+                "A device push token is required.",
+                [new ApiFieldError("token", "required", "Provide a non-empty device push token.")]);
+        }
+
+        if (!ValidPlatforms.Contains(request.Platform))
+        {
+            throw ApiException.Validation(
+                "push_token_invalid_platform",
+                $"Platform '{request.Platform}' is not supported. Use android, ios, or web.",
+                [new ApiFieldError("platform", "invalid", "Allowed values: android, ios, web.")]);
+        }
+
+        var normalizedPlatform = request.Platform.ToLowerInvariant();
+
+        var existing = await db.MobilePushTokens
+            .FirstOrDefaultAsync(t => t.Token == request.Token, ct);
+
+        if (existing is not null)
+        {
+            existing.AuthAccountId = authAccountId;
+            existing.Platform = normalizedPlatform;
+            existing.IsActive = true;
+            existing.UpdatedAt = timeProvider.GetUtcNow();
+        }
+        else
+        {
+            existing = new Domain.MobilePushToken
+            {
+                Id = Guid.NewGuid(),
+                AuthAccountId = authAccountId,
+                Token = request.Token,
+                Platform = normalizedPlatform,
+                IsActive = true,
+                CreatedAt = timeProvider.GetUtcNow(),
+                UpdatedAt = timeProvider.GetUtcNow()
+            };
+            db.MobilePushTokens.Add(existing);
+        }
+
+        await db.SaveChangesAsync(ct);
+        return new { tokenId = existing.Id };
+    }
+
     public Task<IReadOnlyList<AdminNotificationCatalogEntry>> GetAdminCatalogAsync(CancellationToken ct)
         => Task.FromResult<IReadOnlyList<AdminNotificationCatalogEntry>>(NotificationCatalog.ToAdminEntries());
 

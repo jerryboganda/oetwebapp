@@ -99,7 +99,7 @@ export default function RubricReferencePage() {
               <Card className="p-5">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-semibold">{r.criterion}</h3>
-                  <Badge variant={r.weight === 'High' ? 'default' : r.weight === 'Medium' ? 'secondary' : 'outline'}>{r.weight} weight</Badge>
+                  <Badge variant={r.weight === 'High' ? 'default' : r.weight === 'Medium' ? 'muted' : 'outline'}>{r.weight} weight</Badge>
                 </div>
                 <div className="grid gap-2">
                   {r.bands.map(b => (
@@ -121,7 +121,7 @@ export default function RubricReferencePage() {
               <Card className="p-5">
                 <div className="flex items-center justify-between mb-3">
                   <h3 className="font-semibold">{r.criterion}</h3>
-                  <Badge variant={r.weight === 'High' ? 'default' : 'secondary'}>{r.weight} weight</Badge>
+                  <Badge variant={r.weight === 'High' ? 'default' : 'muted'}>{r.weight} weight</Badge>
                 </div>
                 <div className="grid gap-2">
                   {r.bands.map(b => (

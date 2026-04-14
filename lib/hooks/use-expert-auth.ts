@@ -8,7 +8,7 @@ import { useCurrentUser } from './use-current-user';
 import { defaultRouteForRole } from '@/lib/auth-routes';
 
 export interface UserRole {
-  role: 'learner' | 'expert' | 'admin';
+  role: 'learner' | 'expert' | 'admin' | 'sponsor';
   isAuthenticated: boolean;
 }
 
@@ -66,6 +66,19 @@ export function useExpertAuth() {
       try {
         const expert = await fetchExpertMe();
         if (cancelled) {
+          return;
+        }
+
+        // Verify expert account is still active (mirrors backend ExpertOnly policy)
+        if (expert && 'isActive' in expert && expert.isActive === false) {
+          setAuthState({
+            role: 'expert',
+            isAuthenticated: false,
+            expert: null,
+            error: new ApiError(403, 'expert_deactivated', 'Your expert account has been deactivated. Please contact support.', false),
+          });
+          setIsLoading(false);
+          router.replace(defaultRouteForRole('learner'));
           return;
         }
 

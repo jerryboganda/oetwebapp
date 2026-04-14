@@ -29,10 +29,10 @@ interface ContentQualityItem {
   updatedAt: string;
 }
 
-const QA_BADGE: Record<string, { label: string; variant: 'default' | 'success' | 'destructive' | 'outline' }> = {
+const QA_BADGE: Record<string, { label: string; variant: 'default' | 'success' | 'danger' | 'outline' }> = {
   approved: { label: 'Approved', variant: 'success' },
   needs_review: { label: 'Needs Review', variant: 'default' },
-  rejected: { label: 'Rejected', variant: 'destructive' },
+  rejected: { label: 'Rejected', variant: 'danger' },
 };
 
 async function adminRequest<T = unknown>(path: string, init?: RequestInit): Promise<T> {
@@ -135,7 +135,7 @@ export default function ContentQualityPage() {
 
       <AsyncStateWrapper status={status} errorMessage="Failed to load content quality data." onRetry={loadData}>
         <AdminRoutePanel>
-          <DataTable columns={columns} data={items} />
+          <DataTable columns={columns} data={items} keyExtractor={(row) => row.id} />
         </AdminRoutePanel>
       </AsyncStateWrapper>
     </AdminRouteWorkspace>

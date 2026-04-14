@@ -29,6 +29,7 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
     nextPath === '/reset-password/success' ||
     nextPath === '/verify-email' ||
     nextPath === '/mfa/challenge' ||
+    nextPath === '/mfa/recovery' ||
     nextPath === '/mfa/setup' ||
     nextPath.startsWith('/auth/callback/');
 

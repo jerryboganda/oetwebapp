@@ -1,0 +1,6 @@
+{
+  "files.associations": {
+    "*.swift": "plaintext"
+  },
+  "swift.sourcekit-lsp.disable": true
+}{}

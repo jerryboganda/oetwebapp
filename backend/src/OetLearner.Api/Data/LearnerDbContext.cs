@@ -47,6 +47,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<NotificationPolicyOverride> NotificationPolicyOverrides => Set<NotificationPolicyOverride>();
     public DbSet<NotificationDeliveryAttempt> NotificationDeliveryAttempts => Set<NotificationDeliveryAttempt>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
+    public DbSet<MobilePushToken> MobilePushTokens => Set<MobilePushToken>();
     public DbSet<SubscriptionItem> SubscriptionItems => Set<SubscriptionItem>();
     public DbSet<BillingAddOn> BillingAddOns => Set<BillingAddOn>();
     public DbSet<BillingCoupon> BillingCoupons => Set<BillingCoupon>();
@@ -136,6 +137,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<SponsorLearnerLink> SponsorLearnerLinks => Set<SponsorLearnerLink>();
     public DbSet<Cohort> Cohorts => Set<Cohort>();
     public DbSet<CohortMember> CohortMembers => Set<CohortMember>();
+    public DbSet<Sponsorship> Sponsorships => Set<Sponsorship>();
 
     // Marketplace / booking entities
     public DbSet<ExamBooking> ExamBookings => Set<ExamBooking>();
@@ -150,11 +152,14 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
     public DbSet<BillingPlan> BillingPlans => Set<BillingPlan>();
     public DbSet<AdminPermissionGrant> AdminPermissionGrants => Set<AdminPermissionGrant>();
+    public DbSet<PermissionTemplate> PermissionTemplates => Set<PermissionTemplate>();
     public DbSet<ContentPublishRequest> ContentPublishRequests => Set<ContentPublishRequest>();
     public DbSet<ReviewEscalation> ReviewEscalations => Set<ReviewEscalation>();
+    public DbSet<LearnerEscalation> LearnerEscalations => Set<LearnerEscalation>();
     public DbSet<ScoreGuaranteePledge> ScoreGuaranteePledges => Set<ScoreGuaranteePledge>();
     public DbSet<ReferralRecord> ReferralRecords => Set<ReferralRecord>();
     public DbSet<ExpertAnnotationTemplate> ExpertAnnotationTemplates => Set<ExpertAnnotationTemplate>();
+    public DbSet<ScheduleException> ScheduleExceptions => Set<ScheduleException>();
     public DbSet<StudyCommitment> StudyCommitments => Set<StudyCommitment>();
     public DbSet<LearnerCertificate> LearnerCertificates => Set<LearnerCertificate>();
 
@@ -379,9 +384,15 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
 
         // ── Phase 0: Foundation entities ──
         modelBuilder.Entity<AdminPermissionGrant>().HasIndex(x => new { x.AdminUserId, x.Permission }).IsUnique();
+        modelBuilder.Entity<PermissionTemplate>().HasIndex(x => x.Name).IsUnique();
         modelBuilder.Entity<ContentPublishRequest>().HasIndex(x => new { x.ContentItemId, x.Status });
         modelBuilder.Entity<ContentPublishRequest>().HasIndex(x => x.RequestedBy);
+        modelBuilder.Entity<ContentPublishRequest>().HasIndex(x => x.Stage);
         modelBuilder.Entity<ReviewEscalation>().HasIndex(x => new { x.ReviewRequestId, x.Status });
         modelBuilder.Entity<ReviewEscalation>().HasIndex(x => x.SecondReviewerId);
+
+        // ── Learner Escalations ──
+        modelBuilder.Entity<LearnerEscalation>().HasIndex(x => new { x.UserId, x.Status });
+        modelBuilder.Entity<LearnerEscalation>().HasIndex(x => x.SubmissionId);
     }
 }

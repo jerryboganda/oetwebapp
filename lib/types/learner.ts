@@ -90,3 +90,18 @@ export interface ExpertAnnotationTemplate {
   createdAt: string;
   updatedAt: string;
 }
+
+// ── Learner Escalations (Disputes) ──────────────────
+
+export type EscalationStatus = 'Pending' | 'InReview' | 'Resolved' | 'Rejected';
+
+export interface LearnerEscalation {
+  id: string;
+  submissionId: string;
+  reason: string;
+  details: string;
+  status: EscalationStatus;
+  createdAt: string;
+  updatedAt: string | null;
+  resolutionNote: string | null;
+}

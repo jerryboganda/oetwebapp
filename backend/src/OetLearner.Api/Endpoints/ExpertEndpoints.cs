@@ -104,6 +104,23 @@ public static class ExpertEndpoints
             => Results.Ok(await service.SaveAvailabilityAsync(http.ExpertId(), request, ct)))
             .RequireRateLimiting("PerUserWrite");
 
+        // Schedule exceptions
+        expert.MapPost("/schedule/exceptions", async (HttpContext http, CreateScheduleExceptionRequest request, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.CreateScheduleExceptionAsync(http.ExpertId(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        expert.MapGet("/schedule/exceptions", async (HttpContext http, ExpertService service, CancellationToken ct,
+            [FromQuery] string? from, [FromQuery] string? to) =>
+        {
+            DateOnly? fromDate = DateOnly.TryParseExact(from, "yyyy-MM-dd", out var f) ? f : null;
+            DateOnly? toDate = DateOnly.TryParseExact(to, "yyyy-MM-dd", out var t) ? t : null;
+            return Results.Ok(await service.GetScheduleExceptionsAsync(http.ExpertId(), fromDate, toDate, ct));
+        });
+
+        expert.MapDelete("/schedule/exceptions/{exceptionId}", async (string exceptionId, HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.DeleteScheduleExceptionAsync(http.ExpertId(), exceptionId, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
         // Metrics
         expert.MapGet("/metrics", async (HttpContext http, ExpertService service, CancellationToken ct, int? days)
             => Results.Ok(await service.GetMetricsAsync(http.ExpertId(), days ?? 7, ct)));

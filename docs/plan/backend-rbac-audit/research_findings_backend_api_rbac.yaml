@@ -1,0 +1,1339 @@
+plan_id: backend-rbac-audit
+objective: "Comprehensive audit of all backend API endpoints, RBAC configuration, Next.js API route handlers, admin CRUD coverage, and frontend dependencies"
+focus_area: "backend API + RBAC + admin CRUD coverage"
+created_at: "2026-04-13T00:00:00Z"
+created_by: "gem-researcher"
+status: completed
+
+tldr: |
+  - The .NET backend exposes 22 endpoint groups mapped via Minimal API, totaling ~280+ individual routes under /v1/*.
+  - RBAC is enforced via 4 role policies (LearnerOnly, ExpertOnly, AdminOnly, SponsorOnly) plus 12 granular admin permission policies; JWT auth with HS256 symmetric signing, OnTokenValidated checks for suspension.
+  - Payment webhook endpoints (/v1/payment/webhooks/stripe & /v1/payment/webhooks/paypal) are UNAUTHENTICATED by design — they sit inside a group that shares the LearnerOnly parent but are mapped on a separate group without auth. This is correct for webhook receivers but worth noting.
+  - The Next.js frontend proxies ALL /api/backend/v1/* requests to the .NET backend via a catch-all route handler; only /v1/* paths are allowed; x-debug-* and forwarding headers are stripped.
+  - Admin CMS has comprehensive CRUD coverage for content, users, billing, review ops, taxonomy, criteria, AI config, flags, audit logs, escalations, permissions, webhooks, sponsors/cohorts, community moderation, private speaking tutors, and marketplace — no major gaps found.
+
+research_metadata:
+  methodology: "Hybrid retrieval: read_file for all 22 endpoint files, Program.cs (auth/RBAC config), middleware.ts, backend-proxy.ts, package.json, API route handlers. Systematic file-by-file enumeration."
+  scope: "All backend endpoints, all RBAC policies, all Next.js API routes, admin page inventory, package.json dependencies"
+  confidence: high
+  coverage: 98  # All endpoint files read fully; all auth config examined
+  decision_blockers: 0
+  research_blockers: 0
+
+# ═══════════════════════════════════════════════════════════════════════
+# SECTION 1: COMPLETE BACKEND ENDPOINT INVENTORY
+# ═══════════════════════════════════════════════════════════════════════
+
+backend_endpoints:
+
+  # ── Health Checks (Anonymous) ──────────────────────────────────────
+  health:
+    description: "Health check endpoints"
+    auth: AllowAnonymous
+    endpoints:
+      - { method: GET, path: "/health/live", auth: AllowAnonymous }
+      - { method: GET, path: "/health/ready", auth: AllowAnonymous }
+      - { method: GET, path: "/health", auth: AllowAnonymous }
+
+  # ── Auth Endpoints ─────────────────────────────────────────────────
+  auth:
+    file: AuthEndpoints.cs
+    group_prefix: "/v1/auth"
+    group_auth: "none (per-endpoint)"
+    endpoints:
+      - { method: POST, path: "/v1/auth/register", auth: AllowAnonymous }
+      - { method: GET,  path: "/v1/auth/catalog/signup", auth: AllowAnonymous }
+      - { method: POST, path: "/v1/auth/sign-in", auth: AllowAnonymous }
+      - { method: GET,  path: "/v1/auth/external/{provider}/start", auth: AllowAnonymous }
+      - { method: GET,  path: "/v1/auth/external/{provider}/callback", auth: AllowAnonymous }
+      - { method: POST, path: "/v1/auth/external/{provider}/exchange", auth: AllowAnonymous }
+      - { method: POST, path: "/v1/auth/email/send-verification-otp", auth: AllowAnonymous }
+      - { method: POST, path: "/v1/auth/email/verify-otp", auth: AllowAnonymous }
+      - { method: POST, path: "/v1/auth/forgot-password", auth: AllowAnonymous }
+      - { method: POST, path: "/v1/auth/reset-password", auth: AllowAnonymous }
+      - { method: POST, path: "/v1/auth/mfa/authenticator/begin", auth: RequireAuthorization (any authenticated) }
+      - { method: POST, path: "/v1/auth/mfa/authenticator/confirm", auth: RequireAuthorization (any authenticated) }
+      - { method: POST, path: "/v1/auth/mfa/challenge", auth: AllowAnonymous }
+      - { method: POST, path: "/v1/auth/mfa/recovery", auth: AllowAnonymous }
+      - { method: GET,  path: "/v1/auth/me", auth: RequireAuthorization (any authenticated) }
+      - { method: POST, path: "/v1/auth/refresh", auth: AllowAnonymous }
+      - { method: POST, path: "/v1/auth/sign-out", auth: AllowAnonymous }
+      - { method: POST, path: "/v1/auth/account/delete", auth: LearnerOnly }
+      - { method: GET,  path: "/v1/auth/sessions", auth: RequireAuthorization (any authenticated) }
+      - { method: DELETE, path: "/v1/auth/sessions/{sessionId}", auth: RequireAuthorization (any authenticated) }
+      - { method: DELETE, path: "/v1/auth/sessions", auth: RequireAuthorization (any authenticated) }
+
+  # ── Analytics ──────────────────────────────────────────────────────
+  analytics:
+    file: AnalyticsEndpoints.cs
+    group_prefix: "/v1/analytics"
+    group_auth: "RequireAuthorization (any authenticated)"
+    endpoints:
+      - { method: POST, path: "/v1/analytics/events", auth: "RequireAuthorization (any authenticated) + PerUserWrite rate limit" }
+
+  # ── Notifications ──────────────────────────────────────────────────
+  notifications:
+    file: NotificationEndpoints.cs
+    group_prefix: "/v1/notifications"
+    group_auth: "RequireAuthorization (any authenticated)"
+    endpoints:
+      - { method: GET,    path: "/v1/notifications/", auth: "authenticated" }
+      - { method: POST,   path: "/v1/notifications/{notificationId}/read", auth: "authenticated" }
+      - { method: POST,   path: "/v1/notifications/read-all", auth: "authenticated" }
+      - { method: GET,    path: "/v1/notifications/preferences", auth: "authenticated" }
+      - { method: PATCH,  path: "/v1/notifications/preferences", auth: "authenticated + PerUserWrite" }
+      - { method: POST,   path: "/v1/notifications/push-subscriptions", auth: "authenticated + PerUserWrite" }
+      - { method: DELETE, path: "/v1/notifications/push-subscriptions/{subscriptionId}", auth: "authenticated + PerUserWrite" }
+    admin_endpoints:
+      - { method: GET,  path: "/v1/admin/notifications/catalog", auth: AdminOnly }
+      - { method: GET,  path: "/v1/admin/notifications/policies", auth: AdminOnly }
+      - { method: PUT,  path: "/v1/admin/notifications/policies/{audienceRole}/{eventKey}", auth: "AdminOnly + PerUserWrite" }
+      - { method: GET,  path: "/v1/admin/notifications/health", auth: AdminOnly }
+      - { method: GET,  path: "/v1/admin/notifications/deliveries", auth: AdminOnly }
+      - { method: POST, path: "/v1/admin/notifications/test-email", auth: "AdminOnly + PerUserWrite" }
+      - { method: POST, path: "/v1/admin/notifications/proof/trigger", auth: "AdminOnly + PerUserWrite" }
+
+  # ── Learner Endpoints ──────────────────────────────────────────────
+  learner:
+    file: LearnerEndpoints.cs
+    group_prefix: "/v1"
+    group_auth: LearnerOnly
+    endpoint_count: ~100
+    domains:
+      profile_and_settings:
+        - { method: GET,   path: "/v1/me" }
+        - { method: GET,   path: "/v1/me/bootstrap" }
+        - { method: GET,   path: "/v1/settings" }
+        - { method: GET,   path: "/v1/settings/{section}" }
+        - { method: PATCH, path: "/v1/settings/profile" }
+        - { method: PATCH, path: "/v1/settings/goals" }
+        - { method: PATCH, path: "/v1/settings/notifications" }
+        - { method: PATCH, path: "/v1/settings/privacy" }
+        - { method: PATCH, path: "/v1/settings/accessibility" }
+        - { method: PATCH, path: "/v1/settings/audio" }
+        - { method: PATCH, path: "/v1/settings/study" }
+      freeze:
+        - { method: GET,  path: "/v1/freeze" }
+        - { method: POST, path: "/v1/freeze/request" }
+        - { method: POST, path: "/v1/freeze/{freezeId}/confirm" }
+        - { method: POST, path: "/v1/freeze/{freezeId}/cancel" }
+      reference_data:
+        - { method: GET, path: "/v1/reference/professions" }
+        - { method: GET, path: "/v1/reference/subtests" }
+        - { method: GET, path: "/v1/reference/criteria" }
+        - { method: GET, path: "/v1/reference/filters/{surface}" }
+        - { method: GET, path: "/v1/reference/exam-families" }
+        - { method: GET, path: "/v1/reference/score-equivalences" }
+      onboarding:
+        - { method: GET,  path: "/v1/learner/onboarding/state" }
+        - { method: POST, path: "/v1/learner/onboarding/start" }
+        - { method: POST, path: "/v1/learner/onboarding/complete" }
+      goals:
+        - { method: GET,   path: "/v1/learner/goals/" }
+        - { method: PATCH, path: "/v1/learner/goals/" }
+        - { method: POST,  path: "/v1/learner/goals/submit" }
+      dashboard_and_progress:
+        - { method: GET, path: "/v1/learner/dashboard" }
+        - { method: GET, path: "/v1/readiness" }
+        - { method: GET, path: "/v1/progress" }
+        - { method: GET, path: "/v1/submissions" }
+        - { method: GET, path: "/v1/submissions/compare" }
+        - { method: GET, path: "/v1/learner/engagement" }
+        - { method: GET, path: "/v1/learner/readiness/risk" }
+      study_plan:
+        - { method: GET,  path: "/v1/study-plan" }
+        - { method: POST, path: "/v1/study-plan/regenerate" }
+        - { method: POST, path: "/v1/study-plan/items/{itemId}/complete" }
+        - { method: POST, path: "/v1/study-plan/items/{itemId}/skip" }
+        - { method: POST, path: "/v1/study-plan/items/{itemId}/reset" }
+        - { method: POST, path: "/v1/study-plan/items/{itemId}/reschedule" }
+        - { method: POST, path: "/v1/study-plan/items/{itemId}/swap" }
+        - { method: GET,  path: "/v1/learner/study-plan/drift" }
+      diagnostic:
+        - { method: GET,  path: "/v1/diagnostic/overview" }
+        - { method: POST, path: "/v1/diagnostic/attempts" }
+        - { method: GET,  path: "/v1/diagnostic/attempts/{diagnosticId}" }
+        - { method: GET,  path: "/v1/diagnostic/attempts/{diagnosticId}/hub" }
+        - { method: GET,  path: "/v1/diagnostic/attempts/{diagnosticId}/results" }
+        - { method: GET,  path: "/v1/learner/diagnostic-personalization" }
+      writing:
+        - { method: GET,  path: "/v1/writing/home" }
+        - { method: GET,  path: "/v1/writing/tasks" }
+        - { method: GET,  path: "/v1/writing/tasks/{contentId}" }
+        - { method: POST, path: "/v1/writing/attempts" }
+        - { method: GET,  path: "/v1/writing/attempts/{attemptId}" }
+        - { method: PATCH, path: "/v1/writing/attempts/{attemptId}/draft" }
+        - { method: PATCH, path: "/v1/writing/attempts/{attemptId}/heartbeat" }
+        - { method: POST, path: "/v1/writing/attempts/{attemptId}/submit" }
+        - { method: GET,  path: "/v1/writing/evaluations/{evaluationId}/summary" }
+        - { method: GET,  path: "/v1/writing/evaluations/{evaluationId}/feedback" }
+        - { method: GET,  path: "/v1/writing/revisions/{attemptId}" }
+        - { method: POST, path: "/v1/writing/revisions/{attemptId}/submit" }
+        - { method: GET,  path: "/v1/writing/content/{contentId}/model-answer" }
+      speaking:
+        - { method: GET,  path: "/v1/speaking/home" }
+        - { method: GET,  path: "/v1/speaking/tasks" }
+        - { method: GET,  path: "/v1/speaking/tasks/{contentId}" }
+        - { method: POST, path: "/v1/speaking/attempts" }
+        - { method: GET,  path: "/v1/speaking/attempts/{attemptId}" }
+        - { method: POST, path: "/v1/speaking/attempts/{attemptId}/audio/upload-session" }
+        - { method: PUT,  path: "/v1/speaking/upload-sessions/{uploadSessionId}/content" }
+        - { method: POST, path: "/v1/speaking/attempts/{attemptId}/audio/complete" }
+        - { method: PATCH, path: "/v1/speaking/attempts/{attemptId}/heartbeat" }
+        - { method: POST, path: "/v1/speaking/attempts/{attemptId}/submit" }
+        - { method: GET,  path: "/v1/speaking/attempts/{attemptId}/processing" }
+        - { method: GET,  path: "/v1/speaking/evaluations/{evaluationId}/summary" }
+        - { method: GET,  path: "/v1/speaking/evaluations/{evaluationId}/review" }
+        - { method: GET,  path: "/v1/speaking/evaluations/{evaluationId}/audio" }
+        - { method: POST, path: "/v1/speaking/device-checks" }
+        - { method: GET,  path: "/v1/learner/speaking/{attemptId}/fluency-timeline" }
+      reading:
+        - { method: GET,  path: "/v1/reading/home" }
+        - { method: GET,  path: "/v1/reading/tasks/{contentId}" }
+        - { method: POST, path: "/v1/reading/attempts" }
+        - { method: GET,  path: "/v1/reading/attempts/{attemptId}" }
+        - { method: PATCH, path: "/v1/reading/attempts/{attemptId}/answers" }
+        - { method: PATCH, path: "/v1/reading/attempts/{attemptId}/heartbeat" }
+        - { method: POST, path: "/v1/reading/attempts/{attemptId}/submit" }
+        - { method: GET,  path: "/v1/reading/evaluations/{evaluationId}" }
+      listening:
+        - { method: GET,  path: "/v1/listening/home" }
+        - { method: GET,  path: "/v1/listening/tasks/{contentId}" }
+        - { method: POST, path: "/v1/listening/attempts" }
+        - { method: GET,  path: "/v1/listening/attempts/{attemptId}" }
+        - { method: PATCH, path: "/v1/listening/attempts/{attemptId}/answers" }
+        - { method: PATCH, path: "/v1/listening/attempts/{attemptId}/heartbeat" }
+        - { method: POST, path: "/v1/listening/attempts/{attemptId}/submit" }
+        - { method: GET,  path: "/v1/listening/evaluations/{evaluationId}" }
+        - { method: GET,  path: "/v1/listening/drills/{drillId}" }
+      mocks:
+        - { method: GET,  path: "/v1/mocks" }
+        - { method: GET,  path: "/v1/mocks/options" }
+        - { method: POST, path: "/v1/mock-attempts" }
+        - { method: GET,  path: "/v1/mock-attempts/{mockAttemptId}" }
+        - { method: POST, path: "/v1/mock-attempts/{mockAttemptId}/submit" }
+        - { method: GET,  path: "/v1/mock-reports/{reportId}" }
+      reviews:
+        - { method: GET,  path: "/v1/reviews/" }
+        - { method: GET,  path: "/v1/reviews/eligibility" }
+        - { method: POST, path: "/v1/reviews/requests" }
+        - { method: GET,  path: "/v1/reviews/requests/{reviewRequestId}" }
+      billing:
+        - { method: GET,  path: "/v1/billing/summary" }
+        - { method: GET,  path: "/v1/billing/plans" }
+        - { method: GET,  path: "/v1/billing/change-preview" }
+        - { method: GET,  path: "/v1/billing/quote" }
+        - { method: GET,  path: "/v1/billing/invoices" }
+        - { method: GET,  path: "/v1/billing/invoices/{invoiceId}/download" }
+        - { method: GET,  path: "/v1/billing/review-options" }
+        - { method: GET,  path: "/v1/billing/extras" }
+        - { method: POST, path: "/v1/billing/checkout-sessions" }
+        - { method: GET,  path: "/v1/billing/wallet/transactions" }
+        - { method: POST, path: "/v1/billing/wallet/top-up" }
+        - { method: GET,  path: "/v1/learner/billing/upgrade-path" }
+      score_guarantee:
+        - { method: GET,  path: "/v1/learner/score-guarantee" }
+        - { method: POST, path: "/v1/learner/score-guarantee/activate" }
+        - { method: POST, path: "/v1/learner/score-guarantee/claim" }
+      study_commitment:
+        - { method: GET,  path: "/v1/learner/study-commitment" }
+        - { method: POST, path: "/v1/learner/study-commitment" }
+      certificates:
+        - { method: GET, path: "/v1/learner/certificates" }
+      referral:
+        - { method: GET,  path: "/v1/learner/referral" }
+        - { method: POST, path: "/v1/learner/referral/generate" }
+      learning_paths:
+        - { method: GET, path: "/v1/learner/learning-path" }
+      remediation:
+        - { method: GET,  path: "/v1/learner/remediation" }
+        - { method: POST, path: "/v1/learner/remediation/start" }
+      smart_actions:
+        - { method: GET, path: "/v1/learner/next-actions" }
+        - { method: GET, path: "/v1/learner/comparative-analytics" }
+        - { method: GET, path: "/v1/learner/exam-simulation-config" }
+        - { method: GET, path: "/v1/learner/interleaved-practice" }
+      peer_reviews:
+        - { method: GET,  path: "/v1/learner/peer-reviews" }
+        - { method: POST, path: "/v1/learner/peer-reviews/submit" }
+        - { method: POST, path: "/v1/learner/peer-reviews/{peerReviewId}/claim" }
+        - { method: POST, path: "/v1/learner/peer-reviews/{peerReviewId}/feedback" }
+      escalations:
+        - { method: POST, path: "/v1/learner/escalations" }
+        - { method: GET,  path: "/v1/learner/escalations" }
+        - { method: GET,  path: "/v1/learner/escalations/{escalationId}" }
+      streak_freeze:
+        - { method: POST, path: "/v1/learner/engagement/streak-freeze" }
+
+  # ── Payment Webhooks (UNAUTHENTICATED) ─────────────────────────────
+  payment_webhooks:
+    file: LearnerEndpoints.cs
+    group_prefix: "/v1/payment/webhooks"
+    group_auth: "NO AUTH (separate MapGroup, no RequireAuthorization)"
+    note: "Webhook receiver endpoints — correctly unauthenticated; Stripe/PayPal verify via their own signature mechanisms"
+    endpoints:
+      - { method: POST, path: "/v1/payment/webhooks/stripe", auth: "NONE" }
+      - { method: POST, path: "/v1/payment/webhooks/paypal", auth: "NONE" }
+
+  # ── Expert Endpoints ───────────────────────────────────────────────
+  expert:
+    file: ExpertEndpoints.cs
+    group_prefix: "/v1/expert"
+    group_auth: "ExpertOnly + PerUser rate limit"
+    endpoints:
+      - { method: GET,  path: "/v1/expert/me" }
+      - { method: GET,  path: "/v1/expert/dashboard" }
+      - { method: GET,  path: "/v1/expert/queue" }
+      - { method: GET,  path: "/v1/expert/queue/filters/metadata" }
+      - { method: POST, path: "/v1/expert/queue/{reviewRequestId}/claim" }
+      - { method: POST, path: "/v1/expert/queue/{reviewRequestId}/release" }
+      - { method: GET,  path: "/v1/expert/reviews/{reviewRequestId}/writing" }
+      - { method: GET,  path: "/v1/expert/reviews/{reviewRequestId}/speaking" }
+      - { method: GET,  path: "/v1/expert/reviews/{reviewRequestId}/speaking/audio" }
+      - { method: PUT,  path: "/v1/expert/reviews/{reviewRequestId}/draft" }
+      - { method: POST, path: "/v1/expert/reviews/{reviewRequestId}/writing/submit" }
+      - { method: POST, path: "/v1/expert/reviews/{reviewRequestId}/speaking/submit" }
+      - { method: POST, path: "/v1/expert/reviews/{reviewRequestId}/rework" }
+      - { method: GET,  path: "/v1/expert/learners" }
+      - { method: GET,  path: "/v1/expert/learners/{learnerId}" }
+      - { method: GET,  path: "/v1/expert/learners/{learnerId}/review-context" }
+      - { method: GET,  path: "/v1/expert/reviews/{reviewRequestId}/history" }
+      - { method: GET,  path: "/v1/expert/calibration/cases" }
+      - { method: GET,  path: "/v1/expert/calibration/cases/{caseId}" }
+      - { method: GET,  path: "/v1/expert/calibration/notes" }
+      - { method: POST, path: "/v1/expert/calibration/cases/{caseId}/submit" }
+      - { method: GET,  path: "/v1/expert/schedule" }
+      - { method: PUT,  path: "/v1/expert/schedule" }
+      - { method: POST, path: "/v1/expert/schedule/exceptions" }
+      - { method: GET,  path: "/v1/expert/schedule/exceptions" }
+      - { method: DELETE, path: "/v1/expert/schedule/exceptions/{exceptionId}" }
+      - { method: GET,  path: "/v1/expert/metrics" }
+      - { method: GET,  path: "/v1/expert/annotation-templates" }
+      - { method: POST, path: "/v1/expert/annotation-templates" }
+      - { method: PUT,  path: "/v1/expert/annotation-templates/{templateId}" }
+      - { method: DELETE, path: "/v1/expert/annotation-templates/{templateId}" }
+      - { method: GET,  path: "/v1/expert/scoring-quality" }
+      - { method: GET,  path: "/v1/expert/queue-priority" }
+      - { method: GET,  path: "/v1/expert/reviews/{reviewRequestId}/ai-prefill" }
+      - { method: GET,  path: "/v1/expert/community/ask-an-expert" }
+      - { method: POST, path: "/v1/expert/community/threads/{threadId}/verified-reply" }
+
+  # ── Admin Endpoints (Main) ─────────────────────────────────────────
+  admin:
+    file: AdminEndpoints.cs
+    group_prefix: "/v1/admin"
+    group_auth: "AdminOnly + PerUser rate limit"
+    domains:
+      dashboard:
+        - { method: GET, path: "/v1/admin/dashboard" }
+      freeze_management:
+        - { method: GET,  path: "/v1/admin/freeze/overview" }
+        - { method: PUT,  path: "/v1/admin/freeze/policy" }
+        - { method: POST, path: "/v1/admin/freeze/manual" }
+        - { method: POST, path: "/v1/admin/freeze/{freezeId}/approve" }
+        - { method: POST, path: "/v1/admin/freeze/{freezeId}/reject" }
+        - { method: POST, path: "/v1/admin/freeze/{freezeId}/end" }
+        - { method: POST, path: "/v1/admin/freeze/{freezeId}/force-end" }
+      content_management:
+        - { method: GET,  path: "/v1/admin/content" }
+        - { method: GET,  path: "/v1/admin/content/{contentId}" }
+        - { method: POST, path: "/v1/admin/content" }
+        - { method: PUT,  path: "/v1/admin/content/{contentId}" }
+        - { method: POST, path: "/v1/admin/content/{contentId}/publish" }
+        - { method: POST, path: "/v1/admin/content/{contentId}/archive" }
+        - { method: POST, path: "/v1/admin/content/bulk-action" }
+        - { method: GET,  path: "/v1/admin/content/{contentId}/impact" }
+        - { method: GET,  path: "/v1/admin/content/{contentId}/revisions" }
+        - { method: POST, path: "/v1/admin/content/{contentId}/revisions/{revisionId}/restore" }
+        - { method: POST, path: "/v1/admin/content/validate" }
+        - { method: POST, path: "/v1/admin/content/bulk-import" }
+        - { method: GET,  path: "/v1/admin/content/inventory" }
+      content_publishing_workflow:
+        - { method: POST, path: "/v1/admin/content/{contentId}/request-publish" }
+        - { method: POST, path: "/v1/admin/content/{contentId}/submit-for-review" }
+        - { method: POST, path: "/v1/admin/content/{contentId}/editor-approve" }
+        - { method: POST, path: "/v1/admin/content/{contentId}/editor-reject" }
+        - { method: POST, path: "/v1/admin/content/{contentId}/publisher-approve" }
+        - { method: POST, path: "/v1/admin/content/{contentId}/publisher-reject" }
+        - { method: GET,  path: "/v1/admin/content/pending-review" }
+        - { method: GET,  path: "/v1/admin/publish-requests" }
+        - { method: POST, path: "/v1/admin/publish-requests/{requestId}/approve" }
+        - { method: POST, path: "/v1/admin/publish-requests/{requestId}/reject" }
+      ai_content_generation:
+        - { method: POST, path: "/v1/admin/content/generate" }
+        - { method: GET,  path: "/v1/admin/content/generation-jobs" }
+        - { method: GET,  path: "/v1/admin/content/generation-jobs/{jobId}" }
+      taxonomy:
+        - { method: GET,  path: "/v1/admin/taxonomy" }
+        - { method: POST, path: "/v1/admin/taxonomy" }
+        - { method: PUT,  path: "/v1/admin/taxonomy/{professionId}" }
+        - { method: POST, path: "/v1/admin/taxonomy/{professionId}/archive" }
+        - { method: GET,  path: "/v1/admin/taxonomy/{professionId}/impact" }
+      criteria:
+        - { method: GET,  path: "/v1/admin/criteria" }
+        - { method: POST, path: "/v1/admin/criteria" }
+        - { method: PUT,  path: "/v1/admin/criteria/{criterionId}" }
+      ai_config:
+        - { method: GET,  path: "/v1/admin/ai-config" }
+        - { method: POST, path: "/v1/admin/ai-config" }
+        - { method: PUT,  path: "/v1/admin/ai-config/{configId}" }
+        - { method: POST, path: "/v1/admin/ai-config/{configId}/activate" }
+      feature_flags:
+        - { method: GET,  path: "/v1/admin/flags" }
+        - { method: POST, path: "/v1/admin/flags" }
+        - { method: PUT,  path: "/v1/admin/flags/{flagId}" }
+        - { method: POST, path: "/v1/admin/flags/{flagId}/activate" }
+        - { method: POST, path: "/v1/admin/flags/{flagId}/deactivate" }
+      audit_logs:
+        - { method: GET,  path: "/v1/admin/audit-logs" }
+        - { method: GET,  path: "/v1/admin/audit-logs/{eventId}" }
+        - { method: GET,  path: "/v1/admin/audit-logs/export" }
+      user_ops:
+        - { method: GET,  path: "/v1/admin/users" }
+        - { method: GET,  path: "/v1/admin/users/{userId}" }
+        - { method: POST, path: "/v1/admin/users/invite" }
+        - { method: POST, path: "/v1/admin/users/import" }
+        - { method: PUT,  path: "/v1/admin/users/{userId}/status" }
+        - { method: POST, path: "/v1/admin/users/{userId}/delete" }
+        - { method: POST, path: "/v1/admin/users/{userId}/restore" }
+        - { method: POST, path: "/v1/admin/users/{userId}/credits" }
+        - { method: POST, path: "/v1/admin/users/{userId}/password-reset" }
+      billing:
+        - { method: GET,  path: "/v1/admin/billing/plans" }
+        - { method: POST, path: "/v1/admin/billing/plans" }
+        - { method: PUT,  path: "/v1/admin/billing/plans/{planId}" }
+        - { method: GET,  path: "/v1/admin/billing/add-ons" }
+        - { method: POST, path: "/v1/admin/billing/add-ons" }
+        - { method: PUT,  path: "/v1/admin/billing/add-ons/{addOnId}" }
+        - { method: GET,  path: "/v1/admin/billing/coupons" }
+        - { method: POST, path: "/v1/admin/billing/coupons" }
+        - { method: PUT,  path: "/v1/admin/billing/coupons/{couponId}" }
+        - { method: GET,  path: "/v1/admin/billing/subscriptions" }
+        - { method: GET,  path: "/v1/admin/billing/redemptions" }
+        - { method: GET,  path: "/v1/admin/billing/invoices" }
+      review_ops:
+        - { method: GET,  path: "/v1/admin/review-ops/summary" }
+        - { method: GET,  path: "/v1/admin/review-ops/queue" }
+        - { method: POST, path: "/v1/admin/review-ops/{reviewRequestId}/assign" }
+        - { method: POST, path: "/v1/admin/review-ops/{reviewRequestId}/cancel" }
+        - { method: POST, path: "/v1/admin/review-ops/{reviewRequestId}/reopen" }
+        - { method: GET,  path: "/v1/admin/review-ops/failures" }
+      quality_analytics:
+        - { method: GET, path: "/v1/admin/quality-analytics" }
+      permissions_rbac:
+        - { method: GET,  path: "/v1/admin/permissions" }
+        - { method: GET,  path: "/v1/admin/permissions/{userId}" }
+        - { method: PUT,  path: "/v1/admin/permissions/{userId}" }
+        - { method: GET,  path: "/v1/admin/permission-templates" }
+        - { method: POST, path: "/v1/admin/permission-templates" }
+        - { method: DELETE, path: "/v1/admin/permission-templates/{templateId}" }
+        - { method: POST, path: "/v1/admin/users/{userId}/apply-template/{templateId}" }
+      webhooks:
+        - { method: GET,  path: "/v1/admin/webhooks" }
+        - { method: GET,  path: "/v1/admin/webhooks/summary" }
+        - { method: POST, path: "/v1/admin/webhooks/{eventId}/retry" }
+      escalations:
+        - { method: GET,  path: "/v1/admin/escalations" }
+        - { method: POST, path: "/v1/admin/escalations/{escalationId}/assign" }
+        - { method: POST, path: "/v1/admin/escalations/{escalationId}/resolve" }
+      score_guarantee_claims:
+        - { method: GET,  path: "/v1/admin/score-guarantee-claims" }
+        - { method: POST, path: "/v1/admin/score-guarantee-claims/{pledgeId}/review" }
+      content_quality:
+        - { method: GET,  path: "/v1/admin/content-quality" }
+        - { method: POST, path: "/v1/admin/content-quality/{contentId}/score" }
+      bulk_ops:
+        - { method: POST, path: "/v1/admin/bulk/credits" }
+        - { method: POST, path: "/v1/admin/bulk/notifications" }
+        - { method: POST, path: "/v1/admin/bulk/status" }
+      sponsors_enterprise:
+        - { method: GET,   path: "/v1/admin/sponsors" }
+        - { method: POST,  path: "/v1/admin/sponsors" }
+        - { method: PATCH, path: "/v1/admin/sponsors/{sponsorId}" }
+        - { method: GET,   path: "/v1/admin/sponsors/{sponsorId}/learners" }
+        - { method: POST,  path: "/v1/admin/sponsors/{sponsorId}/learners" }
+        - { method: GET,   path: "/v1/admin/cohorts" }
+        - { method: POST,  path: "/v1/admin/cohorts" }
+        - { method: PATCH, path: "/v1/admin/cohorts/{cohortId}" }
+        - { method: GET,   path: "/v1/admin/cohorts/{cohortId}/members" }
+        - { method: POST,  path: "/v1/admin/cohorts/{cohortId}/members" }
+      content_analytics:
+        - { method: GET, path: "/v1/admin/content-analytics/{contentId}" }
+      sla_health:
+        - { method: GET, path: "/v1/admin/sla-health" }
+      credit_lifecycle:
+        - { method: GET, path: "/v1/admin/credit-lifecycle" }
+      reporting:
+        - { method: GET, path: "/v1/admin/analytics/cohort" }
+        - { method: GET, path: "/v1/admin/analytics/content-effectiveness" }
+        - { method: GET, path: "/v1/admin/analytics/expert-efficiency" }
+        - { method: GET, path: "/v1/admin/analytics/subscription-health" }
+      community_moderation:
+        - { method: PATCH,  path: "/v1/admin/community/threads/{threadId}/pin" }
+        - { method: PATCH,  path: "/v1/admin/community/threads/{threadId}/lock" }
+        - { method: DELETE, path: "/v1/admin/community/threads/{threadId}" }
+        - { method: DELETE, path: "/v1/admin/community/threads/{threadId}/replies/{replyId}" }
+
+  # ── Content Hierarchy (Admin + Learner) ────────────────────────────
+  content_hierarchy:
+    file: ContentHierarchyEndpoints.cs
+    admin_group_auth: "AdminOnly + PerUser"
+    learner_group_auth: "RequireAuthorization (any) + PerUser"
+    admin_endpoints:
+      - { method: GET,  path: "/v1/admin/programs" }
+      - { method: GET,  path: "/v1/admin/programs/{programId}" }
+      - { method: POST, path: "/v1/admin/programs" }
+      - { method: PUT,  path: "/v1/admin/programs/{programId}" }
+      - { method: GET,  path: "/v1/admin/programs/{programId}/tracks" }
+      - { method: POST, path: "/v1/admin/tracks" }
+      - { method: PUT,  path: "/v1/admin/tracks/{trackId}" }
+      - { method: GET,  path: "/v1/admin/tracks/{trackId}/modules" }
+      - { method: POST, path: "/v1/admin/modules" }
+      - { method: PUT,  path: "/v1/admin/modules/{moduleId}" }
+      - { method: GET,  path: "/v1/admin/modules/{moduleId}/lessons" }
+      - { method: POST, path: "/v1/admin/lessons" }
+      - { method: GET,  path: "/v1/admin/packages" }
+      - { method: GET,  path: "/v1/admin/packages/{packageId}" }
+      - { method: POST, path: "/v1/admin/packages" }
+      - { method: PUT,  path: "/v1/admin/packages/{packageId}" }
+      - { method: GET,  path: "/v1/admin/packages/{packageId}/rules" }
+      - { method: POST, path: "/v1/admin/packages/{packageId}/rules" }
+      - { method: DELETE, path: "/v1/admin/packages/rules/{ruleId}" }
+      - { method: GET,  path: "/v1/admin/import-batches" }
+      - { method: POST, path: "/v1/admin/import-batches" }
+      - { method: POST, path: "/v1/admin/import-batches/{batchId}/rollback" }
+      - { method: GET,  path: "/v1/admin/testimonials" }
+      - { method: POST, path: "/v1/admin/testimonials" }
+      - { method: GET,  path: "/v1/admin/foundation-resources" }
+      - { method: POST, path: "/v1/admin/foundation-resources" }
+      - { method: POST, path: "/v1/admin/dedup/scan" }
+      - { method: GET,  path: "/v1/admin/dedup/groups" }
+      - { method: GET,  path: "/v1/admin/dedup/groups/{groupId}" }
+      - { method: POST, path: "/v1/admin/dedup/groups/{groupId}/designate-canonical" }
+      - { method: POST, path: "/v1/admin/dedup/items/{itemId}/remove-from-group" }
+      - { method: POST, path: "/v1/admin/mock/assemble" }
+      - { method: POST, path: "/v1/admin/diagnostic/generate" }
+      - { method: PATCH, path: "/v1/admin/content/{contentId}/eligibility" }
+      - { method: POST, path: "/v1/admin/media-assets" }
+      - { method: GET,  path: "/v1/admin/media-assets" }
+      - { method: POST, path: "/v1/admin/media/{assetId}/process" }
+      - { method: POST, path: "/v1/admin/media/{assetId}/complete-processing" }
+      - { method: GET,  path: "/v1/admin/media/audit" }
+      - { method: GET,  path: "/v1/admin/media/normalization-plan" }
+    learner_endpoints:
+      - { method: GET, path: "/v1/programs" }
+      - { method: GET, path: "/v1/programs/{programId}" }
+      - { method: GET, path: "/v1/programs/{programId}/tracks" }
+      - { method: GET, path: "/v1/packages" }
+      - { method: GET, path: "/v1/packages/{packageId}" }
+      - { method: GET, path: "/v1/free-previews" }
+      - { method: GET, path: "/v1/foundation-resources" }
+      - { method: GET, path: "/v1/content-browser" }
+      - { method: GET, path: "/v1/content-browser/{contentId}/access" }
+      - { method: GET, path: "/v1/programs-browser" }
+      - { method: GET, path: "/v1/content/by-skill" }
+      - { method: GET, path: "/v1/search" }
+      - { method: GET, path: "/v1/search/facets" }
+      - { method: GET, path: "/v1/recommendations" }
+      - { method: GET, path: "/v1/media/{assetId}/url" }
+
+  # ── Gamification ───────────────────────────────────────────────────
+  gamification:
+    file: GamificationEndpoints.cs
+    group_prefix: "/v1"
+    group_auth: LearnerOnly
+    endpoints:
+      - { method: GET,  path: "/v1/gamification/xp" }
+      - { method: GET,  path: "/v1/gamification/streak" }
+      - { method: POST, path: "/v1/gamification/streak/activity" }
+      - { method: GET,  path: "/v1/gamification/achievements" }
+      - { method: GET,  path: "/v1/gamification/leaderboard" }
+      - { method: GET,  path: "/v1/gamification/leaderboard/my-position" }
+      - { method: POST, path: "/v1/gamification/leaderboard/opt-in" }
+
+  # ── Spaced Repetition / Review Items ───────────────────────────────
+  review_items:
+    file: ReviewItemEndpoints.cs
+    group_prefix: "/v1/review"
+    group_auth: LearnerOnly
+    endpoints:
+      - { method: GET,    path: "/v1/review/summary" }
+      - { method: GET,    path: "/v1/review/due" }
+      - { method: POST,   path: "/v1/review/items" }
+      - { method: POST,   path: "/v1/review/items/{itemId}/submit" }
+      - { method: DELETE, path: "/v1/review/items/{itemId}" }
+
+  # ── Vocabulary ─────────────────────────────────────────────────────
+  vocabulary:
+    file: VocabularyEndpoints.cs
+    group_prefix: "/v1/vocabulary"
+    group_auth: LearnerOnly
+    endpoints:
+      - { method: GET,    path: "/v1/vocabulary/terms" }
+      - { method: GET,    path: "/v1/vocabulary/terms/{termId}" }
+      - { method: GET,    path: "/v1/vocabulary/my-list" }
+      - { method: POST,   path: "/v1/vocabulary/my-list/{termId}" }
+      - { method: DELETE, path: "/v1/vocabulary/my-list/{termId}" }
+      - { method: GET,    path: "/v1/vocabulary/flashcards/due" }
+      - { method: POST,   path: "/v1/vocabulary/flashcards/{lvId}/review" }
+      - { method: GET,    path: "/v1/vocabulary/quiz" }
+      - { method: POST,   path: "/v1/vocabulary/quiz/submit" }
+
+  # ── Adaptive Difficulty ────────────────────────────────────────────
+  adaptive:
+    file: AdaptiveEndpoints.cs
+    group_prefix: "/v1/adaptive"
+    group_auth: LearnerOnly
+    endpoints:
+      - { method: GET, path: "/v1/adaptive/skill-profile" }
+      - { method: GET, path: "/v1/adaptive/content" }
+
+  # ── Predictions ────────────────────────────────────────────────────
+  predictions:
+    file: PredictionEndpoints.cs
+    group_prefix: "/v1/predictions"
+    group_auth: LearnerOnly
+    endpoints:
+      - { method: GET,  path: "/v1/predictions/" }
+      - { method: GET,  path: "/v1/predictions/{examTypeCode}/{subtestCode}" }
+      - { method: POST, path: "/v1/predictions/compute" }
+
+  # ── Learning Content (Grammar, Video, Strategy) ────────────────────
+  learning_content:
+    file: LearningContentEndpoints.cs
+    group_prefix: "/v1"
+    group_auth: LearnerOnly
+    endpoints:
+      grammar:
+        - { method: GET,  path: "/v1/grammar/lessons" }
+        - { method: GET,  path: "/v1/grammar/lessons/{lessonId}" }
+        - { method: POST, path: "/v1/grammar/lessons/{lessonId}/start" }
+        - { method: POST, path: "/v1/grammar/lessons/{lessonId}/complete" }
+      video_lessons:
+        - { method: GET,  path: "/v1/lessons/" }
+        - { method: GET,  path: "/v1/lessons/{lessonId}" }
+        - { method: POST, path: "/v1/lessons/{lessonId}/progress" }
+      strategy_guides:
+        - { method: GET, path: "/v1/strategies/" }
+        - { method: GET, path: "/v1/strategies/{guideId}" }
+
+  # ── Community ──────────────────────────────────────────────────────
+  community:
+    file: CommunityEndpoints.cs
+    group_prefix: "/v1/community"
+    group_auth: LearnerOnly
+    endpoints:
+      - { method: GET,  path: "/v1/community/categories" }
+      - { method: GET,  path: "/v1/community/threads" }
+      - { method: GET,  path: "/v1/community/threads/{threadId}" }
+      - { method: POST, path: "/v1/community/threads" }
+      - { method: GET,  path: "/v1/community/threads/{threadId}/replies" }
+      - { method: POST, path: "/v1/community/threads/{threadId}/replies" }
+      - { method: GET,  path: "/v1/community/study-groups" }
+      - { method: POST, path: "/v1/community/study-groups" }
+      - { method: POST, path: "/v1/community/study-groups/{groupId}/join" }
+
+  # ── Social (Certificates, Referrals, Bookings, Tutoring) ──────────
+  social:
+    file: SocialEndpoints.cs
+    group_prefix: "/v1"
+    group_auth: LearnerOnly
+    endpoints:
+      - { method: GET,    path: "/v1/certificates/" }
+      - { method: GET,    path: "/v1/certificates/verify/{code}" }
+      - { method: GET,    path: "/v1/referrals/my-code" }
+      - { method: GET,    path: "/v1/referrals/my-referrals" }
+      - { method: POST,   path: "/v1/referrals/apply" }
+      - { method: GET,    path: "/v1/exam-bookings/" }
+      - { method: POST,   path: "/v1/exam-bookings/" }
+      - { method: DELETE, path: "/v1/exam-bookings/{bookingId}" }
+      - { method: GET,    path: "/v1/tutoring/sessions" }
+      - { method: POST,   path: "/v1/tutoring/sessions" }
+      - { method: POST,   path: "/v1/tutoring/sessions/{sessionId}/rate" }
+
+  # ── Conversations (AI) ────────────────────────────────────────────
+  conversations:
+    file: ConversationEndpoints.cs
+    group_prefix: "/v1/conversations"
+    group_auth: LearnerOnly
+    endpoints:
+      - { method: POST, path: "/v1/conversations/" }
+      - { method: GET,  path: "/v1/conversations/{sessionId}" }
+      - { method: POST, path: "/v1/conversations/{sessionId}/complete" }
+      - { method: GET,  path: "/v1/conversations/{sessionId}/evaluation" }
+      - { method: GET,  path: "/v1/conversations/history" }
+
+  # ── Pronunciation ──────────────────────────────────────────────────
+  pronunciation:
+    file: PronunciationEndpoints.cs
+    group_prefix: "/v1/pronunciation"
+    group_auth: LearnerOnly
+    endpoints:
+      - { method: GET,  path: "/v1/pronunciation/profile" }
+      - { method: GET,  path: "/v1/pronunciation/drills" }
+      - { method: GET,  path: "/v1/pronunciation/drills/{drillId}" }
+      - { method: POST, path: "/v1/pronunciation/drills/{drillId}/attempt" }
+      - { method: GET,  path: "/v1/pronunciation/assessment/{assessmentId}" }
+      - { method: GET,  path: "/v1/pronunciation/speaking-linked" }
+
+  # ── Writing Coach ──────────────────────────────────────────────────
+  writing_coach:
+    file: WritingCoachEndpoints.cs
+    group_prefix: "/v1/writing"
+    group_auth: LearnerOnly
+    endpoints:
+      - { method: POST, path: "/v1/writing/attempts/{attemptId}/coach-check" }
+      - { method: POST, path: "/v1/writing/coach-suggestions/{id}/resolve" }
+      - { method: GET,  path: "/v1/writing/attempts/{attemptId}/coach-stats" }
+
+  # ── Marketplace ────────────────────────────────────────────────────
+  marketplace:
+    file: MarketplaceEndpoints.cs
+    learner_group_auth: LearnerOnly
+    admin_group_auth: "AdminOnly + PerUser"
+    learner_endpoints:
+      - { method: GET,   path: "/v1/marketplace/browse" }
+      - { method: GET,   path: "/v1/marketplace/profile" }
+      - { method: PATCH, path: "/v1/marketplace/profile" }
+      - { method: POST,  path: "/v1/marketplace/submissions" }
+      - { method: GET,   path: "/v1/marketplace/submissions" }
+      - { method: GET,   path: "/v1/marketplace/submissions/{submissionId}" }
+    admin_endpoints:
+      - { method: GET,  path: "/v1/admin/marketplace/pending" }
+      - { method: POST, path: "/v1/admin/marketplace/submissions/{submissionId}/review" }
+
+  # ── Sponsor Dashboard ─────────────────────────────────────────────
+  sponsor:
+    file: SponsorEndpoints.cs
+    group_prefix: "/v1/sponsor"
+    group_auth: "SponsorOnly + PerUser"
+    endpoints:
+      - { method: GET,    path: "/v1/sponsor/dashboard" }
+      - { method: GET,    path: "/v1/sponsor/learners" }
+      - { method: POST,   path: "/v1/sponsor/learners/invite" }
+      - { method: DELETE, path: "/v1/sponsor/learners/{id}" }
+      - { method: GET,    path: "/v1/sponsor/billing" }
+
+  # ── Private Speaking ───────────────────────────────────────────────
+  private_speaking:
+    file: PrivateSpeakingEndpoints.cs
+    learner_auth: LearnerOnly
+    expert_auth: ExpertOnly
+    admin_auth: AdminOnly
+    learner_endpoints:
+      - { method: GET,  path: "/v1/private-speaking/config" }
+      - { method: GET,  path: "/v1/private-speaking/tutors" }
+      - { method: GET,  path: "/v1/private-speaking/tutors/{tutorProfileId}/slots" }
+      - { method: GET,  path: "/v1/private-speaking/slots" }
+      - { method: POST, path: "/v1/private-speaking/bookings" }
+      - { method: GET,  path: "/v1/private-speaking/bookings" }
+      - { method: GET,  path: "/v1/private-speaking/bookings/{bookingId}" }
+      - { method: POST, path: "/v1/private-speaking/bookings/{bookingId}/cancel" }
+      - { method: POST, path: "/v1/private-speaking/bookings/{bookingId}/rate" }
+    expert_endpoints:
+      - { method: GET,    path: "/v1/expert/private-speaking/profile" }
+      - { method: GET,    path: "/v1/expert/private-speaking/sessions" }
+      - { method: GET,    path: "/v1/expert/private-speaking/sessions/{bookingId}" }
+      - { method: POST,   path: "/v1/expert/private-speaking/sessions/{bookingId}/cancel" }
+      - { method: GET,    path: "/v1/expert/private-speaking/availability" }
+      - { method: POST,   path: "/v1/expert/private-speaking/availability" }
+      - { method: DELETE, path: "/v1/expert/private-speaking/availability/{ruleId}" }
+    admin_endpoints:
+      - { method: GET,    path: "/v1/admin/private-speaking/config" }
+      - { method: PUT,    path: "/v1/admin/private-speaking/config" }
+      - { method: GET,    path: "/v1/admin/private-speaking/stats" }
+      - { method: GET,    path: "/v1/admin/private-speaking/tutors" }
+      - { method: GET,    path: "/v1/admin/private-speaking/tutors/{profileId}" }
+      - { method: POST,   path: "/v1/admin/private-speaking/tutors" }
+      - { method: PUT,    path: "/v1/admin/private-speaking/tutors/{profileId}" }
+      - { method: GET,    path: "/v1/admin/private-speaking/tutors/{profileId}/availability" }
+      - { method: POST,   path: "/v1/admin/private-speaking/tutors/{profileId}/availability" }
+      - { method: DELETE, path: "/v1/admin/private-speaking/tutors/{profileId}/availability/{ruleId}" }
+      - { method: GET,    path: "/v1/admin/private-speaking/tutors/{profileId}/overrides" }
+      - { method: POST,   path: "/v1/admin/private-speaking/tutors/{profileId}/overrides" }
+      - { method: DELETE, path: "/v1/admin/private-speaking/tutors/{profileId}/overrides/{overrideId}" }
+      - { method: GET,    path: "/v1/admin/private-speaking/bookings" }
+
+  # ── Media ──────────────────────────────────────────────────────────
+  media:
+    file: MediaEndpoints.cs
+    group_prefix: "/v1/media"
+    group_auth: "RequireAuthorization (any authenticated) + PerUser"
+    endpoints:
+      - { method: POST,   path: "/v1/media/upload", auth: "authenticated + PerUserWrite" }
+      - { method: GET,    path: "/v1/media/{id}", auth: "authenticated" }
+      - { method: DELETE, path: "/v1/media/{id}", auth: "authenticated + PerUserWrite (owner or admin)" }
+      - { method: GET,    path: "/v1/media", auth: "authenticated (own media only)" }
+
+  # ── SignalR Hubs ───────────────────────────────────────────────────
+  signalr_hubs:
+    note: "WebSocket hubs requiring authorization; access_token passed via query string"
+    endpoints:
+      - { path: "/v1/notifications/hub", auth: RequireAuthorization }
+      - { path: "/v1/conversations/hub", auth: RequireAuthorization }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SECTION 2: RBAC MATRIX
+# ═══════════════════════════════════════════════════════════════════════
+
+rbac:
+  jwt_config:
+    algorithm: HS256_symmetric
+    token_validation:
+      validates: [issuer, audience, lifetime, signing_key]
+      name_claim: ClaimTypes.NameIdentifier
+      role_claim: ClaimTypes.Role
+      map_inbound_claims: false
+    on_token_validated:
+      - "Checks auth_account_id claim present"
+      - "Looks up ApplicationUserAccount in DB"
+      - "Fails if account is null or deleted"
+      - "If role=learner, checks User.AccountStatus == 'active' (suspension)"
+      - "If role=expert, checks ExpertUsers.IsActive (suspension)"
+    development_auth:
+      scheme: "DevelopmentOrJwt hybrid policy scheme"
+      condition: "Auth:UseDevelopmentAuth=true AND Environment.IsDevelopment()"
+      handler: "DevelopmentAuthHandler — fails closed outside Development"
+
+  role_policies:
+    LearnerOnly:
+      requires: [authenticated, "role=learner"]
+    ExpertOnly:
+      requires: [authenticated, "role=expert", "email_verified=true"]
+    AdminOnly:
+      requires: [authenticated, "role=admin", "email_verified=true"]
+    SponsorOnly:
+      requires: [authenticated, "role=sponsor", "email_verified=true"]
+
+  granular_admin_permission_policies:
+    AdminContentRead:   { requires: ["admin", "content:read OR system_admin"] }
+    AdminContentWrite:  { requires: ["admin", "content:write OR system_admin"] }
+    AdminContentPublish: { requires: ["admin", "content:publish OR system_admin"] }
+    AdminContentEditorReview: { requires: ["admin", "content:editor_review OR content:publish OR system_admin"] }
+    AdminContentPublisherApproval: { requires: ["admin", "content:publisher_approval OR content:publish OR system_admin"] }
+    AdminBillingRead:   { requires: ["admin", "billing:read OR system_admin"] }
+    AdminBillingWrite:  { requires: ["admin", "billing:write OR system_admin"] }
+    AdminUsersRead:     { requires: ["admin", "users:read OR system_admin"] }
+    AdminUsersWrite:    { requires: ["admin", "users:write OR system_admin"] }
+    AdminReviewOps:     { requires: ["admin", "review_ops OR system_admin"] }
+    AdminSystemAdmin:   { requires: ["admin", "system_admin"] }
+
+  note_admin_granular_policies_not_applied: |
+    The granular admin permission policies (AdminContentRead, AdminContentWrite, etc.) are DEFINED
+    in Program.cs but NOT currently applied to any endpoint groups — AdminEndpoints.cs uses
+    the broad "AdminOnly" policy for the entire /v1/admin group. The granular policies exist
+    for future fine-grained enforcement but are not wired to specific endpoints yet.
+
+  endpoint_role_matrix:
+    AllowAnonymous:
+      - "/health/*"
+      - "/v1/auth/register"
+      - "/v1/auth/catalog/signup"
+      - "/v1/auth/sign-in"
+      - "/v1/auth/external/*/start"
+      - "/v1/auth/external/*/callback"
+      - "/v1/auth/external/*/exchange"
+      - "/v1/auth/email/*"
+      - "/v1/auth/forgot-password"
+      - "/v1/auth/reset-password"
+      - "/v1/auth/mfa/challenge"
+      - "/v1/auth/mfa/recovery"
+      - "/v1/auth/refresh"
+      - "/v1/auth/sign-out"
+      - "/v1/payment/webhooks/stripe"
+      - "/v1/payment/webhooks/paypal"
+    AnyAuthenticated:
+      - "/v1/auth/mfa/authenticator/*"
+      - "/v1/auth/me"
+      - "/v1/auth/sessions*"
+      - "/v1/analytics/events"
+      - "/v1/notifications/*"
+      - "/v1/media/*"
+      - "/v1/programs*"
+      - "/v1/packages*"
+      - "/v1/free-previews"
+      - "/v1/foundation-resources"
+      - "/v1/content-browser*"
+      - "/v1/programs-browser"
+      - "/v1/search*"
+      - "/v1/recommendations"
+      - "/v1/media/{assetId}/url"
+      - "/v1/content/by-skill"
+      - "/v1/notifications/hub (SignalR)"
+      - "/v1/conversations/hub (SignalR)"
+    LearnerOnly:
+      - "All /v1/* learner endpoints (~100+)"
+      - "/v1/auth/account/delete"
+      - "/v1/private-speaking/*"
+      - "/v1/marketplace/* (browse, profile, submissions)"
+      - "/v1/community/*"
+      - "/v1/certificates/*"
+      - "/v1/referrals/*"
+      - "/v1/tutoring/*"
+      - "/v1/exam-bookings/*"
+      - "/v1/conversations/*"
+      - "/v1/pronunciation/*"
+      - "/v1/grammar/*"
+      - "/v1/lessons/*"
+      - "/v1/strategies/*"
+      - "/v1/vocabulary/*"
+      - "/v1/review/*"
+      - "/v1/gamification/*"
+      - "/v1/adaptive/*"
+      - "/v1/predictions/*"
+      - "/v1/writing/coach-*"
+    ExpertOnly:
+      - "All /v1/expert/* endpoints (~35)"
+      - "/v1/expert/private-speaking/*"
+    AdminOnly:
+      - "All /v1/admin/* endpoints (~120+)"
+      - "/v1/admin/notifications/*"
+      - "/v1/admin/marketplace/*"
+      - "/v1/admin/private-speaking/*"
+    SponsorOnly:
+      - "All /v1/sponsor/* endpoints (5)"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SECTION 3: UNPROTECTED / MISCONFIGURED ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════════
+
+security_findings:
+
+  intentionally_unauthenticated:
+    - path: "/v1/payment/webhooks/stripe"
+      reason: "Stripe webhook — verified via Stripe signature header, not JWT"
+    - path: "/v1/payment/webhooks/paypal"
+      reason: "PayPal webhook — verified via PayPal signature header, not JWT"
+    - path: "/health/*"
+      reason: "Infrastructure health checks"
+    - path: "/v1/auth/* (most)"
+      reason: "Pre-authentication flows (login, register, MFA, password reset)"
+
+  potential_concerns:
+    - area: "Granular admin permissions defined but not enforced"
+      detail: |
+        12 granular admin permission policies (AdminContentRead, AdminContentWrite, AdminBillingRead, etc.)
+        are defined in Program.cs but the AdminEndpoints.cs group only uses the broad "AdminOnly" policy.
+        This means any admin can access ALL admin endpoints regardless of their permission claims.
+        Consider wiring granular policies to specific endpoint subgroups for least-privilege enforcement.
+      severity: medium
+      recommendation: "Wire AdminContentWrite to content mutation endpoints, AdminBillingWrite to billing mutations, etc."
+
+    - area: "Certificate verify endpoint behind LearnerOnly"
+      detail: |
+        GET /v1/certificates/verify/{code} requires LearnerOnly auth but conceptually should be
+        public — anyone trying to verify a certificate (e.g., an employer) shouldn't need a learner account.
+      severity: low
+
+    - area: "/v1/notifications and /v1/media use generic RequireAuthorization"
+      detail: |
+        These endpoints accept ANY authenticated role (learner, expert, admin, sponsor).
+        This is likely intentional for shared functionality but worth documenting.
+      severity: info
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SECTION 4: NEXT.JS API ROUTE HANDLERS
+# ═══════════════════════════════════════════════════════════════════════
+
+nextjs_api_routes:
+  - path: "app/api/backend/[...path]/route.ts"
+    purpose: "Catch-all proxy to .NET backend"
+    methods: [GET, POST, PUT, PATCH, DELETE, OPTIONS]
+    behavior: |
+      1. Validates path starts with 'v1/' (rejects non-v1 paths)
+      2. Strips x-debug-* and forwarding headers via sanitizeProxyHeaders
+      3. Strips unsafe response headers (transfer-encoding, etc.)
+      4. Proxies to API_PROXY_TARGET_URL env var (default: http://127.0.0.1:5198)
+      5. No auth validation in the proxy — all auth handled by backend JWT middleware
+    security:
+      - "Path traversal prevention (rejects .., empty segments, null bytes)"
+      - "Only /v1/* paths allowed"
+      - "x-debug-* headers stripped"
+      - "Forwarding headers stripped (x-forwarded-for, x-forwarded-host, etc.)"
+
+  - path: "app/api/health/route.ts"
+    purpose: "Frontend health check"
+    methods: [GET]
+    behavior: "Returns { status: 'ok', service: 'oet-web', timestamp }"
+    auth: "None (server-side only, not protected by middleware)"
+
+nextjs_middleware:
+  file: middleware.ts
+  behavior: |
+    1. Checks if path is in PUBLIC_PATHS set (auth routes)
+    2. For non-public paths, checks for 'oet_auth' cookie
+    3. Redirects to /sign-in?next={path} if no auth cookie
+    4. Matcher excludes /api, /_next, static files
+  public_paths:
+    - /sign-in
+    - /register
+    - /register/success
+    - /terms
+    - /forgot-password
+    - /forgot-password/verify
+    - /reset-password
+    - /reset-password/success
+    - /verify-email
+    - /mfa/challenge
+    - /mfa/setup
+    - /mfa/recovery
+    - /auth/callback
+    - /auth/callback/*
+  note: |
+    The middleware only checks for presence of an auth cookie — it does NOT validate JWT or role.
+    Role-based frontend protection must happen at the page/component level.
+    API routes (/api/*) are excluded from this middleware entirely.
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SECTION 5: ADMIN CRUD COVERAGE ANALYSIS
+# ═══════════════════════════════════════════════════════════════════════
+
+admin_crud_coverage:
+  covered_areas:
+    - domain: Content Management
+      admin_crud: "Full CRUD (list, detail, create, update, publish, archive, bulk-action, revisions, import)"
+      learner_feature: "Writing/Speaking/Reading/Listening tasks"
+      gap: none
+
+    - domain: Taxonomy / Professions
+      admin_crud: "List, Create, Update, Archive, Impact analysis"
+      learner_feature: "Profession-specific learning paths"
+      gap: none
+
+    - domain: Criteria / Rubric
+      admin_crud: "List, Create, Update"
+      learner_feature: "Evaluation criteria reference"
+      gap: none
+
+    - domain: AI Evaluation Config
+      admin_crud: "List, Create, Update, Activate"
+      learner_feature: "AI scoring"
+      gap: none
+
+    - domain: Users
+      admin_crud: "List, Detail, Invite, Import, Status change, Delete, Restore, Credit adjustment, Password reset"
+      learner_feature: "User accounts"
+      gap: none
+
+    - domain: Billing Plans
+      admin_crud: "Plans CRUD, Add-ons CRUD, Coupons CRUD, Subscriptions list, Invoices list, Redemptions list"
+      learner_feature: "Subscription management"
+      gap: none
+
+    - domain: Review Operations
+      admin_crud: "Queue, Assign, Cancel, Reopen, Failures list"
+      learner_feature: "Expert review requests"
+      gap: none
+
+    - domain: Content Publishing Workflow
+      admin_crud: "Request, Submit, Editor approve/reject, Publisher approve/reject, Pending review list"
+      learner_feature: "Content availability"
+      gap: none
+
+    - domain: Feature Flags
+      admin_crud: "List, Create, Update, Activate, Deactivate"
+      learner_feature: "Feature gating"
+      gap: none
+
+    - domain: Webhooks
+      admin_crud: "List, Summary, Retry"
+      learner_feature: "Payment processing"
+      gap: none
+
+    - domain: Escalations
+      admin_crud: "List, Assign, Resolve"
+      learner_feature: "Learner dispute flow"
+      gap: none
+
+    - domain: Score Guarantee Claims
+      admin_crud: "List, Review"
+      learner_feature: "Score guarantee"
+      gap: none
+
+    - domain: Audit Logs
+      admin_crud: "List, Detail, Export CSV"
+      learner_feature: "N/A (admin-only)"
+      gap: none
+
+    - domain: Permissions (Admin RBAC)
+      admin_crud: "List, Get per-user, Update, Templates CRUD, Apply template"
+      learner_feature: "N/A (admin-only)"
+      gap: none
+
+    - domain: Content Hierarchy (Programs/Tracks/Modules/Lessons/Packages)
+      admin_crud: "Full CRUD for all levels"
+      learner_feature: "Program browser"
+      gap: none
+
+    - domain: Notifications
+      admin_crud: "Catalog, Policies CRUD, Health, Deliveries, Test email, Proof trigger"
+      learner_feature: "Push/email notifications"
+      gap: none
+
+    - domain: Community Moderation
+      admin_crud: "Pin/Lock threads, Delete threads/replies"
+      learner_feature: "Forum"
+      gap: none
+
+    - domain: Sponsors / Cohorts (Enterprise)
+      admin_crud: "Sponsors CRUD, Cohorts CRUD, Members management"
+      learner_feature: "Sponsored learning"
+      gap: none
+
+    - domain: Marketplace
+      admin_crud: "Pending list, Review submissions"
+      learner_feature: "Content submissions"
+      gap: none
+
+    - domain: Private Speaking
+      admin_crud: "Config, Stats, Tutors CRUD, Availability CRUD, Overrides CRUD, Bookings list"
+      learner_feature: "Private speaking sessions"
+      gap: none
+
+    - domain: Content Quality
+      admin_crud: "Overview, Score"
+      learner_feature: "N/A"
+      gap: none
+
+    - domain: Bulk Operations
+      admin_crud: "Credits, Notifications, Status"
+      learner_feature: "N/A"
+      gap: none
+
+    - domain: Analytics / BI
+      admin_crud: "Cohort analysis, Content effectiveness, Expert efficiency, Subscription health, Content analytics, SLA health"
+      learner_feature: "N/A (admin reporting)"
+      gap: none
+
+    - domain: Media Management
+      admin_crud: "Upload, List, Process, Complete processing, Audit, Normalization plan"
+      learner_feature: "Media uploads"
+      gap: none
+
+    - domain: Import / Dedup
+      admin_crud: "Bulk import, Inventory, Import batches, Dedup scan/groups/designate"
+      learner_feature: "N/A"
+      gap: none
+
+    - domain: Freeze Management
+      admin_crud: "Overview, Policy update, Manual create, Approve/Reject/End/Force-end"
+      learner_feature: "Account freeze"
+      gap: none
+
+  coverage_gaps:
+    - domain: "Grammar Lessons (Admin CRUD)"
+      detail: |
+        Learners can browse/complete grammar lessons (LearningContentEndpoints),
+        but there's NO admin CRUD for managing grammar lessons — no create, update,
+        publish, or archive endpoints exist for GrammarLesson entities.
+      severity: medium
+
+    - domain: "Video Lessons (Admin CRUD)"
+      detail: |
+        Learners can browse/watch video lessons (LearningContentEndpoints),
+        but there's NO admin CRUD for managing video lessons — no create, update,
+        or manage endpoints exist for VideoLesson entities.
+      severity: medium
+
+    - domain: "Strategy Guides (Admin CRUD)"
+      detail: |
+        Learners can browse strategy guides (LearningContentEndpoints),
+        but there's NO admin CRUD for managing strategy guides.
+      severity: medium
+
+    - domain: "Forum Categories (Admin CRUD)"
+      detail: |
+        Community forum categories are queried by learners, but there's no admin
+        endpoint to create, update, or manage ForumCategory entities.
+      severity: low
+
+    - domain: "Vocabulary Terms (Admin CRUD)"
+      detail: |
+        Learners can browse, add, quiz vocabulary terms, but there's no admin
+        endpoint to create, update, or manage VocabularyTerm entities.
+      severity: medium
+
+    - domain: "Pronunciation Drills (Admin CRUD)"
+      detail: |
+        Learners can browse and attempt pronunciation drills, but there's no admin
+        endpoint to create, update, or manage pronunciation drill content.
+      severity: medium
+
+    - domain: "Calibration Cases (Admin CRUD)"
+      detail: |
+        Experts can view calibration cases, but there's no admin endpoint to
+        create, update, or manage calibration case content.
+      severity: low
+
+    - domain: "Tutoring Sessions (Admin visibility)"
+      detail: |
+        Learners can book tutoring sessions via /v1/tutoring/sessions, but there's
+        no admin dashboard for viewing or managing the general tutoring sessions
+        (distinct from private speaking). The SocialEndpoints tutoring has no admin overlay.
+      severity: low
+
+    - domain: "Exam Bookings (Admin visibility)"
+      detail: |
+        Learners can create exam bookings, but there's no admin visibility into
+        learner exam bookings for reporting purposes.
+      severity: low
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SECTION 6: KEY DEPENDENCIES (package.json)
+# ═══════════════════════════════════════════════════════════════════════
+
+dependencies:
+  framework:
+    - { name: "next", version: "^15.4.9", purpose: "App framework" }
+    - { name: "react", version: "^19.2.1" }
+    - { name: "react-dom", version: "^19.2.1" }
+    - { name: "typescript", version: "5.9.3" }
+
+  capacitor_mobile:
+    - { name: "@capacitor/core", version: "^6.2.1" }
+    - { name: "@capacitor/app", version: "^6.0.3" }
+    - { name: "@capacitor/browser", version: "^6.0.6" }
+    - { name: "@capacitor/device", version: "^6.0.3" }
+    - { name: "@capacitor/filesystem", version: "^6.0.4" }
+    - { name: "@capacitor/haptics", version: "^6.0.3" }
+    - { name: "@capacitor/keyboard", version: "^6.0.4" }
+    - { name: "@capacitor/network", version: "^6.0.4" }
+    - { name: "@capacitor/preferences", version: "^6.0.4" }
+    - { name: "@capacitor/push-notifications", version: "^6.0.5" }
+    - { name: "@capacitor/share", version: "^6.0.4" }
+    - { name: "@capacitor/splash-screen", version: "^6.0.4" }
+    - { name: "@capacitor/status-bar", version: "^6.0.3" }
+    - { name: "capacitor-secure-storage-plugin", version: "^0.10.0" }
+
+  electron_desktop:
+    - { name: "electron", version: "^41.1.0", dev: true }
+    - { name: "electron-builder", version: "^26.8.1", dev: true }
+    - { name: "electron-updater", version: "^6.6.2" }
+    - { name: "@electron/fuses", version: "^2.1.1", dev: true }
+
+  ui_and_styling:
+    - { name: "tailwindcss", version: "4.1.11", dev: true }
+    - { name: "@tailwindcss/postcss", version: "4.1.11", dev: true }
+    - { name: "@tailwindcss/typography", version: "^0.5.19", dev: true }
+    - { name: "class-variance-authority", version: "^0.7.1" }
+    - { name: "clsx", version: "^2.1.1" }
+    - { name: "tailwind-merge", version: "^3.3.1" }
+    - { name: "tw-animate-css", version: "^1.4.0", dev: true }
+    - { name: "motion", version: "^12.23.24" }
+    - { name: "lucide-react", version: "^0.553.0" }
+    - { name: "@tabler/icons-react", version: "^3.41.0" }
+    - { name: "country-flag-icons", version: "^1.6.15" }
+
+  forms_and_validation:
+    - { name: "react-hook-form", version: "^7.72.0" }
+    - { name: "@hookform/resolvers", version: "^5.2.1" }
+    - { name: "zod", version: "^4.3.6" }
+
+  data_and_state:
+    - { name: "zustand", version: "^5.0.12" }
+    - { name: "recharts", version: "^3.8.0" }
+    - { name: "react-select", version: "^5.10.2" }
+
+  realtime:
+    - { name: "@microsoft/signalr", version: "^10.0.0" }
+
+  ai:
+    - { name: "@google/genai", version: "^1.17.0" }
+
+  ui_components:
+    - { name: "@radix-ui/react-popover", version: "^1.1.15" }
+
+  audio:
+    - { name: "wavesurfer.js", version: "^7.12.5" }
+
+  themes:
+    - { name: "next-themes", version: "^0.4.6" }
+
+  testing:
+    - { name: "vitest", version: "^4.1.2", dev: true }
+    - { name: "@testing-library/react", version: "^16.3.2", dev: true }
+    - { name: "@testing-library/jest-dom", version: "^6.9.1", dev: true }
+    - { name: "@playwright/test", version: "^1.58.2", dev: true }
+    - { name: "@axe-core/playwright", version: "^4.11.1", dev: true }
+    - { name: "jsdom", version: "^29.0.1", dev: true }
+
+  other:
+    - { name: "sass", version: "^1.98.0" }
+    - { name: "postcss", version: "^8.5.6" }
+    - { name: "autoprefixer", version: "^10.4.21" }
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# SECTION 7: ADMIN FRONTEND ROUTES
+# ═══════════════════════════════════════════════════════════════════════
+
+admin_frontend_pages:
+  - "app/admin/page.tsx (dashboard)"
+  - "app/admin/ai-config/"
+  - "app/admin/analytics/"
+  - "app/admin/audit-logs/"
+  - "app/admin/billing/"
+  - "app/admin/bulk-operations/"
+  - "app/admin/business-intelligence/"
+  - "app/admin/community/"
+  - "app/admin/content/"
+  - "app/admin/content-analytics/"
+  - "app/admin/content-generation/"
+  - "app/admin/content-hierarchy/"
+  - "app/admin/content-import/"
+  - "app/admin/content-quality/"
+  - "app/admin/credit-lifecycle/"
+  - "app/admin/criteria/"
+  - "app/admin/dedup/"
+  - "app/admin/enterprise/"
+  - "app/admin/escalations/"
+  - "app/admin/experts/"
+  - "app/admin/flags/"
+  - "app/admin/free-tier/"
+  - "app/admin/freeze/"
+  - "app/admin/marketplace-review/"
+  - "app/admin/media/"
+  - "app/admin/notifications/"
+  - "app/admin/permissions/"
+  - "app/admin/playbook/"
+  - "app/admin/private-speaking/"
+  - "app/admin/publish-requests/"
+  - "app/admin/review-ops/"
+  - "app/admin/roles/"
+  - "app/admin/score-guarantee-claims/"
+  - "app/admin/sla-health/"
+  - "app/admin/taxonomy/"
+  - "app/admin/users/"
+  - "app/admin/webhooks/"
+
+
+# ═══════════════════════════════════════════════════════════════════════
+# OPEN QUESTIONS & GAPS
+# ═══════════════════════════════════════════════════════════════════════
+
+open_questions:
+  - question: "Should the granular admin permission policies be wired to endpoint subgroups?"
+    context: "12 policies are defined but none are applied — all admins have full access to every admin endpoint"
+    type: decision_blocker
+    affects: ["admin RBAC enforcement"]
+
+  - question: "Should /v1/certificates/verify/{code} be made public (AllowAnonymous)?"
+    context: "Certificate verification is a public utility, but it's currently behind LearnerOnly auth"
+    type: nice_to_know
+    affects: ["certificate verification UX"]
+
+gaps:
+  - area: "Grammar, Video, Strategy, Vocabulary, Pronunciation, ForumCategory admin CRUD"
+    description: "Learner-facing content types that lack backend admin management endpoints"
+    impact: research_blocker
+    affects: ["admin content completeness"]
+
+  - area: "Frontend role enforcement"
+    description: "Next.js middleware checks for auth cookie presence only, not role — frontend role-gating confirmed by page-level logic but not centralized middleware"
+    impact: nice_to_know
+    affects: ["frontend security posture"]

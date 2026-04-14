@@ -94,6 +94,35 @@ public static class AuthEndpoints
             })
             .AllowAnonymous();
 
+        auth.MapPost("/account/delete", async (ClaimsPrincipal user, DeleteAccountRequest request, AuthService service, CancellationToken ct) =>
+            {
+                await service.DeleteAccountAsync(user, request, ct);
+                return Results.NoContent();
+            })
+            .RequireAuthorization("LearnerOnly")
+            .WithName("DeleteAccount")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces(StatusCodes.Status401Unauthorized)
+            .ProducesValidationProblem();
+
+        auth.MapGet("/sessions", async (ClaimsPrincipal user, AuthService service, CancellationToken ct)
+                => Results.Ok(await service.GetActiveSessionsAsync(user, ct)))
+            .RequireAuthorization();
+
+        auth.MapDelete("/sessions/{sessionId:guid}", async (Guid sessionId, ClaimsPrincipal user, AuthService service, CancellationToken ct) =>
+            {
+                await service.RevokeSessionAsync(user, sessionId, ct);
+                return Results.NoContent();
+            })
+            .RequireAuthorization();
+
+        auth.MapDelete("/sessions", async (ClaimsPrincipal user, AuthService service, CancellationToken ct) =>
+            {
+                var count = await service.RevokeAllOtherSessionsAsync(user, ct);
+                return Results.Ok(new { revokedCount = count });
+            })
+            .RequireAuthorization();
+
         return app;
     }
 }

@@ -44,9 +44,18 @@ export function MobileRuntimeBridge() {
 
       // Push notification registration
       const pushCleanup = await registerPushNotifications({
-        onRegistration: (token) => {
-          // TODO: Send token to backend for push targeting
+        onRegistration: async (token) => {
           console.debug('[push] Registered with token:', token.value.slice(0, 8) + '...');
+          // Send push token to backend for targeting
+          try {
+            await fetch('/api/backend/v1/notifications/push-token', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ token: token.value, platform: (globalThis as unknown as Record<string, unknown>).__CAPACITOR_PLATFORM__ ?? 'unknown' }),
+            });
+          } catch {
+            console.warn('[push] Failed to register push token with backend');
+          }
         },
         onNotificationActionPerformed: (notification) => {
           // Navigate to a route if the push payload includes one

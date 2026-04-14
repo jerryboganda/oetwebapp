@@ -117,6 +117,23 @@ vi.mock('@/lib/hooks/use-admin-auth', () => ({
   }),
 }));
 
+vi.mock('@/lib/hooks/use-current-user', () => ({
+  useCurrentUser: () => ({
+    user: {
+      userId: 'admin-1',
+      displayName: 'Admin User',
+      email: 'admin@example.com',
+      isEmailVerified: true,
+      isAuthenticatorEnabled: false,
+      adminPermissions: ['content:create', 'content:edit', 'content:publish', 'content:publisher_approval', 'content:archive', 'content:delete', 'user:manage', 'user:invite'],
+    },
+    role: 'admin' as const,
+    isAuthenticated: true,
+    isLoading: false,
+    pendingMfaChallenge: null,
+  }),
+}));
+
 vi.mock('@/lib/admin', () => ({
   getAdminDashboardData: admin.getAdminDashboardData,
   getAdminAIConfigData: admin.getAdminAIConfigData,

@@ -23,7 +23,7 @@ vi.mock('@/components/layout', () => ({
 }));
 
 vi.mock('@/lib/analytics', () => ({ analytics: { track: mockTrack } }));
-vi.mock('@/lib/api', () => ({ fetchReadiness: mockFetchReadiness }));
+vi.mock('@/lib/api', () => ({ fetchReadiness: mockFetchReadiness, fetchReadinessRisk: vi.fn().mockResolvedValue({ overallRisk: 'moderate', factors: [] }) }));
 
 import ReadinessCenter from './page';
 

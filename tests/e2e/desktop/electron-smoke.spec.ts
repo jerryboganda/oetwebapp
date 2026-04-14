@@ -200,9 +200,9 @@ test.describe('Electron desktop shell', () => {
         { timeout: 5_000, message: 'Expected the Electron renderer to mark itself as a desktop runtime.' },
       ).toBe('desktop');
 
-      const runtimeInfo = await page.evaluate(() => window.desktopBridge.runtime.info());
-      expect(runtimeInfo.windowState.isVisible).toBe(true);
-      expect(runtimeInfo.windowState.isMinimized).toBe(false);
+      const runtimeInfo = await page.evaluate(() => window.desktopBridge!.runtime.info());
+      expect(runtimeInfo.windowState!.isVisible).toBe(true);
+      expect(runtimeInfo.windowState!.isMinimized).toBe(false);
       await expect.poll(
         async () => await page.evaluate(() => document.documentElement.dataset.appActive ?? null),
         { timeout: 5_000, message: 'Expected the desktop lifecycle bridge to mark the window active.' },

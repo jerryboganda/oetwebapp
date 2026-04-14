@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { DollarSign, TrendingUp, TrendingDown, Users, CreditCard, BarChart3 } from 'lucide-react';
+import { DollarSign, TrendingUp, TrendingDown, Users, CreditCard, BarChart3, Download } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { exportToCsv, formatDateForExport } from '@/lib/csv-export';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -36,7 +38,27 @@ export default function SubscriptionHealthPage() {
   return (
     <div className="min-h-screen bg-background-light">
       <div className="max-w-5xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-1">Subscription Health</h1>
+        <div className="flex items-center justify-between mb-1">
+          <h1 className="text-2xl font-bold">Subscription Health</h1>
+          {data && (
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => {
+              const rows: Record<string, unknown>[] = [
+                { metric: 'MRR', value: data.mrr },
+                { metric: 'Active Subscriptions', value: data.activeSubscriptions },
+                { metric: 'Churn Rate (%)', value: data.churnRate },
+                { metric: 'New This Month', value: data.newSubscriptionsThisMonth },
+                { metric: 'ARPU', value: data.arpu },
+                { metric: 'Trial Conversion (%)', value: data.trialConversionRate },
+                ...data.revenueByPlan.map(p => ({ metric: `Plan: ${p.planName}`, value: p.monthlyRevenue, subscribers: p.subscribers })),
+                ...data.monthlyTrend.map(m => ({ metric: `Trend: ${m.month}`, value: m.newSubscriptions, cancellations: m.cancellations })),
+              ];
+              exportToCsv(rows, `subscription-health-${formatDateForExport(new Date())}.csv`);
+            }}>
+              <Download className="w-4 h-4" />
+              Export CSV
+            </Button>
+          )}
+        </div>
         <p className="text-muted mb-6">MRR, churn, ARPU, trial conversion, and revenue breakdown.</p>
 
         {loading ? <div className="grid grid-cols-3 gap-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div> : data ? (

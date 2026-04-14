@@ -336,6 +336,20 @@ public static class LearnerEndpoints
             => Results.Ok(await service.SubmitPeerFeedbackAsync(http.UserId(), peerReviewId, req.OverallRating, req.Comments, req.Strengths, req.Improvements, ct)))
             .RequireAuthorization("LearnerOnly");
 
+        // ── Learner Escalation / Dispute ────────────────
+
+        v1.MapPost("/learner/escalations", async (HttpContext http, LearnerEscalationSubmitRequest req, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.SubmitEscalationAsync(http.UserId(), req.SubmissionId, req.Reason, req.Details, ct)))
+            .RequireAuthorization("LearnerOnly");
+
+        v1.MapGet("/learner/escalations", async (HttpContext http, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.GetMyEscalationsAsync(http.UserId(), ct)))
+            .RequireAuthorization("LearnerOnly");
+
+        v1.MapGet("/learner/escalations/{escalationId}", async (string escalationId, HttpContext http, LearnerService service, CancellationToken ct)
+            => Results.Ok(await service.GetEscalationDetailsAsync(http.UserId(), escalationId, ct)))
+            .RequireAuthorization("LearnerOnly");
+
         return app;
     }
 
@@ -346,3 +360,4 @@ public static class LearnerEndpoints
 
 public record PeerReviewSubmitRequest(string AttemptId, string SubtestCode);
 public record PeerReviewFeedbackRequest(int OverallRating, string Comments, string? Strengths, string? Improvements);
+public record LearnerEscalationSubmitRequest(string SubmissionId, string Reason, string Details);

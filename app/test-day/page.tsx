@@ -75,7 +75,7 @@ export default function TestDayPrepPage() {
     <LearnerDashboardShell>
       <LearnerPageHero
         title="Test-Day Preparation"
-        subtitle="Your comprehensive checklist and tips for OET exam day success."
+        description="Your comprehensive checklist and tips for OET exam day success."
         icon={<ClipboardCheck className="w-7 h-7" />}
       />
 
@@ -145,7 +145,7 @@ export default function TestDayPrepPage() {
         <LearnerSurfaceSectionHeader
           icon={<AlertTriangle className="w-5 h-5" />}
           title="Expert Tips"
-          subtitle="Key advice from OET experts and past high-scorers."
+          description="Key advice from OET experts and past high-scorers."
         />
         <div className="grid gap-3 sm:grid-cols-2 mt-3">
           {TIPS.map((tip, i) => (

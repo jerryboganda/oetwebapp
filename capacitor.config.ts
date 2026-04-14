@@ -21,6 +21,8 @@ const config: CapacitorConfig = {
   server: {
     url: appUrl,
     cleartext: appUrl.startsWith('http://'),
+    androidScheme: 'https',
+    iosScheme: 'capacitor',
   },
   ios: {
     contentInset: 'automatic',
@@ -28,6 +30,8 @@ const config: CapacitorConfig = {
   },
   android: {
     allowMixedContent: false,
+    appendUserAgent: 'OETPrep-Capacitor',
+    overrideUserAgent: undefined,
   },
   plugins: {
     Keyboard: {
@@ -35,11 +39,13 @@ const config: CapacitorConfig = {
       resizeOnFullScreen: true,
     },
     SplashScreen: {
-      launchShowDuration: 0,
+      launchShowDuration: 300,
+      launchAutoHide: true,
       showSpinner: false,
       backgroundColor: '#f7f5ef',
     },
     StatusBar: {
+      overlaysWebView: false,
       style: 'DARK',
       backgroundColor: '#f7f5ef',
     },

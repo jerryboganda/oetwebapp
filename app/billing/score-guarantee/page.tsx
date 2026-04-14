@@ -18,11 +18,11 @@ import type { ScoreGuaranteePledge } from '@/lib/types/learner';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
-const STATUS_BADGE: Record<string, { label: string; variant: 'default' | 'success' | 'destructive' | 'outline' }> = {
+const STATUS_BADGE: Record<string, { label: string; variant: 'default' | 'success' | 'danger' | 'outline' }> = {
   active: { label: 'Active', variant: 'success' },
   claim_submitted: { label: 'Claim Submitted', variant: 'default' },
   claim_approved: { label: 'Approved', variant: 'success' },
-  claim_rejected: { label: 'Rejected', variant: 'destructive' },
+  claim_rejected: { label: 'Rejected', variant: 'danger' },
   expired: { label: 'Expired', variant: 'outline' },
 };
 

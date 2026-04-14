@@ -34,6 +34,7 @@ import {
   Flame,
   Zap,
   MessageSquare,
+  AlertTriangle,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -59,8 +60,9 @@ export const mainNavItems: NavItem[] = [
   { href: '/mocks', label: 'Mocks', icon: <FileQuestion className="w-5 h-5" />, matchPrefix: '/mocks' },
   { href: '/readiness', label: 'Readiness', icon: <Target className="w-5 h-5" />, matchPrefix: '/readiness' },
   { href: '/progress', label: 'Progress', icon: <TrendingUp className="w-5 h-5" />, matchPrefix: '/progress' },
-  { href: '/subscriptions', label: 'Subscriptions', icon: <CreditCard className="w-5 h-5" />, matchPrefix: '/subscriptions' },
+  { href: '/billing', label: 'Billing', icon: <CreditCard className="w-5 h-5" />, matchPrefix: '/billing' },
   { href: '/submissions', label: 'History', icon: <History className="w-5 h-5" />, matchPrefix: '/submissions' },
+  { href: '/escalations', label: 'Escalations', icon: <AlertTriangle className="w-5 h-5" />, matchPrefix: '/escalations' },
 ];
 
 export const learnNavItems: NavItem[] = [

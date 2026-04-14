@@ -41,8 +41,10 @@ export default function WritingComparePage() {
   }, [resultId, taskId]);
 
   const wordCount = useMemo(() => {
-    const learnerWords = result?.letterBody?.split(/\s+/).filter(Boolean).length ?? 0;
-    const modelWords = model?.text?.split(/\s+/).filter(Boolean).length ?? 0;
+    const body = (result as Record<string, unknown> | null)?.letterBody as string | undefined;
+    const modelText = model?.paragraphs?.map(p => p.text).join('\n\n');
+    const learnerWords = body?.split(/\s+/).filter(Boolean).length ?? 0;
+    const modelWords = modelText?.split(/\s+/).filter(Boolean).length ?? 0;
     return { learner: learnerWords, model: modelWords };
   }, [result, model]);
 
@@ -70,7 +72,7 @@ export default function WritingComparePage() {
 
       <LearnerPageHero
         title="Writing Comparison"
-        subtitle="Compare your response with the model answer side by side."
+        description="Compare your response with the model answer side by side."
         icon={<ArrowLeftRight className="w-7 h-7" />}
       />
 
@@ -80,14 +82,14 @@ export default function WritingComparePage() {
       <div className="flex items-center gap-2 mb-6">
         <Button
           size="sm"
-          variant={viewMode === 'side-by-side' ? 'default' : 'outline'}
+          variant={viewMode === 'side-by-side' ? 'primary' : 'outline'}
           onClick={() => setViewMode('side-by-side')}
         >
           Side by Side
         </Button>
         <Button
           size="sm"
-          variant={viewMode === 'overlay' ? 'default' : 'outline'}
+          variant={viewMode === 'overlay' ? 'primary' : 'outline'}
           onClick={() => setViewMode('overlay')}
         >
           Stacked View
@@ -103,9 +105,9 @@ export default function WritingComparePage() {
           />
           <div className="flex flex-wrap gap-3">
             {result.criteria.map((c) => (
-              <MotionItem key={c.criterion}>
+              <MotionItem key={c.name}>
                 <Badge variant="default" className="text-sm px-3 py-1.5">
-                  {c.criterion}: {c.score}/{c.maxScore}
+                  {c.name}: {c.score}/{c.maxScore}
                 </Badge>
               </MotionItem>
             ))}
@@ -126,7 +128,7 @@ export default function WritingComparePage() {
               <span className="text-xs text-gray-500">{wordCount.learner} words</span>
             </div>
             <div className="p-5 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed max-h-[600px] overflow-y-auto">
-              {result?.letterBody ?? 'No response available.'}
+              {(result as Record<string, unknown> | null)?.letterBody as string ?? 'No response available.'}
             </div>
           </Card>
         </MotionSection>
@@ -142,7 +144,7 @@ export default function WritingComparePage() {
               {model && <span className="text-xs text-gray-500">{wordCount.model} words</span>}
             </div>
             <div className="p-5 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed max-h-[600px] overflow-y-auto">
-              {model?.text ?? (
+              {model?.paragraphs?.map(p => p.text).join('\n\n') ?? (
                 <div className="flex flex-col items-center justify-center py-12 text-gray-400">
                   <BookOpen className="w-10 h-10 mb-3 opacity-60" />
                   <p className="text-sm">Model answer not available for this task.</p>

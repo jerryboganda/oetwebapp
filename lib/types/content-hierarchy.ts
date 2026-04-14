@@ -1,6 +1,6 @@
 // ── Content Hierarchy Types ──
 
-export type ContentStatus = 'Draft' | 'Published' | 'Archived';
+export type ContentStatus = 'Draft' | 'InReview' | 'EditorReview' | 'PublisherApproval' | 'Published' | 'Rejected' | 'Archived';
 export type ProgramType = 'full_course' | 'crash_course' | 'foundation' | 'combo';
 export type PackageType = 'full_course' | 'crash_course' | 'combo' | 'foundation' | 'standalone';
 export type LessonType = 'video_lesson' | 'strategy_guide' | 'session_replay' | 'reading_material' | 'practice_task';
@@ -123,8 +123,10 @@ export interface MediaAsset {
   captionPath?: string;
   transcriptPath?: string;
   status: MediaAssetStatus;
+  uploadedBy?: string;
   uploadedAt: string;
   processedAt?: string;
+  url?: string;
 }
 
 // ── Testimonials & Marketing ──

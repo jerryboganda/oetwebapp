@@ -1,5 +1,35 @@
 export const DEFAULT_PROXY_TARGET = 'http://127.0.0.1:5198';
 
+/**
+ * Allowed request origins for CSRF protection (RBAC-05).
+ * Requests from unknown origins on state-changing methods are rejected.
+ */
+const CSRF_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+export function validateRequestOrigin(request: Request): boolean {
+  const method = request.method.toUpperCase();
+  if (CSRF_SAFE_METHODS.has(method)) return true;
+
+  const origin = request.headers.get('origin');
+  const referer = request.headers.get('referer');
+  const source = origin || referer;
+
+  // Allow requests with no origin header (non-browser clients, same-origin)
+  if (!source) return true;
+
+  try {
+    const url = new URL(source);
+    // Allow localhost development and configured app URLs
+    if (url.hostname === 'localhost' || url.hostname === '127.0.0.1') return true;
+    if (url.hostname === 'app.oetwithdrhesham.co.uk') return true;
+    // Allow Capacitor/Electron origins
+    if (url.protocol === 'capacitor:' || url.protocol === 'file:') return true;
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 const SENSITIVE_REQUEST_HEADERS = new Set([
   'host',
   'connection',

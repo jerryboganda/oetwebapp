@@ -178,7 +178,7 @@ export interface AdminUserRow {
   id: string;
   name: string;
   email: string;
-  role: 'learner' | 'expert' | 'admin';
+  role: 'learner' | 'expert' | 'admin' | 'sponsor';
   status: 'active' | 'suspended' | 'deleted';
   lastLogin: string | null;
 }
@@ -187,7 +187,7 @@ export interface AdminUserDetail {
   id: string;
   name: string;
   email: string;
-  role: 'learner' | 'expert' | 'admin';
+  role: 'learner' | 'expert' | 'admin' | 'sponsor';
   status: 'active' | 'suspended' | 'deleted';
   lastLogin: string | null;
   createdAt: string | null;
@@ -429,6 +429,15 @@ export interface AdminPermissionsResponse {
   allPermissions: string[];
 }
 
+export interface PermissionTemplate {
+  id: string;
+  name: string;
+  description: string | null;
+  permissions: string[];
+  createdBy: string;
+  createdAt: string;
+}
+
 // ── Content Publishing Workflow ─────────────────────────
 
 export interface AdminPublishRequest {
@@ -438,11 +447,25 @@ export interface AdminPublishRequest {
   requestedByName: string;
   reviewedBy: string | null;
   reviewedByName: string | null;
-  status: 'pending' | 'approved' | 'rejected';
+  status: 'pending' | 'editor_review' | 'publisher_approval' | 'approved' | 'rejected';
+  stage: 'editor_review' | 'publisher_approval';
   requestNote: string | null;
   reviewNote: string | null;
   requestedAt: string;
   reviewedAt: string | null;
+  editorReviewedBy: string | null;
+  editorReviewedByName: string | null;
+  editorReviewedAt: string | null;
+  editorNotes: string | null;
+  publisherApprovedBy: string | null;
+  publisherApprovedByName: string | null;
+  publisherApprovedAt: string | null;
+  publisherNotes: string | null;
+  rejectedBy: string | null;
+  rejectedByName: string | null;
+  rejectedAt: string | null;
+  rejectionReason: string | null;
+  rejectionStage: string | null;
 }
 
 export interface AdminPublishRequestsResponse {

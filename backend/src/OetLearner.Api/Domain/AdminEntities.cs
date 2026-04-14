@@ -132,7 +132,7 @@ public class AuditEvent
     public ApplicationUserAccount? ActorAuthAccount { get; set; }
 }
 
-/// <summary>Content publish request requiring approval before going live.</summary>
+/// <summary>Content publish request requiring multi-stage approval before going live.</summary>
 public class ContentPublishRequest
 {
     [Key]
@@ -156,13 +156,57 @@ public class ContentPublishRequest
 
     [MaxLength(32)]
     public string Status { get; set; } = "pending";
-    // pending | approved | rejected
+    // pending | editor_review | publisher_approval | approved | rejected
+
+    /// <summary>Current approval stage: editor_review | publisher_approval</summary>
+    [MaxLength(32)]
+    public string Stage { get; set; } = "editor_review";
 
     [MaxLength(512)]
     public string? RequestNote { get; set; }
 
     [MaxLength(512)]
     public string? ReviewNote { get; set; }
+
+    // ── Editor Review Fields ──
+    [MaxLength(64)]
+    public string? EditorReviewedBy { get; set; }
+
+    [MaxLength(128)]
+    public string? EditorReviewedByName { get; set; }
+
+    public DateTimeOffset? EditorReviewedAt { get; set; }
+
+    [MaxLength(512)]
+    public string? EditorNotes { get; set; }
+
+    // ── Publisher Approval Fields ──
+    [MaxLength(64)]
+    public string? PublisherApprovedBy { get; set; }
+
+    [MaxLength(128)]
+    public string? PublisherApprovedByName { get; set; }
+
+    public DateTimeOffset? PublisherApprovedAt { get; set; }
+
+    [MaxLength(512)]
+    public string? PublisherNotes { get; set; }
+
+    // ── Rejection Fields ──
+    [MaxLength(64)]
+    public string? RejectedBy { get; set; }
+
+    [MaxLength(128)]
+    public string? RejectedByName { get; set; }
+
+    public DateTimeOffset? RejectedAt { get; set; }
+
+    [MaxLength(512)]
+    public string? RejectionReason { get; set; }
+
+    /// <summary>Which stage the rejection occurred at: editor_review | publisher_approval</summary>
+    [MaxLength(32)]
+    public string? RejectionStage { get; set; }
 
     public DateTimeOffset RequestedAt { get; set; }
     public DateTimeOffset? ReviewedAt { get; set; }
@@ -207,6 +251,33 @@ public class ReviewEscalation
 
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset? ResolvedAt { get; set; }
+}
+
+/// <summary>Learner-initiated escalation/dispute of a review decision.</summary>
+public class LearnerEscalation
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string UserId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string SubmissionId { get; set; } = default!;
+
+    [MaxLength(128)]
+    public string Reason { get; set; } = default!;
+
+    [MaxLength(2000)]
+    public string Details { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string Status { get; set; } = "Pending";
+    // Pending | InReview | Resolved | Rejected
+
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? UpdatedAt { get; set; }
 }
 
 /// <summary>Subscription plan definition for billing administration.</summary>

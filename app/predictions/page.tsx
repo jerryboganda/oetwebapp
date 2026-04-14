@@ -29,11 +29,11 @@ type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
 const SUBTESTS = ['writing', 'speaking', 'reading', 'listening'];
 
-const CONFIDENCE_BADGE: Record<string, { label: string; variant: 'default' | 'success' | 'destructive' | 'outline' }> = {
+const CONFIDENCE_BADGE: Record<string, { label: string; variant: 'default' | 'success' | 'danger' | 'outline' }> = {
   good: { label: 'High Confidence', variant: 'success' },
   moderate: { label: 'Moderate', variant: 'default' },
   low: { label: 'Low Confidence', variant: 'outline' },
-  insufficient: { label: 'Insufficient Data', variant: 'destructive' },
+  insufficient: { label: 'Insufficient Data', variant: 'danger' },
 };
 
 async function apiRequest<T = unknown>(path: string, init?: RequestInit): Promise<T> {
@@ -122,7 +122,7 @@ export default function ScoreEstimatorPage() {
 
       <LearnerPageHero
         title="Score Estimator"
-        subtitle="AI-powered predictions based on your practice history and improvement trends."
+        description="AI-powered predictions based on your practice history and improvement trends."
         icon={<TrendingUp className="w-7 h-7" />}
       />
 

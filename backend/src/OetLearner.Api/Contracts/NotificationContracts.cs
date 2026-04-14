@@ -37,6 +37,10 @@ public sealed record PushSubscriptionPayload(
     DateTimeOffset? ExpiresAt,
     string? UserAgent);
 
+public sealed record RegisterPushTokenRequest(
+    string Token,
+    string Platform);
+
 public sealed record NotificationPreferencePatchRequest(
     string? Timezone,
     bool? GlobalInAppEnabled,

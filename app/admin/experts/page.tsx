@@ -442,7 +442,7 @@ export default function ExpertManagementPage() {
           <AdminRouteSummaryCard label="Total Experts" value={counts.total} hint="All expert accounts on the platform." icon={Users} />
           <AdminRouteSummaryCard label="Active" value={counts.active} hint="Experts currently available for work." icon={ShieldCheck} accent="emerald" />
           <AdminRouteSummaryCard label="Suspended" value={counts.suspended} hint="Experts with temporarily restricted access." icon={ShieldAlert} accent="amber" />
-          <AdminRouteSummaryCard label="PS Tutors" value={counts.psTutors} hint="Experts with Private Speaking tutor profiles." icon={Mic} accent="sky" />
+          <AdminRouteSummaryCard label="PS Tutors" value={counts.psTutors} hint="Experts with Private Speaking tutor profiles." icon={Mic} accent="blue" />
         </div>
 
         {/* ─── directory ─── */}
@@ -685,7 +685,7 @@ export default function ExpertManagementPage() {
                 </Button>
               ) : null}
               {selectedExpert.availableActions.canDelete ? (
-                <Button variant="danger" size="sm" onClick={() => openStatusAction(selectedExpert, 'delete')}>
+                <Button variant="destructive" size="sm" onClick={() => openStatusAction(selectedExpert, 'delete')}>
                   Delete
                 </Button>
               ) : null}
@@ -741,7 +741,7 @@ export default function ExpertManagementPage() {
               Cancel
             </Button>
             <Button
-              variant={statusAction === 'delete' ? 'danger' : 'primary'}
+              variant={statusAction === 'delete' ? 'destructive' : 'primary'}
               disabled={isProcessingAction}
               onClick={handleStatusAction}
             >

@@ -24,6 +24,10 @@
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>OET Prep Learner needs microphone access to record speaking responses.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>OET Prep Learner needs camera access for profile photos and document scanning.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>OET Prep Learner uses Face ID for secure login authentication.</string>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIMainStoryboardFile</key>
@@ -49,6 +53,17 @@
 	<true/>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>com.oetprep.learner</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>oet-prep</string>
+			</array>
+		</dict>
+	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>remote-notification</string>

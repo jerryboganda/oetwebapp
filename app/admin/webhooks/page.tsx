@@ -18,12 +18,12 @@ import type { AdminWebhookEvent, AdminWebhookSummary } from '@/lib/types/admin';
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
-const statusColors: Record<string, 'default' | 'success' | 'destructive' | 'secondary'> = {
-  received: 'secondary',
+const statusColors: Record<string, 'default' | 'success' | 'danger' | 'muted'> = {
+  received: 'muted',
   processing: 'default',
   completed: 'success',
-  failed: 'destructive',
-  ignored: 'secondary',
+  failed: 'danger',
+  ignored: 'muted',
 };
 
 export default function WebhooksPage() {
@@ -99,7 +99,7 @@ export default function WebhooksPage() {
 
   const columns: Column<AdminWebhookEvent>[] = [
     { key: 'eventType', header: 'Event Type', render: (e) => <span className="font-mono text-xs">{e.eventType}</span> },
-    { key: 'gateway', header: 'Gateway', render: (e) => <Badge variant="secondary">{e.gateway}</Badge> },
+    { key: 'gateway', header: 'Gateway', render: (e) => <Badge variant="muted">{e.gateway}</Badge> },
     {
       key: 'processingStatus',
       header: 'Status',
@@ -156,22 +156,23 @@ export default function WebhooksPage() {
         </AdminRoutePanel>
       )}
 
-      <FilterBar groups={filterGroups} value={filters} onChange={setFilters} />
+      <FilterBar groups={filterGroups} selected={filters} onChange={(groupId, optionId) => setFilters(prev => { const arr = [...(prev[groupId] || [])]; const i = arr.indexOf(optionId); if (i >= 0) arr.splice(i, 1); else arr.push(optionId); return { ...prev, [groupId]: arr }; })} />
 
       <AsyncStateWrapper
         status={pageStatus}
-        empty={<EmptyState icon={<Webhook className="w-12 h-12" />} heading="No webhook events" body="No webhook events found with current filters." />}
-        error={<EmptyState variant="error" heading="Error" body="Unable to load webhook events." />}
+        emptyContent={<EmptyState icon={<Webhook className="w-12 h-12" />} title="No webhook events" description="No webhook events found with current filters." />}
+        errorMessage="Unable to load webhook events."
       >
         <AdminRoutePanel>
           <DataTable
             columns={columns}
             data={events}
+            keyExtractor={(e) => e.id}
             mobileCardRender={(e) => (
               <div className="space-y-1">
                 <p className="font-mono text-xs">{e.eventType}</p>
                 <div className="flex gap-2">
-                  <Badge variant="secondary">{e.gateway}</Badge>
+                  <Badge variant="muted">{e.gateway}</Badge>
                   <Badge variant={statusColors[e.processingStatus] ?? 'default'}>{e.processingStatus}</Badge>
                 </div>
                 {e.errorMessage && <p className="text-xs text-danger">{e.errorMessage}</p>}

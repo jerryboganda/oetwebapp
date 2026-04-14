@@ -9,7 +9,8 @@ import { ProgressBar } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { fetchXP, fetchStreak, fetchAchievements } from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { fetchXP, fetchStreak, fetchAchievements, applyStreakFreeze } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
 type XPData = { totalXP: number; weeklyXP: number; monthlyXP: number; level: number; nextLevelXP: number; currentLevelXP: number };
@@ -41,6 +42,25 @@ export default function AchievementsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>('all');
+  const [freezing, setFreezing] = useState(false);
+  const [freezeMsg, setFreezeMsg] = useState<string | null>(null);
+
+  const handleUseStreakFreeze = async () => {
+    setFreezing(true);
+    setFreezeMsg(null);
+    try {
+      const result = await applyStreakFreeze();
+      setFreezeMsg(result.message);
+      if (result.applied && streak) {
+        setStreak({ ...streak, streakFreezesAvailable: Math.max(0, streak.streakFreezesAvailable - 1) });
+      }
+      analytics.track('streak_freeze_used', { applied: result.applied });
+    } catch {
+      setFreezeMsg('Failed to apply streak freeze.');
+    } finally {
+      setFreezing(false);
+    }
+  };
 
   useEffect(() => {
     analytics.track('content_view', { page: 'achievements' });
@@ -120,6 +140,20 @@ export default function AchievementsPage() {
                 </div>
                 <div className="text-3xl font-bold text-navy">{streak?.currentStreak ?? '—'} <span className="text-base font-normal text-muted">days</span></div>
                 <div className="text-xs text-muted mt-1">Best: {streak?.longestStreak ?? 0} days</div>
+                {streak && streak.streakFreezesAvailable > 0 && (
+                  <div className="mt-2">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleUseStreakFreeze}
+                      disabled={freezing}
+                      className="text-xs"
+                    >
+                      {freezing ? 'Applying...' : `Use Streak Freeze (${streak.streakFreezesAvailable})`}
+                    </Button>
+                    {freezeMsg && <p className="text-xs text-muted mt-1">{freezeMsg}</p>}
+                  </div>
+                )}
               </Card>
             </MotionItem>
           </>

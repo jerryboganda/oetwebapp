@@ -1,7 +1,26 @@
 import type { ReactNode } from 'react';
 import { screen } from '@testing-library/react';
+import { AdminPermission } from '@/lib/admin-permissions';
 const state = vi.hoisted(() => ({
   pathname: '/admin',
+}));
+
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => ({
+    user: {
+      userId: 'admin-1',
+      email: 'admin@test.com',
+      role: 'admin' as const,
+      displayName: 'Admin',
+      isEmailVerified: true,
+      isAuthenticatorEnabled: false,
+      requiresEmailVerification: false,
+      requiresMfa: false,
+      emailVerifiedAt: null,
+      authenticatorEnabledAt: null,
+      adminPermissions: Object.values(AdminPermission),
+    },
+  }),
 }));
 
 vi.mock('@/components/auth/privileged-mfa-banner', () => ({

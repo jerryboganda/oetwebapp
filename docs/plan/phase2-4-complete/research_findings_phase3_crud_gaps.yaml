@@ -1,0 +1,448 @@
+plan_id: phase2-4-complete
+objective: "Map codebase patterns for Phase 3 items: P9-P17 (CRUD gaps and operational polish)"
+focus_area: "Phase 3 — CRUD gaps, expert features, session management"
+created_at: "2026-04-13"
+created_by: gem-researcher
+status: completed
+
+tldr: |
+  - P9 (Media): Frontend is list+audit+process only — no upload/delete/replace UI or backend endpoints. Backend has upsert, list, process, audit but no DELETE or file-upload endpoint.
+  - P10 (Content Hierarchy): Backend has full CRUD for programs/tracks/modules/lessons/packages. Frontend is read-only (tabs for programs and packages). Big gap — needs edit/create forms.
+  - P11 (Permission Templates): Backend has granular AdminPermissions (13 permissions) + AdminPermissionGrant entity. Frontend shows admin users but has no permission editing UI.
+  - P12 (Bulk CSV Import): Backend has ContentImportService.BulkImportAsync for content — no USER CSV import exists. Frontend has user invite (single) but no bulk import.
+  - P13 (Schedule Exceptions): Expert review schedule is weekly-only (GET/PUT /expert/schedule). Private speaking has date-override/block system. Review schedule lacks exception mechanism.
+  - P14 (Expert Session Cancel): Backend has learner + admin cancel endpoints for private-speaking bookings. Expert-initiated cancel endpoint is MISSING.
+  - P15 (Forum Moderation): Expert can post verified replies only. No delete/pin/ban/lock endpoints for experts — threads have isPinned/isLocked fields but no moderation API.
+  - P16 (Mobile Review): NOT a dead stub — it's a fully functional multi-step review wizard (queue→read→score→comment→confirm). Calls real endpoints.
+  - P17 (Session Management): RefreshTokenRecord entity tracks tokens per user with CreatedAt/RevokedAt/LastUsedAt. No listing/revoke-all endpoints or device-session UI exist.
+
+research_metadata:
+  methodology: "Hybrid retrieval: semantic_search + grep_search across frontend pages and backend endpoints/services/entities. Targeted read_file for all 9 focus areas."
+  scope: "All admin, expert frontend pages for P9-P17. All backend endpoint files, service files, and domain entities relevant to media, content hierarchy, permissions, community, private speaking, auth tokens."
+  confidence: high
+  coverage: 92
+  decision_blockers: 0
+  research_blockers: 0
+
+files_analyzed:
+  - file: page.tsx
+    path: app/admin/media/page.tsx
+    purpose: Admin media asset manager page — list, audit, and process media
+    key_elements:
+      - element: fetchAdminMediaAssets
+        type: function
+        location: "app/admin/media/page.tsx:34"
+        description: "Fetches paginated media assets from /v1/admin/media-assets"
+      - element: fetchAdminMediaAudit
+        type: function
+        location: "app/admin/media/page.tsx:49"
+        description: "Runs media audit — returns totals, missing thumbnails/transcripts"
+      - element: adminProcessMediaAsset
+        type: function
+        location: "app/admin/media/page.tsx:58"
+        description: "Enqueues a media asset for normalization processing"
+    language: typescript
+    lines: 130
+
+  - file: page.tsx
+    path: app/admin/content-hierarchy/page.tsx
+    purpose: Admin content hierarchy — list programs and packages in tabs
+    key_elements:
+      - element: fetchAdminContentPrograms
+        type: function
+        location: "app/admin/content-hierarchy/page.tsx:30"
+        description: "Fetches paginated programs"
+      - element: fetchAdminContentPackages
+        type: function
+        location: "app/admin/content-hierarchy/page.tsx:31"
+        description: "Fetches paginated packages"
+    language: typescript
+    lines: 112
+
+  - file: page.tsx
+    path: app/admin/users/page.tsx
+    purpose: Admin user list with search, filters, invite modal
+    key_elements:
+      - element: inviteAdminUser
+        type: function
+        location: "app/admin/users/page.tsx:17"
+        description: "Invite a new user (single invite, not bulk)"
+      - element: InviteFormState
+        type: pattern
+        location: "app/admin/users/page.tsx:28-33"
+        description: "Invite form captures name, email, role, professionId — no permissions"
+    language: typescript
+    lines: 150+
+
+  - file: page.tsx
+    path: app/admin/users/[id]/page.tsx
+    purpose: Admin user detail — status toggle, password reset, credit adjust, delete/restore
+    key_elements:
+      - element: updateAdminUserStatus
+        type: function
+        location: "app/admin/users/[id]/page.tsx:22"
+        description: "Suspend/reactivate a user"
+      - element: adjustAdminUserCredits
+        type: function
+        location: "app/admin/users/[id]/page.tsx:21"
+        description: "Adjust user credit balance"
+    language: typescript
+    lines: 200+
+
+  - file: page.tsx
+    path: app/expert/schedule/page.tsx
+    purpose: Expert review schedule — weekly recurring day/time grid
+    key_elements:
+      - element: fetchExpertSchedule / saveExpertSchedule
+        type: function
+        location: "app/expert/schedule/page.tsx:13"
+        description: "GET/PUT /v1/expert/schedule — weekly day-by-day availability"
+      - element: ExpertScheduleDay
+        type: pattern
+        location: "app/expert/schedule/page.tsx"
+        description: "Each day has active boolean, start time, end time. No date-specific exceptions."
+    language: typescript
+    lines: 200+
+
+  - file: page.tsx
+    path: app/expert/private-speaking/page.tsx
+    purpose: Expert private speaking — sessions list, availability rules, add/delete rules
+    key_elements:
+      - element: fetchExpertPrivateSpeakingSessions
+        type: function
+        location: "app/expert/private-speaking/page.tsx:10"
+        description: "Expert's list of upcoming/past sessions"
+      - element: updateExpertPrivateSpeakingAvailability
+        type: function
+        location: "app/expert/private-speaking/page.tsx:11"
+        description: "Add weekly availability rule"
+      - element: deleteExpertPrivateSpeakingAvailability
+        type: function
+        location: "app/expert/private-speaking/page.tsx:12"
+        description: "Delete an availability rule"
+    language: typescript
+    lines: 150
+
+  - file: page.tsx
+    path: app/expert/ask-an-expert/page.tsx
+    purpose: Expert Q&A — list threads, post verified replies
+    key_elements:
+      - element: "/v1/expert/community/ask-an-expert"
+        type: pattern
+        location: "app/expert/ask-an-expert/page.tsx:53"
+        description: "GET list of threads for expert to answer"
+      - element: "/v1/expert/community/threads/{threadId}/verified-reply"
+        type: pattern
+        location: "app/expert/ask-an-expert/page.tsx:72"
+        description: "POST verified expert reply — only moderation action available"
+    language: typescript
+    lines: 150
+
+  - file: page.tsx
+    path: app/expert/mobile-review/page.tsx
+    purpose: "FULLY FUNCTIONAL multi-step review wizard: queue→read→score→comment→confirm"
+    key_elements:
+      - element: "/v1/expert/queue-priority"
+        type: pattern
+        location: "app/expert/mobile-review/page.tsx:36"
+        description: "Loads priority review queue"
+      - element: handleSubmit
+        type: function
+        location: "app/expert/mobile-review/page.tsx:83"
+        description: "Submits review scores + comment to /v1/expert/reviews/{id}/{type}/submit"
+    language: typescript
+    lines: 100+
+
+  - file: ContentHierarchyEndpoints.cs
+    path: backend/src/OetLearner.Api/Endpoints/ContentHierarchyEndpoints.cs
+    purpose: Maps all admin content hierarchy CRUD + media asset endpoints
+    key_elements:
+      - element: "admin.MapPost('/media-assets')"
+        type: pattern
+        location: "ContentHierarchyEndpoints.cs:253"
+        description: "Upsert media asset (metadata only, no file upload)"
+      - element: "admin.MapGet('/media-assets')"
+        type: pattern
+        location: "ContentHierarchyEndpoints.cs:257"
+        description: "List media assets with filters"
+      - element: "admin.MapPost('/media/{assetId}/process')"
+        type: pattern
+        location: "ContentHierarchyEndpoints.cs:291"
+        description: "Enqueue asset for normalization"
+      - element: "admin.MapGet('/media/audit')"
+        type: pattern
+        location: "ContentHierarchyEndpoints.cs:301"
+        description: "Run media audit"
+    language: csharp
+    lines: 320
+
+  - file: ContentHierarchyService.cs
+    path: backend/src/OetLearner.Api/Services/ContentHierarchyService.cs
+    purpose: Full CRUD for programs, tracks, modules, lessons, packages, package rules
+    key_elements:
+      - element: CreateProgramAsync / UpdateProgramAsync
+        type: function
+        location: "ContentHierarchyService.cs:29-55"
+        description: "Program create/update (no delete)"
+      - element: CreateTrackAsync / UpdateTrackAsync
+        type: function
+        location: "ContentHierarchyService.cs:62-82"
+        description: "Track create/update (no delete)"
+      - element: CreateModuleAsync / UpdateModuleAsync
+        type: function
+        location: "ContentHierarchyService.cs:87-108"
+        description: "Module create/update (no delete)"
+      - element: CreateLessonAsync
+        type: function
+        location: "ContentHierarchyService.cs:113-120"
+        description: "Lesson create only (no update/delete)"
+    language: csharp
+    lines: 200
+
+  - file: AuthEntities.cs
+    path: backend/src/OetLearner.Api/Domain/AuthEntities.cs
+    purpose: Defines auth domain — user accounts, refresh tokens, permissions
+    key_elements:
+      - element: AdminPermissions
+        type: class
+        location: "AuthEntities.cs:139"
+        description: "13 granular permissions: content:read/write/publish, billing:read/write, users:read/write, review_ops, quality_analytics, ai_config, feature_flags, audit_logs, system_admin"
+      - element: AdminPermissionGrant
+        type: class
+        location: "AuthEntities.cs:167"
+        description: "Links AdminUserId → Permission with GrantedBy/GrantedAt"
+      - element: RefreshTokenRecord
+        type: class
+        location: "AuthEntities.cs:44"
+        description: "Stores token hash, expires, revoked, last used per user"
+    language: csharp
+    lines: 190
+
+  - file: PrivateSpeakingEndpoints.cs
+    path: backend/src/OetLearner.Api/Endpoints/PrivateSpeakingEndpoints.cs
+    purpose: All private speaking endpoints — learner/expert/admin
+    key_elements:
+      - element: "learner.MapPost('/bookings/{bookingId}/cancel')"
+        type: pattern
+        location: "PrivateSpeakingEndpoints.cs:127"
+        description: "Learner-initiated cancel"
+      - element: "admin.MapPost('/bookings/{bookingId}/cancel')"
+        type: pattern
+        location: "PrivateSpeakingEndpoints.cs:490"
+        description: "Admin-initiated cancel"
+      - element: "admin overrides management"
+        type: pattern
+        location: "PrivateSpeakingEndpoints.cs:405-441"
+        description: "Date-specific availability overrides (block or add)"
+    language: csharp
+    lines: 610
+
+  - file: CommunityEndpoints.cs
+    path: backend/src/OetLearner.Api/Endpoints/CommunityEndpoints.cs
+    purpose: Forum categories, threads, replies, study groups — learner-only
+    key_elements:
+      - element: "community.MapGet('/threads')"
+        type: pattern
+        location: "CommunityEndpoints.cs:35"
+        description: "List threads — returns isPinned, isLocked fields"
+      - element: "community.MapPost('/threads/{threadId}/replies')"
+        type: pattern
+        location: "CommunityEndpoints.cs:90"
+        description: "Checks thread.IsLocked before allowing reply"
+    language: csharp
+    lines: 180
+
+  - file: ExpertEndpoints.cs
+    path: backend/src/OetLearner.Api/Endpoints/ExpertEndpoints.cs
+    purpose: Expert dashboard, queue, reviews, schedule, community Q&A
+    key_elements:
+      - element: "expert.MapGet('/schedule')"
+        type: pattern
+        location: "ExpertEndpoints.cs:100"
+        description: "GET weekly review availability"
+      - element: "expert.MapPut('/schedule')"
+        type: pattern
+        location: "ExpertEndpoints.cs:103"
+        description: "PUT (save) weekly review availability"
+      - element: "expert.MapGet('/community/ask-an-expert')"
+        type: pattern
+        location: "ExpertEndpoints.cs:145"
+        description: "List threads for expert Q&A"
+      - element: "expert.MapPost('/community/threads/{threadId}/verified-reply')"
+        type: pattern
+        location: "ExpertEndpoints.cs:150"
+        description: "Post verified reply — the ONLY expert community action"
+    language: csharp
+    lines: 170
+
+patterns_found:
+  - category: architecture
+    pattern: "List-only admin pages for complex domains"
+    description: "Admin media and content hierarchy pages only consume GET/list endpoints. Backend has full CRUD service methods but the frontend never calls create/update/delete."
+    examples:
+      - file: app/admin/media/page.tsx
+        location: "line 1-130"
+        snippet: "Uses fetchAdminMediaAssets (list), fetchAdminMediaAudit (audit), adminProcessMediaAsset (process) — no upload/delete/replace"
+      - file: app/admin/content-hierarchy/page.tsx
+        location: "line 1-112"
+        snippet: "Uses fetchAdminContentPrograms, fetchAdminContentPackages — no create/update/delete forms"
+    prevalence: common
+
+  - category: architecture
+    pattern: "Expert feature specialization gap"
+    description: "Expert cancel for private speaking sessions is missing. Learner and admin both have cancel, but expert has no cancel endpoint."
+    examples:
+      - file: backend/src/OetLearner.Api/Endpoints/PrivateSpeakingEndpoints.cs
+        location: "line 160-261"
+        snippet: "Expert section has: profile, sessions, sessions/{id}, availability, availability POST, availability DELETE — no cancel"
+    prevalence: occasional
+
+  - category: architecture
+    pattern: "Backend-ready, frontend-missing CRUD"
+    description: "ContentHierarchyService has CreateProgram, UpdateProgram, CreateTrack, UpdateTrack, CreateModule, UpdateModule, CreateLesson, CreatePackage, UpdatePackage — none exposed in frontend"
+    examples:
+      - file: backend/src/OetLearner.Api/Services/ContentHierarchyService.cs
+        location: "line 29-170"
+        snippet: "Full CRUD service methods for programs, tracks, modules, lessons, packages"
+    prevalence: common
+
+  - category: architecture
+    pattern: "Permission model defined but not surfaced"
+    description: "AdminPermissions has 13 granular constants, AdminPermissionGrant entity exists, but no endpoint to assign/revoke permissions and no frontend UI."
+    examples:
+      - file: backend/src/OetLearner.Api/Domain/AuthEntities.cs
+        location: "line 139-186"
+        snippet: "AdminPermissions constants + AdminPermissionGrant entity"
+    prevalence: rare
+
+  - category: architecture
+    pattern: "Date-specific override pattern (private speaking)"
+    description: "Private speaking has a date-override system (block/add availability on specific dates). Review schedule has no equivalent — only weekly recurring."
+    examples:
+      - file: backend/src/OetLearner.Api/Domain/PrivateSpeakingEntities.cs
+        location: "line 146"
+        snippet: "Date-specific availability override (block or add availability on a specific date)"
+    prevalence: occasional
+
+related_architecture:
+  components_relevant_to_domain:
+    - component: ContentHierarchyService
+      responsibility: "Programs/tracks/modules/lessons/packages CRUD"
+      location: backend/src/OetLearner.Api/Services/ContentHierarchyService.cs
+      relationship_to_domain: "P10 depends on this — full backend CRUD already exists"
+    - component: ContentImportService
+      responsibility: "Bulk content import + media asset upsert"
+      location: backend/src/OetLearner.Api/Services/ContentImportService.cs
+      relationship_to_domain: "P9 media upsert, P12 content import model"
+    - component: MediaNormalizationService
+      responsibility: "Media processing, transcoding, audit"
+      location: backend/src/OetLearner.Api/Services/MediaNormalizationService.cs
+      relationship_to_domain: "P9 processing pipeline"
+    - component: PrivateSpeakingService
+      responsibility: "Tutor profiles, bookings, availability, overrides, cancel"
+      location: backend/src/OetLearner.Api/Services/PrivateSpeakingService.cs
+      relationship_to_domain: "P13 overrides, P14 cancel"
+    - component: ExpertService
+      responsibility: "Expert review queue, schedule, metrics, Q&A"
+      location: backend/src/OetLearner.Api/Services/ExpertService.cs
+      relationship_to_domain: "P13 review schedule, P15 Q&A"
+    - component: AuthService
+      responsibility: "Auth sessions, refresh tokens, sign-in, register"
+      location: backend/src/OetLearner.Api/Services/AuthService.cs
+      relationship_to_domain: "P17 session management"
+    - component: AdminService
+      responsibility: "User ops, audit, content, billing admin"
+      location: backend/src/OetLearner.Api/Services/AdminService.cs
+      relationship_to_domain: "P11 permissions, P12 invite"
+
+  data_flow_involving_domain: |
+    Admin media → ContentHierarchyEndpoints → ContentImportService / MediaNormalizationService → MediaAssets table
+    Admin content hierarchy → ContentHierarchyEndpoints → ContentHierarchyService → Programs/Tracks/Modules/Lessons/Packages tables
+    Admin user invite → AdminEndpoints → AdminService → ApplicationUserAccount + email
+    Expert schedule → ExpertEndpoints → ExpertService → ExpertAvailability (weekly)
+    Private speaking → PrivateSpeakingEndpoints → PrivateSpeakingService → TutorProfiles/Bookings/AvailabilityRules/Overrides
+    Auth sessions → AuthEndpoints → AuthService → RefreshTokenRecord table
+
+related_technology_stack:
+  languages_used_in_domain:
+    - TypeScript (frontend)
+    - "C# / .NET 9 (backend)"
+  frameworks_used_in_domain:
+    - name: Next.js 15.5.14
+      usage_in_domain: "Admin/Expert page routing, client components"
+    - name: ASP.NET Minimal API
+      usage_in_domain: "All backend endpoints"
+  libraries_used_in_domain:
+    - name: Entity Framework Core
+      purpose_in_domain: "Database access for all CRUD operations"
+    - name: lucide-react
+      purpose_in_domain: "Icons across all admin/expert pages"
+
+related_conventions:
+  naming_patterns_in_domain: "fetchAdmin* / adminProcess* for admin API functions; ContentHierarchyService / PrivateSpeakingService for backend service classes"
+  structure_of_domain: "Endpoint files map routes → service methods → EF Core. Frontend pages use useEffect+useState pattern with AsyncStateWrapper."
+  error_handling_in_domain: "Frontend: useState<PageStatus> + try/catch + Toast. Backend: Results.NotFound / Results.BadRequest."
+  testing_in_domain: "AdminFlowsTests covers admin endpoints. ProductionReadinessTests covers media upload pipeline."
+  documentation_in_domain: "admin_cms_backend_api_complete_A_to_Z.md documents full admin API surface"
+
+open_questions:
+  - question: "Should media upload use multipart/form-data or a presigned-URL pattern like the existing speaking audio upload?"
+    context: "Backend speaking upload uses upload-session → presigned PUT → complete workflow. Media assets currently only have metadata upsert."
+    type: nice_to_know
+    affects: ["P9"]
+
+  - question: "Should expert session cancel use the same CancelBookingAsync method with role='expert' or need different business rules?"
+    context: "Learner cancel and admin cancel both call CancelBookingAsync with different role strings. Expert cancel would be trivial to add."
+    type: nice_to_know
+    affects: ["P14"]
+
+  - question: "Should user CSV import reuse InviteUserAsync per row or need a dedicated bulk endpoint?"
+    context: "InviteUserAsync creates an account + sends email. Bulk import might skip email or batch it."
+    type: nice_to_know
+    affects: ["P12"]
+
+gaps:
+  - area: "P9 — Media upload/delete/replace"
+    description: "No file upload endpoint (only metadata upsert). No DELETE endpoint for media assets. No replace workflow. Frontend has no upload UI."
+    impact: research_blocker
+    affects: ["P9"]
+
+  - area: "P10 — Content hierarchy edit UI"
+    description: "Backend has full CRUD. Frontend is list-only — needs create/edit forms for programs, tracks, modules, lessons, packages."
+    impact: research_blocker
+    affects: ["P10"]
+
+  - area: "P11 — Permission role templates"
+    description: "AdminPermissions constants and AdminPermissionGrant entity exist. No assign/revoke endpoint. No frontend UI for permission management."
+    impact: research_blocker
+    affects: ["P11"]
+
+  - area: "P12 — Bulk user CSV import"
+    description: "No user CSV import endpoint. ContentImportService handles content import only. AdminService.InviteUserAsync is single-user."
+    impact: research_blocker
+    affects: ["P12"]
+
+  - area: "P13 — Review schedule exceptions"
+    description: "Expert review schedule (GET/PUT /expert/schedule) is weekly-only. Private speaking has date-override pattern but review schedule does not."
+    impact: research_blocker
+    affects: ["P13"]
+
+  - area: "P14 — Expert-initiated session cancel"
+    description: "Missing expert.MapPost('/sessions/{bookingId}/cancel') in PrivateSpeakingEndpoints. Learner and admin cancel exist."
+    impact: research_blocker
+    affects: ["P14"]
+
+  - area: "P15 — Forum moderation endpoints"
+    description: "No delete/pin/lock/ban endpoints. ForumThread has isPinned/isLocked fields but no mutation API. Expert can only post verified replies."
+    impact: research_blocker
+    affects: ["P15"]
+
+  - area: "P16 — Mobile review is NOT a stub"
+    description: "ExpertMobileReviewPage is a fully functional multi-step wizard calling real API endpoints. Original P-item assumption was wrong."
+    impact: nice_to_know
+    affects: ["P16"]
+
+  - area: "P17 — Session/device listing"
+    description: "RefreshTokenRecord has all needed fields (CreatedAt, RevokedAt, LastUsedAt). No list-sessions or revoke-all endpoint exists. No frontend UI."
+    impact: research_blocker
+    affects: ["P17"]

@@ -87,6 +87,13 @@ public record ExpertScheduleDayDto(
     string Start,
     string End);
 
+public record CreateScheduleExceptionRequest(
+    string Date,
+    bool IsBlocked,
+    string? StartTime,
+    string? EndTime,
+    string? Reason);
+
 public record ExpertAnchoredCommentDto(
     string? Id,
     string? Criterion,

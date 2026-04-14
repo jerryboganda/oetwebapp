@@ -125,7 +125,7 @@ export default function InterleavedPracticePage() {
                         <div className="flex items-center gap-2">
                           <span className="text-xs font-semibold uppercase tracking-[0.18em] text-muted">#{task.order}</span>
                           <h4 className="truncate text-sm font-semibold text-navy">{task.title}</h4>
-                          {task.isWeakArea && <Badge variant="destructive" className="text-[10px]">Weak area</Badge>}
+                          {task.isWeakArea && <Badge variant="danger" className="text-[10px]">Weak area</Badge>}
                         </div>
                         <p className="text-xs capitalize text-muted">{task.subtestCode} • {task.taskType.replace(/-/g, ' ')} • {task.durationMinutes} min</p>
                       </div>

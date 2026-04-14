@@ -167,6 +167,31 @@ const TRACKED_EVENTS = [
   'study_plan_drift_viewed',
   // Test day events
   'test_day_checklist_toggle',
+  // Community events
+  'community_threads_viewed',
+  'community_thread_viewed',
+  'community_thread_created',
+  'community_thread_updated',
+  'community_thread_deleted',
+  'community_reply_posted',
+  'community_my_threads_viewed',
+  'community_new_thread_viewed',
+  'community_edit_thread_viewed',
+  'admin_community_thread_deleted',
+  // Expert console extended events
+  'expert_onboarding_started',
+  'expert_onboarding_completed',
+  'expert_onboarding_profile_saved',
+  'expert_onboarding_qualifications_saved',
+  'expert_onboarding_schedule_saved',
+  'expert_onboarding_rates_saved',
+  'expert_schedule_exception_created',
+  // Escalation events
+  'escalation_submitted',
+  // Achievements extended
+  'streak_freeze_used',
+  // Generic page view
+  'page_viewed',
 ] as const;
 
 export type AnalyticsEvent = typeof TRACKED_EVENTS[number];

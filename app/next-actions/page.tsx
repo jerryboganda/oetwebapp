@@ -79,7 +79,7 @@ export default function NextActionsPage() {
     <LearnerDashboardShell>
       <LearnerPageHero
         title="What to Do Next"
-        subtitle="AI-powered recommendations based on your goals, performance, and exam timeline."
+        description="AI-powered recommendations based on your goals, performance, and exam timeline."
         icon={<Sparkles className="w-7 h-7" />}
       />
 

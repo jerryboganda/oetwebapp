@@ -84,19 +84,19 @@ export default function ScoringQualityPage() {
     <ExpertRouteWorkspace>
       <ExpertRouteHero
         title="Scoring Quality"
-        subtitle="Track your calibration accuracy, AI-human agreement, and scoring consistency."
+        description="Track your calibration accuracy, AI-human agreement, and scoring consistency."
       />
 
       <div className="mb-4 flex justify-end">
-        <Select value={days} onChange={(e) => setDays(e.target.value)}>
-          <option value="7">Last 7 days</option>
-          <option value="30">Last 30 days</option>
-          <option value="90">Last 90 days</option>
-          <option value="180">Last 180 days</option>
-        </Select>
+        <Select value={days} onChange={(e) => setDays(e.target.value)} options={[
+          { value: '7', label: 'Last 7 days' },
+          { value: '30', label: 'Last 30 days' },
+          { value: '90', label: 'Last 90 days' },
+          { value: '180', label: 'Last 180 days' },
+        ]} />
       </div>
 
-      <AsyncStateWrapper status={status} errorMessage={errorMsg} onRetry={() => setDays(days)}>
+      <AsyncStateWrapper status={status} errorMessage={errorMsg ?? undefined} onRetry={() => setDays(days)}>
         {data && (
           <>
             {/* Summary cards */}
@@ -147,7 +147,7 @@ export default function ScoringQualityPage() {
                         <CartesianGrid strokeDasharray="3 3" />
                         <XAxis dataKey="date" tickFormatter={(v: string) => new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} fontSize={11} />
                         <YAxis domain={[0, 6]} />
-                        <Tooltip labelFormatter={(v: string) => new Date(v).toLocaleDateString()} />
+                        <Tooltip labelFormatter={(v) => new Date(String(v)).toLocaleDateString()} />
                         <Line type="monotone" dataKey="averageScore" stroke="#6366f1" strokeWidth={2} dot={false} />
                       </LineChart>
                     </ResponsiveContainer>

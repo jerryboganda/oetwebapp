@@ -13,6 +13,8 @@ import {
   Volume2,
   Calendar,
   Settings as SettingsIcon,
+  Trash2,
+  MonitorSmartphone,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -43,6 +45,7 @@ const settingsGroups: SettingGroup[] = [
     items: [
       { id: 'profile', title: 'Profile', description: 'Manage your personal information and credentials', icon: User, type: 'link' },
       { id: 'privacy', title: 'Privacy', description: 'Control your data, visibility, and security', icon: Shield, type: 'link' },
+      { id: 'sessions', title: 'Active Sessions', description: 'View and manage devices signed into your account', icon: MonitorSmartphone, type: 'link' },
     ],
   },
   {
@@ -64,6 +67,12 @@ const settingsGroups: SettingGroup[] = [
     items: [
       { id: 'accessibility', title: 'Accessibility', description: 'Text size, contrast, and screen reader options', icon: Accessibility, type: 'link' },
       { id: 'low-bandwidth', title: 'Low-Bandwidth Mode', description: 'Reduce data usage for slower connections', icon: Wifi, type: 'toggle', defaultToggleState: false },
+    ],
+  },
+  {
+    title: 'Danger Zone',
+    items: [
+      { id: 'danger-zone', title: 'Delete Account', description: 'Permanently delete your account and all associated data', icon: Trash2, type: 'link' },
     ],
   },
 ];
@@ -186,25 +195,26 @@ export default function Settings() {
               className="mb-3"
             />
 
-            <div className="bg-surface rounded-[24px] border border-gray-200 shadow-sm overflow-hidden">
+            <div className={`bg-surface rounded-[24px] border shadow-sm overflow-hidden ${group.title === 'Danger Zone' ? 'border-red-200' : 'border-gray-200'}`}>
               <div className="divide-y divide-gray-100">
                 {group.items.map((item) => {
                   const Icon = item.icon;
+                  const isDanger = item.id === 'danger-zone';
                   return (
                     <div
                       key={item.id}
-                      className={`flex items-center justify-between p-4 sm:p-5 transition-colors ${item.type === 'link' ? (isFrozen ? 'cursor-not-allowed opacity-60' : 'hover:bg-gray-50 cursor-pointer') : ''}`}
+                      className={`flex items-center justify-between p-4 sm:p-5 transition-colors ${item.type === 'link' ? (isFrozen ? 'cursor-not-allowed opacity-60' : isDanger ? 'hover:bg-red-50 cursor-pointer' : 'hover:bg-gray-50 cursor-pointer') : ''}`}
                       onClick={item.type === 'link' ? () => handleOpen(item.id) : undefined}
                     >
                       <div className="flex items-center gap-4 pr-4">
-                        <div className="w-10 h-10 rounded-xl bg-gray-50 flex items-center justify-center shrink-0 border border-gray-100">
-                          <Icon className="w-5 h-5 text-gray-600" />
+                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${isDanger ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-100'}`}>
+                          <Icon className={`w-5 h-5 ${isDanger ? 'text-red-600' : 'text-gray-600'}`} />
                         </div>
                         <div>
                           <div className="flex items-center gap-2">
-                            <h3 className="text-base font-bold text-navy">{item.title}</h3>
+                            <h3 className={`text-base font-bold ${isDanger ? 'text-red-700' : 'text-navy'}`}>{item.title}</h3>
                           </div>
-                          <p className="text-xs sm:text-sm text-muted mt-0.5">{item.description}</p>
+                          <p className={`text-xs sm:text-sm mt-0.5 ${isDanger ? 'text-red-600/80' : 'text-muted'}`}>{item.description}</p>
                         </div>
                       </div>
 

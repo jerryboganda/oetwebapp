@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, BookMarked, CheckCircle, ClipboardCheck, History, Save, TimerReset } from 'lucide-react';
+import { ArrowLeft, BookMarked, CheckCircle, ClipboardCheck, History, Save, Send, TimerReset } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -11,8 +11,10 @@ import { Tabs, TabPanel } from '@/components/ui/tabs';
 import { Toast } from '@/components/ui/alert';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
-import { createAdminContent, publishAdminContent, updateAdminContent } from '@/lib/api';
+import { useCurrentUser } from '@/lib/hooks/use-current-user';
+import { createAdminContent, publishAdminContent, submitContentForReview, updateAdminContent } from '@/lib/api';
 import { getAdminContentDetailData, getAdminContentImpactData, getAdminCriteriaData } from '@/lib/admin';
+import { hasPermission, AdminPermission } from '@/lib/admin-permissions';
 import type { AdminContentImpact, AdminCriterion } from '@/lib/types/admin';
 
 type PageStatus = 'loading' | 'success' | 'error';
@@ -54,15 +56,19 @@ const defaultFormState: FormState = {
 export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
   const router = useRouter();
   const { isAuthenticated, role } = useAdminAuth();
+  const { user } = useCurrentUser();
   const [pageStatus, setPageStatus] = useState<PageStatus>(contentId ? 'loading' : 'success');
   const [activeTab, setActiveTab] = useState('metadata');
   const [form, setForm] = useState<FormState>(defaultFormState);
+  const [contentStatus, setContentStatus] = useState<string>('Draft');
   const [criteriaOptions, setCriteriaOptions] = useState<AdminCriterion[]>([]);
   const [impact, setImpact] = useState<AdminContentImpact | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
 
   const isNew = !contentId;
+  const userPerms = user?.adminPermissions ?? [];
+  const canPublish = hasPermission(userPerms, AdminPermission.ContentPublish, AdminPermission.ContentPublisherApproval);
 
   useEffect(() => {
     if (!contentId) return;
@@ -93,6 +99,7 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
           sourceType: detail.sourceType || 'original',
           qaStatus: detail.qaStatus || 'pending',
         });
+        if (detail.status) setContentStatus(detail.status);
         setImpact(impactSummary);
         setPageStatus('success');
       } catch (error) {
@@ -179,7 +186,12 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
       }
 
       if (publishAfterSave && resolvedContentId) {
-        await publishAdminContent(resolvedContentId);
+        if (canPublish) {
+          await publishAdminContent(resolvedContentId);
+          setContentStatus('Published');
+        } else {
+          throw new Error('Insufficient permissions to publish directly.');
+        }
       }
 
       setToast({
@@ -196,6 +208,34 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
     } catch (error) {
       console.error(error);
       setToast({ variant: 'error', message: 'Unable to save content right now.' });
+    } finally {
+      setIsSaving(false);
+    }
+  }
+
+  async function handleSubmitForReview() {
+    if (!contentId) return;
+    setIsSaving(true);
+    try {
+      // Save first, then submit
+      await updateAdminContent(contentId, {
+        title: form.title,
+        contentType: form.contentType,
+        subtestCode: form.subtestCode,
+        professionId: form.professionId,
+        difficulty: form.difficulty,
+        estimatedDurationMinutes: Number(form.estimatedDurationMinutes || 45),
+        description: form.description,
+        caseNotes: form.caseNotes,
+        modelAnswer: form.modelAnswer,
+        criteriaFocus: JSON.stringify(form.criteriaFocus),
+      });
+      await submitContentForReview(contentId);
+      setContentStatus('EditorReview');
+      setToast({ variant: 'success', message: 'Content submitted for editor review.' });
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: 'Unable to submit for review.' });
     } finally {
       setIsSaving(false);
     }
@@ -236,6 +276,27 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
               ]}
               actions={
                 <>
+                  {/* Status pipeline stepper */}
+                  {!isNew && contentId ? (
+                    <div className="flex items-center gap-1 text-xs mr-2">
+                      {(['Draft', 'EditorReview', 'PublisherApproval', 'Published'] as const).map((step, i) => {
+                        const labels: Record<string, string> = { Draft: 'Draft', EditorReview: 'Editor', PublisherApproval: 'Publisher', Published: 'Published' };
+                        const isActive = contentStatus === step;
+                        const isPast = ['Draft', 'EditorReview', 'PublisherApproval', 'Published'].indexOf(contentStatus) > i;
+                        return (
+                          <span key={step} className="flex items-center gap-1">
+                            {i > 0 ? <span className="text-[var(--color-border)]">→</span> : null}
+                            <span className={`px-2 py-0.5 rounded-full ${isActive ? 'bg-[var(--color-accent)] text-white' : isPast ? 'bg-[var(--color-success-bg)] text-[var(--color-success)]' : 'bg-[var(--color-surface-secondary)] text-[var(--color-text-tertiary)]'}`}>
+                              {labels[step]}
+                            </span>
+                          </span>
+                        );
+                      })}
+                      {contentStatus === 'Rejected' ? (
+                        <span className="ml-1 px-2 py-0.5 rounded-full bg-[var(--color-error-bg)] text-[var(--color-error)] text-xs">Rejected</span>
+                      ) : null}
+                    </div>
+                  ) : null}
                   {!isNew && contentId ? (
                     <Button variant="outline" onClick={() => router.push(`/admin/content/${contentId}/revisions`)} className="gap-2">
                       <History className="h-4 w-4" /> Revisions
@@ -244,9 +305,16 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
                   <Button variant="outline" onClick={() => saveContent(false)} loading={isSaving} className="gap-2">
                     <Save className="h-4 w-4" /> Save Draft
                   </Button>
-                  <Button onClick={() => saveContent(true)} loading={isSaving} className="gap-2">
-                    <CheckCircle className="h-4 w-4" /> Publish
-                  </Button>
+                  {!isNew && contentId && (contentStatus === 'Draft' || contentStatus === 'Rejected') ? (
+                    <Button variant="outline" onClick={handleSubmitForReview} loading={isSaving} className="gap-2">
+                      <Send className="h-4 w-4" /> Submit for Review
+                    </Button>
+                  ) : null}
+                  {canPublish ? (
+                    <Button onClick={() => saveContent(true)} loading={isSaving} className="gap-2">
+                      <CheckCircle className="h-4 w-4" /> Publish
+                    </Button>
+                  ) : null}
                 </>
               }
             />

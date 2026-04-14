@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, BarChart3, CheckCircle2, Clock, FileText, Users } from 'lucide-react';
+import { AlertTriangle, BarChart3, CheckCircle2, Clock, Download, FileText, Users } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { exportToCsv, formatDateForExport } from '@/lib/csv-export';
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 import { AdminRouteFreshnessBadge, AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { MotionSection } from '@/components/ui/motion-primitives';
@@ -125,6 +127,24 @@ export default function QualityAnalyticsPage() {
         meta={analytics ? `Window ${analytics.freshness.windowDays} days` : undefined}
         actions={
           <div className="flex items-center gap-3">
+            {analytics && (
+              <Button variant="outline" size="sm" className="gap-2" onClick={() => {
+                const rows: Record<string, unknown>[] = [
+                  { metric: 'AI-Human Agreement (%)', value: analytics.aiHumanAgreement.value, trend: analytics.aiHumanAgreement.trend },
+                  { metric: 'Appeals Rate (%)', value: analytics.appealsRate.value, trend: analytics.appealsRate.trend },
+                  { metric: 'Avg Review Time', value: `${analytics.avgReviewTime.value} ${analytics.avgReviewTime.unit}` },
+                  { metric: 'SLA Met (%)', value: analytics.reviewSLA.metPercent },
+                  { metric: 'Risk Cases', value: analytics.riskCases.count, severity: analytics.riskCases.severity },
+                  { metric: 'Published Content', value: analytics.contentPerformance.publishedCount },
+                  { metric: 'Active Content', value: analytics.contentPerformance.activeContent },
+                  { metric: 'Feature Adoption (%)', value: analytics.featureAdoption.adoptionRate, activeUsers: analytics.featureAdoption.activeUsers },
+                ];
+                exportToCsv(rows, `quality-analytics-${timeRange}-${formatDateForExport(new Date())}.csv`);
+              }}>
+                <Download className="w-4 h-4" />
+                Export CSV
+              </Button>
+            )}
             <AdminRouteFreshnessBadge value={analytics?.freshness.generatedAt} />
             <div className="w-44">
               <Select

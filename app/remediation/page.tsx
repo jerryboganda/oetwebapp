@@ -97,7 +97,7 @@ export default function RemediationPage() {
 
       <LearnerPageHero
         title="Weak-Area Remediation"
-        subtitle="Targeted practice to strengthen your weakest areas based on evaluation analysis."
+        description="Targeted practice to strengthen your weakest areas based on evaluation analysis."
         icon={<AlertTriangle className="w-7 h-7" />}
       />
 
@@ -128,7 +128,7 @@ export default function RemediationPage() {
                     <div className="flex items-center gap-3 mt-1">
                       <span className="text-sm text-gray-500">Avg: {wa.averageScore}/6</span>
                       <span className="text-sm text-gray-500">{wa.evaluationCount} evals</span>
-                      <Badge variant={wa.trend === 'improving' ? 'success' : wa.trend === 'declining' ? 'destructive' : 'outline'}>
+                      <Badge variant={wa.trend === 'improving' ? 'success' : wa.trend === 'declining' ? 'danger' : 'outline'}>
                         {wa.trend === 'improving' ? '↑ Improving' : wa.trend === 'declining' ? '↓ Declining' : 'Stable'}
                       </Badge>
                     </div>

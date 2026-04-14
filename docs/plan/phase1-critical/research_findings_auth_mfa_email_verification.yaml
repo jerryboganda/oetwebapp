@@ -1,0 +1,599 @@
+plan_id: phase1-critical
+objective: "Map auth page patterns for MFA recovery and email verification implementation"
+focus_area: "Auth pages — MFA and email verification"
+created_at: "2026-04-13"
+created_by: gem-researcher
+status: completed
+
+tldr: |
+  - Auth pages use a custom SCSS-based component library (NO shadcn/MUI). Core shell: `AuthScreenShell` + `OtpCodeInput` + SCSS modules (`auth-screen-shell.module.scss`). Icons from `@tabler/icons-react`.
+  - Form handling uses raw `useState` + `onSubmit` handlers (no react-hook-form). Feedback is inline via `.notice`/`.noticeDanger` CSS classes — NO toast/sonner library in auth pages.
+  - API calls go through `lib/auth-client.ts` which wraps `fetchWithTimeout` with `postJson`/`getJson` helpers, using `NEXT_PUBLIC_API_BASE_URL`. Auth context delegates to these functions.
+  - MFA challenge page already has a recovery code section (`completeRecoveryChallenge`). The backend endpoints for MFA recovery exist: `POST /v1/auth/mfa/recovery`. A dedicated "mfa/recovery" page would structurally be a slimmed-down version of `mfa-challenge-form.tsx`.
+  - Verify-email page already has a "Resend it" button calling `sendEmailVerificationOtp`. Adding "Resend OTP" is about enhancing the existing `handleResend` with cooldown/retry logic, not adding a new button.
+
+research_metadata:
+  methodology: "Hybrid retrieval: read_file for all auth pages, components, context, API client, types, routes, SCSS; grep_search for toast/notification patterns; list_dir for directory structure"
+  scope: "All files in app/(auth)/mfa/*, app/(auth)/verify-email/*, components/auth/*, contexts/auth-context.tsx, lib/auth-client.ts, lib/auth-routes.ts, lib/auth/routes.ts, lib/types/auth.ts"
+  confidence: high
+  coverage: 95
+  decision_blockers: 0
+  research_blockers: 0
+
+files_analyzed:
+  - file: page.tsx
+    path: app/(auth)/mfa/setup/page.tsx
+    purpose: "Thin page wrapper that guards auth state and renders MfaSetupCard"
+    key_elements:
+      - element: MfaSetupPage
+        type: function
+        location: "app/(auth)/mfa/setup/page.tsx:9"
+        description: "Checks isAuthenticated, redirects to /sign-in if not authenticated, redirects to post-auth destination if authenticator already enabled. Delegates rendering to MfaSetupCard."
+    language: typescript
+    lines: 34
+
+  - file: page.tsx
+    path: app/(auth)/mfa/challenge/page.tsx
+    purpose: "Thin page wrapper that guards pendingMfaChallenge state and renders MfaChallengeForm"
+    key_elements:
+      - element: MfaChallengePage
+        type: function
+        location: "app/(auth)/mfa/challenge/page.tsx:8"
+        description: "Checks pendingMfaChallenge existence, redirects to /sign-in if missing, redirects away if already authenticated. Delegates rendering to MfaChallengeForm."
+    language: typescript
+    lines: 34
+
+  - file: page.tsx
+    path: app/(auth)/verify-email/page.tsx
+    purpose: "Email OTP verification page with send-on-mount, resend, and OTP submission"
+    key_elements:
+      - element: VerifyEmailPage
+        type: function
+        location: "app/(auth)/verify-email/page.tsx:23"
+        description: "Standalone page (no extraction to component). Uses useState for otp, errorMessage, notice, isSubmitting. Calls sendEmailVerificationOtp on mount. Has handleResend and handleSubmit. Routes to resolveAuthenticatedDestination or sign-in after success."
+      - element: handleResend
+        type: function
+        location: "app/(auth)/verify-email/page.tsx:60"
+        description: "Clears OTP + error, calls sendEmailVerificationOtp(email), sets notice or errorMessage. No cooldown/debounce currently."
+      - element: handleSubmit
+        type: function
+        location: "app/(auth)/verify-email/page.tsx:72"
+        description: "Validates 6-digit OTP, calls verifyEmailOtp(email, normalizedOtp), routes on success."
+    language: typescript
+    lines: 160
+
+  - file: layout.tsx
+    path: app/(auth)/layout.tsx
+    purpose: "Auth route group layout — wraps children in MotionPage for page transitions"
+    key_elements:
+      - element: AuthLayout
+        type: function
+        location: "app/(auth)/layout.tsx:5"
+        description: "Minimal layout: wraps children in <MotionPage> from components/ui/motion-primitives."
+    language: typescript
+    lines: 8
+
+  - file: mfa-setup-card.tsx
+    path: components/auth/mfa-setup-card.tsx
+    purpose: "Full MFA authenticator setup wizard — QR code display, secret key, recovery codes, OTP confirmation"
+    key_elements:
+      - element: MfaSetupCard
+        type: function
+        location: "components/auth/mfa-setup-card.tsx:30"
+        description: "Calls beginAuthenticatorSetup on mount. Shows QR code (Image), secret key, recovery codes. Form with OtpCodeInput for 6-digit confirmation. 'Maybe later' button. On success calls confirmAuthenticatorSetup and navigates to post-auth destination."
+      - element: readErrorMessage
+        type: function
+        location: "components/auth/mfa-setup-card.tsx:20"
+        description: "Helper to extract error.message or return a default. Reused across all MFA/auth components."
+    language: typescript
+    lines: 232
+
+  - file: mfa-challenge-form.tsx
+    path: components/auth/mfa-challenge-form.tsx
+    purpose: "MFA challenge form — authenticator code input + recovery code fallback"
+    key_elements:
+      - element: MfaChallengeForm
+        type: function
+        location: "components/auth/mfa-challenge-form.tsx:27"
+        description: "Two forms in one view: (1) OtpCodeInput for 6-digit authenticator code calling completeMfaChallenge, (2) text input for recovery code calling completeRecoveryChallenge. Both navigate to post-auth destination on success."
+      - element: handleCodeSubmit
+        type: function
+        location: "components/auth/mfa-challenge-form.tsx:37"
+        description: "Validates 6-digit, calls completeMfaChallenge, navigates."
+      - element: handleRecoverySubmit
+        type: function
+        location: "components/auth/mfa-challenge-form.tsx:56"
+        description: "Calls completeRecoveryChallenge with trimmed recovery code, navigates."
+    language: typescript
+    lines: 151
+
+  - file: auth-screen-shell.tsx
+    path: components/auth/auth-screen-shell.tsx
+    purpose: "Shared auth page shell — decorative background shapes, brand header, card container, social login slots, footer/terms"
+    key_elements:
+      - element: AuthScreenShell
+        type: function
+        location: "components/auth/auth-screen-shell.tsx:35"
+        description: "Props: title, subtitle, children, hero, eyebrow, footer, terms, socials, brandHref, brandLabel, stackClassName, cardClassName, headerClassName. Renders page with gradient background, decorative shapes, centered card."
+      - element: AuthScreenShellProps
+        type: interface
+        location: "components/auth/auth-screen-shell.tsx:12"
+        description: "Full props interface — all strings/ReactNode, socials is SocialAction[]."
+    language: typescript
+    lines: 106
+
+  - file: otp-code-input.tsx
+    path: components/auth/otp-code-input.tsx
+    purpose: "6-digit OTP grid input with per-digit focus management, paste support, backspace navigation"
+    key_elements:
+      - element: OtpCodeInput
+        type: function
+        location: "components/auth/otp-code-input.tsx:19"
+        description: "Props: value, onChange, length (default 6), disabled. Renders individual input cells in styles.otpGrid. Manages focus with useRef array. Handles paste distribution, arrow keys, backspace."
+    language: typescript
+    lines: 105
+
+  - file: auth-screen-shell.module.scss
+    path: components/auth/auth-screen-shell.module.scss
+    purpose: "All auth page CSS — variables, layout, card, inputs, OTP grid, notices, buttons, wizard sections"
+    key_elements:
+      - element: .page
+        type: pattern
+        location: "auth-screen-shell.module.scss:1"
+        description: "Root with CSS custom properties: --auth-bg, --auth-card, --auth-text, --auth-accent-strong, etc."
+      - element: .notice / .noticeDanger / .noticeSuccess
+        type: pattern
+        location: "auth-screen-shell.module.scss:~279-295"
+        description: "Inline notification banners. noticeDanger: red tint. noticeSuccess: green tint. Used instead of toasts."
+      - element: .submit / .secondaryButton
+        type: pattern
+        location: "auth-screen-shell.module.scss:~380-440"
+        description: "Primary gradient button and outlined secondary button."
+      - element: .wizard
+        type: pattern
+        location: "auth-screen-shell.module.scss:~445"
+        description: "Grid layout for multi-section forms (MFA setup, challenge)."
+      - element: .summaryCard
+        type: pattern
+        location: "auth-screen-shell.module.scss"
+        description: "Inner card sections used for grouping content within the wizard."
+    language: scss
+    lines: 500+
+
+  - file: auth-context.tsx
+    path: contexts/auth-context.tsx
+    purpose: "Global auth state provider — session, user, MFA challenge, all auth operations"
+    key_elements:
+      - element: AuthProvider
+        type: function
+        location: "contexts/auth-context.tsx:66"
+        description: "Hydrates session on mount via restoreSession(). Exposes signIn, signUp, signOut, refreshSession, sendVerificationOtp, verifyEmailOtp, beginAuthenticatorSetup, confirmAuthenticatorSetup, completeMfaChallenge, completeRecoveryChallenge, clearError."
+      - element: AuthContextValue
+        type: interface
+        location: "contexts/auth-context.tsx:37"
+        description: "Full context shape — extends AuthState with role, isAuthenticated, and all auth method signatures."
+      - element: completeRecoveryChallenge
+        type: function
+        location: "contexts/auth-context.tsx:~265"
+        description: "Delegates to completeRecoveryChallengeRequest from auth-client. Updates state with session, clears pendingMfaChallenge."
+      - element: pendingMfaChallenge
+        type: variable
+        location: "contexts/auth-context.tsx:31"
+        description: "PendingMfaChallenge | null — stored in state, loaded from auth-storage on hydrate."
+    language: typescript
+    lines: 296
+
+  - file: auth-client.ts
+    path: lib/auth-client.ts
+    purpose: "Auth API client — all backend auth endpoints, token management, session storage integration"
+    key_elements:
+      - element: postJson
+        type: function
+        location: "lib/auth-client.ts:~100"
+        description: "Core POST helper: builds full URL from API_BASE_URL, adds auth header if accessToken provided, uses fetchWithTimeout, parses via parseResponse."
+      - element: getJson
+        type: function
+        location: "lib/auth-client.ts:~115"
+        description: "Core GET helper: same pattern as postJson."
+      - element: completeMfaChallenge
+        type: function
+        location: "lib/auth-client.ts:~350"
+        description: "POST /v1/auth/mfa/challenge — loads pending challenge from storage, sends {email, code, challengeToken, recoveryCode: null}. Saves session, clears challenge."
+      - element: completeRecoveryChallenge
+        type: function
+        location: "lib/auth-client.ts:~367"
+        description: "POST /v1/auth/mfa/recovery — loads pending challenge, sends {email, code: '', challengeToken, recoveryCode}. Saves session, clears challenge."
+      - element: sendEmailVerificationOtp
+        type: function
+        location: "lib/auth-client.ts:~310"
+        description: "POST /v1/auth/email/send-verification-otp — {email, purpose: 'verify_email'}. Returns OtpChallenge."
+      - element: verifyEmailOtp
+        type: function
+        location: "lib/auth-client.ts:~317"
+        description: "POST /v1/auth/email/verify-otp — {email, purpose: 'verify_email', code}. Returns CurrentUser, updates stored user."
+      - element: beginAuthenticatorSetup
+        type: function
+        location: "lib/auth-client.ts:~333"
+        description: "POST /v1/auth/mfa/authenticator/begin — requires fresh access token. Returns AuthenticatorSetup."
+      - element: confirmAuthenticatorSetup
+        type: function
+        location: "lib/auth-client.ts:~341"
+        description: "POST /v1/auth/mfa/authenticator/confirm — requires fresh access token. Returns CurrentUser."
+      - element: AuthClientError
+        type: class
+        location: "lib/auth-client.ts:~30"
+        description: "Custom error class with status, code, message, retryable, details. Thrown by parseResponse on non-OK responses."
+    language: typescript
+    lines: 390
+
+  - file: auth.ts
+    path: lib/types/auth.ts
+    purpose: "All auth type definitions"
+    key_elements:
+      - element: CurrentUser
+        type: interface
+        location: "lib/types/auth.ts:4"
+        description: "userId, email, role, displayName, isEmailVerified, isAuthenticatorEnabled, requiresEmailVerification, requiresMfa, emailVerifiedAt, authenticatorEnabledAt"
+      - element: AuthSession
+        type: interface
+        location: "lib/types/auth.ts:17"
+        description: "accessToken, refreshToken, accessTokenExpiresAt, refreshTokenExpiresAt, currentUser"
+      - element: OtpChallenge
+        type: interface
+        location: "lib/types/auth.ts:25"
+        description: "challengeId, purpose, deliveryChannel, destinationHint, expiresAt, retryAfterSeconds"
+      - element: AuthenticatorSetup
+        type: interface
+        location: "lib/types/auth.ts:34"
+        description: "secretKey, otpAuthUri, qrCodeDataUrl, recoveryCodes"
+      - element: PendingMfaChallenge
+        type: interface
+        location: "lib/types/auth.ts:41"
+        description: "email, challengeToken, rememberMe"
+      - element: SignInResult
+        type: type
+        location: "lib/types/auth.ts:116"
+        description: "Discriminated union: {status: 'authenticated', session} | {status: 'mfa_required', challenge}"
+    language: typescript
+    lines: 120
+
+  - file: routes.ts
+    path: lib/auth/routes.ts
+    purpose: "Auth route constants and link builder helpers"
+    key_elements:
+      - element: AUTH_ROUTES
+        type: variable
+        location: "lib/auth/routes.ts:1"
+        description: "Constant object with signIn, signUp, signUpSuccess, passwordReset, passwordResetOtp, passwordCreate, passwordResetSuccess, twoStepVerification, terms"
+      - element: buildTwoStepVerificationHref
+        type: function
+        location: "lib/auth/routes.ts:45"
+        description: "Builds /verify-email URL with optional username, email, error, next query params."
+    language: typescript
+    lines: 95
+
+  - file: auth-routes.ts
+    path: lib/auth-routes.ts
+    purpose: "Post-auth destination resolution based on user role"
+    key_elements:
+      - element: resolvePostAuthDestination
+        type: function
+        location: "lib/auth-routes.ts:28"
+        description: "Given a CurrentUser and optional nextPath, resolves to the correct role-specific route (admin → /admin, expert → /expert, learner → /). Validates path access."
+      - element: defaultRouteForRole
+        type: function
+        location: "lib/auth-routes.ts:3"
+        description: "Maps UserRole to default landing path."
+    language: typescript
+    lines: 44
+
+patterns_found:
+  - category: architecture
+    pattern: "Thin page.tsx + extracted component"
+    description: "Auth page.tsx files are thin wrappers that handle route guards (redirect logic via useEffect) and delegate all UI to a component in components/auth/. MFA setup → MfaSetupCard. MFA challenge → MfaChallengeForm. Verify-email is the exception — its logic is inline."
+    examples:
+      - file: app/(auth)/mfa/setup/page.tsx
+        location: "line 33"
+        snippet: "return <MfaSetupCard nextHref={nextHref} />;"
+      - file: app/(auth)/mfa/challenge/page.tsx
+        location: "line 33"
+        snippet: "return <MfaChallengeForm nextHref={nextHref} />;"
+    prevalence: common
+
+  - category: architecture
+    pattern: "AuthScreenShell as universal auth page wrapper"
+    description: "Every auth page uses AuthScreenShell for consistent layout: brand, eyebrow badge, title, subtitle, card container, optional footer/socials. Children are placed inside styles.form grid."
+    examples:
+      - file: components/auth/mfa-challenge-form.tsx
+        location: "line 75"
+        snippet: |
+          <AuthScreenShell
+            eyebrow="Multi-Factor Authentication"
+            title="Complete MFA challenge"
+            subtitle={...}
+          >
+      - file: app/(auth)/verify-email/page.tsx
+        location: "line 113"
+        snippet: |
+          <AuthScreenShell
+            brandHref={AUTH_ROUTES.signIn}
+            brandLabel="OET"
+            eyebrow="Step Verification"
+            title="Verify OTP"
+            subtitle={...}
+            footer={<p className={styles.resend}>...</p>}
+          >
+    prevalence: common
+
+  - category: structure
+    pattern: "useState-based form handling"
+    description: "No react-hook-form or formAction. All auth forms use useState for each field (code, recoveryCode, otp, error, isSubmitting). Submit handlers are async functions on <form onSubmit={...}>."
+    examples:
+      - file: components/auth/mfa-challenge-form.tsx
+        location: "lines 29-34"
+        snippet: |
+          const [code, setCode] = useState('');
+          const [recoveryCode, setRecoveryCode] = useState('');
+          const [error, setError] = useState<string | null>(null);
+          const [isSubmittingCode, setIsSubmittingCode] = useState(false);
+          const [isSubmittingRecovery, setIsSubmittingRecovery] = useState(false);
+    prevalence: common
+
+  - category: error_handling
+    pattern: "Inline error notices — no toasts"
+    description: "Auth pages display errors inline using <div className={styles.noticeDanger}> or <p className={styles.noticeDanger}>. No toast/sonner/notification library is used in auth flows. Success is shown via styles.noticeSuccess. Error extraction uses a shared readErrorMessage() helper."
+    examples:
+      - file: components/auth/mfa-challenge-form.tsx
+        location: "line 108"
+        snippet: "{error ? <div className={`${styles.notice} ${styles.noticeDanger}`}>{error}</div> : null}"
+      - file: app/(auth)/verify-email/page.tsx
+        location: "line 142"
+        snippet: |
+          {errorMessage ? (
+            <p className={`${styles.notice} ${styles.noticeDanger}`.trim()}>
+              {errorMessage}
+            </p>
+          ) : null}
+    prevalence: common
+
+  - category: error_handling
+    pattern: "readErrorMessage helper duplicated in each component"
+    description: "Each MFA/auth component has a local readErrorMessage(error: unknown): string function that extracts error.message or returns a component-specific default. Not shared across files."
+    examples:
+      - file: components/auth/mfa-setup-card.tsx
+        location: "line 20"
+        snippet: "return 'Unable to complete MFA setup.';"
+      - file: components/auth/mfa-challenge-form.tsx
+        location: "line 18"
+        snippet: "return 'Unable to verify the MFA challenge.';"
+      - file: app/(auth)/verify-email/page.tsx
+        location: "line 17"
+        snippet: "return 'Unable to verify the OTP code.';"
+    prevalence: common
+
+  - category: naming
+    pattern: "CSS module import as 'styles'"
+    description: "All auth components import auth-screen-shell.module.scss as `styles` and reference classes via styles.xxx."
+    examples:
+      - file: components/auth/mfa-setup-card.tsx
+        location: "line 13"
+        snippet: "import styles from './auth-screen-shell.module.scss';"
+    prevalence: common
+
+  - category: architecture
+    pattern: "Auth context as single source of auth operations"
+    description: "Components call auth operations via useAuth() hook (completeMfaChallenge, completeRecoveryChallenge, beginAuthenticatorSetup, etc). The context delegates to lib/auth-client.ts functions and updates shared state."
+    examples:
+      - file: components/auth/mfa-challenge-form.tsx
+        location: "line 28"
+        snippet: "const { pendingMfaChallenge, completeMfaChallenge, completeRecoveryChallenge } = useAuth();"
+    prevalence: common
+
+  - category: architecture
+    pattern: "Direct lib/auth-client.ts calls (bypass context)"
+    description: "The verify-email page calls lib/auth-client.ts functions directly (sendEmailVerificationOtp, verifyEmailOtp) rather than through the auth context. This is because the verify-email page may operate without a full session."
+    examples:
+      - file: app/(auth)/verify-email/page.tsx
+        location: "line 8"
+        snippet: "import { sendEmailVerificationOtp, verifyEmailOtp } from '@/lib/auth-client';"
+    prevalence: occasional
+
+  - category: architecture
+    pattern: "OTP field via OtpCodeInput component"
+    description: "All 6-digit OTP entries use the shared OtpCodeInput component with value/onChange/disabled/length props. It renders a per-digit input grid with auto-advance, paste support, and keyboard navigation."
+    examples:
+      - file: components/auth/mfa-setup-card.tsx
+        location: "line 164"
+        snippet: "<OtpCodeInput value={code} onChange={(next) => { setCode(next.replace(/\\D/g, '').slice(0, 6)); setError(null); }} disabled={!setup || isConfirming} />"
+    prevalence: common
+
+  - category: naming
+    pattern: "Icons from @tabler/icons-react"
+    description: "Auth pages use @tabler/icons-react for all icons: IconArrowRight, IconDeviceMobile, IconKey, IconShieldLock."
+    examples:
+      - file: components/auth/mfa-challenge-form.tsx
+        location: "line 4"
+        snippet: "import { IconArrowRight, IconDeviceMobile, IconKey, IconShieldLock } from '@tabler/icons-react';"
+    prevalence: common
+
+  - category: architecture
+    pattern: "Post-auth routing via resolvePostAuthDestination"
+    description: "After successful MFA/auth operations, components call resolvePostAuthDestination(user, nextHref) to compute the correct role-based redirect. admin→/admin, expert→/expert, learner→/."
+    examples:
+      - file: components/auth/mfa-challenge-form.tsx
+        location: "line 52"
+        snippet: "router.replace(resolvePostAuthDestination(session.currentUser, nextHref));"
+    prevalence: common
+
+  - category: structure
+    pattern: "wizard layout for multi-section MFA forms"
+    description: "MFA setup and challenge forms use <div className={styles.wizard}> as a parent grid, with .summaryCard children for grouped content sections, .passwordFlowForm for the actual form, and action rows."
+    examples:
+      - file: components/auth/mfa-challenge-form.tsx
+        location: "line 81"
+        snippet: "<div className={styles.wizard}>"
+    prevalence: common
+
+related_architecture:
+  components_relevant_to_domain:
+    - component: AuthScreenShell
+      responsibility: "Universal auth page layout shell — background, brand, card, header, form slot, footer, social logins"
+      location: "components/auth/auth-screen-shell.tsx"
+      relationship_to_domain: "domain depends on this"
+    - component: OtpCodeInput
+      responsibility: "6-digit OTP grid with per-digit inputs, focus management, paste support"
+      location: "components/auth/otp-code-input.tsx"
+      relationship_to_domain: "domain depends on this"
+    - component: MotionPage
+      responsibility: "Page-level animation wrapper for route transitions"
+      location: "components/ui/motion-primitives.tsx"
+      relationship_to_domain: "domain depends on this (via auth layout)"
+    - component: AuthProvider
+      responsibility: "Global auth state, exposes all auth operations via useAuth hook"
+      location: "contexts/auth-context.tsx"
+      relationship_to_domain: "domain depends on this"
+    - component: auth-client
+      responsibility: "All HTTP calls to backend auth API endpoints, token management"
+      location: "lib/auth-client.ts"
+      relationship_to_domain: "domain depends on this"
+    - component: auth-storage
+      responsibility: "Session persistence (local/session storage), pending MFA challenge storage"
+      location: "lib/auth-storage.ts"
+      relationship_to_domain: "auth-client depends on this"
+
+  interfaces_used_by_domain:
+    - interface: AuthContextValue
+      location: "contexts/auth-context.tsx:37"
+      usage_pattern: "const { completeMfaChallenge, completeRecoveryChallenge, ... } = useAuth();"
+    - interface: AuthScreenShellProps
+      location: "components/auth/auth-screen-shell.tsx:12"
+      usage_pattern: "<AuthScreenShell eyebrow=... title=... subtitle=... footer=...>{children}</AuthScreenShell>"
+    - interface: OtpCodeInputProps
+      location: "components/auth/otp-code-input.tsx:5"
+      usage_pattern: "<OtpCodeInput value={code} onChange={...} disabled={...} />"
+
+  data_flow_involving_domain: |
+    1. User signs in → if MFA required, signIn() returns {status: 'mfa_required', challenge} → challenge saved to auth-storage → redirect to /mfa/challenge.
+    2. MFA challenge page loads pendingMfaChallenge from auth context (hydrated from storage).
+    3. User enters TOTP code → completeMfaChallenge(code) → POST /v1/auth/mfa/challenge → session returned → saved to storage → state updated → router.replace to post-auth destination.
+    4. OR user enters recovery code → completeRecoveryChallenge(recoveryCode) → POST /v1/auth/mfa/recovery → same flow.
+    5. For email verification: page mounts → sendEmailVerificationOtp(email) → POST /v1/auth/email/send-verification-otp → user enters OTP → verifyEmailOtp(email, code) → POST /v1/auth/email/verify-otp → updates stored user → routes to destination or sign-in.
+
+  key_relationships_to_domain:
+    - from: "app/(auth)/mfa/setup/page.tsx"
+      to: "components/auth/mfa-setup-card.tsx"
+      relationship: imports
+    - from: "app/(auth)/mfa/challenge/page.tsx"
+      to: "components/auth/mfa-challenge-form.tsx"
+      relationship: imports
+    - from: "components/auth/mfa-setup-card.tsx"
+      to: "contexts/auth-context.tsx"
+      relationship: calls
+    - from: "components/auth/mfa-challenge-form.tsx"
+      to: "contexts/auth-context.tsx"
+      relationship: calls
+    - from: "app/(auth)/verify-email/page.tsx"
+      to: "lib/auth-client.ts"
+      relationship: calls
+    - from: "contexts/auth-context.tsx"
+      to: "lib/auth-client.ts"
+      relationship: calls
+    - from: "lib/auth-client.ts"
+      to: "lib/auth-storage.ts"
+      relationship: calls
+
+related_technology_stack:
+  languages_used_in_domain:
+    - TypeScript
+    - SCSS (CSS Modules)
+  frameworks_used_in_domain:
+    - name: "Next.js (App Router)"
+      usage_in_domain: "Route group (auth), client components ('use client'), useRouter, useSearchParams"
+    - name: "React 19"
+      usage_in_domain: "useState, useEffect, useMemo, useRef, useContext, createContext"
+  libraries_used_in_domain:
+    - name: "@tabler/icons-react"
+      purpose_in_domain: "Icons: IconArrowRight, IconDeviceMobile, IconKey, IconShieldLock"
+    - name: "motion/react (Framer Motion)"
+      purpose_in_domain: "Page transitions via MotionPage in auth layout"
+    - name: "next/image"
+      purpose_in_domain: "QR code rendering in MFA setup"
+    - name: "next/link"
+      purpose_in_domain: "Navigation links in auth pages"
+
+related_conventions:
+  naming_patterns_in_domain: "PascalCase components (MfaSetupCard, MfaChallengeForm, AuthScreenShell). camelCase functions (completeMfaChallenge, readErrorMessage). kebab-case files (mfa-setup-card.tsx, auth-screen-shell.module.scss)."
+  structure_of_domain: "app/(auth)/{feature}/page.tsx is a thin guard + render. components/auth/{feature-component}.tsx has all UI/logic. lib/auth-client.ts has all API calls. lib/types/auth.ts has all types. One shared SCSS module for all auth components."
+  error_handling_in_domain: "try/catch in async handlers. Errors stored in useState<string | null>. readErrorMessage() extracts message. Displayed inline via .noticeDanger class. No global error boundary or toast for auth flows."
+  testing_in_domain: "Test directory exists at components/auth/__tests__/ (not examined in this research pass)."
+  documentation_in_domain: "No inline JSDoc. Types serve as documentation."
+
+related_dependencies:
+  internal:
+    - component: "lib/auth-storage.ts"
+      relationship_to_domain: "Stores and retrieves sessions and pending MFA challenges"
+      direction: outbound
+    - component: "lib/network/fetch-with-timeout.ts"
+      relationship_to_domain: "HTTP fetch with timeout used by auth-client"
+      direction: outbound
+    - component: "lib/analytics.ts"
+      relationship_to_domain: "initializeAnalyticsTransport called after session restore"
+      direction: outbound
+    - component: "lib/motion.ts"
+      relationship_to_domain: "Motion utilities used by MotionPage in auth layout"
+      direction: outbound
+  external:
+    - name: "@tabler/icons-react"
+      purpose_for_domain: "Icon library"
+    - name: "motion"
+      purpose_for_domain: "Animation (via motion/react)"
+
+domain_security_considerations:
+  sensitive_areas:
+    - area: "MFA challenge token"
+      location: "lib/auth-client.ts:completeMfaChallenge, completeRecoveryChallenge"
+      concern: "Challenge token stored in browser storage (via savePendingMfaChallenge). Cleared after use."
+    - area: "Recovery codes display"
+      location: "components/auth/mfa-setup-card.tsx:~175"
+      concern: "Recovery codes shown in plaintext during setup. Users instructed to save them. Only shown once."
+    - area: "Access token in Authorization header"
+      location: "lib/auth-client.ts:withAuthHeader"
+      concern: "Bearer token sent for authenticated MFA endpoints (begin/confirm setup). Token refreshed if near expiry."
+  authentication_patterns_in_domain: "JWT access/refresh token pair. Access token has expiry. Refresh token used to get new access token. Both stored via auth-storage."
+  authorization_patterns_in_domain: "Role-based route resolution (admin/expert/learner). roleCanAccessPath validates next-path before redirect."
+  data_validation_in_domain: "OTP validated client-side (6 digits, non-digit stripping). Recovery code trimmed. Server-side validation is the authority."
+
+testing_patterns:
+  framework: "Not examined — components/auth/__tests__/ directory exists"
+  coverage_areas:
+    - "Unknown — deferred to subsequent research pass"
+  test_organization: "Colocated __tests__/ folder inside components/auth/"
+  mock_patterns:
+    - "Unknown — deferred"
+
+open_questions:
+  - question: "Does the backend already have an endpoint for regenerating MFA recovery codes (e.g. POST /v1/auth/mfa/recovery/regenerate)?"
+    context: "The auth-client.ts file has no such function. If a dedicated mfa/recovery page needs a 'regenerate recovery codes' feature, the backend endpoint must exist or be created."
+    type: nice_to_know
+    affects: ["mfa-recovery-page"]
+
+  - question: "Should the new MFA recovery page be accessible from the MFA challenge page, or also from account settings?"
+    context: "Currently the MFA challenge form has the recovery code section inline. A separate /mfa/recovery page would need clear entry points."
+    type: nice_to_know
+    affects: ["mfa-recovery-page"]
+
+gaps:
+  - area: "components/auth/__tests__/"
+    description: "Test files in the auth component test directory were not examined. Testing patterns for MFA/auth components are unknown."
+    impact: nice_to_know
+    affects: ["mfa-recovery-page", "verify-email-resend"]
+
+  - area: "lib/auth-storage.ts"
+    description: "Storage implementation not read. Assumed functional based on auth-client.ts import patterns."
+    impact: nice_to_know
+    affects: []
+
+  - area: "Backend API contract for MFA recovery regeneration"
+    description: "No endpoint found in auth-client.ts for regenerating recovery codes after initial setup. If the mfa/recovery page needs this, it's a backend gap."
+    impact: nice_to_know
+    affects: ["mfa-recovery-page"]

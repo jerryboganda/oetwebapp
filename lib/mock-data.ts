@@ -564,7 +564,7 @@ export interface BillingData {
   invoices: Invoice[];
 }
 
-export type SettingsSectionId = 'profile' | 'goals' | 'study' | 'privacy' | 'notifications' | 'audio' | 'accessibility';
+export type SettingsSectionId = 'profile' | 'goals' | 'study' | 'privacy' | 'notifications' | 'audio' | 'accessibility' | 'danger-zone';
 
 export interface SettingsSectionData {
   section: SettingsSectionId;

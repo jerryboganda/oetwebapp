@@ -46,7 +46,10 @@ public enum ContentStatus
 {
     Draft,
     InReview,
+    EditorReview,
+    PublisherApproval,
     Published,
+    Rejected,
     Archived
 }
 

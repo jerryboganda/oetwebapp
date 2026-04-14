@@ -35,4 +35,13 @@ contextBridge.exposeInMainWorld('desktopBridge', {
     list: () => ipcRenderer.invoke('desktop:offline-cache:list'),
     clear: () => ipcRenderer.invoke('desktop:offline-cache:clear'),
   },
+  notifications: {
+    show: (title, body, route) => ipcRenderer.invoke('desktop:show-notification', { title, body, route }),
+  },
+  fileInfo: {
+    getDroppedFileInfo: (filePath) => ipcRenderer.invoke('desktop:get-dropped-file-info', filePath),
+  },
+  print: {
+    printPage: (options) => ipcRenderer.invoke('desktop:print-page', options),
+  },
 });

@@ -1,5 +1,7 @@
+using System.ComponentModel.DataAnnotations;
 using System.Text;
 using System.Linq.Expressions;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
@@ -51,6 +53,21 @@ public partial class AdminService(
             Details = details
         });
         await db.SaveChangesAsync(ct);
+    }
+
+    /// <summary>Load the effective permission set for an admin user.</summary>
+    private async Task<HashSet<string>> GetEffectivePermissionsAsync(string adminId, CancellationToken ct)
+    {
+        var grants = await db.AdminPermissionGrants
+            .AsNoTracking()
+            .Where(g => g.AdminUserId == adminId)
+            .Select(g => g.Permission)
+            .ToListAsync(ct);
+        var perms = new HashSet<string>(grants, StringComparer.OrdinalIgnoreCase);
+        // Backward compat: admins with no explicit grants are treated as system_admin
+        if (perms.Count == 0)
+            perms.Add(AdminPermissions.SystemAdmin);
+        return perms;
     }
 
     private Task NotifyAdminsAsync(
@@ -656,6 +673,11 @@ public partial class AdminService(
 
     public async Task<object> PublishContentAsync(string adminId, string adminName, string contentId, CancellationToken ct)
     {
+        // Direct publish is now gated — only admins with content:publish or content:publisher_approval can bypass workflow
+        var perms = await GetEffectivePermissionsAsync(adminId, ct);
+        if (!perms.Contains(AdminPermissions.ContentPublish) && !perms.Contains(AdminPermissions.ContentPublisherApproval) && !perms.Contains(AdminPermissions.SystemAdmin))
+            throw ApiException.Forbidden("insufficient_permission", "Only publishers can directly publish content. Use the multi-stage approval workflow instead.");
+
         var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId, ct)
                    ?? throw ApiException.NotFound("content_not_found", "Content item not found.");
 
@@ -664,7 +686,7 @@ public partial class AdminService(
         item.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(ct);
 
-        await LogAuditAsync(adminId, adminName, "Published", "Content", contentId, $"Published: {item.Title}", ct);
+        await LogAuditAsync(adminId, adminName, "Published", "Content", contentId, $"Published (direct bypass): {item.Title}", ct);
         return new { id = contentId, status = "published" };
     }
 
@@ -1470,6 +1492,315 @@ public partial class AdminService(
                 retryAfterSeconds = inviteChallenge.RetryAfterSeconds
             }
         };
+    }
+
+    // ── Bulk User Import ─────────────────────────────────
+
+    private const int MaxImportFileBytes = 5 * 1024 * 1024; // 5 MB
+    private const int MaxImportRows = 1000;
+    private static readonly HashSet<string> ValidImportRoles = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ApplicationUserRoles.Learner,
+        ApplicationUserRoles.Expert,
+        ApplicationUserRoles.Admin
+    };
+    private static readonly EmailAddressAttribute EmailValidator = new();
+
+    public async Task<object> BulkImportUsersAsync(
+        string adminId,
+        string adminName,
+        IFormFile file,
+        CancellationToken ct)
+    {
+        if (file is null || file.Length == 0)
+        {
+            throw ApiException.Validation("file_required", "A CSV file is required.");
+        }
+
+        if (file.Length > MaxImportFileBytes)
+        {
+            throw ApiException.Validation("file_too_large", "CSV file must be under 5 MB.");
+        }
+
+        var contentType = file.ContentType?.ToLowerInvariant() ?? string.Empty;
+        if (!contentType.Contains("csv", StringComparison.Ordinal) && !contentType.Contains("text/plain", StringComparison.Ordinal)
+            && !file.FileName.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation("invalid_file_type", "Only CSV files are accepted.");
+        }
+
+        List<CsvUserRow> rows;
+        using (var reader = new StreamReader(file.OpenReadStream()))
+        {
+            rows = ParseCsvRows(await reader.ReadToEndAsync(ct));
+        }
+
+        if (rows.Count == 0)
+        {
+            throw ApiException.Validation("empty_csv", "CSV contains no data rows.");
+        }
+
+        if (rows.Count > MaxImportRows)
+        {
+            throw ApiException.Validation("too_many_rows", $"CSV must not exceed {MaxImportRows} rows. Found {rows.Count}.");
+        }
+
+        var errors = new List<object>();
+        var created = 0;
+        var skipped = 0;
+        var now = timeProvider.GetUtcNow();
+
+        // Pre-fetch existing emails for duplicate detection
+        var importEmails = rows
+            .Where(r => !string.IsNullOrWhiteSpace(r.Email))
+            .Select(r => r.Email!.Trim().ToUpperInvariant())
+            .Where(e => e.Length > 0)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var existingEmailsList = await db.ApplicationUserAccounts
+            .Where(a => importEmails.Contains(a.NormalizedEmail))
+            .Select(a => a.NormalizedEmail)
+            .ToListAsync(ct);
+        var existingEmails = new HashSet<string>(existingEmailsList, StringComparer.OrdinalIgnoreCase);
+
+        var seenEmails = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+
+        for (var i = 0; i < rows.Count; i++)
+        {
+            var row = rows[i];
+            var rowNumber = i + 2; // +2 because row 1 is header, data starts at 2
+
+            // Validate email
+            var rawEmail = (row.Email ?? string.Empty).Trim();
+            if (string.IsNullOrWhiteSpace(rawEmail) || !EmailValidator.IsValid(rawEmail))
+            {
+                errors.Add(new { row = rowNumber, email = rawEmail, error = "Invalid email format." });
+                continue;
+            }
+
+            var normalizedEmail = rawEmail.ToUpperInvariant();
+
+            // Skip duplicates within the CSV itself
+            if (!seenEmails.Add(normalizedEmail))
+            {
+                skipped++;
+                continue;
+            }
+
+            // Skip existing accounts
+            if (existingEmails.Contains(normalizedEmail))
+            {
+                skipped++;
+                continue;
+            }
+
+            // Validate role
+            var role = (row.Role ?? string.Empty).Trim().ToLowerInvariant();
+            if (!ValidImportRoles.Contains(role))
+            {
+                errors.Add(new { row = rowNumber, email = rawEmail, error = $"Invalid role '{row.Role}'. Must be learner, expert, or admin." });
+                continue;
+            }
+
+            // Sanitize name fields
+            var firstName = SanitizeField(row.FirstName, 100);
+            var lastName = SanitizeField(row.LastName, 100);
+            var displayName = string.IsNullOrWhiteSpace(firstName) && string.IsNullOrWhiteSpace(lastName)
+                ? rawEmail
+                : $"{firstName} {lastName}".Trim();
+            var profession = SanitizeField(row.Profession, 100);
+
+            var authAccountId = GenerateAccountId(role);
+            var tempPassword = $"Tmp!{Guid.NewGuid():N}";
+
+            var authAccount = new ApplicationUserAccount
+            {
+                Id = authAccountId,
+                Email = rawEmail,
+                NormalizedEmail = normalizedEmail,
+                PasswordHash = string.Empty,
+                Role = role,
+                EmailVerifiedAt = now,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            authAccount.PasswordHash = passwordHasher.HashPassword(authAccount, tempPassword);
+            db.ApplicationUserAccounts.Add(authAccount);
+
+            switch (role)
+            {
+                case ApplicationUserRoles.Learner:
+                    var learnerId = GenerateDomainId("usr");
+                    db.Users.Add(new LearnerUser
+                    {
+                        Id = learnerId,
+                        AuthAccountId = authAccountId,
+                        Role = ApplicationUserRoles.Learner,
+                        DisplayName = displayName,
+                        Email = rawEmail,
+                        Timezone = "UTC",
+                        Locale = "en-AU",
+                        ActiveProfessionId = string.IsNullOrWhiteSpace(profession) ? null : profession,
+                        CreatedAt = now,
+                        LastActiveAt = now,
+                        AccountStatus = "active"
+                    });
+                    db.Wallets.Add(new Wallet
+                    {
+                        Id = GenerateDomainId("wallet"),
+                        UserId = learnerId,
+                        CreditBalance = 0,
+                        LedgerSummaryJson = "[]",
+                        LastUpdatedAt = now
+                    });
+                    break;
+                case ApplicationUserRoles.Expert:
+                    db.ExpertUsers.Add(new ExpertUser
+                    {
+                        Id = GenerateDomainId("expert"),
+                        AuthAccountId = authAccountId,
+                        Role = ApplicationUserRoles.Expert,
+                        DisplayName = displayName,
+                        Email = rawEmail,
+                        SpecialtiesJson = JsonSupport.Serialize(string.IsNullOrWhiteSpace(profession) ? Array.Empty<string>() : new[] { profession }),
+                        Timezone = "UTC",
+                        IsActive = true,
+                        CreatedAt = now
+                    });
+                    break;
+                default:
+                    // Admin — no separate domain entity
+                    break;
+            }
+
+            created++;
+        }
+
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Bulk Import Users", "User", "bulk",
+            $"Imported {created} users, skipped {skipped}, errors {errors.Count}", ct);
+        await CommitIfOwnedAsync(tx, ct);
+
+        return new
+        {
+            total = rows.Count,
+            created,
+            skipped,
+            errors
+        };
+    }
+
+    private static List<CsvUserRow> ParseCsvRows(string csvContent)
+    {
+        var rows = new List<CsvUserRow>();
+        using var reader = new StringReader(csvContent);
+        var headerLine = reader.ReadLine();
+        if (string.IsNullOrWhiteSpace(headerLine)) return rows;
+
+        var headers = ParseCsvLine(headerLine)
+            .Select(h => h.Trim().ToLowerInvariant())
+            .ToArray();
+
+        var emailIdx = Array.IndexOf(headers, "email");
+        var firstNameIdx = Array.IndexOf(headers, "firstname");
+        var lastNameIdx = Array.IndexOf(headers, "lastname");
+        var roleIdx = Array.IndexOf(headers, "role");
+        var professionIdx = Array.IndexOf(headers, "profession");
+
+        if (emailIdx < 0)
+        {
+            throw ApiException.Validation("missing_email_column", "CSV must have an 'email' column header.");
+        }
+
+        string? line;
+        while ((line = reader.ReadLine()) is not null)
+        {
+            if (string.IsNullOrWhiteSpace(line)) continue;
+            var fields = ParseCsvLine(line);
+
+            rows.Add(new CsvUserRow
+            {
+                Email = GetField(fields, emailIdx),
+                FirstName = GetField(fields, firstNameIdx),
+                LastName = GetField(fields, lastNameIdx),
+                Role = GetField(fields, roleIdx),
+                Profession = GetField(fields, professionIdx),
+            });
+        }
+
+        return rows;
+    }
+
+    private static string[] ParseCsvLine(string line)
+    {
+        var fields = new List<string>();
+        var current = new StringBuilder();
+        var inQuotes = false;
+
+        for (var i = 0; i < line.Length; i++)
+        {
+            var c = line[i];
+            if (inQuotes)
+            {
+                if (c == '"')
+                {
+                    if (i + 1 < line.Length && line[i + 1] == '"')
+                    {
+                        current.Append('"');
+                        i++;
+                    }
+                    else
+                    {
+                        inQuotes = false;
+                    }
+                }
+                else
+                {
+                    current.Append(c);
+                }
+            }
+            else
+            {
+                if (c == '"')
+                {
+                    inQuotes = true;
+                }
+                else if (c == ',')
+                {
+                    fields.Add(current.ToString());
+                    current.Clear();
+                }
+                else
+                {
+                    current.Append(c);
+                }
+            }
+        }
+
+        fields.Add(current.ToString());
+        return fields.ToArray();
+    }
+
+    private static string? GetField(string[] fields, int index)
+        => index >= 0 && index < fields.Length ? fields[index] : null;
+
+    private static string SanitizeField(string? value, int maxLength)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        // Strip control characters and trim
+        var sanitized = new string(value.Where(c => !char.IsControl(c)).ToArray()).Trim();
+        return sanitized.Length > maxLength ? sanitized[..maxLength] : sanitized;
+    }
+
+    private sealed class CsvUserRow
+    {
+        public string? Email { get; init; }
+        public string? FirstName { get; init; }
+        public string? LastName { get; init; }
+        public string? Role { get; init; }
+        public string? Profession { get; init; }
     }
 
     public async Task<object> UpdateUserStatusAsync(string adminId, string adminName,
@@ -2974,6 +3305,147 @@ public partial class AdminService(
     }
 
     // ════════════════════════════════════════════
+    //  Permission Templates
+    // ════════════════════════════════════════════
+
+    public object GetAllPermissions()
+    {
+        return new
+        {
+            permissions = AdminPermissions.All.Select(p => new { key = p }).ToArray()
+        };
+    }
+
+    public async Task<object> GetPermissionTemplatesAsync(CancellationToken ct)
+    {
+        var templates = await db.PermissionTemplates
+            .AsNoTracking()
+            .OrderBy(t => t.Name)
+            .ToListAsync(ct);
+
+        return new
+        {
+            templates = templates.Select(t => new
+            {
+                id = t.Id,
+                name = t.Name,
+                description = t.Description,
+                permissions = System.Text.Json.JsonSerializer.Deserialize<string[]>(t.Permissions) ?? [],
+                createdBy = t.CreatedBy,
+                createdAt = t.CreatedAt
+            })
+        };
+    }
+
+    public async Task<object> CreatePermissionTemplateAsync(
+        string actorId, string actorName,
+        CreatePermissionTemplateRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.Name))
+            throw ApiException.Validation("name_required", "Template name is required.");
+
+        var invalid = request.Permissions.Except(AdminPermissions.All).ToArray();
+        if (invalid.Length > 0)
+            throw ApiException.Validation("invalid_permissions", $"Invalid permissions: {string.Join(", ", invalid)}");
+
+        var exists = await db.PermissionTemplates.AnyAsync(t => t.Name == request.Name, ct);
+        if (exists)
+            throw ApiException.Validation("duplicate_name", "A template with this name already exists.");
+
+        var template = new PermissionTemplate
+        {
+            Id = $"PT-{Guid.NewGuid():N}",
+            Name = request.Name,
+            Description = request.Description,
+            Permissions = System.Text.Json.JsonSerializer.Serialize(request.Permissions.Distinct().ToArray()),
+            CreatedBy = actorId,
+            CreatedAt = timeProvider.GetUtcNow()
+        };
+
+        db.PermissionTemplates.Add(template);
+        await db.SaveChangesAsync(ct);
+
+        await LogAuditAsync(actorId, actorName, "CreatePermissionTemplate", "PermissionTemplate", template.Id,
+            $"Created template '{request.Name}' with [{string.Join(", ", request.Permissions)}]", ct);
+
+        return new
+        {
+            id = template.Id,
+            name = template.Name,
+            description = template.Description,
+            permissions = request.Permissions,
+            createdBy = template.CreatedBy,
+            createdAt = template.CreatedAt
+        };
+    }
+
+    public async Task<object> DeletePermissionTemplateAsync(
+        string actorId, string actorName, string templateId, CancellationToken ct)
+    {
+        var template = await db.PermissionTemplates.FirstOrDefaultAsync(t => t.Id == templateId, ct)
+                       ?? throw ApiException.NotFound("template_not_found", "Permission template not found.");
+
+        db.PermissionTemplates.Remove(template);
+        await db.SaveChangesAsync(ct);
+
+        await LogAuditAsync(actorId, actorName, "DeletePermissionTemplate", "PermissionTemplate", templateId,
+            $"Deleted template '{template.Name}'", ct);
+
+        return new { deleted = true, id = templateId };
+    }
+
+    public async Task<object> ApplyPermissionTemplateAsync(
+        string actorId, string actorName, string userId, string templateId, CancellationToken ct)
+    {
+        var user = await db.ApplicationUserAccounts.FirstOrDefaultAsync(u => u.Id == userId, ct)
+                   ?? throw ApiException.NotFound("user_not_found", "User not found.");
+
+        if (user.Role != ApplicationUserRoles.Admin)
+            throw ApiException.Validation("not_admin", "User is not an admin.");
+
+        var template = await db.PermissionTemplates.AsNoTracking().FirstOrDefaultAsync(t => t.Id == templateId, ct)
+                       ?? throw ApiException.NotFound("template_not_found", "Permission template not found.");
+
+        var permissions = System.Text.Json.JsonSerializer.Deserialize<string[]>(template.Permissions) ?? [];
+
+        var tx = await BeginTransactionIfNeededAsync(ct);
+        try
+        {
+            var existing = await db.AdminPermissionGrants
+                .Where(g => g.AdminUserId == userId)
+                .ToListAsync(ct);
+
+            db.AdminPermissionGrants.RemoveRange(existing);
+
+            var now = timeProvider.GetUtcNow();
+            foreach (var perm in permissions.Distinct())
+            {
+                db.AdminPermissionGrants.Add(new AdminPermissionGrant
+                {
+                    Id = $"APG-{Guid.NewGuid():N}",
+                    AdminUserId = userId,
+                    Permission = perm,
+                    GrantedBy = actorId,
+                    GrantedAt = now
+                });
+            }
+
+            await db.SaveChangesAsync(ct);
+            await CommitIfOwnedAsync(tx, ct);
+        }
+        catch
+        {
+            if (tx is not null) await tx.RollbackAsync(ct);
+            throw;
+        }
+
+        await LogAuditAsync(actorId, actorName, "ApplyPermissionTemplate", "AdminPermission", userId,
+            $"Applied template '{template.Name}' → [{string.Join(", ", permissions)}]", ct);
+
+        return new { userId, templateId, templateName = template.Name, permissions, applied = true };
+    }
+
+    // ════════════════════════════════════════════
     //  Content Publishing Workflow
     // ════════════════════════════════════════════
 
@@ -2984,15 +3456,15 @@ public partial class AdminService(
         var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId, ct)
                    ?? throw ApiException.NotFound("content_not_found", "Content item not found.");
 
-        if (item.Status != ContentStatus.Draft && item.Status != ContentStatus.InReview)
-            throw ApiException.Validation("invalid_status", "Content must be in Draft or InReview status to request publishing.");
+        if (item.Status != ContentStatus.Draft && item.Status != ContentStatus.InReview && item.Status != ContentStatus.Rejected)
+            throw ApiException.Validation("invalid_status", "Content must be in Draft, InReview, or Rejected status to request publishing.");
 
         var pending = await db.ContentPublishRequests
-            .AnyAsync(r => r.ContentItemId == contentId && r.Status == "pending", ct);
+            .AnyAsync(r => r.ContentItemId == contentId && (r.Status == "pending" || r.Status == "editor_review" || r.Status == "publisher_approval"), ct);
         if (pending)
             throw ApiException.Conflict("already_pending", "A publish request is already pending for this content.");
 
-        item.Status = ContentStatus.InReview;
+        item.Status = ContentStatus.EditorReview;
         item.UpdatedAt = DateTimeOffset.UtcNow;
 
         var pr = new ContentPublishRequest
@@ -3003,16 +3475,17 @@ public partial class AdminService(
             RequestedByName = actorName,
             RequestNote = request.Note,
             RequestedAt = DateTimeOffset.UtcNow,
-            Status = "pending"
+            Status = "editor_review",
+            Stage = "editor_review"
         };
 
         db.ContentPublishRequests.Add(pr);
         await db.SaveChangesAsync(ct);
 
         await LogAuditAsync(actorId, actorName, "RequestPublish", "Content", contentId,
-            $"Publish requested for: {item.Title}", ct);
+            $"Publish requested (multi-stage) for: {item.Title}", ct);
 
-        return new { requestId = pr.Id, contentId, status = "pending" };
+        return new { requestId = pr.Id, contentId, status = "editor_review", stage = "editor_review" };
     }
 
     public async Task<object> GetPublishRequestsAsync(
@@ -3041,10 +3514,24 @@ public partial class AdminService(
                 reviewedBy = r.ReviewedBy,
                 reviewedByName = r.ReviewedByName,
                 status = r.Status,
+                stage = r.Stage,
                 requestNote = r.RequestNote,
                 reviewNote = r.ReviewNote,
                 requestedAt = r.RequestedAt,
-                reviewedAt = r.ReviewedAt
+                reviewedAt = r.ReviewedAt,
+                editorReviewedBy = r.EditorReviewedBy,
+                editorReviewedByName = r.EditorReviewedByName,
+                editorReviewedAt = r.EditorReviewedAt,
+                editorNotes = r.EditorNotes,
+                publisherApprovedBy = r.PublisherApprovedBy,
+                publisherApprovedByName = r.PublisherApprovedByName,
+                publisherApprovedAt = r.PublisherApprovedAt,
+                publisherNotes = r.PublisherNotes,
+                rejectedBy = r.RejectedBy,
+                rejectedByName = r.RejectedByName,
+                rejectedAt = r.RejectedAt,
+                rejectionReason = r.RejectionReason,
+                rejectionStage = r.RejectionStage
             }),
             total,
             page,
@@ -3116,6 +3603,267 @@ public partial class AdminService(
             $"Rejected publish{(request.Note is not null ? $": {request.Note}" : "")}", ct);
 
         return new { requestId, contentId = pr.ContentItemId, status = "rejected" };
+    }
+
+    // ── Multi-Stage Approval Workflow ──
+
+    public async Task<object> SubmitContentForReviewAsync(
+        string actorId, string actorName, string contentId,
+        AdminPublishRequestPayload request, CancellationToken ct)
+    {
+        var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId, ct)
+                   ?? throw ApiException.NotFound("content_not_found", "Content item not found.");
+
+        if (item.Status != ContentStatus.Draft && item.Status != ContentStatus.Rejected)
+            throw ApiException.Validation("invalid_status", "Content must be in Draft or Rejected status to submit for review.");
+
+        var pending = await db.ContentPublishRequests
+            .AnyAsync(r => r.ContentItemId == contentId && (r.Status == "pending" || r.Status == "editor_review" || r.Status == "publisher_approval"), ct);
+        if (pending)
+            throw ApiException.Conflict("already_pending", "An active publish request already exists for this content.");
+
+        item.Status = ContentStatus.EditorReview;
+        item.UpdatedAt = DateTimeOffset.UtcNow;
+
+        var pr = new ContentPublishRequest
+        {
+            Id = $"CPR-{Guid.NewGuid():N}",
+            ContentItemId = contentId,
+            RequestedBy = actorId,
+            RequestedByName = actorName,
+            RequestNote = request.Note,
+            RequestedAt = DateTimeOffset.UtcNow,
+            Status = "editor_review",
+            Stage = "editor_review"
+        };
+
+        db.ContentPublishRequests.Add(pr);
+        await db.SaveChangesAsync(ct);
+
+        await LogAuditAsync(actorId, actorName, "SubmitForReview", "Content", contentId,
+            $"Submitted for editor review: {item.Title}", ct);
+
+        return new { requestId = pr.Id, contentId, status = "editor_review", stage = "editor_review" };
+    }
+
+    public async Task<object> EditorApproveContentAsync(
+        string actorId, string actorName, string contentId,
+        AdminEditorReviewPayload request, CancellationToken ct)
+    {
+        var perms = await GetEffectivePermissionsAsync(actorId, ct);
+        if (!perms.Contains(AdminPermissions.ContentEditorReview) && !perms.Contains(AdminPermissions.ContentPublish) && !perms.Contains(AdminPermissions.SystemAdmin))
+            throw ApiException.Forbidden("insufficient_permission", "Editor review permission required.");
+
+        var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId, ct)
+                   ?? throw ApiException.NotFound("content_not_found", "Content item not found.");
+
+        if (item.Status != ContentStatus.EditorReview)
+            throw ApiException.Validation("invalid_status", "Content must be in EditorReview status.");
+
+        var pr = await db.ContentPublishRequests
+            .Where(r => r.ContentItemId == contentId && r.Status == "editor_review")
+            .OrderByDescending(r => r.RequestedAt)
+            .FirstOrDefaultAsync(ct)
+            ?? throw ApiException.NotFound("request_not_found", "No active editor review request found.");
+
+        if (pr.RequestedBy == actorId)
+            throw ApiException.Validation("self_approve", "Cannot approve your own content submission.");
+
+        pr.Status = "publisher_approval";
+        pr.Stage = "publisher_approval";
+        pr.EditorReviewedBy = actorId;
+        pr.EditorReviewedByName = actorName;
+        pr.EditorReviewedAt = DateTimeOffset.UtcNow;
+        pr.EditorNotes = request.Notes;
+
+        item.Status = ContentStatus.PublisherApproval;
+        item.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+
+        await LogAuditAsync(actorId, actorName, "EditorApprove", "Content", contentId,
+            $"Editor approved, moved to publisher approval: {item.Title}", ct);
+
+        return new { requestId = pr.Id, contentId, status = "publisher_approval", stage = "publisher_approval" };
+    }
+
+    public async Task<object> EditorRejectContentAsync(
+        string actorId, string actorName, string contentId,
+        AdminEditorRejectPayload request, CancellationToken ct)
+    {
+        var perms = await GetEffectivePermissionsAsync(actorId, ct);
+        if (!perms.Contains(AdminPermissions.ContentEditorReview) && !perms.Contains(AdminPermissions.ContentPublish) && !perms.Contains(AdminPermissions.SystemAdmin))
+            throw ApiException.Forbidden("insufficient_permission", "Editor review permission required.");
+
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            throw ApiException.Validation("reason_required", "Rejection reason is required.");
+
+        var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId, ct)
+                   ?? throw ApiException.NotFound("content_not_found", "Content item not found.");
+
+        if (item.Status != ContentStatus.EditorReview)
+            throw ApiException.Validation("invalid_status", "Content must be in EditorReview status.");
+
+        var pr = await db.ContentPublishRequests
+            .Where(r => r.ContentItemId == contentId && r.Status == "editor_review")
+            .OrderByDescending(r => r.RequestedAt)
+            .FirstOrDefaultAsync(ct)
+            ?? throw ApiException.NotFound("request_not_found", "No active editor review request found.");
+
+        pr.Status = "rejected";
+        pr.RejectedBy = actorId;
+        pr.RejectedByName = actorName;
+        pr.RejectedAt = DateTimeOffset.UtcNow;
+        pr.RejectionReason = request.Reason;
+        pr.RejectionStage = "editor_review";
+        pr.ReviewedAt = DateTimeOffset.UtcNow;
+
+        item.Status = ContentStatus.Draft;
+        item.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+
+        await LogAuditAsync(actorId, actorName, "EditorReject", "Content", contentId,
+            $"Editor rejected: {request.Reason}", ct);
+
+        return new { requestId = pr.Id, contentId, status = "rejected", rejectionStage = "editor_review" };
+    }
+
+    public async Task<object> PublisherApproveContentAsync(
+        string actorId, string actorName, string contentId,
+        AdminPublisherApprovePayload request, CancellationToken ct)
+    {
+        var perms = await GetEffectivePermissionsAsync(actorId, ct);
+        if (!perms.Contains(AdminPermissions.ContentPublisherApproval) && !perms.Contains(AdminPermissions.ContentPublish) && !perms.Contains(AdminPermissions.SystemAdmin))
+            throw ApiException.Forbidden("insufficient_permission", "Publisher approval permission required.");
+
+        var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId, ct)
+                   ?? throw ApiException.NotFound("content_not_found", "Content item not found.");
+
+        if (item.Status != ContentStatus.PublisherApproval)
+            throw ApiException.Validation("invalid_status", "Content must be in PublisherApproval status.");
+
+        var pr = await db.ContentPublishRequests
+            .Where(r => r.ContentItemId == contentId && r.Status == "publisher_approval")
+            .OrderByDescending(r => r.RequestedAt)
+            .FirstOrDefaultAsync(ct)
+            ?? throw ApiException.NotFound("request_not_found", "No active publisher approval request found.");
+
+        pr.Status = "approved";
+        pr.PublisherApprovedBy = actorId;
+        pr.PublisherApprovedByName = actorName;
+        pr.PublisherApprovedAt = DateTimeOffset.UtcNow;
+        pr.PublisherNotes = request.Notes;
+        pr.ReviewedBy = actorId;
+        pr.ReviewedByName = actorName;
+        pr.ReviewedAt = DateTimeOffset.UtcNow;
+
+        item.Status = ContentStatus.Published;
+        item.PublishedAt = DateTimeOffset.UtcNow;
+        item.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+
+        await LogAuditAsync(actorId, actorName, "PublisherApprove", "Content", contentId,
+            $"Publisher approved and published: {item.Title}", ct);
+
+        return new { requestId = pr.Id, contentId, status = "approved" };
+    }
+
+    public async Task<object> PublisherRejectContentAsync(
+        string actorId, string actorName, string contentId,
+        AdminPublisherRejectPayload request, CancellationToken ct)
+    {
+        var perms = await GetEffectivePermissionsAsync(actorId, ct);
+        if (!perms.Contains(AdminPermissions.ContentPublisherApproval) && !perms.Contains(AdminPermissions.ContentPublish) && !perms.Contains(AdminPermissions.SystemAdmin))
+            throw ApiException.Forbidden("insufficient_permission", "Publisher approval permission required.");
+
+        if (string.IsNullOrWhiteSpace(request.Reason))
+            throw ApiException.Validation("reason_required", "Rejection reason is required.");
+
+        var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId, ct)
+                   ?? throw ApiException.NotFound("content_not_found", "Content item not found.");
+
+        if (item.Status != ContentStatus.PublisherApproval)
+            throw ApiException.Validation("invalid_status", "Content must be in PublisherApproval status.");
+
+        var pr = await db.ContentPublishRequests
+            .Where(r => r.ContentItemId == contentId && r.Status == "publisher_approval")
+            .OrderByDescending(r => r.RequestedAt)
+            .FirstOrDefaultAsync(ct)
+            ?? throw ApiException.NotFound("request_not_found", "No active publisher approval request found.");
+
+        // Publisher rejection returns to EditorReview (not Draft)
+        pr.Status = "editor_review";
+        pr.Stage = "editor_review";
+        pr.RejectedBy = actorId;
+        pr.RejectedByName = actorName;
+        pr.RejectedAt = DateTimeOffset.UtcNow;
+        pr.RejectionReason = request.Reason;
+        pr.RejectionStage = "publisher_approval";
+        // Clear prior publisher fields for re-review
+        pr.PublisherApprovedBy = null;
+        pr.PublisherApprovedByName = null;
+        pr.PublisherApprovedAt = null;
+        pr.PublisherNotes = null;
+
+        item.Status = ContentStatus.EditorReview;
+        item.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await db.SaveChangesAsync(ct);
+
+        await LogAuditAsync(actorId, actorName, "PublisherReject", "Content", contentId,
+            $"Publisher rejected, returned to editor review: {request.Reason}", ct);
+
+        return new { requestId = pr.Id, contentId, status = "editor_review", rejectionStage = "publisher_approval" };
+    }
+
+    public async Task<object> GetPendingReviewContentAsync(
+        string? stage, int page, int pageSize, CancellationToken ct)
+    {
+        var query = db.ContentPublishRequests.AsNoTracking()
+            .Where(r => r.Status == "editor_review" || r.Status == "publisher_approval");
+
+        if (!string.IsNullOrWhiteSpace(stage))
+            query = query.Where(r => r.Stage == stage);
+
+        var total = await query.CountAsync(ct);
+        var items = await query
+            .OrderByDescending(r => r.RequestedAt)
+            .Skip((page - 1) * pageSize)
+            .Take(pageSize)
+            .ToListAsync(ct);
+
+        return new
+        {
+            items = items.Select(r => new
+            {
+                id = r.Id,
+                contentItemId = r.ContentItemId,
+                requestedBy = r.RequestedBy,
+                requestedByName = r.RequestedByName,
+                status = r.Status,
+                stage = r.Stage,
+                requestNote = r.RequestNote,
+                requestedAt = r.RequestedAt,
+                editorReviewedBy = r.EditorReviewedBy,
+                editorReviewedByName = r.EditorReviewedByName,
+                editorReviewedAt = r.EditorReviewedAt,
+                editorNotes = r.EditorNotes,
+                publisherApprovedBy = r.PublisherApprovedBy,
+                publisherApprovedByName = r.PublisherApprovedByName,
+                publisherApprovedAt = r.PublisherApprovedAt,
+                publisherNotes = r.PublisherNotes,
+                rejectedBy = r.RejectedBy,
+                rejectedByName = r.RejectedByName,
+                rejectedAt = r.RejectedAt,
+                rejectionReason = r.RejectionReason,
+                rejectionStage = r.RejectionStage
+            }),
+            total,
+            page,
+            pageSize
+        };
     }
 
     // ════════════════════════════════════════════

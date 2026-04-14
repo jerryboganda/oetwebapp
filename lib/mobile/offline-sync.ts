@@ -1,6 +1,8 @@
 // ── Offline Sync Module ──────────────────────────────────────────
 // Manages offline content caching, attempt queuing, and sync-on-reconnect
 
+import { encryptForStorage, decryptFromStorage, isEncryptionAvailable } from './offline-crypto';
+
 const OFFLINE_DB_NAME = 'oet-offline';
 const OFFLINE_DB_VERSION = 1;
 const STORES = {
@@ -71,18 +73,37 @@ function openDb(): Promise<IDBDatabase> {
 
 // ── Content Cache ───────────────────────────────────────────────
 
+/** Session-scoped encryption passphrase — set once per user session. */
+let _encryptionKey: string | null = null;
+
+/** Configure encryption for offline cache. Call after login with a user-unique key. */
+export function setOfflineEncryptionKey(key: string): void {
+  _encryptionKey = key;
+}
+
 export async function cacheContent(id: string, type: string, data: unknown): Promise<void> {
   const db = await openDb();
   const tx = db.transaction(STORES.content, 'readwrite');
   const store = tx.objectStore(STORES.content);
 
+  // Encrypt data at rest when encryption is configured
+  let storedData: unknown = data;
+  let encrypted = false;
+  if (_encryptionKey && isEncryptionAvailable()) {
+    storedData = await encryptForStorage(data, _encryptionKey);
+    encrypted = true;
+  }
+
   const entry: OfflineContent = {
     id,
     type,
-    data,
+    data: storedData,
     cachedAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(), // 7 days
   };
+
+  // Tag as encrypted for transparent decryption on read
+  (entry as Record<string, unknown>)._encrypted = encrypted;
 
   store.put(entry);
   return new Promise((resolve, reject) => {
@@ -98,8 +119,8 @@ export async function getCachedContent(id: string): Promise<unknown | null> {
 
   return new Promise((resolve, reject) => {
     const request = store.get(id);
-    request.onsuccess = () => {
-      const entry = request.result as OfflineContent | undefined;
+    request.onsuccess = async () => {
+      const entry = request.result as (OfflineContent & { _encrypted?: boolean }) | undefined;
       if (!entry) {
         resolve(null);
         return;
@@ -109,7 +130,13 @@ export async function getCachedContent(id: string): Promise<unknown | null> {
         resolve(null);
         return;
       }
-      resolve(entry.data);
+      // Decrypt if encrypted
+      if (entry._encrypted && _encryptionKey) {
+        const decrypted = await decryptFromStorage(entry.data as string, _encryptionKey);
+        resolve(decrypted);
+      } else {
+        resolve(entry.data);
+      }
     };
     request.onerror = () => reject(request.error);
   });

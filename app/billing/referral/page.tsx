@@ -103,7 +103,7 @@ export default function ReferralPage() {
     <LearnerDashboardShell>
       <LearnerPageHero
         title="Referral Program"
-        subtitle="Invite friends and earn credits — they get a discount, you get rewarded"
+        description="Invite friends and earn credits — they get a discount, you get rewarded"
       />
 
       <div className="max-w-2xl mx-auto px-4 pb-12 space-y-6">
@@ -139,7 +139,7 @@ export default function ReferralPage() {
                 <div className="flex-1 bg-muted/50 rounded-lg px-4 py-3 font-mono text-lg font-bold tracking-widest text-center select-all">
                   {info.referralCode}
                 </div>
-                <Button variant="outline" size="icon" onClick={copyCode} className="h-12 w-12 shrink-0">
+                <Button variant="outline" size="sm" onClick={copyCode} className="h-12 w-12 shrink-0">
                   {copied ? <CheckCircle2 className="h-5 w-5 text-green-600" /> : <Copy className="h-5 w-5" />}
                 </Button>
               </div>

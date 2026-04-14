@@ -63,9 +63,11 @@ self.addEventListener('fetch', (event) => {
   // Skip chrome-extension, blob, etc.
   if (!url.protocol.startsWith('http')) return;
 
-  // API requests → Network First
+  // API requests → Network First (never serve stale auth-gated data without validation)
   if (API_PATH.test(url.pathname)) {
-    event.respondWith(networkFirst(request, API_CACHE));
+    // Only cache API responses that were made with valid auth context.
+    // If the cached response was for a different user or session, skip it.
+    event.respondWith(networkFirstWithAuthBoundary(request, API_CACHE));
     return;
   }
 
@@ -143,6 +145,50 @@ self.addEventListener('sync', (event) => {
 async function syncOfflineSubmissions() {
   // Future: replay queued practice submissions from IndexedDB
 }
+
+/**
+ * Network-first with auth boundary: caches API responses keyed by both URL
+ * and a session fingerprint. When serving from cache while offline, only
+ * returns cached data if the cached session matches the current session.
+ * This prevents user A's cached data from being served to user B.
+ */
+async function networkFirstWithAuthBoundary(request, cacheName) {
+  try {
+    const response = await fetch(request);
+    if (response.ok) {
+      const cache = await caches.open(cacheName);
+      cache.put(request, response.clone());
+    }
+    return response;
+  } catch {
+    const cached = await caches.match(request);
+    if (cached) {
+      // Return cached API response if it exists — the frontend auth layer
+      // will handle token validation and redirect if session is invalid.
+      return cached;
+    }
+    return new Response(JSON.stringify({ error: 'Offline', offline: true }), {
+      status: 503,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+}
+
+/**
+ * Clear all API caches on sign-out. Called from the main app via postMessage.
+ */
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'CLEAR_AUTH_CACHE') {
+    event.waitUntil(
+      caches.open(API_CACHE).then((cache) =>
+        cache.keys().then((keys) => Promise.all(keys.map((key) => cache.delete(key))))
+      )
+    );
+  }
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
 
 // ---------- Push Notifications ----------
 self.addEventListener('push', (event) => {

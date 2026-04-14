@@ -4,6 +4,8 @@ vi.mock('@/lib/auth-client', () => ({
   ensureFreshAccessToken: vi.fn(async () => null),
 }));
 
+export {}; // Make this a module for top-level await
+
 // Import after mocks
 const { ApiError } = await import('../api');
 
@@ -183,7 +185,7 @@ describe('API retry logic', () => {
     vi.mocked(authClient.ensureFreshAccessToken).mockResolvedValue('access-token-123');
 
     let requestHeaders: Headers | null = null;
-    globalThis.fetch = vi.fn(async (_input, init) => {
+    globalThis.fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       requestHeaders = new Headers(init?.headers);
       return new Response(JSON.stringify({ code: 'not_found', message: 'Not found', retryable: false }), {
         status: 404,
@@ -202,7 +204,7 @@ describe('API retry logic', () => {
 
   it('persists expert draft scratchpad and checklist fields', async () => {
     let requestBody: Record<string, unknown> | null = null;
-    globalThis.fetch = vi.fn(async (_input, init) => {
+    globalThis.fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
       requestBody = JSON.parse(String(init?.body));
       return new Response(JSON.stringify({
         version: 3,
@@ -242,3 +244,46 @@ describe('API retry logic', () => {
     expect(response.checklistItems).toEqual([{ id: 'purpose', label: 'Purpose is explicit.', checked: true }]);
   });
 });
+
+describe('error logging in catch blocks', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  it('logs console.error when apiRequest cannot parse error response body', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    globalThis.fetch = vi.fn(async () => new Response('not json', {
+      status: 400,
+      headers: { 'content-type': 'text/plain' },
+    }));
+
+    const { fetchUserProfile } = await import('../api');
+    await expect(fetchUserProfile()).rejects.toThrow();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[API]'),
+      expect.anything(),
+    );
+  });
+
+  it('logs console.error when fetchAuthorizedObjectUrl cannot parse error response', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    globalThis.fetch = vi.fn(async () => new Response('not json', {
+      status: 500,
+      headers: { 'content-type': 'text/plain' },
+    }));
+
+    const { fetchAuthorizedObjectUrl } = await import('../api');
+    await expect(fetchAuthorizedObjectUrl('/test-object')).rejects.toThrow();
+
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining('[API] fetchAuthorizedObjectUrl'),
+      expect.anything(),
+    );
+  });
+});
+

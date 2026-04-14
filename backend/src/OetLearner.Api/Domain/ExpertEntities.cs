@@ -254,3 +254,31 @@ public class ExpertAnnotationTemplate
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
+
+/// <summary>Override or block a specific date from the expert's weekly recurring schedule.</summary>
+[Index(nameof(ReviewerId))]
+public class ScheduleException
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ReviewerId { get; set; } = default!;
+
+    public DateOnly Date { get; set; }
+
+    /// <summary>True = day off (blocked), False = custom hours for that date.</summary>
+    public bool IsBlocked { get; set; }
+
+    [MaxLength(5)]
+    public string? StartTime { get; set; }
+
+    [MaxLength(5)]
+    public string? EndTime { get; set; }
+
+    [MaxLength(500)]
+    public string? Reason { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+}

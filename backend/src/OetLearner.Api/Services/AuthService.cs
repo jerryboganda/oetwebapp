@@ -26,6 +26,7 @@ public sealed class AuthService(
     IOptions<AuthOptions> authOptions,
     IWebHostEnvironment environment,
     IDataProtectionProvider dataProtectionProvider,
+    IHttpContextAccessor httpContextAccessor,
     TimeProvider timeProvider)
 {
     private const int AllowedAuthenticatorDriftWindows = 1;
@@ -555,6 +556,132 @@ public sealed class AuthService(
         return BuildCurrentUserResponse(subject);
     }
 
+    public async Task DeleteAccountAsync(ClaimsPrincipal principal, DeleteAccountRequest request, CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(request.Password))
+        {
+            throw ApiException.Validation("password_required", "Password is required to confirm account deletion.");
+        }
+
+        var account = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
+
+        var verificationResult = passwordHasher.VerifyHashedPassword(account, account.PasswordHash, request.Password);
+        if (verificationResult == PasswordVerificationResult.Failed)
+        {
+            throw ApiException.Unauthorized("invalid_password", "The password provided is incorrect.");
+        }
+
+        var learner = await db.Users.SingleOrDefaultAsync(x => x.AuthAccountId == account.Id, cancellationToken);
+        if (learner is null)
+        {
+            throw ApiException.NotFound("learner_not_found", "No learner profile found for this account.");
+        }
+
+        var now = timeProvider.GetUtcNow();
+
+        try
+        {
+            account.DeletedAt = now;
+            account.UpdatedAt = now;
+            learner.AccountStatus = "deleted";
+
+            var activeRefreshTokens = await db.RefreshTokenRecords
+                .Where(t => t.ApplicationUserAccountId == account.Id && t.RevokedAt == null)
+                .ToListAsync(cancellationToken);
+
+            foreach (var token in activeRefreshTokens)
+            {
+                token.RevokedAt = now;
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            throw ApiException.Conflict("account_update_conflict", "The account was modified concurrently. Please retry.");
+        }
+    }
+
+    public async Task<ActiveSessionListResponse> GetActiveSessionsAsync(ClaimsPrincipal principal, CancellationToken cancellationToken = default)
+    {
+        var account = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
+        var now = timeProvider.GetUtcNow();
+
+        var currentSessionId = Guid.TryParse(
+            principal.FindFirstValue(AuthTokenService.SessionIdClaimType), out var sid)
+            ? sid
+            : (Guid?)null;
+
+        var tokens = await db.RefreshTokenRecords
+            .AsNoTracking()
+            .Where(t => t.ApplicationUserAccountId == account.Id && t.RevokedAt == null && t.ExpiresAt > now)
+            .OrderByDescending(t => t.LastUsedAt ?? t.CreatedAt)
+            .ToListAsync(cancellationToken);
+
+        var sessions = tokens.Select(t => new ActiveSessionResponse(
+            t.Id,
+            t.DeviceInfo,
+            t.IpAddress,
+            t.LastUsedAt,
+            t.CreatedAt,
+            t.Id == currentSessionId
+        )).ToList();
+
+        return new ActiveSessionListResponse(sessions);
+    }
+
+    public async Task RevokeSessionAsync(ClaimsPrincipal principal, Guid sessionId, CancellationToken cancellationToken = default)
+    {
+        var account = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
+
+        var currentSessionId = Guid.TryParse(
+            principal.FindFirstValue(AuthTokenService.SessionIdClaimType), out var sid)
+            ? sid
+            : (Guid?)null;
+
+        if (sessionId == currentSessionId)
+        {
+            throw ApiException.Validation("cannot_revoke_current_session", "Cannot revoke the current session.");
+        }
+
+        var token = await db.RefreshTokenRecords
+            .SingleOrDefaultAsync(t => t.Id == sessionId && t.ApplicationUserAccountId == account.Id && t.RevokedAt == null, cancellationToken);
+
+        if (token is null)
+        {
+            throw ApiException.NotFound("session_not_found", "Session not found or already revoked.");
+        }
+
+        token.RevokedAt = timeProvider.GetUtcNow();
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<int> RevokeAllOtherSessionsAsync(ClaimsPrincipal principal, CancellationToken cancellationToken = default)
+    {
+        var account = await ResolveTrackedAccountFromPrincipalAsync(principal, cancellationToken);
+        var now = timeProvider.GetUtcNow();
+
+        var currentSessionId = Guid.TryParse(
+            principal.FindFirstValue(AuthTokenService.SessionIdClaimType), out var sid)
+            ? sid
+            : (Guid?)null;
+
+        var tokens = await db.RefreshTokenRecords
+            .Where(t => t.ApplicationUserAccountId == account.Id && t.RevokedAt == null && t.ExpiresAt > now)
+            .ToListAsync(cancellationToken);
+
+        var count = 0;
+        foreach (var token in tokens)
+        {
+            if (token.Id == currentSessionId) continue;
+            token.RevokedAt = now;
+            count++;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
+        return count;
+    }
+
     private async Task<AuthSessionResponse> CreateSessionAsync(
         ApplicationUserAccount account,
         string userId,
@@ -572,15 +699,29 @@ public sealed class AuthService(
         AuthenticatedSessionSubject subject,
         CancellationToken cancellationToken)
     {
-        var issuedSession = tokenService.IssueSession(subject);
+        var sessionId = Guid.NewGuid();
+        var issuedSession = tokenService.IssueSession(subject, sessionId);
+
+        string? deviceInfo = null;
+        string? ipAddress = null;
+        var httpContext = httpContextAccessor.HttpContext;
+        if (httpContext is not null)
+        {
+            deviceInfo = httpContext.Request.Headers.UserAgent.ToString();
+            if (deviceInfo?.Length > 512) deviceInfo = deviceInfo[..512];
+            ipAddress = httpContext.Connection.RemoteIpAddress?.ToString();
+            if (ipAddress?.Length > 64) ipAddress = ipAddress[..64];
+        }
 
         db.RefreshTokenRecords.Add(new RefreshTokenRecord
         {
-            Id = Guid.NewGuid(),
+            Id = sessionId,
             ApplicationUserAccountId = account.Id,
             TokenHash = issuedSession.RefreshTokenHash,
             ExpiresAt = issuedSession.RefreshTokenExpiresAt,
-            CreatedAt = timeProvider.GetUtcNow()
+            CreatedAt = timeProvider.GetUtcNow(),
+            DeviceInfo = deviceInfo,
+            IpAddress = ipAddress
         });
 
         await Task.CompletedTask;
@@ -933,7 +1074,8 @@ public sealed class AuthService(
             subject.RequiresEmailVerification,
             subject.RequiresMfa,
             subject.EmailVerifiedAt,
-            subject.AuthenticatorEnabledAt);
+            subject.AuthenticatorEnabledAt,
+            subject.AdminPermissions);
 
     private static bool TryBuildCurrentUserFromClaims(
         ClaimsPrincipal principal,
@@ -959,6 +1101,11 @@ public sealed class AuthService(
             return false;
         }
 
+        var adminPermsClaim = FindFirstValue(principal, AuthTokenService.AdminPermissionsClaimType);
+        var adminPermissions = string.IsNullOrEmpty(adminPermsClaim)
+            ? null
+            : adminPermsClaim.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
         currentUser = new CurrentUserResponse(
             userId,
             email,
@@ -969,7 +1116,8 @@ public sealed class AuthService(
             requiresEmailVerification,
             requiresMfa,
             emailVerifiedAt,
-            authenticatorEnabledAt);
+            authenticatorEnabledAt,
+            adminPermissions);
 
         return true;
     }

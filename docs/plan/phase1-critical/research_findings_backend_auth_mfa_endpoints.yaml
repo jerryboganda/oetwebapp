@@ -1,0 +1,805 @@
+plan_id: "phase1-critical"
+objective: "Map backend auth endpoint patterns, MFA recovery endpoint, and email verification endpoints"
+focus_area: "Backend auth and MFA endpoints"
+created_at: "2026-04-13T00:00:00Z"
+created_by: "gem-researcher"
+status: completed
+
+tldr: |
+  - All auth endpoints are registered in AuthEndpoints.cs under /v1/auth group (16 endpoints total).
+  - MFA recovery uses POST /v1/auth/mfa/recovery with MfaChallengeRequest DTO (Email, Code, ChallengeToken, RecoveryCode) → returns AuthSessionResponse.
+  - Email verification has send-OTP and verify-OTP endpoints; no dedicated "resend" — the send endpoint replaces any pending challenge.
+  - Three base role policies: LearnerOnly (role=learner), ExpertOnly (role=expert + email_verified), AdminOnly (role=admin + email_verified); plus 9 granular admin permission policies.
+  - JWT is HMAC-SHA256 symmetric signing with OnTokenValidated hook verifying account existence and suspension status in the database.
+
+research_metadata:
+  methodology: "Hybrid retrieval: file_search for discovery, read_file for detailed examination of AuthEndpoints.cs, AuthRequests.cs, AuthResponses.cs, AuthService.cs, Program.cs, EmailOtpService.cs, AuthenticatorTotp.cs, AuthTokenService.cs, MfaChallengeRequiredException.cs, DevelopmentAuthHandler.cs, AuthEntities.cs, AuthOptions.cs, AuthTokenOptions.cs"
+  scope: "All backend auth-related files: endpoints, contracts, services, configuration, domain entities, security"
+  confidence: high
+  coverage: 98
+  decision_blockers: 0
+  research_blockers: 0
+
+files_analyzed:
+  - file: AuthEndpoints.cs
+    path: backend/src/OetLearner.Api/Endpoints/AuthEndpoints.cs
+    purpose: "Maps all /v1/auth route registrations to AuthService handler methods"
+    key_elements:
+      - element: MapAuthEndpoints
+        type: function
+        location: "AuthEndpoints.cs:10"
+        description: "Extension method that registers all 16 auth endpoints under /v1/auth group"
+    language: csharp
+    lines: 100
+
+  - file: AuthRequests.cs
+    path: backend/src/OetLearner.Api/Contracts/AuthRequests.cs
+    purpose: "Request DTOs for all auth endpoints"
+    key_elements:
+      - element: MfaChallengeRequest
+        type: record
+        location: "AuthRequests.cs:40"
+        description: "Shared DTO for both MFA TOTP challenge and recovery: (Email, Code, ChallengeToken, RecoveryCode)"
+      - element: SendEmailOtpRequest
+        type: record
+        location: "AuthRequests.cs:29"
+        description: "Request to send email OTP: (Email, Purpose)"
+      - element: VerifyEmailOtpRequest
+        type: record
+        location: "AuthRequests.cs:33"
+        description: "Request to verify email OTP: (Email, Purpose, Code)"
+      - element: RegisterRequest
+        type: record
+        location: "AuthRequests.cs:3"
+        description: "Learner self-registration with 17 fields including ExternalRegistrationToken"
+      - element: PasswordSignInRequest
+        type: record
+        location: "AuthRequests.cs:21"
+        description: "Email/password sign-in: (Email, Password, RememberMe)"
+      - element: RefreshTokenRequest
+        type: record
+        location: "AuthRequests.cs:26"
+        description: "Token refresh: (RefreshToken)"
+      - element: ForgotPasswordRequest
+        type: record
+        location: "AuthRequests.cs:46"
+        description: "Password reset initiation: (Email)"
+      - element: ResetPasswordRequest
+        type: record
+        location: "AuthRequests.cs:48"
+        description: "Password reset completion: (Email, ResetToken, NewPassword)"
+      - element: BeginAuthenticatorSetupRequest
+        type: record
+        location: "AuthRequests.cs:38"
+        description: "Empty record — begin TOTP authenticator setup"
+      - element: ConfirmAuthenticatorSetupRequest
+        type: record
+        location: "AuthRequests.cs:39"
+        description: "Confirm TOTP setup: (Code)"
+      - element: ExternalAuthExchangeRequest
+        type: record
+        location: "AuthRequests.cs:52"
+        description: "Exchange external auth ticket: (ExchangeToken)"
+    language: csharp
+    lines: 53
+
+  - file: AuthResponses.cs
+    path: backend/src/OetLearner.Api/Contracts/AuthResponses.cs
+    purpose: "Response DTOs for all auth endpoints"
+    key_elements:
+      - element: AuthSessionResponse
+        type: record
+        location: "AuthResponses.cs:15"
+        description: "Full auth session: (AccessToken, RefreshToken, AccessTokenExpiresAt, RefreshTokenExpiresAt, CurrentUser)"
+      - element: CurrentUserResponse
+        type: record
+        location: "AuthResponses.cs:3"
+        description: "User profile: (UserId, Email, Role, DisplayName, IsEmailVerified, IsAuthenticatorEnabled, RequiresEmailVerification, RequiresMfa, EmailVerifiedAt, AuthenticatorEnabledAt)"
+      - element: OtpChallengeResponse
+        type: record
+        location: "AuthResponses.cs:22"
+        description: "OTP challenge result: (ChallengeId, Purpose, DeliveryChannel, DestinationHint, ExpiresAt, RetryAfterSeconds)"
+      - element: AuthenticatorSetupResponse
+        type: record
+        location: "AuthResponses.cs:30"
+        description: "TOTP setup: (SecretKey, OtpAuthUri, QrCodeDataUrl, RecoveryCodes)"
+    language: csharp
+    lines: 87
+
+  - file: AuthService.cs
+    path: backend/src/OetLearner.Api/Services/AuthService.cs
+    purpose: "Core auth business logic: registration, sign-in, MFA, email OTP, token management"
+    key_elements:
+      - element: CompleteRecoveryChallengeAsync
+        type: function
+        location: "AuthService.cs:504"
+        description: "MFA recovery handler — validates recovery code hash, marks it redeemed, completes sign-in"
+      - element: CompleteMfaChallengeAsync
+        type: function
+        location: "AuthService.cs:~480"
+        description: "MFA TOTP handler — verifies TOTP code against secret, completes sign-in"
+      - element: RegisterLearnerAsync
+        type: function
+        location: "AuthService.cs:37"
+        description: "Learner self-registration with external auth support"
+      - element: SignInAsync
+        type: function
+        location: "AuthService.cs:~270"
+        description: "Password sign-in — throws MfaChallengeRequiredException if authenticator is enabled"
+      - element: SendEmailVerificationOtpAsync
+        type: function
+        location: "AuthService.cs:~370"
+        description: "Delegates to EmailOtpService.RequestEmailVerificationOtpAsync"
+      - element: VerifyEmailOtpAsync
+        type: function
+        location: "AuthService.cs:~380"
+        description: "Delegates to EmailOtpService.VerifyEmailVerificationOtpAsync, returns CurrentUserResponse"
+    language: csharp
+    lines: "700+"
+
+  - file: EmailOtpService.cs
+    path: backend/src/OetLearner.Api/Services/EmailOtpService.cs
+    purpose: "OTP generation, email dispatch, and verification for email-verification and password-reset flows"
+    key_elements:
+      - element: RequestEmailVerificationOtpAsync
+        type: function
+        location: "EmailOtpService.cs:27"
+        description: "Generates 6-digit OTP, replaces any pending challenge, sends email, returns OtpChallengeResponse"
+      - element: VerifyEmailVerificationOtpAsync
+        type: function
+        location: "EmailOtpService.cs:~95"
+        description: "Validates OTP code hash, sets account.EmailVerifiedAt, returns ApplicationUserAccount"
+      - element: RequestPasswordResetOtpAsync
+        type: function
+        location: "EmailOtpService.cs:~145"
+        description: "Generates password reset OTP, sends via email. Safe no-op if account not found."
+    language: csharp
+    lines: "200+"
+
+  - file: AuthTokenService.cs
+    path: backend/src/OetLearner.Api/Services/AuthTokenService.cs
+    purpose: "JWT access token issuance and refresh token management"
+    key_elements:
+      - element: IssueSession
+        type: function
+        location: "AuthTokenService.cs:~40"
+        description: "Creates JWT with sub, jti, auth_account_id, role, email, name, email_verified, authenticator_enabled, requires_email_verification, requires_mfa, admin_permissions claims"
+      - element: AuthAccountIdClaimType
+        type: variable
+        location: "AuthTokenService.cs:35"
+        description: "Custom claim: 'auth_account_id'"
+      - element: IsEmailVerifiedClaimType
+        type: variable
+        location: "AuthTokenService.cs:36"
+        description: "Custom claim: 'email_verified'"
+      - element: AdminPermissionsClaimType
+        type: variable
+        location: "AuthTokenService.cs:41"
+        description: "Custom claim: 'admin_permissions' (comma-separated)"
+    language: csharp
+    lines: 100
+
+  - file: AuthenticatorTotp.cs
+    path: backend/src/OetLearner.Api/Services/AuthenticatorTotp.cs
+    purpose: "TOTP code generation/verification and recovery code management"
+    key_elements:
+      - element: VerifyCode
+        type: function
+        location: "AuthenticatorTotp.cs:17"
+        description: "RFC 6238 TOTP verification with configurable drift window (default ±1 step = 30s)"
+      - element: GenerateRecoveryCodes
+        type: function
+        location: "AuthenticatorTotp.cs:42"
+        description: "Generates 8 random recovery codes in XXXXX-XXXXX hex format"
+      - element: HashRecoveryCode
+        type: function
+        location: "AuthenticatorTotp.cs:55"
+        description: "SHA-256 hash of normalized (uppercased, dash-stripped) recovery code"
+    language: csharp
+    lines: 100
+
+  - file: MfaChallengeRequiredException.cs
+    path: backend/src/OetLearner.Api/Services/MfaChallengeRequiredException.cs
+    purpose: "Custom exception thrown during sign-in when MFA is required"
+    key_elements:
+      - element: MfaChallengeRequiredException
+        type: class
+        location: "MfaChallengeRequiredException.cs:3"
+        description: "Carries Email and ChallengeToken; caught by global exception handler and returned as 403 with code='mfa_challenge_required'"
+    language: csharp
+    lines: 11
+
+  - file: Program.cs
+    path: backend/src/OetLearner.Api/Program.cs
+    purpose: "Application startup, DI registration, middleware pipeline, auth configuration"
+    key_elements:
+      - element: ConfigureJwtBearer
+        type: function
+        location: "Program.cs:~240"
+        description: "JWT validation: HMAC-SHA256 SymmetricSecurityKey, validates issuer/audience/lifetime/signing key, OnTokenValidated checks account existence and suspension"
+      - element: AddAuthorization
+        type: function
+        location: "Program.cs:~340"
+        description: "Defines LearnerOnly, ExpertOnly, AdminOnly, and 9 granular admin policies"
+      - element: HasAdminPermission
+        type: function
+        location: "Program.cs:~700"
+        description: "Helper that checks comma-separated admin_permissions claim for any matching permission"
+    language: csharp
+    lines: "710+"
+
+  - file: AuthEntities.cs
+    path: backend/src/OetLearner.Api/Domain/AuthEntities.cs
+    purpose: "EF Core domain entities for auth: accounts, refresh tokens, email OTP challenges, MFA recovery codes, external identity links"
+    key_elements:
+      - element: ApplicationUserAccount
+        type: class
+        location: "AuthEntities.cs:7"
+        description: "Core auth account entity with Email, PasswordHash, Role, ProtectedAuthenticatorSecret, EmailVerifiedAt, AuthenticatorEnabledAt, DeletedAt"
+      - element: MfaRecoveryCode
+        type: class
+        location: "AuthEntities.cs:82"
+        description: "Recovery code entity: Id, ApplicationUserAccountId, CodeHash, CreatedAt, RedeemedAt"
+      - element: ApplicationUserRoles
+        type: class
+        location: "AuthEntities.cs:138"
+        description: "Static constants: Learner='learner', Expert='expert', Admin='admin'"
+      - element: AdminPermissions
+        type: class
+        location: "AuthEntities.cs:145"
+        description: "13 granular admin permissions as constants (content:read, content:write, content:publish, billing:read, billing:write, users:read, users:write, review_ops, quality_analytics, ai_config, feature_flags, audit_logs, system_admin)"
+    language: csharp
+    lines: 190
+
+  - file: DevelopmentAuthHandler.cs
+    path: backend/src/OetLearner.Api/Security/DevelopmentAuthHandler.cs
+    purpose: "Dev-only auth bypass using X-Debug-* headers"
+    key_elements:
+      - element: HandleAuthenticateAsync
+        type: function
+        location: "DevelopmentAuthHandler.cs:17"
+        description: "Reads X-Debug-UserId, X-Debug-Role, X-Debug-Email, X-Debug-Name, X-Debug-EmailVerified, X-Debug-AdminPermissions headers to build ClaimsPrincipal"
+    language: csharp
+    lines: 57
+
+  - file: AuthOptions.cs
+    path: backend/src/OetLearner.Api/Configuration/AuthOptions.cs
+    purpose: "Auth configuration options"
+    key_elements:
+      - element: UseDevelopmentAuth
+        type: variable
+        location: "AuthOptions.cs:5"
+        description: "When true + IsDevelopment, enables DevelopmentAuthHandler bypass"
+    language: csharp
+    lines: 12
+
+  - file: AuthTokenOptions.cs
+    path: backend/src/OetLearner.Api/Configuration/AuthTokenOptions.cs
+    purpose: "JWT and OTP configuration: signing keys, lifetimes, issuer/audience"
+    key_elements:
+      - element: AuthTokenOptions
+        type: class
+        location: "AuthTokenOptions.cs:3"
+        description: "Section='AuthTokens'. Properties: Issuer, Audience, AccessTokenSigningKey (min 32 chars), RefreshTokenSigningKey, AccessTokenLifetime, RefreshTokenLifetime, OtpLifetime, AuthenticatorIssuer"
+    language: csharp
+    lines: 16
+
+patterns_found:
+  - category: architecture
+    pattern: "Minimal API endpoint-per-feature pattern"
+    description: "Each feature area has its own static MapXxxEndpoints extension method in a dedicated file under Endpoints/. All endpoints are registered in Program.cs via extension method calls."
+    examples:
+      - file: AuthEndpoints.cs
+        location: "AuthEndpoints.cs:10"
+        snippet: "public static IEndpointRouteBuilder MapAuthEndpoints(this IEndpointRouteBuilder app)"
+    prevalence: common
+
+  - category: architecture
+    pattern: "Request/Response DTO records in Contracts/"
+    description: "All request and response types are C# records in Contracts/ folder, separated into AuthRequests.cs and AuthResponses.cs files per domain."
+    examples:
+      - file: AuthRequests.cs
+        location: "AuthRequests.cs:1-53"
+        snippet: "public record MfaChallengeRequest(string Email, string Code, string? ChallengeToken, string? RecoveryCode);"
+    prevalence: common
+
+  - category: architecture
+    pattern: "Scoped service layer"
+    description: "Business logic lives in Services/ as scoped services injected via DI. AuthService is the main auth orchestrator."
+    examples:
+      - file: AuthService.cs
+        location: "AuthService.cs:18"
+        snippet: "public sealed class AuthService(LearnerDbContext db, IPasswordHasher<ApplicationUserAccount> passwordHasher, AuthTokenService tokenService, ...)"
+    prevalence: common
+
+  - category: error_handling
+    pattern: "ApiException custom exception with global handler"
+    description: "All domain errors throw ApiException (static factory methods: Validation, NotFound, Conflict, Forbidden). MFA challenge throws MfaChallengeRequiredException. Both are caught by the global UseExceptionHandler in Program.cs."
+    examples:
+      - file: Program.cs
+        location: "Program.cs:~480"
+        snippet: "if (exception is MfaChallengeRequiredException mfaChallengeRequiredException) { context.Response.StatusCode = 403; ... }"
+    prevalence: common
+
+  - category: naming
+    pattern: "Entity classes in Domain/, one file per subdomain"
+    description: "Domain entities are grouped by feature area with suffix 'Entities.cs' (AuthEntities.cs, BillingEntities.cs, etc.)"
+    examples:
+      - file: AuthEntities.cs
+        location: "AuthEntities.cs:1"
+        snippet: "namespace OetLearner.Api.Domain;"
+    prevalence: common
+
+  - category: structure
+    pattern: "MFA challenge-response flow via exception"
+    description: "When sign-in detects MFA is enabled, it throws MfaChallengeRequiredException (caught by middleware, returned as 403 with email + challengeToken). Client then calls /mfa/challenge or /mfa/recovery with the token."
+    examples:
+      - file: AuthService.cs
+        location: "AuthService.cs:~310"
+        snippet: "if (account.AuthenticatorEnabledAt is not null) { throw new MfaChallengeRequiredException(account.Email, CreateMfaChallengeToken(account.Id)); }"
+    prevalence: occasional
+
+  - category: structure
+    pattern: "Data-protection-based MFA challenge tokens"
+    description: "MFA challenge tokens are created using IDataProtector to encrypt the account ID, providing tamper-proof opaque tokens."
+    examples:
+      - file: AuthService.cs
+        location: "AuthService.cs:33"
+        snippet: "_mfaChallengeProtector = dataProtectionProvider.CreateProtector(\"AuthService.MfaChallenge\")"
+    prevalence: occasional
+
+related_architecture:
+  components_relevant_to_domain:
+    - component: AuthEndpoints
+      responsibility: "HTTP route registration for all /v1/auth/* endpoints"
+      location: "backend/src/OetLearner.Api/Endpoints/AuthEndpoints.cs"
+      relationship_to_domain: "entry point"
+    - component: AuthService
+      responsibility: "Core auth business logic orchestrator"
+      location: "backend/src/OetLearner.Api/Services/AuthService.cs"
+      relationship_to_domain: "primary service"
+    - component: AuthTokenService
+      responsibility: "JWT issuance and refresh token hashing"
+      location: "backend/src/OetLearner.Api/Services/AuthTokenService.cs"
+      relationship_to_domain: "domain depends on this"
+    - component: EmailOtpService
+      responsibility: "OTP generation, dispatch (via IEmailSender), and verification"
+      location: "backend/src/OetLearner.Api/Services/EmailOtpService.cs"
+      relationship_to_domain: "domain depends on this"
+    - component: AuthenticatorTotp
+      responsibility: "TOTP code generation/verification and recovery code utilities"
+      location: "backend/src/OetLearner.Api/Services/AuthenticatorTotp.cs"
+      relationship_to_domain: "domain depends on this"
+    - component: ExternalAuthService
+      responsibility: "OAuth provider redirect/callback/exchange flows"
+      location: "backend/src/OetLearner.Api/Services/ExternalAuthService.cs"
+      relationship_to_domain: "domain depends on this"
+    - component: DevelopmentAuthHandler
+      responsibility: "Dev-only bypass via X-Debug-* headers"
+      location: "backend/src/OetLearner.Api/Security/DevelopmentAuthHandler.cs"
+      relationship_to_domain: "dev tooling"
+    - component: LearnerDbContext
+      responsibility: "EF Core database context"
+      location: "backend/src/OetLearner.Api/Data/"
+      relationship_to_domain: "domain depends on this"
+
+  interfaces_used_by_domain:
+    - interface: IEmailSender
+      location: "backend/src/OetLearner.Api/Services/ (BrevoEmailSender or SmtpEmailSender)"
+      usage_pattern: "EmailOtpService calls SendAsync to dispatch OTP emails"
+    - interface: IPasswordHasher<ApplicationUserAccount>
+      location: "Microsoft.AspNetCore.Identity"
+      usage_pattern: "AuthService uses to hash and verify passwords"
+    - interface: IDataProtector
+      location: "Microsoft.AspNetCore.DataProtection"
+      usage_pattern: "Protects/unprotects authenticator secrets and MFA challenge tokens"
+
+  data_flow_involving_domain: |
+    1. Client → AuthEndpoints (HTTP) → AuthService (business logic)
+    2. AuthService → LearnerDbContext (EF Core) for account/token/OTP persistence
+    3. AuthService → AuthTokenService → JWT issuance
+    4. AuthService → EmailOtpService → IEmailSender (Brevo API or SMTP)
+    5. Sign-in with MFA: AuthService throws MfaChallengeRequiredException → global handler returns 403 with challengeToken → client calls /mfa/challenge or /mfa/recovery
+    6. OnTokenValidated event: every authenticated request → DB lookup to verify account exists and is not deleted/suspended
+
+  key_relationships_to_domain:
+    - from: AuthEndpoints
+      to: AuthService
+      relationship: calls
+    - from: AuthService
+      to: AuthTokenService
+      relationship: calls
+    - from: AuthService
+      to: EmailOtpService
+      relationship: calls
+    - from: AuthService
+      to: AuthenticatorTotp
+      relationship: calls
+    - from: AuthService
+      to: LearnerDbContext
+      relationship: imports
+    - from: EmailOtpService
+      to: IEmailSender
+      relationship: calls
+    - from: Program.cs
+      to: AuthEndpoints
+      relationship: calls (MapAuthEndpoints)
+
+related_technology_stack:
+  languages_used_in_domain:
+    - "C# 12"
+  frameworks_used_in_domain:
+    - name: "ASP.NET Core Minimal API"
+      usage_in_domain: "Endpoint registration via MapGroup/MapPost/MapGet"
+    - name: "Entity Framework Core"
+      usage_in_domain: "Data access, migrations, SQLite/SQL Server"
+  libraries_used_in_domain:
+    - name: "Microsoft.AspNetCore.Authentication.JwtBearer"
+      purpose_in_domain: "JWT Bearer token authentication"
+    - name: "System.IdentityModel.Tokens.Jwt"
+      purpose_in_domain: "JWT token creation"
+    - name: "Microsoft.AspNetCore.DataProtection"
+      purpose_in_domain: "Encrypt authenticator secrets and MFA challenge tokens"
+    - name: "Microsoft.AspNetCore.Identity (PasswordHasher only)"
+      purpose_in_domain: "Password hashing via IPasswordHasher<T>"
+
+related_conventions:
+  naming_patterns_in_domain: "PascalCase for types/methods, camelCase for JSON serialization. Request DTOs are records named {Action}Request, responses {Action}Response."
+  structure_of_domain: "Endpoints/ for HTTP routing, Services/ for business logic, Contracts/ for DTOs, Domain/ for EF entities, Configuration/ for options, Security/ for auth handlers"
+  error_handling_in_domain: "ApiException with static factory methods (Validation, NotFound, Conflict, Forbidden). MfaChallengeRequiredException for MFA flow. Global UseExceptionHandler converts both to JSON problem responses."
+  testing_in_domain: "Integration tests in backend/tests/OetLearner.Api.Tests/AuthFlowsTests.cs"
+  documentation_in_domain: "Minimal XML comments. OpenAPI/Swagger enabled in development."
+
+related_dependencies:
+  internal:
+    - component: LearnerDbContext
+      relationship_to_domain: "All auth entities persisted here"
+      direction: outbound
+    - component: LearnerUser entity
+      relationship_to_domain: "Created during registration, resolved during session creation"
+      direction: outbound
+    - component: ExpertUser entity
+      relationship_to_domain: "Resolved for expert sign-in to build session subject"
+      direction: outbound
+  external:
+    - name: "Brevo API (or SMTP fallback)"
+      purpose_for_domain: "Sending OTP emails for verification and password reset"
+
+domain_security_considerations:
+  sensitive_areas:
+    - area: "Password storage"
+      location: "AuthService.cs (RegisterLearnerAsync, ResetPasswordAsync)"
+      concern: "Uses ASP.NET Identity PasswordHasher (bcrypt-like). Verified secure."
+    - area: "JWT signing key"
+      location: "Program.cs, AuthTokenOptions"
+      concern: "Minimum 32-char symmetric key enforced at startup. HMAC-SHA256."
+    - area: "MFA authenticator secret"
+      location: "AuthService.cs"
+      concern: "Encrypted at rest via IDataProtector. Decrypted only for TOTP verification."
+    - area: "MFA challenge token"
+      location: "AuthService.cs"
+      concern: "Data-protected opaque token containing account ID. Time-bounded by _mfaChallengeLifetime."
+    - area: "Recovery codes"
+      location: "AuthenticatorTotp.cs, AuthService.cs"
+      concern: "SHA-256 hashed before storage. Single-use (RedeemedAt set on use)."
+    - area: "OTP codes"
+      location: "EmailOtpService.cs"
+      concern: "6-digit codes, HMAC-hashed with challengeId+accountId+purpose. Expiry-bounded. Attempt counting exists."
+  authentication_patterns_in_domain: |
+    - Primary: email/password with optional TOTP MFA
+    - External: OAuth2 via Google/Facebook/LinkedIn (start → callback → exchange flow)
+    - Development: X-Debug-* header bypass (IsDevelopment only)
+    - JWT Bearer with OnTokenValidated DB check for account existence/suspension
+    - Hybrid scheme in dev: DevelopmentOrJwt policy scheme that forwards to Bearer if Authorization header present, else Development handler
+  authorization_patterns_in_domain: |
+    - RequireAuthorization() for authenticated-user-only endpoints
+    - AllowAnonymous() for public endpoints (register, sign-in, OTP, MFA challenge, etc.)
+    - Named policies: LearnerOnly, ExpertOnly, AdminOnly
+    - Granular admin policies: AdminContentRead, AdminContentWrite, AdminContentPublish, AdminBillingRead, AdminBillingWrite, AdminUsersRead, AdminUsersWrite, AdminReviewOps, AdminSystemAdmin
+    - Admin permissions stored as comma-separated JWT claim, checked via HasAdminPermission helper
+  data_validation_in_domain: |
+    - Email validation via AuthEmailAddress.TrimAndValidateOrThrow / NormalizeOrThrow
+    - Required field checks with ApiException.Validation
+    - Password required checks
+    - OTP code format validation (6 digits)
+    - Recovery code hash-based validation
+
+# ══════════════════════════════════════════════════════════════════
+# ORCHESTRATOR-REQUESTED STRUCTURED ANSWERS
+# ══════════════════════════════════════════════════════════════════
+
+auth_endpoint_registrations:
+  group_prefix: "/v1/auth"
+  endpoints:
+    - method: POST
+      path: "/v1/auth/register"
+      handler: "AuthService.RegisterLearnerAsync"
+      request_dto: RegisterRequest
+      response_dto: AuthSessionResponse
+      policy: AllowAnonymous
+
+    - method: GET
+      path: "/v1/auth/catalog/signup"
+      handler: "AuthService.GetSignupCatalogAsync"
+      request_dto: null
+      response_dto: SignupCatalogResponse
+      policy: AllowAnonymous
+
+    - method: POST
+      path: "/v1/auth/sign-in"
+      handler: "AuthService.SignInAsync"
+      request_dto: PasswordSignInRequest
+      response_dto: "AuthSessionResponse (or 403 MfaChallengeRequired)"
+      policy: AllowAnonymous
+
+    - method: GET
+      path: "/v1/auth/external/{provider}/start"
+      handler: "ExternalAuthService.BuildAuthorizationRedirect"
+      request_dto: "query: next?, platform?"
+      response_dto: "302 Redirect"
+      policy: AllowAnonymous
+
+    - method: GET
+      path: "/v1/auth/external/{provider}/callback"
+      handler: "ExternalAuthService.CompleteCallbackAsync"
+      request_dto: "query: code?, state?, error?"
+      response_dto: "302 Redirect"
+      policy: AllowAnonymous
+
+    - method: POST
+      path: "/v1/auth/external/{provider}/exchange"
+      handler: "ExternalAuthService.ExchangeAsync"
+      request_dto: ExternalAuthExchangeRequest
+      response_dto: ExternalAuthExchangeResponse
+      policy: AllowAnonymous
+
+    - method: POST
+      path: "/v1/auth/email/send-verification-otp"
+      handler: "AuthService.SendEmailVerificationOtpAsync"
+      request_dto: SendEmailOtpRequest
+      response_dto: OtpChallengeResponse
+      policy: AllowAnonymous
+
+    - method: POST
+      path: "/v1/auth/email/verify-otp"
+      handler: "AuthService.VerifyEmailOtpAsync"
+      request_dto: VerifyEmailOtpRequest
+      response_dto: CurrentUserResponse
+      policy: AllowAnonymous
+
+    - method: POST
+      path: "/v1/auth/forgot-password"
+      handler: "AuthService.ForgotPasswordAsync"
+      request_dto: ForgotPasswordRequest
+      response_dto: OtpChallengeResponse
+      policy: AllowAnonymous
+
+    - method: POST
+      path: "/v1/auth/reset-password"
+      handler: "AuthService.ResetPasswordAsync"
+      request_dto: ResetPasswordRequest
+      response_dto: "204 NoContent"
+      policy: AllowAnonymous
+
+    - method: POST
+      path: "/v1/auth/mfa/authenticator/begin"
+      handler: "AuthService.BeginAuthenticatorSetupAsync"
+      request_dto: BeginAuthenticatorSetupRequest (empty)
+      response_dto: AuthenticatorSetupResponse
+      policy: RequireAuthorization (any authenticated user)
+
+    - method: POST
+      path: "/v1/auth/mfa/authenticator/confirm"
+      handler: "AuthService.ConfirmAuthenticatorSetupAsync"
+      request_dto: ConfirmAuthenticatorSetupRequest
+      response_dto: CurrentUserResponse
+      policy: RequireAuthorization (any authenticated user)
+
+    - method: POST
+      path: "/v1/auth/mfa/challenge"
+      handler: "AuthService.CompleteMfaChallengeAsync"
+      request_dto: MfaChallengeRequest
+      response_dto: AuthSessionResponse
+      policy: AllowAnonymous
+
+    - method: POST
+      path: "/v1/auth/mfa/recovery"
+      handler: "AuthService.CompleteRecoveryChallengeAsync"
+      request_dto: MfaChallengeRequest
+      response_dto: AuthSessionResponse
+      policy: AllowAnonymous
+
+    - method: GET
+      path: "/v1/auth/me"
+      handler: "AuthService.GetCurrentUserAsync"
+      request_dto: "(ClaimsPrincipal from JWT)"
+      response_dto: CurrentUserResponse
+      policy: RequireAuthorization (any authenticated user)
+
+    - method: POST
+      path: "/v1/auth/refresh"
+      handler: "AuthService.RefreshAsync"
+      request_dto: RefreshTokenRequest
+      response_dto: AuthSessionResponse
+      policy: AllowAnonymous
+
+    - method: POST
+      path: "/v1/auth/sign-out"
+      handler: "AuthService.SignOutAsync"
+      request_dto: SignOutRequest
+      response_dto: "204 NoContent"
+      policy: AllowAnonymous
+
+mfa_recovery_endpoint:
+  path: "POST /v1/auth/mfa/recovery"
+  request_dto:
+    name: MfaChallengeRequest
+    fields:
+      - name: Email
+        type: string
+        required: true
+        description: "The user's email address"
+      - name: Code
+        type: string
+        required: false
+        description: "Not used for recovery — the TOTP code field (used by /mfa/challenge instead)"
+      - name: ChallengeToken
+        type: "string?"
+        required: false
+        description: "Data-protected opaque token issued during sign-in 403 (contains encrypted account ID)"
+      - name: RecoveryCode
+        type: "string?"
+        required: true_for_recovery
+        description: "One of the 8 recovery codes issued during authenticator setup (format: XXXXX-XXXXX)"
+  response_dto:
+    name: AuthSessionResponse
+    fields:
+      - name: AccessToken
+        type: string
+      - name: RefreshToken
+        type: string
+      - name: AccessTokenExpiresAt
+        type: DateTimeOffset
+      - name: RefreshTokenExpiresAt
+        type: DateTimeOffset
+      - name: CurrentUser
+        type: CurrentUserResponse
+        nested_fields:
+          - "UserId, Email, Role, DisplayName, IsEmailVerified, IsAuthenticatorEnabled, RequiresEmailVerification, RequiresMfa, EmailVerifiedAt, AuthenticatorEnabledAt"
+  handler_logic_summary: |
+    1. Validates RecoveryCode is not null/whitespace (throws 'mfa_recovery_code_required' if missing)
+    2. Resolves account via ResolveTrackedMfaAccountAsync (uses Email + ChallengeToken to find and decrypt account ID)
+    3. Hashes the recovery code: uppercase, strip dashes, SHA-256
+    4. Looks up MfaRecoveryCode entity matching account ID + code hash + RedeemedAt == null
+    5. If not found, throws 'invalid_mfa_recovery_code'
+    6. Marks recovery code as redeemed (sets RedeemedAt = now)
+    7. Calls CompleteMfaSignInAsync which:
+       a. Updates account.LastLoginAt and UpdatedAt
+       b. Resolves subject (learner/expert/admin user profile)
+       c. Issues JWT + refresh token pair
+       d. Returns AuthSessionResponse
+
+email_verification_endpoints:
+  send_otp:
+    path: "POST /v1/auth/email/send-verification-otp"
+    request: "SendEmailOtpRequest { Email, Purpose='verify_email' }"
+    response: "OtpChallengeResponse { ChallengeId, Purpose, DeliveryChannel, DestinationHint, ExpiresAt, RetryAfterSeconds }"
+    behavior: "Replaces any existing pending challenge for the account. Generates 6-digit code, sends via IEmailSender. Acts as both 'send' and 'resend'."
+  verify_otp:
+    path: "POST /v1/auth/email/verify-otp"
+    request: "VerifyEmailOtpRequest { Email, Purpose='verify_email', Code }"
+    response: "CurrentUserResponse { UserId, Email, Role, ... }"
+    behavior: "Validates code hash, checks expiry, sets account.EmailVerifiedAt if first verification."
+  resend_endpoint:
+    exists: false
+    note: "No dedicated resend endpoint. Calling send-verification-otp again replaces any pending challenge and sends a new OTP. Effectively serves as resend."
+
+auth_policy_definitions:
+  base_policies:
+    - name: "LearnerOnly"
+      requirements:
+        - RequireAuthenticatedUser
+        - "RequireRole('learner')"
+    - name: "ExpertOnly"
+      requirements:
+        - RequireAuthenticatedUser
+        - "RequireRole('expert')"
+        - "RequireClaim('email_verified', 'true')"
+    - name: "AdminOnly"
+      requirements:
+        - RequireAuthenticatedUser
+        - "RequireRole('admin')"
+        - "RequireClaim('email_verified', 'true')"
+  granular_admin_policies:
+    - name: "AdminContentRead"
+      requirements: "admin role + HasAdminPermission('content:read', 'system_admin')"
+    - name: "AdminContentWrite"
+      requirements: "admin role + HasAdminPermission('content:write', 'system_admin')"
+    - name: "AdminContentPublish"
+      requirements: "admin role + HasAdminPermission('content:publish', 'system_admin')"
+    - name: "AdminBillingRead"
+      requirements: "admin role + HasAdminPermission('billing:read', 'system_admin')"
+    - name: "AdminBillingWrite"
+      requirements: "admin role + HasAdminPermission('billing:write', 'system_admin')"
+    - name: "AdminUsersRead"
+      requirements: "admin role + HasAdminPermission('users:read', 'system_admin')"
+    - name: "AdminUsersWrite"
+      requirements: "admin role + HasAdminPermission('users:write', 'system_admin')"
+    - name: "AdminReviewOps"
+      requirements: "admin role + HasAdminPermission('review_ops', 'system_admin')"
+    - name: "AdminSystemAdmin"
+      requirements: "admin role + HasAdminPermission('system_admin')"
+  has_admin_permission_logic: |
+    Reads 'admin_permissions' claim from JWT, splits by comma, checks if any of the required permissions exist (case-insensitive).
+    system_admin always grants access to all granular permission policies.
+
+jwt_configuration:
+  algorithm: "HMAC-SHA256 (SymmetricSecurityKey)"
+  signing_key_source: "AuthTokens:AccessTokenSigningKey (min 32 chars)"
+  validation:
+    validate_issuer: true
+    validate_audience: true
+    validate_lifetime: true
+    validate_issuer_signing_key: true
+    valid_issuer: "AuthTokens:Issuer"
+    valid_audience: "AuthTokens:Audience"
+    name_claim_type: "ClaimTypes.NameIdentifier"
+    role_claim_type: "ClaimTypes.Role"
+    map_inbound_claims: false
+  on_token_validated: |
+    1. Extract auth_account_id claim; fail if missing
+    2. Load ApplicationUserAccount from DB; fail if not found or deleted
+    3. If learner role: check LearnerUser.AccountStatus == 'active'; fail if not
+    4. If expert role: check ExpertUser.IsActive; fail if not
+  signalr_token_support: |
+    OnMessageReceived extracts access_token from query string for /v1/notifications/hub and /v1/conversations/hub paths
+  refresh_token:
+    signing_key: "AuthTokens:RefreshTokenSigningKey (separate from access key, min 32 chars)"
+    storage: "SHA-256 hash stored in RefreshTokenRecords table"
+    rotation: "Old refresh token revoked on each refresh; new pair issued"
+
+middleware_pipeline_order:
+  - step: 1
+    middleware: "UseForwardedHeaders (if trustForwardHeaders)"
+  - step: 2
+    middleware: "Correlation ID middleware (X-Correlation-Id)"
+  - step: 3
+    middleware: "Security headers (X-Content-Type-Options, X-Frame-Options, Referrer-Policy, Permissions-Policy)"
+  - step: 4
+    middleware: "UseExceptionHandler (global error handler for ApiException, MfaChallengeRequiredException, unhandled)"
+  - step: 5
+    middleware: "UseHsts (production only)"
+  - step: 6
+    middleware: "UseHttpsRedirection (if enforceHttps)"
+  - step: 7
+    middleware: "UseSwagger + UseSwaggerUI (if enableSwagger)"
+  - step: 8
+    middleware: "UseCors('Frontend')"
+  - step: 9
+    middleware: "UseAuthentication"
+  - step: 10
+    middleware: "UseRateLimiter"
+  - step: 11
+    middleware: "UseAuthorization"
+  - step: 12
+    middleware: "Endpoint routing (MapAuthEndpoints, MapLearnerEndpoints, etc.)"
+
+backend_project_structure:
+  root: "backend/src/OetLearner.Api/"
+  folders:
+    Endpoints: "HTTP route registrations (one file per feature area)"
+    Services: "Business logic services (scoped/singleton)"
+    Contracts: "Request/Response DTOs"
+    Domain: "EF Core entity classes"
+    Configuration: "IOptions configuration classes"
+    Security: "Auth handlers (DevelopmentAuthHandler)"
+    Data: "DbContext, migrations"
+    Hubs: "SignalR hubs (NotificationHub, ConversationHub)"
+    Properties: "launchSettings.json"
+  key_files:
+    - "Program.cs — DI registration, middleware pipeline, auth config"
+    - "OetLearner.Api.csproj — project file"
+
+open_questions: []
+
+gaps: []

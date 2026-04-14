@@ -21,7 +21,7 @@ import {
 import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { fetchReadiness } from '@/lib/api';
+import { fetchReadiness, fetchReadinessRisk } from '@/lib/api';
 import type { ReadinessData } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
@@ -35,6 +35,7 @@ const SUBTEST_ICONS: Record<string, React.ElementType> = {
 
 export default function ReadinessCenter() {
   const [data, setData] = useState<ReadinessData | null>(null);
+  const [riskData, setRiskData] = useState<{ riskProbability: number; riskLevel: string; factors: { label: string; severity: string; impact: number; description: string }[]; recommendation: string } | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
@@ -42,6 +43,9 @@ export default function ReadinessCenter() {
     fetchReadiness()
       .then(setData)
       .catch(() => setError('Could not load readiness data.'));
+    fetchReadinessRisk()
+      .then((r: any) => setRiskData(r))
+      .catch(() => { /* non-critical — page still works without risk data */ });
   }, []);
 
   if (error) {
@@ -76,7 +80,9 @@ export default function ReadinessCenter() {
     ShieldCheck;
 
   // ── Risk Gauge Data ──
+  const apiRiskPercent = riskData?.riskProbability;
   const riskPercent =
+    typeof apiRiskPercent === 'number' ? apiRiskPercent :
     data.overallRisk === 'High' ? 82 :
     data.overallRisk === 'Moderate' ? 52 :
     22;
@@ -87,12 +93,21 @@ export default function ReadinessCenter() {
   interface RiskFactor { label: string; severity: 'high' | 'medium' | 'low'; impact: number; description: string }
   const weakest = data.subTests.find((t) => t.isWeakest);
   const avgReadiness = data.subTests.reduce((sum, t) => sum + t.readiness, 0) / (data.subTests.length || 1);
-  const riskFactors: RiskFactor[] = [
+
+  const localRiskFactors: RiskFactor[] = [
     { label: 'Practice Consistency', severity: data.overallRisk === 'High' ? 'high' : data.overallRisk === 'Moderate' ? 'medium' : 'low', impact: data.overallRisk === 'High' ? 85 : data.overallRisk === 'Moderate' ? 55 : 25, description: 'Steady daily practice reduces overall risk substantially.' },
     { label: weakest ? `${weakest.name} Gap` : 'Sub-test Balance', severity: weakest && weakest.readiness < 50 ? 'high' : 'medium', impact: weakest ? Math.max(0, 100 - weakest.readiness) : 30, description: weakest ? `${weakest.name} readiness is ${weakest.readiness}% against a ${weakest.target}% target.` : 'Sub-tests are relatively balanced.' },
     { label: 'Mock Test Frequency', severity: data.evidence.mocksCompleted < 2 ? 'high' : data.evidence.mocksCompleted < 5 ? 'medium' : 'low', impact: data.evidence.mocksCompleted < 2 ? 75 : data.evidence.mocksCompleted < 5 ? 45 : 15, description: `${data.evidence.mocksCompleted} mock tests completed; full mocks are the strongest readiness signal.` },
     { label: 'Time Remaining', severity: data.weeksRemaining <= 3 ? 'high' : data.weeksRemaining <= 6 ? 'medium' : 'low', impact: data.weeksRemaining <= 3 ? 90 : data.weeksRemaining <= 6 ? 50 : 20, description: `${data.weeksRemaining} weeks until exam date.` },
   ];
+  const riskFactors: RiskFactor[] = riskData?.factors?.length
+    ? riskData.factors.map((f) => ({
+        label: f.label,
+        severity: (f.severity === 'high' || f.severity === 'medium' || f.severity === 'low' ? f.severity : 'medium') as 'high' | 'medium' | 'low',
+        impact: f.impact,
+        description: f.description,
+      }))
+    : localRiskFactors;
 
   return (
     <LearnerDashboardShell

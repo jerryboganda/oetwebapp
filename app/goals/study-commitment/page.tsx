@@ -70,7 +70,7 @@ export default function StudyCommitmentPage() {
 
       <LearnerPageHero
         title="Study Commitment"
-        subtitle="Set your daily study goal and earn streak protection for consistency."
+        description="Set your daily study goal and earn streak protection for consistency."
         icon={<Target className="w-7 h-7" />}
       />
 
@@ -126,7 +126,7 @@ export default function StudyCommitmentPage() {
           <LearnerSurfaceSectionHeader
             icon={<Clock className="w-5 h-5" />}
             title={commitment ? 'Update Your Daily Goal' : 'Set Your Daily Study Goal'}
-            subtitle="Choose how many minutes you plan to study each day."
+            description="Choose how many minutes you plan to study each day."
           />
           <div className="mt-4 flex flex-wrap gap-2">
             {PRESET_MINUTES.map((m) => (

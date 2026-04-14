@@ -216,7 +216,7 @@ export default function FreeTierStrategyPage() {
                       <div className="flex items-center gap-2 mb-1">
                         <span className="font-medium text-sm">{flag.name}</span>
                         <Badge variant="outline" className="text-[10px] capitalize">{flag.flagType}</Badge>
-                        {preset && <Badge variant="secondary" className="text-[10px]">Tier-configured</Badge>}
+                        {preset && <Badge variant="muted" className="text-[10px]">Tier-configured</Badge>}
                       </div>
                       <p className="text-xs text-muted truncate">{flag.description || flag.key}</p>
                     </div>

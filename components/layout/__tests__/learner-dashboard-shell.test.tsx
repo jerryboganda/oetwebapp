@@ -1,9 +1,9 @@
 import { screen } from '@testing-library/react';
 import { renderWithRouter } from '@/tests/test-utils';
-const appShellSpy = vi.fn(({ children }: { children: React.ReactNode }) => <div data-testid="app-shell">{children}</div>);
+const appShellSpy = vi.fn(({ children }: Record<string, unknown> & { children: React.ReactNode }) => <div data-testid="app-shell">{children}</div>);
 
 vi.mock('@/components/layout/app-shell', () => ({
-  AppShell: (props: { children: React.ReactNode }) => appShellSpy(props),
+  AppShell: (props: Record<string, unknown> & { children: React.ReactNode }) => appShellSpy(props),
 }));
 
 import { LearnerDashboardShell } from '../learner-dashboard-shell';
@@ -27,7 +27,7 @@ describe('LearnerDashboardShell', () => {
     expect(container).toHaveClass('lg:px-8');
     expect(container).toHaveClass('py-6');
     expect(container).toHaveClass('space-y-8');
-    expect(appShellSpy.mock.calls[0]?.[0].mobileMenuSections?.map((section: { label: string }) => section.label)).toEqual([
+    expect((appShellSpy.mock.calls[0]?.[0].mobileMenuSections as Array<{ label: string }> | undefined)?.map((section) => section.label)).toEqual([
       'Practice',
       'Learn',
     ]);

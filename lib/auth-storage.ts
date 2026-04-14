@@ -7,6 +7,19 @@ const LOCAL_SESSION_KEY = 'oet.auth.session.local';
 const SESSION_SESSION_KEY = 'oet.auth.session.session';
 const MFA_CHALLENGE_KEY = 'oet.auth.challenge.mfa';
 
+export const AUTH_INDICATOR_COOKIE = 'oet_auth';
+
+export function setAuthIndicatorCookie(): void {
+  if (typeof document === 'undefined') return;
+  const secure = typeof location !== 'undefined' && location.protocol === 'https:' ? '; Secure' : '';
+  document.cookie = `${AUTH_INDICATOR_COOKIE}=1; path=/; max-age=2592000; SameSite=Lax${secure}`;
+}
+
+export function clearAuthIndicatorCookie(): void {
+  if (typeof document === 'undefined') return;
+  document.cookie = `${AUTH_INDICATOR_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
+}
+
 interface StoredSessionRecord {
   persistence: AuthPersistence;
   session: AuthSession;
@@ -39,6 +52,7 @@ function getStorage(persistence: AuthPersistence): Storage | null {
 export function saveStoredSession(session: AuthSession, persistence: AuthPersistence): void {
   const key = persistence === 'local' ? LOCAL_SESSION_KEY : SESSION_SESSION_KEY;
   persistWebStorageKey(key, JSON.stringify(session), persistence);
+  setAuthIndicatorCookie();
 
   if (persistence === 'local') {
     removeWebStorageKey(SESSION_SESSION_KEY);
@@ -84,6 +98,7 @@ export function updateStoredUser(currentUser: CurrentUser): AuthSession | null {
 export function clearStoredSession(): void {
   removeWebStorageKey(LOCAL_SESSION_KEY);
   removeWebStorageKey(SESSION_SESSION_KEY);
+  clearAuthIndicatorCookie();
 }
 
 export function savePendingMfaChallenge(challenge: PendingMfaChallenge): void {

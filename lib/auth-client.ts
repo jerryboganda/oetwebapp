@@ -259,9 +259,10 @@ export async function fetchSignupCatalog(): Promise<SignupCatalog> {
 export function buildExternalAuthStartHref(provider: ExternalAuthProvider, nextPath?: string | null): string {
   let platform: string | undefined;
   if (typeof window !== 'undefined') {
-    if ((window as Record<string, unknown>).desktopBridge) {
+    const w = window as unknown as Record<string, unknown>;
+    if (w.desktopBridge) {
       platform = 'desktop';
-    } else if ((window as Record<string, unknown>).Capacitor && typeof (window as Record<string, unknown> & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform === 'function' && (window as Record<string, unknown> & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor!.isNativePlatform!()) {
+    } else if (w.Capacitor && typeof (w as Record<string, unknown> & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor?.isNativePlatform === 'function' && (w as Record<string, unknown> & { Capacitor?: { isNativePlatform?: () => boolean } }).Capacitor!.isNativePlatform!()) {
       platform = 'capacitor';
     }
   }
@@ -301,6 +302,15 @@ export async function signOut(): Promise<void> {
     clearStoredSession();
     clearPendingMfaChallenge();
   }
+}
+
+export async function deleteAccount(password: string, reason?: string): Promise<void> {
+  const accessToken = await ensureFreshAccessToken();
+  if (!accessToken) {
+    throw new AuthClientError(401, 'not_authenticated', 'A valid session is required.');
+  }
+
+  await postJson<void>('/v1/auth/account/delete', { password, reason }, accessToken);
 }
 
 export async function sendEmailVerificationOtp(email: string): Promise<OtpChallenge> {

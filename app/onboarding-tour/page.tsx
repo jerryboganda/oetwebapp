@@ -125,7 +125,7 @@ export default function OnboardingTourPage() {
 
         {/* Skip option */}
         <div className="text-center">
-          <Button variant="link" size="sm" onClick={finishTour} className="text-muted-foreground">
+          <Button variant="ghost" size="sm" onClick={finishTour} className="text-muted-foreground">
             Skip tour and go to dashboard
           </Button>
         </div>

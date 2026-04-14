@@ -86,7 +86,7 @@ export default function LearningPathsPage() {
     <LearnerDashboardShell>
       <LearnerPageHero
         title="Your Learning Path"
-        subtitle={data ? `${data.professionLabel} · ${data.examTypeCode.toUpperCase()} · ${data.overallProgress}% complete` : 'Personalized by your profession and goals'}
+        description={data ? `${data.professionLabel} · ${data.examTypeCode.toUpperCase()} · ${data.overallProgress}% complete` : 'Personalized by your profession and goals'}
         icon={<BookOpen className="w-7 h-7" />}
       />
 
@@ -131,7 +131,7 @@ export default function LearningPathsPage() {
         <MotionSection key={sp.subtestCode} className="mt-6">
           <LearnerSurfaceSectionHeader
             icon={<BookOpen className="w-5 h-5" />}
-            title={<span className="capitalize">{sp.subtestCode}</span>}
+            title={sp.subtestCode.charAt(0).toUpperCase() + sp.subtestCode.slice(1)}
           />
           <div className="flex items-center gap-3 mt-2 mb-4">
             <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">

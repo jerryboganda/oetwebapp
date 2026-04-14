@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
+import { fetchDiagnosticPersonalization } from '@/lib/api';
 
 interface SubtestAnalysis {
   subtestCode: string;
@@ -27,17 +28,6 @@ interface DiagnosticData {
   message?: string;
 }
 
-async function apiRequest<T = unknown>(path: string): Promise<T> {
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const { env } = await import('@/lib/env');
-  const token = await ensureFreshAccessToken();
-  const res = await fetch(`${env.apiBaseUrl}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
-
 export default function DiagnosticInsightsPage() {
   const [data, setData] = useState<DiagnosticData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,8 +35,8 @@ export default function DiagnosticInsightsPage() {
 
   useEffect(() => {
     analytics.track('content_view', { page: 'diagnostic-insights' });
-    apiRequest<DiagnosticData>('/v1/learner/diagnostic-personalization')
-      .then(setData)
+    fetchDiagnosticPersonalization()
+      .then((d) => setData(d as DiagnosticData))
       .catch(() => setError('Unable to load diagnostic insights.'))
       .finally(() => setLoading(false));
   }, []);
@@ -105,7 +95,7 @@ export default function DiagnosticInsightsPage() {
                         {po.analysis.weakCriteria.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-2">
                             {po.analysis.weakCriteria.map((wc) => (
-                              <Badge key={wc.code} variant="destructive" className="text-xs">
+                              <Badge key={wc.code} variant="danger" className="text-xs">
                                 {wc.code}: {wc.score}
                               </Badge>
                             ))}
@@ -159,7 +149,7 @@ export default function DiagnosticInsightsPage() {
                         <p className="text-xs font-medium text-gray-500 mb-1">Weak criteria:</p>
                         <div className="flex flex-wrap gap-1">
                           {sa.weakCriteria.map((wc) => (
-                            <Badge key={wc.code} variant="destructive" className="text-xs">{wc.code}: {wc.score}</Badge>
+                            <Badge key={wc.code} variant="danger" className="text-xs">{wc.code}: {wc.score}</Badge>
                           ))}
                         </div>
                       </div>

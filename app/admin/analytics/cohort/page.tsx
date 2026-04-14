@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Users, BarChart3, Activity } from 'lucide-react';
+import { Users, BarChart3, Activity, Download } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { exportToCsv, formatDateForExport } from '@/lib/csv-export';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -36,7 +38,24 @@ export default function CohortAnalysisPage() {
   return (
     <div className="min-h-screen bg-background-light">
       <div className="max-w-5xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-1">Learner Cohort Analysis</h1>
+        <div className="flex items-center justify-between mb-1">
+          <h1 className="text-2xl font-bold">Learner Cohort Analysis</h1>
+          {data && data.cohorts.length > 0 && (
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => {
+              const rows = data.cohorts.map(c => ({
+                cohort: c.cohortName,
+                learnerCount: c.learnerCount,
+                averageScore: c.averageScore,
+                evaluationCount: c.evaluationCount,
+                activeLastMonth: c.activeLastMonth,
+              }));
+              exportToCsv(rows, `cohort-analysis-${data.groupBy}-${formatDateForExport(new Date())}.csv`);
+            }}>
+              <Download className="w-4 h-4" />
+              Export CSV
+            </Button>
+          )}
+        </div>
         <p className="text-muted mb-6">Compare outcomes across professions and subscription tiers.</p>
 
         <div className="flex gap-2 mb-6">

@@ -1,8 +1,9 @@
 'use client';
 
+import { useMemo } from 'react';
 import { AppShell, ExpertDashboardShell, type MobileMenuSection } from '@/components/layout';
 import type { NavItem } from '@/components/layout/sidebar';
-import { LayoutDashboard, Inbox, CheckCircle, BarChart3, CalendarClock, Users, Mic } from 'lucide-react';
+import { LayoutDashboard, Inbox, CheckCircle, BarChart3, CalendarClock, Users, Mic, Rocket } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 import { useExpertAuth } from '@/lib/hooks/use-expert-auth';
 
@@ -16,24 +17,12 @@ const expertNavItems: NavItem[] = [
   { href: '/expert/private-speaking', label: 'Private Speaking', icon: <Mic className="w-5 h-5" />, matchPrefix: '/expert/private-speaking' },
 ];
 
-const expertMobileNavItems: NavItem[] = [
-  expertNavItems[0],
-  expertNavItems[1],
-  expertNavItems[2],
-  expertNavItems[3],
-  expertNavItems[4],
-];
-
-const expertMobileMenuSections: MobileMenuSection[] = [
-  {
-    label: 'Review',
-    items: [expertNavItems[0], expertNavItems[1], expertNavItems[2]],
-  },
-  {
-    label: 'Performance',
-    items: [expertNavItems[3], expertNavItems[4], expertNavItems[5]],
-  },
-];
+const onboardingNavItem: NavItem = {
+  href: '/expert/onboarding',
+  label: 'Onboarding',
+  icon: <Rocket className="w-5 h-5" />,
+  matchPrefix: '/expert/onboarding',
+};
 
 function getExpertPageTitle(pathname: string | null): string | undefined {
   if (!pathname || pathname === '/expert') {
@@ -64,6 +53,10 @@ function getExpertPageTitle(pathname: string | null): string | undefined {
     return 'Private Speaking';
   }
 
+  if (pathname.startsWith('/expert/onboarding')) {
+    return 'Onboarding';
+  }
+
   return undefined;
 }
 
@@ -72,17 +65,68 @@ function ExpertLayoutContent({ children }: { children: React.ReactNode }) {
   const { expert } = useExpertAuth();
   const pageTitle = getExpertPageTitle(pathname);
 
+  const showOnboarding = expert?.isOnboardingComplete === false;
+
+  const navItems = useMemo(() => {
+    if (!showOnboarding) return expertNavItems;
+    return [expertNavItems[0], onboardingNavItem, ...expertNavItems.slice(1)];
+  }, [showOnboarding]);
+
+  const mobileNavItems = useMemo(() => {
+    const base = [expertNavItems[0], expertNavItems[1], expertNavItems[2], expertNavItems[3], expertNavItems[4]];
+    if (!showOnboarding) return base;
+    return [expertNavItems[0], onboardingNavItem, ...base.slice(1)];
+  }, [showOnboarding]);
+
+  const mobileMenuSections: MobileMenuSection[] = useMemo(() => {
+    const sections: MobileMenuSection[] = [
+      {
+        label: 'Review',
+        items: [expertNavItems[0], expertNavItems[1], expertNavItems[2]],
+      },
+      {
+        label: 'Performance',
+        items: [expertNavItems[3], expertNavItems[4], expertNavItems[5]],
+      },
+    ];
+    if (showOnboarding) {
+      sections[0] = {
+        label: 'Review',
+        items: [expertNavItems[0], onboardingNavItem, expertNavItems[1], expertNavItems[2]],
+      };
+    }
+    return sections;
+  }, [showOnboarding]);
+
   // Hide nav for specific review workspaces
   const isReviewWorkspace = pathname?.includes('/expert/review/') ?? false;
+  const isOnboardingPage = pathname?.startsWith('/expert/onboarding') ?? false;
+
+  if (isOnboardingPage) {
+    return (
+      <AppShell
+        distractionFree
+        pageTitle="Expert Onboarding"
+        navItems={navItems}
+        mobileNavItems={mobileNavItems}
+        mobileMenuSections={mobileMenuSections}
+        userSummary={{ displayName: expert?.displayName, email: expert?.email }}
+        requiredRole="expert"
+        workspaceRole="expert"
+      >
+        {children}
+      </AppShell>
+    );
+  }
 
   if (isReviewWorkspace) {
     return (
       <AppShell
         distractionFree
         pageTitle="Review Workspace"
-        navItems={expertNavItems}
-        mobileNavItems={expertMobileNavItems}
-        mobileMenuSections={expertMobileMenuSections}
+        navItems={navItems}
+        mobileNavItems={mobileNavItems}
+        mobileMenuSections={mobileMenuSections}
         userSummary={{ displayName: expert?.displayName, email: expert?.email }}
         requiredRole="expert"
         workspaceRole="expert"
@@ -95,9 +139,9 @@ function ExpertLayoutContent({ children }: { children: React.ReactNode }) {
   return (
     <ExpertDashboardShell
       pageTitle={pageTitle}
-      navItems={expertNavItems}
-      mobileNavItems={expertMobileNavItems}
-      mobileMenuSections={expertMobileMenuSections}
+      navItems={navItems}
+      mobileNavItems={mobileNavItems}
+      mobileMenuSections={mobileMenuSections}
       userSummary={{ displayName: expert?.displayName, email: expert?.email }}
       requiredRole="expert"
     >

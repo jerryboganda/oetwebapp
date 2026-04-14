@@ -10,7 +10,8 @@ public sealed record CurrentUserResponse(
     bool RequiresEmailVerification,
     bool RequiresMfa,
     DateTimeOffset? EmailVerifiedAt,
-    DateTimeOffset? AuthenticatorEnabledAt);
+    DateTimeOffset? AuthenticatorEnabledAt,
+    string[]? AdminPermissions = null);
 
 public sealed record AuthSessionResponse(
     string AccessToken,
@@ -93,3 +94,14 @@ public sealed record ExternalAuthExchangeResponse(
     string Status,
     AuthSessionResponse? Session,
     ExternalRegistrationPromptResponse? Registration);
+
+public sealed record ActiveSessionResponse(
+    Guid Id,
+    string? DeviceInfo,
+    string? IpAddress,
+    DateTimeOffset? LastUsedAt,
+    DateTimeOffset CreatedAt,
+    bool IsCurrent);
+
+public sealed record ActiveSessionListResponse(
+    IReadOnlyList<ActiveSessionResponse> Sessions);

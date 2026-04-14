@@ -1,4 +1,4 @@
-export type UserRole = 'learner' | 'expert' | 'admin';
+export type UserRole = 'learner' | 'expert' | 'admin' | 'sponsor';
 export type ExternalAuthProvider = 'google' | 'facebook' | 'linkedin';
 
 export interface CurrentUser {
@@ -12,6 +12,7 @@ export interface CurrentUser {
   requiresMfa: boolean;
   emailVerifiedAt: string | null;
   authenticatorEnabledAt: string | null;
+  adminPermissions?: string[] | null;
 }
 
 export interface AuthSession {

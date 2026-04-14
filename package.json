@@ -39,8 +39,10 @@
     "backend:smoke": "dotnet run --no-build --project backend/src/OetLearner.Api/OetLearner.Api.csproj"
   },
   "dependencies": {
+    "@aparajita/capacitor-biometric-auth": "^7.2.0",
     "@capacitor/app": "^6.0.3",
     "@capacitor/browser": "^6.0.6",
+    "@capacitor/camera": "^6.0.5",
     "@capacitor/core": "^6.2.1",
     "@capacitor/device": "^6.0.3",
     "@capacitor/filesystem": "^6.0.4",
@@ -56,6 +58,7 @@
     "@hookform/resolvers": "^5.2.1",
     "@microsoft/signalr": "^10.0.0",
     "@radix-ui/react-popover": "^1.1.15",
+    "@revenuecat/purchases-capacitor": "^8.0.0",
     "@tabler/icons-react": "^3.41.0",
     "autoprefixer": "^10.4.21",
     "capacitor-secure-storage-plugin": "^0.10.0",
@@ -138,6 +141,7 @@
     "@tailwindcss/typography": "^0.5.19",
     "@testing-library/jest-dom": "^6.9.1",
     "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

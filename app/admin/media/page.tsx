@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -9,12 +9,24 @@ import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
-import { fetchAdminMediaAssets, fetchAdminMediaAudit, adminProcessMediaAsset } from '@/lib/api';
+import { fetchAdminMediaAssets, fetchAdminMediaAudit, adminProcessMediaAsset, uploadMedia, deleteMedia } from '@/lib/api';
 import type { MediaAsset, MediaAuditResult, PaginatedResponse } from '@/lib/types/content-hierarchy';
-import { Film, RefreshCw, AlertTriangle } from 'lucide-react';
+import { Film, RefreshCw, AlertTriangle, Upload, Trash2, FileImage, FileText } from 'lucide-react';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 const PAGE_SIZE = 25;
+const MAX_FILE_SIZE = 10 * 1024 * 1024;
+const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
+
+function isImage(mimeType: string) {
+  return mimeType.startsWith('image/');
+}
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
 
 export default function AdminMediaPage() {
   const { isAuthenticated } = useAdminAuth();
@@ -25,6 +37,10 @@ export default function AdminMediaPage() {
   const [audit, setAudit] = useState<MediaAuditResult | null>(null);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
+  const [uploading, setUploading] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -63,11 +79,85 @@ export default function AdminMediaPage() {
     }
   }
 
+  const handleUploadFiles = useCallback(async (files: FileList | File[]) => {
+    const fileArray = Array.from(files);
+    if (fileArray.length === 0) return;
+
+    for (const file of fileArray) {
+      if (file.size > MAX_FILE_SIZE) {
+        setToast({ variant: 'error', message: `${file.name} exceeds 10 MB limit.` });
+        return;
+      }
+      if (!ALLOWED_TYPES.includes(file.type)) {
+        setToast({ variant: 'error', message: `${file.name} has an unsupported file type.` });
+        return;
+      }
+    }
+
+    setUploading(true);
+    let successCount = 0;
+    for (const file of fileArray) {
+      try {
+        await uploadMedia(file);
+        successCount++;
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : 'Upload failed';
+        setToast({ variant: 'error', message: `Failed to upload ${file.name}: ${msg}` });
+      }
+    }
+    setUploading(false);
+    if (successCount > 0) {
+      setToast({ variant: 'success', message: `${successCount} file${successCount > 1 ? 's' : ''} uploaded.` });
+      setReloadNonce(n => n + 1);
+    }
+  }, []);
+
+  async function handleDelete(assetId: string) {
+    try {
+      await deleteMedia(assetId);
+      setToast({ variant: 'success', message: 'Media deleted.' });
+      setDeleteConfirmId(null);
+      setReloadNonce(n => n + 1);
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Delete failed';
+      setToast({ variant: 'error', message: msg });
+    }
+  }
+
+  function handleDrop(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+    if (e.dataTransfer.files.length > 0) {
+      handleUploadFiles(e.dataTransfer.files);
+    }
+  }
+
+  function handleDragOver(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(true);
+  }
+
+  function handleDragLeave(e: React.DragEvent) {
+    e.preventDefault();
+    setDragOver(false);
+  }
+
   const columns: Column<MediaAsset>[] = [
+    {
+      key: 'thumbnail', header: '', render: (r) => (
+        <div className="w-10 h-10 rounded flex items-center justify-center bg-surface-alt shrink-0">
+          {isImage(r.mimeType) ? (
+            <FileImage className="w-5 h-5 text-muted" />
+          ) : (
+            <FileText className="w-5 h-5 text-muted" />
+          )}
+        </div>
+      ),
+    },
     { key: 'originalFilename', header: 'Filename', render: (r) => <span className="font-medium text-sm truncate max-w-[200px] block">{r.originalFilename}</span> },
     { key: 'mimeType', header: 'Type', render: (r) => <Badge variant="muted" className="text-[10px]">{r.mimeType}</Badge> },
     { key: 'format', header: 'Format', render: (r) => <span className="text-xs">{r.format}</span> },
-    { key: 'sizeBytes', header: 'Size', render: (r) => <span className="text-xs">{(r.sizeBytes / 1024 / 1024).toFixed(1)} MB</span> },
+    { key: 'sizeBytes', header: 'Size', render: (r) => <span className="text-xs">{formatFileSize(r.sizeBytes)}</span> },
     {
       key: 'status', header: 'Status', render: (r) => (
         <Badge variant={r.status === 'Ready' ? 'default' : r.status === 'Processing' ? 'muted' : 'danger'}>
@@ -76,11 +166,29 @@ export default function AdminMediaPage() {
       ),
     },
     {
-      key: 'actions', header: '', render: (r) => r.status !== 'Ready' ? (
-        <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleProcess(r.id); }}>
-          Process
-        </Button>
-      ) : null,
+      key: 'actions', header: '', render: (r) => (
+        <div className="flex items-center gap-1">
+          {r.status !== 'Ready' && (
+            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); handleProcess(r.id); }}>
+              Process
+            </Button>
+          )}
+          {deleteConfirmId === r.id ? (
+            <div className="flex items-center gap-1">
+              <Button variant="destructive" size="sm" onClick={(e) => { e.stopPropagation(); handleDelete(r.id); }}>
+                Confirm
+              </Button>
+              <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(null); }}>
+                Cancel
+              </Button>
+            </div>
+          ) : (
+            <Button variant="outline" size="sm" onClick={(e) => { e.stopPropagation(); setDeleteConfirmId(r.id); }}>
+              <Trash2 className="w-3 h-3" />
+            </Button>
+          )}
+        </div>
+      ),
     },
   ];
 
@@ -90,8 +198,47 @@ export default function AdminMediaPage() {
     <AdminRouteWorkspace>
       <AdminRouteSectionHeader
         title="Media Asset Manager"
-        description="View, audit, and process media assets across the content library."
+        description="Upload, view, audit, and manage media assets across the content library."
       />
+
+      {/* Upload Drop Zone */}
+      <AdminRoutePanel title="Upload Media">
+        <div
+          className={`border-2 border-dashed rounded-lg p-8 text-center transition-colors ${
+            dragOver ? 'border-primary bg-primary/5' : 'border-border'
+          }`}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+        >
+          <Upload className="w-8 h-8 text-muted mx-auto mb-2" />
+          <p className="text-sm text-muted mb-2">
+            Drag & drop files here, or click to select
+          </p>
+          <p className="text-xs text-muted mb-3">
+            Allowed: JPG, PNG, GIF, WebP, PDF — Max 10 MB per file
+          </p>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".jpg,.jpeg,.png,.gif,.webp,.pdf"
+            multiple
+            className="hidden"
+            onChange={(e) => {
+              if (e.target.files) handleUploadFiles(e.target.files);
+              e.target.value = '';
+            }}
+          />
+          <Button
+            variant="primary"
+            size="sm"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {uploading ? 'Uploading…' : 'Select Files'}
+          </Button>
+        </div>
+      </AdminRoutePanel>
 
       <AdminRoutePanel title="Media Assets">
         <div className="flex items-center justify-between mb-4">
@@ -125,7 +272,7 @@ export default function AdminMediaPage() {
 
         <AsyncStateWrapper status={pageStatus} errorMessage="Failed to load media assets.">
           {pageStatus === 'empty' ? (
-            <EmptyState icon={<Film className="w-8 h-8 text-muted" />} title="No media assets" description="Media assets will appear here when content is imported." />
+            <EmptyState icon={<Film className="w-8 h-8 text-muted" />} title="No media assets" description="Upload files or import content to see media assets here." />
           ) : (
             <DataTable columns={columns} data={assets} keyExtractor={(r) => r.id} />
           )}

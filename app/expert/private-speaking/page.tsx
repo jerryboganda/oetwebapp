@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { ExpertRouteHero, ExpertRouteSectionHeader } from '@/components/domain/expert-route-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Calendar, Clock, Video, Star, Plus, Trash2 } from 'lucide-react';
+import { Calendar, Clock, Video, Star, Plus, Trash2, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import {
   fetchExpertPrivateSpeakingProfile,
@@ -12,6 +12,7 @@ import {
   fetchExpertPrivateSpeakingAvailability,
   updateExpertPrivateSpeakingAvailability,
   deleteExpertPrivateSpeakingAvailability,
+  cancelExpertPrivateSpeakingSession,
 } from '@/lib/api';
 
 type TutorProfile = {
@@ -60,6 +61,11 @@ export default function ExpertPrivateSpeakingPage() {
   // New availability rule form
   const [newRule, setNewRule] = useState({ dayOfWeek: 1, startTime: '09:00', endTime: '17:00' });
 
+  // Cancel session state
+  const [cancelTarget, setCancelTarget] = useState<ExpertSession | null>(null);
+  const [cancelReason, setCancelReason] = useState('');
+  const [cancelling, setCancelling] = useState(false);
+
   useEffect(() => {
     loadData();
   }, []);
@@ -106,6 +112,21 @@ export default function ExpertPrivateSpeakingPage() {
       setAvailability(prev => prev.filter(r => r.id !== ruleId));
     } catch {
       setError('Failed to delete rule.');
+    }
+  }
+
+  async function handleCancelSession() {
+    if (!cancelTarget) return;
+    setCancelling(true);
+    try {
+      await cancelExpertPrivateSpeakingSession(cancelTarget.id, cancelReason || undefined);
+      setCancelTarget(null);
+      setCancelReason('');
+      await loadData();
+    } catch {
+      setError('Failed to cancel session.');
+    } finally {
+      setCancelling(false);
     }
   }
 
@@ -209,12 +230,20 @@ export default function ExpertPrivateSpeakingPage() {
                           · Learner: {session.learnerUserId.slice(0, 10)}…
                         </p>
                       </div>
-                      {session.zoomStartUrl && (
-                        <a href={session.zoomStartUrl} target="_blank" rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">
-                          <Video className="w-4 h-4" /> Start Zoom
-                        </a>
-                      )}
+                      <div className="flex items-center gap-2">
+                        {session.zoomStartUrl && (
+                          <a href={session.zoomStartUrl} target="_blank" rel="noopener noreferrer"
+                            className="flex items-center gap-1.5 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium">
+                            <Video className="w-4 h-4" /> Start Zoom
+                          </a>
+                        )}
+                        <button
+                          onClick={() => setCancelTarget(session)}
+                          className="flex items-center gap-1.5 px-3 py-2 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg text-sm font-medium transition-colors"
+                        >
+                          <X className="w-4 h-4" /> Cancel
+                        </button>
+                      </div>
                     </div>
                   </div>
                 );
@@ -299,6 +328,50 @@ export default function ExpertPrivateSpeakingPage() {
               <Button onClick={handleAddRule} size="sm">
                 <Plus className="w-4 h-4 mr-1" /> Add Rule
               </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Cancel Confirmation Dialog ────────────── */}
+      {cancelTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-2xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-900 p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Cancel Session</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Are you sure you want to cancel the session on{' '}
+              <span className="font-medium text-gray-700 dark:text-gray-300">
+                {new Date(cancelTarget.sessionStartUtc).toLocaleDateString('en-AU', { weekday: 'short', month: 'short', day: 'numeric' })}
+                {' '}at {new Date(cancelTarget.sessionStartUtc).toLocaleTimeString('en-AU', { hour: '2-digit', minute: '2-digit' })}
+              </span>?
+              This action cannot be undone.
+            </p>
+            <label className="block text-sm font-medium text-gray-600 dark:text-gray-400 mb-1">
+              Reason (optional)
+            </label>
+            <textarea
+              value={cancelReason}
+              onChange={e => setCancelReason(e.target.value)}
+              rows={2}
+              maxLength={500}
+              className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-900 dark:text-white mb-4 resize-none"
+              placeholder="e.g. Schedule conflict"
+            />
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={() => { setCancelTarget(null); setCancelReason(''); }}
+                disabled={cancelling}
+                className="px-4 py-2 text-sm font-medium text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 transition-colors"
+              >
+                Keep Session
+              </button>
+              <button
+                onClick={handleCancelSession}
+                disabled={cancelling}
+                className="px-4 py-2 text-sm font-medium text-white bg-red-600 hover:bg-red-700 disabled:opacity-50 rounded-lg transition-colors"
+              >
+                {cancelling ? 'Cancelling…' : 'Confirm Cancel'}
+              </button>
             </div>
           </div>
         </div>

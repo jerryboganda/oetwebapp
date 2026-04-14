@@ -53,13 +53,13 @@ describe('desktop runtime config helpers', () => {
     expect(
       runtimeConfig.createDesktopRuntimeConfig({
         NEXT_PUBLIC_API_BASE_URL: '/api/backend',
-      } as NodeJS.ProcessEnv),
+      } as unknown as NodeJS.ProcessEnv),
     ).toEqual({});
 
     expect(
       runtimeConfig.createDesktopRuntimeConfig({
         PUBLIC_API_BASE_URL: 'https://api.example.com',
-      } as NodeJS.ProcessEnv),
+      } as unknown as NodeJS.ProcessEnv),
     ).toEqual({
       publicApiBaseUrl: 'https://api.example.com',
     });
@@ -69,14 +69,14 @@ describe('desktop runtime config helpers', () => {
     expect(
       runtimeConfig.createDesktopRuntimeConfig({
         PUBLIC_API_BASE_URL: 'http://127.0.0.1:5198',
-      } as NodeJS.ProcessEnv),
+      } as unknown as NodeJS.ProcessEnv),
     ).toEqual({});
 
     expect(
       runtimeConfig.createDesktopRuntimeConfig(
         {
           PUBLIC_API_BASE_URL: 'http://127.0.0.1:5198',
-        } as NodeJS.ProcessEnv,
+        } as unknown as NodeJS.ProcessEnv,
         { allowLoopback: true },
       ),
     ).toEqual({
@@ -89,7 +89,7 @@ describe('desktop runtime config helpers', () => {
       {
         API_PROXY_TARGET_URL: 'https://override.example.com',
         NEXT_PUBLIC_API_BASE_URL: '/api/backend',
-      } as NodeJS.ProcessEnv,
+      } as unknown as NodeJS.ProcessEnv,
       {
         publicApiBaseUrl: 'https://persisted.example.com',
       },
@@ -102,7 +102,7 @@ describe('desktop runtime config helpers', () => {
     const resolvedUrl = runtimeConfig.resolveDesktopApiBaseUrl(
       {
         NEXT_PUBLIC_API_BASE_URL: '/api/backend',
-      } as NodeJS.ProcessEnv,
+      } as unknown as NodeJS.ProcessEnv,
       {
         publicApiBaseUrl: 'https://api.example.com',
       },

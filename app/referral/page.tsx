@@ -18,11 +18,11 @@ import type { ReferralInfo } from '@/lib/types/learner';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
-const STATUS_BADGE: Record<string, { label: string; variant: 'default' | 'success' | 'destructive' | 'outline' }> = {
+const STATUS_BADGE: Record<string, { label: string; variant: 'default' | 'success' | 'danger' | 'outline' }> = {
   pending: { label: 'Pending', variant: 'outline' },
   activated: { label: 'Activated', variant: 'default' },
   rewarded: { label: 'Rewarded', variant: 'success' },
-  expired: { label: 'Expired', variant: 'destructive' },
+  expired: { label: 'Expired', variant: 'danger' },
 };
 
 export default function ReferralPage() {
@@ -81,7 +81,7 @@ export default function ReferralPage() {
 
       <LearnerPageHero
         title="Refer a Friend"
-        subtitle="Share OET Prep with colleagues and earn credits for each signup."
+        description="Share OET Prep with colleagues and earn credits for each signup."
         icon={<Users className="w-7 h-7" />}
       />
 

@@ -171,3 +171,26 @@ public class CohortMember
 
     public DateTimeOffset EnrolledAt { get; set; }
 }
+
+// ── Sponsorship (self-service by sponsor) ──
+
+public class Sponsorship
+{
+    [Key]
+    public Guid Id { get; set; }
+
+    [MaxLength(64)]
+    public string SponsorUserId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string? LearnerUserId { get; set; }
+
+    [MaxLength(256)]
+    public string LearnerEmail { get; set; } = default!;
+
+    [MaxLength(16)]
+    public string Status { get; set; } = "Pending";       // "Pending", "Active", "Revoked"
+
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? RevokedAt { get; set; }
+}

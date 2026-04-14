@@ -7010,4 +7010,76 @@ public partial class LearnerService(
         await db.SaveChangesAsync(ct);
         return new { feedbackId = feedback.Id, status = "completed" };
     }
+
+    // ── Learner Escalation / Dispute ────────────────────────────
+
+    public async Task<object> SubmitEscalationAsync(
+        string userId, string submissionId, string reason, string details, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(submissionId))
+            throw new InvalidOperationException("Submission ID is required.");
+        if (string.IsNullOrWhiteSpace(reason))
+            throw new InvalidOperationException("Reason is required.");
+        if (string.IsNullOrWhiteSpace(details))
+            throw new InvalidOperationException("Details are required.");
+
+        var existing = await db.LearnerEscalations
+            .AnyAsync(e => e.UserId == userId && e.SubmissionId == submissionId && e.Status == "Pending", ct);
+        if (existing)
+            throw new InvalidOperationException("An escalation for this submission is already pending.");
+
+        var escalation = new LearnerEscalation
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            UserId = userId,
+            SubmissionId = submissionId,
+            Reason = reason,
+            Details = details,
+            Status = "Pending",
+            CreatedAt = DateTimeOffset.UtcNow
+        };
+
+        db.LearnerEscalations.Add(escalation);
+        await db.SaveChangesAsync(ct);
+        return new { escalationId = escalation.Id, status = escalation.Status };
+    }
+
+    public async Task<object> GetMyEscalationsAsync(string userId, CancellationToken ct)
+    {
+        var items = await db.LearnerEscalations
+            .AsNoTracking()
+            .Where(e => e.UserId == userId)
+            .OrderByDescending(e => e.CreatedAt)
+            .Select(e => new
+            {
+                id = e.Id,
+                submissionId = e.SubmissionId,
+                reason = e.Reason,
+                status = e.Status,
+                createdAt = e.CreatedAt,
+                updatedAt = e.UpdatedAt
+            })
+            .ToListAsync(ct);
+
+        return new { items, total = items.Count };
+    }
+
+    public async Task<object> GetEscalationDetailsAsync(string userId, string escalationId, CancellationToken ct)
+    {
+        var esc = await db.LearnerEscalations
+            .AsNoTracking()
+            .FirstOrDefaultAsync(e => e.Id == escalationId && e.UserId == userId, ct)
+            ?? throw new InvalidOperationException("Escalation not found.");
+
+        return new
+        {
+            id = esc.Id,
+            submissionId = esc.SubmissionId,
+            reason = esc.Reason,
+            details = esc.Details,
+            status = esc.Status,
+            createdAt = esc.CreatedAt,
+            updatedAt = esc.UpdatedAt
+        };
+    }
 }

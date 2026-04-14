@@ -288,3 +288,23 @@ public class PushSubscription
     public DateTimeOffset? LastSuccessfulAt { get; set; }
     public DateTimeOffset? LastFailureAt { get; set; }
 }
+
+[Index(nameof(AuthAccountId), nameof(Platform))]
+[Index(nameof(Token), IsUnique = true)]
+public class MobilePushToken
+{
+    [Key]
+    public Guid Id { get; set; }
+
+    [MaxLength(64)]
+    public string AuthAccountId { get; set; } = default!;
+
+    [MaxLength(512)]
+    public string Token { get; set; } = default!;
+
+    [MaxLength(16)]
+    public string Platform { get; set; } = default!;
+
+    public bool IsActive { get; set; } = true;
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }IND

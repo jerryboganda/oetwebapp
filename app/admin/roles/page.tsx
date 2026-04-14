@@ -241,7 +241,7 @@ export default function AdminRolesPage() {
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
                                   <span className="text-sm font-medium">{meta.label}</span>
-                                  {checked && <Badge variant="secondary" className="text-[10px]">Granted</Badge>}
+                                  {checked && <Badge variant="muted" className="text-[10px]">Granted</Badge>}
                                 </div>
                                 <p className="text-xs text-muted">{meta.desc}</p>
                               </div>

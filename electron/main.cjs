@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, session, Menu, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, session, Menu, dialog, Tray, Notification, nativeImage } = require('electron');
 const { spawn } = require('child_process');
 const fs = require('fs');
 const net = require('net');
@@ -67,6 +67,7 @@ let updateCheckTimer = null;
 let shuttingDown = false;
 let secureSecretStore = null;
 let desktopRuntimeConfig = null;
+let tray = null;
 const allowPackagedLoopbackApiTarget = !app.isPackaged || process.env.ELECTRON_ALLOW_LOCAL_API_TARGET === 'true';
 let activeBackendUrl = null;
 let ignoredPackagedLoopbackApiTarget = null;
@@ -493,18 +494,19 @@ function getBundledBackendEnv(runtimeUrl) {
   const dataRoot = path.join(app.getPath('userData'), 'backend');
   const storageRoot = path.join(app.getPath('userData'), 'storage');
   const databasePath = path.join(dataRoot, 'oet-prep.desktop.db');
+  const isProduction = app.isPackaged;
 
   fs.mkdirSync(dataRoot, { recursive: true });
   fs.mkdirSync(storageRoot, { recursive: true });
 
   return {
     ...process.env,
-    ASPNETCORE_ENVIRONMENT: 'Development',
+    ASPNETCORE_ENVIRONMENT: isProduction ? 'Production' : 'Development',
     ASPNETCORE_URLS: runtimeUrl,
     ConnectionStrings__DefaultConnection: `Data Source=${databasePath}`,
-    Auth__UseDevelopmentAuth: 'true',
+    Auth__UseDevelopmentAuth: isProduction ? 'false' : 'true',
     Bootstrap__AutoMigrate: 'true',
-    Bootstrap__SeedDemoData: 'true',
+    Bootstrap__SeedDemoData: isProduction ? 'false' : 'true',
     Platform__PublicApiBaseUrl: runtimeUrl,
     Platform__PublicWebBaseUrl: DEFAULT_RENDERER_URL,
     Billing__CheckoutBaseUrl: `${DEFAULT_RENDERER_URL}/billing/checkout`,
@@ -726,6 +728,77 @@ app.on('open-url', (event, url) => {
   openOrNavigateUrl(url);
 });
 
+// ── System Tray ─────────────────────────────────────────────────────
+
+function createSystemTray() {
+  if (tray) return;
+
+  const iconPath = path.join(__dirname, '..', 'public', 'icon.svg');
+  let trayIcon;
+
+  try {
+    trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+  } catch {
+    trayIcon = nativeImage.createEmpty();
+  }
+
+  tray = new Tray(trayIcon);
+  tray.setToolTip('OET Prep');
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Open OET Prep',
+      click: () => focusMainWindow(),
+    },
+    {
+      label: 'Dashboard',
+      click: () => { focusMainWindow(); navigateToRoute('/dashboard'); },
+    },
+    {
+      label: 'Study Plan',
+      click: () => { focusMainWindow(); navigateToRoute('/study-plan'); },
+    },
+    { type: 'separator' },
+    {
+      label: 'Quit',
+      click: () => app.quit(),
+    },
+  ]);
+
+  tray.setContextMenu(contextMenu);
+
+  tray.on('click', () => {
+    focusMainWindow();
+  });
+}
+
+// ── Desktop Native Notifications ────────────────────────────────────
+
+function showDesktopNotification(title, body, route) {
+  if (!Notification.isSupported()) return;
+
+  const notification = new Notification({
+    title: title || 'OET Prep',
+    body: body || '',
+    icon: path.join(__dirname, '..', 'public', 'icon.svg'),
+    silent: false,
+  });
+
+  notification.on('click', () => {
+    focusMainWindow();
+    if (route) navigateToRoute(route);
+  });
+
+  notification.show();
+}
+
+// IPC handler for renderer to trigger native notifications (e.g., from SignalR)
+ipcMain.handle('desktop:show-notification', async (event, { title, body, route }) => {
+  if (!validateSenderFrame(event)) throw new Error('Unauthorized IPC sender.');
+  showDesktopNotification(title, body, route);
+  return { ok: true };
+});
+
 app.whenReady().then(async () => {
   try {
     app.setAppUserModelId('com.oetprep.desktop');
@@ -766,6 +839,8 @@ app.whenReady().then(async () => {
       getWindow: () => mainWindow,
       onStateChange: () => refreshApplicationMenu(),
     });
+
+    createSystemTray();
 
     await resolveRendererUrl();
     await createWindow();
@@ -971,4 +1046,40 @@ ipcMain.handle('desktop:offline-cache:clear', async (event) => {
     fs.unlinkSync(path.join(OFFLINE_CACHE_DIR, f));
   }
   return { success: true, cleared: files.length };
+});
+
+ipcMain.handle('desktop:get-dropped-file-info', async (event, filePath) => {
+  if (!validateSenderFrame(event)) throw new Error('Unauthorized IPC sender.');
+  try {
+    const resolved = path.resolve(filePath);
+    const stat = await fs.promises.stat(resolved);
+    if (!stat.isFile()) return { ok: false, error: 'NOT_A_FILE' };
+    return {
+      ok: true,
+      name: path.basename(resolved),
+      size: stat.size,
+      path: resolved,
+      lastModified: stat.mtimeMs,
+    };
+  } catch {
+    return { ok: false, error: 'FILE_NOT_FOUND' };
+  }
+});
+
+ipcMain.handle('desktop:print-page', async (event, options) => {
+  if (!validateSenderFrame(event)) throw new Error('Unauthorized IPC sender.');
+  const win = BrowserWindow.getFocusedWindow();
+  if (!win) return { ok: false, error: 'NO_WINDOW' };
+  try {
+    const printOptions = {
+      silent: false,
+      printBackground: true,
+      margins: { marginType: 'default' },
+      ...(options || {}),
+    };
+    await win.webContents.print(printOptions);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message || 'PRINT_FAILED' };
+  }
 });

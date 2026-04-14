@@ -21,6 +21,7 @@ import { EmptyState } from '@/components/ui/empty-error';
 import { InlineAlert } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
 import { fetchExpertDashboard, isApiError } from '@/lib/api';
+import { useExpertAuth } from '@/lib/hooks/use-expert-auth';
 import type { ExpertDashboardData, ReviewRequest } from '@/lib/types/expert';
 
 type AsyncStatus = 'loading' | 'error' | 'success';
@@ -126,6 +127,7 @@ function EmptyDraftState({ actionLabel, onAction }: { actionLabel: string; onAct
 
 export default function ExpertDashboardPage() {
   const router = useRouter();
+  const { expert } = useExpertAuth();
   const [dashboard, setDashboard] = useState<ExpertDashboardData | null>(null);
   const [status, setStatus] = useState<AsyncStatus>('loading');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -198,6 +200,19 @@ export default function ExpertDashboardPage() {
     >
       {dashboard ? (
         <div className="space-y-6">
+            {expert?.isOnboardingComplete === false && (
+              <InlineAlert
+                variant="info"
+                title="Complete your expert onboarding"
+                action={(
+                  <Button variant="primary" size="sm" onClick={() => router.push('/expert/onboarding')}>
+                    Start Onboarding
+                  </Button>
+                )}
+              >
+                Set up your profile, qualifications, schedule, and rates so learners can find you and book sessions.
+              </InlineAlert>
+            )}
             <LearnerPageHero
               eyebrow="Current Focus"
               icon={Sparkles}

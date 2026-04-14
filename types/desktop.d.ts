@@ -50,6 +50,18 @@ declare global {
         vaultPath: string;
       }>;
     };
+    notifications: {
+      show: (title: string, body: string, route?: string) => Promise<{ ok: boolean }>;
+    };
+    fileInfo: {
+      getDroppedFileInfo: (filePath: string) => Promise<
+        | { ok: true; name: string; size: number; path: string; lastModified: number }
+        | { ok: false; error: string }
+      >;
+    };
+    print: {
+      printPage: (options?: Record<string, unknown>) => Promise<{ ok: boolean; error?: string }>;
+    };
   }
 
   interface Window {

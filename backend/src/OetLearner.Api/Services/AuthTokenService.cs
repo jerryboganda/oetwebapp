@@ -40,10 +40,11 @@ public sealed class AuthTokenService(IOptions<AuthTokenOptions> authTokenOptions
     public const string EmailVerifiedAtClaimType = "email_verified_at";
     public const string AuthenticatorEnabledAtClaimType = "authenticator_enabled_at";
     public const string AdminPermissionsClaimType = "admin_permissions";
+    public const string SessionIdClaimType = "sid";
 
     private readonly AuthTokenOptions _options = authTokenOptions.Value;
 
-    public IssuedAuthSession IssueSession(AuthenticatedSessionSubject subject)
+    public IssuedAuthSession IssueSession(AuthenticatedSessionSubject subject, Guid? sessionId = null)
     {
         var now = timeProvider.GetUtcNow();
         var accessTokenExpiresAt = now.Add(_options.AccessTokenLifetime);
@@ -80,6 +81,11 @@ public sealed class AuthTokenService(IOptions<AuthTokenOptions> authTokenOptions
         if (subject.AdminPermissions is { Length: > 0 })
         {
             claims.Add(new Claim(AdminPermissionsClaimType, string.Join(",", subject.AdminPermissions)));
+        }
+
+        if (sessionId is not null)
+        {
+            claims.Add(new Claim(SessionIdClaimType, sessionId.Value.ToString()));
         }
 
         var accessTokenDescriptor = new SecurityTokenDescriptor

@@ -205,6 +205,28 @@ public static class PrivateSpeakingEndpoints
             return Results.Ok(MapBookingDetailResponse(booking));
         });
 
+        expert.MapPost("/sessions/{bookingId}/cancel", async (
+            HttpContext http,
+            string bookingId,
+            CancelBookingRequest? req,
+            PrivateSpeakingService svc,
+            CancellationToken ct) =>
+        {
+            // Verify this expert owns the session via their tutor profile
+            var profile = await svc.GetTutorProfileByExpertIdAsync(http.UserId(), ct);
+            if (profile is null) return Results.NotFound(new { error = "NO_PROFILE" });
+
+            var booking = await svc.GetBookingAsync(bookingId, ct);
+            if (booking is null || booking.TutorProfileId != profile.Id)
+                return Results.NotFound(new { error = "NOT_FOUND" });
+
+            var (success, error) = await svc.CancelBookingAsync(
+                bookingId, http.UserId(), "expert", req?.Reason, ct);
+            return success
+                ? Results.Ok(new { cancelled = true })
+                : Results.BadRequest(new { error });
+        });
+
         expert.MapGet("/availability", async (
             HttpContext http,
             PrivateSpeakingService svc,

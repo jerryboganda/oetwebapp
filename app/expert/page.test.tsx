@@ -11,9 +11,26 @@ vi.mock('@/lib/analytics', () => ({
   },
 }));
 
-vi.mock('@/lib/api', () => ({
-  fetchExpertDashboard: mockFetchExpertDashboard,
-  isApiError: () => false,
+vi.mock('@/lib/api', () => {
+  class ApiError extends Error {
+    status: number; code: string; retryable: boolean; userMessage: string; fieldErrors: any[];
+    constructor(s: number, c: string, m: string, r = false, f: any[] = []) { super(m); this.name='ApiError'; this.status=s; this.code=c; this.retryable=r; this.userMessage=m; this.fieldErrors=f; }
+  }
+  return {
+    ApiError,
+    fetchExpertDashboard: mockFetchExpertDashboard,
+    isApiError: (e: unknown) => e instanceof ApiError,
+  };
+});
+
+vi.mock('@/lib/hooks/use-current-user', () => ({
+  useCurrentUser: () => ({
+    user: { userId: 'test-expert', displayName: 'Dr Test', email: 'test@example.com', isEmailVerified: true, isAuthenticatorEnabled: false },
+    role: 'expert' as const,
+    isAuthenticated: true,
+    isLoading: false,
+    pendingMfaChallenge: null,
+  }),
 }));
 
 import ExpertDashboardPage from './page';

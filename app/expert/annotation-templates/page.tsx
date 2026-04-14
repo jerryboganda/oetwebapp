@@ -126,7 +126,7 @@ export default function AnnotationTemplatesPage() {
 
       <LearnerPageHero
         title="Annotation Templates"
-        subtitle="Manage reusable feedback templates for your expert reviews."
+        description="Manage reusable feedback templates for your expert reviews."
         icon={<FileEdit className="w-7 h-7" />}
       />
 
@@ -135,17 +135,10 @@ export default function AnnotationTemplatesPage() {
         <Select
           value={filterSubtest}
           onChange={(e) => { setFilterSubtest(e.target.value); setFilterCriterion(''); }}
-        >
-          <option value="">All subtests</option>
-          {SUBTESTS.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-        </Select>
+          options={[{ value: '', label: 'All subtests' }, ...SUBTESTS.map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))]}
+        />
         {filterSubtest && CRITERIA[filterSubtest] && (
-          <Select value={filterCriterion} onChange={(e) => setFilterCriterion(e.target.value)}>
-            <option value="">All criteria</option>
-            {CRITERIA[filterSubtest].map((c) => (
-              <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>
-            ))}
-          </Select>
+          <Select value={filterCriterion} onChange={(e) => setFilterCriterion(e.target.value)} options={[{ value: '', label: 'All criteria' }, ...CRITERIA[filterSubtest].map((c) => ({ value: c, label: c.replace(/_/g, ' ') }))]} />
         )}
         <Button onClick={openCreate} className="ml-auto">
           <Plus className="w-4 h-4 mr-1" /> New Template
@@ -154,9 +147,8 @@ export default function AnnotationTemplatesPage() {
 
       <AsyncStateWrapper
         status={pageStatus}
-        loadingMessage="Loading templates…"
         errorMessage="Unable to load annotation templates."
-        emptySlot={
+        emptyContent={
           <EmptyState
             icon={<FileEdit className="w-12 h-12 text-gray-400" />}
             title="No templates yet"
@@ -199,20 +191,15 @@ export default function AnnotationTemplatesPage() {
 
       {/* Create/Edit Modal */}
       {showModal && (
-        <Modal title={modalMode === 'create' ? 'New Template' : 'Edit Template'} onClose={() => setShowModal(false)}>
+        <Modal open title={modalMode === 'create' ? 'New Template' : 'Edit Template'} onClose={() => setShowModal(false)}>
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Subtest</label>
-              <Select value={form.subtestCode} onChange={(e) => setForm({ ...form, subtestCode: e.target.value, criterionCode: '' })}>
-                {SUBTESTS.map((s) => <option key={s} value={s}>{s.charAt(0).toUpperCase() + s.slice(1)}</option>)}
-              </Select>
+              <Select value={form.subtestCode} onChange={(e) => setForm({ ...form, subtestCode: e.target.value, criterionCode: '' })} options={SUBTESTS.map((s) => ({ value: s, label: s.charAt(0).toUpperCase() + s.slice(1) }))} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Criterion</label>
-              <Select value={form.criterionCode} onChange={(e) => setForm({ ...form, criterionCode: e.target.value })}>
-                <option value="">Select criterion</option>
-                {criteriaOptions.map((c) => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
-              </Select>
+              <Select value={form.criterionCode} onChange={(e) => setForm({ ...form, criterionCode: e.target.value })} options={[{ value: '', label: 'Select criterion' }, ...criteriaOptions.map((c) => ({ value: c, label: c.replace(/_/g, ' ') }))]} />
             </div>
             <div>
               <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Label</label>

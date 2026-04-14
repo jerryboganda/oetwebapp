@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import { fetchFluencyTimeline } from '@/lib/api';
 
 interface Segment {
   index: number;
@@ -35,15 +36,6 @@ interface FluencyData {
   benchmarks: { idealWordsPerMinute: { min: number; max: number }; maxAcceptableFillerRatio: number; maxAcceptablePauseSeconds: number };
 }
 
-async function apiRequest<T = unknown>(path: string, init?: RequestInit): Promise<T> {
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const { env } = await import('@/lib/env');
-  const token = await ensureFreshAccessToken();
-  const res = await fetch(`${env.apiBaseUrl}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...init?.headers } });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
-
 const RATING_COLORS: Record<string, string> = { good: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300', fair: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300', poor: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300' };
 
 export default function FluencyTimelinePage() {
@@ -56,7 +48,7 @@ export default function FluencyTimelinePage() {
   const load = async (id: string) => {
     if (!id) return;
     setLoading(true);
-    try { setData(await apiRequest<FluencyData>(`/v1/learner/speaking/${id}/fluency-timeline`)); }
+    try { setData(await fetchFluencyTimeline(id) as FluencyData); }
     catch { setData(null); }
     finally { setLoading(false); }
   };

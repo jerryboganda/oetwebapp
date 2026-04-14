@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { MailPlus, Search, Users } from 'lucide-react';
+import { MailPlus, Search, Upload, Users } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -256,10 +256,18 @@ export default function UsersPage() {
         title="User Operations"
         description="Manage learner, expert, and admin accounts with real invite, access, and status controls."
         actions={
-          <Button onClick={() => setIsInviteOpen(true)} className="gap-2">
-            <MailPlus className="h-4 w-4" />
-            Invite User
-          </Button>
+          <div className="flex gap-2">
+            <Link href="/admin/users/import">
+              <Button variant="outline" className="gap-2">
+                <Upload className="h-4 w-4" />
+                Bulk Import
+              </Button>
+            </Link>
+            <Button onClick={() => setIsInviteOpen(true)} className="gap-2">
+              <MailPlus className="h-4 w-4" />
+              Invite User
+            </Button>
+          </div>
         }
       />
 

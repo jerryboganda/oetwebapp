@@ -60,7 +60,7 @@ export default function SmartRemindersPage() {
       preferredSlot,
       pushEnabled,
       emailEnabled,
-      enabledReminders: prefs.filter((p) => p.enabled).map((p) => p.id),
+      enabledReminders: prefs.filter((p: ReminderPreference) => p.enabled).map((p: ReminderPreference) => p.id).join(','),
     });
     setIsSaving(false);
   }
@@ -71,7 +71,7 @@ export default function SmartRemindersPage() {
 
       <LearnerPageHero
         title="Smart Study Reminders"
-        subtitle="Customise when and how you receive study notifications."
+        description="Customise when and how you receive study notifications."
         icon={<Bell className="w-7 h-7" />}
       />
 
@@ -81,7 +81,7 @@ export default function SmartRemindersPage() {
           <LearnerSurfaceSectionHeader
             icon={<Clock className="w-5 h-5" />}
             title="Preferred Study Time"
-            subtitle="When should we remind you to study?"
+            description="When should we remind you to study?"
           />
           <div className="mt-4 flex flex-wrap gap-3">
             {TIME_SLOTS.map((slot) => (
@@ -149,7 +149,7 @@ export default function SmartRemindersPage() {
         <LearnerSurfaceSectionHeader
           icon={<Bell className="w-5 h-5" />}
           title="Reminder Types"
-          subtitle="Toggle the reminders you want to receive."
+          description="Toggle the reminders you want to receive."
         />
         <div className="space-y-2 mt-3">
           {prefs.map((pref) => (

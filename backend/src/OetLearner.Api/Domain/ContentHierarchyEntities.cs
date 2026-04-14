@@ -261,6 +261,9 @@ public class MediaAsset
 
     public MediaAssetStatus Status { get; set; }
 
+    [MaxLength(64)]
+    public string? UploadedBy { get; set; }
+
     public DateTimeOffset UploadedAt { get; set; }
     public DateTimeOffset? ProcessedAt { get; set; }
 }

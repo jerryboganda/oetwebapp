@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Trophy, BarChart3, Clock } from 'lucide-react';
+import { Trophy, BarChart3, Clock, Download } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { exportToCsv, formatDateForExport } from '@/lib/csv-export';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -37,7 +39,27 @@ export default function ContentEffectivenessPage() {
   return (
     <div className="min-h-screen bg-background-light">
       <div className="max-w-5xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-1">Content Effectiveness</h1>
+        <div className="flex items-center justify-between mb-1">
+          <h1 className="text-2xl font-bold">Content Effectiveness</h1>
+          {data && data.items.length > 0 && (
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => {
+              const rows = data.items.map(item => ({
+                title: item.title,
+                subtest: item.subtestCode,
+                difficulty: item.difficulty,
+                totalAttempts: item.totalAttempts,
+                completionRate: item.completionRate,
+                averageScore: item.averageScore,
+                avgTimeSeconds: item.avgTimeSeconds,
+                effectivenessScore: item.effectivenessScore,
+              }));
+              exportToCsv(rows, `content-effectiveness-${formatDateForExport(new Date())}.csv`);
+            }}>
+              <Download className="w-4 h-4" />
+              Export CSV
+            </Button>
+          )}
+        </div>
         <p className="text-muted mb-6">Which content produces the most improvement and engagement?</p>
 
         <div className="flex gap-2 mb-6 flex-wrap">

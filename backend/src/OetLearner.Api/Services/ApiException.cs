@@ -37,4 +37,7 @@ public sealed class ApiException : Exception
 
     public static ApiException Forbidden(string errorCode, string message)
         => new(StatusCodes.Status403Forbidden, errorCode, message);
+
+    public static ApiException Unauthorized(string errorCode, string message)
+        => new(StatusCodes.Status401Unauthorized, errorCode, message);
 }

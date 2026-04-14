@@ -214,7 +214,7 @@ export default function ScoreCalculatorPage() {
                           Min OET: <strong>{req.oetMinGrade}</strong> ({req.oetMinScore}) · Min IELTS: <strong>{req.ieltsMin}</strong>
                         </p>
                       </div>
-                      <Badge variant={meetsReq ? 'default' : 'destructive'} className="text-xs shrink-0">
+                      <Badge variant={meetsReq ? 'default' : 'danger'} className="text-xs shrink-0">
                         {meetsReq ? 'Meets Requirement' : 'Below Minimum'}
                       </Badge>
                     </div>

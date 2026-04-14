@@ -25,6 +25,9 @@ const api = vi.hoisted(() => ({
   fetchExpertMetrics: vi.fn(),
   fetchExpertSchedule: vi.fn(),
   saveExpertSchedule: vi.fn(),
+  fetchScheduleExceptions: vi.fn(),
+  createScheduleException: vi.fn(),
+  deleteScheduleException: vi.fn(),
   track: vi.fn(),
 }));
 
@@ -44,23 +47,33 @@ vi.mock('@/lib/analytics', () => ({
   },
 }));
 
-vi.mock('@/lib/api', () => ({
-  fetchExpertQueueFilterMetadata: api.fetchExpertQueueFilterMetadata,
-  fetchReviewQueue: api.fetchReviewQueue,
-  claimReview: api.claimReview,
-  releaseReview: api.releaseReview,
-  fetchCalibrationCases: api.fetchCalibrationCases,
-  fetchCalibrationNotes: api.fetchCalibrationNotes,
-  fetchCalibrationCaseDetail: api.fetchCalibrationCaseDetail,
-  submitCalibrationCase: api.submitCalibrationCase,
-  fetchExpertLearners: api.fetchExpertLearners,
-  fetchLearnerProfile: api.fetchLearnerProfile,
-  fetchExpertLearnerReviewContext: api.fetchExpertLearnerReviewContext,
-  fetchExpertMetrics: api.fetchExpertMetrics,
-  fetchExpertSchedule: api.fetchExpertSchedule,
-  saveExpertSchedule: api.saveExpertSchedule,
-  isApiError: () => false,
-}));
+vi.mock('@/lib/api', () => {
+  class ApiError extends Error {
+    status: number; code: string; retryable: boolean; userMessage: string; fieldErrors: any[];
+    constructor(s: number, c: string, m: string, r = false, f: any[] = []) { super(m); this.name='ApiError'; this.status=s; this.code=c; this.retryable=r; this.userMessage=m; this.fieldErrors=f; }
+  }
+  return {
+    ApiError,
+    fetchExpertQueueFilterMetadata: api.fetchExpertQueueFilterMetadata,
+    fetchReviewQueue: api.fetchReviewQueue,
+    claimReview: api.claimReview,
+    releaseReview: api.releaseReview,
+    fetchCalibrationCases: api.fetchCalibrationCases,
+    fetchCalibrationNotes: api.fetchCalibrationNotes,
+    fetchCalibrationCaseDetail: api.fetchCalibrationCaseDetail,
+    submitCalibrationCase: api.submitCalibrationCase,
+    fetchExpertLearners: api.fetchExpertLearners,
+    fetchLearnerProfile: api.fetchLearnerProfile,
+    fetchExpertLearnerReviewContext: api.fetchExpertLearnerReviewContext,
+    fetchExpertMetrics: api.fetchExpertMetrics,
+    fetchExpertSchedule: api.fetchExpertSchedule,
+    saveExpertSchedule: api.saveExpertSchedule,
+    fetchScheduleExceptions: api.fetchScheduleExceptions,
+    createScheduleException: api.createScheduleException,
+    deleteScheduleException: api.deleteScheduleException,
+    isApiError: (e: unknown) => e instanceof ApiError,
+  };
+});
 
 import CalibrationCaseWorkspacePage from './calibration/[caseId]/page';
 import CalibrationCenterPage from './calibration/page';
@@ -333,6 +346,7 @@ describe('Expert Non-Review Pages', () => {
         sunday: { active: false, start: '09:00', end: '17:00' },
       },
     });
+    api.fetchScheduleExceptions.mockResolvedValue({ exceptions: [] });
     api.saveExpertSchedule.mockResolvedValue(null);
 
     renderPage(<SchedulePage />);

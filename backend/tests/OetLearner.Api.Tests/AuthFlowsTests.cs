@@ -9,6 +9,7 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.DataProtection;
+using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -471,6 +472,125 @@ public class AuthFlowsTests
 
         Assert.Equal(HttpStatusCode.BadRequest, reusedRecoveryResponse.StatusCode);
         Assert.Equal("invalid_mfa_recovery_code", await ReadErrorCodeAsync(reusedRecoveryResponse));
+    }
+
+    [Fact]
+    public async Task AuthEndpoints_DeleteAccount_ReturnsNoContentOnSuccess()
+    {
+        await using var harness = CreateAuthApiHarness();
+        await RegisterLearnerAsync(harness.Client);
+
+        var signInResponse = await harness.Client.PostAsJsonAsync("/v1/auth/sign-in",
+            new PasswordSignInRequest("learner@example.com", "Password123!", true));
+        signInResponse.EnsureSuccessStatusCode();
+        var session = await signInResponse.Content.ReadFromJsonAsync<AuthSessionResponse>(JsonSupport.Options);
+        Assert.NotNull(session);
+
+        using var deleteRequest = new HttpRequestMessage(HttpMethod.Post, "/v1/auth/account/delete")
+        {
+            Content = JsonContent.Create(new DeleteAccountRequest("Password123!", "No longer needed"))
+        };
+        deleteRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", session!.AccessToken);
+
+        var deleteResponse = await harness.Client.SendAsync(deleteRequest);
+
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task AuthEndpoints_DeleteAccount_RejectsWrongPassword()
+    {
+        await using var harness = CreateAuthApiHarness();
+        await RegisterLearnerAsync(harness.Client);
+
+        var signInResponse = await harness.Client.PostAsJsonAsync("/v1/auth/sign-in",
+            new PasswordSignInRequest("learner@example.com", "Password123!", true));
+        signInResponse.EnsureSuccessStatusCode();
+        var session = await signInResponse.Content.ReadFromJsonAsync<AuthSessionResponse>(JsonSupport.Options);
+        Assert.NotNull(session);
+
+        using var deleteRequest = new HttpRequestMessage(HttpMethod.Post, "/v1/auth/account/delete")
+        {
+            Content = JsonContent.Create(new DeleteAccountRequest("WrongPassword!", null))
+        };
+        deleteRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", session!.AccessToken);
+
+        var deleteResponse = await harness.Client.SendAsync(deleteRequest);
+
+        Assert.Equal(HttpStatusCode.Unauthorized, deleteResponse.StatusCode);
+        Assert.Equal("invalid_password", await ReadErrorCodeAsync(deleteResponse));
+    }
+
+    [Fact]
+    public async Task AuthEndpoints_DeleteAccount_SoftDeletesAccountAndRevokesTokens()
+    {
+        await using var harness = CreateAuthApiHarness();
+        await RegisterLearnerAsync(harness.Client);
+
+        var signInResponse = await harness.Client.PostAsJsonAsync("/v1/auth/sign-in",
+            new PasswordSignInRequest("learner@example.com", "Password123!", true));
+        signInResponse.EnsureSuccessStatusCode();
+        var session = await signInResponse.Content.ReadFromJsonAsync<AuthSessionResponse>(JsonSupport.Options);
+        Assert.NotNull(session);
+
+        using var deleteRequest = new HttpRequestMessage(HttpMethod.Post, "/v1/auth/account/delete")
+        {
+            Content = JsonContent.Create(new DeleteAccountRequest("Password123!"))
+        };
+        deleteRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", session!.AccessToken);
+
+        var deleteResponse = await harness.Client.SendAsync(deleteRequest);
+        Assert.Equal(HttpStatusCode.NoContent, deleteResponse.StatusCode);
+
+        // Verify soft-delete fields
+        await using var scope = harness.Factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var account = await db.ApplicationUserAccounts.SingleAsync(x => x.Email == "learner@example.com");
+        var learner = await db.Users.SingleAsync(x => x.AuthAccountId == account.Id);
+
+        Assert.NotNull(account.DeletedAt);
+        Assert.Equal("deleted", learner.AccountStatus);
+
+        // Verify all refresh tokens revoked
+        var activeTokens = await db.RefreshTokenRecords
+            .Where(t => t.ApplicationUserAccountId == account.Id && t.RevokedAt == null)
+            .CountAsync();
+        Assert.Equal(0, activeTokens);
+
+        // Verify sign-in is rejected
+        var signInAfterDelete = await harness.Client.PostAsJsonAsync("/v1/auth/sign-in",
+            new PasswordSignInRequest("learner@example.com", "Password123!", true));
+        Assert.Equal(HttpStatusCode.Forbidden, signInAfterDelete.StatusCode);
+        Assert.Equal("account_deleted", await ReadErrorCodeAsync(signInAfterDelete));
+    }
+
+    [Fact]
+    public async Task AuthEndpoints_DeleteAccount_RejectsUnauthenticatedRequest()
+    {
+        await using var harness = CreateAuthApiHarness();
+
+        var deleteResponse = await harness.Client.PostAsJsonAsync("/v1/auth/account/delete",
+            new DeleteAccountRequest("Password123!"));
+
+        Assert.Equal(HttpStatusCode.Unauthorized, deleteResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task AuthEndpoints_DeleteAccount_RejectsNonLearnerRole()
+    {
+        await using var harness = CreateAuthApiHarness();
+        var seed = await harness.SeedPrivilegedAccountAsync(ApplicationUserRoles.Expert, isEmailVerified: true);
+        var accessToken = await harness.IssueAccessTokenAsync(seed, isEmailVerified: true);
+
+        using var deleteRequest = new HttpRequestMessage(HttpMethod.Post, "/v1/auth/account/delete")
+        {
+            Content = JsonContent.Create(new DeleteAccountRequest("Password123!"))
+        };
+        deleteRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken);
+
+        var deleteResponse = await harness.Client.SendAsync(deleteRequest);
+
+        Assert.Equal(HttpStatusCode.Forbidden, deleteResponse.StatusCode);
     }
 
     [Fact]
@@ -966,7 +1086,7 @@ public class AuthFlowsTests
         yield return new object[]
         {
             currentUser,
-            new[] { "userId", "email", "role", "displayName", "isEmailVerified", "isAuthenticatorEnabled", "requiresEmailVerification", "requiresMfa", "emailVerifiedAt", "authenticatorEnabledAt" }
+            new[] { "userId", "email", "role", "displayName", "isEmailVerified", "isAuthenticatorEnabled", "requiresEmailVerification", "requiresMfa", "emailVerifiedAt", "authenticatorEnabledAt", "adminPermissions" }
         };
 
         yield return new object[]
@@ -1232,6 +1352,7 @@ public class AuthFlowsTests
             authBehaviorOptions,
             environment,
             dataProtectionProvider,
+            new HttpContextAccessor(),
             now);
 
         return new AuthServiceHarness(

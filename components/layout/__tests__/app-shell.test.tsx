@@ -51,6 +51,6 @@ describe('AppShell', () => {
     expect(authProviderSpy).toHaveBeenCalled();
     expect(authGuardSpy).toHaveBeenCalled();
     expect(authGuardSpy.mock.calls[0]?.[0]).toEqual(expect.objectContaining({ requiredRole: 'admin' }));
-    expect(topNavSpy.mock.calls.some(([props]) => Array.isArray(props.sectionedItems) && props.sectionedItems.length === 1)).toBe(true);
+    expect(topNavSpy.mock.calls.some(([props]: [Record<string, unknown>]) => Array.isArray(props.sectionedItems) && (props.sectionedItems as unknown[]).length === 1)).toBe(true);
   });
 });

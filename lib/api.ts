@@ -65,8 +65,13 @@ import type {
   ReviewDraft,
   ReviewQueueResponse,
   ReviewRequest as ExpertReviewRequest,
+  ScheduleException,
   SpeakingReviewDetail,
   WritingReviewDetail,
+  ExpertOnboardingProfile,
+  ExpertOnboardingQualifications,
+  ExpertOnboardingRates,
+  ExpertOnboardingStatus,
 } from './types/expert';
 
 const API_BASE_URL = env.apiBaseUrl;
@@ -111,9 +116,7 @@ function toSubTest(code: string): SubTest {
     case 'listening':
       return 'Listening';
     default:
-      if (process.env.NODE_ENV === 'development') {
-        console.warn('[API] Unknown subtest code:', code, '- defaulting to Writing');
-      }
+      console.warn('[API] Unknown subtest code:', code, '- defaulting to Writing');
       return 'Writing';
   }
 }
@@ -146,6 +149,9 @@ function toExamFamilyCode(value: unknown): ExamFamilyCode {
     return normalized;
   }
 
+  if (normalized !== 'oet' && normalized !== '') {
+    console.warn('[API] Unknown exam family code:', value);
+  }
   return 'oet';
 }
 
@@ -250,6 +256,14 @@ async function getHeaders(path: string, extra?: HeadersInit, options?: { json?: 
     headers.set('Content-Type', 'application/json');
   }
 
+  // Attach CSRF token (double-submit cookie pattern) for mutation requests
+  if (typeof document !== 'undefined') {
+    const csrfMatch = document.cookie.match(/(?:^|;\s*)oet_csrf=([^;]+)/);
+    if (csrfMatch) {
+      headers.set('x-csrf-token', csrfMatch[1]);
+    }
+  }
+
   try {
     const token = await ensureFreshAccessToken();
     if (token) {
@@ -330,7 +344,8 @@ async function apiRequest<T = any>(path: string, init?: RequestInit): Promise<T>
           message = error.message ?? error.title ?? message;
           retryable = error.retryable ?? isRetryable(response.status);
           fieldErrors = Array.isArray(error.fieldErrors) ? error.fieldErrors : [];
-        } catch {
+        } catch (err) {
+          console.error('[API] Failed to parse error response body:', err);
           retryable = isRetryable(response.status);
         }
 
@@ -391,8 +406,8 @@ async function uploadBinary(pathOrUrl: string, blob: Blob): Promise<void> {
     try {
       const error = await response.json();
       message = error.message ?? error.title ?? message;
-    } catch {
-      // noop
+    } catch (err) {
+      console.error('[API] uploadBinary: failed to parse error response:', err);
     }
     throw new Error(message);
   }
@@ -408,8 +423,8 @@ export async function fetchAuthorizedObjectUrl(pathOrUrl: string): Promise<strin
     try {
       const error = await response.json();
       message = error.message ?? error.title ?? message;
-    } catch {
-      // noop
+    } catch (err) {
+      console.error('[API] fetchAuthorizedObjectUrl: failed to parse error response:', err);
     }
     throw new Error(message);
   }
@@ -452,7 +467,12 @@ async function ensureAttempt(subtest: 'writing' | 'speaking' | 'reading' | 'list
         return existing;
       }
       cacheRemove(key);
-    } catch {
+    } catch (err) {
+      if (err instanceof ApiError && err.status >= 500) {
+        console.error('[API] ensureAttempt: server error checking existing attempt:', err);
+      } else {
+        console.error('[API] ensureAttempt: failed to verify existing attempt:', err);
+      }
       cacheRemove(key);
     }
   }
@@ -777,6 +797,30 @@ export async function updateSettingsSection(section: 'profile' | 'goals' | 'noti
     method: 'PATCH',
     body: JSON.stringify({ values }),
   });
+}
+
+// ── Session Management ──
+
+export interface ActiveSession {
+  id: string;
+  deviceInfo: string | null;
+  ipAddress: string | null;
+  lastUsedAt: string | null;
+  createdAt: string;
+  isCurrent: boolean;
+}
+
+export async function fetchActiveSessions(): Promise<ActiveSession[]> {
+  const data = await apiRequest<{ sessions: ActiveSession[] }>('/v1/auth/sessions');
+  return Array.isArray(data.sessions) ? data.sessions : [];
+}
+
+export async function revokeSession(sessionId: string): Promise<void> {
+  await apiRequest<void>(`/v1/auth/sessions/${sessionId}`, { method: 'DELETE' });
+}
+
+export async function revokeAllOtherSessions(): Promise<{ revokedCount: number }> {
+  return apiRequest<{ revokedCount: number }>('/v1/auth/sessions', { method: 'DELETE' });
 }
 
 export async function fetchReadingHome(): Promise<ApiRecord> {
@@ -1963,6 +2007,39 @@ export async function fetchExpertDashboard(): Promise<ExpertDashboardData> {
   return apiRequest<ExpertDashboardData>('/v1/expert/dashboard');
 }
 
+// ── Expert Onboarding ─────────────────────────────────────
+
+export async function fetchExpertOnboardingStatus(): Promise<ExpertOnboardingStatus> {
+  return apiRequest<ExpertOnboardingStatus>('/v1/expert/onboarding/status');
+}
+
+export async function saveExpertOnboardingProfile(data: ExpertOnboardingProfile): Promise<ExpertOnboardingProfile> {
+  return apiRequest<ExpertOnboardingProfile>('/v1/expert/onboarding/profile', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function saveExpertOnboardingQualifications(data: ExpertOnboardingQualifications): Promise<ExpertOnboardingQualifications> {
+  return apiRequest<ExpertOnboardingQualifications>('/v1/expert/onboarding/qualifications', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function saveExpertOnboardingRates(data: ExpertOnboardingRates): Promise<ExpertOnboardingRates> {
+  return apiRequest<ExpertOnboardingRates>('/v1/expert/onboarding/rates', {
+    method: 'PUT',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function completeExpertOnboarding(): Promise<{ completed: boolean }> {
+  return apiRequest<{ completed: boolean }>('/v1/expert/onboarding/complete', {
+    method: 'PATCH',
+  });
+}
+
 export async function fetchReviewQueue(params?: {
   search?: string;
   type?: string[];
@@ -2007,6 +2084,33 @@ export async function saveExpertSchedule(schedule: ExpertSchedule): Promise<Expe
   return apiRequest<ExpertSchedule>('/v1/expert/schedule', {
     method: 'PUT',
     body: JSON.stringify({ timezone: schedule.timezone, days: schedule.days }),
+  });
+}
+
+export async function fetchScheduleExceptions(from?: string, to?: string): Promise<{ exceptions: ScheduleException[] }> {
+  const params = new URLSearchParams();
+  if (from) params.set('from', from);
+  if (to) params.set('to', to);
+  const query = params.toString();
+  return apiRequest<{ exceptions: ScheduleException[] }>(`/v1/expert/schedule/exceptions${query ? `?${query}` : ''}`);
+}
+
+export async function createScheduleException(data: {
+  date: string;
+  isBlocked: boolean;
+  startTime?: string;
+  endTime?: string;
+  reason?: string;
+}): Promise<ScheduleException> {
+  return apiRequest<ScheduleException>('/v1/expert/schedule/exceptions', {
+    method: 'POST',
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteScheduleException(exceptionId: string): Promise<{ deleted: boolean }> {
+  return apiRequest<{ deleted: boolean }>(`/v1/expert/schedule/exceptions/${encodeURIComponent(exceptionId)}`, {
+    method: 'DELETE',
   });
 }
 
@@ -2316,6 +2420,30 @@ export async function adjustAdminUserCredits(userId: string, payload: { amount: 
 
 export async function triggerAdminUserPasswordReset(userId: string) {
   return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/password-reset`, { method: 'POST' });
+}
+
+export async function bulkImportUsers(file: File) {
+  const form = new FormData();
+  form.append('file', file);
+  const token = await ensureFreshAccessToken();
+  const headers: Record<string, string> = {};
+  if (token) headers['Authorization'] = `Bearer ${token}`;
+  const response = await fetchWithTimeout(resolveApiUrl('/v1/admin/users/import'), {
+    method: 'POST',
+    headers,
+    body: form,
+  }, 120_000);
+  if (!response.ok) {
+    let code = 'unknown_error';
+    let message = `Import failed: ${response.status}`;
+    try {
+      const error = await response.json();
+      code = error.code ?? code;
+      message = error.message ?? error.title ?? message;
+    } catch { /* ignore parse error */ }
+    throw new ApiError(response.status, code, message, false);
+  }
+  return response.json();
 }
 
 export async function fetchAdminBillingPlans(params?: { status?: string }) {
@@ -3007,6 +3135,44 @@ export async function fetchSignedMediaUrl(assetId: string) {
   return apiRequest(`/v1/media/${encodeURIComponent(assetId)}/url`);
 }
 
+// ── Media Management ──
+
+export async function uploadMedia(file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetchWithTimeout(resolveApiUrl('/v1/media/upload'), {
+    method: 'POST',
+    headers: await getHeaders('/v1/media/upload', undefined, { json: false }),
+    body: formData,
+  }, 90_000);
+  if (!response.ok) {
+    let code = 'upload_failed';
+    let message = `Upload failed: ${response.status}`;
+    try {
+      const error = await response.json();
+      code = error.code ?? code;
+      message = error.message ?? message;
+    } catch { /* ignore */ }
+    throw new ApiError(response.status, code, message, false);
+  }
+  return response.json();
+}
+
+export async function fetchMediaItem(id: string) {
+  return apiRequest(`/v1/media/${encodeURIComponent(id)}`);
+}
+
+export async function deleteMedia(id: string) {
+  return apiRequest(`/v1/media/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function fetchMyMedia(params?: { page?: number; pageSize?: number }) {
+  const qs = new URLSearchParams();
+  qs.set('page', String(params?.page ?? 1));
+  qs.set('pageSize', String(params?.pageSize ?? 20));
+  return apiRequest(`/v1/media?${qs}`);
+}
+
 export async function submitFlashcardReview(lvId: string, quality: number) {
   return apiRequest(`/v1/vocabulary/flashcards/${encodeURIComponent(lvId)}/review`, {
     method: 'POST',
@@ -3039,6 +3205,89 @@ export async function fetchAdminContentPackages(params?: { type?: string; status
   if (params?.pageSize) p.set('pageSize', String(params.pageSize));
   const qs = p.toString();
   return apiRequest(`/v1/admin/packages${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchAdminProgram(programId: string) {
+  return apiRequest(`/v1/admin/programs/${encodeURIComponent(programId)}`);
+}
+
+export async function createAdminProgram(payload: Record<string, unknown>) {
+  return apiRequest('/v1/admin/programs', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateAdminProgram(programId: string, payload: Record<string, unknown>) {
+  return apiRequest(`/v1/admin/programs/${encodeURIComponent(programId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchAdminTracks(programId: string) {
+  return apiRequest(`/v1/admin/programs/${encodeURIComponent(programId)}/tracks`);
+}
+
+export async function createAdminTrack(payload: Record<string, unknown>) {
+  return apiRequest('/v1/admin/tracks', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateAdminTrack(trackId: string, payload: Record<string, unknown>) {
+  return apiRequest(`/v1/admin/tracks/${encodeURIComponent(trackId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchAdminModules(trackId: string) {
+  return apiRequest(`/v1/admin/tracks/${encodeURIComponent(trackId)}/modules`);
+}
+
+export async function createAdminModule(payload: Record<string, unknown>) {
+  return apiRequest('/v1/admin/modules', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateAdminModule(moduleId: string, payload: Record<string, unknown>) {
+  return apiRequest(`/v1/admin/modules/${encodeURIComponent(moduleId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchAdminLessons(moduleId: string) {
+  return apiRequest(`/v1/admin/modules/${encodeURIComponent(moduleId)}/lessons`);
+}
+
+export async function createAdminLesson(payload: Record<string, unknown>) {
+  return apiRequest('/v1/admin/lessons', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function fetchAdminPackage(packageId: string) {
+  return apiRequest(`/v1/admin/packages/${encodeURIComponent(packageId)}`);
+}
+
+export async function createAdminPackage(payload: Record<string, unknown>) {
+  return apiRequest('/v1/admin/packages', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateAdminPackage(packageId: string, payload: Record<string, unknown>) {
+  return apiRequest(`/v1/admin/packages/${encodeURIComponent(packageId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
 }
 
 export async function fetchAdminContentInventory(params?: {
@@ -3213,6 +3462,34 @@ export async function createStudyGroup(payload: { name: string; description: str
 
 export async function joinStudyGroup(groupId: string) {
   return apiRequest(`/v1/community/study-groups/${encodeURIComponent(groupId)}/join`, { method: 'POST' });
+}
+
+// ── Community Moderation (Admin) ──────────────────────────────────────────────
+
+export async function pinCommunityThread(threadId: string, isPinned: boolean) {
+  return apiRequest(`/v1/admin/community/threads/${encodeURIComponent(threadId)}/pin`, {
+    method: 'PATCH',
+    body: JSON.stringify({ isPinned }),
+  });
+}
+
+export async function lockCommunityThread(threadId: string, isLocked: boolean) {
+  return apiRequest(`/v1/admin/community/threads/${encodeURIComponent(threadId)}/lock`, {
+    method: 'PATCH',
+    body: JSON.stringify({ isLocked }),
+  });
+}
+
+export async function adminDeleteCommunityThread(threadId: string) {
+  return apiRequest(`/v1/admin/community/threads/${encodeURIComponent(threadId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function adminDeleteCommunityReply(threadId: string, replyId: string) {
+  return apiRequest(`/v1/admin/community/threads/${encodeURIComponent(threadId)}/replies/${encodeURIComponent(replyId)}`, {
+    method: 'DELETE',
+  });
 }
 
 // ── Grammar ───────────────────────────────────────────────────────────────────
@@ -3504,6 +3781,10 @@ export async function fetchPendingMarketplaceSubmissions(page = 1, pageSize = 20
 
 // ── Admin Permissions (RBAC) ──────────────────────────
 
+export async function fetchAllPermissions() {
+  return apiRequest('/v1/admin/permissions');
+}
+
 export async function fetchAdminPermissions(userId: string) {
   return apiRequest(`/v1/admin/permissions/${encodeURIComponent(userId)}`);
 }
@@ -3515,6 +3796,31 @@ export async function updateAdminPermissions(userId: string, permissions: string
   });
 }
 
+// ── Permission Templates ──────────────────────────────
+
+export async function fetchPermissionTemplates() {
+  return apiRequest('/v1/admin/permission-templates');
+}
+
+export async function createPermissionTemplate(name: string, description: string, permissions: string[]) {
+  return apiRequest('/v1/admin/permission-templates', {
+    method: 'POST',
+    body: JSON.stringify({ name, description, permissions }),
+  });
+}
+
+export async function deletePermissionTemplate(id: string) {
+  return apiRequest(`/v1/admin/permission-templates/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function applyPermissionTemplate(userId: string, templateId: string) {
+  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/apply-template/${encodeURIComponent(templateId)}`, {
+    method: 'POST',
+  });
+}
+
 // ── Content Publishing Workflow ────────────────────────
 
 export async function requestContentPublish(contentId: string, note?: string) {
@@ -3522,6 +3828,49 @@ export async function requestContentPublish(contentId: string, note?: string) {
     method: 'POST',
     body: JSON.stringify({ note }),
   });
+}
+
+export async function submitContentForReview(contentId: string, note?: string) {
+  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}/submit-for-review`, {
+    method: 'POST',
+    body: JSON.stringify({ note }),
+  });
+}
+
+export async function editorApproveContent(contentId: string, notes?: string) {
+  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}/editor-approve`, {
+    method: 'POST',
+    body: JSON.stringify({ notes }),
+  });
+}
+
+export async function editorRejectContent(contentId: string, reason: string) {
+  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}/editor-reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function publisherApproveContent(contentId: string, notes?: string) {
+  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}/publisher-approve`, {
+    method: 'POST',
+    body: JSON.stringify({ notes }),
+  });
+}
+
+export async function publisherRejectContent(contentId: string, reason: string) {
+  return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}/publisher-reject`, {
+    method: 'POST',
+    body: JSON.stringify({ reason }),
+  });
+}
+
+export async function fetchPendingReviewContent(params?: { stage?: string; page?: number; pageSize?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.stage) qs.set('stage', params.stage);
+  qs.set('page', String(params?.page ?? 1));
+  qs.set('pageSize', String(params?.pageSize ?? 20));
+  return apiRequest(`/v1/admin/content/pending-review?${qs}`);
 }
 
 export async function fetchPublishRequests(params?: { status?: string; page?: number; pageSize?: number }) {
@@ -3589,6 +3938,23 @@ export async function resolveEscalation(escalationId: string, finalScore: number
     method: 'POST',
     body: JSON.stringify({ finalScore, resolutionNote }),
   });
+}
+
+// ── Learner Escalations (Disputes) ────────────────────
+
+export async function submitEscalation(submissionId: string, reason: string, details: string) {
+  return apiRequest('/v1/learner/escalations', {
+    method: 'POST',
+    body: JSON.stringify({ submissionId, reason, details }),
+  });
+}
+
+export async function fetchMyEscalations() {
+  return apiRequest('/v1/learner/escalations');
+}
+
+export async function fetchEscalationDetails(id: string) {
+  return apiRequest(`/v1/learner/escalations/${encodeURIComponent(id)}`);
 }
 
 // ── Score Guarantee (Learner) ─────────────────────────
@@ -3781,6 +4147,13 @@ export async function deleteExpertPrivateSpeakingAvailability(ruleId: string) {
   return apiRequest(`/v1/expert/private-speaking/availability/${encodeURIComponent(ruleId)}`, { method: 'DELETE' });
 }
 
+export async function cancelExpertPrivateSpeakingSession(bookingId: string, reason?: string) {
+  return apiRequest(`/v1/expert/private-speaking/sessions/${encodeURIComponent(bookingId)}/cancel`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason || null }),
+  });
+}
+
 // ── Private Speaking: Admin ───────────────────────────────
 
 export async function fetchAdminPrivateSpeakingConfig() {
@@ -3868,4 +4241,85 @@ export async function fetchAdminPrivateSpeakingAuditLogs(params?: { bookingId?: 
   qs.set('page', String(params?.page ?? 1));
   qs.set('pageSize', String(params?.pageSize ?? 50));
   return apiRequest(`/v1/admin/private-speaking/audit-logs?${qs}`);
+}
+
+// ── Orphan Endpoint Wiring ────────────────────────────
+
+export async function fetchStudyPlanDrift() {
+  return apiRequest('/v1/learner/study-plan/drift');
+}
+
+export async function fetchReadinessRisk() {
+  return apiRequest('/v1/learner/readiness/risk');
+}
+
+export async function applyStreakFreeze(): Promise<{ applied: boolean; message: string }> {
+  return apiRequest('/v1/learner/engagement/streak-freeze', { method: 'POST' });
+}
+
+export async function fetchFluencyTimeline(attemptId: string) {
+  return apiRequest(`/v1/learner/speaking/${encodeURIComponent(attemptId)}/fluency-timeline`);
+}
+
+export async function fetchDiagnosticPersonalization() {
+  return apiRequest('/v1/learner/diagnostic-personalization');
+}
+
+// ── Sponsor Dashboard ──
+
+export interface SponsorDashboardData {
+  sponsorName: string;
+  organizationName: string | null;
+  learnersSponsored: number;
+  activeSponsorships: number;
+  pendingSponsorships: number;
+  totalSpend: number;
+}
+
+export interface SponsoredLearner {
+  id: string;
+  learnerEmail: string;
+  learnerUserId: string | null;
+  status: string;
+  createdAt: string;
+  revokedAt: string | null;
+}
+
+export interface SponsorBillingData {
+  sponsorName: string;
+  organizationName: string | null;
+  totalSponsorships: number;
+  totalSpend: number;
+  currentMonthSpend: number;
+  billingCycle: string;
+  invoices: Array<Record<string, unknown>>;
+}
+
+export async function fetchSponsorDashboard(): Promise<SponsorDashboardData> {
+  return apiRequest<SponsorDashboardData>('/v1/sponsor/dashboard');
+}
+
+export async function fetchSponsoredLearners(params?: { page?: number; pageSize?: number }): Promise<{ items: SponsoredLearner[]; total: number; page: number; pageSize: number }> {
+  const queryParams = new URLSearchParams();
+  if (params?.page) queryParams.set('page', String(params.page));
+  if (params?.pageSize) queryParams.set('pageSize', String(params.pageSize));
+  const qs = queryParams.toString();
+  return apiRequest(`/v1/sponsor/learners${qs ? `?${qs}` : ''}`);
+}
+
+export async function inviteSponsoredLearner(email: string): Promise<SponsoredLearner> {
+  return apiRequest<SponsoredLearner>('/v1/sponsor/learners/invite', {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function removeSponsoredLearner(id: string): Promise<{ revoked: boolean }> {
+  return apiRequest(`/v1/sponsor/learners/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function fetchSponsorBilling(): Promise<SponsorBillingData> {
+  return apiRequest<SponsorBillingData>('/v1/sponsor/billing');
 }

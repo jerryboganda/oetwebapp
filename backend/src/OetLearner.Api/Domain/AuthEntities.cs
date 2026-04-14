@@ -55,6 +55,12 @@ public class RefreshTokenRecord
     public DateTimeOffset? RevokedAt { get; set; }
     public DateTimeOffset? LastUsedAt { get; set; }
 
+    [MaxLength(512)]
+    public string? DeviceInfo { get; set; }
+
+    [MaxLength(64)]
+    public string? IpAddress { get; set; }
+
     public ApplicationUserAccount ApplicationUserAccount { get; set; } = default!;
 }
 
@@ -141,6 +147,8 @@ public static class AdminPermissions
     public const string ContentRead = "content:read";
     public const string ContentWrite = "content:write";
     public const string ContentPublish = "content:publish";
+    public const string ContentEditorReview = "content:editor_review";
+    public const string ContentPublisherApproval = "content:publisher_approval";
     public const string BillingRead = "billing:read";
     public const string BillingWrite = "billing:write";
     public const string UsersRead = "users:read";
@@ -151,15 +159,18 @@ public static class AdminPermissions
     public const string FeatureFlags = "feature_flags";
     public const string AuditLogs = "audit_logs";
     public const string SystemAdmin = "system_admin";
+    public const string ManagePermissions = "manage_permissions";
 
     /// <summary>Full permission set granted to system administrators.</summary>
     public static readonly string[] All =
     [
         ContentRead, ContentWrite, ContentPublish,
+        ContentEditorReview, ContentPublisherApproval,
         BillingRead, BillingWrite,
         UsersRead, UsersWrite,
         ReviewOps, QualityAnalytics, AiConfig,
-        FeatureFlags, AuditLogs, SystemAdmin
+        FeatureFlags, AuditLogs, SystemAdmin,
+        ManagePermissions
     ];
 }
 
@@ -182,4 +193,26 @@ public class AdminPermissionGrant
     public DateTimeOffset GrantedAt { get; set; }
 
     public ApplicationUserAccount? AdminUser { get; set; }
+}
+
+/// <summary>Reusable permission role template.</summary>
+public class PermissionTemplate
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(128)]
+    public string Name { get; set; } = default!;
+
+    [MaxLength(512)]
+    public string? Description { get; set; }
+
+    /// <summary>JSON array of permission strings, e.g. ["content:read","content:write"]</summary>
+    public string Permissions { get; set; } = "[]";
+
+    [MaxLength(128)]
+    public string CreatedBy { get; set; } = default!;
+
+    public DateTimeOffset CreatedAt { get; set; }
 }

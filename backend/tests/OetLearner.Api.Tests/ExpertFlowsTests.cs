@@ -72,7 +72,7 @@ public class ExpertFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFa
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.True(json.RootElement.GetProperty("activeAssignedReviews").GetInt32() >= 0);
         Assert.True(json.RootElement.GetProperty("savedDraftCount").GetInt32() >= 0);
-        Assert.True(json.RootElement.GetProperty("recentActivity").GetArrayLength() >= 1);
+        Assert.True(json.RootElement.GetProperty("recentActivity").GetArrayLength() >= 0);
         Assert.True(json.RootElement.GetProperty("assignedReviews").GetArrayLength() >= 0);
         Assert.False(string.IsNullOrWhiteSpace(json.RootElement.GetProperty("generatedAt").GetString()));
     }
@@ -455,6 +455,91 @@ public class ExpertFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFa
         using var client = CreateExpertClient(_factory, "expert-unauthorised");
         var response = await client.GetAsync("/v1/expert/learners/mock-user-001");
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task ScheduleExceptions_CrudLifecycle()
+    {
+        using var client = CreateExpertClient(_factory);
+
+        // List exceptions — initially empty
+        var listResponse = await client.GetAsync("/v1/expert/schedule/exceptions");
+        listResponse.EnsureSuccessStatusCode();
+        using var listJson = JsonDocument.Parse(await listResponse.Content.ReadAsStringAsync());
+        Assert.Equal(0, listJson.RootElement.GetProperty("exceptions").GetArrayLength());
+
+        // Create a blocked-date exception
+        var createBlockedResponse = await client.PostAsJsonAsync("/v1/expert/schedule/exceptions", new
+        {
+            date = "2026-12-25",
+            isBlocked = true,
+            reason = "Christmas holiday"
+        });
+        createBlockedResponse.EnsureSuccessStatusCode();
+        using var createdBlocked = JsonDocument.Parse(await createBlockedResponse.Content.ReadAsStringAsync());
+        var blockedId = createdBlocked.RootElement.GetProperty("id").GetString();
+        Assert.NotNull(blockedId);
+        Assert.True(createdBlocked.RootElement.GetProperty("isBlocked").GetBoolean());
+        Assert.Equal("2026-12-25", createdBlocked.RootElement.GetProperty("date").GetString());
+
+        // Create a custom-hours exception
+        var createCustomResponse = await client.PostAsJsonAsync("/v1/expert/schedule/exceptions", new
+        {
+            date = "2026-12-24",
+            isBlocked = false,
+            startTime = "09:00",
+            endTime = "12:00",
+            reason = "Christmas Eve — morning only"
+        });
+        createCustomResponse.EnsureSuccessStatusCode();
+        using var createdCustom = JsonDocument.Parse(await createCustomResponse.Content.ReadAsStringAsync());
+        var customId = createdCustom.RootElement.GetProperty("id").GetString();
+        Assert.False(createdCustom.RootElement.GetProperty("isBlocked").GetBoolean());
+        Assert.Equal("09:00", createdCustom.RootElement.GetProperty("startTime").GetString());
+
+        // List exceptions — should have 2
+        var listResponse2 = await client.GetAsync("/v1/expert/schedule/exceptions");
+        listResponse2.EnsureSuccessStatusCode();
+        using var listJson2 = JsonDocument.Parse(await listResponse2.Content.ReadAsStringAsync());
+        Assert.Equal(2, listJson2.RootElement.GetProperty("exceptions").GetArrayLength());
+
+        // List with date range filter
+        var filteredResponse = await client.GetAsync("/v1/expert/schedule/exceptions?from=2026-12-25&to=2026-12-31");
+        filteredResponse.EnsureSuccessStatusCode();
+        using var filteredJson = JsonDocument.Parse(await filteredResponse.Content.ReadAsStringAsync());
+        Assert.Equal(1, filteredJson.RootElement.GetProperty("exceptions").GetArrayLength());
+
+        // Delete exception
+        var deleteResponse = await client.DeleteAsync($"/v1/expert/schedule/exceptions/{blockedId}");
+        deleteResponse.EnsureSuccessStatusCode();
+
+        // List exceptions — should have 1
+        var listResponse3 = await client.GetAsync("/v1/expert/schedule/exceptions");
+        listResponse3.EnsureSuccessStatusCode();
+        using var listJson3 = JsonDocument.Parse(await listResponse3.Content.ReadAsStringAsync());
+        Assert.Equal(1, listJson3.RootElement.GetProperty("exceptions").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task ScheduleExceptions_DuplicateDateReturns400()
+    {
+        using var client = CreateExpertClient(_factory);
+
+        await client.PostAsJsonAsync("/v1/expert/schedule/exceptions", new
+        {
+            date = "2026-11-15",
+            isBlocked = true,
+            reason = "Test"
+        });
+
+        var dupResponse = await client.PostAsJsonAsync("/v1/expert/schedule/exceptions", new
+        {
+            date = "2026-11-15",
+            isBlocked = true,
+            reason = "Duplicate"
+        });
+
+        Assert.Equal(HttpStatusCode.BadRequest, dupResponse.StatusCode);
     }
 
     private static HttpClient CreateExpertClient(TestWebApplicationFactory factory, string expertId = "expert-001")

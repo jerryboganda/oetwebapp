@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import { fetchStudyPlanDrift } from '@/lib/api';
 
 interface DriftData {
   hasPlan: boolean;
@@ -29,15 +30,6 @@ interface DriftData {
   overdueItems?: { id: string; title: string; subtestCode: string; dueDate: string; daysOverdue: number }[];
 }
 
-async function apiRequest<T = unknown>(path: string, init?: RequestInit): Promise<T> {
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const { env } = await import('@/lib/env');
-  const token = await ensureFreshAccessToken();
-  const res = await fetch(`${env.apiBaseUrl}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...init?.headers } });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
-
 const DRIFT_COLOR: Record<string, string> = {
   severe: 'text-red-600 bg-red-50 dark:bg-red-950',
   moderate: 'text-amber-600 bg-amber-50 dark:bg-amber-950',
@@ -51,7 +43,7 @@ export default function StudyPlanDriftPage() {
 
   useEffect(() => {
     analytics.track('study_plan_drift_viewed');
-    apiRequest<DriftData>('/v1/learner/study-plan/drift').then(setData).catch(() => {}).finally(() => setLoading(false));
+    fetchStudyPlanDrift().then((d) => setData(d as DriftData)).catch(() => {}).finally(() => setLoading(false));
   }, []);
 
   return (
@@ -121,7 +113,7 @@ export default function StudyPlanDriftPage() {
                           <p className="text-sm font-medium">{item.title}</p>
                           <p className="text-xs text-muted-foreground capitalize">{item.subtestCode} • Due: {item.dueDate}</p>
                         </div>
-                        <Badge variant="destructive">{item.daysOverdue}d overdue</Badge>
+                        <Badge variant="danger">{item.daysOverdue}d overdue</Badge>
                       </Card>
                     </MotionItem>
                   ))}

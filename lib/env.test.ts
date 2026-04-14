@@ -3,7 +3,7 @@ const ORIGINAL_ENV = { ...process.env };
 function resetEnvironment() {
   vi.resetModules();
   process.env = { ...ORIGINAL_ENV };
-  delete (globalThis as typeof globalThis & { window?: Window }).window;
+  delete (globalThis as Record<string, unknown>).window;
 }
 
 describe('resolveApiBaseUrl', () => {
@@ -22,7 +22,7 @@ describe('resolveApiBaseUrl', () => {
   });
 
   it('uses the proxy path in the browser when NEXT_PUBLIC_API_BASE_URL is missing', async () => {
-    (globalThis as typeof globalThis & { window?: Window }).window = {} as Window;
+    (globalThis as Record<string, unknown>).window = {} as Window & typeof globalThis;
     delete process.env.NEXT_PUBLIC_API_BASE_URL;
 
     const { resolveApiBaseUrl } = await import('./env');

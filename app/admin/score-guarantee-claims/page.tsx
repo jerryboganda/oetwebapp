@@ -20,11 +20,11 @@ import type { AdminScoreGuaranteeClaim } from '@/lib/types/admin';
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
-const statusBadge: Record<string, { label: string; variant: 'default' | 'success' | 'destructive' | 'outline' }> = {
+const statusBadge: Record<string, { label: string; variant: 'default' | 'success' | 'danger' | 'outline' }> = {
   active: { label: 'Active', variant: 'default' },
   claim_submitted: { label: 'Claim Submitted', variant: 'default' },
   claim_approved: { label: 'Approved', variant: 'success' },
-  claim_rejected: { label: 'Rejected', variant: 'destructive' },
+  claim_rejected: { label: 'Rejected', variant: 'danger' },
   expired: { label: 'Expired', variant: 'outline' },
 };
 
@@ -83,13 +83,13 @@ export default function ScoreGuaranteeClaimsPage() {
   const filterGroups: FilterGroup[] = [
     {
       label: 'Status',
-      key: 'status',
+      id: 'status',
       options: [
-        { value: 'active', label: 'Active' },
-        { value: 'claim_submitted', label: 'Claim Submitted' },
-        { value: 'claim_approved', label: 'Approved' },
-        { value: 'claim_rejected', label: 'Rejected' },
-        { value: 'expired', label: 'Expired' },
+        { id: 'active', label: 'Active' },
+        { id: 'claim_submitted', label: 'Claim Submitted' },
+        { id: 'claim_approved', label: 'Approved' },
+        { id: 'claim_rejected', label: 'Rejected' },
+        { id: 'expired', label: 'Expired' },
       ],
     },
   ];
@@ -127,13 +127,12 @@ export default function ScoreGuaranteeClaimsPage() {
         <AdminRouteSummaryCard label="Pending Review" value={claims.filter((c) => c.status === 'claim_submitted').length} />
       </div>
 
-      <FilterBar groups={filterGroups} values={filters} onChange={setFilters} />
+      <FilterBar groups={filterGroups} selected={filters} onChange={(groupId, optionId) => setFilters(prev => { const arr = [...(prev[groupId] || [])]; const i = arr.indexOf(optionId); if (i >= 0) arr.splice(i, 1); else arr.push(optionId); return { ...prev, [groupId]: arr }; })} />
 
       <AsyncStateWrapper
         status={pageStatus}
-        loadingMessage="Loading claims…"
         errorMessage="Unable to load score guarantee claims."
-        emptySlot={
+        emptyContent={
           <EmptyState
             icon={<Shield className="w-12 h-12 text-muted" />}
             title="No claims found"
@@ -146,17 +145,13 @@ export default function ScoreGuaranteeClaimsPage() {
             data={claims}
             columns={columns}
             keyExtractor={(r) => r.id}
-            page={page}
-            pageSize={20}
-            total={total}
-            onPageChange={setPage}
           />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 
       {/* Review Modal */}
       {reviewTarget && (
-        <Modal title="Review Score Guarantee Claim" onClose={() => setReviewTarget(null)}>
+        <Modal open title="Review Score Guarantee Claim" onClose={() => setReviewTarget(null)}>
           <div className="space-y-4">
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div><span className="text-muted">Baseline:</span> <strong>{reviewTarget.baselineScore}</strong></div>

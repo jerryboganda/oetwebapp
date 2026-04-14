@@ -32,3 +32,10 @@ dev-output.txt
 tsconfig.tsbuildinfo
 .env*
 !.env.example
+
+# Local/temp artifacts
+Contactppp.png
+Contactzzz.png
+$sdkRoot/
+_previous_chat_history/
+dmb_*.py

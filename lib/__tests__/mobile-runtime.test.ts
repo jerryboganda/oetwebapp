@@ -52,6 +52,15 @@ describe('mobile runtime', () => {
           vaultPath: 'C:/tmp/desktop-secrets.json',
         }),
       },
+      notifications: {
+        show: async () => ({ ok: true }),
+      },
+      fileInfo: {
+        getDroppedFileInfo: async () => ({ ok: false, error: 'NOT_A_FILE' as const }),
+      },
+      print: {
+        printPage: async () => ({ ok: true }),
+      },
     };
 
     const cleanup = await initializeMobileRuntime();

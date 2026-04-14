@@ -20,7 +20,7 @@ import type { AdminReviewEscalation, AdminUserRow } from '@/lib/types/admin';
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
-const statusBadge: Record<string, { label: string; variant: 'default' | 'success' | 'destructive' }> = {
+const statusBadge: Record<string, { label: string; variant: 'default' | 'success' | 'danger' }> = {
   pending: { label: 'Pending', variant: 'default' },
   assigned: { label: 'Assigned', variant: 'default' },
   resolved: { label: 'Resolved', variant: 'success' },
@@ -121,7 +121,7 @@ export default function EscalationsPage() {
   ];
 
   const columns: Column<AdminReviewEscalation>[] = [
-    { key: 'subtestCode', header: 'Subtest', render: (e) => <Badge variant="secondary">{e.subtestCode}</Badge> },
+    { key: 'subtestCode', header: 'Subtest', render: (e) => <Badge variant="muted">{e.subtestCode}</Badge> },
     { key: 'aiScore', header: 'AI Score', render: (e) => <span className="font-mono">{e.aiScore}</span> },
     { key: 'humanScore', header: 'Human Score', render: (e) => <span className="font-mono">{e.humanScore}</span> },
     {
@@ -180,21 +180,22 @@ export default function EscalationsPage() {
         <AdminRouteSummaryCard label="Resolved" value={escalations.filter((e) => e.status === 'resolved').length} tone="success" />
       </div>
 
-      <FilterBar groups={filterGroups} value={filters} onChange={setFilters} />
+      <FilterBar groups={filterGroups} selected={filters} onChange={(groupId, optionId) => setFilters(prev => { const arr = [...(prev[groupId] || [])]; const i = arr.indexOf(optionId); if (i >= 0) arr.splice(i, 1); else arr.push(optionId); return { ...prev, [groupId]: arr }; })} />
 
       <AsyncStateWrapper
         status={pageStatus}
-        empty={<EmptyState icon={<Scale className="w-12 h-12" />} heading="No escalations" body="No review escalations found." />}
-        error={<EmptyState variant="error" heading="Error" body="Unable to load escalations." />}
+        emptyContent={<EmptyState icon={<Scale className="w-12 h-12" />} title="No escalations" description="No review escalations found." />}
+        errorMessage="Unable to load escalations."
       >
         <AdminRoutePanel>
           <DataTable
             columns={columns}
             data={escalations}
+            keyExtractor={(e) => e.id}
             mobileCardRender={(e) => (
               <div className="space-y-1">
                 <div className="flex gap-2">
-                  <Badge variant="secondary">{e.subtestCode}</Badge>
+                  <Badge variant="muted">{e.subtestCode}</Badge>
                   <Badge variant={statusBadge[e.status]?.variant ?? 'default'}>{statusBadge[e.status]?.label ?? e.status}</Badge>
                 </div>
                 <p className="text-xs">AI: {e.aiScore} | Human: {e.humanScore} | Div: {e.divergence}</p>
@@ -213,21 +214,15 @@ export default function EscalationsPage() {
         >
           <div className="space-y-4 p-4">
             <p className="text-sm text-muted">
-              Subtest: <Badge variant="secondary">{assignTarget.subtestCode}</Badge>
+              Subtest: <Badge variant="muted">{assignTarget.subtestCode}</Badge>
               {' '}AI: {assignTarget.aiScore} | Human: {assignTarget.humanScore} (Divergence: {assignTarget.divergence})
             </p>
             <Select
               label="Select Expert Reviewer"
               value={selectedExpertId}
               onChange={(e) => setSelectedExpertId(e.target.value)}
-            >
-              <option value="">Choose an expert...</option>
-              {experts
-                .filter((ex) => ex.id !== assignTarget.originalReviewerId)
-                .map((ex) => (
-                  <option key={ex.id} value={ex.id}>{ex.name} ({ex.email})</option>
-                ))}
-            </Select>
+              options={[{ value: '', label: 'Choose an expert...' }, ...experts.filter((ex) => ex.id !== assignTarget.originalReviewerId).map((ex) => ({ value: ex.id, label: `${ex.name} (${ex.email})` }))]}
+            />
           </div>
           <div className="flex justify-end gap-2 pt-4 border-t border-border dark:border-border px-4 pb-4">
             <Button variant="ghost" onClick={() => setAssignTarget(null)}>Cancel</Button>

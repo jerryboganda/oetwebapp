@@ -1,8 +1,9 @@
 import { render, screen } from '@testing-library/react';
-const { mockFetchXP, mockFetchStreak, mockFetchAchievements, mockTrack } = vi.hoisted(() => ({
+const { mockFetchXP, mockFetchStreak, mockFetchAchievements, mockApplyStreakFreeze, mockTrack } = vi.hoisted(() => ({
   mockFetchXP: vi.fn(),
   mockFetchStreak: vi.fn(),
   mockFetchAchievements: vi.fn(),
+  mockApplyStreakFreeze: vi.fn(),
   mockTrack: vi.fn(),
 }));
 
@@ -33,7 +34,7 @@ vi.mock('@/components/ui/progress', () => ({
 }));
 
 vi.mock('@/lib/analytics', () => ({ analytics: { track: mockTrack } }));
-vi.mock('@/lib/api', () => ({ fetchXP: mockFetchXP, fetchStreak: mockFetchStreak, fetchAchievements: mockFetchAchievements }));
+vi.mock('@/lib/api', () => ({ fetchXP: mockFetchXP, fetchStreak: mockFetchStreak, fetchAchievements: mockFetchAchievements, applyStreakFreeze: mockApplyStreakFreeze }));
 
 import AchievementsPage from './page';
 

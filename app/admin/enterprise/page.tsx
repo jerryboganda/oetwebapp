@@ -52,11 +52,11 @@ async function adminRequest<T = unknown>(path: string, init?: RequestInit): Prom
   return res.json();
 }
 
-const STATUS_BADGE: Record<string, { label: string; variant: 'default' | 'success' | 'destructive' | 'outline' }> = {
+const STATUS_BADGE: Record<string, { label: string; variant: 'default' | 'success' | 'danger' | 'outline' }> = {
   active: { label: 'Active', variant: 'success' },
   draft: { label: 'Draft', variant: 'outline' },
   completed: { label: 'Completed', variant: 'default' },
-  archived: { label: 'Archived', variant: 'destructive' },
+  archived: { label: 'Archived', variant: 'danger' },
 };
 
 export default function EnterprisePage() {
@@ -170,10 +170,10 @@ export default function EnterprisePage() {
       </div>
 
       <div className="flex gap-2 mb-4">
-        <Button variant={tab === 'sponsors' ? 'default' : 'outline'} size="sm" onClick={() => setTab('sponsors')}>
+        <Button variant={tab === 'sponsors' ? 'secondary' : 'outline'} size="sm" onClick={() => setTab('sponsors')}>
           <Building2 className="w-4 h-4 mr-1" /> Sponsors
         </Button>
-        <Button variant={tab === 'cohorts' ? 'default' : 'outline'} size="sm" onClick={() => setTab('cohorts')}>
+        <Button variant={tab === 'cohorts' ? 'secondary' : 'outline'} size="sm" onClick={() => setTab('cohorts')}>
           <GraduationCap className="w-4 h-4 mr-1" /> Cohorts
         </Button>
         <div className="flex-1" />
@@ -191,14 +191,14 @@ export default function EnterprisePage() {
 
       <AsyncStateWrapper status={status} errorMessage="Failed to load enterprise data." onRetry={loadData}>
         <AdminRoutePanel>
-          {tab === 'sponsors' && <DataTable columns={sponsorColumns} data={sponsors} />}
-          {tab === 'cohorts' && <DataTable columns={cohortColumns} data={cohorts} />}
+          {tab === 'sponsors' && <DataTable columns={sponsorColumns} data={sponsors} keyExtractor={(row) => row.id} />}
+          {tab === 'cohorts' && <DataTable columns={cohortColumns} data={cohorts} keyExtractor={(row) => row.id} />}
         </AdminRoutePanel>
       </AsyncStateWrapper>
 
       {/* Create Sponsor Modal */}
       {showCreate && (
-        <Modal onClose={() => setShowCreate(false)} title="Create Sponsor">
+        <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create Sponsor">
           <div className="space-y-4 p-4">
             <div>
               <label className="text-sm font-medium">Name</label>
@@ -206,11 +206,7 @@ export default function EnterprisePage() {
             </div>
             <div>
               <label className="text-sm font-medium">Type</label>
-              <Select value={newSponsorType} onChange={(e) => setNewSponsorType(e.target.value)}>
-                <option value="employer">Employer</option>
-                <option value="institution">Institution</option>
-                <option value="parent">Parent</option>
-              </Select>
+              <Select value={newSponsorType} onChange={(e) => setNewSponsorType(e.target.value)} options={[{ value: 'employer', label: 'Employer' }, { value: 'institution', label: 'Institution' }, { value: 'parent', label: 'Parent' }]} />
             </div>
             <div>
               <label className="text-sm font-medium">Contact Email</label>
@@ -230,14 +226,11 @@ export default function EnterprisePage() {
 
       {/* Create Cohort Modal */}
       {showCohortCreate && (
-        <Modal onClose={() => setShowCohortCreate(false)} title="Create Cohort">
+        <Modal open={showCohortCreate} onClose={() => setShowCohortCreate(false)} title="Create Cohort">
           <div className="space-y-4 p-4">
             <div>
               <label className="text-sm font-medium">Sponsor</label>
-              <Select value={cohortSponsorId} onChange={(e) => setCohortSponsorId(e.target.value)}>
-                <option value="">Select sponsor…</option>
-                {sponsors.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </Select>
+              <Select value={cohortSponsorId} onChange={(e) => setCohortSponsorId(e.target.value)} options={[{ value: '', label: 'Select sponsor…' }, ...sponsors.map((s) => ({ value: s.id, label: s.name }))]} />
             </div>
             <div>
               <label className="text-sm font-medium">Cohort Name</label>
@@ -246,9 +239,7 @@ export default function EnterprisePage() {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="text-sm font-medium">Exam Type</label>
-                <Select value={cohortExamType} onChange={(e) => setCohortExamType(e.target.value)}>
-                  <option value="oet">OET</option>
-                </Select>
+                <Select value={cohortExamType} onChange={(e) => setCohortExamType(e.target.value)} options={[{ value: 'oet', label: 'OET' }]} />
               </div>
               <div>
                 <label className="text-sm font-medium">Max Seats</label>

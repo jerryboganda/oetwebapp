@@ -58,7 +58,7 @@ export default function PeerReviewPage() {
 
         <div className="flex gap-2">
           {(['available', 'mine', 'given'] as const).map(t => (
-            <Button key={t} variant={tab === t ? 'default' : 'outline'} size="sm" onClick={() => setTab(t)}>
+            <Button key={t} variant={tab === t ? 'secondary' : 'outline'} size="sm" onClick={() => setTab(t)}>
               {t === 'available' ? 'Available' : t === 'mine' ? 'My Submissions' : 'My Reviews'}
             </Button>
           ))}
@@ -92,7 +92,7 @@ export default function PeerReviewPage() {
                 <Card className="p-4">
                   <div className="flex items-center gap-2 mb-2">
                     <Badge variant="outline">{item.subtestCode}</Badge>
-                    <Badge variant={item.status === 'completed' ? 'default' : 'secondary'}>
+                    <Badge variant={item.status === 'completed' ? 'default' : 'muted'}>
                       {item.status === 'completed' ? <><CheckCircle2 className="w-3 h-3 mr-1" /> Reviewed</> : <><Clock className="w-3 h-3 mr-1" /> {item.status}</>}
                     </Badge>
                   </div>
@@ -119,7 +119,7 @@ export default function PeerReviewPage() {
                 <Card className="p-4 flex items-center justify-between">
                   <div>
                     <Badge variant="outline" className="mr-2">{item.subtestCode}</Badge>
-                    <Badge variant={item.status === 'completed' ? 'default' : 'secondary'}>{item.status}</Badge>
+                    <Badge variant={item.status === 'completed' ? 'default' : 'muted'}>{item.status}</Badge>
                   </div>
                   <span className="text-xs text-muted-foreground">{item.completedAt ? new Date(item.completedAt).toLocaleDateString() : item.claimedAt ? 'In Progress' : ''}</span>
                 </Card>

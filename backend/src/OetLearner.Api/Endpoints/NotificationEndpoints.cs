@@ -78,6 +78,14 @@ public static class NotificationEndpoints
             return Results.Ok(new { ok = true });
         }).RequireRateLimiting("PerUserWrite");
 
+        notifications.MapPost("/push-token", async (
+            HttpContext http,
+            RegisterPushTokenRequest request,
+            NotificationService service,
+            CancellationToken ct) =>
+            Results.Ok(await service.RegisterPushTokenAsync(http.AuthAccountId(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
         var admin = app.MapGroup("/v1/admin/notifications")
             .RequireAuthorization("AdminOnly")
             .RequireRateLimiting("PerUser");

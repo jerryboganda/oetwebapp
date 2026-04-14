@@ -1,7 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { UserCheck, Clock, BarChart3, Zap } from 'lucide-react';
+import { UserCheck, Clock, BarChart3, Zap, Download } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { exportToCsv, formatDateForExport } from '@/lib/csv-export';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -38,7 +40,26 @@ export default function ExpertEfficiencyPage() {
   return (
     <div className="min-h-screen bg-background-light">
       <div className="max-w-5xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-1">Expert Efficiency Report</h1>
+        <div className="flex items-center justify-between mb-1">
+          <h1 className="text-2xl font-bold">Expert Efficiency Report</h1>
+          {data && data.experts.length > 0 && (
+            <Button variant="outline" size="sm" className="gap-2" onClick={() => {
+              const rows = data.experts.map(e => ({
+                expertName: e.expertName,
+                assignmentsReceived: e.assignmentsReceived,
+                reviewsCompleted: e.reviewsCompleted,
+                averageReviewTimeMinutes: e.averageReviewTimeMinutes,
+                reviewsPerDay: e.reviewsPerDay,
+                aiAlignmentScore: e.aiAlignmentScore,
+                efficiency: e.efficiency,
+              }));
+              exportToCsv(rows, `expert-efficiency-${days}d-${formatDateForExport(new Date())}.csv`);
+            }}>
+              <Download className="w-4 h-4" />
+              Export CSV
+            </Button>
+          )}
+        </div>
         <p className="text-muted mb-6">Review throughput, quality alignment, and operational efficiency per expert.</p>
 
         <div className="flex gap-2 mb-6">

@@ -29,7 +29,7 @@ export default function ScoreCalculatorPage() {
     <LearnerDashboardShell>
       <LearnerPageHero
         title="Score Cross-Reference Calculator"
-        subtitle="Compare your OET score to IELTS, PTE, and CEFR levels and check institution requirements."
+        description="Compare your OET score to IELTS, PTE, and CEFR levels and check institution requirements."
         icon={<Calculator className="w-7 h-7" />}
       />
 
@@ -49,7 +49,7 @@ export default function ScoreCalculatorPage() {
             <LearnerSurfaceSectionHeader
               icon={<Globe className="w-5 h-5" />}
               title="Score Equivalence Table"
-              subtitle="See how OET grades map to other major English proficiency exams."
+              description="See how OET grades map to other major English proficiency exams."
             />
             <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
               <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
@@ -66,7 +66,6 @@ export default function ScoreCalculatorPage() {
                   {data.equivalences.map((row) => (
                     <MotionItem
                       key={row.oetGrade}
-                      as="tr"
                       className={`cursor-pointer transition-colors ${
                         highlight === row.oetGrade
                           ? 'bg-indigo-50 dark:bg-indigo-900/20'
@@ -91,7 +90,7 @@ export default function ScoreCalculatorPage() {
             <LearnerSurfaceSectionHeader
               icon={<Building2 className="w-5 h-5" />}
               title="Institution Requirements"
-              subtitle="Minimum OET grades accepted by major healthcare regulators worldwide."
+              description="Minimum OET grades accepted by major healthcare regulators worldwide."
             />
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
               {data.institutions.map((inst) => (

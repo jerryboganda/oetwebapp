@@ -105,7 +105,7 @@ export default function AskAnExpertPage() {
         {data && (
           <MotionSection className="space-y-3">
             <div className="flex gap-3 mb-4">
-              <Badge variant="secondary">{data.total} questions</Badge>
+              <Badge variant="muted">{data.total} questions</Badge>
               <Badge variant="outline">{data.threads.filter(t => !t.hasExpertAnswer).length} unanswered</Badge>
             </div>
 

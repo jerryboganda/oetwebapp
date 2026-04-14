@@ -77,7 +77,7 @@ export default function QueuePriorityPage() {
                         <Icon className={`w-5 h-5 mt-0.5 flex-shrink-0 ${cfg.color}`} />
                         <div className="flex-1">
                           <div className="flex items-center gap-2 flex-wrap">
-                            <Badge variant={item.priority === 'critical' ? 'destructive' : item.priority === 'high' ? 'default' : 'outline'} className="uppercase text-[10px]">{item.priority}</Badge>
+                            <Badge variant={item.priority === 'critical' ? 'danger' : item.priority === 'high' ? 'default' : 'outline'} className="uppercase text-[10px]">{item.priority}</Badge>
                             <span className="text-sm font-medium capitalize">{item.subtestCode}</span>
                             {item.isResubmission && <Badge variant="outline" className="text-[10px]">Re-submission</Badge>}
                             {item.turnaround === 'express' && <Badge className="text-[10px] bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300">Express</Badge>}

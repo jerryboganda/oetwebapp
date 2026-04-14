@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { IconArrowRight, IconDeviceMobile, IconKey, IconShieldLock } from '@tabler/icons-react';
 import { useAuth } from '@/contexts/auth-context';
 import { resolvePostAuthDestination } from '@/lib/auth-routes';
@@ -114,6 +115,16 @@ export function MfaChallengeForm({ nextHref }: MfaChallengeFormProps) {
             <span>{isSubmittingCode ? 'Verifying code...' : 'Verify Code'}</span>
             {!isSubmittingCode ? <IconArrowRight size={18} /> : null}
           </button>
+
+          <p className={styles.fieldHint} style={{ textAlign: 'center', marginTop: '0.75rem' }}>
+            Lost your authenticator?{' '}
+            <Link
+              href={`/mfa/recovery${nextHref ? `?next=${encodeURIComponent(nextHref)}` : ''}`}
+              className={styles.link}
+            >
+              Use a recovery code
+            </Link>
+          </p>
         </form>
 
         <div className={styles.summaryCard}>

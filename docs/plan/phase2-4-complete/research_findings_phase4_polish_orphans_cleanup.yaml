@@ -1,0 +1,834 @@
+plan_id: "phase2-4-complete"
+objective: "Map codebase patterns for Phase 4 items: P18-P24 (polish, orphans, code quality)"
+focus_area: "Phase 4 — Polish, orphan wiring, code cleanup, expert onboarding"
+created_at: "2026-04-13T00:00:00Z"
+created_by: "gem-researcher"
+status: completed
+
+tldr: |
+  - P18: All 5 orphan endpoints confirmed in LearnerEndpoints.cs with rich anonymous-object DTOs; natural frontend consumers identifiable for each.
+  - P19: 4 `catch {}` blocks in lib/api.ts — 2 are benign (JSON parse fallback in uploadBinary/fetchAuthorizedObjectUrl), 1 is in ensureAttempt (cache cleanup), 1 is in apiRequest (JSON error parse); the file has strong error handling elsewhere via ApiError class.
+  - P20: fetchDiagnosticOverview and fetchDiagnosticSession are NOT duplicates — different semantics and return types; subscriptions/page.tsx IS a re-export wrapper.
+  - P21: toSubTest() silently defaults unknown codes to 'Writing'; toExamFamilyCode() defaults to 'oet'; GET /v1/reference/exam-families EXISTS and returns from DB.
+  - P22: No expert onboarding wizard exists; experts land on dashboard with no guided setup flow; calibration + schedule pages exist but are not linked sequentially.
+  - P23: 5 analytics pages under /admin/analytics/ plus 1 BI dashboard; recharts is the chart library; NO export/CSV library in package.json.
+  - P24: Single-stage publish request workflow exists (pending→approved|rejected); ContentPublishRequest entity tracks requestor + reviewer; no multi-stage approval chain.
+
+research_metadata:
+  methodology: "Hybrid retrieval: semantic_search + grep_search for discovery, targeted read_file for code examination, 3-pass investigation"
+  scope: "7 items (P18-P24) spanning backend endpoints, lib/api.ts, admin pages, expert pages, content workflow"
+  confidence: high
+  coverage: 92
+  decision_blockers: 0
+  research_blockers: 0
+
+# ═══════════════════════════════════════════════════
+# P18 — Wire Orphan Backend Endpoints
+# ═══════════════════════════════════════════════════
+
+p18_orphan_endpoints:
+  summary: "All 5 orphan endpoints confirmed present in LearnerEndpoints.cs. None have frontend API wrapper functions or page consumers."
+  complexity_estimate: "medium — ~2-3 days for all 5 (API functions + page integration)"
+
+  endpoints:
+    - route: "GET /v1/learner/study-plan/drift"
+      file: "backend/src/OetLearner.Api/Endpoints/LearnerEndpoints.cs"
+      line: 305
+      service_method: "LearnerService.DetectStudyPlanDriftAsync"
+      service_file: "backend/src/OetLearner.Api/Services/LearnerService.cs"
+      service_line: 6667
+      auth: ".RequireAuthorization('LearnerOnly')"
+      response_dto: |
+        anonymous object {
+          hasPlan: bool,
+          planId: string,
+          drift: {
+            level: "severe" | "moderate" | "mild" | "on-track",
+            overdueItems: int,
+            oldestOverdueDays: int,
+            completionRate: double,
+            expectedCompleted: int,
+            actualCompleted: int,
+            totalItems: int,
+            shouldRegenerate: bool,
+            recommendation: string
+          },
+          subtestDrift: [{ subtestCode, total, completed, overdue, completionRate }],
+          overdueItems: [{ Id, Title, SubtestCode, DueDate, daysOverdue }] (top 10)
+        }
+      natural_consumer: "app/study-plan/page.tsx — add drift alert banner + overdue items section"
+
+    - route: "GET /v1/learner/readiness/risk"
+      file: "backend/src/OetLearner.Api/Endpoints/LearnerEndpoints.cs"
+      line: 198
+      service_method: "EngagementService.CalculateTargetDateRiskAsync"
+      service_file: "backend/src/OetLearner.Api/Services/EngagementService.cs"
+      service_line: 106
+      auth: "none (no .RequireAuthorization chained)"
+      response_dto: |
+        record TargetDateRisk(
+          string RiskLevel,            // "unknown" | "low" | "medium" | "high" | "critical"
+          int ReadinessProbability,
+          int WeeksRemaining,
+          string Summary,
+          List<RiskFactor> Factors     // record RiskFactor(string FactorId, string Severity, string Description)
+        )
+      natural_consumer: "app/readiness/page.tsx — risk assessment section, or app/dashboard/ as a warning card"
+
+    - route: "POST /v1/learner/engagement/streak-freeze"
+      file: "backend/src/OetLearner.Api/Endpoints/LearnerEndpoints.cs"
+      line: 201
+      service_method: "EngagementService.UseStreakFreezeAsync"
+      service_file: "backend/src/OetLearner.Api/Services/EngagementService.cs"
+      service_line: 81
+      auth: "none (no .RequireAuthorization chained)"
+      response_dto: |
+        anonymous object {
+          applied: bool,
+          message: "Streak freeze applied." | "No streak freeze needed or available."
+        }
+      natural_consumer: "app/freeze/page.tsx — or dashboard streak widget with 'Use Freeze' button"
+
+    - route: "GET /v1/learner/speaking/{attemptId}/fluency-timeline"
+      file: "backend/src/OetLearner.Api/Endpoints/LearnerEndpoints.cs"
+      line: 287
+      service_method: "LearnerService.GetFluencyTimelineAsync"
+      service_file: "backend/src/OetLearner.Api/Services/LearnerService.cs"
+      service_line: 6442
+      auth: ".RequireAuthorization('LearnerOnly')"
+      response_dto: |
+        anonymous object {
+          attemptId: string,
+          totalDurationSeconds: double,
+          totalWords: int,
+          totalFillerWords: int,
+          fillerRatio: double,
+          averageWordsPerMinute: double,
+          pauseCount: int,
+          timeline: [{
+            index, startTime, endTime, text, wordCount, wordsPerMinute,
+            pauseBefore, isPause, fillerCount, fluencyRating: "good"|"fair"|"poor"
+          }],
+          overallAnalysis: { speechRate?, pauseCount?, averagePauseDuration? },
+          benchmarks: { ... }
+        }
+      natural_consumer: "app/speaking/page.tsx — post-attempt fluency visualization (timeline chart)"
+
+    - route: "GET /v1/learner/diagnostic-personalization"
+      file: "backend/src/OetLearner.Api/Endpoints/LearnerEndpoints.cs"
+      line: 281
+      service_method: "LearnerService.GetDiagnosticPersonalizationAsync"
+      service_file: "backend/src/OetLearner.Api/Services/LearnerService.cs"
+      service_line: 6362
+      auth: ".RequireAuthorization('LearnerOnly')"
+      response_dto: |
+        anonymous object {
+          hasDiagnostic: bool,
+          message?: string,                    (when hasDiagnostic=false)
+          subtestAnalysis: [{
+            subtestCode, scoreRange, weakCriteria: [{ code, label, score }],
+            recommendation: string
+          }],
+          priorityOrder: [...],               (sorted by lowest score first)
+          personalizedPlan: { ... }
+        }
+      natural_consumer: "app/diagnostic/results/page.tsx — personalization recommendations post-diagnostic"
+
+  auth_gap_note: |
+    readiness/risk and streak-freeze endpoints lack .RequireAuthorization().
+    They still resolve http.UserId() which requires auth, but explicit policy is missing.
+    This should be fixed when wiring.
+
+# ═══════════════════════════════════════════════════
+# P19 — Fix Error Swallowing in lib/api.ts
+# ═══════════════════════════════════════════════════
+
+p19_error_swallowing:
+  summary: "4 catch blocks found. 2 are intentional JSON-parse fallbacks, 1 is cache cleanup, 1 is response JSON parse fallback."
+  complexity_estimate: "small — ~1 hour"
+
+  catch_blocks:
+    - location: "lib/api.ts:333"
+      function: "apiRequest"
+      context: "Inside the error-response parsing try/catch — attempts response.json() to extract error details"
+      code_snippet: |
+        try {
+          const error = await response.json();
+          code = error.code ?? code;
+          message = error.message ?? error.title ?? message;
+          ...
+        } catch {
+          retryable = isRetryable(response.status);
+        }
+      severity: "benign"
+      reason: "If error response body isn't JSON, falls back to status-based retryable. Acceptable pattern."
+      recommendation: "Optional: add console.warn in development only"
+
+    - location: "lib/api.ts:394"
+      function: "uploadBinary"
+      code_snippet: |
+        try {
+          const error = await response.json();
+          message = error.message ?? error.title ?? message;
+        } catch {
+          // noop
+        }
+      severity: "low"
+      reason: "Swallows JSON parse failure on upload error response. The outer throw still propagates."
+      recommendation: "Add console.warn for upload error parse failures"
+
+    - location: "lib/api.ts:411"
+      function: "fetchAuthorizedObjectUrl"
+      code_snippet: |
+        try {
+          const error = await response.json();
+          message = error.message ?? error.title ?? message;
+        } catch {
+          // noop
+        }
+      severity: "low"
+      reason: "Same pattern as uploadBinary — swallows JSON parse failure on error response."
+      recommendation: "Add console.warn for object URL fetch parse failures"
+
+    - location: "lib/api.ts:455"
+      function: "ensureAttempt"
+      code_snippet: |
+        try {
+          const existing = await apiRequest<ApiRecord>(`/v1/${subtest}/attempts/${cached}`);
+          if (existing.state !== 'completed') { return existing; }
+          cacheRemove(key);
+        } catch {
+          cacheRemove(key);
+        }
+      severity: "medium"
+      reason: "Silently removes cache entry if API call fails. Could mask real errors vs 404."
+      recommendation: "Distinguish 404 (stale cache) from 5xx (real error); only remove on 404"
+
+  error_pattern_elsewhere: |
+    The file uses a robust ApiError class throughout:
+    - ApiError(status, code, message, retryable, fieldErrors) thrown from apiRequest()
+    - isApiError() type guard exported for consumers
+    - Retry logic for 5xx/408/429 with exponential backoff (RETRY_DELAYS array)
+    - DOMException AbortError handling for timeouts
+    - Network error wrapping as ApiError(0, 'network_error', ...)
+
+# ═══════════════════════════════════════════════════
+# P20 — Remove Duplicates
+# ═══════════════════════════════════════════════════
+
+p20_duplicates:
+  summary: "fetchDiagnosticOverview and fetchDiagnosticSession are NOT duplicates. subscriptions/page.tsx IS a re-export."
+  complexity_estimate: "small — ~30 min for subscriptions cleanup"
+
+  fetchDiagnosticOverview:
+    file: "lib/api.ts"
+    line: 735
+    signature: "export async function fetchDiagnosticOverview(): Promise<ApiRecord>"
+    endpoint: "GET /v1/diagnostic/overview"
+    returns: "Raw ApiRecord (untyped JSON)"
+    consumers:
+      - "app/diagnostic/page.tsx:10,71 — uses raw overview data"
+
+  fetchDiagnosticSession:
+    file: "lib/api.ts"
+    line: 1898
+    signature: "export async function fetchDiagnosticSession(): Promise<DiagnosticSession>"
+    endpoint: "GET /v1/diagnostic/overview (same endpoint!)"
+    returns: "Typed DiagnosticSession with mapped subTests"
+    consumers:
+      - "app/diagnostic/results/page.tsx:17,57"
+      - "app/diagnostic/hub/page.tsx:13,48"
+      - "lib/api.ts:1931 — used internally by startDiagnostic()"
+
+  analysis: |
+    They call the same API endpoint (/v1/diagnostic/overview) but:
+    - fetchDiagnosticOverview returns the raw JSON as ApiRecord
+    - fetchDiagnosticSession maps the response into a typed DiagnosticSession { id, status, startedAt, completedAt, subTests[] }
+    They are NOT true duplicates — different abstractions. However, fetchDiagnosticOverview could be refactored to use fetchDiagnosticSession internally.
+    True duplicate risk: LOW. Consolidation opportunity: MEDIUM.
+
+  subscriptions_page:
+    file: "app/subscriptions/page.tsx"
+    lines: "1-5"
+    content: |
+      import BillingPage from '../billing/page';
+      export default function SubscriptionsPage() { return <BillingPage />; }
+    is_reexport: true
+    recommendation: "Replace with redirect from /subscriptions → /billing in middleware.ts or next.config.ts rewrites"
+
+# ═══════════════════════════════════════════════════
+# P21 — Fix toSubTest() and toExamFamilyCode()
+# ═══════════════════════════════════════════════════
+
+p21_hardcoded_mappers:
+  summary: "toSubTest() defaults unknown codes to 'Writing' silently; toExamFamilyCode() defaults to 'oet'. Backend has /v1/reference/exam-families from DB."
+  complexity_estimate: "medium — ~1 day (fetch from API + update all call sites)"
+
+  toSubTest:
+    file: "lib/api.ts"
+    line: 103
+    code: |
+      function toSubTest(code: string): SubTest {
+        switch (code?.toLowerCase()) {
+          case 'writing': return 'Writing';
+          case 'speaking': return 'Speaking';
+          case 'reading': return 'Reading';
+          case 'listening': return 'Listening';
+          default:
+            if (process.env.NODE_ENV === 'development') {
+              console.warn('[API] Unknown subtest code:', code, '- defaulting to Writing');
+            }
+            return 'Writing';
+        }
+      }
+    problem: "Silently defaults any unknown/null/undefined subtest code to 'Writing'. Only warns in development."
+    call_sites: 13  # lines 696,705,850,876,951,1072,1402,1523,1638,1646,1906,1922,1934
+    risk: "If backend sends a new subtest code or a typo, it silently converts to Writing — data corruption"
+    fix_options:
+      - "Throw an error for unknown codes (break-fast approach)"
+      - "Return a sentinel like 'Unknown' and handle in UI"
+      - "Log to analytics.track('unknown_subtest_code', { code })"
+
+  toExamFamilyCode:
+    file: "lib/api.ts"
+    line: 143
+    code: |
+      function toExamFamilyCode(value: unknown): ExamFamilyCode {
+        const normalized = typeof value === 'string' ? value.trim().toLowerCase() : '';
+        if (normalized === 'ielts' || normalized === 'pte') { return normalized; }
+        return 'oet';
+      }
+    problem: "Hardcoded to only recognize 'oet', 'ielts', 'pte'. Any new exam family defaults to 'oet'."
+    call_sites: 3  # lines 696, 951, 1072
+
+  reference_endpoint:
+    exists: true
+    route: "GET /v1/reference/exam-families"
+    file: "backend/src/OetLearner.Api/Endpoints/LearnerEndpoints.cs"
+    line: 195
+    service: "LearnerService.GetExamFamiliesAsync (line 5838)"
+    returns: |
+      { examFamilies: [{ code, label, scoringModel, description, subtests, criteria, isActive }] }
+    note: "Fetches from db.ExamFamilies table. Can be used at app startup to populate valid codes dynamically."
+
+# ═══════════════════════════════════════════════════
+# P22 — Expert Onboarding Flow
+# ═══════════════════════════════════════════════════
+
+p22_expert_onboarding:
+  summary: "No guided onboarding wizard for experts. Individual pages exist but are not sequenced."
+  complexity_estimate: "large — ~3-5 days (wizard UI + backend state + step tracking)"
+
+  existing_expert_routes:
+    total: 19
+    pages:
+      - route: "/expert"
+        file: "app/expert/page.tsx"
+        role: "Dashboard — review queue, overdue items, quick stats"
+        onboarding_relevance: "Landing page after login; no first-run detection"
+      - route: "/expert/calibration"
+        file: "app/expert/calibration/page.tsx"
+        role: "Calibration center — cases with filters, notes"
+        onboarding_relevance: "Exists but not linked as onboarding step"
+      - route: "/expert/calibration/[caseId]"
+        file: "app/expert/calibration/[caseId]/page.tsx"
+        role: "Individual calibration case"
+      - route: "/expert/schedule"
+        file: "app/expert/schedule/page.tsx"
+        role: "Weekly schedule + timezone setup"
+        onboarding_relevance: "Could be step 2 of onboarding"
+      - route: "/expert/queue"
+        file: "app/expert/queue/page.tsx"
+        role: "Review assignment queue"
+      - route: "/expert/queue-priority"
+        file: "app/expert/queue-priority/page.tsx"
+        role: "Priority queue management"
+      - route: "/expert/rubric-reference"
+        file: "app/expert/rubric-reference/page.tsx"
+        role: "OET rubric reference material"
+        onboarding_relevance: "Mandatory reading for new experts"
+      - route: "/expert/annotation-templates"
+        file: "app/expert/annotation-templates/page.tsx"
+        role: "Annotation template library"
+      - route: "/expert/scoring-quality"
+        file: "app/expert/scoring-quality/page.tsx"
+        role: "Scoring quality metrics"
+      - route: "/expert/metrics"
+        file: "app/expert/metrics/page.tsx"
+        role: "Personal performance metrics"
+      - route: "/expert/ai-prefill"
+        file: "app/expert/ai-prefill/page.tsx"
+        role: "AI prefill configuration"
+      - route: "/expert/ask-an-expert"
+        file: "app/expert/ask-an-expert/page.tsx"
+        role: "Expert Q&A"
+      - route: "/expert/mobile-review"
+        file: "app/expert/mobile-review/page.tsx"
+        role: "Mobile-optimized review interface"
+      - route: "/expert/private-speaking"
+        file: "app/expert/private-speaking/page.tsx"
+        role: "Private speaking session management"
+      - route: "/expert/learners"
+        file: "app/expert/learners/page.tsx"
+        role: "Learner portfolio browser"
+      - route: "/expert/learners/[learnerId]"
+        file: "app/expert/learners/[learnerId]/page.tsx"
+        role: "Individual learner profile"
+      - route: "/expert/review/[reviewRequestId]"
+        file: "app/expert/review/[reviewRequestId]/page.tsx"
+        role: "Generic review page"
+      - route: "/expert/review/writing/[reviewRequestId]"
+        file: "app/expert/review/writing/[reviewRequestId]/page.tsx"
+        role: "Writing-specific review"
+      - route: "/expert/review/speaking/[reviewRequestId]"
+        file: "app/expert/review/speaking/[reviewRequestId]/page.tsx"
+        role: "Speaking-specific review"
+
+  missing_for_onboarding:
+    - "No /expert/onboarding or /expert/getting-started route"
+    - "No profile-setup page (bio, qualifications, specialties)"
+    - "No sequential step tracker / wizard component"
+    - "No 'is_onboarded' or 'onboarding_step' field in expert user model"
+    - "No welcome/intro page explaining expert responsibilities"
+
+  recommended_wizard_steps:
+    - step: 1
+      name: "Welcome & Role Overview"
+      description: "Brief intro to expert responsibilities, review expectations, SLA commitments"
+    - step: 2
+      name: "Profile Setup"
+      description: "Bio, qualifications, OET expertise areas, profession specialties"
+    - step: 3
+      name: "Schedule Configuration"
+      description: "Link to existing /expert/schedule — set availability + timezone"
+    - step: 4
+      name: "Rubric Familiarization"
+      description: "Link to /expert/rubric-reference — mandatory reading with acknowledgment"
+    - step: 5
+      name: "Calibration Exercise"
+      description: "Complete 1-2 calibration cases from /expert/calibration — verify alignment"
+    - step: 6
+      name: "Ready to Review"
+      description: "Summary + redirect to /expert/queue"
+
+# ═══════════════════════════════════════════════════
+# P23 — Admin Analytics Export
+# ═══════════════════════════════════════════════════
+
+p23_admin_analytics:
+  summary: "6 analytics pages exist (5 under /admin/analytics/ + 1 BI dashboard). No export/CSV library in package.json."
+  complexity_estimate: "medium — ~2 days (add export library + download buttons to each page)"
+
+  analytics_pages:
+    - route: "/admin/analytics/quality"
+      file: "app/admin/analytics/quality/page.tsx"
+      data_shown: "AI-human alignment, inter-rater reliability, review quality trends over time"
+      data_source: "getAdminQualityAnalyticsData() from lib/admin"
+      has_charts: true
+      chart_library: "recharts (LineChart)"
+      filters: "subtest, profession, time range (7d/30d/90d)"
+
+    - route: "/admin/analytics/subscription-health"
+      file: "app/admin/analytics/subscription-health/page.tsx"
+      data_shown: "MRR, active subscriptions, churn rate, new subs, ARPU, trial conversion, revenue by plan, monthly trend"
+      data_source: "inline apiRequest to /v1/admin/analytics/subscription-health"
+      has_charts: false
+      chart_library: "none (uses Card-based metrics + progress bars)"
+
+    - route: "/admin/analytics/content-effectiveness"
+      file: "app/admin/analytics/content-effectiveness/page.tsx"
+      data_shown: "Content items ranked by attempts, completion rate, avg score, effectiveness score"
+      data_source: "inline apiRequest to /v1/admin/analytics/content-effectiveness"
+      has_charts: false
+      filters: "subtest filter (writing/speaking/reading/listening)"
+
+    - route: "/admin/analytics/expert-efficiency"
+      file: "app/admin/analytics/expert-efficiency/page.tsx"
+      data_shown: "Per-expert: assignments received, reviews completed, avg review time, throughput, AI alignment score"
+      data_source: "inline apiRequest to /v1/admin/analytics/expert-efficiency"
+      has_charts: false
+      filters: "time period (7d/14d/30d/60d/90d)"
+
+    - route: "/admin/analytics/cohort"
+      file: "app/admin/analytics/cohort/page.tsx"
+      data_shown: "Learner cohorts by profession or plan: learner count, avg score, evaluations, active (30d)"
+      data_source: "inline apiRequest to /v1/admin/analytics/cohort"
+      has_charts: false
+      filters: "group by (profession/plan)"
+
+    - route: "/admin/business-intelligence"
+      file: "app/admin/business-intelligence/page.tsx"
+      data_shown: "Aggregated BI: revenue, users, engagement, expert efficiency (overview dashboard)"
+      data_source: "getAdminBusinessIntelligenceData() from lib/admin"
+      has_charts: false
+
+  export_libraries_in_package_json:
+    xlsx: false
+    papaparse: false
+    file_saver: false
+    jszip: false
+    exceljs: false
+    note: "No CSV/Excel export library is currently installed"
+
+  implementation_options:
+    - library: "papaparse"
+      purpose: "CSV generation from JSON arrays"
+      npm_package: "papaparse"
+      types: "@types/papaparse"
+      bundle_size: "~7KB gzipped"
+    - library: "file-saver"
+      purpose: "Trigger browser file download"
+      npm_package: "file-saver"
+      note: "Or use native Blob + link.click() approach (0 deps)"
+    - library: "exceljs"
+      purpose: "Full Excel workbook generation"
+      npm_package: "exceljs"
+      bundle_size: "~200KB gzipped — only if .xlsx is required"
+
+# ═══════════════════════════════════════════════════
+# P24 — Multi-stage Content Approval
+# ═══════════════════════════════════════════════════
+
+p24_content_approval:
+  summary: "Single-stage approval workflow exists. Content: Draft→InReview→(approved→Published | rejected→Draft). No multi-stage chain."
+  complexity_estimate: "large — ~4-6 days for multi-stage (schema + service + UI + migration)"
+
+  current_workflow:
+    content_statuses:
+      enum: "ContentStatus { Draft, InReview, Published, Archived }"
+      file: "backend/src/OetLearner.Api/Domain/Enums.cs"
+      line: 45
+
+    publish_request_entity:
+      file: "backend/src/OetLearner.Api/Domain/AdminEntities.cs"
+      line: 136
+      fields:
+        - "Id (string, PK)"
+        - "ContentItemId (string)"
+        - "RequestedBy / RequestedByName"
+        - "ReviewedBy / ReviewedByName"
+        - "Status: 'pending' | 'approved' | 'rejected'"
+        - "RequestNote / ReviewNote"
+        - "RequestedAt / ReviewedAt"
+
+    workflow_steps:
+      - step: 1
+        action: "Author creates/edits content in admin-content-editor"
+        file: "components/domain/admin-content-editor.tsx"
+        detail: "Can 'Save Draft' or 'Publish' directly"
+      - step: 2
+        action: "Author clicks Publish → publishAdminContent() is called"
+        detail: "This directly publishes without approval for some paths"
+      - step: 3
+        action: "OR author requests publish → RequestContentPublishAsync()"
+        file: "backend/src/OetLearner.Api/Services/AdminService.cs"
+        line: 2982
+        detail: "Creates ContentPublishRequest with status='pending', sets content to InReview"
+      - step: 4
+        action: "Reviewer views pending requests on /admin/publish-requests"
+        file: "app/admin/publish-requests/page.tsx"
+        detail: "Modal to approve/reject with optional note"
+      - step: 5a
+        action: "Approve → ApprovePublishRequestAsync()"
+        file: "backend/src/OetLearner.Api/Services/AdminService.cs"
+        line: 3055
+        detail: "Sets PR status='approved', content status=Published, creates revision"
+      - step: 5b
+        action: "Reject → RejectPublishRequestAsync()"
+        line: 3089
+        detail: "Sets PR status='rejected', content remains InReview (no automatic revert to Draft)"
+
+    validation_rules:
+      - "Content must be Draft or InReview to request publishing"
+      - "Cannot have duplicate pending requests for same content"
+      - "Cannot approve your own publish request (self_approve check)"
+
+    roles_involved:
+      - role: "author"
+        capabilities: "Create content, edit drafts, request publish, direct publish"
+        note: "No role-based restriction on direct publish in admin-content-editor currently"
+      - role: "reviewer"
+        capabilities: "Approve or reject publish requests"
+        note: "Any admin can review — no explicit 'editor' or 'publisher' role distinction"
+
+  missing_for_multi_stage:
+    - "No stage definitions (e.g., editorial_review → quality_check → final_approval)"
+    - "No stage-sequence configuration in ContentPublishRequest"
+    - "No 'current_stage' field on publish requests"
+    - "No per-stage reviewer assignment"
+    - "No conditional routing (e.g., auto-skip QC for minor edits)"
+    - "No stage transition history / timeline"
+    - "Direct publish bypass in admin-content-editor undermines approval workflow"
+
+  frontend_types:
+    file: "lib/types/admin.ts"
+    line: 434
+    interface: |
+      AdminPublishRequest {
+        id: string; contentItemId: string;
+        requestedBy: string; requestedByName: string;
+        reviewedBy: string | null; reviewedByName: string | null;
+        status: 'pending' | 'approved' | 'rejected';
+        requestNote: string | null; reviewNote: string | null;
+        requestedAt: string; reviewedAt: string | null;
+      }
+
+# ═══════════════════════════════════════════════════
+# Files Analyzed
+# ═══════════════════════════════════════════════════
+
+files_analyzed:
+  - file: "LearnerEndpoints.cs"
+    path: "backend/src/OetLearner.Api/Endpoints/LearnerEndpoints.cs"
+    purpose: "Maps all learner API routes including the 5 orphan endpoints"
+    key_elements:
+      - element: "study-plan/drift endpoint"
+        type: pattern
+        location: "LearnerEndpoints.cs:305"
+        description: "Orphan endpoint for study plan drift detection"
+      - element: "readiness/risk endpoint"
+        type: pattern
+        location: "LearnerEndpoints.cs:198"
+        description: "Orphan endpoint for target date risk assessment"
+      - element: "streak-freeze endpoint"
+        type: pattern
+        location: "LearnerEndpoints.cs:201"
+        description: "Orphan endpoint for using a streak freeze"
+      - element: "fluency-timeline endpoint"
+        type: pattern
+        location: "LearnerEndpoints.cs:287"
+        description: "Orphan endpoint for speaking fluency timeline"
+      - element: "diagnostic-personalization endpoint"
+        type: pattern
+        location: "LearnerEndpoints.cs:281"
+        description: "Orphan endpoint for post-diagnostic personalization"
+      - element: "reference/exam-families endpoint"
+        type: pattern
+        location: "LearnerEndpoints.cs:195"
+        description: "Returns exam families from DB"
+    language: csharp
+    lines: 330
+
+  - file: "api.ts"
+    path: "lib/api.ts"
+    purpose: "Central API client with all fetch functions, error handling, retry logic"
+    key_elements:
+      - element: "toSubTest"
+        type: function
+        location: "lib/api.ts:103"
+        description: "Maps string to SubTest type with silent 'Writing' default"
+      - element: "toExamFamilyCode"
+        type: function
+        location: "lib/api.ts:143"
+        description: "Maps unknown to ExamFamilyCode with hardcoded 'oet' default"
+      - element: "fetchDiagnosticOverview"
+        type: function
+        location: "lib/api.ts:735"
+        description: "Raw API fetch to /v1/diagnostic/overview"
+      - element: "fetchDiagnosticSession"
+        type: function
+        location: "lib/api.ts:1898"
+        description: "Typed fetch to same endpoint with DiagnosticSession mapping"
+      - element: "uploadBinary catch block"
+        type: pattern
+        location: "lib/api.ts:394"
+        description: "Swallows JSON parse error on upload failure response"
+      - element: "fetchAuthorizedObjectUrl catch block"
+        type: pattern
+        location: "lib/api.ts:411"
+        description: "Swallows JSON parse error on object URL failure response"
+      - element: "ensureAttempt catch block"
+        type: pattern
+        location: "lib/api.ts:455"
+        description: "Silently removes cache entry on any API error"
+    language: typescript
+    lines: 1950
+
+  - file: "EngagementService.cs"
+    path: "backend/src/OetLearner.Api/Services/EngagementService.cs"
+    purpose: "Streak tracking, engagement metrics, target-date risk"
+    key_elements:
+      - element: "UseStreakFreezeAsync"
+        type: function
+        location: "EngagementService.cs:81"
+        description: "Applies streak freeze by backdating LastPracticeDate"
+      - element: "CalculateTargetDateRiskAsync"
+        type: function
+        location: "EngagementService.cs:106"
+        description: "Calculates risk factors based on exam date proximity and study velocity"
+      - element: "TargetDateRisk"
+        type: class
+        location: "EngagementService.cs:219"
+        description: "Record type DTO for risk assessment"
+    language: csharp
+    lines: 230
+
+  - file: "LearnerService.cs"
+    path: "backend/src/OetLearner.Api/Services/LearnerService.cs"
+    purpose: "Core learner business logic including orphan endpoint implementations"
+    key_elements:
+      - element: "GetDiagnosticPersonalizationAsync"
+        type: function
+        location: "LearnerService.cs:6362"
+        description: "Analyzes diagnostic results for personalized recommendations"
+      - element: "GetFluencyTimelineAsync"
+        type: function
+        location: "LearnerService.cs:6442"
+        description: "Parses transcript segments for fluency metrics timeline"
+      - element: "DetectStudyPlanDriftAsync"
+        type: function
+        location: "LearnerService.cs:6667"
+        description: "Compares study plan items against schedule for drift detection"
+      - element: "GetExamFamiliesAsync"
+        type: function
+        location: "LearnerService.cs:5838"
+        description: "Returns active exam families from database"
+    language: csharp
+    lines: 6800
+
+  - file: "AdminService.cs"
+    path: "backend/src/OetLearner.Api/Services/AdminService.cs"
+    purpose: "Admin operations including content publishing workflow"
+    key_elements:
+      - element: "RequestContentPublishAsync"
+        type: function
+        location: "AdminService.cs:2982"
+        description: "Creates pending publish request, sets content to InReview"
+      - element: "ApprovePublishRequestAsync"
+        type: function
+        location: "AdminService.cs:3055"
+        description: "Approves request, publishes content, creates revision"
+      - element: "RejectPublishRequestAsync"
+        type: function
+        location: "AdminService.cs:3089"
+        description: "Rejects request, content stays in InReview"
+    language: csharp
+    lines: 3200
+
+  - file: "subscriptions/page.tsx"
+    path: "app/subscriptions/page.tsx"
+    purpose: "Re-exports BillingPage component"
+    key_elements:
+      - element: "SubscriptionsPage"
+        type: function
+        location: "app/subscriptions/page.tsx:3"
+        description: "Wrapper that just renders BillingPage"
+    language: typescript
+    lines: 5
+
+  - file: "publish-requests/page.tsx"
+    path: "app/admin/publish-requests/page.tsx"
+    purpose: "Admin publish request review interface"
+    key_elements:
+      - element: "PublishRequestsPage"
+        type: function
+        location: "app/admin/publish-requests/page.tsx:33"
+        description: "Lists pending/approved/rejected publish requests with approve/reject modal"
+    language: typescript
+    lines: 120
+
+  - file: "admin-content-editor.tsx"
+    path: "components/domain/admin-content-editor.tsx"
+    purpose: "Content editor component with draft/publish actions"
+    key_elements:
+      - element: "saveContent(publishAfterSave)"
+        type: function
+        location: "admin-content-editor.tsx:157"
+        description: "Save with optional direct publish — bypasses approval workflow"
+    language: typescript
+    lines: 400
+
+# ═══════════════════════════════════════════════════
+# Patterns Found
+# ═══════════════════════════════════════════════════
+
+patterns_found:
+  - category: error_handling
+    pattern: "JSON parse fallback in catch blocks"
+    description: "When parsing error responses, catch blocks fall back gracefully but silently"
+    examples:
+      - file: "lib/api.ts"
+        location: "lib/api.ts:394"
+        snippet: "catch { /* noop */ }"
+    prevalence: common
+
+  - category: architecture
+    pattern: "Anonymous object DTOs in backend"
+    description: "Orphan endpoints return anonymous objects rather than typed DTOs/records"
+    examples:
+      - file: "LearnerService.cs"
+        location: "LearnerService.cs:6667"
+        snippet: "return new { hasPlan = true, planId = plan.Id, drift = new { level = driftLevel, ... } }"
+    prevalence: common
+
+  - category: naming
+    pattern: "toX() mapper functions"
+    description: "Type-narrowing functions with silent defaults for unknown values"
+    examples:
+      - file: "lib/api.ts"
+        location: "lib/api.ts:103"
+        snippet: "function toSubTest(code: string): SubTest { ... default: return 'Writing'; }"
+    prevalence: common
+
+  - category: architecture
+    pattern: "Inline apiRequest in analytics pages"
+    description: "Analytics pages define their own apiRequest instead of using lib/api.ts"
+    examples:
+      - file: "app/admin/analytics/subscription-health/page.tsx"
+        location: "subscription-health/page.tsx:22"
+        snippet: "async function apiRequest<T = unknown>(path: string, init?: RequestInit): Promise<T> { ... }"
+    prevalence: common
+
+  - category: structure
+    pattern: "Single-stage publish approval"
+    description: "Content goes Draft→InReview→Published with one approve/reject decision"
+    examples:
+      - file: "AdminService.cs"
+        location: "AdminService.cs:2998"
+        snippet: "var pr = new ContentPublishRequest { Status = 'pending' }"
+    prevalence: occasional
+
+# ═══════════════════════════════════════════════════
+# Open Questions
+# ═══════════════════════════════════════════════════
+
+open_questions:
+  - question: "Should readiness/risk and streak-freeze endpoints require explicit .RequireAuthorization('LearnerOnly')?"
+    context: "Both endpoints call http.UserId() which requires auth, but lack the explicit policy chain"
+    type: research
+    affects: ["P18"]
+
+  - question: "Should admin-content-editor's direct 'Publish' button be removed or gated behind the approval workflow?"
+    context: "Currently any admin can bypass the publish-request flow by clicking 'Publish' in the editor"
+    type: decision_blocker
+    affects: ["P24"]
+
+  - question: "What export format do stakeholders prefer — CSV, Excel, or both?"
+    context: "No export library exists; choice affects dependency and implementation complexity"
+    type: decision_blocker
+    affects: ["P23"]
+
+  - question: "Is the expert onboarding wizard a new standalone route or a modal overlay on /expert?"
+    context: "Need to decide UX pattern before implementation"
+    type: decision_blocker
+    affects: ["P22"]
+
+# ═══════════════════════════════════════════════════
+# Gaps
+# ═══════════════════════════════════════════════════
+
+gaps:
+  - area: "Expert user model onboarding state"
+    description: "No 'is_onboarded' or 'onboarding_completed_at' field found in expert/user entity"
+    impact: research_blocker
+    affects: ["P22"]
+
+  - area: "Analytics pages duplicate apiRequest pattern"
+    description: "4 of 5 analytics pages under /admin/analytics/ define their own inline apiRequest() instead of using lib/api.ts — inconsistent error handling"
+    impact: nice_to_know
+    affects: ["P23"]
+
+  - area: "Multi-stage approval schema design"
+    description: "No existing stage-definition pattern in the codebase to extend — would need new DB table and migration"
+    impact: research_blocker
+    affects: ["P24"]

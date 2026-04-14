@@ -19,6 +19,7 @@ import {
   Globe2,
   Headphones,
   Keyboard,
+  Loader2,
   Mail,
   MessageSquareMore,
   Mic,
@@ -31,6 +32,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Target,
+  Trash2,
   Type,
   User,
   UserCircle2,
@@ -47,9 +49,11 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import { fetchSettingsSection, updateSettingsSection } from '@/lib/api';
+import { deleteAccount } from '@/lib/auth-client';
 import type { LearnerSurfaceAccent } from '@/lib/learner-surface';
 import type { SettingsSectionData, SettingsSectionId } from '@/lib/mock-data';
 import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/auth-context';
 
 type FieldType = 'text' | 'email' | 'number' | 'date' | 'select' | 'textarea' | 'toggle';
 type FieldTagTone = 'section' | 'muted' | 'writing' | 'speaking' | 'reading' | 'listening' | 'study';
@@ -440,6 +444,17 @@ const SECTION_CONFIG: Record<SettingsSectionId, SectionConfig> = {
       },
     ],
   },
+  'danger-zone': {
+    title: 'Delete Account',
+    description: 'Permanently delete your account and all associated data.',
+    eyebrow: 'Danger Zone',
+    icon: Trash2,
+    accent: 'rose',
+    helperBadge: 'Irreversible',
+    helperCardTitle: 'Account deletion',
+    helperCardBody: 'This action schedules your account for permanent deletion after a 30-day grace period.',
+    fields: [],
+  },
   study: {
     title: 'Exam Date & Study Preferences',
     description: 'Keep the exam window, study volume, destination regulator, and reminder cadence in one practical surface.',
@@ -816,6 +831,104 @@ function SettingsSectionForm({
   );
 }
 
+function DangerZoneDeleteSection() {
+  const { signOut } = useAuth();
+  const router = useRouter();
+  const [password, setPassword] = useState('');
+  const [reason, setReason] = useState('');
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  const handleDelete = async () => {
+    if (!password.trim()) return;
+
+    const confirmed = window.confirm(
+      'Are you sure you want to delete your account? This action cannot be undone. Your data will be permanently removed after 30 days.'
+    );
+    if (!confirmed) return;
+
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteAccount(password, reason || undefined);
+      await signOut();
+      router.push('/sign-in');
+    } catch (err) {
+      setDeleteError(
+        err instanceof Error ? err.message : 'Failed to delete account. Please check your password and try again.'
+      );
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="rounded-[24px] border-2 border-red-300 bg-red-50/50 p-6 shadow-sm">
+        <div className="flex items-start gap-4">
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-red-200 bg-red-100">
+            <Trash2 className="h-5 w-5 text-red-600" />
+          </div>
+          <div className="flex-1">
+            <h3 className="text-lg font-bold text-red-900">Delete your account</h3>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-red-800">
+              This action cannot be undone. After 30 days, your account and all associated data will be permanently deleted. During the grace period you can contact support to cancel the deletion.
+            </p>
+          </div>
+        </div>
+
+        <div className="mt-6 space-y-4">
+          <div>
+            <label htmlFor="delete-password" className="block text-sm font-semibold text-red-900">
+              Confirm your password
+            </label>
+            <input
+              id="delete-password"
+              type="password"
+              required
+              autoComplete="current-password"
+              placeholder="Enter your password to confirm"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="mt-1.5 w-full rounded-2xl border border-red-200 bg-white px-4 py-3 text-sm text-navy outline-none transition-shadow focus:border-red-400 focus:ring-2 focus:ring-red-100"
+            />
+          </div>
+
+          <div>
+            <label htmlFor="delete-reason" className="block text-sm font-semibold text-red-900">
+              Reason for leaving <span className="font-normal text-red-600">(optional)</span>
+            </label>
+            <textarea
+              id="delete-reason"
+              placeholder="Why are you leaving? (optional)"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+              className="mt-1.5 min-h-24 w-full rounded-2xl border border-red-200 bg-white px-4 py-3 text-sm text-navy outline-none transition-shadow focus:border-red-400 focus:ring-2 focus:ring-red-100"
+            />
+          </div>
+
+          {deleteError ? <InlineAlert variant="error">{deleteError}</InlineAlert> : null}
+
+          <button
+            type="button"
+            disabled={!password.trim() || deleting}
+            onClick={handleDelete}
+            className={cn(
+              'inline-flex items-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2',
+              password.trim() && !deleting
+                ? 'bg-red-600 hover:bg-red-700 cursor-pointer'
+                : 'bg-red-300 cursor-not-allowed',
+            )}
+          >
+            {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+            {deleting ? 'Deleting account...' : 'Delete my account'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function LearnerSettingsSectionPage() {
   const params = useParams<{ section: string }>();
   const router = useRouter();
@@ -840,7 +953,7 @@ export default function LearnerSettingsSectionPage() {
       return;
     }
 
-    if (section === 'notifications') {
+    if (section === 'notifications' || section === 'danger-zone') {
       setLoading(false);
       setData(null);
       setError(null);
@@ -885,7 +998,7 @@ export default function LearnerSettingsSectionPage() {
     setError(null);
     setSuccessMessage(null);
     try {
-      const response = await updateSettingsSection(section, data.values);
+      const response = await updateSettingsSection(section as Parameters<typeof updateSettingsSection>[0], data.values);
       setData({ section, values: response.values ?? data.values });
       setSuccessMessage('Settings saved.');
     } catch (err) {
@@ -942,6 +1055,22 @@ export default function LearnerSettingsSectionPage() {
             <NotificationPreferencesPanel
               description="These controls now use the shared notification service for learners, experts, and admins while preserving learner compatibility settings during rollout."
             />
+          </>
+        ) : null}
+
+        {!loading && section === 'danger-zone' && config ? (
+          <>
+            <SettingsSectionHelperCard
+              accent={config.accent}
+              helperBadge={config.helperBadge}
+              icon={config.icon}
+              title={config.helperCardTitle}
+              body={config.helperCardBody}
+              configuredFieldCount={0}
+              totalFieldCount={0}
+            />
+
+            <DangerZoneDeleteSection />
           </>
         ) : null}
 

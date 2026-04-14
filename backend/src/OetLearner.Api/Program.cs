@@ -163,6 +163,7 @@ else
     builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 }
 builder.Services.AddScoped<EmailOtpService>();
+builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<ExternalAuthService>();
 
@@ -360,6 +361,10 @@ builder.Services.AddAuthorization(options =>
         .RequireAuthenticatedUser()
         .RequireRole("admin")
         .RequireClaim(AuthTokenService.IsEmailVerifiedClaimType, bool.TrueString.ToLowerInvariant()));
+    options.AddPolicy("SponsorOnly", policy => policy
+        .RequireAuthenticatedUser()
+        .RequireRole("sponsor")
+        .RequireClaim(AuthTokenService.IsEmailVerifiedClaimType, bool.TrueString.ToLowerInvariant()));
 
     // Granular admin permission policies
     options.AddPolicy("AdminContentRead", policy => policy
@@ -371,6 +376,12 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminContentPublish", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "content:publish", "system_admin")));
+    options.AddPolicy("AdminContentEditorReview", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "content:editor_review", "content:publish", "system_admin")));
+    options.AddPolicy("AdminContentPublisherApproval", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "content:publisher_approval", "content:publish", "system_admin")));
     options.AddPolicy("AdminBillingRead", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:read", "system_admin")));
@@ -394,6 +405,7 @@ builder.Services.AddAuthorization(options =>
 builder.Services.AddScoped<LearnerService>();
 builder.Services.AddScoped<ExpertService>();
 builder.Services.AddScoped<AdminService>();
+builder.Services.AddScoped<SponsorService>();
 builder.Services.AddScoped<ContentHierarchyService>();
 builder.Services.AddScoped<ContentDeduplicationService>();
 builder.Services.AddScoped<ContentAccessService>();
@@ -669,8 +681,14 @@ app.MapPronunciationEndpoints();
 app.MapWritingCoachEndpoints();
 app.MapMarketplaceEndpoints();
 
+// ── Sponsor Dashboard ──
+app.MapSponsorEndpoints();
+
 // ── Private Speaking Sessions ──
 app.MapPrivateSpeakingEndpoints();
+
+// ── Media Management ──
+app.MapMediaEndpoints();
 
 app.MapHub<NotificationHub>("/v1/notifications/hub").RequireAuthorization();
 app.MapHub<ConversationHub>("/v1/conversations/hub").RequireAuthorization();

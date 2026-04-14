@@ -6,6 +6,8 @@ export function defaultRouteForRole(role: UserRole): string {
       return '/admin';
     case 'expert':
       return '/expert';
+    case 'sponsor':
+      return '/sponsor';
     default:
       return '/';
   }
@@ -22,6 +24,10 @@ export function roleCanAccessPath(role: UserRole, path: string): boolean {
 
   if (path.startsWith('/expert')) {
     return role === 'expert';
+  }
+
+  if (path.startsWith('/sponsor')) {
+    return role === 'sponsor';
   }
 
   return role === 'learner';

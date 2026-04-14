@@ -91,7 +91,7 @@ public static class CommunityEndpoints
         {
             var thread = await db.ForumThreads.FindAsync([threadId], ct);
             if (thread == null) return Results.NotFound(new { error = "THREAD_NOT_FOUND" });
-            if (thread.IsLocked) return Results.BadRequest(new { error = "THREAD_LOCKED" });
+            if (thread.IsLocked) return Results.Json(new { error = "THREAD_LOCKED" }, statusCode: 403);
 
             var user = await db.Users.FindAsync([http.UserId()], ct);
             var reply = new ForumReply

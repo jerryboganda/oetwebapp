@@ -174,7 +174,7 @@ test.describe('Packaged Electron desktop shell', () => {
       app = await launchPackagedDesktop(appDataRoot);
       const page = await getDesktopPage(app);
       const diagnostics = observePage(page);
-      const runtimeInfo = await page.evaluate(() => window.desktopBridge.runtime.info());
+      const runtimeInfo = await page.evaluate(() => window.desktopBridge!.runtime.info());
       const activeBackendUrl = runtimeInfo.activeBackendUrl ?? `http://127.0.0.1:${packagedBackendPort}`;
 
       await expect(page.getByRole('heading', { name: /login to your account|access your workspace/i })).toBeVisible();
@@ -199,8 +199,8 @@ test.describe('Packaged Electron desktop shell', () => {
       expect(bridgeDetails.hasOpenExternal).toBe(true);
       expect(bridgeDetails.hasSecureSecrets).toBe(true);
       expect(bridgeDetails.electronVersion).toBeTruthy();
-      expect(runtimeInfo.windowState.isVisible).toBe(true);
-      expect(runtimeInfo.windowState.isMinimized).toBe(false);
+      expect(runtimeInfo.windowState!.isVisible).toBe(true);
+      expect(runtimeInfo.windowState!.isMinimized).toBe(false);
       await expect.poll(async () => page.evaluate(() => document.documentElement.dataset.appActive)).toBe('true');
 
       expectNoSevereClientIssues(diagnostics);

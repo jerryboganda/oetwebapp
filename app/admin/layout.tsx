@@ -3,6 +3,9 @@
 import { PrivilegedMfaBanner } from '@/components/auth/privileged-mfa-banner';
 import { AdminDashboardShell, AppShell, LearnerWorkspaceContainer, type MobileMenuSection } from '@/components/layout';
 import type { NavItem } from '@/components/layout/sidebar';
+import { hasPermission, sidebarPermissionMap } from '@/lib/admin-permissions';
+import { useAuth } from '@/contexts/auth-context';
+import { useMemo } from 'react';
 import { 
   LayoutDashboard,
   Library, 
@@ -29,6 +32,7 @@ import {
   Scale,
   Mic,
   GraduationCap,
+  MessageSquareText,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 
@@ -58,6 +62,7 @@ const adminNavItems: NavItem[] = [
   { href: '/admin/webhooks', label: 'Webhooks', icon: <Webhook className="w-5 h-5" />, matchPrefix: '/admin/webhooks' },
   { href: '/admin/escalations', label: 'Escalations', icon: <Scale className="w-5 h-5" />, matchPrefix: '/admin/escalations' },
   { href: '/admin/private-speaking', label: 'Private Speaking', icon: <Mic className="w-5 h-5" />, matchPrefix: '/admin/private-speaking' },
+  { href: '/admin/community', label: 'Community', icon: <MessageSquareText className="w-5 h-5" />, matchPrefix: '/admin/community' },
 ];
 
 const adminMobileNavItems: NavItem[] = [
@@ -84,7 +89,7 @@ const adminMobileMenuSections: MobileMenuSection[] = [
   },
   {
     label: 'People & billing',
-    items: [adminNavItems[8], adminNavItems[9], adminNavItems[10]],
+    items: [adminNavItems[8], adminNavItems[9], adminNavItems[10], adminNavItems[25]],
   },
 ];
 
@@ -185,11 +190,39 @@ function getAdminPageTitle(pathname: string | null) {
     return 'Private Speaking';
   }
 
+  if (pathname.startsWith('/admin/community')) {
+    return 'Community Moderation';
+  }
+
   return undefined;
+}
+
+function filterNavByPermissions(items: NavItem[], perms: string[] | null | undefined): NavItem[] {
+  return items.filter((item) => {
+    const required = sidebarPermissionMap[item.href];
+    if (!required) return true; // no permission required (e.g. dashboard)
+    return hasPermission(perms, ...required);
+  });
+}
+
+function filterSectionsByPermissions(
+  sections: MobileMenuSection[],
+  perms: string[] | null | undefined,
+): MobileMenuSection[] {
+  return sections
+    .map((s) => ({ ...s, items: filterNavByPermissions(s.items, perms) }))
+    .filter((s) => s.items.length > 0);
 }
 
 function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const { user } = useAuth();
+  const perms = user?.adminPermissions;
+
+  const filteredNavItems = useMemo(() => filterNavByPermissions(adminNavItems, perms), [perms]);
+  const filteredMobileNavItems = useMemo(() => filterNavByPermissions(adminMobileNavItems, perms), [perms]);
+  const filteredMobileMenuSections = useMemo(() => filterSectionsByPermissions(adminMobileMenuSections, perms), [perms]);
+
   const pageTitle = getAdminPageTitle(pathname);
   const bannerBlock = (
     <div className="space-y-6">
@@ -203,9 +236,9 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
       <AppShell
         distractionFree
         pageTitle={pageTitle}
-        navItems={adminNavItems}
-        mobileNavItems={adminMobileNavItems}
-        mobileMenuSections={adminMobileMenuSections}
+        navItems={filteredNavItems}
+        mobileNavItems={filteredMobileNavItems}
+        mobileMenuSections={filteredMobileMenuSections}
         requiredRole="admin"
         workspaceRole="admin"
       >
@@ -217,9 +250,9 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
   return (
     <AdminDashboardShell
       pageTitle={pageTitle}
-      navItems={adminNavItems}
-      mobileNavItems={adminMobileNavItems}
-      mobileMenuSections={adminMobileMenuSections}
+      navItems={filteredNavItems}
+      mobileNavItems={filteredMobileNavItems}
+      mobileMenuSections={filteredMobileMenuSections}
       requiredRole="admin"
     >
       {bannerBlock}

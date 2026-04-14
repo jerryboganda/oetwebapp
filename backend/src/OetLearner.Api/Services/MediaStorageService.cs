@@ -60,6 +60,37 @@ public sealed class MediaStorageService(IWebHostEnvironment environment, IOption
         return totalBytes;
     }
 
+    private static readonly HashSet<string> AllowedMediaContentTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "image/jpeg", "image/png", "image/gif", "image/webp", "application/pdf"
+    };
+
+    private static readonly HashSet<string> AllowedMediaExtensions = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf"
+    };
+
+    public static bool IsAllowedMediaContentType(string? contentType)
+    {
+        if (string.IsNullOrWhiteSpace(contentType)) return false;
+        var normalized = contentType.Split(';', 2, StringSplitOptions.TrimEntries)[0].Trim();
+        return AllowedMediaContentTypes.Contains(normalized);
+    }
+
+    public static bool IsAllowedMediaExtension(string? fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName)) return false;
+        return AllowedMediaExtensions.Contains(Path.GetExtension(fileName));
+    }
+
+    public bool DeleteFile(string storageKey)
+    {
+        var fullPath = ResolvePath(storageKey);
+        if (!File.Exists(fullPath)) return false;
+        File.Delete(fullPath);
+        return true;
+    }
+
     public bool Exists(string storageKey) => File.Exists(ResolvePath(storageKey));
 
     public long GetLength(string storageKey) => new FileInfo(ResolvePath(storageKey)).Length;

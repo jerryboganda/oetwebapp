@@ -79,7 +79,7 @@ export default function BillingUpgradePage() {
                       {plan.trialDays > 0 && <div className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-500" /> {plan.trialDays}-day free trial</div>}
                     </div>
                     {!plan.isCurrent && (
-                      <Button variant={plan.isUpgrade ? 'default' : 'outline'} size="sm" className="w-full mt-4">
+                      <Button variant={plan.isUpgrade ? 'secondary' : 'outline'} size="sm" className="w-full mt-4">
                         {plan.isUpgrade ? <><ArrowUpRight className="w-4 h-4 mr-1" /> Upgrade</> : 'Switch Plan'}
                       </Button>
                     )}

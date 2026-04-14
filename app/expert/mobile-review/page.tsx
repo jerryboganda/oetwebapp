@@ -166,9 +166,9 @@ export default function ExpertMobileReviewPage() {
                       <div className="flex items-center gap-2">
                         {isWriting ? <FileText className="h-4 w-4 text-blue-500" /> : <Mic className="h-4 w-4 text-purple-500" />}
                         <span className="font-medium text-sm">{item.subtestCode}</span>
-                        {item.isResubmission && <Badge variant="secondary" className="text-[10px] px-1.5">Re-sub</Badge>}
+                        {item.isResubmission && <Badge variant="muted" className="text-[10px] px-1.5">Re-sub</Badge>}
                       </div>
-                      <Badge variant={item.priority === 'critical' ? 'destructive' : item.priority === 'high' ? 'default' : 'outline'} className="text-[10px]">
+                      <Badge variant={item.priority === 'critical' ? 'danger' : item.priority === 'high' ? 'default' : 'outline'} className="text-[10px]">
                         {item.priority}
                       </Badge>
                     </div>
@@ -200,7 +200,7 @@ export default function ExpertMobileReviewPage() {
         <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-4 py-3 flex items-center justify-between">
           <button onClick={backToQueue} className="flex items-center gap-1 text-sm text-muted-foreground"><ChevronLeft className="h-4 w-4" />Queue</button>
           <span className="text-sm font-medium">{activeItem.subtestCode}</span>
-          <Badge variant={activeItem.priority === 'critical' ? 'destructive' : 'outline'} className="text-[10px]">{activeItem.priority}</Badge>
+          <Badge variant={activeItem.priority === 'critical' ? 'danger' : 'outline'} className="text-[10px]">{activeItem.priority}</Badge>
         </div>
         <div className="px-4 py-6 max-w-lg mx-auto space-y-4">
           <Card className="p-4">

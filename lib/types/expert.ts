@@ -28,6 +28,33 @@ export interface ExpertMe {
   isActive: boolean;
   specialties: string[];
   createdAt: string;
+  isOnboardingComplete?: boolean;
+}
+
+export interface ExpertOnboardingProfile {
+  displayName: string;
+  bio: string;
+  photoUrl?: string;
+}
+
+export interface ExpertOnboardingQualifications {
+  qualifications: string;
+  certifications: string;
+  experienceYears: number;
+}
+
+export interface ExpertOnboardingRates {
+  hourlyRateMinorUnits: number;
+  sessionRateMinorUnits: number;
+  currency: string;
+}
+
+export interface ExpertOnboardingStatus {
+  isComplete: boolean;
+  completedSteps: string[];
+  profile?: ExpertOnboardingProfile | null;
+  qualifications?: ExpertOnboardingQualifications | null;
+  rates?: ExpertOnboardingRates | null;
 }
 
 export interface ExpertReviewActions {
@@ -284,6 +311,16 @@ export type ExpertSchedule = {
   days: Record<string, ExpertScheduleDay>;
   lastUpdatedAt?: string | null;
 };
+
+export interface ScheduleException {
+  id: string;
+  date: string;
+  isBlocked: boolean;
+  startTime?: string | null;
+  endTime?: string | null;
+  reason?: string | null;
+  createdAt: string;
+}
 
 export interface LearnerProfile {
   id: string;

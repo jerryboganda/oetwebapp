@@ -462,6 +462,79 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
     }
 
+    // ── Bulk User Import ───────────────────────
+
+    [Fact]
+    public async Task AdminUsers_BulkImport_CreatesUsersFromCsv()
+    {
+        var csv = "email,firstName,lastName,role,profession\n"
+                + $"import-learner-{Guid.NewGuid():N}@oet-prep.dev,Jane,Smith,learner,nursing\n"
+                + $"import-expert-{Guid.NewGuid():N}@oet-prep.dev,John,Doe,expert,medicine\n";
+
+        var content = new MultipartFormDataContent();
+        content.Add(new ByteArrayContent(System.Text.Encoding.UTF8.GetBytes(csv)), "file", "users.csv");
+
+        var response = await _client.PostAsync("/v1/admin/users/import", content);
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(2, json.RootElement.GetProperty("total").GetInt32());
+        Assert.Equal(2, json.RootElement.GetProperty("created").GetInt32());
+        Assert.Equal(0, json.RootElement.GetProperty("skipped").GetInt32());
+        Assert.Equal(0, json.RootElement.GetProperty("errors").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task AdminUsers_BulkImport_SkipsDuplicateEmails()
+    {
+        var email = $"dup-import-{Guid.NewGuid():N}@oet-prep.dev";
+        var csv = "email,firstName,lastName,role,profession\n"
+                + $"{email},First,User,learner,nursing\n"
+                + $"{email},Duplicate,User,learner,nursing\n";
+
+        var content = new MultipartFormDataContent();
+        content.Add(new ByteArrayContent(System.Text.Encoding.UTF8.GetBytes(csv)), "file", "users.csv");
+
+        var response = await _client.PostAsync("/v1/admin/users/import", content);
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(2, json.RootElement.GetProperty("total").GetInt32());
+        Assert.Equal(1, json.RootElement.GetProperty("created").GetInt32());
+        Assert.Equal(1, json.RootElement.GetProperty("skipped").GetInt32());
+    }
+
+    [Fact]
+    public async Task AdminUsers_BulkImport_ReportsInvalidRows()
+    {
+        var csv = "email,firstName,lastName,role,profession\n"
+                + "not-an-email,Bad,User,learner,nursing\n"
+                + $"valid-{Guid.NewGuid():N}@oet-prep.dev,Good,User,invalidrole,nursing\n";
+
+        var content = new MultipartFormDataContent();
+        content.Add(new ByteArrayContent(System.Text.Encoding.UTF8.GetBytes(csv)), "file", "users.csv");
+
+        var response = await _client.PostAsync("/v1/admin/users/import", content);
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(2, json.RootElement.GetProperty("total").GetInt32());
+        Assert.Equal(0, json.RootElement.GetProperty("created").GetInt32());
+        Assert.Equal(2, json.RootElement.GetProperty("errors").GetArrayLength());
+    }
+
+    [Fact]
+    public async Task AdminUsers_BulkImport_RejectsEmptyCsv()
+    {
+        var csv = "email,firstName,lastName,role,profession\n";
+
+        var content = new MultipartFormDataContent();
+        content.Add(new ByteArrayContent(System.Text.Encoding.UTF8.GetBytes(csv)), "file", "users.csv");
+
+        var response = await _client.PostAsync("/v1/admin/users/import", content);
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
     private static async Task<string?> ReadErrorCodeAsync(HttpResponseMessage response)
     {
         using var document = JsonDocument.Parse(await response.Content.ReadAsStringAsync());

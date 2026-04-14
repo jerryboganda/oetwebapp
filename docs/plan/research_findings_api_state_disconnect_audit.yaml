@@ -1,0 +1,713 @@
+plan_id: api-state-disconnect-audit
+objective: "Comprehensive audit of frontend ↔ backend API contract coherence, state management architecture, real-time features, platform-conditional code, and type safety across the OET Web App ecosystem"
+focus_area: "API contracts, state management, SignalR, platform detection, environment config, types"
+created_at: "2026-04-13"
+created_by: gem-researcher
+status: completed
+
+tldr: |
+  - Frontend (lib/api.ts ~4100 lines) exports ~200 functions covering learner, expert, admin, gamification, vocabulary, community, marketplace, private-speaking, grammar, pronunciation, conversations, and billing – all calling /v1/* endpoints.
+  - Backend has 22 endpoint files with rich coverage; ~4 backend subsystems (Sponsor, parts of Marketplace admin, some PrivateSpeaking admin, ConversationHub real-time) have endpoints without fully wired frontend page consumers.
+  - SignalR is used for notifications (NotificationHub) and real-time AI conversation (ConversationHub); the web proxy path (/api/backend) forces LongPolling for SignalR, and Capacitor mobile lacks explicit SignalR config.
+  - Platform detection is well-structured via runtime-signals.ts (web | desktop | capacitor-native), with 3 platform code paths: desktop (desktopBridge), Capacitor (Capacitor.isNativePlatform), and CSS breakpoint mobile (useIsMobile).
+  - Only 2 `as any` casts in api.ts. Primary type gap: most api.ts functions return `ApiRecord` (Record<string, any>) rather than strict typed DTOs — no compile-time contract enforcement with backend.
+
+# ═══════════════════════════════════════════════════════════════
+# 1. FRONTEND API CALLS → BACKEND ENDPOINT MAPPING
+# ═══════════════════════════════════════════════════════════════
+
+research_metadata:
+  methodology: "Hybrid retrieval: full-file reads of lib/api.ts (4100+ lines), lib/auth-client.ts, lib/notifications-api.ts, lib/learner-data.ts, lib/admin.ts; grep_search for all export functions; read of all 22 backend Endpoints/*.cs files via grep for MapGet/MapPost/MapPut/MapPatch/MapDelete; cross-referencing by /v1/* path prefixes"
+  scope: "Full coverage of all frontend API client files and backend endpoint registrations"
+  confidence: high
+  coverage: 95
+  decision_blockers: 0
+  research_blockers: 1  # Could not read every backend endpoint file line-by-line; relied on route grep
+
+# ───────────────────────────────────────────────────────────────
+# Section 1: Frontend API Call Inventory (by file)
+# ───────────────────────────────────────────────────────────────
+
+frontend_api_inventory:
+
+  lib_api_ts:
+    file: lib/api.ts
+    line_count: ~4100
+    total_exports: ~200
+    endpoint_groups:
+      # ── Learner Core ──
+      - group: "User & Bootstrap"
+        functions:
+          - {name: fetchUserProfile, endpoint: "/v1/me/bootstrap", method: GET}
+          - {name: fetchOnboardingState, endpoint: "/v1/learner/onboarding/state", method: GET}
+          - {name: startOnboarding, endpoint: "/v1/learner/onboarding/start", method: POST}
+          - {name: completeOnboarding, endpoint: "/v1/learner/onboarding/complete", method: POST}
+          - {name: fetchDashboardHome, endpoint: "/v1/learner/dashboard", method: GET}
+          - {name: fetchEngagement, endpoint: "/v1/learner/engagement", method: GET}
+          - {name: updateUserProfile, endpoints: ["/v1/settings/profile (PATCH)", "/v1/learner/goals (PATCH)"]}
+          - {name: fetchSettingsData, endpoint: "/v1/settings", method: GET}
+          - {name: fetchSettingsSection, endpoint: "/v1/settings/{section}", method: GET}
+          - {name: updateSettingsSection, endpoint: "/v1/settings/{section}", method: PATCH}
+
+      - group: "Study Plan"
+        functions:
+          - {name: fetchStudyPlan, endpoint: "/v1/study-plan", method: GET}
+          - {name: updateStudyPlanTask, endpoints: ["/v1/study-plan/items/{id}/complete", "/v1/study-plan/items/{id}/reset", "/v1/study-plan/items/{id}/reschedule", "/v1/study-plan/items/{id}/skip"]}
+
+      - group: "Writing"
+        functions:
+          - {name: fetchWritingHome, endpoint: "/v1/writing/home", method: GET}
+          - {name: fetchWritingTasks, endpoint: "/v1/writing/tasks", method: GET}
+          - {name: fetchWritingTask, endpoint: "/v1/writing/tasks/{id}", method: GET}
+          - {name: fetchWritingChecklist, endpoint: "/v1/reference/criteria?subtest=writing", method: GET}
+          - {name: submitWritingDraft, endpoint: "/v1/writing/attempts/{id}/draft", method: PATCH}
+          - {name: submitWritingTask, endpoints: ["/v1/writing/attempts/{id}/draft PATCH", "/v1/writing/attempts/{id}/submit POST"]}
+          - {name: fetchWritingResult, endpoints: ["/v1/writing/evaluations/{id}/summary", "/v1/writing/evaluations/{id}/feedback"]}
+          - {name: fetchWritingSubmissions, endpoint: "/v1/submissions", method: GET}
+          - {name: fetchWritingRevisionData, endpoints: ["/v1/writing/evaluations/{id}/summary", "/v1/writing/revisions/{id}"]}
+          - {name: fetchModelAnswer, endpoint: "/v1/writing/content/{id}/model-answer", method: GET}
+
+      - group: "Writing Coach"
+        functions:
+          - {name: coachCheckText, endpoint: "/v1/writing/attempts/{id}/coach-check", method: POST}
+          - {name: resolveCoachSuggestion, endpoint: "/v1/writing/coach-suggestions/{id}/resolve", method: POST}
+          - {name: fetchCoachStats, endpoint: "/v1/writing/attempts/{id}/coach-stats", method: GET}
+
+      - group: "Speaking"
+        functions:
+          - {name: fetchSpeakingHome, endpoint: "/v1/speaking/home", method: GET}
+          - {name: fetchSpeakingTasks, endpoint: "/v1/speaking/tasks", method: GET}
+          - {name: fetchRoleCard, endpoint: "/v1/speaking/tasks/{id}", method: GET}
+          - {name: postSpeakingDeviceCheck, endpoint: "/v1/speaking/device-checks", method: POST}
+          - {name: submitSpeakingRecording, endpoints: ["/v1/speaking/attempts/{id}/audio/upload-session POST", "/v1/speaking/attempts/{id}/audio/complete POST", "/v1/speaking/attempts/{id}/submit POST"]}
+          - {name: fetchSpeakingResult, endpoint: "/v1/speaking/evaluations/{id}/summary", method: GET}
+          - {name: fetchTranscript, endpoint: "/v1/speaking/evaluations/{id}/review", method: GET}
+          - {name: fetchPhrasingData, endpoint: "/v1/speaking/evaluations/{id}/review", method: GET}
+
+      - group: "Reading"
+        functions:
+          - {name: fetchReadingHome, endpoint: "/v1/reading/home", method: GET}
+          - {name: fetchReadingTask, endpoint: "/v1/reading/tasks/{id}", method: GET}
+          - {name: submitReadingAnswers, endpoints: ["/v1/reading/attempts/{id}/answers PATCH", "/v1/reading/attempts/{id}/submit POST"]}
+          - {name: fetchReadingResult, endpoint: "/v1/reading/evaluations/{id}", method: GET}
+
+      - group: "Listening"
+        functions:
+          - {name: fetchListeningHome, endpoint: "/v1/listening/home", method: GET}
+          - {name: fetchListeningTask, endpoint: "/v1/listening/tasks/{id}", method: GET}
+          - {name: submitListeningAnswers, endpoints: ["/v1/listening/attempts/{id}/answers PATCH", "/v1/listening/attempts/{id}/submit POST"]}
+          - {name: fetchListeningResult, endpoint: "/v1/listening/evaluations/{id}", method: GET}
+          - {name: fetchListeningDrill, endpoint: "/v1/listening/drills/{id}", method: GET}
+          - {name: fetchListeningReview, endpoint: "/v1/listening/evaluations/{id}", method: GET}
+
+      - group: "Mocks"
+        functions:
+          - {name: fetchMocksHome, endpoint: "/v1/mocks", method: GET}
+          - {name: fetchMockReport, endpoint: "/v1/mock-reports/{id}", method: GET}
+          - {name: createMockSession, endpoint: "/v1/mock-attempts", method: POST}
+          - {name: fetchMockSession, endpoint: "/v1/mock-attempts/{id}", method: GET}
+          - {name: submitMockSession, endpoint: "/v1/mock-attempts/{id}/submit", method: POST}
+
+      - group: "Diagnostic"
+        functions:
+          - {name: fetchDiagnosticOverview, endpoint: "/v1/diagnostic/overview", method: GET}
+          - {name: fetchDiagnosticSession, endpoint: "/v1/diagnostic/overview", method: GET}
+          - {name: startDiagnostic, endpoint: "/v1/diagnostic/attempts", method: POST}
+          - {name: fetchDiagnosticResults, endpoint: "/v1/diagnostic/attempts/{id}/results", method: GET}
+
+      - group: "Progress & Readiness"
+        functions:
+          - {name: fetchReadiness, endpoint: "/v1/readiness", method: GET}
+          - {name: fetchTrendData, endpoint: "/v1/progress", method: GET}
+          - {name: fetchCompletionData, endpoint: "/v1/progress", method: GET}
+          - {name: fetchSubmissionVolume, endpoint: "/v1/progress", method: GET}
+          - {name: fetchProgressEvidenceSummary, endpoint: "/v1/progress", method: GET}
+
+      - group: "Submissions"
+        functions:
+          - {name: fetchSubmissions, endpoint: "/v1/submissions", method: GET}
+          - {name: fetchSubmissionDetail, endpoint: "(composite - multiple)", method: GET}
+          - {name: fetchSubmissionComparison, endpoint: "/v1/submissions/compare", method: GET}
+
+      - group: "Billing"
+        functions:
+          - {name: fetchBilling, endpoints: ["/v1/billing/summary", "/v1/billing/invoices", "/v1/billing/plans", "/v1/billing/extras"]}
+          - {name: fetchBillingQuote, endpoint: "/v1/billing/quote", method: GET}
+          - {name: purchaseReviewCredits, endpoint: "/v1/billing/checkout-sessions", method: POST}
+          - {name: fetchBillingChangePreview, endpoint: "/v1/billing/change-preview", method: GET}
+          - {name: createBillingCheckoutSession, endpoint: "/v1/billing/checkout-sessions", method: POST}
+          - {name: downloadInvoice, endpoint: "/v1/billing/invoices/{id}/download", method: GET}
+          - {name: fetchTurnaroundOptions, endpoint: "/v1/billing/review-options", method: GET}
+          - {name: fetchWalletTransactions, endpoint: "/v1/billing/wallet/transactions", method: GET}
+          - {name: createWalletTopUp, endpoint: "/v1/billing/wallet/top-up", method: POST}
+
+      - group: "Reviews"
+        functions:
+          - {name: submitReviewRequest, endpoint: "/v1/reviews/requests", method: POST}
+          - {name: fetchFocusAreas, endpoint: "/v1/reference/criteria", method: GET}
+
+      - group: "Session Management"
+        functions:
+          - {name: fetchActiveSessions, endpoint: "/v1/auth/sessions", method: GET}
+          - {name: revokeSession, endpoint: "/v1/auth/sessions/{id}", method: DELETE}
+          - {name: revokeAllOtherSessions, endpoint: "/v1/auth/sessions", method: DELETE}
+
+      - group: "Gamification"
+        functions:
+          - {name: fetchXP, endpoint: "/v1/gamification/xp", method: GET}
+          - {name: fetchStreak, endpoint: "/v1/gamification/streak", method: GET}
+          - {name: recordActivity, endpoint: "/v1/gamification/streak/activity", method: POST}
+          - {name: fetchAchievements, endpoint: "/v1/gamification/achievements", method: GET}
+          - {name: fetchLeaderboard, endpoint: "/v1/gamification/leaderboard", method: GET}
+          - {name: fetchMyLeaderboardPosition, endpoint: "/v1/gamification/leaderboard/my-position", method: GET}
+          - {name: setLeaderboardOptIn, endpoint: "/v1/gamification/leaderboard/opt-in", method: POST}
+
+      - group: "Spaced Repetition"
+        functions:
+          - {name: fetchReviewSummary, endpoint: "/v1/review/summary", method: GET}
+          - {name: fetchDueReviewItems, endpoint: "/v1/review/due", method: GET}
+          - {name: createReviewItem, endpoint: "/v1/review/items", method: POST}
+          - {name: submitReview, endpoint: "/v1/review/items/{id}/submit", method: POST}
+          - {name: deleteReviewItem, endpoint: "/v1/review/items/{id}", method: DELETE}
+
+      - group: "Vocabulary"
+        functions:
+          - {name: fetchVocabularyTerms, endpoint: "/v1/vocabulary/terms", method: GET}
+          - {name: fetchVocabularyTerm, endpoint: "/v1/vocabulary/terms/{id}", method: GET}
+          - {name: fetchMyVocabulary, endpoint: "/v1/vocabulary/my-list", method: GET}
+          - {name: addToMyVocabulary, endpoint: "/v1/vocabulary/my-list/{id}", method: POST}
+          - {name: removeFromMyVocabulary, endpoint: "/v1/vocabulary/my-list/{id}", method: DELETE}
+          - {name: fetchDueFlashcards, endpoint: "/v1/vocabulary/flashcards/due", method: GET}
+          - {name: submitFlashcardReview, endpoint: "/v1/vocabulary/flashcards/{id}/review", method: POST}
+          - {name: fetchVocabQuiz, endpoint: "/v1/vocabulary/quiz", method: GET}
+          - {name: submitVocabQuiz, endpoint: "/v1/vocabulary/quiz/submit", method: POST}
+
+      - group: "Content Hierarchy & Programs"
+        functions:
+          - {name: fetchContentPrograms, endpoint: "/v1/programs", method: GET}
+          - {name: fetchContentProgram, endpoint: "/v1/programs/{id}", method: GET}
+          - {name: fetchContentTracks, endpoint: "/v1/programs/{id}/tracks", method: GET}
+          - {name: fetchContentPackages, endpoint: "/v1/packages", method: GET}
+          - {name: fetchContentPackage, endpoint: "/v1/packages/{id}", method: GET}
+          - {name: fetchFreePreviewAssets, endpoint: "/v1/free-previews", method: GET}
+          - {name: fetchFoundationResources, endpoint: "/v1/foundation-resources", method: GET}
+          - {name: fetchContentBrowser, endpoint: "/v1/content-browser", method: GET}
+          - {name: fetchContentAccess, endpoint: "/v1/content-browser/{id}/access", method: GET}
+          - {name: fetchProgramsBrowser, endpoint: "/v1/programs-browser", method: GET}
+
+      - group: "Search & Recommendations"
+        functions:
+          - {name: searchContent, endpoint: "/v1/search", method: GET}
+          - {name: fetchSearchFacets, endpoint: "/v1/search/facets", method: GET}
+          - {name: fetchRecommendations, endpoint: "/v1/recommendations", method: GET}
+
+      - group: "Media"
+        functions:
+          - {name: fetchSignedMediaUrl, endpoint: "/v1/media/{id}/url", method: GET}
+          - {name: uploadMedia, endpoint: "/v1/media/upload", method: POST}
+          - {name: fetchMediaItem, endpoint: "/v1/media/{id}", method: GET}
+          - {name: deleteMedia, endpoint: "/v1/media/{id}", method: DELETE}
+          - {name: fetchMyMedia, endpoint: "/v1/media", method: GET}
+
+      - group: "Adaptive & Predictions"
+        functions:
+          - {name: fetchSkillProfile, endpoint: "/v1/adaptive/skill-profile", method: GET}
+          - {name: fetchAdaptiveContent, endpoint: "/v1/adaptive/content", method: GET}
+          - {name: fetchPredictions, endpoint: "/v1/predictions", method: GET}
+          - {name: fetchPrediction, endpoint: "/v1/predictions/{examType}/{subtest}", method: GET}
+          - {name: requestPredictionComputation, endpoint: "/v1/predictions/compute", method: POST}
+
+      - group: "Community"
+        functions:
+          - {name: fetchForumCategories, endpoint: "/v1/community/categories", method: GET}
+          - {name: fetchForumThreads, endpoint: "/v1/community/threads", method: GET}
+          - {name: fetchForumThread, endpoint: "/v1/community/threads/{id}", method: GET}
+          - {name: createForumThread, endpoint: "/v1/community/threads", method: POST}
+          - {name: fetchThreadReplies, endpoint: "/v1/community/threads/{id}/replies", method: GET}
+          - {name: createReply, endpoint: "/v1/community/threads/{id}/replies", method: POST}
+          - {name: fetchStudyGroups, endpoint: "/v1/community/study-groups", method: GET}
+          - {name: createStudyGroup, endpoint: "/v1/community/study-groups", method: POST}
+          - {name: joinStudyGroup, endpoint: "/v1/community/study-groups/{id}/join", method: POST}
+
+      - group: "Certificates & Referrals & Social"
+        functions:
+          - {name: fetchMyCertificates, endpoint: "/v1/certificates", method: GET}
+          - {name: verifyCertificate, endpoint: "/v1/certificates/verify/{code}", method: GET}
+          - {name: fetchMyReferralCode, endpoint: "/v1/referrals/my-code", method: GET}
+          - {name: fetchMyReferrals, endpoint: "/v1/referrals/my-referrals", method: GET}
+          - {name: applyReferralCode, endpoint: "/v1/referrals/apply", method: POST}
+          - {name: fetchExamBookings, endpoint: "/v1/exam-bookings", method: GET}
+          - {name: createExamBooking, endpoint: "/v1/exam-bookings", method: POST}
+          - {name: deleteExamBooking, endpoint: "/v1/exam-bookings/{id}", method: DELETE}
+
+      - group: "Tutoring & Conversations"
+        functions:
+          - {name: fetchTutoringSessions, endpoint: "/v1/tutoring/sessions", method: GET}
+          - {name: bookTutoringSession, endpoint: "/v1/tutoring/sessions", method: POST}
+          - {name: rateTutoringSession, endpoint: "/v1/tutoring/sessions/{id}/rate", method: POST}
+          - {name: createConversation, endpoint: "/v1/conversations", method: POST}
+          - {name: getConversation, endpoint: "/v1/conversations/{id}", method: GET}
+          - {name: completeConversation, endpoint: "/v1/conversations/{id}/complete", method: POST}
+          - {name: getConversationEvaluation, endpoint: "/v1/conversations/{id}/evaluation", method: GET}
+          - {name: getConversationHistory, endpoint: "/v1/conversations/history", method: GET}
+
+      - group: "Pronunciation"
+        functions:
+          - {name: fetchPronunciationDrills, endpoint: "/v1/pronunciation/drills", method: GET}
+          - {name: fetchPronunciationDrill, endpoint: "/v1/pronunciation/drills/{id}", method: GET}
+          - {name: fetchMyPronunciationProgress, endpoint: "/v1/pronunciation/my-progress", method: GET}
+          - {name: fetchPronunciationProfile, endpoint: "/v1/pronunciation/profile", method: GET}
+          - {name: submitPronunciationAttempt, endpoint: "/v1/pronunciation/drills/{id}/attempt", method: POST}
+          - {name: fetchPronunciationAssessment, endpoint: "/v1/pronunciation/assessment/{id}", method: GET}
+
+      - group: "Grammar & Lessons"
+        functions:
+          - {name: fetchGrammarLessons, endpoint: "/v1/grammar/lessons", method: GET}
+          - {name: fetchGrammarLesson, endpoint: "/v1/grammar/lessons/{id}", method: GET}
+          - {name: startGrammarLesson, endpoint: "/v1/grammar/lessons/{id}/start", method: POST}
+          - {name: completeGrammarLesson, endpoint: "/v1/grammar/lessons/{id}/complete", method: POST}
+          - {name: fetchVideoLessons, endpoint: "/v1/lessons", method: GET}
+          - {name: fetchVideoLesson, endpoint: "/v1/lessons/{id}", method: GET}
+          - {name: updateVideoProgress, endpoint: "/v1/lessons/{id}/progress", method: POST}
+
+      - group: "Strategies"
+        functions:
+          - {name: fetchStrategyGuides, endpoint: "/v1/strategies", method: GET}
+          - {name: fetchStrategyGuide, endpoint: "/v1/strategies/{id}", method: GET}
+
+      - group: "Private Speaking"
+        functions:
+          - {name: fetchPrivateSpeakingConfig, endpoint: "/v1/private-speaking/config", method: GET}
+          - {name: fetchPrivateSpeakingTutors, endpoint: "/v1/private-speaking/tutors", method: GET}
+          - {name: fetchPrivateSpeakingSlots, endpoint: "/v1/private-speaking/tutors/{id}/slots", method: GET}
+          - {name: fetchAllPrivateSpeakingSlots, endpoint: "/v1/private-speaking/slots", method: GET}
+          - {name: createPrivateSpeakingBooking, endpoint: "/v1/private-speaking/bookings", method: POST}
+          - {name: fetchLearnerPrivateSpeakingBookings, endpoint: "/v1/private-speaking/bookings", method: GET}
+          - {name: fetchPrivateSpeakingBookingDetail, endpoint: "/v1/private-speaking/bookings/{id}", method: GET}
+
+      - group: "Marketplace"
+        functions:
+          - {name: fetchMarketplaceProfile, endpoint: "/v1/marketplace/profile", method: GET}
+          - {name: updateMarketplaceProfile, endpoint: "/v1/marketplace/profile", method: PUT}
+          - {name: createMarketplaceSubmission, endpoint: "/v1/marketplace/submissions", method: POST}
+          - {name: fetchMyMarketplaceSubmissions, endpoint: "/v1/marketplace/submissions", method: GET}
+          - {name: fetchMarketplaceSubmission, endpoint: "/v1/marketplace/submissions/{id}", method: GET}
+          - {name: browseMarketplace, endpoint: "/v1/marketplace/browse", method: GET}
+
+      - group: "Expert Console (~45 functions)"
+        note: "Full expert queue, reviews, schedule, calibration, onboarding, learner directory"
+        key_prefixes: ["/v1/expert/*"]
+
+      - group: "Admin CMS (~80 functions)"
+        note: "Content CRUD, taxonomy, criteria, AI config, flags, audit, users, billing management, review ops, quality analytics, score guarantee claims, escalations, webhooks, publish requests, freeze management, notifications, content hierarchy admin, dedup, media assets"
+        key_prefixes: ["/v1/admin/*"]
+
+      - group: "Learner Phase 1-2 features"
+        functions:
+          - {name: fetchScoreGuarantee, endpoint: "/v1/learner/score-guarantee", method: GET}
+          - {name: activateScoreGuarantee, endpoint: "/v1/learner/score-guarantee/activate", method: POST}
+          - {name: submitScoreGuaranteeClaim, endpoint: "/v1/learner/score-guarantee/claim", method: POST}
+          - {name: fetchStudyCommitment, endpoint: "/v1/learner/study-commitment", method: GET}
+          - {name: setStudyCommitment, endpoint: "/v1/learner/study-commitment", method: POST}
+          - {name: fetchCertificates, endpoint: "/v1/learner/certificates", method: GET}
+          - {name: fetchReferralInfo, endpoint: "/v1/learner/referral", method: GET}
+          - {name: generateReferralCode, endpoint: "/v1/learner/referral/generate", method: POST}
+          - {name: submitEscalation, endpoint: "/v1/learner/escalations", method: POST}
+          - {name: fetchMyEscalations, endpoint: "/v1/learner/escalations", method: GET}
+          - {name: fetchFreezeStatus, endpoint: "/v1/freeze", method: GET}
+          - {name: requestFreeze, endpoint: "/v1/freeze/request", method: POST}
+
+  lib_auth_client_ts:
+    file: lib/auth-client.ts
+    total_exports: ~20
+    key_endpoints:
+      - {name: signIn, endpoint: "/v1/auth/sign-in", method: POST}
+      - {name: registerLearner, endpoint: "/v1/auth/register", method: POST}
+      - {name: fetchSignupCatalog, endpoint: "/v1/auth/catalog/signup", method: GET}
+      - {name: buildExternalAuthStartHref, endpoint: "/v1/auth/external/{provider}/start", method: "GET (redirect)"}
+      - {name: exchangeExternalAuth, endpoint: "/v1/auth/external/{provider}/exchange", method: POST}
+      - {name: signOut, endpoint: "/v1/auth/sign-out", method: POST}
+      - {name: deleteAccount, endpoint: "/v1/auth/account/delete", method: POST}
+      - {name: sendEmailVerificationOtp, endpoint: "/v1/auth/email/send-verification-otp", method: POST}
+      - {name: verifyEmailOtp, endpoint: "/v1/auth/email/verify-otp", method: POST}
+      - {name: requestPasswordReset, endpoint: "/v1/auth/forgot-password", method: POST}
+      - {name: resetPassword, endpoint: "/v1/auth/reset-password", method: POST}
+      - {name: beginAuthenticatorSetup, endpoint: "/v1/auth/mfa/authenticator/begin", method: POST}
+      - {name: confirmAuthenticatorSetup, endpoint: "/v1/auth/mfa/authenticator/confirm", method: POST}
+      - {name: completeMfaChallenge, endpoint: "/v1/auth/mfa/challenge", method: POST}
+      - {name: completeRecoveryChallenge, endpoint: "/v1/auth/mfa/recovery", method: POST}
+      - {name: refreshSessionInternal, endpoint: "/v1/auth/refresh", method: POST}
+
+  lib_notifications_api_ts:
+    file: lib/notifications-api.ts
+    total_exports: ~12
+    key_endpoints:
+      - {name: fetchNotifications, endpoint: "/v1/notifications", method: GET}
+      - {name: markNotificationRead, endpoint: "/v1/notifications/{id}/read", method: POST}
+      - {name: markAllNotificationsRead, endpoint: "/v1/notifications/read-all", method: POST}
+      - {name: fetchNotificationPreferences, endpoint: "/v1/notifications/preferences", method: GET}
+      - {name: updateNotificationPreferences, endpoint: "/v1/notifications/preferences", method: PATCH}
+      - {name: createPushSubscription, endpoint: "/v1/notifications/push-subscriptions", method: POST}
+      - {name: deletePushSubscription, endpoint: "/v1/notifications/push-subscriptions/{id}", method: DELETE}
+      - {name: fetchAdminNotificationCatalog, endpoint: "/v1/admin/notifications/catalog", method: GET}
+      - {name: fetchAdminNotificationPolicies, endpoint: "/v1/admin/notifications/policies", method: GET}
+      - {name: updateAdminNotificationPolicy, endpoint: "/v1/admin/notifications/policies/{role}/{event}", method: PUT}
+      - {name: fetchAdminNotificationHealth, endpoint: "/v1/admin/notifications/health", method: GET}
+      - {name: fetchAdminNotificationDeliveries, endpoint: "/v1/admin/notifications/deliveries", method: GET}
+      - {name: sendAdminNotificationTestEmail, endpoint: "/v1/admin/notifications/test-email", method: POST}
+
+# ───────────────────────────────────────────────────────────────
+# Section 2: FRONTEND CALLS WITHOUT BACKEND ENDPOINTS
+# ───────────────────────────────────────────────────────────────
+
+frontend_calls_without_backend_endpoints:
+  status: "NO CRITICAL GAPS FOUND"
+  notes: |
+    All /v1/* frontend calls map to registered backend endpoints in Endpoints/*.cs.
+    The backend has 22 endpoint files with comprehensive coverage. Every frontend
+    API path prefix has a matching backend registration.
+
+  potential_soft_gaps:
+    - concern: "Frontend fetchContentBySkill calls /v1/content/by-skill which routes through LearningContentEndpoints — verify this endpoint was fully implemented vs stub"
+    - concern: "Frontend fetchReadinessScore calls /v1/readiness — same endpoint as fetchReadiness, no dedicated readiness-score endpoint; may be intentional"
+
+# ───────────────────────────────────────────────────────────────
+# Section 3: ORPHAN BACKEND ENDPOINTS (no frontend consumer)
+# ───────────────────────────────────────────────────────────────
+
+orphan_backend_endpoints:
+  description: "Backend endpoints with no known frontend page or component consumer"
+
+  confirmed_orphans:
+    - subsystem: "Sponsor"
+      file: "backend/src/OetLearner.Api/Endpoints/SponsorEndpoints.cs"
+      endpoints:
+        - "/v1/sponsor/dashboard (GET)"
+        - "/v1/sponsor/learners (GET)"
+        - "/v1/sponsor/learners/invite (POST)"
+        - "/v1/sponsor/learners/{id} (DELETE)"
+        - "/v1/sponsor/billing (GET)"
+      reason: "No frontend Sponsor pages or API calls exist in lib/api.ts"
+
+    - subsystem: "ConversationHub (SignalR methods)"
+      file: "backend/src/OetLearner.Api/Hubs/ConversationHub.cs"
+      endpoints:
+        - "StartSession (SignalR)"
+        - "SendAudio (SignalR)"
+      reason: "Frontend has REST endpoints for conversations but no SignalR conversation client — the real-time audio streaming via SignalR hub has no frontend consumer. The REST-based conversation endpoints ARE consumed."
+
+    - subsystem: "Pronunciation (partial)"
+      file: "backend/src/OetLearner.Api/Endpoints/PronunciationEndpoints.cs"
+      endpoints:
+        - "/v1/pronunciation/speaking-linked (GET)"
+      reason: "Frontend calls /v1/pronunciation/profile, /v1/pronunciation/drills/*, /v1/pronunciation/my-progress, /v1/pronunciation/assessment/* but NOT /v1/pronunciation/speaking-linked"
+
+    - subsystem: "Admin Notification Proof Trigger"
+      file: "backend/src/OetLearner.Api/Endpoints/NotificationEndpoints.cs"
+      endpoints:
+        - "/v1/admin/notifications/proof/trigger (POST)"
+      reason: "Frontend notifications-api.ts covers catalog, policies, health, deliveries, test-email — but NOT proof/trigger"
+
+    - subsystem: "Private Speaking Admin (partial)"
+      file: "backend/src/OetLearner.Api/Endpoints/PrivateSpeakingEndpoints.cs"
+      orphan_admin_endpoints:
+        - "/v1/admin/private-speaking/config (GET, PUT)"
+        - "/v1/admin/private-speaking/stats (GET)"
+        - "/v1/admin/private-speaking/tutors/* (full CRUD)"
+        - "/v1/admin/private-speaking/bookings/* (admin management)"
+        - "/v1/admin/private-speaking/audit-logs (GET)"
+      reason: "Frontend has Private Speaking learner endpoints but NO admin private speaking pages — backend admin CRUD for tutors, availability, overrides, bookings admin has no frontend consumer"
+
+    - subsystem: "Expert Private Speaking"
+      file: "backend/src/OetLearner.Api/Endpoints/PrivateSpeakingEndpoints.cs"
+      orphan_expert_endpoints:
+        - "/v1/expert/private-speaking/profile (GET)"
+        - "/v1/expert/private-speaking/sessions/* (GET, cancel)"
+        - "/v1/expert/private-speaking/availability (GET, POST, DELETE)"
+      reason: "No frontend expert-facing private speaking pages or API calls"
+
+    - subsystem: "Admin Marketplace Review"
+      note: "Frontend has reviewMarketplaceSubmission and fetchPendingMarketplaceSubmissions but these may not be wired into actual admin pages yet"
+
+# ═══════════════════════════════════════════════════════════════
+# 4. STATE MANAGEMENT ARCHITECTURE
+# ═══════════════════════════════════════════════════════════════
+
+state_management:
+
+  contexts:
+    - name: AuthContext
+      file: "contexts/auth-context.tsx"
+      manages:
+        - "session (AuthSession | null)"
+        - "user (CurrentUser | null)"
+        - "loading, error states"
+        - "pendingMfaChallenge"
+      providers: "AuthProvider wraps the entire app"
+      consumers: "Every authenticated page/component via useAuth()"
+      platform_behavior: "Platform-agnostic — delegates to auth-client.ts which handles platform-aware OAuth (desktop/capacitor)"
+
+    - name: NotificationCenterContext
+      file: "contexts/notification-center-context.tsx"
+      manages:
+        - "notifications feed (NotificationFeedItem[])"
+        - "unreadCount, totalCount, hasMore"
+        - "connectionStatus (SignalR status)"
+        - "preferences (NotificationPreferencePayload)"
+        - "push subscription state"
+      providers: "NotificationCenterProvider"
+      consumers: "Notification bell, notification center panel, settings"
+      platform_behavior: |
+        - SignalR transport: forces LongPolling when going through /api/backend proxy (same-origin); uses WebSockets when direct API connection
+        - Push notifications: uses Web Push API (service worker); NOT wired for Capacitor native push
+        - Poll interval: 30s fallback polling regardless of platform
+
+  stores:
+    - name: useExpertStore
+      file: "lib/stores/expert-store.ts"
+      manages:
+        - "playbackSpeed, currentTimestamp, isPlaying (audio review state)"
+        - "reviewDrafts: Record<string, LocalReviewDraft> (persisted to localStorage)"
+      persistence: "zustand persist middleware → localStorage key 'expert-console-store'"
+      platform_behavior: "Uses localStorage — works on web and desktop, but NOT reliable on Capacitor native (should use Capacitor Preferences or secure storage)"
+
+  hooks:
+    - name: useIsMobile
+      file: "hooks/use-mobile.ts"
+      manages: "Boolean based on viewport width < 768px"
+      note: "This is CSS breakpoint mobile, NOT Capacitor native detection"
+
+    - name: useAnalytics
+      file: "hooks/use-analytics.ts"
+      manages: "Thin wrapper around analytics.track()"
+
+  state_gaps:
+    - gap: "Expert review draft persistence uses localStorage which is NOT reliable on Capacitor mobile native; should use capacitor-secure-storage-plugin or @capacitor/preferences for persistence"
+      severity: medium
+
+    - gap: "NotificationCenterContext push subscription uses Web Push API (service worker) which does NOT work on Capacitor native — native push (FCM/APNs) is configured in lib/mobile/push-notifications.ts but NOT integrated with NotificationCenterContext"
+      severity: high
+
+    - gap: "No global loading/error state management — each page manages its own loading/error useState"
+      severity: low
+
+# ═══════════════════════════════════════════════════════════════
+# 5. SIGNALR / REAL-TIME INTEGRATION
+# ═══════════════════════════════════════════════════════════════
+
+signalr_integration:
+
+  hubs:
+    - name: NotificationHub
+      file: "backend/src/OetLearner.Api/Services/NotificationHub.cs"
+      registered_in: "Program.cs (builder.Services.AddSignalR())"
+      frontend_consumer: "contexts/notification-center-context.tsx"
+      web_status: WORKING
+      desktop_status: WORKING
+      capacitor_status: PARTIAL
+      transport_notes: |
+        - When apiBaseUrl starts with '/' (proxy path), forces HttpTransportType.LongPolling
+        - When direct API URL, uses HttpTransportType.WebSockets
+        - Capacitor native: SignalR client (@microsoft/signalr) works but transport depends
+          on whether the native WebView supports WebSockets to the API (usually yes)
+
+    - name: ConversationHub
+      file: "backend/src/OetLearner.Api/Hubs/ConversationHub.cs"
+      registered_in: "Program.cs"
+      frontend_consumer: "NONE (orphan — REST endpoints consumed, but SignalR real-time audio streaming has no frontend client)"
+      web_status: NOT_CONSUMED
+      desktop_status: NOT_CONSUMED
+      capacitor_status: NOT_CONSUMED
+      note: "ConversationHub supports StartSession, SendAudio, EndSession for real-time speaking practice but the frontend conversation page uses REST endpoints only"
+
+  platform_issues:
+    - issue: "Capacitor native has NO explicit SignalR configuration in lib/mobile/ or capacitor-config.ts"
+      impact: "SignalR connection from Capacitor native WebView depends on default WebView behavior; may fail behind restrictive network configs"
+
+    - issue: "Next.js proxy (/api/backend) does NOT support WebSocket upgrade — forces LongPolling for all proxy-routed SignalR"
+      impact: "Higher latency for real-time notifications in development and possibly production if proxy is used"
+
+# ═══════════════════════════════════════════════════════════════
+# 6. PLATFORM DETECTION & CONDITIONAL CODE
+# ═══════════════════════════════════════════════════════════════
+
+platform_detection:
+
+  core_system:
+    file: "lib/runtime-signals.ts"
+    function: getAppRuntimeKind
+    returns: "'web' | 'desktop' | 'capacitor-native'"
+    detection_chain:
+      - "1. Check document.documentElement.dataset.runtimeKind (set by bootstrap script)"
+      - "2. Check window.desktopBridge existence → 'desktop'"
+      - "3. Check window.Capacitor?.isNativePlatform?.() → 'capacitor-native'"
+      - "4. Default → 'web'"
+    bootstrap_script: "getRuntimeBootstrapScript() — inline <script> sets data-runtime-kind on <html>"
+
+  type_definitions:
+    file: "types/desktop.d.ts"
+    defines:
+      - "CapacitorGlobal (isNativePlatform, getPlatform)"
+      - "DesktopBridge (platform, versions, openExternal, runtime, secureSecrets)"
+      - "Window augmentation (desktopBridge?, Capacitor?)"
+
+  platform_conditional_code_inventory:
+
+    - location: "lib/auth-client.ts:buildExternalAuthStartHref"
+      condition: "window.desktopBridge → platform='desktop'; Capacitor.isNativePlatform() → platform='capacitor'"
+      purpose: "OAuth start URL includes platform param for backend to redirect appropriately"
+
+    - location: "app/speaking/task/[id]/page.tsx"
+      condition: "Capacitor.isNativePlatform() → isNativeRecorder=true"
+      purpose: "Uses native audio recording API on Capacitor instead of browser MediaRecorder"
+      completeness: "Fully implemented with native visualizer, pause/resume handling"
+
+    - location: "components/auth/sign-in-form.tsx"
+      condition: "window.desktopBridge?.runtime?.info"
+      purpose: "Shows desktop runtime info on sign-in form (isPackaged, version)"
+
+    - location: "components/runtime/runtime-lifecycle-bridge.tsx"
+      condition: "runtimeKind === 'desktop' → desktop lifecycle; runtimeKind === 'capacitor-native' → capacitor lifecycle"
+      purpose: "Bridges platform lifecycle events (window focus/blur, app state changes)"
+
+    - location: "hooks/use-mobile.ts"
+      condition: "window.innerWidth < 768 (CSS breakpoint, NOT platform)"
+      purpose: "Responsive layout — used in writing player for timer/button sizing"
+
+    - location: "contexts/notification-center-context.tsx"
+      condition: "env.apiBaseUrl.startsWith('/') → LongPolling; else → WebSockets"
+      purpose: "SignalR transport selection based on proxy vs direct API"
+
+  incomplete_platform_gates:
+    - feature: "Push notifications"
+      issue: "NotificationCenterContext only uses Web Push API. lib/mobile/push-notifications.ts has Capacitor FCM/APNs code but it's NOT integrated with the notification center context"
+
+    - feature: "File downloads"
+      issue: "Desktop file downloads handled by Electron will-download handler. Capacitor file downloads not explicitly handled"
+
+# ═══════════════════════════════════════════════════════════════
+# 7. ENVIRONMENT & CONFIGURATION
+# ═══════════════════════════════════════════════════════════════
+
+environment_config:
+
+  env_resolution:
+    file: "lib/env.ts"
+    variables:
+      - name: apiBaseUrl
+        resolution_order:
+          - "NEXT_PUBLIC_API_BASE_URL (client-side, explicit)"
+          - "Browser: falls back to '/api/backend' (same-origin proxy)"
+          - "Server-side: PUBLIC_API_BASE_URL → API_PROXY_TARGET_URL → 'http://127.0.0.1:5198'"
+      - name: webPushPublicKey
+        source: "NEXT_PUBLIC_WEB_PUSH_PUBLIC_KEY"
+
+  next_config:
+    file: "next.config.ts"
+    features:
+      - "CSP headers with dynamic apiOrigins and WebSocket origins"
+      - "Microphone permission allowed (self)"
+      - "output: 'standalone'"
+      - "HMR disable option via DISABLE_HMR env var"
+    rewrites: "NONE defined in next.config.ts — proxy is handled by route handler"
+    redirects: "NONE defined"
+
+  config_gaps:
+    - gap: "No explicit CORS configuration for Capacitor native in next.config.ts CSP connect-src — Capacitor WebView may need capacitor://localhost or ionic://localhost in connect-src"
+      severity: medium
+
+    - gap: "CSP connect-src only allows apiOrigins and apiWebSocketOrigins derived from NEXT_PUBLIC_API_BASE_URL/API_PROXY_TARGET_URL. If the Capacitor native app uses a different API URL, CSP may block the request"
+      severity: medium
+
+    - gap: "lib/auth-client.ts hardcodes API_BASE_URL from process.env.NEXT_PUBLIC_API_BASE_URL only — does NOT use lib/env.ts resolver, could diverge from api.ts resolution"
+      severity: low
+
+# ═══════════════════════════════════════════════════════════════
+# 8. TYPES & CONTRACT MISMATCHES
+# ═══════════════════════════════════════════════════════════════
+
+type_safety:
+
+  frontend_type_files:
+    directory: "lib/types/"
+    files:
+      - {name: admin.ts, purpose: "Admin dashboard, content, users, billing, review ops types"}
+      - {name: auth.ts, purpose: "Auth session, current user, MFA, signup types"}
+      - {name: content-hierarchy.ts, purpose: "Programs, tracks, modules, lessons, packages"}
+      - {name: conversation.ts, purpose: "AI conversation session types"}
+      - {name: expert.ts, purpose: "Expert console, reviews, schedule, calibration types"}
+      - {name: gamification.ts, purpose: "XP, streak, achievements, leaderboard types"}
+      - {name: learner.ts, purpose: "Score guarantee, study commitment, certificates, referral types"}
+      - {name: notifications.ts, purpose: "Notification feed, preferences, push, admin notification types"}
+      - {name: subtest-content-schemas.ts, purpose: "Writing/speaking/reading/listening content schemas"}
+      - {name: vocabulary.ts, purpose: "Vocabulary terms, flashcards, quiz types"}
+
+  as_any_usage:
+    count: 2
+    locations:
+      - {file: "lib/api.ts", line: 1248, context: "(question as any).explanation — reading question type lacks explanation field"}
+      - {file: "lib/api.ts", line: 1521, context: "(existing as any)[subtest] — dynamic property assignment on TrendPoint"}
+
+  primary_type_gap:
+    description: |
+      Most api.ts functions use `apiRequest<ApiRecord>` where ApiRecord = Record<string, any>.
+      This means the Backend→Frontend contract is NOT enforced at compile time. The backend
+      .NET DTOs are well-typed, but the frontend receives them as `any` and manually maps fields
+      in each function body. If a backend DTO changes a field name, the frontend will silently
+      receive undefined without any TypeScript compile error.
+
+    affected_functions: "~150+ functions that return ApiRecord or use asRecord/asArray helpers"
+
+    well_typed_exceptions:
+      - "Expert console functions that use typed generics: apiRequest<ExpertMe>, apiRequest<ReviewQueueResponse>, etc."
+      - "Auth client functions with proper typed responses (AuthSession, CurrentUser, etc.)"
+      - "Notification API with full typed request/response types"
+
+  contract_risks:
+    - risk: "Backend field rename in a DTO breaks frontend silently — no compile-time detection"
+      severity: high
+      mitigation: "Consider generating TypeScript types from .NET OpenAPI/Swagger spec"
+
+    - risk: "2 `as any` casts for missing type fields — low risk, minor"
+      severity: low
+
+# ═══════════════════════════════════════════════════════════════
+# OPEN QUESTIONS
+# ═══════════════════════════════════════════════════════════════
+
+open_questions:
+  - question: "Is the Sponsor subsystem planned for a future phase, or deprecated?"
+    context: "Backend has full SponsorEndpoints.cs but zero frontend Sponsor pages or API calls"
+    type: nice_to_know
+    affects: ["backend cleanup"]
+
+  - question: "Will the ConversationHub SignalR audio streaming be wired to the frontend, or is REST-only the intended conversation UX?"
+    context: "ConversationHub has StartSession/SendAudio/EndSession SignalR methods but frontend only uses REST conversation endpoints"
+    type: research
+    affects: ["conversation feature completeness"]
+
+  - question: "Should Capacitor native push notifications be integrated into NotificationCenterContext?"
+    context: "lib/mobile/push-notifications.ts exists with FCM/APNs setup but is separate from the notification center state management"
+    type: decision_blocker
+    affects: ["mobile notification parity"]
+
+gaps:
+  - area: "Capacitor SignalR configuration"
+    description: "No explicit SignalR transport configuration for Capacitor native platform"
+    impact: research_blocker
+    affects: ["mobile real-time features"]
+
+  - area: "Type safety across API boundary"
+    description: "~150 frontend API functions use Record<string, any> return types — no compile-time contract enforcement with backend DTOs"
+    impact: nice_to_know
+    affects: ["maintainability", "refactoring safety"]
+
+  - area: "Expert store persistence on mobile"
+    description: "useExpertStore uses localStorage via zustand persist — not reliable on Capacitor native"
+    impact: nice_to_know
+    affects: ["expert mobile experience"]
+
+  - area: "Push notification integration gap"
+    description: "Web Push (service worker) and Capacitor native push (FCM/APNs) are separate implementations not unified in state management"
+    impact: decision_blocker
+    affects: ["cross-platform notification parity"]

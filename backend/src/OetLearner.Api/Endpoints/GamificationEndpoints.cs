@@ -32,6 +32,13 @@ public static class GamificationEndpoints
             GamificationService svc, CancellationToken ct) =>
             Results.Ok(await svc.GetLeaderboardAsync(examTypeCode, period ?? "weekly", ct)));
 
+        // Alias: /v1/learner/leaderboard → same handler for frontend path compatibility
+        v1.MapGet("/learner/leaderboard", async (
+            [FromQuery] string? examTypeCode,
+            [FromQuery] string? period,
+            GamificationService svc, CancellationToken ct) =>
+            Results.Ok(await svc.GetLeaderboardAsync(examTypeCode, period ?? "weekly", ct)));
+
         v1.MapGet("/gamification/leaderboard/my-position", async (
             HttpContext http,
             [FromQuery] string? examTypeCode,

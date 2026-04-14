@@ -1,9 +1,14 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-import { resolveProxyTarget, sanitizeProxyHeaders, sanitizeProxyResponseHeaders } from '../../../../lib/backend-proxy';
+import { resolveProxyTarget, sanitizeProxyHeaders, sanitizeProxyResponseHeaders, validateRequestOrigin } from '../../../../lib/backend-proxy';
 
 async function proxyRequest(request: Request, context: { params: Promise<{ path: string[] }> }) {
+  // CSRF origin validation for state-changing methods
+  if (!validateRequestOrigin(request)) {
+    return new Response('Forbidden: invalid request origin', { status: 403 });
+  }
+
   const { path } = await context.params;
 
   let targetUrl: string;

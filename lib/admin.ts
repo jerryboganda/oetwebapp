@@ -56,6 +56,7 @@ import type {
   AdminEscalationsResponse,
   AdminFlag,
   AdminPermissionsResponse,
+  AdminPublishRequest,
   AdminPublishRequestsResponse,
   AdminQualityAnalytics,
   AdminRevisionRow,
@@ -134,10 +135,11 @@ function normalizeContentStatus(value: unknown): 'draft' | 'published' | 'archiv
   return 'draft';
 }
 
-function normalizeUserRole(value: unknown): 'learner' | 'expert' | 'admin' {
+function normalizeUserRole(value: unknown): 'learner' | 'expert' | 'admin' | 'sponsor' {
   const normalized = toStringValue(value, 'learner').toLowerCase();
   if (normalized === 'expert') return 'expert';
   if (normalized === 'admin') return 'admin';
+  if (normalized === 'sponsor') return 'sponsor';
   return 'learner';
 }
 
@@ -751,10 +753,24 @@ export async function getAdminPublishRequestsData(
       reviewedBy: toNullableString(r.reviewedBy),
       reviewedByName: toNullableString(r.reviewedByName),
       status: normalizePublishRequestStatus(r.status),
+      stage: normalizePublishRequestStage(r.stage),
       requestNote: toNullableString(r.requestNote),
       reviewNote: toNullableString(r.reviewNote),
       requestedAt: toStringValue(r.requestedAt),
       reviewedAt: toNullableString(r.reviewedAt),
+      editorReviewedBy: toNullableString(r.editorReviewedBy),
+      editorReviewedByName: toNullableString(r.editorReviewedByName),
+      editorReviewedAt: toNullableString(r.editorReviewedAt),
+      editorNotes: toNullableString(r.editorNotes),
+      publisherApprovedBy: toNullableString(r.publisherApprovedBy),
+      publisherApprovedByName: toNullableString(r.publisherApprovedByName),
+      publisherApprovedAt: toNullableString(r.publisherApprovedAt),
+      publisherNotes: toNullableString(r.publisherNotes),
+      rejectedBy: toNullableString(r.rejectedBy),
+      rejectedByName: toNullableString(r.rejectedByName),
+      rejectedAt: toNullableString(r.rejectedAt),
+      rejectionReason: toNullableString(r.rejectionReason),
+      rejectionStage: toNullableString(r.rejectionStage),
     })),
     total: toNumberValue(raw.total),
     page: toNumberValue(raw.page, 1),
@@ -762,11 +778,19 @@ export async function getAdminPublishRequestsData(
   };
 }
 
-function normalizePublishRequestStatus(value: unknown): 'pending' | 'approved' | 'rejected' {
+function normalizePublishRequestStatus(value: unknown): AdminPublishRequest['status'] {
   const normalized = toStringValue(value, 'pending').toLowerCase();
+  if (normalized === 'editor_review') return 'editor_review';
+  if (normalized === 'publisher_approval') return 'publisher_approval';
   if (normalized === 'approved') return 'approved';
   if (normalized === 'rejected') return 'rejected';
   return 'pending';
+}
+
+function normalizePublishRequestStage(value: unknown): AdminPublishRequest['stage'] {
+  const normalized = toStringValue(value, 'editor_review').toLowerCase();
+  if (normalized === 'publisher_approval') return 'publisher_approval';
+  return 'editor_review';
 }
 
 // ── Webhook Monitoring ──────────────────────────────────
