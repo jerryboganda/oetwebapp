@@ -486,6 +486,21 @@ public static class SeedData
             ApplicationUserRoles.Admin,
             now.AddMonths(-6));
 
+        // Ensure seeded admin has system_admin permission (satisfies all granular policies)
+        var hasSystemAdmin = db.AdminPermissionGrants.Any(
+            g => g.AdminUserId == adminAccount.Id && g.Permission == AdminPermissions.SystemAdmin);
+        if (!hasSystemAdmin)
+        {
+            db.AdminPermissionGrants.Add(new AdminPermissionGrant
+            {
+                Id = $"grant_seed_{Guid.NewGuid():N}",
+                AdminUserId = adminAccount.Id,
+                Permission = AdminPermissions.SystemAdmin,
+                GrantedBy = "seed",
+                GrantedAt = now
+            });
+        }
+
         var localAuthAccountIds = new[]
         {
             learnerAccount.Id,

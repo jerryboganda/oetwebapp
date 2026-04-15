@@ -301,7 +301,7 @@ public sealed class AuthService(
         await db.SaveChangesAsync(cancellationToken);
 
         var subject = await ResolveSubjectAsync(account, cancellationToken);
-        return await CreateSessionAsync(account, subject.UserId, subject.DisplayName, cancellationToken);
+        return await CreateSessionFromSubjectAsync(account, subject, cancellationToken);
     }
 
     public async Task<AuthSessionResponse> CompleteDirectSignInAsync(
@@ -689,6 +689,14 @@ public sealed class AuthService(
         CancellationToken cancellationToken)
     {
         var subject = await BuildSubjectAsync(account, userId, displayName, cancellationToken);
+        return await CreateSessionFromSubjectAsync(account, subject, cancellationToken);
+    }
+
+    private async Task<AuthSessionResponse> CreateSessionFromSubjectAsync(
+        ApplicationUserAccount account,
+        AuthenticatedSessionSubject subject,
+        CancellationToken cancellationToken)
+    {
         var session = await CreateSessionCoreAsync(account, subject, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return session;
