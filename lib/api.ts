@@ -3950,7 +3950,8 @@ export async function submitEscalation(submissionId: string, reason: string, det
 }
 
 export async function fetchMyEscalations() {
-  return apiRequest('/v1/learner/escalations');
+  const res = await apiRequest('/v1/learner/escalations');
+  return res?.items ?? res;
 }
 
 export async function fetchEscalationDetails(id: string) {
