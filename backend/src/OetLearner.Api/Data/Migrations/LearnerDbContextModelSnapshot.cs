@@ -3564,6 +3564,52 @@ namespace OetLearner.Api.Data.Migrations
                     b.ToTable("LearnerAchievements", (string)null);
                 });
 
+            modelBuilder.Entity("OetLearner.Api.Domain.LearnerEscalation", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Details")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("character varying(2000)");
+
+                    b.Property<string>("Reason")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("SubmissionId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SubmissionId");
+
+                    b.HasIndex("UserId", "Status");
+
+                    b.ToTable("LearnerEscalations", (string)null);
+                });
+
             modelBuilder.Entity("OetLearner.Api.Domain.LearnerGoal", b =>
                 {
                     b.Property<Guid>("Id")
@@ -5287,6 +5333,72 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("UserId", "ExamTypeCode", "Status");
 
                     b.ToTable("ReviewItems", (string)null);
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.ReviewEscalation", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("AiScore")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Divergence")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("FinalScore")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("HumanScore")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("OriginalReviewerId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ResolutionNote")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)");
+
+                    b.Property<DateTimeOffset?>("ResolvedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("ReviewRequestId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("SecondReviewerId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("SubtestCode")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("TriggerCriterion")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("SecondReviewerId");
+
+                    b.HasIndex("ReviewRequestId", "Status");
+
+                    b.ToTable("ReviewEscalations", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ReviewRequest", b =>
