@@ -71,7 +71,7 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         Assert.All(sectionStates.EnumerateArray().ToArray(), section =>
         {
             Assert.True(section.TryGetProperty("launchRoute", out var launchRoute));
-            Assert.Contains("/app/mocks/player/", launchRoute.GetString());
+            Assert.Contains("/mocks/player/", launchRoute.GetString());
         });
     }
 
@@ -94,8 +94,8 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         drillResponse.EnsureSuccessStatusCode();
         using var drillJson = JsonDocument.Parse(await drillResponse.Content.ReadAsStringAsync());
         Assert.Equal("listening-drill-distractor_confusion", drillJson.RootElement.GetProperty("drillId").GetString());
-        Assert.Contains("/app/listening/player/", drillJson.RootElement.GetProperty("launchRoute").GetString());
-        Assert.Contains("/app/listening/review/", drillJson.RootElement.GetProperty("reviewRoute").GetString());
+        Assert.Contains("/listening/player/", drillJson.RootElement.GetProperty("launchRoute").GetString());
+        Assert.Contains("/listening/review/", drillJson.RootElement.GetProperty("reviewRoute").GetString());
     }
 
     [Fact]

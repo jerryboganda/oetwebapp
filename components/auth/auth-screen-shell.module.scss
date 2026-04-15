@@ -12,7 +12,9 @@
   --auth-input-bg: rgba(255, 255, 255, 0.85);
   position: relative;
   min-height: 100vh;
-  overflow: hidden;
+  min-height: 100dvh;
+  overflow-x: hidden;
+  overflow-y: auto;
   background: var(--auth-bg);
 }
 
@@ -101,10 +103,11 @@
   position: relative;
   z-index: 1;
   min-height: 100vh;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 3rem 1.25rem;
+  padding: 2rem 1.25rem;
 }
 
 .stack {
@@ -231,10 +234,11 @@
 .title {
   margin: 0;
   color: var(--auth-text);
-  font-size: clamp(1.9rem, 4vw, 2.35rem);
+  font-size: clamp(1.6rem, 4vw, 2.35rem);
   line-height: 1.08;
   font-weight: 800;
-  white-space: nowrap;
+  white-space: normal;
+  text-wrap: balance;
 }
 
 .subtitle {
@@ -1029,20 +1033,18 @@
 
 @media (max-width: 576px) {
   .content {
-    padding: 1.5rem 0.85rem;
+    padding: 1.25rem 0.75rem;
+    align-items: flex-start;
+    padding-top: env(safe-area-inset-top, 1.25rem);
   }
 
   .brand {
-    margin-bottom: 1.35rem;
+    margin-bottom: 1rem;
   }
 
   .card {
     border-radius: 1.5rem;
-    padding: 1.5rem 1rem 1.35rem;
-  }
-
-  .title {
-    white-space: normal;
+    padding: 1.25rem 1rem 1.15rem;
   }
 
   .otpGrid {

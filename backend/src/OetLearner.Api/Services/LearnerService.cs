@@ -82,9 +82,9 @@ public partial class LearnerService(
             },
             links = new
             {
-                dashboard = "/app/dashboard",
-                studyPlan = "/app/study-plan",
-                goals = "/app/goals"
+                dashboard = "/dashboard",
+                studyPlan = "/study-plan",
+                goals = "/goals"
             },
             lastUpdatedAt = user.LastActiveAt
         };
@@ -170,7 +170,7 @@ public partial class LearnerService(
             startedAt = user.OnboardingStartedAt,
             completedAt = user.OnboardingCompletedAt,
             checkpoint = user.OnboardingCompleted ? "goals" : "welcome",
-            resumeRoute = user.OnboardingCompleted ? "/app/dashboard" : "/app/onboarding"
+            resumeRoute = user.OnboardingCompleted ? "/dashboard" : "/onboarding"
         };
     }
 
@@ -488,7 +488,7 @@ public partial class LearnerService(
 
     public async Task<object> GetDiagnosticOverviewAsync(string userId, CancellationToken cancellationToken)
     {
-        await EnsureUserAsync(userId, cancellationToken);
+        await EnsureLearnerProfileAsync(userId, cancellationToken);
         var goal = await db.Goals.AsNoTracking().FirstAsync(x => x.UserId == userId, cancellationToken);
         var examFamilyLabel = FormatExamFamilyLabel(goal.ExamFamilyCode);
         var session = (await db.DiagnosticSessions
@@ -505,13 +505,13 @@ public partial class LearnerService(
                 estimatedTotalMinutes = 120,
                 disclaimer = $"Diagnostic results are training estimates only and are not official {examFamilyLabel} scores.",
                 resumable = false,
-                startRoute = "/app/diagnostic",
+                startRoute = "/diagnostic",
                 subtests = new[]
                 {
-                    new { subtest = "writing", estimatedDurationMinutes = 45, state = "not_started", route = "/app/diagnostic/writing" },
-                    new { subtest = "speaking", estimatedDurationMinutes = 20, state = "not_started", route = "/app/diagnostic/speaking" },
-                    new { subtest = "reading", estimatedDurationMinutes = 30, state = "not_started", route = "/app/diagnostic/reading" },
-                    new { subtest = "listening", estimatedDurationMinutes = 25, state = "not_started", route = "/app/diagnostic/listening" }
+                    new { subtest = "writing", estimatedDurationMinutes = 45, state = "not_started", route = "/diagnostic/writing" },
+                    new { subtest = "speaking", estimatedDurationMinutes = 20, state = "not_started", route = "/diagnostic/speaking" },
+                    new { subtest = "reading", estimatedDurationMinutes = 30, state = "not_started", route = "/diagnostic/reading" },
+                    new { subtest = "listening", estimatedDurationMinutes = 25, state = "not_started", route = "/diagnostic/listening" }
                 }
             };
         }
@@ -525,20 +525,20 @@ public partial class LearnerService(
             estimatedTotalMinutes = subtests.Sum(x => x.EstimatedDurationMinutes),
             disclaimer = $"Diagnostic results are training estimates only and are not official {examFamilyLabel} scores.",
             resumable = session.State is AttemptState.InProgress or AttemptState.Paused,
-            startRoute = "/app/diagnostic",
+            startRoute = "/diagnostic",
             subtests = subtests.OrderBy(x => DiagnosticSubtestOrder(x.SubtestCode)).Select(x => new
             {
                 subtest = x.SubtestCode,
                 estimatedDurationMinutes = x.EstimatedDurationMinutes,
                 state = ToApiState(x.State),
-                route = $"/app/diagnostic/{x.SubtestCode}"
+                route = $"/diagnostic/{x.SubtestCode}"
             })
         };
     }
 
     public async Task<object> CreateOrResumeDiagnosticAsync(string userId, CancellationToken cancellationToken)
     {
-        await EnsureUserAsync(userId, cancellationToken);
+        await EnsureLearnerProfileAsync(userId, cancellationToken);
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var goal = await db.Goals.AsNoTracking().FirstAsync(x => x.UserId == userId, cancellationToken);
         var active = await db.DiagnosticSessions.Where(x => x.UserId == userId && x.State == AttemptState.InProgress).FirstOrDefaultAsync(cancellationToken);
@@ -617,7 +617,7 @@ public partial class LearnerService(
             {
                 subtest = x.SubtestCode,
                 state = ToApiState(x.State),
-                routeHint = x.State == AttemptState.Completed ? "/app/diagnostic/results" : $"/app/diagnostic/{x.SubtestCode}",
+                routeHint = x.State == AttemptState.Completed ? "/diagnostic/results" : $"/diagnostic/{x.SubtestCode}",
                 estimatedDurationMinutes = x.EstimatedDurationMinutes,
                 attemptId = x.AttemptId
             })
@@ -717,9 +717,9 @@ public partial class LearnerService(
             recommendedIntensity = new { hoursPerWeek = 12, rationale = "Your current readiness suggests concentrated writing and speaking practice over the next 6-8 weeks." },
             firstStudyWeek = new[]
             {
-                new { day = "Day 1", action = "Writing task focused on discharge summaries", route = "/app/writing/tasks/wt-001" },
-                new { day = "Day 2", action = "Speaking fluency drill with roleplay", route = "/app/speaking/task/st-001" },
-                new { day = "Day 3", action = "Reading detail extraction practice", route = "/app/reading/task/rt-001" }
+                new { day = "Day 1", action = "Writing task focused on discharge summaries", route = "/writing/tasks/wt-001" },
+                new { day = "Day 2", action = "Speaking fluency drill with roleplay", route = "/speaking/task/st-001" },
+                new { day = "Day 3", action = "Reading detail extraction practice", route = "/reading/task/rt-001" }
             },
             upgradePrompt = new { shouldShow = true, reason = "Expert review can validate your highest-priority writing and speaking gaps." },
             studyPlan = new
@@ -764,17 +764,17 @@ public partial class LearnerService(
             cards = new
             {
                 readiness,
-                examDate = new { value = goal.TargetExamDate, route = "/app/goals" },
+                examDate = new { value = goal.TargetExamDate, route = "/goals" },
                 todaysTasks = todaysTasks.Select(StudyPlanItemDto),
                 latestEvaluatedSubmission = latestEvaluation is null || latestAttempt is null
                     ? null
-                    : new { evaluationId = latestEvaluation.Id, attemptId = latestAttempt.Id, subtest = latestEvaluation.SubtestCode, scoreRange = latestEvaluation.ScoreRange, route = $"/app/{latestEvaluation.SubtestCode}/result/{latestEvaluation.Id}" },
+                    : new { evaluationId = latestEvaluation.Id, attemptId = latestAttempt.Id, subtest = latestEvaluation.SubtestCode, scoreRange = latestEvaluation.ScoreRange, route = $"/{latestEvaluation.SubtestCode}/result/{latestEvaluation.Id}" },
                 weakCriteria = latestEvaluation is null
                     ? new List<Dictionary<string, object?>>()
                     : JsonSupport.Deserialize<List<Dictionary<string, object?>>>(latestEvaluation.CriterionScoresJson, []),
                 momentum = new { streakDays = streak, completionRate = 0.78 },
-                nextMockRecommendation = new { title = $"Full {FormatExamFamilyLabel(goal.ExamFamilyCode)} Mock Test", route = "/app/mocks", rationale = "A full mock will confirm whether your recent practice gains are transferring under pressure." },
-                pendingExpertReviews = new { count = pendingReviews, route = "/app/reviews" }
+                nextMockRecommendation = new { title = $"Full {FormatExamFamilyLabel(goal.ExamFamilyCode)} Mock Test", route = "/mocks", rationale = "A full mock will confirm whether your recent practice gains are transferring under pressure." },
+                pendingExpertReviews = new { count = pendingReviews, route = "/reviews" }
             },
             engagement = user is not null ? new
             {
@@ -787,9 +787,9 @@ public partial class LearnerService(
             freeze,
             primaryActions = new[]
             {
-                new { id = "resume-study-plan", label = "Resume Study Plan", route = "/app/study-plan" },
-                new { id = "start-next-task", label = "Start Next Task", route = "/app/writing/tasks/wt-001" },
-                new { id = "view-latest-feedback", label = "View Latest Feedback", route = latestEvaluation is null ? "/app/writing" : $"/app/writing/result/{latestEvaluation.Id}" }
+                new { id = "resume-study-plan", label = "Resume Study Plan", route = "/study-plan" },
+                new { id = "start-next-task", label = "Start Next Task", route = "/writing/tasks/wt-001" },
+                new { id = "view-latest-feedback", label = "View Latest Feedback", route = latestEvaluation is null ? "/writing" : $"/writing/result/{latestEvaluation.Id}" }
             },
             partialData = latestEvaluation is null,
             lastUpdatedAt = DateTimeOffset.UtcNow
@@ -1006,9 +1006,9 @@ public partial class LearnerService(
                 canRequestReview,
                 actions = new
                 {
-                    reopenFeedbackRoute = $"/app/submissions/{attempt.Id}",
-                    compareRoute = $"/app/submissions/compare?leftId={attempt.Id}",
-                    requestReviewRoute = canRequestReview ? $"/app/submissions/{attempt.Id}?requestReview=1" : null
+                    reopenFeedbackRoute = $"/submissions/{attempt.Id}",
+                    compareRoute = $"/submissions/compare?leftId={attempt.Id}",
+                    requestReviewRoute = canRequestReview ? $"/submissions/{attempt.Id}?requestReview=1" : null
                 }
             });
         }
@@ -1066,7 +1066,7 @@ public partial class LearnerService(
 
     public async Task<object> GetWritingHomeAsync(string userId, CancellationToken cancellationToken)
     {
-        await EnsureUserAsync(userId, cancellationToken);
+        await EnsureLearnerProfileAsync(userId, cancellationToken);
         var goal = await db.Goals.AsNoTracking().FirstAsync(x => x.UserId == userId, cancellationToken);
         var examFamilyLabel = FormatExamFamilyLabel(goal.ExamFamilyCode);
         var tasks = await GetTasksBySubtestAsync("writing", cancellationToken);
@@ -1097,7 +1097,7 @@ public partial class LearnerService(
                     criterionCode = x.GetValueOrDefault("criterionCode")?.ToString(),
                     criterionLabel = CriterionLabelFromCode(x.GetValueOrDefault("criterionCode")?.ToString()),
                     rationale = x.GetValueOrDefault("explanation")?.ToString() ?? "Target this criterion with a focused writing drill.",
-                    route = $"/app/writing/tasks?criterion={x.GetValueOrDefault("criterionCode")}"
+                    route = $"/writing/tasks?criterion={x.GetValueOrDefault("criterionCode")}"
                 })
                 .ToList<object>()
             : tasks.Take(3).Select(task => task).ToList();
@@ -1126,27 +1126,27 @@ public partial class LearnerService(
                     contentId = attempt.ContentId,
                     state = ToApiState(attempt.State),
                     scoreEstimate = evaluation?.ScoreRange,
-                    route = evaluation?.Id is null ? $"/app/writing/attempt/{attempt.Id}" : $"/app/writing/result/{evaluation.Id}"
+                    route = evaluation?.Id is null ? $"/writing/attempt/{attempt.Id}" : $"/writing/result/{evaluation.Id}"
                 };
             }),
             reviewCredits = new
             {
                 available = wallet.CreditBalance,
-                route = "/app/reviews",
-                billingRoute = "/app/billing"
+                route = "/reviews",
+                billingRoute = "/billing"
             },
             fullMockEntry = new
             {
                 title = $"{examFamilyLabel} Full Mock Test",
-                route = "/app/mocks",
+                route = "/mocks",
                 rationale = $"Use a full mock to confirm whether your {examFamilyLabel} writing gains are transferring under timed conditions."
             },
             featuredTasks = tasks.Take(3),
             latestEvaluation = latestEvaluation is null ? null : await GetWritingEvaluationSummaryAsync(userId, latestEvaluation.Id, cancellationToken),
             actions = new[]
             {
-                new { label = "Browse Writing Tasks", route = "/app/writing/tasks" },
-                new { label = draftAttempt is null ? "Start Writing Task" : "Resume Draft", route = draftAttempt is null ? "/app/writing/tasks" : $"/app/writing/attempt/{draftAttempt.Id}" }
+                new { label = "Browse Writing Tasks", route = "/writing/tasks" },
+                new { label = draftAttempt is null ? "Start Writing Task" : "Resume Draft", route = draftAttempt is null ? "/writing/tasks" : $"/writing/attempt/{draftAttempt.Id}" }
             }
         };
     }
@@ -1392,7 +1392,7 @@ public partial class LearnerService(
             deltaSummary,
             unresolvedIssues,
             priorRevisions = related.Select(x => new { attemptId = x.Id, submittedAt = x.SubmittedAt, state = ToApiState(x.State) }),
-            actions = new[] { new { label = "Submit Revision", route = $"/app/writing/revision/{attemptId}" } }
+            actions = new[] { new { label = "Submit Revision", route = $"/writing/revision/{attemptId}" } }
         };
     }
 
@@ -1475,7 +1475,7 @@ public partial class LearnerService(
 
     public async Task<object> GetSpeakingHomeAsync(string userId, CancellationToken cancellationToken)
     {
-        await EnsureUserAsync(userId, cancellationToken);
+        await EnsureLearnerProfileAsync(userId, cancellationToken);
         var tasks = await GetTasksBySubtestAsync("speaking", cancellationToken);
         var attemptIds = await db.Attempts.Where(x => x.UserId == userId && x.SubtestCode == "speaking").Select(x => x.Id).ToListAsync(cancellationToken);
         var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId, cancellationToken);
@@ -1515,7 +1515,7 @@ public partial class LearnerService(
                     title = "Pronunciation drills",
                     items = new[]
                     {
-                        new { id = "sp-drill-1", title = "Stress important treatment words", route = "/app/speaking/review/sa-001" }
+                        new { id = "sp-drill-1", title = "Stress important treatment words", route = "/speaking/review/sa-001" }
                     }
                 },
                 new
@@ -1524,7 +1524,7 @@ public partial class LearnerService(
                     title = "Empathy and clarification drills",
                     items = new[]
                     {
-                        new { id = "sp-drill-2", title = "Clarify concerns without losing structure", route = "/app/speaking/tasks" }
+                        new { id = "sp-drill-2", title = "Clarify concerns without losing structure", route = "/speaking/tasks" }
                     }
                 }
             },
@@ -1536,13 +1536,13 @@ public partial class LearnerService(
                     attemptId = attempt.Id,
                     state = ToApiState(attempt.State),
                     scoreEstimate = evaluation?.ScoreRange,
-                    route = evaluation?.Id is null ? $"/app/speaking/attempt/{attempt.Id}" : $"/app/speaking/result/{evaluation.Id}"
+                    route = evaluation?.Id is null ? $"/speaking/attempt/{attempt.Id}" : $"/speaking/result/{evaluation.Id}"
                 };
             }),
             reviewCredits = new
             {
                 available = wallet.CreditBalance,
-                route = "/app/reviews"
+                route = "/reviews"
             },
             featuredTasks = tasks.Take(3),
             latestEvaluation = latestEvaluation is null ? null : await GetSpeakingEvaluationSummaryAsync(userId, latestEvaluation.Id, cancellationToken),
@@ -1850,23 +1850,23 @@ public partial class LearnerService(
             {
                 new { id = "part-a", title = "Part A", route = (string?)null, available = false },
                 new { id = "part-b", title = "Part B", route = (string?)null, available = false },
-                new { id = "part-c", title = "Part C", route = "/app/reading/task/rt-001", available = true }
+                new { id = "part-c", title = "Part C", route = "/reading/task/rt-001", available = true }
             },
             speedDrills = new[]
             {
-                new { id = "reading-speed-1", title = "Timed detail scanning", route = "/app/reading/task/rt-001" }
+                new { id = "reading-speed-1", title = "Timed detail scanning", route = "/reading/task/rt-001" }
             },
             accuracyDrills = new[]
             {
-                new { id = "reading-accuracy-1", title = "Named concept accuracy drill", route = "/app/reading/task/rt-001" }
+                new { id = "reading-accuracy-1", title = "Named concept accuracy drill", route = "/reading/task/rt-001" }
             },
             explanations = new[]
             {
-                new { id = "reading-explanations", title = "Review answer explanations", route = "/app/history" }
+                new { id = "reading-explanations", title = "Review answer explanations", route = "/history" }
             },
             mockSets = new[]
             {
-                new { id = "reading-mock-set", title = "Reading mock set", route = "/app/mocks" }
+                new { id = "reading-mock-set", title = "Reading mock set", route = "/mocks" }
             }
         };
     }
@@ -1887,17 +1887,17 @@ public partial class LearnerService(
             intro = "Listening practice emphasises accurate capture of numbers, frequencies, and changes in plan.",
             partCollections = new[]
             {
-                new { id = "listening-practice", title = "Practice sets", route = "/app/listening/player/lt-001" }
+                new { id = "listening-practice", title = "Practice sets", route = "/listening/player/lt-001" }
             },
             transcriptBackedReview = new
             {
                 title = "Transcript-backed review",
-                route = "/app/listening/review/lt-001",
+                route = "/listening/review/lt-001",
                 availableAfterAttempt = true
             },
             distractorDrills = new[]
             {
-                new { id = "listening-drill-distractor_confusion", title = "Frequency distractor drill", route = "/app/listening/drills/listening-drill-distractor_confusion" }
+                new { id = "listening-drill-distractor_confusion", title = "Frequency distractor drill", route = "/listening/drills/listening-drill-distractor_confusion" }
             },
             accessPolicyHints = new
             {
@@ -2209,7 +2209,7 @@ public partial class LearnerService(
             state = ToApiState(attempt.State),
             config,
             sectionStates = MockAttemptSections(attempt.Id, config),
-            resumeRoute = $"/app/mocks/player/{attempt.Id}",
+            resumeRoute = $"/mocks/player/{attempt.Id}",
             reportRoute = (string?)null
         };
     }
@@ -2227,8 +2227,8 @@ public partial class LearnerService(
             completedAt = attempt.CompletedAt,
             config,
             sectionStates = MockAttemptSections(attempt.Id, config),
-            resumeRoute = $"/app/mocks/player/{attempt.Id}",
-            reportRoute = attempt.ReportId is null ? null : $"/app/mocks/report/{attempt.ReportId}",
+            resumeRoute = $"/mocks/player/{attempt.Id}",
+            reportRoute = attempt.ReportId is null ? null : $"/mocks/report/{attempt.ReportId}",
             reportId = attempt.ReportId
         };
     }
@@ -2253,7 +2253,7 @@ public partial class LearnerService(
         payload["studyPlanUpdateCta"] = new
         {
             label = "Update study plan",
-            route = "/app/study-plan"
+            route = "/study-plan"
         };
         return payload;
     }
@@ -2281,7 +2281,7 @@ public partial class LearnerService(
 
     public async Task<object> GetReviewEligibilityAsync(string userId, string? attemptId, CancellationToken cancellationToken)
     {
-        await EnsureUserAsync(userId, cancellationToken);
+        await EnsureLearnerProfileAsync(userId, cancellationToken);
         Attempt? attempt = null;
         if (!string.IsNullOrWhiteSpace(attemptId))
         {
@@ -2332,7 +2332,7 @@ public partial class LearnerService(
 
     private async Task<object> CreateReviewRequestCoreAsync(string userId, ReviewRequestCreateRequest request, CancellationToken cancellationToken)
     {
-        var user = await EnsureUserAsync(userId, cancellationToken);
+        var user = await EnsureLearnerProfileAsync(userId, cancellationToken);
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
             var cached = await GetIdempotentResponseAsync("review-request", request.IdempotencyKey, cancellationToken);
@@ -2462,7 +2462,7 @@ public partial class LearnerService(
 
     public async Task<object> GetBillingSummaryAsync(string userId, CancellationToken cancellationToken)
     {
-        await EnsureUserAsync(userId, cancellationToken);
+        await EnsureLearnerProfileAsync(userId, cancellationToken);
         var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId, cancellationToken);
         var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId, cancellationToken);
         var freeze = await GetFreezeStatusAsync(userId, cancellationToken);
@@ -4828,7 +4828,7 @@ public partial class LearnerService(
                 || (reviewSelection == "writing" && subtest == "writing")
                 || (reviewSelection == "speaking" && subtest == "speaking")
                 || (reviewSelection == "current_subtest" && string.Equals(subtest, subType, StringComparison.OrdinalIgnoreCase)),
-            launchRoute = $"/app/mocks/player/{attemptId}?section={Uri.EscapeDataString(subtest)}"
+            launchRoute = $"/mocks/player/{attemptId}?section={Uri.EscapeDataString(subtest)}"
         }).ToArray<object>();
     }
 
@@ -4893,8 +4893,8 @@ public partial class LearnerService(
             detail.errorType,
             detail.estimatedMinutes,
             detail.highlights,
-            launchRoute = $"/app/listening/player/lt-001?drill={Uri.EscapeDataString(detail.drillId)}",
-            reviewRoute = $"/app/listening/review/lt-001?drill={Uri.EscapeDataString(detail.drillId)}"
+            launchRoute = $"/listening/player/lt-001?drill={Uri.EscapeDataString(detail.drillId)}",
+            reviewRoute = $"/listening/review/lt-001?drill={Uri.EscapeDataString(detail.drillId)}"
         };
     }
 
@@ -4980,8 +4980,8 @@ public partial class LearnerService(
             title = subtest == "listening" ? "Listening distractor drill" : "Reading exact-detail drill",
             rationale = $"Focus next on {ObjectiveErrorTypeLabel(errorType).ToLowerInvariant()} to strengthen your {ToDisplaySubtest(subtest)} accuracy.",
             route = subtest == "listening"
-                ? $"/app/listening/drills/{Uri.EscapeDataString(listeningDrillId)}"
-                : "/app/reading/task/rt-001"
+                ? $"/listening/drills/{Uri.EscapeDataString(listeningDrillId)}"
+                : "/reading/task/rt-001"
         };
     }
 
@@ -5162,11 +5162,11 @@ public partial class LearnerService(
 
     private static string AttemptFeedbackRoute(string subtest, string evaluationId) => subtest switch
     {
-        "writing" => $"/app/writing/result/{evaluationId}",
-        "speaking" => $"/app/speaking/result/{evaluationId}",
-        "reading" => $"/app/reading/task/{evaluationId}",
-        "listening" => $"/app/listening/task/{evaluationId}",
-        _ => $"/app/history/{evaluationId}"
+        "writing" => $"/writing/result/{evaluationId}",
+        "speaking" => $"/speaking/result/{evaluationId}",
+        "reading" => $"/reading/task/{evaluationId}",
+        "listening" => $"/listening/task/{evaluationId}",
+        _ => $"/history/{evaluationId}"
     };
 
     // ── Engagement ──

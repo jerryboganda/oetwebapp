@@ -1145,9 +1145,9 @@ export const MOCK_SUBMISSIONS: Submission[] = [
     comparisonGroupId: 'cmp-writing-001',
     canRequestReview: true,
     actions: {
-      reopenFeedbackRoute: '/app/submissions/sub-001',
-      compareRoute: '/app/submissions/compare?left=sub-001',
-      requestReviewRoute: '/app/submissions/sub-001?requestReview=1',
+      reopenFeedbackRoute: '/submissions/sub-001',
+      compareRoute: '/submissions/compare?left=sub-001',
+      requestReviewRoute: '/submissions/sub-001?requestReview=1',
     },
   },
   {
@@ -1162,9 +1162,9 @@ export const MOCK_SUBMISSIONS: Submission[] = [
     comparisonGroupId: 'cmp-speaking-001',
     canRequestReview: true,
     actions: {
-      reopenFeedbackRoute: '/app/submissions/sub-002',
-      compareRoute: '/app/submissions/compare?left=sub-002',
-      requestReviewRoute: '/app/submissions/sub-002?requestReview=1',
+      reopenFeedbackRoute: '/submissions/sub-002',
+      compareRoute: '/submissions/compare?left=sub-002',
+      requestReviewRoute: '/submissions/sub-002?requestReview=1',
     },
   },
   {
@@ -1178,8 +1178,8 @@ export const MOCK_SUBMISSIONS: Submission[] = [
     comparisonGroupId: 'cmp-reading-001',
     canRequestReview: false,
     actions: {
-      reopenFeedbackRoute: '/app/submissions/sub-003',
-      compareRoute: '/app/submissions/compare?left=sub-003',
+      reopenFeedbackRoute: '/submissions/sub-003',
+      compareRoute: '/submissions/compare?left=sub-003',
       requestReviewRoute: null,
     },
   },
@@ -1194,8 +1194,8 @@ export const MOCK_SUBMISSIONS: Submission[] = [
     comparisonGroupId: 'cmp-listening-001',
     canRequestReview: false,
     actions: {
-      reopenFeedbackRoute: '/app/submissions/sub-004',
-      compareRoute: '/app/submissions/compare?left=sub-004',
+      reopenFeedbackRoute: '/submissions/sub-004',
+      compareRoute: '/submissions/compare?left=sub-004',
       requestReviewRoute: null,
     },
   },
@@ -1210,8 +1210,8 @@ export const MOCK_SUBMISSIONS: Submission[] = [
     comparisonGroupId: 'cmp-writing-002',
     canRequestReview: false,
     actions: {
-      reopenFeedbackRoute: '/app/submissions/sub-005',
-      compareRoute: '/app/submissions/compare?left=sub-005',
+      reopenFeedbackRoute: '/submissions/sub-005',
+      compareRoute: '/submissions/compare?left=sub-005',
       requestReviewRoute: null,
     },
   },

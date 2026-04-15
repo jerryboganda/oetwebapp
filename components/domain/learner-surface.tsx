@@ -110,7 +110,7 @@ export function LearnerSurfaceMetaRow({ items, className }: { items?: LearnerSur
   }
 
   return (
-    <div className={cn('flex flex-wrap items-center gap-4 text-sm font-semibold text-muted', className)}>
+    <div className={cn('flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-semibold text-muted', className)}>
       {safeItems.map((item) => {
         const Icon = item.icon;
         return (
@@ -174,7 +174,7 @@ export function LearnerPageHero({
     return (
       <div
         key={`${item.label}-${item.value}`}
-        className="inline-flex min-w-[160px] items-center gap-2 rounded-2xl border border-border bg-background-light px-3 py-2"
+        className="inline-flex min-w-0 flex-1 basis-[140px] items-center gap-2 rounded-2xl border border-border bg-background-light px-3 py-2"
       >
         {HighlightIcon ? (
           <div className={cn('flex h-8 w-8 shrink-0 items-center justify-center rounded-xl', palette.icon)}>
@@ -190,13 +190,13 @@ export function LearnerPageHero({
   };
 
   return (
-    <section className="rounded-[24px] border border-border bg-surface px-5 py-5 shadow-sm sm:px-6 sm:py-6">
+    <section className="rounded-[20px] border border-border bg-surface px-4 py-4 shadow-sm sm:rounded-[24px] sm:px-6 sm:py-6">
       <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
         <div className="min-w-0 flex-1">
           <div className="flex items-start gap-3 sm:gap-4">
           {Icon ? (
-              <div className={cn('mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl', palette.icon)}>
-                {renderIcon(Icon, 'h-6 w-6')}
+              <div className={cn('mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl sm:h-12 sm:w-12 sm:rounded-2xl', palette.icon)}>
+                {renderIcon(Icon, 'h-5 w-5 sm:h-6 sm:w-6')}
             </div>
           ) : null}
             <div className="min-w-0">

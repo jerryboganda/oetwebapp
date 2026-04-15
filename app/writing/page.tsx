@@ -200,14 +200,14 @@ export default function WritingHome() {
             className="mb-4"
           />
 
-          <div className="flex overflow-x-auto border-b border-gray-200 mb-6">
+          <div className="flex overflow-x-auto border-b border-gray-200 mb-6 scrollbar-hide -mx-1">
             {([
               { key: 'practice' as TabType, label: 'Practice Library', icon: FileText },
               { key: 'drills' as TabType, label: 'Criterion Drills', icon: Target },
               { key: 'past' as TabType, label: 'Past Submissions', icon: History },
             ]).map((tab) => (
               <button key={tab.key} onClick={() => setActiveTab(tab.key)}
-                className={`whitespace-nowrap py-4 px-6 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${activeTab === tab.key ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-navy'}`}>
+                className={`whitespace-nowrap py-3 px-4 sm:py-4 sm:px-6 font-bold text-sm border-b-2 transition-colors flex items-center gap-2 ${activeTab === tab.key ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-navy'}`}>
                 <tab.icon className="w-4 h-4" /> {tab.label}
               </button>
             ))}

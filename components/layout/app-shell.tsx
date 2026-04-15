@@ -94,7 +94,7 @@ export function AppShell({
           id="main-content"
           key={pathname}
           layout="position"
-          className={cn('relative z-10 flex flex-1 min-h-0 flex-col overflow-y-auto px-4 py-4 sm:px-6 lg:px-8 lg:py-6', className)}
+            className={cn('relative z-10 flex flex-1 min-h-0 flex-col overflow-y-auto py-4 lg:py-6', className)}
           {...routeMotionProps}
         >
           {children}
@@ -134,7 +134,7 @@ export function AppShell({
             id="main-content"
             key={pathname}
             layout="position"
-            className={cn('relative flex-1 min-h-0 overflow-y-auto overscroll-contain px-4 py-4 pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom))] sm:px-6 lg:px-8 lg:py-6 lg:pb-6', className)}
+            className={cn('relative flex-1 min-h-0 overflow-y-auto overscroll-contain py-4 pb-[calc(var(--bottom-nav-height)+env(safe-area-inset-bottom))] lg:py-6 lg:pb-6', className)}
             {...routeMotionProps}
           >
             {children}

@@ -25,7 +25,9 @@ describe('LearnerDashboardShell', () => {
     expect(container).toHaveClass('px-4');
     expect(container).toHaveClass('sm:px-6');
     expect(container).toHaveClass('lg:px-8');
-    expect(container).toHaveClass('py-6');
+    expect(container).toHaveClass('py-2');
+    expect(container).toHaveClass('sm:py-4');
+    expect(container).toHaveClass('lg:py-6');
     expect(container).toHaveClass('space-y-8');
     expect((appShellSpy.mock.calls[0]?.[0].mobileMenuSections as Array<{ label: string }> | undefined)?.map((section) => section.label)).toEqual([
       'Practice',
