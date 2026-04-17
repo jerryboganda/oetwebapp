@@ -21,6 +21,7 @@ import { InlineAlert } from '@/components/ui/alert';
 import { fetchMockReport } from '@/lib/api';
 import type { MockReport } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
+import { oetGradeFromScaled } from '@/lib/scoring';
 
 const SUBTEST_META: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
   listening: { icon: Headphones, color: 'text-indigo-600', bg: 'bg-indigo-100' },
@@ -29,9 +30,21 @@ const SUBTEST_META: Record<string, { icon: React.ElementType; color: string; bg:
   speaking:  { icon: Mic,        color: 'text-purple-600', bg: 'bg-purple-100' },
 };
 
+/**
+ * Colour a sub-test score cell based on its grade band. Always derives the
+ * grade through the canonical scoring module so we can never drift from the
+ * 350/300 thresholds or the 30/42 raw mapping. Accepts either a scaled
+ * numeric string ("370", "350") or a letter-prefixed label ("A", "B").
+ */
 function scoreColor(score: string) {
-  if (score.startsWith('A') || score.startsWith('B')) return 'text-green-600';
-  if (score.startsWith('C')) return 'text-amber-500';
+  const trimmed = score.trim();
+  if (trimmed.length === 0) return 'text-muted';
+  const numeric = Number(trimmed);
+  const grade = Number.isFinite(numeric)
+    ? oetGradeFromScaled(numeric)
+    : (trimmed.toUpperCase().replace(/^GRADE\s*/, '').split(/\s|,/)[0] ?? '');
+  if (grade === 'A' || grade === 'B') return 'text-green-600';
+  if (grade === 'C+' || grade === 'C') return 'text-amber-500';
   return 'text-rose-600';
 }
 

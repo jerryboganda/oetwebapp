@@ -5,6 +5,12 @@ namespace OetLearner.Api.Services;
 /// <summary>
 /// Resolves score display formats and scale information by exam family.
 /// OET: 0–500 grade scale (A–E).  IELTS: 0–9 band score.  PTE: 10–90.
+///
+/// NOTE: OET-specific canonical scoring rules (raw↔scaled conversion,
+/// Listening/Reading pass threshold, country-aware Writing pass threshold,
+/// and Speaking pass threshold) live in <see cref="OetScoring"/>.
+/// All OET pass/fail determinations MUST route through that type — do NOT
+/// re-implement thresholds at call sites.
 /// </summary>
 public class ScoringService
 {

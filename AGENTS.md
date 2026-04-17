@@ -5,7 +5,7 @@
 ## Project Overview
 
 | Layer | Tech | Location |
-|-------|------|----------|
+| ------- | ------ | ---------- |
 | Frontend | Next.js 15.4, React 19, TypeScript 5.9, Tailwind CSS 4, motion v12 | `app/`, `components/`, `lib/`, `hooks/`, `contexts/` |
 | Backend API | ASP.NET Core 10, EF Core, PostgreSQL 17, SignalR | `backend/` |
 | Desktop | Electron 41, electron-builder | `electron/` |
@@ -15,7 +15,7 @@
 ### Key Stats
 
 - **217 routes** across 4 portals (learner, expert, admin, sponsor)
-- **77 unit test files, 302 tests** (Vitest + React Testing Library)
+- **77 unit test files, 304 tests** (Vitest + React Testing Library)
 - **13 Playwright E2E test projects** (Chromium/Firefox/WebKit × roles)
 - **195+ backend API endpoints** with 16 granular admin permissions
 
@@ -57,7 +57,7 @@ npx tsc --noEmit
 # Lint (must return 0 errors/warnings)
 npm run lint
 
-# Unit tests (must be 77/77 files, 302/302 tests)
+# Unit tests (must be 77/77 files, 304/304 tests)
 npm test
 
 # Production build (must compile 169+ pages)
@@ -97,12 +97,14 @@ npm run test:e2e:report
 ## Code Conventions
 
 ### TypeScript
+
 - **Strict mode** enabled; zero tolerance for `tsc --noEmit` errors.
 - Prefer `.tsx`/`.ts` for all new files. No `.js` in app code.
 - Use Zod 4 for runtime validation at system boundaries.
 - `tsconfig.json` has `"types": ["vitest/globals"]` so `describe`/`it`/`expect`/`vi` are globally available.
 
 ### React / Next.js
+
 - App Router only. All pages are `app/*/page.tsx`.
 - `output: 'standalone'` for Docker deployment.
 - Use Server Components by default; add `'use client'` only when needed.
@@ -110,23 +112,27 @@ npm run test:e2e:report
 - `usePathname()` returns `string | null` — always null-check.
 
 ### Component APIs (Critical)
+
 - `Badge` uses variant `'danger'`, NOT `'destructive'`.
 - `Button` uses variant `'primary'`, NOT `'default'`.
 - `LearnerPageHeroModel` uses `description`, NOT `subtitle`.
 - `CurrentUser` type uses `userId`/`displayName`/`isEmailVerified`.
 
 ### Motion / Animation
+
 - Import from `motion/react` (NOT `framer-motion`).
 - Mock in tests with Proxy pattern + `stripMotion()` to remove motion-specific props.
 - Use `@testing-library/user-event` (NOT `fireEvent`) for async `onClick` handlers.
 - In tests, avoid ambiguous regex like `/welcome/i` when both a stepper label and heading contain the same word — use exact text instead.
 
 ### Styling
+
 - Tailwind CSS 4 utility classes. No CSS modules.
 - Follow `DESIGN.md` for design tokens, color system, and component patterns.
 - Responsive: mobile-first breakpoints.
 
 ### Backend (.NET)
+
 - Minimal API pattern with endpoint files in `Endpoints/`.
 - Services in `Services/`, DTOs in `Contracts/`, entities in `Domain/`.
 - EF Core with PostgreSQL; migrations in `Data/Migrations/`.
@@ -136,7 +142,7 @@ npm run test:e2e:report
 
 ## Project Structure
 
-```
+```text
 app/                          # Next.js App Router pages (217 routes)
 ├── (auth)/                   # Auth pages: sign-in, register, MFA, password reset
 ├── admin/                    # Admin CMS portal (40+ pages)
@@ -196,7 +202,7 @@ tests/e2e/                    # Playwright E2E tests
 ### Production Environment
 
 | Component | Detail |
-|-----------|--------|
+| ----------- | -------- |
 | VPS | `185.252.233.186`, `/root/oetwebsite/` |
 | Frontend | `app.oetwithdrhesham.co.uk` (port 3000) |
 | API | `api.oetwithdrhesham.co.uk` (port 8080) |
@@ -215,7 +221,7 @@ docker compose --env-file .env.production -f docker-compose.production.yml up -d
 
 ### Docker Architecture
 
-```
+```text
 ┌─────────────┐    ┌─────────────┐    ┌─────────────┐
 │   web:3000  │───▶│ api:8080    │───▶│ postgres:5432│
 │  (Next.js)  │    │(.NET Core)  │    │ (PG 17)     │
@@ -227,6 +233,7 @@ docker compose --env-file .env.production -f docker-compose.production.yml up -d
 ```
 
 ### IMPORTANT
+
 - Docker volumes use `oetwebsite_` prefix. **Never** recreate `oet_postgres_data` without backup.
 - `.env.production` must be present on the VPS (not in Git).
 - Web container healthcheck: `GET /api/health`.
@@ -236,6 +243,7 @@ docker compose --env-file .env.production -f docker-compose.production.yml up -d
 ## Testing Strategy
 
 ### Unit Tests (Vitest)
+
 - **Config:** `vitest.config.ts` — jsdom environment, globals enabled, `vitest.setup.ts`.
 - **Pattern:** Co-located `*.test.tsx` files or `__tests__/` directories.
 - **Mocking:** `vi.mock()` with `vi.hoisted()` for module mocks. Proxy-based `motion/react` mock.
@@ -243,12 +251,14 @@ docker compose --env-file .env.production -f docker-compose.production.yml up -d
 - **Run:** `npm test` or `npm run test:watch`.
 
 ### E2E Tests (Playwright)
+
 - **Config:** `playwright.config.ts` — multi-project matrix by browser × auth role.
 - **Auth:** Bootstrap via `tests/e2e/setup/auth.setup.ts`.
 - **Roles:** `unauth`, `learner`, `expert`, `admin`.
 - **Run:** `npm run test:e2e` (full) or `npm run test:e2e:smoke`.
 
 ### Backend Tests (.NET)
+
 - **Solution:** `backend/OetLearner.sln` (includes test project).
 - **Run:** `npm run backend:test` or `dotnet test backend/OetLearner.sln`.
 - **Database:** SQLite in-memory for tests (catches concurrency regressions better than EF InMemory).
@@ -275,7 +285,7 @@ docker compose --env-file .env.production -f docker-compose.production.yml up -d
 Use the installed project skills based on the area being changed:
 
 | Area | Skills to Use |
-|------|---------------|
+| ------ | --------------- |
 | `app/`, `components/`, `contexts/`, `hooks/`, `lib/` | `next-best-practices`, `vercel-react-best-practices`, `vercel-composition-patterns`, `tailwind-css-patterns`, `typescript-advanced-types` |
 | UI polish, accessibility, SEO | `frontend-design`, `accessibility`, `seo` |
 | `tests/e2e/`, Playwright configs | `playwright-best-practices` |
@@ -289,13 +299,15 @@ Use the installed project skills based on the area being changed:
 ## Environment Variables
 
 ### Frontend (`.env.local`)
-```
+
+```text
 NEXT_PUBLIC_API_BASE_URL=http://localhost:5062
 APP_URL=http://localhost:3000
 ```
 
 ### Backend (via Docker `.env.production`)
-```
+
+```text
 ConnectionStrings__DefaultConnection=Host=postgres;...
 Auth__JwtSecret=<secret>
 Auth__RefreshTokenSecret=<secret>
@@ -309,6 +321,7 @@ Stripe__SecretKey=<key>
 
 ## Common Gotchas
 
+- **OET Scoring (MISSION CRITICAL)**: All pass/fail logic, raw↔scaled conversion, and country-aware Writing thresholds MUST route through `lib/scoring.ts` (TS) or `OetLearner.Api.Services.OetScoring` (.NET). Full spec: **[`docs/SCORING.md`](docs/SCORING.md)**. Key invariants: `30/42 ≡ 350/500` for Listening/Reading; Writing pass is **350** for UK/IE/AU/NZ/CA and **300** for US/QA; Speaking is always 350. Never compare `score >= 350` inline.
 - **PowerShell on Windows**: Run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` first, or use `cmd /c npm ...`.
 - **`motion/react` not `framer-motion`**: This project uses `motion` v12 package. Import from `motion/react`.
 - **Desktop OAuth**: Use `oet-prep://` scheme (double slash required).

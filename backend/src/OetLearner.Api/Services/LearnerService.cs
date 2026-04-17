@@ -6304,7 +6304,7 @@ public partial class LearnerService(
                 .OrderBy(g => g.AvgMid)
                 .FirstOrDefault();
 
-            if (weakSubtest is not null && weakSubtest.AvgMid < 350)
+            if (weakSubtest is not null && weakSubtest.AvgMid < OetScoring.ScaledPassGradeB)
             {
                 actions.Add(new
                 {
@@ -6876,7 +6876,7 @@ public partial class LearnerService(
                     },
                     durationMinutes = taskDuration,
                     difficulty = content.Difficulty,
-                    isWeakArea = subtestScores.GetValueOrDefault(subtest, 300.0) < 350
+                    isWeakArea = subtestScores.GetValueOrDefault(subtest, (double)OetScoring.ScaledPassGradeCPlus) < OetScoring.ScaledPassGradeB
                 });
                 allocatedMinutes += taskDuration;
             }
