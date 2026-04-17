@@ -43,12 +43,6 @@ const scriptSrcDirective = isProductionBuild
 
 const nextConfig: NextConfig = {
   reactStrictMode: true,
-  eslint: {
-    ignoreDuringBuilds: true,
-  },
-  typescript: {
-    ignoreBuildErrors: true,
-  },
   images: {
     remotePatterns: [],
   },
@@ -74,6 +68,7 @@ const nextConfig: NextConfig = {
               `media-src 'self' blob: ${apiOrigins.join(' ')}`,
               "worker-src 'self' blob:",
               "frame-src 'self'",
+              "frame-ancestors 'self'",
               "object-src 'none'",
               "base-uri 'self'",
               "form-action 'self'",
