@@ -7,25 +7,13 @@ const { mockFetchTrendData, mockFetchCompletionData, mockFetchSubmissionVolume, 
   mockTrack: vi.fn(),
 }));
 
-vi.mock('motion/react', () => ({
-  motion: {
-    div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
-    button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
-    span: ({ children, ...props }: any) => <span {...props}>{children}</span>,
-    section: ({ children, ...props }: any) => <section {...props}>{children}</section>,
-    p: ({ children, ...props }: any) => <p {...props}>{children}</p>,
-  },
-  useReducedMotion: () => false,
-  AnimatePresence: ({ children }: any) => <div>{children}</div>,
-}));
-
 vi.mock('recharts', () => ({
-  LineChart: ({ children }: any) => <div data-testid="line-chart">{children}</div>,
-  Line: () => null, AreaChart: ({ children }: any) => <div>{children}</div>,
-  Area: () => null, BarChart: ({ children }: any) => <div>{children}</div>,
+  LineChart: ({ children }: { children?: React.ReactNode }) => <div data-testid="line-chart">{children}</div>,
+  Line: () => null, AreaChart: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  Area: () => null, BarChart: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
   Bar: () => null, XAxis: () => null, YAxis: () => null,
   CartesianGrid: () => null, Tooltip: () => null,
-  ResponsiveContainer: ({ children }: any) => <div>{children}</div>,
+  ResponsiveContainer: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
   Legend: () => null,
 }));
 

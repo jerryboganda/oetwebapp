@@ -6,19 +6,7 @@ const { mockGetConversationHistory, mockCreateConversation, mockTrack, mockPush 
   mockTrack: vi.fn(),
   mockPush: vi.fn(),
 }));
-vi.mock('next/link', () => ({ default: ({ children, href, ...props }: any) => <a href={href} {...props}>{children}</a> }));
-
-vi.mock('motion/react', () => ({
-  motion: {
-    div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
-    button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
-    span: ({ children, ...props }: any) => <span {...props}>{children}</span>,
-    section: ({ children, ...props }: any) => <section {...props}>{children}</section>,
-    p: ({ children, ...props }: any) => <p {...props}>{children}</p>,
-  },
-  useReducedMotion: () => false,
-  AnimatePresence: ({ children }: any) => <div>{children}</div>,
-}));
+vi.mock('next/link', () => ({ default: ({ children, href }: { children: React.ReactNode; href?: string }) => <a href={href}>{children}</a> }));
 
 vi.mock('@/components/layout', () => ({
   LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => (
@@ -54,7 +42,9 @@ describe('Conversation page', () => {
 
   it('displays task type options for starting new conversations', async () => {
     renderWithRouter(<ConversationPage />, { router: { push: mockPush } });
-    expect(await screen.findByText('OET Clinical Role Play')).toBeInTheDocument();
+    // Wait for the page to fully render (hero loads first)
+    await screen.findByText('AI Conversation Practice');
+    expect(screen.getByText('OET Clinical Role Play')).toBeInTheDocument();
     expect(screen.getByText('IELTS Part 2 Long Turn')).toBeInTheDocument();
   });
 });

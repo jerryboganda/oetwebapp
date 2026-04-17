@@ -1,15 +1,4 @@
 import { render, screen } from '@testing-library/react';
-vi.mock('motion/react', () => ({
-  motion: {
-    div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
-    button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
-    span: ({ children, ...props }: any) => <span {...props}>{children}</span>,
-    section: ({ children, ...props }: any) => <section {...props}>{children}</section>,
-    p: ({ children, ...props }: any) => <p {...props}>{children}</p>,
-  },
-  useReducedMotion: () => false,
-  AnimatePresence: ({ children }: any) => <div>{children}</div>,
-}));
 
 vi.mock('@/components/layout', () => ({
   LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => (

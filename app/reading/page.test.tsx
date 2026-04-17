@@ -7,13 +7,7 @@ const { mockFetchReadingHome, mockFetchMockReports, mockTrack, mockUseAuth } = v
 }));
 
 vi.mock('next/link', () => ({
-  default: ({ children, href, ...props }: any) => <a href={href} {...props}>{children}</a>,
-}));
-
-vi.mock('motion/react', () => ({
-  motion: {
-    div: ({ children, initial: _initial, animate: _animate, transition: _transition, ...props }: any) => <div {...props}>{children}</div>,
-  },
+  default: ({ children, href }: { children: React.ReactNode; href?: string }) => <a href={href}>{children}</a>,
 }));
 
 vi.mock('@/components/layout', () => ({

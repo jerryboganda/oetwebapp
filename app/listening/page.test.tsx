@@ -1,30 +1,23 @@
 import { render, screen } from '@testing-library/react';
-const { mockFetchListeningHome, mockFetchMockReports, mockTrack } = vi.hoisted(() => ({
+const { mockFetchListeningHome, mockFetchMockReports, mockTrack, mockUseAuth } = vi.hoisted(() => ({
   mockFetchListeningHome: vi.fn(),
   mockFetchMockReports: vi.fn(),
   mockTrack: vi.fn(),
+  mockUseAuth: vi.fn(),
 }));
 
 vi.mock('next/link', () => ({
-  default: ({ children, href, ...props }: any) => <a href={href} {...props}>{children}</a>,
-}));
-
-vi.mock('motion/react', () => ({
-  motion: {
-    div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
-    button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
-    span: ({ children, ...props }: any) => <span {...props}>{children}</span>,
-    section: ({ children, ...props }: any) => <section {...props}>{children}</section>,
-    p: ({ children, ...props }: any) => <p {...props}>{children}</p>,
-  },
-  useReducedMotion: () => false,
-  AnimatePresence: ({ children }: any) => <div>{children}</div>,
+  default: ({ children, href }: { children: React.ReactNode; href?: string }) => <a href={href}>{children}</a>,
 }));
 
 vi.mock('@/components/layout', () => ({
   LearnerDashboardShell: ({ children, workspaceClassName }: { children: React.ReactNode; workspaceClassName?: string }) => (
     <div data-testid="learner-dashboard-shell" data-workspace-class={workspaceClassName}>{children}</div>
   ),
+}));
+
+vi.mock('@/contexts/auth-context', () => ({
+  useAuth: () => mockUseAuth(),
 }));
 
 vi.mock('@/lib/analytics', () => ({
@@ -41,6 +34,10 @@ import ListeningHome from './page';
 describe('Listening page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUseAuth.mockReturnValue({
+      isAuthenticated: true,
+      loading: false,
+    });
     mockFetchListeningHome.mockResolvedValue({
       intro: 'Use this workspace to tighten detail capture.',
       featuredTasks: [{ contentId: 'lt-001', title: 'Consultation: Asthma Management Review', estimatedDurationMinutes: 25, difficulty: 'medium', scenarioType: 'Consultation' }],

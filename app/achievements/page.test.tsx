@@ -7,18 +7,6 @@ const { mockFetchXP, mockFetchStreak, mockFetchAchievements, mockApplyStreakFree
   mockTrack: vi.fn(),
 }));
 
-vi.mock('motion/react', () => ({
-  motion: {
-    div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
-    button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
-    span: ({ children, ...props }: any) => <span {...props}>{children}</span>,
-    section: ({ children, ...props }: any) => <section {...props}>{children}</section>,
-    p: ({ children, ...props }: any) => <p {...props}>{children}</p>,
-  },
-  useReducedMotion: () => false,
-  AnimatePresence: ({ children }: any) => <div>{children}</div>,
-}));
-
 vi.mock('@/components/layout', () => ({
   LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="learner-dashboard-shell">{children}</div>
@@ -26,11 +14,11 @@ vi.mock('@/components/layout', () => ({
 }));
 
 vi.mock('@/components/ui/card', () => ({
-  Card: ({ children, className, ...props }: any) => <div data-testid="card" className={className} {...props}>{children}</div>,
+  Card: ({ children, className }: { children?: React.ReactNode; className?: string }) => <div data-testid="card" className={className}>{children}</div>,
 }));
 
 vi.mock('@/components/ui/progress', () => ({
-  ProgressBar: (props: any) => <div data-testid="progress-bar" role="progressbar" />,
+  ProgressBar: (_props: Record<string, unknown>) => <div data-testid="progress-bar" role="progressbar" />,
 }));
 
 vi.mock('@/lib/analytics', () => ({ analytics: { track: mockTrack } }));

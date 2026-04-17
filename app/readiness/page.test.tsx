@@ -4,18 +4,6 @@ const { mockFetchReadiness, mockTrack } = vi.hoisted(() => ({
   mockTrack: vi.fn(),
 }));
 
-vi.mock('motion/react', () => ({
-  motion: {
-    div: ({ children, ...props }: any) => <div {...props}>{children}</div>,
-    button: ({ children, ...props }: any) => <button {...props}>{children}</button>,
-    span: ({ children, ...props }: any) => <span {...props}>{children}</span>,
-    section: ({ children, ...props }: any) => <section {...props}>{children}</section>,
-    p: ({ children, ...props }: any) => <p {...props}>{children}</p>,
-  },
-  useReducedMotion: () => false,
-  AnimatePresence: ({ children }: any) => <div>{children}</div>,
-}));
-
 vi.mock('@/components/layout', () => ({
   LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="learner-dashboard-shell">{children}</div>
@@ -36,12 +24,12 @@ describe('Readiness center page', () => {
       weeksRemaining: 10,
       recommendedStudyHours: 120,
       subTests: [
-        { name: 'Reading', readiness: 68, target: 80, isWeakest: false },
-        { name: 'Listening', readiness: 55, target: 75, isWeakest: true },
-        { name: 'Writing', readiness: 62, target: 70, isWeakest: false },
-        { name: 'Speaking', readiness: 70, target: 75, isWeakest: false },
+        { id: 'reading', name: 'Reading', readiness: 68, target: 80, isWeakest: false, bg: 'bg-blue-50', color: 'text-blue-600', barColor: 'bg-blue-500', status: 'On track' },
+        { id: 'listening', name: 'Listening', readiness: 55, target: 75, isWeakest: true, bg: 'bg-emerald-50', color: 'text-emerald-600', barColor: 'bg-emerald-500', status: 'Needs focus' },
+        { id: 'writing', name: 'Writing', readiness: 62, target: 70, isWeakest: false, bg: 'bg-rose-50', color: 'text-rose-600', barColor: 'bg-rose-500', status: 'Improving' },
+        { id: 'speaking', name: 'Speaking', readiness: 70, target: 75, isWeakest: false, bg: 'bg-purple-50', color: 'text-purple-600', barColor: 'bg-purple-500', status: 'On track' },
       ],
-      evidence: { mocksCompleted: 3, taskCount: 42 },
+      evidence: { mocksCompleted: 3, practiceQuestions: 42, expertReviews: 2, recentTrend: 'Steady improvement', lastUpdated: '2025-04-15' },
       blockers: [{ id: 'b1', title: 'Low listening accuracy', description: 'Distractor control needs improvement.' }],
     });
   });

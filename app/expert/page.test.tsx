@@ -12,9 +12,10 @@ vi.mock('@/lib/analytics', () => ({
 }));
 
 vi.mock('@/lib/api', () => {
+  type FieldError = { field: string; code: string; message: string };
   class ApiError extends Error {
-    status: number; code: string; retryable: boolean; userMessage: string; fieldErrors: any[];
-    constructor(s: number, c: string, m: string, r = false, f: any[] = []) { super(m); this.name='ApiError'; this.status=s; this.code=c; this.retryable=r; this.userMessage=m; this.fieldErrors=f; }
+    status: number; code: string; retryable: boolean; userMessage: string; fieldErrors: FieldError[];
+    constructor(s: number, c: string, m: string, r = false, f: FieldError[] = []) { super(m); this.name='ApiError'; this.status=s; this.code=c; this.retryable=r; this.userMessage=m; this.fieldErrors=f; }
   }
   return {
     ApiError,

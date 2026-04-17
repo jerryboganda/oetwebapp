@@ -18,29 +18,6 @@ const api = vi.hoisted(() => ({
   isApiError: () => false,
 }));
 
-const MOTION_PROPS = ['initial', 'animate', 'exit', 'transition', 'variants', 'whileHover', 'whileTap', 'whileFocus', 'whileDrag', 'whileInView', 'custom', 'layout', 'layoutId', 'onAnimationStart', 'onAnimationComplete'];
-function stripMotion(props: Record<string, unknown>) {
-  const clean: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(props)) {
-    if (!MOTION_PROPS.includes(k)) clean[k] = v;
-  }
-  return clean;
-}
-function makeMotionEl(tag: string) {
-  const Comp = ({ children, ...props }: any) => {
-    const El = tag as any;
-    return <El {...stripMotion(props)}>{children}</El>;
-  };
-  Comp.displayName = `motion.${tag}`;
-  return Comp;
-}
-
-vi.mock('motion/react', () => ({
-  motion: new Proxy({}, { get: (_t, prop: string) => makeMotionEl(prop) }),
-  useReducedMotion: () => false,
-  AnimatePresence: ({ children }: any) => <>{children}</>,
-}));
-
 vi.mock('@/lib/analytics', () => ({
   analytics: { track: mockTrack },
 }));

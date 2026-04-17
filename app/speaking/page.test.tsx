@@ -8,7 +8,7 @@ const { mockFetchSpeakingHome, mockFetchSubmissions, mockTrack } = vi.hoisted(()
 }));
 
 vi.mock('next/link', () => ({
-  default: ({ children, href, ...props }: any) => <a href={href} {...props}>{children}</a>,
+  default: ({ children, href }: { children: React.ReactNode; href?: string }) => <a href={href}>{children}</a>,
 }));
 
 
