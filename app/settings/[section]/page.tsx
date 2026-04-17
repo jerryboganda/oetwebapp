@@ -189,13 +189,13 @@ const tagToneStyles: Record<Exclude<FieldTagTone, 'section'>, string> = {
 const SECTION_CONFIG: Record<SettingsSectionId, SectionConfig> = {
   profile: {
     title: 'Profile',
-    description: 'Keep name, email, profession, and account-facing identity details aligned with the learner record.',
+    description: 'Manage your name, email, profession, and identity details.',
     eyebrow: 'Account & Identity',
     icon: User,
     accent: 'blue',
     helperBadge: 'Identity',
-    helperCardTitle: 'What changes here',
-    helperCardBody: 'Use this page to keep learner identity data accurate before the rest of the app depends on it.',
+    helperCardTitle: 'Personal information',
+    helperCardBody: 'Your identity details used across the platform.',
     fields: [
       {
         key: 'displayName',
@@ -203,8 +203,8 @@ const SECTION_CONFIG: Record<SettingsSectionId, SectionConfig> = {
         type: 'text',
         description: 'Shown across the learner workspace and report surfaces.',
         icon: UserCircle2,
-        primaryTag: 'Identity',
-        secondaryTag: 'Visible in app',
+        primaryTag: '',
+        secondaryTag: '',
         secondaryTagTone: 'muted',
       },
       {
@@ -213,8 +213,8 @@ const SECTION_CONFIG: Record<SettingsSectionId, SectionConfig> = {
         type: 'email',
         description: 'Used for sign-in, review updates, and billing communication.',
         icon: Mail,
-        primaryTag: 'Account',
-        secondaryTag: 'Sign-in',
+        primaryTag: '',
+        secondaryTag: '',
         secondaryTagTone: 'muted',
       },
       {
@@ -223,8 +223,8 @@ const SECTION_CONFIG: Record<SettingsSectionId, SectionConfig> = {
         type: 'select',
         description: 'Controls profession-specific writing and speaking material.',
         icon: BriefcaseMedical,
-        primaryTag: 'Study Content',
-        secondaryTag: 'Route context',
+        primaryTag: '',
+        secondaryTag: '',
         secondaryTagTone: 'muted',
         options: [
           { value: 'medicine', label: 'Medicine' },
@@ -234,27 +234,17 @@ const SECTION_CONFIG: Record<SettingsSectionId, SectionConfig> = {
           { value: 'physiotherapy', label: 'Physiotherapy' },
         ],
       },
-      {
-        key: 'deviceVisibility',
-        label: 'Session Visibility Label',
-        type: 'text',
-        description: 'A learner-facing note for active session and device visibility.',
-        icon: MonitorSmartphone,
-        primaryTag: 'Device Visibility',
-        secondaryTag: 'Session note',
-        secondaryTagTone: 'muted',
-      },
     ],
   },
   privacy: {
     title: 'Privacy',
-    description: 'Control how recordings, transcripts, consent, and learner evidence are stored or shared.',
+    description: 'Manage how recordings, transcripts, and learner evidence are stored or shared.',
     eyebrow: 'Privacy Controls',
     icon: Shield,
     accent: 'rose',
     helperBadge: 'Sensitive Data',
-    helperCardTitle: 'OET evidence privacy',
-    helperCardBody: 'Writing and speaking evidence is sensitive. These settings keep that control explicit.',
+    helperCardTitle: 'Evidence privacy',
+    helperCardBody: 'Control how your writing and speaking evidence is stored and who can access it.',
     fields: [
       {
         key: 'storeRecordings',
@@ -300,13 +290,13 @@ const SECTION_CONFIG: Record<SettingsSectionId, SectionConfig> = {
   },
   notifications: {
     title: 'Notifications',
-    description: 'Choose how the learner is contacted about study reminders, review updates, and billing actions.',
+    description: 'Choose how you receive study reminders, review updates, and billing alerts.',
     eyebrow: 'Learner Notifications',
     icon: Bell,
     accent: 'indigo',
     helperBadge: 'Reminders',
-    helperCardTitle: 'Communication policy',
-    helperCardBody: 'Keep reminders high-signal. The learner should know exactly what each alert type is for.',
+    helperCardTitle: 'Notification preferences',
+    helperCardBody: 'Control what alerts you receive and how often.',
     fields: [
       {
         key: 'emailReminders',
@@ -347,13 +337,13 @@ const SECTION_CONFIG: Record<SettingsSectionId, SectionConfig> = {
   },
   audio: {
     title: 'Audio Preferences',
-    description: 'Control playback defaults, transcript support, and low-bandwidth behavior for audio-heavy study paths.',
+    description: 'Manage playback defaults, transcript support, and low-bandwidth settings for audio content.',
     eyebrow: 'Audio & Playback',
     icon: Volume2,
     accent: 'amber',
     helperBadge: 'Playback',
-    helperCardTitle: 'Runtime impact',
-    helperCardBody: 'These settings affect listening and speaking surfaces immediately, especially on slower networks.',
+    helperCardTitle: 'Audio settings',
+    helperCardBody: 'These settings affect listening and speaking playback, especially on slower networks.',
     fields: [
       {
         key: 'playbackSpeed',
@@ -394,13 +384,13 @@ const SECTION_CONFIG: Record<SettingsSectionId, SectionConfig> = {
   },
   accessibility: {
     title: 'Accessibility',
-    description: 'Make reading, audio review, and navigation easier to use for different learner needs.',
+    description: 'Adjust reading, audio, and navigation to suit your needs.',
     eyebrow: 'Accessibility',
     icon: Accessibility,
     accent: 'emerald',
     helperBadge: 'Accessibility',
-    helperCardTitle: 'Inclusive defaults',
-    helperCardBody: 'Accessibility settings should help instantly, not sit as decorative placeholders.',
+    helperCardTitle: 'Accessibility options',
+    helperCardBody: 'These settings help make the platform more comfortable for your needs.',
     fields: [
       {
         key: 'largeText',
@@ -457,13 +447,13 @@ const SECTION_CONFIG: Record<SettingsSectionId, SectionConfig> = {
   },
   study: {
     title: 'Exam Date & Study Preferences',
-    description: 'Keep the exam window, study volume, destination regulator, and reminder cadence in one practical surface.',
+    description: 'Set your exam date, study volume, and target country to personalise your study plan.',
     eyebrow: 'Study Preferences',
     icon: Calendar,
     accent: 'navy',
     helperBadge: 'Study Planning',
-    helperCardTitle: 'Planning impact',
-    helperCardBody: 'These values influence readiness, study-plan pacing, and reminder timing throughout the learner app.',
+    helperCardTitle: 'Study planning',
+    helperCardBody: 'These values influence your readiness score, study-plan pacing, and reminder timing.',
     fields: [
       {
         key: 'targetExamDate',
@@ -516,13 +506,13 @@ const SECTION_CONFIG: Record<SettingsSectionId, SectionConfig> = {
   },
   goals: {
     title: 'Goals',
-    description: 'Set score targets and weak-skill focus so the app can explain what the learner is aiming for.',
+    description: 'Set score targets and identify focus areas so your study plan stays directed.',
     eyebrow: 'Target Scores',
     icon: Settings2,
     accent: 'purple',
     helperBadge: 'Target Scores',
-    helperCardTitle: 'Goal framing',
-    helperCardBody: 'Use score targets and weak-skill focus to keep study direction explicit, especially for Writing and Speaking.',
+    helperCardTitle: 'Your targets',
+    helperCardBody: 'Score targets and skill focus help keep your study direction clear, especially for Writing and Speaking.',
     fields: [
       {
         key: 'overallGoal',
@@ -650,6 +640,7 @@ function isFieldConfigured(field: FieldConfig, value: string | boolean) {
 }
 
 function renderTag(label: string, accent: LearnerSurfaceAccent, tone: FieldTagTone = 'section') {
+  if (!label) return null;
   const className = tone === 'section' ? accentStyles[accent].badge : tagToneStyles[tone];
 
   return (
@@ -777,7 +768,7 @@ function SettingsSectionForm({
                   type="button"
                   onClick={() => onChange(field.key, !Boolean(value))}
                   className={cn(
-                    'relative inline-flex h-7 w-12 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
+                    'relative inline-flex h-8 w-13 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
                     Boolean(value) ? palette.toggleOn : 'bg-gray-200',
                     toggleFocusClasses(accent),
                   )}
@@ -785,7 +776,7 @@ function SettingsSectionForm({
                   aria-label={`Toggle ${field.label}`}
                   role="switch"
                 >
-                  <span className={cn('inline-block h-5 w-5 transform rounded-full bg-white transition-transform', Boolean(value) ? 'translate-x-6' : 'translate-x-1')} />
+                  <span className={cn('inline-block h-5.5 w-5.5 transform rounded-full bg-white transition-transform', Boolean(value) ? 'translate-x-6' : 'translate-x-1')} />
                 </button>
               ) : null}
             </div>
@@ -1021,8 +1012,8 @@ export default function LearnerSettingsSectionPage() {
             eyebrow={config.eyebrow}
             icon={config.icon}
             accent={config.accent}
-            title={`Keep ${config.title.toLowerCase()} settings clear before you change them`}
-            description={`Use this section to review ${config.title.toLowerCase()} controls with the outcome of each change kept explicit.`}
+            title={config.title}
+            description={`Review and update your ${config.title.toLowerCase()} settings.`}
             highlights={[
               { icon: config.icon, label: 'Controls', value: `${config.fields.length} settings` },
               { icon: Save, label: 'Configured', value: `${configuredFieldCount} set` },

@@ -20,6 +20,7 @@ import { useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { analytics } from '@/lib/analytics';
 import { fetchFreezeStatus, fetchSettingsData, fetchUserProfile, updateSettingsSection } from '@/lib/api';
+import type { LearnerFreezeStatus } from '@/lib/types/freeze';
 import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 
@@ -84,7 +85,7 @@ export default function Settings() {
   });
   const [profileName, setProfileName] = useState('');
   const [profileEmail, setProfileEmail] = useState('');
-  const [freezeState, setFreezeState] = useState<any | null>(null);
+  const [freezeState, setFreezeState] = useState<LearnerFreezeStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [savingId, setSavingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -106,7 +107,7 @@ export default function Settings() {
         });
         setProfileName(profile.displayName);
         setProfileEmail(profile.email);
-        setFreezeState(freeze as any);
+        setFreezeState(freeze as LearnerFreezeStatus | null);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to load settings.');
@@ -225,14 +226,14 @@ export default function Settings() {
                           <button
                             onClick={() => handleToggle(item.id)}
                             disabled={savingId === item.id || isFrozen}
-                            className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-navy focus:ring-offset-2 ${toggles[item.id] ? 'bg-navy' : 'bg-gray-200'}`}
+                            className={`relative inline-flex h-8 w-12 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-navy focus:ring-offset-2 ${toggles[item.id] ? 'bg-navy' : 'bg-gray-200'}`}
                             role="switch"
                             aria-checked={toggles[item.id]}
                             aria-label={`Toggle ${item.title}`}
                           >
                             <span className="sr-only">Toggle {item.title}</span>
                             <span
-                              className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${toggles[item.id] ? 'translate-x-6' : 'translate-x-1'}`}
+                              className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${toggles[item.id] ? 'translate-x-6' : 'translate-x-1'}`}
                             />
                           </button>
                         )}
