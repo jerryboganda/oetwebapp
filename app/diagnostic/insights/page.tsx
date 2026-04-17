@@ -114,7 +114,7 @@ export default function DiagnosticInsightsPage() {
             <MotionSection className="mt-6">
               <LearnerSurfaceSectionHeader icon={<BarChart3 className="w-5 h-5" />} title="Suggested Weekly Time Allocation" />
               <Card className="p-5 mt-3">
-                <div className="grid grid-cols-4 gap-4">
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                   {Object.entries(data.suggestedWeeklyFocus).map(([subtest, percent]) => (
                     <div key={subtest} className="text-center">
                       <div className="relative h-24 flex items-end justify-center mb-2">

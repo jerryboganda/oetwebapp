@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useForm, Controller } from 'react-hook-form';
+import { useForm, Controller, type Resolver } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { Save, ArrowRight } from 'lucide-react';
@@ -124,7 +124,11 @@ export default function GoalSetupPage() {
     watch,
     formState: { errors },
   } = useForm<GoalFormData>({
-    resolver: zodResolver(goalSchema) as any,
+    // Zod v4 + @hookform/resolvers still ships a loose resolver signature that
+    // doesn't line up perfectly with react-hook-form's Resolver<T>. Narrow the
+    // cast through `unknown` so we at least pin the target shape, and keep the
+    // entire expression typed to Resolver<GoalFormData>.
+    resolver: zodResolver(goalSchema) as unknown as Resolver<GoalFormData>,
     defaultValues: {
       examFamilyCode: 'oet',
       profession: '',

@@ -23,6 +23,19 @@ import { getAdminUsersPageData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import type { AdminPermissionsResponse, AdminUserRow, PermissionTemplate } from '@/lib/types/admin';
 
+interface AllPermissionsResponse {
+  permissions: { key: string }[];
+}
+
+interface PermissionTemplatesResponse {
+  templates: PermissionTemplate[];
+}
+
+interface ApplyTemplateResponse {
+  permissions: string[];
+  templateName: string;
+}
+
 type Tab = 'templates' | 'users';
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -50,7 +63,7 @@ export default function PermissionsPage() {
 
   useEffect(() => {
     fetchAllPermissions()
-      .then((r: any) => setAllPerms((r.permissions ?? []).map((p: any) => p.key)))
+      .then((r: AllPermissionsResponse) => setAllPerms((r.permissions ?? []).map((p) => p.key)))
       .catch(() => {});
   }, []);
 
@@ -114,7 +127,7 @@ function TemplatesTab({ allPerms, groups, onToast }: { allPerms: string[]; group
   const load = useCallback(async () => {
     setStatus('loading');
     try {
-      const r = await fetchPermissionTemplates() as any;
+      const r = await fetchPermissionTemplates() as PermissionTemplatesResponse;
       const items = r.templates ?? [];
       setTemplates(items);
       setStatus(items.length > 0 ? 'success' : 'empty');
@@ -255,7 +268,7 @@ function UserPermissionsTab({ allPerms, groups, onToast }: { allPerms: string[];
       try {
         const [data, tplData] = await Promise.all([
           getAdminUsersPageData({ role: 'admin', pageSize: 100 }),
-          fetchPermissionTemplates() as Promise<any>,
+          fetchPermissionTemplates() as Promise<PermissionTemplatesResponse>,
         ]);
         if (cancelled) return;
         setAdmins(data.items);
@@ -277,7 +290,7 @@ function UserPermissionsTab({ allPerms, groups, onToast }: { allPerms: string[];
     setSelectedUser(user);
     try {
       const raw = await fetchAdminPermissions(user.id) as AdminPermissionsResponse;
-      setUserPerms((raw.permissions ?? []).map((p: any) => typeof p === 'string' ? p : p.permission));
+      setUserPerms((raw.permissions ?? []).map((p) => typeof p === 'string' ? p : p.permission));
     } catch {
       setUserPerms([]);
     }
@@ -307,7 +320,7 @@ function UserPermissionsTab({ allPerms, groups, onToast }: { allPerms: string[];
     if (!selectedUser) return;
     setIsMutating(true);
     try {
-      const result = await applyPermissionTemplate(selectedUser.id, templateId) as any;
+      const result = await applyPermissionTemplate(selectedUser.id, templateId) as ApplyTemplateResponse;
       setUserPerms(result.permissions ?? []);
       onToast({ variant: 'success', message: `Template "${result.templateName}" applied to ${selectedUser.name}` });
       setShowApplyTemplate(false);

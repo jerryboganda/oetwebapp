@@ -85,16 +85,17 @@ export function useDashboardHome() {
         fetchEngagement(),
       ]);
 
+      const raw = engagementData as Partial<EngagementData>;
       const engagement: EngagementData = {
-        currentStreak: (engagementData as any)?.currentStreak ?? 0,
-        longestStreak: (engagementData as any)?.longestStreak ?? 0,
-        lastPracticeDate: (engagementData as any)?.lastPracticeDate ?? null,
-        totalPracticeMinutes: (engagementData as any)?.totalPracticeMinutes ?? 0,
-        totalPracticeSessions: (engagementData as any)?.totalPracticeSessions ?? 0,
-        avgSessionMinutes: (engagementData as any)?.avgSessionMinutes ?? 0,
-        weeklyActivity: (engagementData as any)?.weeklyActivity ?? [],
-        streakFreezeAvailable: (engagementData as any)?.streakFreezeAvailable ?? false,
-        streakFreezeUsedThisWeek: (engagementData as any)?.streakFreezeUsedThisWeek ?? false,
+        currentStreak: raw.currentStreak ?? 0,
+        longestStreak: raw.longestStreak ?? 0,
+        lastPracticeDate: raw.lastPracticeDate ?? null,
+        totalPracticeMinutes: raw.totalPracticeMinutes ?? 0,
+        totalPracticeSessions: raw.totalPracticeSessions ?? 0,
+        avgSessionMinutes: raw.avgSessionMinutes ?? 0,
+        weeklyActivity: raw.weeklyActivity ?? [],
+        streakFreezeAvailable: raw.streakFreezeAvailable ?? false,
+        streakFreezeUsedThisWeek: raw.streakFreezeUsedThisWeek ?? false,
       };
 
       setState({
@@ -134,7 +135,7 @@ export function useDashboardHome() {
     }
 
     void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- load is intentionally excluded; effect reacts to auth state only, not function identity
   }, [authLoading, isAuthenticated]);
 
   return {

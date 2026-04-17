@@ -126,7 +126,7 @@ describe('exportToCsv', () => {
         return mockAnchor as unknown as HTMLAnchorElement;
       }
       return document.createElement(tag);
-    }) as any);
+    }) as unknown as typeof document.createElement);
   });
 
   afterEach(() => {

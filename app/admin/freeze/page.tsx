@@ -17,6 +17,7 @@ import { Input } from '@/components/ui/form-controls';
 import { fetchAdminFreezeOverview, updateAdminFreezePolicy, createAdminManualFreeze, approveAdminFreeze, rejectAdminFreeze, endAdminFreeze, forceEndAdminFreeze } from '@/lib/api';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { analytics } from '@/lib/analytics';
+import type { AdminFreezeOverview, FreezePolicy, FreezeCounts } from '@/lib/types/freeze';
 
 function boolToString(value: boolean): 'true' | 'false' {
   return value ? 'true' : 'false';
@@ -27,10 +28,10 @@ export default function AdminFreezePage() {
   const searchParams = useSearchParams();
   const initialUserId = searchParams.get('userId') ?? '';
   const [pageStatus, setPageStatus] = useState<'loading' | 'success' | 'error'>('loading');
-  const [overview, setOverview] = useState<any | null>(null);
+  const [overview, setOverview] = useState<AdminFreezeOverview | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
-  const [policyDraft, setPolicyDraft] = useState<any | null>(null);
+  const [policyDraft, setPolicyDraft] = useState<FreezePolicy | null>(null);
   const [manualUserId, setManualUserId] = useState(initialUserId);
   const [manualStartAt, setManualStartAt] = useState('');
   const [manualEndAt, setManualEndAt] = useState('');
@@ -44,9 +45,9 @@ export default function AdminFreezePage() {
     setPageStatus('loading');
     setError(null);
     try {
-      const result = await fetchAdminFreezeOverview();
-      setOverview(result as any);
-      setPolicyDraft((result as any).policy);
+      const result = await fetchAdminFreezeOverview() as AdminFreezeOverview;
+      setOverview(result);
+      setPolicyDraft(result.policy);
       setPageStatus('success');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to load freeze overview.');
@@ -60,8 +61,25 @@ export default function AdminFreezePage() {
   }, []);
 
   const records = overview?.records ?? [];
-  const counts = overview?.counts ?? {};
-  const policy = policyDraft ?? overview?.policy ?? {};
+  const counts: FreezeCounts = overview?.counts ?? { active: 0, pending: 0, scheduled: 0, ended: 0 };
+  const policy: FreezePolicy = policyDraft ?? overview?.policy ?? { isEnabled: false, selfServiceEnabled: false, approvalMode: 'AutoApprove', accessMode: 'ReadOnly', minDurationDays: 1, maxDurationDays: 365 };
+
+  // Safe merger for policy form fields. Uses the current draft, then the
+  // loaded policy, then sensible defaults — avoiding non-null assertions
+  // and preventing a crash if a user interacts with an input before load.
+  const updatePolicy = (patch: Partial<FreezePolicy>) => {
+    setPolicyDraft((prev) => ({
+      ...(prev ?? overview?.policy ?? {
+        isEnabled: false,
+        selfServiceEnabled: false,
+        approvalMode: 'AutoApprove',
+        accessMode: 'ReadOnly',
+        minDurationDays: 1,
+        maxDurationDays: 365,
+      }),
+      ...patch,
+    }));
+  };
 
   const policyHighlights = useMemo(
     () => [
@@ -78,9 +96,9 @@ export default function AdminFreezePage() {
     setBusy(true);
     setError(null);
     try {
-      const result = await updateAdminFreezePolicy(policyDraft);
-      setOverview(result as any);
-      setPolicyDraft((result as any).policy);
+      const result = await updateAdminFreezePolicy(policyDraft) as AdminFreezeOverview;
+      setOverview(result);
+      setPolicyDraft(result.policy);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to update freeze policy.');
     } finally {
@@ -105,8 +123,8 @@ export default function AdminFreezePage() {
         internalNotes: manualNotes || null,
         pauseEntitlementClock: manualPauseClock,
         overrideEligibility: manualOverrideEligibility,
-      });
-      setOverview(result as any);
+      }) as AdminFreezeOverview;
+      setOverview(result);
       setManualReason('');
       setManualNotes('');
     } catch (err) {
@@ -129,7 +147,7 @@ export default function AdminFreezePage() {
             : action === 'end'
               ? await endAdminFreeze(freezeId, payload)
               : await forceEndAdminFreeze(freezeId, payload);
-      setOverview(result as any);
+      setOverview(result as AdminFreezeOverview);
       setActionNotes('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Unable to process the freeze action.');
@@ -187,12 +205,12 @@ export default function AdminFreezePage() {
             <div className="grid gap-6 lg:grid-cols-2">
               <AdminRoutePanel title="Freeze policy" description="Adjust policy for future eligibility only. Existing records preserve their snapshot.">
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <Input label="Enabled" value={boolToString(Boolean(policyDraft?.isEnabled))} onChange={(event) => setPolicyDraft({ ...policyDraft, isEnabled: event.target.value === 'true' })} />
-                  <Input label="Self-service" value={boolToString(Boolean(policyDraft?.selfServiceEnabled))} onChange={(event) => setPolicyDraft({ ...policyDraft, selfServiceEnabled: event.target.value === 'true' })} />
-                  <Input label="Approval mode" value={policyDraft?.approvalMode ?? 'AutoApprove'} onChange={(event) => setPolicyDraft({ ...policyDraft, approvalMode: event.target.value })} />
-                  <Input label="Access mode" value={policyDraft?.accessMode ?? 'ReadOnly'} onChange={(event) => setPolicyDraft({ ...policyDraft, accessMode: event.target.value })} />
-                  <Input label="Min days" type="number" value={String(policyDraft?.minDurationDays ?? 1)} onChange={(event) => setPolicyDraft({ ...policyDraft, minDurationDays: Number(event.target.value) })} />
-                  <Input label="Max days" type="number" value={String(policyDraft?.maxDurationDays ?? 365)} onChange={(event) => setPolicyDraft({ ...policyDraft, maxDurationDays: Number(event.target.value) })} />
+                  <Input label="Enabled" value={boolToString(Boolean(policyDraft?.isEnabled))} onChange={(event) => updatePolicy({ isEnabled: event.target.value === 'true' })} />
+                  <Input label="Self-service" value={boolToString(Boolean(policyDraft?.selfServiceEnabled))} onChange={(event) => updatePolicy({ selfServiceEnabled: event.target.value === 'true' })} />
+                  <Input label="Approval mode" value={policyDraft?.approvalMode ?? 'AutoApprove'} onChange={(event) => updatePolicy({ approvalMode: event.target.value })} />
+                  <Input label="Access mode" value={policyDraft?.accessMode ?? 'ReadOnly'} onChange={(event) => updatePolicy({ accessMode: event.target.value })} />
+                  <Input label="Min days" type="number" value={String(policyDraft?.minDurationDays ?? 1)} onChange={(event) => updatePolicy({ minDurationDays: Number(event.target.value) })} />
+                  <Input label="Max days" type="number" value={String(policyDraft?.maxDurationDays ?? 365)} onChange={(event) => updatePolicy({ maxDurationDays: Number(event.target.value) })} />
                 </div>
                 <div className="mt-4 flex justify-end">
                   <Button onClick={savePolicy} loading={busy}>Save policy</Button>
@@ -220,7 +238,7 @@ export default function AdminFreezePage() {
                 <Input label="Action notes" value={actionNotes} onChange={(event) => setActionNotes(event.target.value)} hint="Optional reason or notes to carry into the audit trail." />
               </div>
               <div className="space-y-3">
-                {records.length > 0 ? records.map((record: any) => {
+                {records.length > 0 ? records.map((record) => {
                   const status = String(record.status ?? '').toLowerCase();
                   return (
                   <div key={record.id} className="flex flex-col gap-3 rounded-2xl border border-border bg-surface p-4 md:flex-row md:items-center md:justify-between">

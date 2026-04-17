@@ -10,14 +10,24 @@
 
 import { Capacitor } from '@capacitor/core';
 
+/** Shape of the lazy-loaded RevenueCat Purchases plugin. */
+interface PurchasesPlugin {
+  configure(opts: { apiKey: string; appUserID: string }): Promise<void>;
+  getOfferings(): Promise<{ current?: { availablePackages?: Array<{ identifier: string; product: { title: string; priceString: string } }> }; all?: Record<string, { availablePackages?: Array<{ identifier: string; product: { title: string; priceString: string } }> }> }>;
+  purchasePackage(opts: { aPackage: { identifier: string } }): Promise<{ customerInfo: { entitlements: { active: Record<string, unknown> } } }>;
+  restorePurchases(): Promise<{ customerInfo: { entitlements: { active: Record<string, unknown> } } }>;
+  getCustomerInfo(): Promise<{ customerInfo: { entitlements: { active: Record<string, unknown> } } }>;
+  logOut(): Promise<void>;
+}
+
 // Lazy-loaded RevenueCat plugin — only imported when running inside Capacitor.
-let Purchases: any = null;
+let Purchases: PurchasesPlugin | null = null;
 
 async function loadPlugin() {
   if (!Capacitor.isNativePlatform()) return null;
   if (Purchases) return Purchases;
   const mod = await import('@revenuecat/purchases-capacitor');
-  Purchases = mod.Purchases;
+  Purchases = mod.Purchases as unknown as PurchasesPlugin;
   return Purchases;
 }
 

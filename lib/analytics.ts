@@ -144,6 +144,8 @@ const TRACKED_EVENTS = [
   // Peer review events
   'peer_review_claimed',
   'peer_review_viewed',
+  // Practice events
+  'practice_page_viewed',
   // Phrase suggestions events
   'phrase_suggestion_resolved',
   'phrase_suggestions_check',

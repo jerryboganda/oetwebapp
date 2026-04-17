@@ -1253,7 +1253,7 @@ export async function fetchReadingResult(taskId: string): Promise<ReadingResult>
       correctAnswer: question.correctAnswer,
       isCorrect,
       errorType: isCorrect ? '' : readingErrorType(question),
-      explanation: (question as any).explanation ?? (isCorrect ? 'Correct.' : 'Review the source text carefully and focus on exact detail.'),
+      explanation: (question as ReadingTask['questions'][number] & { explanation?: string }).explanation ?? (isCorrect ? 'Correct.' : 'Review the source text carefully and focus on exact detail.'),
     };
   });
 
@@ -1525,8 +1525,8 @@ export async function fetchTrendData(): Promise<TrendPoint[]> {
   const grouped = new Map<string, TrendPoint>();
   for (const point of progress.trend ?? []) {
     const label = point.week ?? new Date(point.generatedAt).toLocaleDateString();
-    const existing = grouped.get(label) ?? { date: label };
-    (existing as any)[String(point.subtest).toLowerCase()] = parseScoreValue(point.scoreRange);
+    const existing: TrendPoint = grouped.get(label) ?? { date: label };
+    existing[String(point.subtest).toLowerCase()] = parseScoreValue(point.scoreRange);
     grouped.set(label, existing);
   }
   return Array.from(grouped.values());

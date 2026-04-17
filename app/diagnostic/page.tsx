@@ -60,7 +60,7 @@ export default function DiagnosticIntroPage() {
   const router = useRouter();
   const { track } = useAnalytics();
   const [starting, setStarting] = useState(false);
-  const [overview, setOverview] = useState<any>(null);
+  const [overview, setOverview] = useState<{ subtests?: Array<{ subtest: string; estimatedDurationMinutes: number }>; estimatedTotalMinutes?: number; disclaimer?: string } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -89,7 +89,7 @@ export default function DiagnosticIntroPage() {
     if (serverSubtests.length === 0) return SUB_TESTS;
 
     return SUB_TESTS.map((sub) => {
-      const match = serverSubtests.find((item: any) => String(item.subtest).toLowerCase() === sub.name.toLowerCase());
+      const match = serverSubtests.find((item) => String(item.subtest).toLowerCase() === sub.name.toLowerCase());
       return {
         ...sub,
         duration: match ? `${match.estimatedDurationMinutes} mins` : sub.duration,
@@ -212,7 +212,7 @@ export default function DiagnosticIntroPage() {
         </section>
         </MotionSection>
 
-        <div className="sticky bottom-4 z-10 flex justify-center">
+        <div className="sticky bottom-[calc(var(--bottom-nav-height)+0.5rem)] lg:bottom-6 z-10 flex justify-center pb-2">
           <Button
             size="lg"
             loading={starting}

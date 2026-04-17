@@ -10,6 +10,7 @@ import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import { cancelFreeze, confirmFreeze, fetchFreezeStatus, requestFreeze } from '@/lib/api';
+import type { LearnerFreezeStatus, FreezePolicy, FreezeEligibility } from '@/lib/types/freeze';
 
 function toLocalInputValue(value: string | null | undefined): string {
   if (!value) return '';
@@ -26,7 +27,7 @@ function toIsoOrNull(value: string): string | null {
 }
 
 export default function FreezePage() {
-  const [freezeState, setFreezeState] = useState<any | null>(null);
+  const [freezeState, setFreezeState] = useState<LearnerFreezeStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -43,7 +44,7 @@ export default function FreezePage() {
       try {
         const result = await fetchFreezeStatus();
         if (!cancelled) {
-          setFreezeState(result as any);
+          setFreezeState(result as LearnerFreezeStatus);
         }
       } catch (err) {
         if (!cancelled) {
@@ -61,9 +62,9 @@ export default function FreezePage() {
     };
   }, []);
 
-  const policy = freezeState?.policy ?? {};
+  const policy: FreezePolicy = freezeState?.policy ?? { isEnabled: false, selfServiceEnabled: false, approvalMode: '', accessMode: '', minDurationDays: 0, maxDurationDays: 365 };
   const currentFreeze = freezeState?.currentFreeze ?? null;
-  const eligibility = freezeState?.eligibility ?? {};
+  const eligibility: FreezeEligibility = freezeState?.eligibility ?? { eligible: false };
   const history = freezeState?.history ?? [];
   const isSelfServiceAvailable = Boolean(policy.selfServiceEnabled && policy.isEnabled);
   const canRequest = Boolean(isSelfServiceAvailable && !currentFreeze && eligibility.eligible !== false);
@@ -96,7 +97,7 @@ export default function FreezePage() {
       });
       setSuccess('Freeze request submitted.');
       const refreshed = await fetchFreezeStatus();
-      setFreezeState(refreshed as any);
+      setFreezeState(refreshed as LearnerFreezeStatus);
       setReason('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not submit freeze request.');
@@ -113,7 +114,7 @@ export default function FreezePage() {
     try {
       await confirmFreeze(currentFreeze.id);
       const refreshed = await fetchFreezeStatus();
-      setFreezeState(refreshed as any);
+      setFreezeState(refreshed as LearnerFreezeStatus);
       setSuccess('Freeze confirmed.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not confirm the freeze.');
@@ -130,7 +131,7 @@ export default function FreezePage() {
     try {
       await cancelFreeze(currentFreeze.id);
       const refreshed = await fetchFreezeStatus();
-      setFreezeState(refreshed as any);
+      setFreezeState(refreshed as LearnerFreezeStatus);
       setSuccess('Freeze cancelled.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not cancel the freeze.');
@@ -272,7 +273,7 @@ export default function FreezePage() {
             className="mb-4"
           />
           <div className="grid gap-4">
-            {history.length > 0 ? history.map((record: any) => (
+            {history.length > 0 ? history.map((record) => (
               <Card key={record.id} className="shadow-sm">
                 <CardContent className="flex flex-col gap-3 p-5 sm:flex-row sm:items-center sm:justify-between">
                   <div>
