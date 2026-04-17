@@ -7,6 +7,7 @@ import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
 import { fetchListeningHome, fetchMockReports } from '@/lib/api';
 import type { MockReport } from '@/lib/mock-data';
@@ -22,6 +23,7 @@ interface ListeningHomeTask {
 }
 
 export default function ListeningHome() {
+  const { isAuthenticated, loading: authLoading } = useAuth();
   const [home, setHome] = useState<Record<string, any> | null>(null);
   const [tasks, setTasks] = useState<ListeningHomeTask[]>([]);
   const [mockReports, setMockReports] = useState<MockReport[]>([]);
@@ -29,11 +31,24 @@ export default function ListeningHome() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
+    if (authLoading) {
+      // Auth state not yet known — keep showing skeletons without fetching.
+      return;
+    }
+    if (!isAuthenticated) {
+      // Middleware should have redirected, but defend against stale renders:
+      // stop showing a skeleton forever and let the surface render empty.
+      setLoading(false);
+      return;
+    }
+
     let cancelled = false;
     analytics.track('module_entry', { module: 'listening' });
 
     (async () => {
       try {
+        setLoading(true);
+        setError(null);
         const [listeningHome, reports] = await Promise.all([fetchListeningHome(), fetchMockReports()]);
         if (cancelled) return;
         setHome(listeningHome);
@@ -53,7 +68,7 @@ export default function ListeningHome() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [authLoading, isAuthenticated]);
 
   const mockRoute = home?.mockSets?.[0]?.route ?? '/mocks';
   const transcriptRoute = home?.transcriptBackedReview?.route ?? '/listening';
@@ -98,7 +113,7 @@ export default function ListeningHome() {
 
   return (
     <LearnerDashboardShell pageTitle="Listening" subtitle="Strengthen audio comprehension, exact detail capture, and distractor control.">
-      <div className="space-y-10 pb-20">
+      <div className="space-y-10">
         <LearnerPageHero
           eyebrow="Module Focus"
           icon={Headphones}
@@ -106,7 +121,7 @@ export default function ListeningHome() {
           title="Train listening accuracy before you test it under pressure"
           description={home?.intro ?? 'Use this workspace to tighten detail capture, review distractors with evidence, and move into transcript-backed follow-up when it helps.'}
           highlights={[
-            { icon: Volume2, label: 'Featured tasks', value: tasks.length ? `${tasks.length} ready now` : 'Loading...' },
+            { icon: Volume2, label: 'Featured tasks', value: loading ? 'Loading...' : tasks.length ? `${tasks.length} ready now` : 'None yet' },
             { icon: Target, label: 'Drill paths', value: `${home?.distractorDrills?.length ?? 0} available` },
             { icon: FileText, label: 'Transcript review', value: home?.transcriptBackedReview ? 'Available after attempts' : 'Open after a task' },
           ]}

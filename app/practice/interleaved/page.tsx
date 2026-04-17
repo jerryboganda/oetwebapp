@@ -64,7 +64,7 @@ export default function InterleavedPracticePage() {
           highlights={heroHighlights}
         />
 
-      <MotionSection className="mx-auto max-w-5xl space-y-6 px-4 py-6">
+      <MotionSection className="space-y-6">
         <MotionItem>
           <Card className="p-5 shadow-sm">
             <LearnerSurfaceSectionHeader

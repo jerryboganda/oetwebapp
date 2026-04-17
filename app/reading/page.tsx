@@ -32,7 +32,11 @@ export default function ReadingHome() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (authLoading || !isAuthenticated) {
+    if (authLoading) {
+      return;
+    }
+    if (!isAuthenticated) {
+      setLoading(false);
       return;
     }
 
@@ -108,7 +112,7 @@ export default function ReadingHome() {
           title="Build reading accuracy before you validate it in mocks"
           description={home?.intro ?? 'Use this workspace to sharpen detail extraction, keep timing visible, and check whether gains hold up in mock conditions.'}
           highlights={[
-            { icon: Target, label: 'Featured tasks', value: tasks.length ? `${tasks.length} ready now` : 'Loading...' },
+            { icon: Target, label: 'Featured tasks', value: loading ? 'Loading...' : tasks.length ? `${tasks.length} ready now` : 'None yet' },
             { icon: FileText, label: 'Mock reports', value: mockReports.length ? `${mockReports.length} available` : 'No reports yet' },
             { icon: TrendingUp, label: 'Mock routes', value: home?.mockSets?.length ? `${home.mockSets.length} ready` : 'Mock setup ready' },
           ]}
@@ -119,8 +123,8 @@ export default function ReadingHome() {
         <section>
           <LearnerSurfaceSectionHeader
             eyebrow="Practice Tasks"
-            title="Start with backend-backed reading work"
-            description="Each task shows the skill shape, timing signal, and direct next action."
+            title="Reading practice tasks"
+            description="Each task shows the focus area, estimated time, and a direct start action."
             className="mb-5"
           />
 

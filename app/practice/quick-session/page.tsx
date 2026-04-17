@@ -138,7 +138,7 @@ export default function MobileQuickSessionPage() {
   /* ── render ────────────────────────────────── */
   return (
     <LearnerDashboardShell>
-      <div className="mx-auto max-w-5xl space-y-6 px-4 py-6">
+      <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Practice"
           icon={Play}
