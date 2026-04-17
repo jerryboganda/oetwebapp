@@ -59,7 +59,7 @@ export default function ComparativeAnalyticsPage() {
     <LearnerDashboardShell>
       <LearnerPageHero title="Comparative Analytics" description="See how your performance compares to the cohort. Percentile rankings and score gap analysis." />
 
-      <MotionSection className="px-4 py-6 space-y-6 max-w-5xl mx-auto">
+      <MotionSection className="space-y-6 max-w-5xl mx-auto">
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-48 rounded-xl" />)}</div>
         ) : !data || data.subtests.length === 0 ? (
@@ -78,7 +78,7 @@ export default function ComparativeAnalyticsPage() {
                         <Badge className={tier.color}>{tier.label}</Badge>
                       </div>
 
-                      <div className="grid grid-cols-3 gap-3 mb-4">
+                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-4">
                         <div className="text-center"><p className="text-2xl font-bold text-primary">{s.yourScore}</p><p className="text-xs text-muted-foreground">Your Score</p></div>
                         <div className="text-center"><p className="text-2xl font-bold">{s.cohortAverage}</p><p className="text-xs text-muted-foreground">Cohort Avg</p></div>
                         <div className="text-center"><p className="text-2xl font-bold">{s.percentile}%</p><p className="text-xs text-muted-foreground">Percentile</p></div>

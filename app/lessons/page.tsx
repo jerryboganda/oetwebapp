@@ -51,7 +51,7 @@ export default function LessonsPage() {
 
   return (
     <LearnerDashboardShell>
-      <div className="mx-auto max-w-6xl space-y-6 px-4 py-6">
+      <div className="space-y-6">
       <LearnerPageHero
         eyebrow="Learn"
         title="Video Lessons"
@@ -66,7 +66,7 @@ export default function LessonsPage() {
         <LearnerSurfaceSectionHeader
           eyebrow="Library filters"
           title="Narrow the lesson set"
-          description="Use the same chip-and-card language as the dashboard instead of browser-style controls."
+          description="Filter lessons by exam type and sub-test."
           className="mb-4"
         />
         <div className="flex flex-wrap gap-3">
@@ -106,7 +106,7 @@ export default function LessonsPage() {
           <LearnerSurfaceSectionHeader
             eyebrow="Lessons"
             title="Curated video lessons"
-            description="Each card keeps the same border, radius, and shadow language as the dashboard."
+            description="Expert-led preparation content to strengthen your skills."
             className="mb-4"
           />
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">

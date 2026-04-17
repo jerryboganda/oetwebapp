@@ -28,7 +28,7 @@ export function WritingCaseNotesPanel({
             role="tab"
             aria-selected={activeTab === tab}
             className={cn(
-              'flex-1 py-2.5 text-xs font-semibold capitalize transition-colors',
+              'flex-1 py-3 text-xs font-semibold capitalize transition-colors',
               activeTab === tab ? 'text-primary border-b-2 border-primary' : 'text-muted hover:text-navy',
             )}
           >

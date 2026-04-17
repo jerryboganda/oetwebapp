@@ -68,8 +68,7 @@ export default function ConversationSessionPage() {
       })
       .catch(() => setError('Failed to load conversation session.'))
       .finally(() => setLoading(false));
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessionId]);
+  }, [sessionId, router]);
 
   // Scroll to bottom on new turns
   useEffect(() => {
@@ -89,7 +88,7 @@ export default function ConversationSessionPage() {
       });
     }, 1000);
     return () => { if (prepTimerRef.current) clearInterval(prepTimerRef.current); };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- handleStartConversation is declared after this effect; interval must not restart on callback identity change
   }, [state]);
 
   // Active timer

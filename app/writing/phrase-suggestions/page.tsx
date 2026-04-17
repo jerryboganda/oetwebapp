@@ -129,7 +129,7 @@ export default function PhraseSuggestionsPage() {
         description="Get intelligent suggestions to upgrade your vocabulary, fix grammar, and improve writing tone"
       />
 
-      <div className="max-w-3xl mx-auto px-4 pb-12 space-y-6">
+      <div className="max-w-3xl mx-auto space-y-6">
 
         {/* ── Input Section ─────────────────── */}
         <Card className="p-5">
@@ -221,7 +221,7 @@ export default function PhraseSuggestionsPage() {
                         <Badge variant="outline" className={`${cfg.color} text-[10px] shrink-0`}>{cfg.label}</Badge>
                         <div className="flex items-center gap-1">
                           <span className="text-[10px] text-muted-foreground">{Math.round(s.confidence * 100)}%</span>
-                          <button onClick={() => setExpandedId(expanded ? null : s.id)} className="p-1">
+                          <button onClick={() => setExpandedId(expanded ? null : s.id)} className="p-2.5 -m-1">
                             {expanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
                           </button>
                         </div>

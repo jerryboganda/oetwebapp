@@ -257,7 +257,7 @@ export default function ThreadPage() {
 
   return (
     <LearnerDashboardShell pageTitle={thread?.title ?? 'Thread'}>
-      <MotionSection className="mx-auto max-w-3xl space-y-4 px-4 py-6">
+      <MotionSection className="space-y-4">
         <Button variant="outline" size="sm" onClick={() => router.push('/community')}>
           <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Threads
         </Button>
@@ -315,7 +315,7 @@ export default function ThreadPage() {
                   </div>
                 )}
                 {isAdmin && (
-                  <div className="flex items-center gap-2 mt-2 rounded-lg border border-red-100 bg-red-50/50 p-2">
+                  <div className="flex flex-wrap items-center gap-2 mt-2 rounded-lg border border-red-100 bg-red-50/50 p-2">
                     <Badge variant="outline" className="text-red-600 border-red-300 bg-red-50 text-xs mr-1">Admin</Badge>
                     <Button
                       variant="outline"

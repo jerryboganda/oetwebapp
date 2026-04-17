@@ -54,6 +54,18 @@
     bottom: calc(env(safe-area-inset-bottom) + var(--app-keyboard-offset, 0px) + 0.75rem);
   }
 
+  /* Hide bottom nav when virtual keyboard is open on mobile */
+  .keyboard-hide-bottom-nav {
+    transition: opacity 0.2s ease, transform 0.2s ease;
+  }
+
+  html[data-keyboard-visible="true"] .keyboard-hide-bottom-nav,
+  html[data-keyboard-visible="true"] .keyboard-safe-floating-bottom {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(100%);
+  }
+
   .touch-target {
     min-width: 44px;
     min-height: 44px;
@@ -131,7 +143,7 @@
   :root {
     --app-viewport-height: 100dvh;
     --app-keyboard-offset: 0px;
-    --bottom-nav-height: 5.5rem;
+    --bottom-nav-height: 6rem;
     color-scheme: light;
   }
 

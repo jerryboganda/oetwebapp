@@ -355,8 +355,8 @@ function LiveSpeakingTaskContent() {
   return (
     <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col font-sans overflow-hidden">
       {/* Top Bar */}
-      <header className="bg-black/40 backdrop-blur-md border-b border-white/10 px-6 py-4 flex items-center justify-between z-20">
-        <div className="flex items-center gap-4">
+      <header className="bg-black/40 backdrop-blur-md border-b border-white/10 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-3 z-20">
+        <div className="flex items-center gap-3 min-w-0 overflow-hidden">
           <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${
             mode === 'self' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
             'bg-amber-500/20 text-amber-400 border border-amber-500/30'
@@ -364,8 +364,8 @@ function LiveSpeakingTaskContent() {
             {mode === 'self' ? <User className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3" />}
             {aiUnavailable ? 'Guided Self Practice' : mode === 'self' ? 'Self Practice' : 'Exam Simulation'}
           </div>
-          <div className="h-4 w-px bg-white/10" />
-          <div className="flex items-center gap-2 text-white/60">
+          <div className="h-4 w-px bg-white/10 hidden sm:block" />
+          <div className="hidden sm:flex items-center gap-2 text-white/60">
             {connectionStatus === 'connected' ? <Wifi className="w-4 h-4 text-green-500" /> : 
              connectionStatus === 'connecting' ? <Loader2 className="w-4 h-4 animate-spin text-blue-500" /> :
              <WifiOff className="w-4 h-4 text-red-500" />}
@@ -494,10 +494,10 @@ function LiveSpeakingTaskContent() {
         </div>
 
         {/* Role Card & Notes Toggles */}
-        <div className="absolute bottom-20 left-1/2 -translate-x-1/2 flex gap-4 z-20">
+        <div className="absolute bottom-20 sm:bottom-20 left-1/2 -translate-x-1/2 flex gap-3 z-20">
           <button 
             onClick={() => setShowRoleCard(!showRoleCard)}
-            className={`px-6 py-2 rounded-full text-xs font-bold flex items-center gap-2 transition-all ${
+            className={`px-5 py-3 min-h-[44px] rounded-full text-xs font-bold flex items-center gap-2 transition-all ${
               showRoleCard ? 'bg-white text-black' : 'bg-white/10 text-white hover:bg-white/20'
             }`}
           >
@@ -505,7 +505,7 @@ function LiveSpeakingTaskContent() {
           </button>
           <button 
             onClick={() => setShowNotes(!showNotes)}
-            className={`px-6 py-2 rounded-full text-xs font-bold flex items-center gap-2 transition-all ${
+            className={`px-5 py-3 min-h-[44px] rounded-full text-xs font-bold flex items-center gap-2 transition-all ${
               showNotes ? 'bg-white text-black' : 'bg-white/10 text-white hover:bg-white/20'
             }`}
           >
@@ -524,7 +524,7 @@ function LiveSpeakingTaskContent() {
             >
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-black uppercase tracking-widest text-white/40">Role Card Reference</h3>
-                <button onClick={() => setShowRoleCard(false)} className="text-white/40 hover:text-white"><Square className="w-4 h-4 rotate-45" /></button>
+                <button onClick={() => setShowRoleCard(false)} className="p-2.5 -m-1 rounded-lg text-white/40 hover:text-white hover:bg-white/10"><Square className="w-4 h-4 rotate-45" /></button>
               </div>
               <div className="space-y-4">
                 <div>
@@ -552,7 +552,7 @@ function LiveSpeakingTaskContent() {
             >
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-black uppercase tracking-widest text-white/40">Your Notes</h3>
-                <button onClick={() => setShowNotes(false)} className="text-white/40 hover:text-white"><Square className="w-4 h-4 rotate-45" /></button>
+                <button onClick={() => setShowNotes(false)} className="p-2.5 -m-1 rounded-lg text-white/40 hover:text-white hover:bg-white/10"><Square className="w-4 h-4 rotate-45" /></button>
               </div>
               <textarea 
                 placeholder="Type your notes here..."
@@ -564,7 +564,7 @@ function LiveSpeakingTaskContent() {
       </main>
 
       {/* Bottom Controls */}
-      <footer className="bg-black/60 backdrop-blur-xl border-t border-white/10 px-8 py-8 z-40">
+      <footer className="bg-black/60 backdrop-blur-xl border-t border-white/10 px-8 py-8 pb-[calc(2rem+env(safe-area-inset-bottom))] z-40">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <button 
             onClick={handleStop}

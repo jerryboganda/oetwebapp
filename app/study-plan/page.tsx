@@ -65,8 +65,9 @@ export default function StudyPlanPage() {
     try {
       const data = await fetchStudyPlan();
       setTasks(data);
-    } catch (e: any) {
-      setError(e.userMessage ?? e.message ?? 'Failed to load study plan.');
+    } catch (e: unknown) {
+      const err = e as { userMessage?: string; message?: string };
+      setError(err.userMessage ?? err.message ?? 'Failed to load study plan.');
     } finally {
       setLoading(false);
     }
@@ -182,7 +183,7 @@ export default function StudyPlanPage() {
                   <Button variant="primary" size="sm" onClick={() => handleStart(task)} className="flex-1 sm:flex-none">
                     <PlayCircle className="w-4 h-4 mr-1" /> Start
                   </Button>
-                  <div className="flex items-center gap-1.5">
+                  <div className="flex flex-wrap items-center gap-1.5">
                     <Button variant="ghost" size="sm" onClick={() => handleMarkComplete(task.id)} title="Mark Complete">
                       <CheckCircle2 className="w-4 h-4" />
                     </Button>

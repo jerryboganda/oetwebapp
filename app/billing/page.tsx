@@ -37,6 +37,7 @@ import {
   fetchWalletTransactions,
 } from '@/lib/api';
 import type { BillingChangePreview, BillingData, BillingQuote, BillingProductType } from '@/lib/billing-types';
+import type { LearnerFreezeStatus } from '@/lib/types/freeze';
 
 function formatCurrency(amount: number, currency = 'AUD') {
   return new Intl.NumberFormat('en-AU', {
@@ -126,7 +127,7 @@ export default function BillingPage() {
 
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [walletLoading, setWalletLoading] = useState(true);
-  const [freezeState, setFreezeState] = useState<any | null>(null);
+  const [freezeState, setFreezeState] = useState<LearnerFreezeStatus | null>(null);
   const [selectedGateway, setSelectedGateway] = useState<'stripe' | 'paypal'>('stripe');
   const searchParams = useSearchParams();
   const paymentStatus = searchParams.get('payment');
@@ -155,7 +156,7 @@ export default function BillingPage() {
       .then(([result, freeze]) => {
         setData(result);
         setQuote(result.quote);
-        setFreezeState(freeze as any);
+        setFreezeState(freeze as LearnerFreezeStatus | null);
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Could not load billing data.'))
       .finally(() => setLoading(false));

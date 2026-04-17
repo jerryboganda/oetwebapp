@@ -45,18 +45,18 @@ export default function PeerReviewPage() {
     <LearnerDashboardShell>
       <LearnerPageHero title="Peer Review Exchange" description="Give and receive feedback from fellow OET learners." />
 
-      <MotionSection className="px-4 py-6 max-w-4xl mx-auto space-y-6">
+      <MotionSection className="max-w-4xl mx-auto space-y-6">
         {error && <InlineAlert variant="error">{error}</InlineAlert>}
 
         {data && (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Card className="p-4 text-center"><div className="text-2xl font-bold">{data.stats.reviewsGiven}</div><div className="text-xs text-muted-foreground">Reviews Given</div></Card>
             <Card className="p-4 text-center"><div className="text-2xl font-bold">{data.stats.reviewsReceived}</div><div className="text-xs text-muted-foreground">Reviews Received</div></Card>
             <Card className="p-4 text-center"><div className="text-2xl font-bold">{data.stats.averageHelpfulness > 0 ? data.stats.averageHelpfulness.toFixed(1) : '—'}</div><div className="text-xs text-muted-foreground">Avg Helpfulness</div></Card>
           </div>
         )}
 
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           {(['available', 'mine', 'given'] as const).map(t => (
             <Button key={t} variant={tab === t ? 'secondary' : 'outline'} size="sm" onClick={() => setTab(t)}>
               {t === 'available' ? 'Available' : t === 'mine' ? 'My Submissions' : 'My Reviews'}

@@ -230,7 +230,7 @@ export default function MockSetup() {
               <button
                 onClick={() => mode !== 'exam' && setStrictTimer(!strictTimer)}
                 disabled={mode === 'exam'}
-                className={`relative inline-flex h-7 w-12 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
+                className={`relative inline-flex h-8 w-13 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
                   strictTimer ? 'bg-primary' : 'bg-gray-200'
                 } ${mode === 'exam' ? 'opacity-50 cursor-not-allowed' : ''}`}
                 role="switch"

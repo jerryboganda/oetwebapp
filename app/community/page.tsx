@@ -133,7 +133,7 @@ export default function CommunityPage() {
         highlights={heroHighlights}
       />
 
-      <MotionSection className="space-y-4 px-4 py-4">
+      <MotionSection className="space-y-4 mt-6">
         {/* Controls bar */}
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="flex flex-wrap items-center gap-2">

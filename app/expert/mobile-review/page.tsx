@@ -198,7 +198,7 @@ export default function ExpertMobileReviewPage() {
     return (
       <div className="min-h-screen bg-background safe-area-inset">
         <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-4 py-3 flex items-center justify-between">
-          <button onClick={backToQueue} className="flex items-center gap-1 text-sm text-muted-foreground"><ChevronLeft className="h-4 w-4" />Queue</button>
+          <button onClick={backToQueue} className="flex items-center gap-1 text-sm text-muted-foreground py-2 px-1"><ChevronLeft className="h-4 w-4" />Queue</button>
           <span className="text-sm font-medium">{activeItem.subtestCode}</span>
           <Badge variant={activeItem.priority === 'critical' ? 'danger' : 'outline'} className="text-[10px]">{activeItem.priority}</Badge>
         </div>
@@ -240,9 +240,9 @@ export default function ExpertMobileReviewPage() {
     return (
       <div className="min-h-screen bg-background safe-area-inset">
         <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-4 py-3 flex items-center justify-between">
-          <button onClick={() => setStep('read')} className="flex items-center gap-1 text-sm text-muted-foreground"><ChevronLeft className="h-4 w-4" />Response</button>
+          <button onClick={() => setStep('read')} className="flex items-center gap-1 text-sm text-muted-foreground py-2 px-1"><ChevronLeft className="h-4 w-4" />Response</button>
           <span className="text-sm font-medium">Score</span>
-          <button onClick={handleSaveDraft} className="text-sm text-primary flex items-center gap-1"><Save className="h-3.5 w-3.5" />Save</button>
+          <button onClick={handleSaveDraft} className="text-sm text-primary flex items-center gap-1 py-2 px-1"><Save className="h-3.5 w-3.5" />Save</button>
         </div>
         <div className="px-4 py-6 max-w-lg mx-auto space-y-4">
           <MotionSection className="space-y-3">
@@ -255,7 +255,7 @@ export default function ExpertMobileReviewPage() {
                       <button
                         key={i}
                         onClick={() => setScores(prev => ({ ...prev, [c.code]: i }))}
-                        className={`w-10 h-10 rounded-lg text-sm font-medium border transition-all
+                        className={`w-11 h-11 rounded-lg text-sm font-medium border transition-all
                           ${scores[c.code] === i
                             ? 'bg-primary text-primary-foreground border-primary shadow-sm'
                             : 'bg-muted/30 border-border hover:border-primary/50'
@@ -283,9 +283,9 @@ export default function ExpertMobileReviewPage() {
     return (
       <div className="min-h-screen bg-background safe-area-inset">
         <div className="sticky top-0 z-10 bg-background/95 backdrop-blur border-b px-4 py-3 flex items-center justify-between">
-          <button onClick={() => setStep('score')} className="flex items-center gap-1 text-sm text-muted-foreground"><ChevronLeft className="h-4 w-4" />Scores</button>
+          <button onClick={() => setStep('score')} className="flex items-center gap-1 text-sm text-muted-foreground py-2 px-1"><ChevronLeft className="h-4 w-4" />Scores</button>
           <span className="text-sm font-medium">Comment</span>
-          <button onClick={handleSaveDraft} className="text-sm text-primary flex items-center gap-1"><Save className="h-3.5 w-3.5" />Save</button>
+          <button onClick={handleSaveDraft} className="text-sm text-primary flex items-center gap-1 py-2 px-1"><Save className="h-3.5 w-3.5" />Save</button>
         </div>
         <div className="px-4 py-6 max-w-lg mx-auto space-y-4">
           {/* score summary */}

@@ -183,7 +183,7 @@ export function LearnerPageHero({
         ) : null}
         <div className="min-w-0">
           <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">{item.label}</p>
-          <p className="truncate text-sm font-semibold text-navy">{item.value}</p>
+          <p className="text-sm font-semibold text-navy break-words">{item.value}</p>
         </div>
       </div>
     );

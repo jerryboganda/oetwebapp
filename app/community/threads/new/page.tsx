@@ -80,7 +80,7 @@ export default function NewThreadPage() {
         icon={PenLine}
       />
 
-      <MotionSection className="mx-auto max-w-2xl space-y-4 px-4 py-4">
+      <MotionSection className="mx-auto max-w-2xl space-y-4">
         <Button variant="outline" size="sm" onClick={() => router.push('/community')}>
           <ArrowLeft className="mr-1.5 h-4 w-4" /> Back to Threads
         </Button>

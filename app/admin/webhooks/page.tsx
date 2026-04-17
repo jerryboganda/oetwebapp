@@ -111,7 +111,7 @@ export default function WebhooksPage() {
       render: (e) => new Date(e.receivedAt).toLocaleString(),
     },
     {
-      key: 'actions' as any,
+      key: 'actions',
       header: '',
       render: (e) =>
         e.processingStatus === 'failed' ? (

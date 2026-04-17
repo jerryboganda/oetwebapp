@@ -101,7 +101,7 @@ export function AudioPlayerWaveform({ audioUrl, onTimeUpdate, seekToTime, classN
     return () => {
       ws.destroy();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- WaveSurfer instance lifecycle: re-creating on callback changes would destroy/rebuild the waveform
   }, [resolvedAudioUrl]);
 
   useEffect(() => {
@@ -171,7 +171,7 @@ export function AudioPlayerWaveform({ audioUrl, onTimeUpdate, seekToTime, classN
               { value: '1.5', label: '1.5x' },
               { value: '2', label: '2x' },
             ]}
-            className="h-8 py-1 text-xs min-w-[100px]"
+            className="h-11 py-1 text-xs min-w-[100px]"
             disabled={!isReady}
           />
         </div>

@@ -107,7 +107,7 @@ export default function FlashcardsPage() {
           </Card>
         </MotionSection>
       ) : cards.length === 0 ? (
-        <Card className="border-gray-200 bg-surface px-8 py-16 text-center">
+        <Card className="border-gray-200 bg-surface px-4 sm:px-8 py-8 sm:py-16 text-center">
           <CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-green-400" />
           <p className="text-muted">No flashcards due right now. Come back later!</p>
           <Link href="/vocabulary" className="mt-4 inline-block text-sm font-medium text-primary hover:underline">Back to Vocabulary</Link>
@@ -159,7 +159,7 @@ export default function FlashcardsPage() {
           </AnimatePresence>
 
           {flipped && (
-            <MotionSection className="grid grid-cols-4 gap-2">
+            <MotionSection className="grid grid-cols-2 sm:grid-cols-4 gap-2">
               {QUALITY_OPTIONS.map(opt => (
                 <button
                   key={opt.q}

@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { ArrowLeft, Video, Clock } from 'lucide-react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
@@ -11,6 +11,15 @@ import { fetchVideoLesson, updateVideoProgress } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
 type VideoLesson = { id: string; examTypeCode: string; subtestCode: string | null; title: string; description: string | null; durationSeconds: number; videoUrl: string | null; transcriptJson: string | null; difficultyLevel: string };
+
+/* Slug-based lesson category routes that should redirect to their own pages */
+const CATEGORY_REDIRECTS: Record<string, string> = {
+  grammar: '/grammar',
+  vocabulary: '/vocabulary',
+  strategies: '/strategies',
+  pronunciation: '/pronunciation',
+  review: '/lessons',
+};
 
 function formatDuration(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -20,6 +29,7 @@ function formatDuration(seconds: number) {
 
 export default function VideoLessonPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const [lesson, setLesson] = useState<VideoLesson | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -28,6 +38,12 @@ export default function VideoLessonPage() {
 
   useEffect(() => {
     if (!params.id) return;
+    /* Redirect category slugs to their dedicated pages */
+    const redirect = CATEGORY_REDIRECTS[params.id.toLowerCase()];
+    if (redirect) {
+      router.replace(redirect);
+      return;
+    }
     fetchVideoLesson(params.id).then(data => {
       setLesson(data as VideoLesson);
       setLoading(false);
@@ -36,7 +52,7 @@ export default function VideoLessonPage() {
       setError('Could not load video lesson.');
       setLoading(false);
     });
-  }, [params.id]);
+  }, [params.id, router]);
 
   function handleTimeUpdate(e: React.SyntheticEvent<HTMLVideoElement>) {
     const video = e.currentTarget;

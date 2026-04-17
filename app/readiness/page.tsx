@@ -44,7 +44,7 @@ export default function ReadinessCenter() {
       .then(setData)
       .catch(() => setError('Could not load readiness data.'));
     fetchReadinessRisk()
-      .then((r: any) => setRiskData(r))
+      .then((r: { riskProbability: number; riskLevel: string; factors: { label: string; severity: string; impact: number; description: string }[]; recommendation: string }) => setRiskData(r))
       .catch(() => { /* non-critical — page still works without risk data */ });
   }, []);
 

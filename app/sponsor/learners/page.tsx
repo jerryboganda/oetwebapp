@@ -159,7 +159,7 @@ export default function SponsorLearnersPage() {
                   {learner.status !== 'Revoked' && (
                     <button
                       onClick={() => handleRemove(learner.id)}
-                      className="rounded-lg p-1.5 text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
+                      className="rounded-lg p-2.5 -m-1 text-muted hover:text-red-600 hover:bg-red-50 transition-colors"
                       title="Remove sponsorship"
                     >
                       <Trash2 className="h-4 w-4" />

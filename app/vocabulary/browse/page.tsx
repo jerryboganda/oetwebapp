@@ -121,7 +121,7 @@ export default function BrowseVocabularyPage() {
           {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
         </div>
       ) : terms.length === 0 ? (
-        <Card className="border-gray-200 bg-surface px-8 py-12 text-center text-muted">No terms found. Try a different search.</Card>
+        <Card className="border-gray-200 bg-surface px-4 sm:px-8 py-6 sm:py-12 text-center text-muted">No terms found. Try a different search.</Card>
       ) : (
         <>
           <div className="space-y-3 mb-6">

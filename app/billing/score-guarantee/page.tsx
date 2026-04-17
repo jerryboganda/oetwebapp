@@ -119,7 +119,7 @@ export default function ScoreGuaranteePage() {
               title="Activate Your Score Guarantee"
               description="Enter your current OET score to activate the 50-point improvement guarantee."
             />
-            <div className="mt-4 flex items-end gap-3 max-w-md">
+            <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-end gap-3 max-w-md">
               <div className="flex-1">
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Baseline OET Score</label>
                 <Input

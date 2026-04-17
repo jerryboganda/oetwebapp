@@ -123,9 +123,9 @@ export default function ExpertManagementPage() {
   const loadTutorProfiles = useCallback(async () => {
     try {
       const raw = await fetchAdminPrivateSpeakingTutors();
-      const items = Array.isArray(raw) ? raw : (raw as any)?.items ?? [];
+      const items = Array.isArray(raw) ? raw : (raw as Record<string, unknown>)?.items as Record<string, unknown>[] ?? [];
       setTutorProfiles(
-        items.map((t: any) => ({
+        items.map((t: Record<string, unknown>) => ({
           id: String(t.id ?? ''),
           expertUserId: String(t.expertUserId ?? ''),
           displayName: String(t.displayName ?? ''),
@@ -213,7 +213,7 @@ export default function ExpertManagementPage() {
       setInviteForm({ name: '', email: '', professionId: 'nursing' });
       setToast({
         variant: 'success',
-        message: `Invitation sent to ${(result as any).email}. Setup expires ${new Date((result as any).invitation?.expiresAt).toLocaleString()}.`,
+        message: `Invitation sent to ${result.email}. Setup expires ${new Date((result as Record<string, Record<string, string>>).invitation?.expiresAt).toLocaleString()}.`,
       });
     } catch {
       setToast({ variant: 'error', message: 'Unable to send invitation.' });

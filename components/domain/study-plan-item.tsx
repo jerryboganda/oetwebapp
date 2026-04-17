@@ -45,7 +45,7 @@ export function StudyPlanItem({
           </div>
         </div>
         {isActionable && (
-          <div className="flex items-center gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
             {onStart && <Button size="sm" onClick={onStart}><Play className="w-3.5 h-3.5" /> Start</Button>}
             {onMarkDone && <Button size="sm" variant="ghost" onClick={onMarkDone}><Check className="w-3.5 h-3.5" /> Done</Button>}
             {onReschedule && <Button size="sm" variant="ghost" onClick={onReschedule}><RotateCcw className="w-3.5 h-3.5" /></Button>}

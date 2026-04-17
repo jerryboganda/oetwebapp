@@ -123,7 +123,7 @@ export default function OnboardingPage() {
 
   return (
     <LearnerDashboardShell pageTitle="Getting Started" distractionFree>
-      <div className="flex-1 flex items-center justify-center p-4 md:p-8">
+      <div className="flex-1 flex items-center justify-center p-4 md:p-8 pb-[calc(1rem+env(safe-area-inset-bottom))]">
         <div className="w-full max-w-2xl space-y-8">
           {/* Stepper */}
           <div className="md:hidden">

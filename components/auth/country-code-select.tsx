@@ -4,7 +4,9 @@ import React, { useMemo } from "react";
 import Select, {
   components,
   type GroupBase,
+  type OptionProps,
   type SingleValue,
+  type SingleValueProps,
 } from "react-select";
 import * as flagComponents from "country-flag-icons/react/1x1";
 
@@ -83,18 +85,18 @@ function CountryOption({
   );
 }
 
-function CustomOption(props: any) {
+function CustomOption(props: OptionProps<CountryCodeOption, false, GroupBase<CountryCodeOption>>) {
   return (
     <components.Option {...props}>
-      <CountryOption option={props.data as CountryCodeOption} />
+      <CountryOption option={props.data} />
     </components.Option>
   );
 }
 
-function CustomSingleValue(props: any) {
+function CustomSingleValue(props: SingleValueProps<CountryCodeOption, false, GroupBase<CountryCodeOption>>) {
   return (
     <components.SingleValue {...props}>
-      <CountryOption option={props.data as CountryCodeOption} compact />
+      <CountryOption option={props.data} compact />
     </components.SingleValue>
   );
 }

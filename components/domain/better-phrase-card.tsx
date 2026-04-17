@@ -28,7 +28,7 @@ export function BetterPhraseCard({
           <div className="flex items-start gap-2">
             <p className="text-sm text-navy flex-1">&ldquo;{original}&rdquo;</p>
             {onPlayOriginal && (
-              <button onClick={onPlayOriginal} className="p-1 text-red-500 hover:text-red-700" aria-label="Play original">
+              <button onClick={onPlayOriginal} className="p-2.5 -m-1 text-red-500 hover:text-red-700" aria-label="Play original">
                 <Volume2 className="w-4 h-4" />
               </button>
             )}
@@ -47,7 +47,7 @@ export function BetterPhraseCard({
           <div className="flex items-start gap-2">
             <p className="text-sm text-navy flex-1">&ldquo;{alternative}&rdquo;</p>
             {onPlayAlternative && (
-              <button onClick={onPlayAlternative} className="p-1 text-emerald-600 hover:text-emerald-800" aria-label="Play alternative">
+              <button onClick={onPlayAlternative} className="p-2.5 -m-1 text-emerald-600 hover:text-emerald-800" aria-label="Play alternative">
                 <Volume2 className="w-4 h-4" />
               </button>
             )}

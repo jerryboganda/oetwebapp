@@ -108,7 +108,7 @@ export default function ScoreEstimatorPage() {
       <LearnerDashboardShell>
         <div className="space-y-4 p-6">
           <Skeleton className="h-10 w-60" />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-48 rounded-xl" />)}
           </div>
         </div>
@@ -212,7 +212,7 @@ export default function ScoreEstimatorPage() {
               icon={<Target className="w-5 h-5" />}
               title="Overall OET Prediction"
             />
-            <div className="mt-3 grid grid-cols-3 gap-4 text-center">
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
               <div>
                 <p className="text-xs text-gray-500">Estimated Range</p>
                 <p className="text-lg font-bold text-indigo-700 dark:text-indigo-300">

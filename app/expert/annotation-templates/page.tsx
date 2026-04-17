@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { FileEdit, Plus, Pencil, Trash2, Users2 } from 'lucide-react';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
@@ -42,7 +42,7 @@ export default function AnnotationTemplatesPage() {
   const [editTarget, setEditTarget] = useState<ExpertAnnotationTemplate | null>(null);
   const [form, setForm] = useState({ subtestCode: 'writing', criterionCode: '', label: '', templateText: '', isShared: false });
 
-  async function loadTemplates() {
+  const loadTemplates = useCallback(async () => {
     setPageStatus('loading');
     try {
       const data = await getAnnotationTemplatesData({
@@ -54,13 +54,12 @@ export default function AnnotationTemplatesPage() {
     } catch {
       setPageStatus('error');
     }
-  }
+  }, [filterSubtest, filterCriterion]);
 
   useEffect(() => {
     analytics.track('content_view', { page: 'annotation-templates' });
     loadTemplates();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filterSubtest, filterCriterion]);
+  }, [loadTemplates]);
 
   function openCreate() {
     setModalMode('create');

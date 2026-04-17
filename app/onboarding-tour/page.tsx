@@ -83,7 +83,7 @@ export default function OnboardingTourPage() {
 
   return (
     <LearnerDashboardShell>
-      <MotionSection className="px-4 py-8 max-w-3xl mx-auto space-y-6">
+      <MotionSection className="max-w-3xl mx-auto space-y-6">
         {/* Progress indicator */}
         <div className="flex items-center justify-center gap-2 mb-4">
           {TOUR_STEPS.map((s, i) => (

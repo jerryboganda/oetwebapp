@@ -91,7 +91,7 @@ export default function ReferralPage() {
   if (loading) {
     return (
       <LearnerDashboardShell>
-        <div className="max-w-2xl mx-auto px-4 py-8 space-y-4">
+        <div className="max-w-2xl mx-auto space-y-4">
           <Skeleton className="h-8 w-48" /><Skeleton className="h-4 w-80" />
           <Skeleton className="h-48" /><Skeleton className="h-32" />
         </div>
@@ -106,7 +106,7 @@ export default function ReferralPage() {
         description="Invite friends and earn credits — they get a discount, you get rewarded"
       />
 
-      <div className="max-w-2xl mx-auto px-4 pb-12 space-y-6">
+      <div className="max-w-2xl mx-auto space-y-6">
 
         {/* how it works */}
         <Card className="p-6 bg-gradient-to-br from-primary/5 to-primary/10 border-primary/20">
@@ -169,7 +169,7 @@ export default function ReferralPage() {
 
         {/* stats */}
         {info && (
-          <div className="grid grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Card className="p-4 text-center">
               <Users className="h-5 w-5 mx-auto mb-1.5 text-blue-500" />
               <p className="text-2xl font-bold">{info.referralsMade}</p>

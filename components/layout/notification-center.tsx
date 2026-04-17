@@ -242,7 +242,7 @@ function NotificationCenterContent({ onNavigate }: { onNavigate?: () => void }) 
           <button
             type="button"
             onClick={() => void refreshFeed({ reset: true })}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted/60 transition-colors hover:bg-gray-100 hover:text-navy"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted/60 transition-colors hover:bg-gray-100 hover:text-navy"
             aria-label="Refresh"
           >
             <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
@@ -251,7 +251,7 @@ function NotificationCenterContent({ onNavigate }: { onNavigate?: () => void }) 
           <Link
             href="/settings/notifications"
             onClick={() => { onNavigate?.(); }}
-            className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-muted/60 transition-colors hover:bg-gray-100 hover:text-navy"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted/60 transition-colors hover:bg-gray-100 hover:text-navy"
             aria-label="Notification settings"
           >
             <Settings className="h-3.5 w-3.5" />
@@ -268,7 +268,7 @@ function NotificationCenterContent({ onNavigate }: { onNavigate?: () => void }) 
               type="button"
               onClick={() => setTab(value)}
               className={cn(
-                'rounded-md px-3 py-1 text-[12px] font-semibold transition-all duration-150',
+                'rounded-md px-3 py-2 text-[12px] font-semibold transition-all duration-150',
                 tab === value
                   ? 'bg-white text-navy shadow-sm'
                   : 'text-muted hover:text-navy',
@@ -392,7 +392,7 @@ const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellBut
         ref={ref}
         type="button"
         className={cn(
-          'relative inline-flex h-9 w-9 items-center justify-center rounded-lg p-2 text-muted transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
+          'relative inline-flex h-11 w-11 items-center justify-center rounded-lg p-2.5 text-muted transition-colors hover:bg-primary/10 hover:text-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary',
           className,
         )}
         aria-label={buttonProps['aria-label'] ?? `Notifications${unreadCount > 0 ? ` (${unreadCount} unread)` : ''}`}

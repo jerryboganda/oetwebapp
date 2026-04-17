@@ -17,6 +17,12 @@ import { analytics } from '@/lib/analytics';
 import { postSpeakingDeviceCheck } from '@/lib/api';
 import { SpeakingRecorder, base64ToBlob } from '@/lib/mobile/speaking-recorder';
 
+declare global {
+  interface Window {
+    webkitAudioContext?: typeof AudioContext;
+  }
+}
+
 type CheckStatus = 'pending' | 'checking' | 'success' | 'warning' | 'error';
 
 function MicEnvironmentCheckContent() {
@@ -54,7 +60,7 @@ function MicEnvironmentCheckContent() {
       }
 
       const hasMediaRecorder = typeof window !== 'undefined' && !!window.MediaRecorder;
-      const hasAudioContext = typeof window !== 'undefined' && (!!window.AudioContext || !!(window as any).webkitAudioContext);
+      const hasAudioContext = typeof window !== 'undefined' && (!!window.AudioContext || !!window.webkitAudioContext);
       setIsCompatible(hasMediaRecorder && hasAudioContext);
     };
     checkCompatibility();
@@ -63,7 +69,7 @@ function MicEnvironmentCheckContent() {
   // --- Noise Monitoring ---
   const startNoiseMonitoring = (stream: MediaStream) => {
     if (!audioContextRef.current) {
-      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioContextRef.current = new (window.AudioContext || window.webkitAudioContext!)();
     }
     
     const source = audioContextRef.current.createMediaStreamSource(stream);
@@ -265,7 +271,7 @@ function MicEnvironmentCheckContent() {
 
   return (
     <LearnerDashboardShell pageTitle="Readiness Check">
-      <div className="mx-auto max-w-5xl space-y-6 px-4 py-6">
+      <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Practice"
           icon={Mic}

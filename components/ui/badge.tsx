@@ -83,7 +83,7 @@ export function CriterionChip({ label, active, onClick, className }: { label: st
       type="button"
       onClick={onClick}
       className={cn(
-        'px-3 py-1.5 rounded-full text-xs font-semibold border transition-all duration-200 active:scale-95 shadow-sm',
+        'px-3.5 py-2.5 rounded-full text-xs font-semibold border transition-all duration-200 active:scale-95 shadow-sm',
         active
           ? 'bg-primary text-white border-primary ring-2 ring-primary/20 ring-offset-1'
           : 'bg-surface text-navy border-gray-200/80 hover:border-primary/50 hover:bg-gray-50 hover:text-primary',

@@ -285,7 +285,7 @@ export default function SpeakingHome() {
                     title: group.title,
                     description: 'Open a focused support path, then return to the next role play with one weaker behavior already tightened.',
                     metaItems: [
-                      { label: `${(group.items ?? []).length || 1} exercises` },
+                      { label: (() => { const count = (group.items ?? []).length || 1; return `${count} ${count === 1 ? 'exercise' : 'exercises'}`; })() },
                       { label: 'Speaking support' },
                     ],
                     primaryAction: {

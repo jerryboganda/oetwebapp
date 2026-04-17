@@ -96,9 +96,9 @@ export function PageSkeleton({ className }: { className?: string }) {
             </div>
           </div>
           <div className="flex flex-wrap gap-3">
-            <Skeleton className="h-14 w-44 rounded-2xl" />
-            <Skeleton className="h-14 w-44 rounded-2xl" />
-            <Skeleton className="h-14 w-44 rounded-2xl" />
+            <Skeleton className="h-14 w-full sm:w-44 rounded-2xl" />
+            <Skeleton className="h-14 w-full sm:w-44 rounded-2xl" />
+            <Skeleton className="h-14 w-full sm:w-44 rounded-2xl" />
           </div>
         </div>
       </div>

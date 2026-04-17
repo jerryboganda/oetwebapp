@@ -98,11 +98,11 @@ export default function DiscoverPage() {
           <div className="flex items-center gap-1 text-xs text-muted-foreground mr-2">
             <Filter className="w-3.5 h-3.5" /> Subtest:
           </div>
-          <button onClick={() => changeSubtest('')} className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${!subtestFilter ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+          <button onClick={() => changeSubtest('')} className={`px-3 py-2 rounded-full text-xs font-medium transition-colors ${!subtestFilter ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
             All ({facets.totalPublished})
           </button>
           {facets.subtests.map((f) => (
-            <button key={f.value} onClick={() => changeSubtest(f.value)} className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${subtestFilter === f.value ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+            <button key={f.value} onClick={() => changeSubtest(f.value)} className={`px-3 py-2 rounded-full text-xs font-medium transition-colors ${subtestFilter === f.value ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
               {f.value} ({f.count})
             </button>
           ))}
@@ -110,11 +110,11 @@ export default function DiscoverPage() {
           <div className="flex items-center gap-1 text-xs text-muted-foreground mr-2 ml-4">
             Difficulty:
           </div>
-          <button onClick={() => changeDifficulty('')} className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${!difficultyFilter ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+          <button onClick={() => changeDifficulty('')} className={`px-3 py-2 rounded-full text-xs font-medium transition-colors ${!difficultyFilter ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
             All
           </button>
           {facets.difficulties.map((f) => (
-            <button key={f.value} onClick={() => changeDifficulty(f.value)} className={`px-2.5 py-1 rounded-full text-xs font-medium transition-colors ${difficultyFilter === f.value ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
+            <button key={f.value} onClick={() => changeDifficulty(f.value)} className={`px-3 py-2 rounded-full text-xs font-medium transition-colors ${difficultyFilter === f.value ? 'bg-primary text-primary-foreground' : 'bg-muted text-muted-foreground'}`}>
               {f.value} ({f.count})
             </button>
           ))}

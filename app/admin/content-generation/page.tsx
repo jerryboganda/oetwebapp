@@ -352,7 +352,7 @@ export default function AdminContentGenerationPage() {
                         <button
                           type="button"
                           onClick={() => void inspectJob(result.id)}
-                          className="rounded-lg p-1.5 text-muted transition-colors hover:bg-lavender/40 hover:text-primary dark:hover:bg-surface"
+                          className="rounded-lg p-2.5 -m-1 text-muted transition-colors hover:bg-lavender/40 hover:text-primary dark:hover:bg-surface"
                           title="Refresh job details"
                         >
                           <FileJson2 className="w-4 h-4" />
@@ -361,7 +361,7 @@ export default function AdminContentGenerationPage() {
                           <button
                             type="button"
                             onClick={() => copyToClipboard(result.previewJson, result.id)}
-                            className="rounded-lg p-1.5 text-muted transition-colors hover:bg-lavender/40 hover:text-primary dark:hover:bg-surface"
+                            className="rounded-lg p-2.5 -m-1 text-muted transition-colors hover:bg-lavender/40 hover:text-primary dark:hover:bg-surface"
                             title="Copy JSON"
                           >
                             {copied === result.id ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}

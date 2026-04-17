@@ -89,7 +89,7 @@ export default function CertificatesPage() {
                         {new Date(cert.issuedAt).toLocaleDateString()}
                       </span>
                       {cert.downloadUrl && (
-                        <a href={cert.downloadUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-1.5 text-xs font-semibold hover:bg-muted transition-colors">
+                        <a href={cert.downloadUrl} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 rounded-lg border border-border px-3 py-2.5 text-xs font-semibold hover:bg-muted transition-colors">
                             <Download className="w-3.5 h-3.5" /> Download
                         </a>
                       )}

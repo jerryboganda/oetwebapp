@@ -325,12 +325,12 @@
 .passwordToggle {
   position: absolute;
   top: 50%;
-  right: 0.7rem;
+  right: 0.4rem;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.2rem;
-  height: 2.2rem;
+  width: 2.75rem;
+  height: 2.75rem;
   transform: translateY(-50%);
   border: 0;
   border-radius: 999px;
@@ -954,8 +954,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 2.65rem;
-  height: 2.65rem;
+  width: 2.75rem;
+  height: 2.75rem;
   border-radius: 0.85rem;
   border: 1px solid rgba(117, 131, 178, 0.16);
   background: rgba(255, 255, 255, 0.88);
@@ -1029,6 +1029,12 @@
 
 .linkButton:hover {
   color: var(--auth-accent-strong);
+}
+
+@media (max-width: 640px) {
+  .successContentGrid {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 576px) {

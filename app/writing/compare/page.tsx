@@ -53,7 +53,7 @@ export default function WritingComparePage() {
       <LearnerDashboardShell>
         <div className="space-y-4 p-6">
           <Skeleton className="h-10 w-60" />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <Skeleton className="h-96 w-full rounded-xl" />
             <Skeleton className="h-96 w-full rounded-xl" />
           </div>

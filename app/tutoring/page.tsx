@@ -112,7 +112,7 @@ export default function TutoringPage() {
               required
               className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
             />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <select value={bookForm.examTypeCode} onChange={e => setBookForm(p => ({ ...p, examTypeCode: e.target.value }))} className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300">
                 <option value="oet">OET</option>
                 <option value="ielts">IELTS</option>
@@ -133,7 +133,7 @@ export default function TutoringPage() {
               required
               className="w-full px-3 py-2.5 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-400"
             />
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label className="text-xs text-gray-500 mb-1 block">Duration (minutes)</label>
                 <select value={bookForm.durationMinutes} onChange={e => setBookForm(p => ({ ...p, durationMinutes: Number(e.target.value) }))} className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300">
@@ -193,18 +193,18 @@ export default function TutoringPage() {
               </div>
               {session.state === 'completed' && session.learnerRating === null && (
                 ratingSession === session.id ? (
-                  <div className="flex items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
                     {[1, 2, 3, 4, 5].map(v => (
                       <button key={v} onClick={() => setRatingValue(v)}
-                        className={`w-7 h-7 rounded-full text-sm ${ratingValue >= v ? 'text-yellow-400' : 'text-gray-300'}`}>
+                        className={`w-10 h-10 rounded-full text-sm ${ratingValue >= v ? 'text-yellow-400' : 'text-gray-300'}`}>
                         ★
                       </button>
                     ))}
-                    <button onClick={() => handleRate(session.id)} className="text-xs px-3 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg">Submit</button>
-                    <button onClick={() => setRatingSession(null)} className="text-xs text-gray-400">Cancel</button>
+                    <button onClick={() => handleRate(session.id)} className="text-xs px-3 py-2.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg">Submit</button>
+                    <button onClick={() => setRatingSession(null)} className="text-xs text-gray-400 py-2 px-1">Cancel</button>
                   </div>
                 ) : (
-                  <button onClick={() => setRatingSession(session.id)} className="flex items-center gap-1.5 text-sm text-yellow-500 hover:text-yellow-600 font-medium">
+                  <button onClick={() => setRatingSession(session.id)} className="flex items-center gap-1.5 text-sm text-yellow-500 hover:text-yellow-600 font-medium py-2 px-1">
                     <Star className="w-4 h-4" /> Rate
                   </button>
                 )

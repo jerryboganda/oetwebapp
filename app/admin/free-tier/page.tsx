@@ -312,7 +312,7 @@ export default function FreeTierStrategyPage() {
         )}
 
         {/* save bar */}
-        <div className="sticky bottom-0 bg-background/95 backdrop-blur border-t py-4 -mx-4 px-4">
+        <div className="sticky bottom-[calc(var(--bottom-nav-height)+0.5rem)] lg:bottom-0 bg-background/95 backdrop-blur border-t py-4 -mx-4 px-4">
           <div className="max-w-5xl mx-auto flex items-center justify-between">
             <p className="text-xs text-muted">Changes are applied in real-time for toggles and rollout. Tier limits save separately.</p>
             <Button onClick={saveTierConfig} disabled={saving}>

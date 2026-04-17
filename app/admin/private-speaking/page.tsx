@@ -354,11 +354,11 @@ export default function AdminPrivateSpeakingPage() {
                   </div>
                   <div className="flex items-center gap-2">
                     <button onClick={() => handleToggleTutor(tutor.id, tutor.isActive)}
-                      className={`text-xs px-3 py-1 rounded-lg ${tutor.isActive ? 'bg-danger/10 text-danger hover:bg-danger/15' : 'bg-success/10 text-success hover:bg-success/10'}`}>
+                      className={`text-xs px-3 py-2 rounded-lg ${tutor.isActive ? 'bg-danger/10 text-danger hover:bg-danger/15' : 'bg-success/10 text-success hover:bg-success/10'}`}>
                       {tutor.isActive ? 'Deactivate' : 'Activate'}
                     </button>
                     <button onClick={() => handleLoadAvailability(tutor.id)}
-                      className="text-xs px-3 py-1 bg-lavender/30 dark:bg-surface rounded-lg text-muted dark:text-navy hover:bg-lavender/60">
+                      className="text-xs px-3 py-2 bg-lavender/30 dark:bg-surface rounded-lg text-muted dark:text-navy hover:bg-lavender/60">
                       <Settings className="w-3.5 h-3.5 inline mr-1" /> Availability
                     </button>
                   </div>
@@ -436,14 +436,14 @@ export default function AdminPrivateSpeakingPage() {
                         {(b.status === 'Confirmed' || b.status === 'ZoomCreated') && (
                           <>
                             <button onClick={async () => { await completeAdminPrivateSpeakingBooking(b.id); loadBookings(); }}
-                              className="text-xs px-2 py-1 bg-success/10 text-success rounded hover:bg-success/10">Complete</button>
+                              className="text-xs px-2 py-2 bg-success/10 text-success rounded hover:bg-success/10">Complete</button>
                             <button onClick={async () => { await cancelAdminPrivateSpeakingBooking(b.id, 'Admin cancelled'); loadBookings(); }}
-                              className="text-xs px-2 py-1 bg-danger/10 text-danger rounded hover:bg-danger/15">Cancel</button>
+                              className="text-xs px-2 py-2 bg-danger/10 text-danger rounded hover:bg-danger/15">Cancel</button>
                           </>
                         )}
                         {b.zoomStatus === 'Failed' && (
                           <button onClick={async () => { await retryAdminPrivateSpeakingZoom(b.id); loadBookings(); }}
-                            className="text-xs px-2 py-1 bg-lavender text-primary rounded hover:bg-lavender/60 flex items-center gap-1">
+                            className="text-xs px-2 py-2 bg-lavender text-primary rounded hover:bg-lavender/60 flex items-center gap-1">
                             <RefreshCw className="w-3 h-3" /> Retry Zoom
                           </button>
                         )}

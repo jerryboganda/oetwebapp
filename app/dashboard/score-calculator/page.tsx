@@ -70,7 +70,7 @@ export default function ScoreCalculatorPage() {
   if (loading) {
     return (
       <LearnerDashboardShell>
-        <div className="max-w-3xl mx-auto px-4 py-8 space-y-4">
+        <div className="max-w-3xl mx-auto space-y-4">
           <Skeleton className="h-8 w-64" /><Skeleton className="h-4 w-96" />
           <Skeleton className="h-32" /><Skeleton className="h-64" />
         </div>
@@ -85,7 +85,7 @@ export default function ScoreCalculatorPage() {
         description="Compare OET scores with IELTS, PTE, and CEFR equivalents · Check institution requirements"
       />
 
-      <div className="max-w-3xl mx-auto px-4 pb-12 space-y-8">
+      <div className="max-w-3xl mx-auto space-y-8">
 
         {/* ── Score Input ────────────────────── */}
         <Card className="p-6">

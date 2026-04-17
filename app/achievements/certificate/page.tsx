@@ -57,7 +57,7 @@ export default function CertificatePage() {
   if (loading) {
     return (
       <LearnerDashboardShell>
-        <div className="max-w-3xl mx-auto px-4 py-8 space-y-4">
+        <div className="max-w-3xl mx-auto space-y-4">
           <Skeleton className="h-8 w-48" /><Skeleton className="h-4 w-80" />
           {[1,2,3].map(i => <Skeleton key={i} className="h-32" />)}
         </div>
@@ -72,7 +72,7 @@ export default function CertificatePage() {
         description="Downloadable certificates for study plan milestones, mock exams, and readiness achievements"
       />
 
-      <div className="max-w-3xl mx-auto px-4 pb-12">
+      <div className="max-w-3xl mx-auto">
 
         {/* summary */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-8">

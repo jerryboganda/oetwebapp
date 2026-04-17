@@ -84,7 +84,7 @@ export default function ConversationPage() {
 
   return (
     <LearnerDashboardShell>
-      <div className="mx-auto max-w-6xl space-y-6 px-4 py-6">
+      <div className="space-y-6">
       <LearnerPageHero
         eyebrow="Practice"
         title="AI Conversation Practice"
@@ -101,7 +101,7 @@ export default function ConversationPage() {
         <LearnerSurfaceSectionHeader
           eyebrow="Session builder"
           title="Start a new conversation"
-          description="Keep the launch cards aligned with the rest of the learner dashboard."
+          description="Choose a conversation type to begin practising."
           className="mb-4"
         />
         <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -138,7 +138,7 @@ export default function ConversationPage() {
         <LearnerSurfaceSectionHeader
           eyebrow="History"
           title="Recent conversations"
-          description="Keep the history items on soft surfaces so they match the dashboard language."
+          description="Review and continue your previous practice sessions."
           className="mb-4"
         />
 

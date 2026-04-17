@@ -305,7 +305,7 @@ export default function ExpertPrivateSpeakingPage() {
                     <span className="text-sm text-gray-500 ml-2">{rule.startTime} – {rule.endTime}</span>
                     {rule.effectiveFrom && <span className="text-xs text-gray-400 ml-2">from {rule.effectiveFrom}</span>}
                   </div>
-                  <button onClick={() => handleDeleteRule(rule.id)} className="text-red-400 hover:text-red-600 p-1">
+                  <button onClick={() => handleDeleteRule(rule.id)} className="text-red-400 hover:text-red-600 p-2.5 -m-1">
                     <Trash2 className="w-4 h-4" />
                   </button>
                 </div>

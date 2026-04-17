@@ -102,7 +102,7 @@ export default function WritingDetailedFeedback() {
       {/* Toolbar */}
       <header className="shrink-0 rounded-3xl border border-border bg-surface px-4 py-3 shadow-sm sm:px-6 flex flex-wrap items-center justify-between gap-3 z-10">
         <div className="flex min-w-0 items-center gap-3 sm:gap-4">
-          <Link href={`/writing/result?id=${resultId}`} className="text-muted transition-colors hover:text-navy"><ChevronLeft className="w-5 h-5" /></Link>
+          <Link href={`/writing/result?id=${resultId}`} className="text-muted transition-colors hover:text-navy p-2 -m-2 touch-target"><ChevronLeft className="w-5 h-5" /></Link>
           <div className="min-w-0">
             <h1 className="font-bold text-lg leading-tight text-navy">Detailed Feedback</h1>
             <div className="truncate text-xs text-muted">{result.taskTitle}</div>

@@ -143,7 +143,7 @@ export default function EscalationsPage() {
     },
     { key: 'finalScore', header: 'Final', render: (e) => e.finalScore != null ? <span className="font-mono font-semibold">{e.finalScore}</span> : <span className="text-muted">—</span> },
     {
-      key: 'actions' as any,
+      key: 'actions',
       header: '',
       render: (e) => (
         <div className="flex gap-1">

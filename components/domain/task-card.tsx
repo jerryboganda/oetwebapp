@@ -81,7 +81,7 @@ export function SubmissionCard({
             {reviewStatus && <span className="text-primary font-semibold">{reviewStatus}</span>}
           </div>
         </div>
-        <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
           {onViewFeedback && <Button size="sm" variant="outline" onClick={onViewFeedback}>View Feedback</Button>}
           {onRequestReview && <Button size="sm" variant="ghost" onClick={onRequestReview}>Request Review</Button>}
         </div>

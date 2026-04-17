@@ -278,7 +278,7 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
                 <>
                   {/* Status pipeline stepper */}
                   {!isNew && contentId ? (
-                    <div className="flex items-center gap-1 text-xs mr-2">
+                    <div className="flex flex-wrap items-center gap-1 text-xs mr-2">
                       {(['Draft', 'EditorReview', 'PublisherApproval', 'Published'] as const).map((step, i) => {
                         const labels: Record<string, string> = { Draft: 'Draft', EditorReview: 'Editor', PublisherApproval: 'Publisher', Published: 'Published' };
                         const isActive = contentStatus === step;

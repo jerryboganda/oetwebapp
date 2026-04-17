@@ -48,7 +48,7 @@ export function Stepper({ steps, currentStep, className, orientation = 'horizont
                 layout
                 transition={springTransition}
                 className={cn(
-                  'w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold shrink-0',
+                  'w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold shrink-0',
                   isComplete && 'bg-primary text-white',
                   isCurrent && 'bg-primary/10 text-primary border-2 border-primary',
                   isUpcoming && 'bg-gray-100 text-muted border border-gray-200',

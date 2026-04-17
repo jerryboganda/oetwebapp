@@ -46,7 +46,7 @@ export default function BillingUpgradePage() {
     <LearnerDashboardShell>
       <LearnerPageHero title="Plan Comparison" description="Compare plans and find the best fit for your OET preparation goals." />
 
-      <MotionSection className="px-4 py-6 space-y-6 max-w-5xl mx-auto">
+      <MotionSection className="space-y-6 max-w-5xl mx-auto">
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-64 rounded-xl" />)}</div>
         ) : data ? (

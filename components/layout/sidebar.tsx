@@ -231,7 +231,7 @@ export function Sidebar({
             {visibleStreak !== null && (
               <Link
                 href="/achievements"
-                className="flex items-center gap-1 rounded-full bg-orange-500 px-2.5 py-1 text-xs font-bold text-white shadow-sm transition-colors hover:bg-orange-600 dark:bg-orange-600 dark:text-white dark:hover:bg-orange-500"
+                className="flex items-center gap-1 rounded-full bg-orange-500 px-2.5 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-orange-600 dark:bg-orange-600 dark:text-white dark:hover:bg-orange-500"
               >
                 <Flame className="w-3.5 h-3.5" />
                 {visibleStreak}d
@@ -240,7 +240,7 @@ export function Sidebar({
             {visibleLevel !== null && (
               <Link
                 href="/achievements"
-                className="flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-1 text-xs font-bold text-white shadow-sm transition-colors hover:bg-amber-600 dark:bg-amber-600 dark:text-white dark:hover:bg-amber-500"
+                className="flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-amber-600 dark:bg-amber-600 dark:text-white dark:hover:bg-amber-500"
               >
                 <Zap className="w-3.5 h-3.5" />
                 Lv.{visibleLevel}

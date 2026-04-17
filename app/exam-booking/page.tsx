@@ -113,7 +113,7 @@ export default function ExamBookingPage() {
         <MotionSection className="bg-white dark:bg-gray-800 rounded-xl border border-violet-200 dark:border-violet-700 p-5 mb-6">
           <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Add Exam Booking</h3>
           <form onSubmit={handleCreate} className="space-y-3">
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <select value={form.examTypeCode} onChange={e => setForm(p => ({ ...p, examTypeCode: e.target.value }))} className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300">
                 <option value="oet">OET</option>
                 <option value="ielts">IELTS</option>
@@ -170,11 +170,11 @@ export default function ExamBookingPage() {
                       </div>
                       <div className="flex items-center gap-2">
                         {booking.externalUrl && (
-                          <a href={booking.externalUrl} target="_blank" rel="noopener noreferrer" className="p-1.5 text-gray-400 hover:text-violet-600 transition-colors">
+                          <a href={booking.externalUrl} target="_blank" rel="noopener noreferrer" className="p-2.5 -m-1 text-gray-400 hover:text-violet-600 transition-colors">
                             <ExternalLink className="w-4 h-4" />
                           </a>
                         )}
-                        <button onClick={() => handleDelete(booking.id)} disabled={deleting === booking.id} className="p-1.5 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-40">
+                        <button onClick={() => handleDelete(booking.id)} disabled={deleting === booking.id} className="p-2.5 -m-1 text-gray-400 hover:text-red-500 transition-colors disabled:opacity-40">
                           <Trash2 className="w-4 h-4" />
                         </button>
                       </div>

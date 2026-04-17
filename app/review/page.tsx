@@ -88,7 +88,7 @@ export default function ReviewPage() {
   if (loading) {
     return (
       <LearnerDashboardShell>
-        <div className="mx-auto max-w-6xl space-y-6 px-4 py-6">
+        <div className="space-y-6">
         <LearnerPageHero eyebrow="Learn" title="Spaced Repetition Review" description="Review your weak areas with smart scheduling." icon={Brain} highlights={heroHighlights} />
         <div className="space-y-4">
           {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-3xl" />)}
@@ -100,7 +100,7 @@ export default function ReviewPage() {
 
   return (
     <LearnerDashboardShell>
-      <div className="mx-auto max-w-6xl space-y-6 px-4 py-6">
+      <div className="space-y-6">
       <LearnerPageHero
         eyebrow="Learn"
         title="Spaced Repetition Review"

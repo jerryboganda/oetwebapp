@@ -263,12 +263,12 @@ export default function PrivateSpeakingPage() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-5">
             <div className="flex items-center gap-2">
               <button onClick={() => setWeekOffset(Math.max(0, weekOffset - 1))} disabled={weekOffset === 0}
-                className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 transition-colors">
+                className="p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 transition-colors">
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <span className="text-sm font-medium text-gray-700 dark:text-gray-300 min-w-[200px] text-center">{weekLabel}</span>
               <button onClick={() => setWeekOffset(weekOffset + 1)}
-                className="p-1.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                className="p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
@@ -349,7 +349,7 @@ export default function PrivateSpeakingPage() {
 
           {/* Booking confirmation panel */}
           {selectedSlot && (
-            <MotionSection className="fixed bottom-20 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md bg-white dark:bg-gray-800 rounded-xl border border-indigo-200 dark:border-indigo-700 shadow-2xl p-5 z-40">
+            <MotionSection className="fixed bottom-[calc(var(--bottom-nav-height)+0.5rem)] lg:bottom-6 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md bg-white dark:bg-gray-800 rounded-xl border border-indigo-200 dark:border-indigo-700 shadow-2xl p-5 z-40">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="font-semibold text-gray-900 dark:text-white">Confirm Booking</h3>
                 <button onClick={() => setSelectedSlot(null)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
@@ -428,19 +428,19 @@ export default function PrivateSpeakingPage() {
                       {/* Rating */}
                       {booking.status === 'Completed' && booking.learnerRating === null && (
                         ratingSession === booking.id ? (
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             {[1, 2, 3, 4, 5].map(v => (
                               <button key={v} onClick={() => setRatingValue(v)}
-                                className={`w-7 h-7 rounded-full text-sm ${ratingValue >= v ? 'text-yellow-400' : 'text-gray-300'}`}>★</button>
+                                className={`w-10 h-10 rounded-full text-sm ${ratingValue >= v ? 'text-yellow-400' : 'text-gray-300'}`}>★</button>
                             ))}
                             <input type="text" placeholder="Feedback" value={ratingFeedback}
                               onChange={e => setRatingFeedback(e.target.value)}
                               className="px-2 py-1 border border-gray-200 dark:border-gray-700 rounded text-xs w-24" />
-                            <button onClick={() => handleRate(booking.id)} className="text-xs px-3 py-1.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg">Submit</button>
-                            <button onClick={() => setRatingSession(null)} className="text-xs text-gray-400">Cancel</button>
+                            <button onClick={() => handleRate(booking.id)} className="text-xs px-3 py-2.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg">Submit</button>
+                            <button onClick={() => setRatingSession(null)} className="text-xs text-gray-400 py-2 px-1">Cancel</button>
                           </div>
                         ) : (
-                          <button onClick={() => setRatingSession(booking.id)} className="flex items-center gap-1.5 text-sm text-yellow-500 hover:text-yellow-600 font-medium">
+                          <button onClick={() => setRatingSession(booking.id)} className="flex items-center gap-1.5 text-sm text-yellow-500 hover:text-yellow-600 font-medium py-2 px-1">
                             <Star className="w-4 h-4" /> Rate
                           </button>
                         )

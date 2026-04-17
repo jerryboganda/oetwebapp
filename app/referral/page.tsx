@@ -127,7 +127,7 @@ export default function ReferralPage() {
 
           {/* Stats */}
           <MotionSection className="mt-6">
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <MotionItem>
                 <Card className="p-4 text-center">
                   <p className="text-xs text-gray-500 dark:text-gray-400">Total Referrals</p>

@@ -91,7 +91,7 @@ export default function MockCenter() {
 
   return (
     <LearnerDashboardShell pageTitle="Mock Center" subtitle="Your hub for full exams, sub-test practice, and expert reviews.">
-      <div className="space-y-10 pb-24">
+      <div className="space-y-10">
         <LearnerPageHero
           eyebrow="Module Focus"
           icon={Layers}

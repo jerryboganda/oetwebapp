@@ -42,7 +42,7 @@ export default function ExamSimulationPage() {
     <LearnerDashboardShell>
       <LearnerPageHero title="Exam Simulation Mode" description="Practice under real exam conditions — strict timing, no pauses, sequential subtests." />
 
-      <MotionSection className="px-4 py-6 space-y-6 max-w-4xl mx-auto">
+      <MotionSection className="space-y-6">
         {loading ? (
           <div className="space-y-4">{Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)}</div>
         ) : config ? (

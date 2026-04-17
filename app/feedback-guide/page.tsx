@@ -44,7 +44,7 @@ export default function FeedbackGuidePage() {
         highlights={heroHighlights}
       />
 
-      <MotionSection className="mx-auto max-w-5xl space-y-6 px-4 py-6">
+      <MotionSection className="space-y-6">
         <LearnerSurfaceSectionHeader
           eyebrow="Writing criteria"
           title="How writing feedback is scored"

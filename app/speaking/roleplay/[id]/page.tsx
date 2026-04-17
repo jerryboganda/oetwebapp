@@ -46,7 +46,7 @@ export default function RoleCardPreview() {
   if (loading) {
     return (
       <AppShell pageTitle="Role Card">
-        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-8">
+        <div className="px-4 sm:px-6 lg:px-8 grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-8">
           <Skeleton className="h-[280px] rounded-xl sm:h-[340px] lg:h-96" />
           <Skeleton className="h-[280px] rounded-xl sm:h-[340px] lg:h-96" />
         </div>
@@ -57,7 +57,7 @@ export default function RoleCardPreview() {
   if (!card) {
     return (
       <AppShell pageTitle="Role Card">
-        <InlineAlert variant="error">Role card not found for this task.</InlineAlert>
+        <div className="px-4 sm:px-6 lg:px-8"><InlineAlert variant="error">Role card not found for this task.</InlineAlert></div>
       </AppShell>
     );
   }
@@ -76,7 +76,7 @@ export default function RoleCardPreview() {
         />
       }
     >
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+      <div className="px-4 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
         {/* Left: Role Card */}
         <section className="flex flex-col">
           <div className="flex items-center gap-2 mb-4">
@@ -140,7 +140,7 @@ export default function RoleCardPreview() {
             <Card className="p-6 space-y-6">
               <div className="space-y-3">
                 <h4 className="text-xs font-bold text-muted uppercase tracking-widest">Practice Mode</h4>
-                <div className="grid grid-cols-3 gap-2">
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {([
                     { id: 'self', label: 'Guided Self-Practice', icon: User, color: 'text-purple-600', bg: 'bg-purple-50' },
                     { id: 'exam', label: 'Simulation', icon: ShieldCheck, color: 'text-amber-600', bg: 'bg-amber-50' },

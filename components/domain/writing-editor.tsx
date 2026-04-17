@@ -68,7 +68,7 @@ export function WritingEditor({
           {onFontSizeChange && showFontSizeControls ? (
             <div className="flex items-center gap-1">
               <button
-                className="rounded border border-gray-200 px-2 py-0.5 text-xs transition-[background-color,border-color,color,transform] duration-150 hover:bg-gray-100 active:scale-[0.98] disabled:opacity-50"
+                className="flex items-center justify-center rounded border border-gray-200 min-w-[2.75rem] min-h-[2.75rem] px-3 py-2 text-xs transition-[background-color,border-color,color,transform] duration-150 hover:bg-gray-100 active:scale-[0.98] disabled:opacity-50"
                 onClick={() => onFontSizeChange(Math.max(12, fontSize - 2))}
                 disabled={fontSize <= 12}
                 aria-label="Decrease font size"
@@ -77,7 +77,7 @@ export function WritingEditor({
               </button>
               <span className="w-8 text-center text-xs text-muted">{fontSize}</span>
               <button
-                className="rounded border border-gray-200 px-2 py-0.5 text-xs transition-[background-color,border-color,color,transform] duration-150 hover:bg-gray-100 active:scale-[0.98] disabled:opacity-50"
+                className="flex items-center justify-center rounded border border-gray-200 min-w-[2.75rem] min-h-[2.75rem] px-3 py-2 text-xs transition-[background-color,border-color,color,transform] duration-150 hover:bg-gray-100 active:scale-[0.98] disabled:opacity-50"
                 onClick={() => onFontSizeChange(Math.min(24, fontSize + 2))}
                 disabled={fontSize >= 24}
                 aria-label="Increase font size"

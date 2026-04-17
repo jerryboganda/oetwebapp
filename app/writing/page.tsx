@@ -72,6 +72,7 @@ export default function WritingHome() {
     });
   }, []);
 
+  const hasActiveFilters = Object.values(filters).some(arr => arr && arr.length > 0);
   const filteredTasks = tasks.filter((t) => {
     if (filters.profession?.length && !filters.profession.includes(t.profession)) return false;
     if (filters.difficulty?.length && !filters.difficulty.includes(t.difficulty)) return false;
@@ -224,7 +225,7 @@ export default function WritingHome() {
                 <motion.div key="practice" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="divide-y divide-gray-100">
                   {filteredTasks.length === 0 ? (
                     <div className="p-10">
-                      <EmptyState title="No tasks match your filters" description="Try removing some filters to see more tasks." />
+                      <EmptyState title={hasActiveFilters ? 'No tasks match your filters' : 'No practice tasks available'} description={hasActiveFilters ? 'Try removing some filters to see more tasks.' : 'Check back later for new writing tasks.'} />
                     </div>
                   ) : filteredTasks.map((task) => (
                     <div key={task.id} className="p-5 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer"
@@ -247,7 +248,7 @@ export default function WritingHome() {
                 <motion.div key="drills" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="divide-y divide-gray-100">
                   {filteredTasks.length === 0 ? (
                     <div className="p-10">
-                      <EmptyState title="No drills match your filters" description="Try removing some filters to see more drills." />
+                      <EmptyState title={hasActiveFilters ? 'No drills match your filters' : 'No criterion drills available'} description={hasActiveFilters ? 'Try removing some filters to see more drills.' : 'Check back later for new criterion drills.'} />
                     </div>
                   ) : filteredTasks.map((task) => (
                     <div key={task.id} className="p-5 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer">

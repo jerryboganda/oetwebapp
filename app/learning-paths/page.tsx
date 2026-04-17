@@ -74,7 +74,7 @@ export default function LearningPathsPage() {
       <LearnerDashboardShell>
         <div className="space-y-4 p-6">
           <Skeleton className="h-10 w-60" />
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             {[1, 2, 3, 4].map((i) => <Skeleton key={i} className="h-40 rounded-xl" />)}
           </div>
         </div>

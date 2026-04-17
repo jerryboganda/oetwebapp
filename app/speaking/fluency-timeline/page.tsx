@@ -57,7 +57,7 @@ export default function FluencyTimelinePage() {
     <LearnerDashboardShell>
       <LearnerPageHero title="Fluency Timeline" description="Visualize your speaking pace, pauses, and filler words across the recording." />
 
-      <MotionSection className="px-4 py-6 space-y-6 max-w-5xl mx-auto">
+      <MotionSection className="space-y-6 max-w-5xl mx-auto">
         <div className="flex gap-3 items-end">
           <div className="flex-1">
             <label className="text-sm font-medium text-muted-foreground mb-1 block">Speaking Attempt ID</label>
@@ -66,7 +66,7 @@ export default function FluencyTimelinePage() {
           <button onClick={() => load(attemptId)} className="px-4 py-2 bg-primary text-primary-foreground rounded-lg text-sm font-medium hover:bg-primary/90">Analyze</button>
         </div>
 
-        {loading && !data && <div className="grid grid-cols-4 gap-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>}
+        {loading && !data && <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>}
 
         {data && (
           <>

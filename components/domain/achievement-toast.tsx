@@ -39,7 +39,7 @@ export function AchievementToast({
       {visible && (
         <motion.div
           {...getCelebrateMotion()}
-          className="fixed top-4 right-4 z-[100] max-w-sm"
+          className="fixed top-4 left-4 right-4 sm:left-auto sm:right-4 z-[100] sm:max-w-sm"
         >
           <div className="relative overflow-hidden rounded-2xl border border-yellow-200/60 bg-gradient-to-br from-yellow-50 via-amber-50 to-orange-50 p-4 shadow-xl shadow-yellow-500/10 dark:border-yellow-800/40 dark:from-yellow-950/80 dark:via-amber-950/80 dark:to-orange-950/80">
             {/* Decorative sparkle */}
@@ -83,7 +83,7 @@ export function AchievementToast({
               <button
                 type="button"
                 onClick={handleDismiss}
-                className="shrink-0 rounded-lg p-1 text-gray-400 transition-colors hover:bg-yellow-100 hover:text-gray-600 dark:hover:bg-yellow-900/30"
+                className="shrink-0 rounded-lg p-2.5 -m-1 text-gray-400 transition-colors hover:bg-yellow-100 hover:text-gray-600 dark:hover:bg-yellow-900/30"
                 aria-label="Dismiss achievement notification"
               >
                 <X className="h-4 w-4" />
