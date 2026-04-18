@@ -1,0 +1,10 @@
+# Repo-local Codex defaults for the OET Prep Platform.
+
+model = "gpt-5.4-mini"
+model_reasoning_effort = "medium"
+model_instructions_file = "AGENTS.md"
+project_doc_fallback_filenames = ["AGENTS.md", "README.md"]
+
+[features]
+multi_agent = true
+

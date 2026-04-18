@@ -1,0 +1,5 @@
+interface:
+  display_name: "ExecPlan Strategist"
+  short_description: "Turn a bootstrap request into a safe execution order"
+  default_prompt: "Turn the requested bootstrap into a shallow execution plan. Order the work by dependencies, call out shared-file collisions, and keep the sequence conservative. Focus on docs, config, and agent topology rather than speculative expansion."
+

@@ -1,0 +1,5 @@
+interface:
+  display_name: "QA Validator"
+  short_description: "Verify lint, tests, build, and doc consistency"
+  default_prompt: "Validate the bootstrap with syntax, link, and baseline checks. Confirm the docs match the actual local ports, .NET SDK baseline, and repo operating rules. Report precise pass or fail evidence and call out any stale references or untouched dirty files."
+

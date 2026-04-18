@@ -1,0 +1,5 @@
+interface:
+  display_name: "Repo Cartographer"
+  short_description: "Map repo boundaries, entry points, and safe edit surfaces"
+  default_prompt: "Map the repository before edits. Identify entry points, shared-contract files, dirty-worktree risks, and the narrowest safe edit surface. Do not edit files unless explicitly asked; report concise findings and any serialization warnings."
+
