@@ -29,6 +29,7 @@ import {
   ReadinessMeter,
   WeakestLinkCard,
 } from '@/components/domain';
+import { AiUsageWidget } from '@/components/domain/AiUsageWidget';
 import { AsyncStateWrapper } from '@/components/state';
 import { useDashboardHome } from '@/lib/hooks/use-dashboard-home';
 import type { SubTest } from '@/lib/mock-data';
@@ -333,6 +334,8 @@ export default function Dashboard() {
                   description={readiness.blockers[0].description}
                 />
               ) : null}
+
+              <AiUsageWidget />
 
               {engagement ? (
                 <Card>

@@ -38,9 +38,11 @@ export function hasPermission(
  */
 export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/content': [AdminPermission.ContentRead],
+  '/admin/content-papers': [AdminPermission.ContentRead],
   '/admin/taxonomy': [AdminPermission.ContentRead],
   '/admin/criteria': [AdminPermission.ContentRead],
   '/admin/ai-config': [AdminPermission.AiConfig],
+  '/admin/ai-usage': [AdminPermission.AiConfig],
   '/admin/review-ops': [AdminPermission.ReviewOps],
   '/admin/notifications': [AdminPermission.SystemAdmin],
   '/admin/analytics/quality': [AdminPermission.QualityAnalytics],

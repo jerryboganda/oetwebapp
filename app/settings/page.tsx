@@ -13,6 +13,7 @@ import {
   Volume2,
   Calendar,
   Settings as SettingsIcon,
+  Cpu,
   Trash2,
   MonitorSmartphone,
 } from 'lucide-react';
@@ -61,6 +62,7 @@ const settingsGroups: SettingGroup[] = [
     items: [
       { id: 'notifications', title: 'Notifications', description: 'Choose what alerts and emails you receive', icon: Bell, type: 'link' },
       { id: 'audio', title: 'Audio Preferences', description: 'Manage playback speed, volume, and transcripts', icon: Volume2, type: 'link' },
+      { id: 'ai', title: 'AI', description: 'Connect your own OpenAI / Anthropic / OpenRouter key, or use platform credits', icon: Cpu, type: 'link' },
     ],
   },
   {

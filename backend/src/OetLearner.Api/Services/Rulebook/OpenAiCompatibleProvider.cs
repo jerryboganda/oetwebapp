@@ -24,14 +24,19 @@ public sealed class OpenAiCompatibleProvider(
 
     public async Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(_options.BaseUrl))
+        var baseUrl = string.IsNullOrWhiteSpace(request.BaseUrlOverride)
+            ? _options.BaseUrl : request.BaseUrlOverride;
+        var apiKey = string.IsNullOrWhiteSpace(request.ApiKeyOverride)
+            ? _options.ApiKey : request.ApiKeyOverride;
+
+        if (string.IsNullOrWhiteSpace(baseUrl))
             throw new InvalidOperationException($"{AiProviderOptions.SectionName}:BaseUrl is not configured.");
-        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+        if (string.IsNullOrWhiteSpace(apiKey))
             throw new InvalidOperationException($"{AiProviderOptions.SectionName}:ApiKey is not configured.");
 
         var client = httpClientFactory.CreateClient("AiOpenAiCompatible");
-        client.BaseAddress = new Uri(_options.BaseUrl.TrimEnd('/') + "/");
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _options.ApiKey);
+        client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
         var payload = new
         {

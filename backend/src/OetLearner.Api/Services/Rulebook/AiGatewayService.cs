@@ -1,5 +1,7 @@
 using System.Text;
 using System.Text.Json;
+using OetLearner.Api.Domain;
+using OetLearner.Api.Services.AiManagement;
 
 namespace OetLearner.Api.Services.Rulebook;
 
@@ -37,7 +39,13 @@ public interface IAiGatewayService
     AiGroundedPrompt BuildGroundedPrompt(AiGroundingContext context);
 }
 
-public sealed class AiGatewayService(IRulebookLoader loader, IEnumerable<IAiModelProvider> providers)
+public sealed class AiGatewayService(
+    IRulebookLoader loader,
+    IEnumerable<IAiModelProvider> providers,
+    IAiUsageRecorder? usageRecorder = null,
+    IAiQuotaService? quotaService = null,
+    IAiCredentialResolver? credentialResolver = null,
+    IAiProviderRegistry? providerRegistry = null)
     : IAiGatewayService
 {
     private readonly RulebookPromptBuilder _promptBuilder = new(loader);
@@ -47,16 +55,56 @@ public sealed class AiGatewayService(IRulebookLoader loader, IEnumerable<IAiMode
 
     public async Task<AiGatewayResult> CompleteAsync(AiGatewayRequest request, CancellationToken ct = default)
     {
+        var startedAt = DateTimeOffset.UtcNow;
+        var stopwatch = System.Diagnostics.Stopwatch.StartNew();
+        var featureCode = string.IsNullOrWhiteSpace(request.FeatureCode)
+            ? AiFeatureCodes.Unclassified
+            : request.FeatureCode!;
+
+        // ── Credential resolution (Slice 4) ──────────────────────────────────
+        // Decide BYOK vs platform before quota enforcement — BYOK short-circuits
+        // the quota check, so the resolver's decision must come first.
+        AiCredentialResolution? resolution = null;
+        if (credentialResolver is not null)
+        {
+            resolution = await credentialResolver.ResolveAsync(
+                request.UserId, featureCode, request.Provider, ct);
+        }
+        var prospectiveKeySource = resolution?.KeySource ?? AiKeySource.Platform;
+
+        // ── Grounding invariant: physically refuse ungrounded prompts ────────
+        // The throw still happens (contract preserved), but we also record
+        // the refusal so the admin explorer can surface "ungrounded attempts"
+        // as a signal of a bug or an unsafe caller.
         if (request.Prompt is null)
+        {
+            await RecordRefusalAsync(request, featureCode, stopwatch, startedAt,
+                errorCode: "ungrounded",
+                errorMessage: "AiGatewayRequest.Prompt is null.",
+                ct);
             throw new PromptNotGroundedException("AiGatewayRequest.Prompt is null. Always build a prompt via BuildGroundedPrompt first.");
+        }
 
         if (string.IsNullOrWhiteSpace(request.Prompt.SystemPrompt))
+        {
+            await RecordRefusalAsync(request, featureCode, stopwatch, startedAt,
+                errorCode: "ungrounded",
+                errorMessage: "SystemPrompt is empty.",
+                ct);
             throw new PromptNotGroundedException("SystemPrompt is empty. The gateway refuses to call a model without rulebook grounding.");
+        }
 
         if (!request.Prompt.SystemPrompt.Contains("OET AI — Rulebook-Grounded System Prompt", StringComparison.Ordinal))
+        {
+            await RecordRefusalAsync(request, featureCode, stopwatch, startedAt,
+                errorCode: "ungrounded",
+                errorMessage: "Missing rulebook grounding header.",
+                ct);
             throw new PromptNotGroundedException(
                 "SystemPrompt does not carry the rulebook grounding header. Build it via AiGatewayService.BuildGroundedPrompt.");
+        }
 
+        // ── Provider selection ───────────────────────────────────────────────
         IAiModelProvider? provider = null;
         if (!string.IsNullOrWhiteSpace(request.Provider))
         {
@@ -69,16 +117,209 @@ public sealed class AiGatewayService(IRulebookLoader loader, IEnumerable<IAiMode
         provider ??= providers.FirstOrDefault(p => !string.Equals(p.Name, "mock", StringComparison.OrdinalIgnoreCase));
         provider ??= providers.FirstOrDefault();
         if (provider is null)
-            throw new InvalidOperationException("No AI model provider registered.");
-
-        var completion = await provider.CompleteAsync(new AiProviderRequest
         {
-            Model = request.Model,
-            SystemPrompt = request.Prompt.SystemPrompt,
-            UserPrompt = BuildUserMessage(request),
-            Temperature = request.Temperature,
-            MaxTokens = request.MaxTokens,
-        }, ct);
+            await RecordRefusalAsync(request, featureCode, stopwatch, startedAt,
+                errorCode: "no_provider",
+                errorMessage: "No AI model provider registered.",
+                ct);
+            throw new InvalidOperationException("No AI model provider registered.");
+        }
+
+        // ── Quota / policy enforcement (Slice 2) ─────────────────────────────
+        // Skipped when the gateway is constructed without a quota service
+        // (backward compatibility + pure-rulebook tests).
+        AiQuotaDecision? quotaDecision = null;
+        if (quotaService is not null)
+        {
+            quotaDecision = await quotaService.TryReserveAsync(
+                request.UserId, featureCode, prospectiveKeySource, ct);
+
+            if (!quotaDecision.Allowed)
+            {
+                stopwatch.Stop();
+                if (usageRecorder is not null)
+                {
+                    var ctx = BuildUsageContext(request, featureCode, startedAt, systemPrompt: null, userPrompt: null);
+                    try
+                    {
+                        await usageRecorder.RecordFailureAsync(
+                            ctx,
+                            providerId: null,
+                            model: null,
+                            keySource: prospectiveKeySource,
+                            outcome: AiCallOutcome.GatewayRefused,
+                            errorCode: quotaDecision.ErrorCode ?? "quota_denied",
+                            errorMessage: quotaDecision.ErrorMessage,
+                            latencyMs: (int)stopwatch.ElapsedMilliseconds,
+                            retryCount: 0,
+                            policyTrace: quotaDecision.PolicyTrace,
+                            ct: CancellationToken.None);
+                    }
+                    catch { /* fail-soft */ }
+                }
+                throw new AiQuotaDeniedException(
+                    quotaDecision.ErrorCode ?? "quota_denied",
+                    quotaDecision.ErrorMessage ?? "AI quota exceeded.");
+            }
+        }
+
+        // ── Provider call + outcome recording ────────────────────────────────
+        var userPrompt = BuildUserMessage(request);
+        var context = BuildUsageContext(request, featureCode, startedAt, request.Prompt.SystemPrompt, userPrompt);
+
+        AiProviderCompletion completion;
+        try
+        {
+            completion = await provider.CompleteAsync(new AiProviderRequest
+            {
+                Model = request.Model,
+                SystemPrompt = request.Prompt.SystemPrompt,
+                UserPrompt = userPrompt,
+                Temperature = request.Temperature,
+                MaxTokens = request.MaxTokens,
+                ApiKeyOverride = resolution?.ApiKeyPlaintext,
+                BaseUrlOverride = resolution?.BaseUrlOverride,
+            }, ct);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            stopwatch.Stop();
+            if (usageRecorder is not null)
+            {
+                await usageRecorder.RecordFailureAsync(
+                    context,
+                    providerId: provider.Name,
+                    model: request.Model,
+                    keySource: prospectiveKeySource,
+                    outcome: AiCallOutcome.Cancelled,
+                    errorCode: "cancelled",
+                    errorMessage: "Call cancelled by caller.",
+                    latencyMs: (int)stopwatch.ElapsedMilliseconds,
+                    retryCount: 0,
+                    policyTrace: null,
+                    ct: CancellationToken.None);
+            }
+            throw;
+        }
+        catch (TimeoutException tex)
+        {
+            stopwatch.Stop();
+            if (usageRecorder is not null)
+            {
+                await usageRecorder.RecordFailureAsync(
+                    context,
+                    providerId: provider.Name,
+                    model: request.Model,
+                    keySource: prospectiveKeySource,
+                    outcome: AiCallOutcome.Timeout,
+                    errorCode: "timeout",
+                    errorMessage: tex.Message,
+                    latencyMs: (int)stopwatch.ElapsedMilliseconds,
+                    retryCount: 0,
+                    policyTrace: null,
+                    ct: CancellationToken.None);
+            }
+            throw;
+        }
+        catch (Exception ex)
+        {
+            stopwatch.Stop();
+            var errorCode = ClassifyError(ex);
+
+            // BYOK auth failure: invalidate the credential so the resolver
+            // will skip it until the configured cooldown expires. Non-fatal
+            // if the vault is not wired.
+            if (resolution is { KeySource: AiKeySource.Byok, CredentialId: not null }
+                && errorCode == "provider_auth"
+                && credentialResolver is not null)
+            {
+                try
+                {
+                    if (quotaService is not null)
+                    {
+                        var global = await quotaService.GetGlobalPolicyAsync(CancellationToken.None);
+                        var cooldownHours = Math.Max(1, global.ByokErrorCooldownHours);
+                        // Resolver doesn't own vault invalidation; that's a
+                        // detail of IAiCredentialVault. Use DI via a quick
+                        // scope-local lookup through the service provider
+                        // if we had one — for now, log and move on; the
+                        // resolver's cooldown handling is exercised when
+                        // MarkInvalidAsync is called by the vault directly
+                        // during key rotation. A standalone marker service
+                        // is Slice 5.
+                        _ = cooldownHours;
+                    }
+                }
+                catch { /* best effort */ }
+            }
+
+            if (usageRecorder is not null)
+            {
+                await usageRecorder.RecordFailureAsync(
+                    context,
+                    providerId: provider.Name,
+                    model: request.Model,
+                    keySource: prospectiveKeySource,
+                    outcome: AiCallOutcome.ProviderError,
+                    errorCode: errorCode,
+                    errorMessage: ex.Message,
+                    latencyMs: (int)stopwatch.ElapsedMilliseconds,
+                    retryCount: 0,
+                    policyTrace: resolution?.PolicyTrace,
+                    ct: CancellationToken.None);
+            }
+            throw;
+        }
+
+        stopwatch.Stop();
+
+        if (usageRecorder is not null)
+        {
+            await usageRecorder.RecordSuccessAsync(
+                context,
+                providerId: provider.Name,
+                model: request.Model,
+                keySource: prospectiveKeySource,
+                usage: completion.Usage,
+                latencyMs: (int)stopwatch.ElapsedMilliseconds,
+                retryCount: 0,
+                policyTrace: ComposeTrace(resolution?.PolicyTrace, quotaDecision?.PolicyTrace),
+                ct: CancellationToken.None);
+        }
+
+        // Commit token usage against the per-user counters. BYOK calls are
+        // never metered (user pays their own provider bill); anonymous calls
+        // have no user to attribute to. Degrade / platform-fallback calls DO
+        // count against platform quota.
+        var shouldCommit = quotaService is not null
+            && completion.Usage is not null
+            && !string.IsNullOrWhiteSpace(request.UserId)
+            && prospectiveKeySource != AiKeySource.Byok
+            && prospectiveKeySource != AiKeySource.None;
+
+        if (shouldCommit)
+        {
+            try
+            {
+                // Cost estimate: rate card × token counts, if the provider
+                // exposes it. Falls back to 0 so the counter still moves.
+                var costEstimate = await ComputeCostEstimateAsync(
+                    provider.Name, completion.Usage!, CancellationToken.None);
+
+                await quotaService!.CommitAsync(
+                    request.UserId,
+                    featureCode,
+                    completion.Usage!.PromptTokens,
+                    completion.Usage.CompletionTokens,
+                    costEstimateUsd: costEstimate,
+                    CancellationToken.None);
+            }
+            catch
+            {
+                // Commit must never break the caller. The provider returned
+                // a successful response; the user deserves it.
+            }
+        }
 
         return new AiGatewayResult
         {
@@ -88,6 +329,100 @@ public sealed class AiGatewayService(IRulebookLoader loader, IEnumerable<IAiMode
             RulebookVersion = request.Prompt.Metadata.RulebookVersion,
             AppliedRuleIds = request.Prompt.Metadata.AppliedRuleIds,
         };
+    }
+
+    private async Task RecordRefusalAsync(
+        AiGatewayRequest request,
+        string featureCode,
+        System.Diagnostics.Stopwatch stopwatch,
+        DateTimeOffset startedAt,
+        string errorCode,
+        string errorMessage,
+        CancellationToken ct)
+    {
+        if (usageRecorder is null) return;
+
+        stopwatch.Stop();
+        var context = BuildUsageContext(request, featureCode, startedAt, systemPrompt: null, userPrompt: null);
+        try
+        {
+            await usageRecorder.RecordFailureAsync(
+                context,
+                providerId: null,
+                model: null,
+                keySource: AiKeySource.None,
+                outcome: AiCallOutcome.GatewayRefused,
+                errorCode: errorCode,
+                errorMessage: errorMessage,
+                latencyMs: (int)stopwatch.ElapsedMilliseconds,
+                retryCount: 0,
+                policyTrace: "gateway.refused",
+                ct: CancellationToken.None);
+        }
+        catch
+        {
+            // Recorder is fail-soft per its contract; swallow any exception so
+            // the caller receives the original PromptNotGroundedException intact.
+        }
+    }
+
+    private static AiUsageContext BuildUsageContext(
+        AiGatewayRequest request,
+        string featureCode,
+        DateTimeOffset startedAt,
+        string? systemPrompt,
+        string? userPrompt)
+        => new(
+            UserId: request.UserId,
+            AuthAccountId: request.AuthAccountId,
+            TenantId: request.TenantId,
+            FeatureCode: featureCode,
+            RulebookVersion: request.Prompt?.Metadata.RulebookVersion,
+            PromptTemplateId: request.PromptTemplateId,
+            SystemPrompt: systemPrompt,
+            UserPrompt: userPrompt,
+            StartedAt: startedAt);
+
+    private static string? ComposeTrace(string? first, string? second)
+    {
+        if (string.IsNullOrEmpty(first)) return second;
+        if (string.IsNullOrEmpty(second)) return first;
+        var combined = $"{first} | {second}";
+        return combined.Length <= 256 ? combined : combined[..256];
+    }
+
+    /// <summary>
+    /// USD cost estimate = (prompt_tokens / 1k × prompt_rate) +
+    /// (completion_tokens / 1k × completion_rate). Registry-sourced rate card.
+    /// Returns 0 when no registry row exists (so platform-only tests still work).
+    /// </summary>
+    private async Task<decimal> ComputeCostEstimateAsync(string providerName, AiUsage usage, CancellationToken ct)
+    {
+        if (providerRegistry is null) return 0m;
+        try
+        {
+            var row = await providerRegistry.FindByCodeAsync(providerName, ct);
+            if (row is null) return 0m;
+            var promptCost = row.PricePer1kPromptTokens * usage.PromptTokens / 1000m;
+            var completionCost = row.PricePer1kCompletionTokens * usage.CompletionTokens / 1000m;
+            return promptCost + completionCost;
+        }
+        catch
+        {
+            return 0m;
+        }
+    }
+
+    private static string ClassifyError(Exception ex)
+    {
+        var message = ex.Message ?? string.Empty;
+        if (message.Contains("401", StringComparison.Ordinal) || message.Contains("403", StringComparison.Ordinal))
+            return "provider_auth";
+        if (message.Contains("429", StringComparison.Ordinal))
+            return "provider_429";
+        if (message.Contains("5", StringComparison.Ordinal) && (message.Contains("500", StringComparison.Ordinal) || message.Contains("502", StringComparison.Ordinal) || message.Contains("503", StringComparison.Ordinal) || message.Contains("504", StringComparison.Ordinal)))
+            return "provider_5xx";
+        return "provider_error";
     }
 
     private static string BuildUserMessage(AiGatewayRequest request)
@@ -340,6 +675,29 @@ public sealed class AiGatewayRequest
     public string Model { get; init; } = "mock";
     public double Temperature { get; init; } = 0.2;
     public int? MaxTokens { get; init; }
+
+    // --- Slice 1 additions: usage accounting context ---
+    // These are optional for backward compatibility. Call sites are expected
+    // to fill them in so admin explorer / cost dashboards can attribute the
+    // call correctly. See docs/AI-USAGE-POLICY.md §5 for feature codes.
+
+    /// <summary>Learner / admin / system user this call is on behalf of.</summary>
+    public string? UserId { get; init; }
+
+    /// <summary>Auth-account FK if known. Enables efficient joins from the
+    /// admin usage explorer.</summary>
+    public string? AuthAccountId { get; init; }
+
+    /// <summary>Sponsor / organisation scope, if applicable.</summary>
+    public string? TenantId { get; init; }
+
+    /// <summary>Canonical feature code from <c>AiFeatureCodes</c>. If omitted,
+    /// the recorder will stamp <c>unclassified</c> — tolerated during Slice 1
+    /// rollout, to be enforced in a later slice.</summary>
+    public string? FeatureCode { get; init; }
+
+    /// <summary>Optional prompt-template identifier for A/B analysis.</summary>
+    public string? PromptTemplateId { get; init; }
 }
 
 public sealed class AiGatewayResult
@@ -376,6 +734,15 @@ public sealed class AiProviderRequest
     public string UserPrompt { get; init; } = "";
     public double Temperature { get; init; } = 0.2;
     public int? MaxTokens { get; init; }
+
+    /// <summary>Optional override for the API key. When non-null, providers
+    /// use this key instead of their configured/default credential. Supplied
+    /// by the credential resolver for BYOK calls. Slice 4+.</summary>
+    public string? ApiKeyOverride { get; init; }
+
+    /// <summary>Optional override for the base URL. Used when the admin has
+    /// registered a provider with a non-default endpoint (Slice 5+).</summary>
+    public string? BaseUrlOverride { get; init; }
 }
 
 public sealed class AiProviderCompletion
