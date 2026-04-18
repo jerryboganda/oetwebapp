@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { fetchMyPronunciationProgress, fetchPronunciationDrill } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { sanitizeRichHtml } from '@/lib/sanitize-html';
 
 type PronunciationDrill = {
   id: string;
@@ -227,7 +228,7 @@ export default function PronunciationDrillPage() {
               <Play className="h-4 w-4" />
               Pronunciation tips
             </div>
-            <div className="prose prose-sm max-w-none text-rose-950 prose-p:my-2 prose-strong:text-rose-900 dark:prose-invert dark:text-rose-100" dangerouslySetInnerHTML={{ __html: drill.tipsHtml }} />
+            <div className="prose prose-sm max-w-none text-rose-950 prose-p:my-2 prose-strong:text-rose-900 dark:prose-invert dark:text-rose-100" dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(drill.tipsHtml) }} />
           </div>
         )}
       </div>

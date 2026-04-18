@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import Link from 'next/link';
-import { FileText, Plus, Archive as ArchiveIcon, Search } from 'lucide-react';
+import { FileText, Plus, Archive as ArchiveIcon } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Badge } from '@/components/ui/badge';
@@ -39,6 +39,8 @@ const STATUSES = [
   { value: 'Archived', label: 'Archived' },
 ];
 
+const PAGE_SIZE = 50;
+
 export default function ContentPapersListPage() {
   const { isAuthenticated, role } = useAdminAuth();
   const [status, setStatus] = useState<PageStatus>('loading');
@@ -47,7 +49,10 @@ export default function ContentPapersListPage() {
 
   const [filterSubtest, setFilterSubtest] = useState('');
   const [filterStatus, setFilterStatus] = useState('');
+  const [searchInput, setSearchInput] = useState('');
   const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [hasMore, setHasMore] = useState(false);
 
   const [showCreate, setShowCreate] = useState(false);
   const [newSubtest, setNewSubtest] = useState<'listening' | 'reading' | 'writing' | 'speaking'>('listening');
@@ -56,25 +61,51 @@ export default function ContentPapersListPage() {
   const [newProfession, setNewProfession] = useState('medicine');
   const [newProvenance, setNewProvenance] = useState(DEFAULT_CONTENT_SOURCE_PROVENANCE);
   const [saving, setSaving] = useState(false);
+  const requestSeqRef = useRef(0);
+  const skipNextLoadRef = useRef(false);
 
-  const load = useCallback(async () => {
+  useEffect(() => {
+    const timeout = window.setTimeout(() => {
+      setSearch(searchInput.trim());
+    }, 250);
+
+    return () => window.clearTimeout(timeout);
+  }, [searchInput]);
+
+  const load = useCallback(async (pageNumber: number) => {
+    const requestSeq = ++requestSeqRef.current;
     setStatus('loading');
     try {
       const data = await listContentPapers({
         subtest: filterSubtest || undefined,
         status: filterStatus || undefined,
         search: search || undefined,
-        pageSize: 100,
+        page: pageNumber,
+        pageSize: PAGE_SIZE,
       });
+      if (requestSeq !== requestSeqRef.current) return;
       setRows(data);
+      setHasMore(data.length === PAGE_SIZE);
       setStatus('success');
     } catch (e) {
+      if (requestSeq !== requestSeqRef.current) return;
       setStatus('error');
       setToast({ variant: 'error', message: `Failed to load papers: ${(e as Error).message}` });
     }
   }, [filterSubtest, filterStatus, search]);
 
-  useEffect(() => { queueMicrotask(() => { void load(); }); }, [load]);
+  useEffect(() => {
+    skipNextLoadRef.current = true;
+    setStatus('loading');
+    setPage(1);
+    setHasMore(false);
+  }, [filterSubtest, filterStatus, search]);
+
+  useEffect(() => {
+    if (skipNextLoadRef.current && page !== 1) return;
+    skipNextLoadRef.current = false;
+    void load(page);
+  }, [load, page]);
 
   const createNow = async () => {
     setSaving(true);
@@ -92,7 +123,7 @@ export default function ContentPapersListPage() {
       setShowCreate(false);
       setNewTitle('');
       setNewProvenance(DEFAULT_CONTENT_SOURCE_PROVENANCE);
-      await load();
+      await load(page);
     } catch (e) {
       const detail = (e as Error & { detail?: { error?: string } }).detail;
       setToast({ variant: 'error', message: detail?.error ?? (e as Error).message });
@@ -103,11 +134,11 @@ export default function ContentPapersListPage() {
     try {
       await archiveContentPaper(id);
       setToast({ variant: 'success', message: 'Paper archived.' });
-      await load();
+      await load(page);
     } catch (e) {
       setToast({ variant: 'error', message: `Archive failed: ${(e as Error).message}` });
     }
-  }, [load]);
+  }, [load, page]);
 
   const columns: Column<ContentPaperDto>[] = useMemo(() => [
     { key: 'st', header: 'Subtest', render: (p) => <Badge variant="info">{p.subtestCode}</Badge> },
@@ -169,7 +200,7 @@ export default function ContentPapersListPage() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <Select label="Subtest" value={filterSubtest} onChange={(e) => setFilterSubtest(e.target.value)} options={SUBTESTS} />
           <Select label="Status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} options={STATUSES} />
-          <Input label="Search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Title or slug" />
+          <Input label="Search" value={searchInput} onChange={(e) => setSearchInput(e.target.value)} placeholder="Title or slug" />
           <div className="flex items-end gap-2">
             <Button variant="primary" onClick={() => {
               setNewProvenance(DEFAULT_CONTENT_SOURCE_PROVENANCE);
@@ -186,12 +217,38 @@ export default function ContentPapersListPage() {
 
       <AsyncStateWrapper status={status}>
         <AdminRoutePanel title={`Papers (${rows.length})`}>
-          <DataTable data={rows} columns={columns} keyExtractor={(p) => p.id} />
+          <div className="space-y-4">
+            <DataTable data={rows} columns={columns} keyExtractor={(p) => p.id} />
+            <div className="flex flex-col gap-3 border-t border-gray-100 pt-4 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-muted">
+                {rows.length === 0 ? 'No papers found.' : `Showing ${rows.length} papers on page ${page}.`}
+              </p>
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setPage((current) => Math.max(1, current - 1))}
+                  disabled={page === 1 || status === 'loading'}
+                >
+                  Previous
+                </Button>
+                <span className="text-sm text-muted">Page {page}</span>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setPage((current) => current + 1)}
+                  disabled={!hasMore || status === 'loading'}
+                >
+                  Next
+                </Button>
+              </div>
+            </div>
+          </div>
         </AdminRoutePanel>
       </AsyncStateWrapper>
 
       <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create paper">
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <Select
             label="Subtest"
             value={newSubtest}
@@ -204,14 +261,14 @@ export default function ContentPapersListPage() {
             ]}
           />
           <Input label="Title" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="e.g. Listening Sample 1" />
-          <label className="flex items-center gap-2 col-span-2">
+          <label className="flex items-center gap-2 md:col-span-2">
             <input type="checkbox" checked={newApplyAll} onChange={(e) => setNewApplyAll(e.target.checked)} />
             Applies to all professions
           </label>
           {!newApplyAll && (
             <Input label="Profession ID" value={newProfession} onChange={(e) => setNewProfession(e.target.value)} />
           )}
-          <div className="col-span-2">
+          <div className="md:col-span-2">
             <Input
               label="Source provenance"
               value={newProvenance}

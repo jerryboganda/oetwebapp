@@ -8,7 +8,7 @@ import { AuthScreenShell } from '@/components/auth/auth-screen-shell';
 import styles from '@/components/auth/auth-screen-shell.module.scss';
 import { AUTH_ROUTES } from '@/lib/auth/routes';
 
-const REDIRECT_SECONDS = 12;
+const REDIRECT_SECONDS = 3;
 
 export default function ResetPasswordSuccessPage() {
   const router = useRouter();
@@ -28,21 +28,26 @@ export default function ResetPasswordSuccessPage() {
   const [paused, setPaused] = useState(false);
 
   useEffect(() => {
-    if (paused) return;
-    if (secondsLeft <= 0) {
+    if (!paused && secondsLeft <= 0) {
       router.replace(signInHref);
-      return;
     }
-    const timeout = window.setTimeout(() => setSecondsLeft((n) => n - 1), 1000);
-    return () => window.clearTimeout(timeout);
   }, [secondsLeft, paused, router, signInHref]);
+
+  useEffect(() => {
+    if (paused) return;
+    const interval = window.setInterval(() => {
+      setSecondsLeft((current) => Math.max(0, current - 1));
+    }, 1000);
+
+    return () => window.clearInterval(interval);
+  }, [paused]);
 
   return (
     <AuthScreenShell
       brandHref={AUTH_ROUTES.signIn}
       brandLabel="OET"
       eyebrow="Password Updated"
-      title="You're all set"
+      title="Reset complete"
       subtitle={`Your new password is active for ${email}. You can sign in right away.`}
     >
       <div

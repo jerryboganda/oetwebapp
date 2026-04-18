@@ -78,8 +78,8 @@ public partial class AdminService
             Id = id,
             Title = request.Title,
             ExamTypeCode = request.ProfessionId ?? "oet",
-            Description = request.Description,
-            ContentHtml = request.Content,
+            Description = request.Description ?? string.Empty,
+            ContentHtml = request.Content ?? string.Empty,
             Level = request.Difficulty ?? "intermediate",
             EstimatedMinutes = request.EstimatedDurationMinutes ?? 15,
             SortOrder = request.SortOrder ?? 0,
@@ -203,9 +203,9 @@ public partial class AdminService
             Term = request.Term,
             Definition = request.Definition,
             ProfessionId = request.ProfessionId,
-            Category = request.Category,
+            Category = request.Category ?? "general",
             AudioUrl = request.Pronunciation,
-            ExampleSentence = request.ExampleSentence,
+            ExampleSentence = request.ExampleSentence ?? string.Empty,
             Difficulty = request.Difficulty ?? "intermediate",
             Status = "active"
         };
@@ -307,8 +307,8 @@ public partial class AdminService
                 Id = id,
                 Term = term,
                 Definition = definition,
-                ExampleSentence = exIdx >= 0 && cols.Length > exIdx ? cols[exIdx].Trim() : null,
-                Category = catIdx >= 0 && cols.Length > catIdx ? cols[catIdx].Trim() : null,
+                ExampleSentence = exIdx >= 0 && cols.Length > exIdx ? cols[exIdx].Trim() : string.Empty,
+                Category = catIdx >= 0 && cols.Length > catIdx ? cols[catIdx].Trim() : "general",
                 Difficulty = diffIdx >= 0 && cols.Length > diffIdx ? cols[diffIdx].Trim() : "intermediate",
                 ProfessionId = profIdx >= 0 && cols.Length > profIdx ? cols[profIdx].Trim() : null,
                 Status = "active"

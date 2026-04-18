@@ -19,6 +19,7 @@ import {
   type ReadingPartCode,
   type ReadingQuestionLearnerDto,
 } from '@/lib/reading-authoring-api';
+import { sanitizeRichHtml } from '@/lib/sanitize-html';
 
 export default function ReadingPaperPlayerPage({ params }: { params: Promise<{ paperId: string }> }) {
   const { paperId } = use(params);
@@ -44,6 +45,10 @@ export default function ReadingPaperPlayerPage({ params }: { params: Promise<{ p
   const load = useCallback(async () => {
     setLoading(true);
     setError(null);
+    setAttempt(null);
+    setAnswers({});
+    setShowConfirm(false);
+    setActivePart('A');
     try {
       const s = await getReadingStructureLearner(paperId);
       setStructure(s);
@@ -221,7 +226,7 @@ function PartBody({
             {t.source && <p className="text-xs text-muted mb-2">Source: {t.source}</p>}
             <div
               className="prose prose-sm max-w-none"
-              dangerouslySetInnerHTML={{ __html: t.bodyHtml }}
+              dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(t.bodyHtml) }}
             />
           </article>
         ))}

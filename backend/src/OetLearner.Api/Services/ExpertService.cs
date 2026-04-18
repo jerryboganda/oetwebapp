@@ -3183,7 +3183,7 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
 
         // Get AI evaluation if available
         var aiEval = await db.Evaluations
-            .Where(e => e.AttemptId == review.AttemptId && e.ConfidenceBand != null)
+            .Where(e => e.AttemptId == review.AttemptId && e.GeneratedAt != null)
             .OrderByDescending(e => e.GeneratedAt)
             .FirstOrDefaultAsync(ct);
 

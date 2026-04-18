@@ -7,7 +7,7 @@ namespace OetLearner.Api.Services;
 /// <summary>
 /// Phase 11 — Media normalization: signed URL generation, format detection, and media pipeline management.
 /// </summary>
-public class MediaNormalizationService(LearnerDbContext db, MediaStorageService storage)
+public class MediaNormalizationService(LearnerDbContext db)
 {
     /// <summary>
     /// Get a time-limited signed URL for accessing paid media content.

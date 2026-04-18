@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { fetchStrategyGuide } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { sanitizeRichHtml } from '@/lib/sanitize-html';
 
 type StrategyGuide = {
   id: string;
@@ -154,7 +155,7 @@ export default function StrategyGuidePage() {
         {articleHtml && !content && (
           <div
             className="prose prose-slate dark:prose-invert max-w-none rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6"
-            dangerouslySetInnerHTML={{ __html: articleHtml }}
+            dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(articleHtml) }}
           />
         )}
 

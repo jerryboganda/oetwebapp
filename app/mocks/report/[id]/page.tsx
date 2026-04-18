@@ -50,17 +50,33 @@ function scoreColor(score: string) {
   return 'text-rose-600';
 }
 
-function MockReportContent() {
-  const params = useParams();
-  const id = Array.isArray(params?.id) ? params?.id[0] : params?.id ?? '';
+function MockReportContent({ id }: { id: string }) {
   const [report, setReport] = useState<MockReport | null>(null);
   const [error, setError] = useState('');
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    let cancelled = false;
     analytics.track('evaluation_viewed', { type: 'mock_report', id });
     fetchMockReport(id)
-      .then(setReport)
-      .catch(() => setError('Could not load report.'));
+      .then((value) => {
+        if (cancelled) return;
+        if (!value) {
+          setError('Report not found.');
+          return;
+        }
+        setReport(value);
+      })
+      .catch(() => {
+        if (!cancelled) setError('Could not load report.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   if (error) {
@@ -73,7 +89,7 @@ function MockReportContent() {
     );
   }
 
-  if (!report) {
+  if (loading || !report) {
     return (
       <LearnerDashboardShell pageTitle="Mock Report" backHref="/mocks">
         <div className="space-y-6">
@@ -221,6 +237,9 @@ function MockReportContent() {
 }
 
 export default function MockReport() {
+  const params = useParams();
+  const id = Array.isArray(params?.id) ? params?.id[0] : params?.id ?? '';
+
   return (
     <Suspense fallback={
       <LearnerDashboardShell pageTitle="Mock Report" backHref="/mocks">
@@ -231,7 +250,7 @@ export default function MockReport() {
         </div>
       </LearnerDashboardShell>
     }>
-      <MockReportContent />
+      <MockReportContent key={id || 'missing'} id={id} />
     </Suspense>
   );
 }
