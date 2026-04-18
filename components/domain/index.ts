@@ -20,3 +20,4 @@ export { RulebookFindingsPanel } from './rulebook-findings-panel';
 export { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceMetaRow, LearnerSurfaceSectionHeader } from './learner-surface';
 export { AchievementToast } from './achievement-toast';
 export { ExamTypeBadge } from './exam-type-badge';
+export { OetStatementOfResultsCard, type OetStatementOfResults, type OetStatementOfResultsProps } from './OetStatementOfResultsCard';
