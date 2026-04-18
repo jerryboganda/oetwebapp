@@ -20,4 +20,16 @@
     <PackageReference Include="WebPush" Version="1.0.12" />
   </ItemGroup>
 
+  <!--
+    OET Rulebooks are the single source of truth for AI grounding and rule-engine
+    detectors. They ship as embedded resources so the backend cannot drift from the
+    JSON files the TypeScript engine consumes. Any edit to a file in rulebooks/ is
+    picked up by the backend via a rebuild.
+  -->
+  <ItemGroup>
+    <EmbeddedResource Include="..\..\..\rulebooks\**\*.json">
+      <LogicalName>OetRulebooks\%(RecursiveDir)%(Filename)%(Extension)</LogicalName>
+    </EmbeddedResource>
+  </ItemGroup>
+
 </Project>

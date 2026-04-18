@@ -7,11 +7,12 @@ import { AppShell } from '@/components/layout/app-shell';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerPageHero, LearnerSurfaceSectionHeader, RulebookFindingsPanel } from '@/components/domain';
 import { AudioPlayerWaveform } from '@/components/domain/audio-player-waveform';
 import { analytics } from '@/lib/analytics';
 import { fetchSettingsSection, fetchTranscript } from '@/lib/api';
 import type { MarkerType, SpeakingTranscriptReview, TranscriptMarker } from '@/lib/mock-data';
+import { auditSpeakingTranscript, inferSpeakingCardType } from '@/lib/rulebook';
 
 const markerLabel: Record<MarkerType, string> = {
   pronunciation: 'Pronunciation',
@@ -69,6 +70,30 @@ export default function SpeakingTranscriptPage() {
     () => review?.transcript.flatMap((line) => line.markers ?? []) ?? [],
     [review],
   );
+
+  const inferredCardType = useMemo(
+    () => inferSpeakingCardType(review?.title),
+    [review?.title],
+  );
+
+  const auditFindings = useMemo(() => {
+    if (!review) return [];
+    return auditSpeakingTranscript({
+      cardType: inferredCardType,
+      transcript: review.transcript.map((line) => ({
+        speaker: /patient/i.test(line.speaker)
+          ? 'patient'
+          : /interlocutor/i.test(line.speaker)
+            ? 'interlocutor'
+            : 'candidate',
+        text: line.text,
+        startMs: Math.round(line.startTime * 1000),
+        endMs: Math.round(line.endTime * 1000),
+      })),
+      silenceAfterDiagnosisMs: undefined,
+      profession: 'medicine',
+    });
+  }, [review, inferredCardType]);
 
   const handleWaveformTimeUpdate = useCallback((time: number) => {
     setCurrentTime(time);
@@ -209,6 +234,14 @@ export default function SpeakingTranscriptPage() {
                 </div>
               )}
             </section>
+
+            <RulebookFindingsPanel
+              title="Rulebook Audit"
+              subtitle={`Transcript-level checks grounded in Dr. Hesham's Speaking rulebook. Inferred card type: ${inferredCardType.replace(/_/g, ' ')}.`}
+              findings={auditFindings}
+              className="rounded-[28px]"
+              ruleHref={(ruleId) => `/speaking/rulebook/${ruleId}`}
+            />
 
             <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
               <LearnerSurfaceSectionHeader

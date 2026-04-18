@@ -322,6 +322,8 @@ Stripe__SecretKey=<key>
 ## Common Gotchas
 
 - **OET Scoring (MISSION CRITICAL)**: All pass/fail logic, raw↔scaled conversion, and country-aware Writing thresholds MUST route through `lib/scoring.ts` (TS) or `OetLearner.Api.Services.OetScoring` (.NET). Full spec: **[`docs/SCORING.md`](docs/SCORING.md)**. Key invariants: `30/42 ≡ 350/500` for Listening/Reading; Writing pass is **350** for UK/IE/AU/NZ/CA and **300** for US/QA; Speaking is always 350. Never compare `score >= 350` inline.
+- **OET Rulebooks (MISSION CRITICAL)**: All Writing / Speaking rule enforcement MUST route through `lib/rulebook` (TS) or `OetLearner.Api.Services.Rulebook` (.NET). Full spec: **[`docs/RULEBOOKS.md`](docs/RULEBOOKS.md)**. Canonical content lives in `rulebooks/**/rulebook.v*.json`. Never read those JSON files from UI or endpoint code directly — always use the engine API.
+- **AI calls (MISSION CRITICAL)**: Every AI invocation MUST go through the grounded gateway: `buildAiGroundedPrompt()` (TS) or `AiGatewayService.BuildGroundedPrompt()` + `CompleteAsync()` (.NET). The .NET gateway **physically refuses** ungrounded prompts with `PromptNotGroundedException`. The prompt embeds the rulebook + the canonical scoring + strict guardrails. Adding a new AI provider = implement `IAiModelProvider`; grounding code is never touched.
 - **PowerShell on Windows**: Run `Set-ExecutionPolicy -Scope Process -ExecutionPolicy Bypass` first, or use `cmd /c npm ...`.
 - **`motion/react` not `framer-motion`**: This project uses `motion` v12 package. Import from `motion/react`.
 - **Desktop OAuth**: Use `oet-prep://` scheme (double slash required).

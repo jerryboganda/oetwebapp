@@ -73,6 +73,13 @@ import type {
   ExpertOnboardingRates,
   ExpertOnboardingStatus,
 } from './types/expert';
+import type {
+  AiGroundingContext,
+  LintFinding,
+  Rulebook,
+  SpeakingAuditInput,
+  WritingLintInput,
+} from './rulebook';
 
 const API_BASE_URL = env.apiBaseUrl;
 type ApiRecord = Record<string, any>;
@@ -299,6 +306,30 @@ export class ApiError extends Error {
   }
 }
 
+export interface WritingLintResponse {
+  findings: LintFinding[];
+  totals: { critical: number; major: number; minor: number; info: number };
+}
+
+export interface SpeakingAuditResponse {
+  findings: LintFinding[];
+}
+
+export interface AiCompletionResponse {
+  completion: string;
+  rulebookVersion: string;
+  appliedRuleIds: string[];
+  metadata: {
+    rulebookVersion: string;
+    rulebookKind: 'writing' | 'speaking';
+    profession: string;
+    scoringPassMark: number;
+    scoringGrade: 'B' | 'C+';
+    appliedRulesCount: number;
+  };
+  promptHeadSnippet?: string;
+}
+
 export function isApiError(error: unknown): error is ApiError {
   return error instanceof ApiError;
 }
@@ -411,6 +442,78 @@ async function uploadBinary(pathOrUrl: string, blob: Blob): Promise<void> {
     }
     throw new Error(message);
   }
+}
+
+// ═══════════════════ RULEBOOK / GROUNDED AI API ═══════════════════
+
+export async function fetchWritingRulebook(profession = 'medicine'): Promise<Rulebook> {
+  return apiRequest<Rulebook>(`/v1/rulebooks/writing/${profession}`);
+}
+
+export async function fetchSpeakingRulebook(profession = 'medicine'): Promise<Rulebook> {
+  return apiRequest<Rulebook>(`/v1/rulebooks/speaking/${profession}`);
+}
+
+export async function fetchRulebookRule(
+  kind: 'writing' | 'speaking',
+  profession: string,
+  ruleId: string,
+): Promise<Record<string, unknown>> {
+  return apiRequest<Record<string, unknown>>(`/v1/rulebooks/${kind}/${profession}/rule/${encodeURIComponent(ruleId)}`);
+}
+
+export async function fetchRulebookAssessment(kind: 'writing' | 'speaking'): Promise<Record<string, unknown>> {
+  return apiRequest<Record<string, unknown>>(`/v1/rulebooks/assessment/${kind}`);
+}
+
+export async function lintWritingViaApi(input: WritingLintInput): Promise<WritingLintResponse> {
+  return apiRequest<WritingLintResponse>('/v1/writing/lint', {
+    method: 'POST',
+    body: JSON.stringify({
+      letterText: input.letterText,
+      letterType: input.letterType,
+      recipientSpecialty: input.recipientSpecialty,
+      recipientName: input.recipientName,
+      patientAge: input.patientAge,
+      patientIsMinor: input.patientIsMinor,
+      caseNotesMarkers: input.caseNotesMarkers,
+      profession: input.profession ?? 'medicine',
+    }),
+  });
+}
+
+export async function auditSpeakingViaApi(input: SpeakingAuditInput): Promise<SpeakingAuditResponse> {
+  return apiRequest<SpeakingAuditResponse>('/v1/speaking/audit', {
+    method: 'POST',
+    body: JSON.stringify({
+      transcript: input.transcript,
+      cardType: input.cardType,
+      profession: input.profession ?? 'medicine',
+      silenceAfterDiagnosisMs: input.silenceAfterDiagnosisMs,
+    }),
+  });
+}
+
+export async function completeGroundedAi(
+  context: AiGroundingContext,
+  userInput: string,
+  provider = '',
+  model = '',
+): Promise<AiCompletionResponse> {
+  return apiRequest<AiCompletionResponse>('/v1/ai/complete', {
+    method: 'POST',
+    body: JSON.stringify({
+      kind: context.kind,
+      profession: context.profession,
+      task: context.task,
+      letterType: context.letterType,
+      cardType: context.cardType,
+      candidateCountry: context.candidateCountry,
+      userInput,
+      provider,
+      model,
+    }),
+  });
 }
 
 export async function fetchAuthorizedObjectUrl(pathOrUrl: string): Promise<string> {

@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
+import Link from 'next/link';
 import {
   PenTool,
   Star,
@@ -14,6 +15,7 @@ import {
   Award,
   ArrowRight,
   Calendar,
+  BookOpen,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -180,6 +182,31 @@ export default function WritingHome() {
             { icon: Clock, label: 'Mock flow', value: fullMockEntry ? 'Timed mock ready' : 'Browse mock setup' },
           ]}
         />
+
+        <MotionSection delayIndex={1} className="rounded-[24px] border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest text-muted">Rulebook Source of Truth</p>
+              <h2 className="mt-2 text-lg font-black text-navy">Study the exact rules your writing is judged against</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
+                The live checker in the writing player uses Dr. Hesham&apos;s rulebook rules directly. Open any rule page to understand the real standard behind the feedback.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <Link href="/writing/rulebook/R03.4">
+                <Button variant="outline" className="whitespace-nowrap">
+                  <BookOpen className="h-4 w-4" /> Writing rules
+                </Button>
+              </Link>
+              <Link href="/writing/rulebook/R14.2">
+                <Button variant="ghost" className="whitespace-nowrap">
+                  Discharge template rule
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </MotionSection>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {recommendedCard ? (

@@ -16,6 +16,13 @@ output/playwright/
 .agents/
 .claude/
 .github/context-mode/
+.kilo/*
+!.kilo/command/
+!.kilo/command/**
+!.kilo/agent/
+!.kilo/agent/**
+!.kilo/skills/
+!.kilo/skills/**
 backend/**/bin/
 backend/**/obj/
 backend/src/OetLearner.Api/App_Data/
@@ -67,3 +74,8 @@ fix_routes.py
 # Content / vendor drops that should not be in VCS
 Project Real Content/
 vscode-digitalocean-model-provider/
+
+# Rulebook extraction scratch area (regenerated from PDFs on demand)
+_extracted/
+_extract_*.py
+_check_pdf_libs.py

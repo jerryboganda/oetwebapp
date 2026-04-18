@@ -287,3 +287,96 @@ describe('error logging in catch blocks', () => {
   });
 });
 
+describe('rulebook and grounded AI API wrappers', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.resetModules();
+  });
+
+  it('calls the writing rulebook endpoint', async () => {
+    let url = '';
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL) => {
+      url = String(input);
+      return new Response(JSON.stringify({ kind: 'writing', profession: 'medicine', version: '1.0.0', sections: [], rules: [] }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const { fetchWritingRulebook } = await import('../api');
+    const payload = await fetchWritingRulebook('medicine');
+
+    expect(url).toContain('/v1/rulebooks/writing/medicine');
+    expect(payload.kind).toBe('writing');
+  });
+
+  it('posts the writing lint payload to the backend', async () => {
+    let body: Record<string, unknown> | null = null;
+    globalThis.fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({ findings: [], totals: { critical: 0, major: 0, minor: 0, info: 0 } }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const { lintWritingViaApi } = await import('../api');
+    await lintWritingViaApi({
+      letterText: 'Dear Dr Smith',
+      letterType: 'routine_referral',
+      profession: 'medicine',
+      recipientSpecialty: 'Cardiologist',
+    });
+
+    expect(body).toMatchObject({
+      letterText: 'Dear Dr Smith',
+      letterType: 'routine_referral',
+      profession: 'medicine',
+      recipientSpecialty: 'Cardiologist',
+    });
+  });
+
+  it('posts the grounded AI request payload to the backend', async () => {
+    let body: Record<string, unknown> | null = null;
+    globalThis.fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      body = JSON.parse(String(init?.body));
+      return new Response(JSON.stringify({
+        completion: '{}',
+        rulebookVersion: '1.0.0',
+        appliedRuleIds: ['R03.4'],
+        metadata: {
+          rulebookVersion: '1.0.0',
+          rulebookKind: 'writing',
+          profession: 'medicine',
+          scoringPassMark: 350,
+          scoringGrade: 'B',
+          appliedRulesCount: 1,
+        },
+      }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const { completeGroundedAi } = await import('../api');
+    await completeGroundedAi(
+      { kind: 'writing', profession: 'medicine', task: 'score', letterType: 'routine_referral', candidateCountry: 'UK' },
+      'Candidate letter here',
+      'digitalocean',
+      'anthropic-claude-opus-4.7',
+    );
+
+    expect(body).toMatchObject({
+      kind: 'writing',
+      profession: 'medicine',
+      task: 'score',
+      letterType: 'routine_referral',
+      candidateCountry: 'UK',
+      userInput: 'Candidate letter here',
+      provider: 'digitalocean',
+      model: 'anthropic-claude-opus-4.7',
+    });
+  });
+});

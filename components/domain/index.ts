@@ -16,6 +16,7 @@ export { BetterPhraseCard } from './better-phrase-card';
 export { MockReportSummary } from './mock-report-summary';
 export { ReviewRequestDrawer } from './review-request-drawer';
 export { AudioPlayerWaveform } from './audio-player-waveform';
+export { RulebookFindingsPanel } from './rulebook-findings-panel';
 export { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceMetaRow, LearnerSurfaceSectionHeader } from './learner-surface';
 export { AchievementToast } from './achievement-toast';
 export { ExamTypeBadge } from './exam-type-badge';

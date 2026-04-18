@@ -1,0 +1,118 @@
+{
+  "version": "1.0.0",
+  "source": "OET public Speaking assessment criteria (from September 2018)",
+  "appliesToProfessions": "all",
+  "linguisticCriteria": {
+    "scale": "0-6",
+    "dimensions": [
+      {
+        "id": "intelligibility",
+        "title": "Intelligibility",
+        "bands": {
+          "6": "Pronunciation is easily understood and prosodic features (stress, intonation, rhythm) are used effectively. L1 accent has no effect on intelligibility.",
+          "5": "Easily understood. Communication is not impeded by a few pronunciation or prosodic errors and/or noticeable L1 accent. Minimal strain for the listener.",
+          "4": "Easily understood most of the time. Pronunciation or prosodic errors and/or L1 accent at times cause strain for the listener.",
+          "3": "Produces some acceptable features of spoken English. Difficult to understand because errors in pronunciation/stress/intonation and/or L1 accent cause serious strain.",
+          "2": "Often unintelligible. Frequent errors in pronunciation/stress/intonation and/or L1 accent cause severe strain for the listener.",
+          "1": "Almost entirely unintelligible.",
+          "0": "Candidate does not provide any response."
+        }
+      },
+      {
+        "id": "fluency",
+        "title": "Fluency",
+        "bands": {
+          "6": "Completely fluent speech at normal speed. Any hesitation is appropriate and not a sign of searching for words or structures.",
+          "5": "Fluent speech at normal speed, with only occasional repetition or self-correction. Hesitation may occasionally indicate searching but is generally appropriate.",
+          "4": "Uneven flow, with some repetition, especially in longer utterances. Some evidence of searching for words. Delivery may be staccato or too fast/slow.",
+          "3": "Very uneven. Frequent pauses and repetitions indicate searching. Excessive use of fillers and difficulty sustaining longer utterances cause serious strain.",
+          "2": "Extremely uneven. Long pauses, numerous repetition and self-corrections make speech difficult to follow.",
+          "1": "Impossible to follow, consisting of isolated words and phrases and self-corrections, separated by long pauses.",
+          "0": "Candidate does not provide any response."
+        }
+      },
+      {
+        "id": "appropriateness",
+        "title": "Appropriateness of Language",
+        "bands": {
+          "6": "Entirely appropriate register, tone and lexis for the context. No difficulty at all in explaining technical matters in lay terms.",
+          "5": "Mostly appropriate register, tone and lexis. Occasional lapses are not intrusive.",
+          "4": "Generally appropriate but somewhat restricted and lacking in complexity. Lapses are noticeable and at times reflect limited resources.",
+          "3": "Some evidence of appropriate register, tone and lexis, but lapses are frequent and intrusive.",
+          "2": "Mostly inappropriate register, tone and lexis for the context.",
+          "1": "Entirely inappropriate register, tone and lexis for the context.",
+          "0": "Candidate does not provide any response."
+        }
+      },
+      {
+        "id": "resources",
+        "title": "Resources of Grammar and Expression",
+        "bands": {
+          "6": "Rich and flexible. Wide range of grammar and vocabulary used accurately and flexibly. Confident use of idiomatic speech.",
+          "5": "Wide range of grammar and vocabulary generally used accurately and flexibly. Occasional errors are not intrusive.",
+          "4": "Sufficient resources to maintain the interaction. Inaccuracies in vocabulary and grammar, particularly in more complex sentences, are sometimes intrusive. Meaning is generally clear.",
+          "3": "Limited vocabulary and control of grammatical structures, except very simple sentences. Persistent inaccuracies are intrusive.",
+          "2": "Very limited resources of vocabulary and grammar, even in simple sentences. Numerous errors in word choice.",
+          "1": "Limited in all respects.",
+          "0": "Candidate does not provide any response."
+        }
+      }
+    ]
+  },
+  "clinicalCommunicationCriteria": {
+    "scale": "0-3",
+    "levels": { "3": "Adept use", "2": "Competent use", "1": "Partially effective use", "0": "Ineffective use" },
+    "clusters": [
+      {
+        "id": "A",
+        "title": "Relationship building",
+        "indicators": [
+          { "id": "A1", "text": "Initiating the interaction appropriately (greeting, introductions, nature of interview)" },
+          { "id": "A2", "text": "Demonstrating an attentive and respectful attitude" },
+          { "id": "A3", "text": "Adopting a non-judgemental approach" },
+          { "id": "A4", "text": "Showing empathy for feelings/predicament/emotional state" }
+        ]
+      },
+      {
+        "id": "B",
+        "title": "Understanding & incorporating the patient's perspective",
+        "indicators": [
+          { "id": "B1", "text": "Eliciting and exploring the patient's ideas/concerns/expectations" },
+          { "id": "B2", "text": "Picking up the patient's cues" },
+          { "id": "B3", "text": "Relating explanations to elicited ideas/concerns/expectations" }
+        ]
+      },
+      {
+        "id": "C",
+        "title": "Providing structure",
+        "indicators": [
+          { "id": "C1", "text": "Sequencing the interview purposefully and logically" },
+          { "id": "C2", "text": "Signposting changes in topic" },
+          { "id": "C3", "text": "Using organising techniques in explanations" }
+        ]
+      },
+      {
+        "id": "D",
+        "title": "Information gathering",
+        "indicators": [
+          { "id": "D1", "text": "Facilitating the patient's narrative with active listening techniques, minimising interruption" },
+          { "id": "D2", "text": "Using initially open questions, appropriately moving to closed questions" },
+          { "id": "D3", "text": "NOT using compound questions/leading questions" },
+          { "id": "D4", "text": "Clarifying statements which are vague or need amplification" },
+          { "id": "D5", "text": "Summarising information to encourage correction/invite further information" }
+        ]
+      },
+      {
+        "id": "E",
+        "title": "Information giving",
+        "indicators": [
+          { "id": "E1", "text": "Establishing initially what the patient already knows" },
+          { "id": "E2", "text": "Pausing periodically when giving information, using the response to guide next steps" },
+          { "id": "E3", "text": "Encouraging the patient to contribute reactions/feelings" },
+          { "id": "E4", "text": "Checking whether the patient has understood information" },
+          { "id": "E5", "text": "Discovering what further information the patient needs" }
+        ]
+      }
+    ]
+  }
+}

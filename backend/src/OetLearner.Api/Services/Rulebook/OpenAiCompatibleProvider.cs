@@ -1,0 +1,101 @@
+using System.Net.Http.Headers;
+using System.Text;
+using System.Text.Json;
+using Microsoft.Extensions.Options;
+using OetLearner.Api.Configuration;
+
+namespace OetLearner.Api.Services.Rulebook;
+
+/// <summary>
+/// Generic OpenAI-compatible provider. Intended for DigitalOcean Serverless
+/// Inference and other vendors that expose `/chat/completions` semantics.
+///
+/// This provider does NOT know anything about OET rulebooks or scoring. It
+/// only transmits already-grounded prompts assembled by AiGatewayService.
+/// Grounding is enforced one layer above.
+/// </summary>
+public sealed class OpenAiCompatibleProvider(
+    IHttpClientFactory httpClientFactory,
+    IOptions<AiProviderOptions> options) : IAiModelProvider
+{
+    private readonly AiProviderOptions _options = options.Value;
+
+    public string Name => string.IsNullOrWhiteSpace(_options.ProviderId) ? "openai-compatible" : _options.ProviderId;
+
+    public async Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(_options.BaseUrl))
+            throw new InvalidOperationException($"{AiProviderOptions.SectionName}:BaseUrl is not configured.");
+        if (string.IsNullOrWhiteSpace(_options.ApiKey))
+            throw new InvalidOperationException($"{AiProviderOptions.SectionName}:ApiKey is not configured.");
+
+        var client = httpClientFactory.CreateClient("AiOpenAiCompatible");
+        client.BaseAddress = new Uri(_options.BaseUrl.TrimEnd('/') + "/");
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _options.ApiKey);
+
+        var payload = new
+        {
+            model = string.IsNullOrWhiteSpace(request.Model) ? _options.DefaultModel : request.Model,
+            messages = new object[]
+            {
+                new { role = "system", content = request.SystemPrompt },
+                new { role = "user", content = request.UserPrompt },
+            },
+            temperature = request.Temperature,
+            max_tokens = request.MaxTokens,
+            stream = false,
+        };
+
+        using var response = await client.PostAsync(
+            "chat/completions",
+            new StringContent(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json"),
+            ct);
+
+        var body = await response.Content.ReadAsStringAsync(ct);
+        if (!response.IsSuccessStatusCode)
+            throw new InvalidOperationException($"AI provider call failed: {(int)response.StatusCode} {response.ReasonPhrase}. Body: {body}");
+
+        using var doc = JsonDocument.Parse(body);
+        var root = doc.RootElement;
+        var choice = root.GetProperty("choices")[0];
+        var message = choice.GetProperty("message");
+        var text = ReadMessageContent(message);
+
+        var usage = root.TryGetProperty("usage", out var usageEl)
+            ? new AiUsage
+            {
+                PromptTokens = usageEl.TryGetProperty("prompt_tokens", out var pt) ? pt.GetInt32() : 0,
+                CompletionTokens = usageEl.TryGetProperty("completion_tokens", out var ctEl) ? ctEl.GetInt32() : 0,
+            }
+            : null;
+
+        return new AiProviderCompletion { Text = text, Usage = usage };
+    }
+
+    private static string ReadMessageContent(JsonElement message)
+    {
+        if (!message.TryGetProperty("content", out var content)) return "";
+
+        if (content.ValueKind == JsonValueKind.String) return content.GetString() ?? "";
+
+        if (content.ValueKind == JsonValueKind.Array)
+        {
+            var parts = new List<string>();
+            foreach (var item in content.EnumerateArray())
+            {
+                if (item.ValueKind == JsonValueKind.String)
+                {
+                    parts.Add(item.GetString() ?? "");
+                    continue;
+                }
+                if (item.ValueKind == JsonValueKind.Object && item.TryGetProperty("text", out var textEl))
+                {
+                    parts.Add(textEl.GetString() ?? "");
+                }
+            }
+            return string.Join("\n", parts.Where(p => !string.IsNullOrWhiteSpace(p)));
+        }
+
+        return content.ToString();
+    }
+}

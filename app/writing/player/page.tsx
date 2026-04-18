@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react';
 import type { Transition } from 'motion/react';
 import { ChevronLeft, Maximize, Minimize } from 'lucide-react';
@@ -11,11 +11,13 @@ import { Modal } from '@/components/ui/modal';
 import { Timer } from '@/components/ui/timer';
 import { WritingCaseNotesPanel } from '@/components/domain/writing-case-notes-panel';
 import { WritingEditor } from '@/components/domain/writing-editor';
+import { RulebookFindingsPanel } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchWritingTask, fetchWritingChecklist, submitWritingDraft, submitWritingTask } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { WritingTask } from '@/lib/mock-data';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { deriveWritingCaseNotesMarkers, inferWritingLetterType, lintWritingLetter } from '@/lib/rulebook';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed';
 
@@ -45,6 +47,30 @@ export default function WritingPlayer() {
   const panelTransition: Transition = prefersReducedMotion
     ? { duration: 0.01 }
     : { type: 'spring', stiffness: 420, damping: 38 };
+
+  const wordCount = useMemo(() => content.trim().split(/\s+/).filter(Boolean).length, [content]);
+
+  const inferredLetterType = useMemo(() => inferWritingLetterType(task ?? {}), [task]);
+  const caseNotesMarkers = useMemo(() => deriveWritingCaseNotesMarkers(task?.caseNotes), [task?.caseNotes]);
+
+  const lintFindings = useMemo(() => {
+    if (!task || wordCount < 20) return [];
+    const minorAgeMatch = task.caseNotes.match(/\b(\d+)\s*(years? old|year-old)\b/i);
+    return lintWritingLetter({
+      letterText: content,
+      letterType: inferredLetterType,
+      profession: 'medicine',
+      recipientSpecialty: task.title,
+      recipientName: null,
+      patientAge: minorAgeMatch ? Number(minorAgeMatch[1]) : null,
+      patientIsMinor: minorAgeMatch ? Number(minorAgeMatch[1]) < 18 : false,
+      caseNotesMarkers,
+    });
+  }, [task, wordCount, content, inferredLetterType, caseNotesMarkers]);
+
+  const lintInactiveMessage = wordCount < 20
+    ? 'The live rulebook checker starts once you have written at least 20 words, so early brainstorming does not create noisy warnings.'
+    : undefined;
 
   useEffect(() => {
     Promise.all([fetchWritingTask(taskId), fetchWritingChecklist()])
@@ -97,7 +123,7 @@ export default function WritingPlayer() {
     setSubmitting(true);
     try {
       const result = await submitWritingTask(taskId, content);
-      analytics.track('task_submitted', { taskId, subtest: 'writing', wordCount: content.split(/\s+/).filter(Boolean).length });
+      analytics.track('task_submitted', { taskId, subtest: 'writing', wordCount });
       setTimerRunning(false);
       router.push(`/writing/result?id=${result.id}`);
     } catch {
@@ -259,16 +285,26 @@ export default function WritingPlayer() {
                     exit={{ opacity: 0, x: prefersReducedMotion ? 0 : -14 }}
                     transition={panelTransition}
                   >
-                    <WritingEditor
-                      value={content}
-                      onChange={handleContentChange}
-                      saveStatus={saveStatus === 'idle' ? 'idle' : saveStatus}
-                      fontSize={fontSize}
-                      onFontSizeChange={setFontSize}
-                      showFontSizeControls={false}
-                      placeholder="Begin writing your response..."
-                      className="h-full"
-                    />
+                    <div className="flex h-full min-h-0 flex-col">
+                      <WritingEditor
+                        value={content}
+                        onChange={handleContentChange}
+                        saveStatus={saveStatus === 'idle' ? 'idle' : saveStatus}
+                        fontSize={fontSize}
+                        onFontSizeChange={setFontSize}
+                        showFontSizeControls={false}
+                        placeholder="Begin writing your response..."
+                        className="min-h-0 flex-1"
+                      />
+                      <RulebookFindingsPanel
+                        title="Rulebook Review"
+                        subtitle={`Live checks grounded in Dr. Hesham's Writing rulebook. Inferred letter type: ${inferredLetterType.replace(/_/g, ' ')}.`}
+                        findings={lintFindings}
+                        inactiveMessage={lintInactiveMessage}
+                        className="shrink-0 rounded-none rounded-b-[24px] border-t border-gray-200"
+                        ruleHref={(ruleId) => `/writing/rulebook/${ruleId}`}
+                      />
+                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -296,16 +332,26 @@ export default function WritingPlayer() {
               className="h-full min-h-0 min-w-0 w-full"
               transition={panelTransition}
             >
-              <WritingEditor
-                value={content}
-                onChange={handleContentChange}
-                saveStatus={saveStatus === 'idle' ? 'idle' : saveStatus}
-                fontSize={fontSize}
-                onFontSizeChange={setFontSize}
-                showFontSizeControls={!isMobile}
-                placeholder="Begin writing your response..."
-                className="h-full"
-              />
+              <div className="flex h-full min-h-0 flex-col">
+                <WritingEditor
+                  value={content}
+                  onChange={handleContentChange}
+                  saveStatus={saveStatus === 'idle' ? 'idle' : saveStatus}
+                  fontSize={fontSize}
+                  onFontSizeChange={setFontSize}
+                  showFontSizeControls={!isMobile}
+                  placeholder="Begin writing your response..."
+                  className="min-h-0 flex-1"
+                />
+                <RulebookFindingsPanel
+                  title="Rulebook Review"
+                  subtitle={`Live checks grounded in Dr. Hesham's Writing rulebook. Inferred letter type: ${inferredLetterType.replace(/_/g, ' ')}.`}
+                  findings={lintFindings}
+                  inactiveMessage={lintInactiveMessage}
+                  className="shrink-0 rounded-none rounded-b-[24px] border-t border-gray-200"
+                  ruleHref={(ruleId) => `/writing/rulebook/${ruleId}`}
+                />
+              </div>
             </motion.div>
           </div>
         </main>
@@ -313,7 +359,7 @@ export default function WritingPlayer() {
         {/* Submit Confirmation Modal */}
         <Modal open={showSubmitModal} onClose={() => setShowSubmitModal(false)} title="Submit Your Response?">
           <p className="mb-4 text-sm text-muted">Once submitted, your response will be evaluated by our AI engine. You can request an expert human review later.</p>
-          <p className="mb-6 text-sm font-semibold text-navy">Word count: {content.trim().split(/\s+/).filter(Boolean).length}</p>
+          <p className="mb-6 text-sm font-semibold text-navy">Word count: {wordCount}</p>
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <Button variant="secondary" onClick={() => setShowSubmitModal(false)}>Cancel</Button>
             <Button loading={submitting} onClick={handleSubmit}>Confirm Submit</Button>

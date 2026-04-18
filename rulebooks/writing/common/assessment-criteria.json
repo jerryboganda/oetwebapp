@@ -1,0 +1,60 @@
+{
+  "version": "1.0.0",
+  "source": "OET Writing assessment criteria (derived from R16.1–R16.8 + official OET documentation)",
+  "appliesToProfessions": "all",
+  "criteria": [
+    {
+      "id": "purpose",
+      "title": "Purpose",
+      "maxScore": 3,
+      "bands": {
+        "3": "Purpose is immediately apparent. Clearly conveys the reason for writing including the specific request/action required.",
+        "2": "Purpose is apparent and generally fit-for-intent. Includes the reason and request with only minor lack of clarity.",
+        "1": "Purpose is somewhat apparent but poorly served. Reader may need to infer the reason or request.",
+        "0": "Purpose is not apparent."
+      }
+    },
+    {
+      "id": "content",
+      "title": "Content",
+      "maxScore": 7,
+      "description": "What information is included: relevant details included, irrelevant details excluded, accurate and specific."
+    },
+    {
+      "id": "conciseness_clarity",
+      "title": "Conciseness & Clarity",
+      "maxScore": 7,
+      "description": "How efficiently information is communicated; free of redundancy and ambiguity."
+    },
+    {
+      "id": "genre_style",
+      "title": "Genre & Style",
+      "maxScore": 7,
+      "description": "Appropriate register, tone, conventions of the specific letter type."
+    },
+    {
+      "id": "organisation_layout",
+      "title": "Organisation & Layout",
+      "maxScore": 7,
+      "description": "Clear structure: paragraphing, sequencing, layout conventions (address, date, salutation, closure)."
+    },
+    {
+      "id": "language",
+      "title": "Language",
+      "maxScore": 7,
+      "description": "Accuracy and range of grammar, vocabulary, spelling, punctuation."
+    }
+  ],
+  "targetBands": {
+    "passMark": {
+      "purpose": 2,
+      "contentAndOthers": 6
+    },
+    "note": "Required approximately Band 6+ in most criteria; at least Band 2 out of 3 in Purpose."
+  },
+  "weighting": {
+    "mostHeavilyWeighted": ["content", "conciseness_clarity"],
+    "significantImpact": ["genre_style"],
+    "realClinicTest": "Could this letter be sent in a real clinical setting? Yes = pass. No = fail."
+  }
+}

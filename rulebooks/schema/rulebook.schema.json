@@ -1,0 +1,108 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://oetwithdrhesham.co.uk/schemas/rulebook.schema.json",
+  "title": "OET Rulebook",
+  "description": "Canonical rulebook content-as-code shape for Writing and Speaking. Authored from Dr. Ahmed Hesham's comprehensive rulebooks (medicine).",
+  "type": "object",
+  "required": ["version", "kind", "profession", "sections", "rules"],
+  "properties": {
+    "version": {
+      "type": "string",
+      "description": "Semver (e.g. '1.0.0'). Bump on any change. Active versions are pinned to in-flight submissions."
+    },
+    "kind": {
+      "type": "string",
+      "enum": ["writing", "speaking"]
+    },
+    "profession": {
+      "type": "string",
+      "enum": ["medicine", "nursing", "dentistry", "pharmacy", "physiotherapy", "veterinary", "optometry", "radiography", "occupational-therapy", "speech-pathology", "podiatry", "dietetics"]
+    },
+    "publishedAt": { "type": "string", "format": "date-time" },
+    "authoritySource": { "type": "string", "description": "Who authored / owns this content." },
+    "sections": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "title"],
+        "properties": {
+          "id": { "type": "string" },
+          "title": { "type": "string" },
+          "order": { "type": "integer", "minimum": 0 }
+        }
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": { "$ref": "#/$defs/rule" }
+    },
+    "tables": {
+      "type": "object",
+      "description": "Structured reference data: glossaries, lookup matrices, templates.",
+      "additionalProperties": true
+    },
+    "stateMachines": {
+      "type": "object",
+      "description": "Ordered stage machines (consultation stages, breaking-bad-news steps, smoking ladder, etc.).",
+      "additionalProperties": true
+    }
+  },
+  "$defs": {
+    "rule": {
+      "type": "object",
+      "required": ["id", "section", "title", "body", "severity"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "description": "Short stable code (e.g. R03.4 or RULE_27)."
+        },
+        "section": { "type": "string" },
+        "title": { "type": "string" },
+        "body": {
+          "type": "string",
+          "description": "Human-readable rule text verbatim or closely paraphrased from the rulebook."
+        },
+        "severity": {
+          "type": "string",
+          "enum": ["critical", "major", "minor", "info"],
+          "description": "CRITICAL rules (auto-mark deduction per rulebook) must be severity 'critical'."
+        },
+        "appliesTo": {
+          "description": "Which letter / card types this rule constrains. Use 'all' as a sentinel.",
+          "oneOf": [
+            { "type": "string", "enum": ["all"] },
+            { "type": "array", "items": { "type": "string" } }
+          ]
+        },
+        "turnStage": {
+          "type": "string",
+          "description": "For speaking rules: greeting, listening, empathy, diagnosis, recap, closure, etc."
+        },
+        "examples": {
+          "type": "object",
+          "properties": {
+            "good": { "type": "array", "items": { "type": "string" } },
+            "bad":  { "type": "array", "items": { "type": "string" } }
+          }
+        },
+        "exemplarPhrases": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "forbiddenPatterns": {
+          "type": "array",
+          "items": { "type": "string" }
+        },
+        "checkId": {
+          "type": "string",
+          "description": "Name of the deterministic detector in the rule engine that enforces this rule. Absence means human-only."
+        },
+        "params": {
+          "type": "object",
+          "additionalProperties": true
+        }
+      },
+      "additionalProperties": false
+    }
+  }
+}

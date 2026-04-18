@@ -31,6 +31,7 @@ var storageOptions = builder.Configuration.GetSection("Storage").Get<StorageOpti
 var platformOptions = builder.Configuration.GetSection("Platform").Get<PlatformOptions>() ?? new PlatformOptions();
 var billingOptions = builder.Configuration.GetSection("Billing").Get<BillingOptions>() ?? new BillingOptions();
 var externalAuthOptions = builder.Configuration.GetSection(ExternalAuthOptions.SectionName).Get<ExternalAuthOptions>() ?? new ExternalAuthOptions();
+var aiProviderOptions = builder.Configuration.GetSection(AiProviderOptions.SectionName).Get<AiProviderOptions>() ?? new AiProviderOptions();
 var useDevelopmentAuth = authOptions.UseDevelopmentAuth && builder.Environment.IsDevelopment();
 var enableSwagger = builder.Environment.IsDevelopment() || builder.Configuration.GetValue<bool>("Features:EnableSwagger");
 var trustForwardHeaders = builder.Configuration.GetValue<bool?>("Proxy:TrustForwardHeaders") ?? !builder.Environment.IsDevelopment();
@@ -138,6 +139,7 @@ builder.Services.Configure<StorageOptions>(builder.Configuration.GetSection("Sto
 builder.Services.Configure<PlatformOptions>(builder.Configuration.GetSection("Platform"));
 builder.Services.Configure<BillingOptions>(builder.Configuration.GetSection("Billing"));
 builder.Services.Configure<ExternalAuthOptions>(builder.Configuration.GetSection(ExternalAuthOptions.SectionName));
+builder.Services.Configure<AiProviderOptions>(builder.Configuration.GetSection(AiProviderOptions.SectionName));
 builder.Services.Configure<WebPushOptions>(builder.Configuration.GetSection(WebPushOptions.SectionName));
 builder.Services.Configure<NotificationProofHarnessOptions>(builder.Configuration.GetSection(NotificationProofHarnessOptions.SectionName));
 builder.Services.AddSingleton(TimeProvider.System);
@@ -440,6 +442,28 @@ builder.Services.AddScoped<PronunciationService>();
 builder.Services.AddScoped<WritingCoachService>();
 builder.Services.AddScoped<MarketplaceService>();
 
+// OET rulebook engine + grounded AI gateway. These services are the single
+// source of truth for rule enforcement and for every AI call: no code path
+// invokes a model without a rulebook-grounded prompt built here.
+builder.Services.AddSingleton<OetLearner.Api.Services.Rulebook.IRulebookLoader,
+    OetLearner.Api.Services.Rulebook.RulebookLoader>();
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.WritingRuleEngine>();
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.SpeakingRuleEngine>();
+builder.Services.AddHttpClient("AiOpenAiCompatible", client =>
+{
+    client.Timeout = TimeSpan.FromMinutes(30);
+    if (!string.IsNullOrWhiteSpace(aiProviderOptions.BaseUrl))
+    {
+        client.BaseAddress = new Uri(aiProviderOptions.BaseUrl.TrimEnd('/') + "/");
+    }
+});
+builder.Services.AddSingleton<OetLearner.Api.Services.Rulebook.IAiModelProvider,
+    OetLearner.Api.Services.Rulebook.MockAiProvider>();
+builder.Services.AddSingleton<OetLearner.Api.Services.Rulebook.IAiModelProvider,
+    OetLearner.Api.Services.Rulebook.OpenAiCompatibleProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiGatewayService,
+    OetLearner.Api.Services.Rulebook.AiGatewayService>();
+
 // ── Private Speaking Sessions ──
 builder.Services.Configure<ZoomOptions>(builder.Configuration.GetSection("Zoom"));
 builder.Services.AddHttpClient("ZoomApi");
@@ -686,6 +710,9 @@ app.MapSponsorEndpoints();
 
 // ── Private Speaking Sessions ──
 app.MapPrivateSpeakingEndpoints();
+
+// ── Rulebook + Writing linter + Speaking auditor + Grounded AI gateway ──
+app.MapRulebookEndpoints();
 
 // ── Media Management ──
 app.MapMediaEndpoints();
