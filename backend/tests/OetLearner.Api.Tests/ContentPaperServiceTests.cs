@@ -7,6 +7,8 @@ namespace OetLearner.Api.Tests;
 
 public class ContentPaperServiceTests
 {
+    private const string DefaultSourceProvenance = ContentDefaults.DefaultSourceProvenance;
+
     private static (LearnerDbContext db, ContentPaperService svc) Build()
     {
         var options = new DbContextOptionsBuilder<LearnerDbContext>()
@@ -47,7 +49,7 @@ public class ContentPaperServiceTests
             Difficulty: null,
             EstimatedDurationMinutes: 40,
             CardType: null, LetterType: null, Priority: 0, TagsCsv: null,
-            SourceProvenance: "Authored by Dr Hesham"), "admin-1", default);
+            SourceProvenance: DefaultSourceProvenance), "admin-1", default);
         Assert.Equal("listening-sample-1", p.Slug);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
@@ -86,7 +88,7 @@ public class ContentPaperServiceTests
         var (db, svc) = Build();
         var p = await svc.CreateAsync(new ContentPaperCreate(
             "listening", "L1", null, null, true, null, 40, null, null, 0, null,
-            "Authored by Dr Hesham"), "admin-1", default);
+            DefaultSourceProvenance), "admin-1", default);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             svc.PublishAsync(p.Id, "admin-1", default));
@@ -118,7 +120,7 @@ public class ContentPaperServiceTests
         var (db, svc) = Build();
         var p = await svc.CreateAsync(new ContentPaperCreate(
             "writing", "W1", null, "medicine", false, null, 45, null, "routine_referral",
-            0, null, "Authored by Dr Hesham"), "admin-1", default);
+            0, null, DefaultSourceProvenance), "admin-1", default);
 
         await AddMediaAsync(db, "m-cn");
         await svc.AttachAssetAsync(p.Id, new ContentPaperAssetAttach(
@@ -139,7 +141,7 @@ public class ContentPaperServiceTests
         var (db, svc) = Build();
         var p = await svc.CreateAsync(new ContentPaperCreate(
             "listening", "L1", null, null, true, null, 40, null, null, 0, null,
-            "Authored by Dr Hesham"), "admin-1", default);
+            DefaultSourceProvenance), "admin-1", default);
         await AddMediaAsync(db, "m1", "sha-one");
         await AddMediaAsync(db, "m2", "sha-two");
 

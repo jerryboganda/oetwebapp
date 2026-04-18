@@ -114,8 +114,9 @@ public class ContentPaper
     public string TagsCsv { get; set; } = string.Empty;
 
     /// <summary>Copyright provenance — required before publish (Slice 8
-    /// enforces). Free text: "Authored by Dr Hesham", "Licensed from X",
-    /// "Public domain".</summary>
+    /// enforces). Recommended default:
+    /// "Source: Project Real Content folder supplied by the project owner.
+    /// Internal practice use only. Redistribution requires rights review."</summary>
     [MaxLength(256)]
     public string? SourceProvenance { get; set; }
 

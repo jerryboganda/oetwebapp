@@ -21,6 +21,8 @@ namespace OetLearner.Api.Tests;
 /// </summary>
 public class ContentBulkImportE2ETests
 {
+    private const string DefaultSourceProvenance = ContentDefaults.DefaultSourceProvenance;
+
     private static (LearnerDbContext db, InMemoryFileStorage storage, ContentBulkImportService svc,
                     ContentPaperService paperSvc, ContentConventionParser parser)
         Build()
@@ -130,7 +132,7 @@ public class ContentBulkImportE2ETests
                 OverrideAppliesToAllProfessions: null,
                 OverrideCardType: null,
                 OverrideLetterType: null,
-                OverrideSourceProvenance: "Authored by Dr Hesham"))
+                OverrideSourceProvenance: DefaultSourceProvenance))
             .ToList();
 
         var result = await svc.CommitAsync("admin-1", session.SessionId, approvals, default);
@@ -148,7 +150,7 @@ public class ContentBulkImportE2ETests
 
         // Every paper must be Draft with provenance set
         Assert.All(papers, p => Assert.Equal(ContentStatus.Draft, p.Status));
-        Assert.All(papers, p => Assert.Equal("Authored by Dr Hesham", p.SourceProvenance));
+        Assert.All(papers, p => Assert.Equal(DefaultSourceProvenance, p.SourceProvenance));
 
         // Distinct MediaAsset count < total attachment count (proves dedup ran)
         var totalAttachments = await db.ContentPaperAssets.CountAsync();
@@ -214,7 +216,7 @@ public class ContentBulkImportE2ETests
         var session = await svc.StagePayloadAsync("admin-1", zip, "real-content.zip", default);
 
         var approvals = session.Manifest.Papers.Select(p => new BulkImportApproval(
-            p.ProposalId, Approve: true, null, null, null, null, null, "Authored by Dr Hesham"))
+            p.ProposalId, Approve: true, null, null, null, null, null, DefaultSourceProvenance))
             .ToList();
         await svc.CommitAsync("admin-1", session.SessionId, approvals, default);
 

@@ -11,6 +11,7 @@ import { Input, Select } from '@/components/ui/form-controls';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { ReadingStructureEditor } from '@/components/domain/ReadingStructureEditor';
+import { DEFAULT_CONTENT_SOURCE_PROVENANCE } from '@/lib/content-upload-defaults';
 import {
   attachPaperAsset,
   getContentPaper,
@@ -199,7 +200,7 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
                 <Input label="Source provenance (required to publish)"
                   value={paper.sourceProvenance ?? ''}
                   onChange={(e) => setPaper({ ...paper, sourceProvenance: e.target.value })}
-                  placeholder="Authored by Dr Hesham / Licensed from X / Public domain" />
+                  placeholder={DEFAULT_CONTENT_SOURCE_PROVENANCE} />
               </div>
               <div className="flex gap-3 mt-4">
                 <Button variant="primary" onClick={saveMetadata} loading={saving}>Save metadata</Button>

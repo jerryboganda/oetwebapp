@@ -12,6 +12,7 @@ import { Input, Select } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import { Toast } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import { DEFAULT_CONTENT_SOURCE_PROVENANCE } from '@/lib/content-upload-defaults';
 import {
   archiveContentPaper,
   createContentPaper,
@@ -53,6 +54,7 @@ export default function ContentPapersListPage() {
   const [newTitle, setNewTitle] = useState('');
   const [newApplyAll, setNewApplyAll] = useState(true);
   const [newProfession, setNewProfession] = useState('medicine');
+  const [newProvenance, setNewProvenance] = useState(DEFAULT_CONTENT_SOURCE_PROVENANCE);
   const [saving, setSaving] = useState(false);
 
   const load = useCallback(async () => {
@@ -84,10 +86,12 @@ export default function ContentPapersListPage() {
         professionId: newApplyAll ? null : newProfession,
         estimatedDurationMinutes: newSubtest === 'listening' ? 40 : newSubtest === 'reading' ? 60 : 45,
         priority: 0,
+        sourceProvenance: newProvenance.trim() || DEFAULT_CONTENT_SOURCE_PROVENANCE,
       });
       setToast({ variant: 'success', message: `Created paper "${paper.title}"` });
       setShowCreate(false);
       setNewTitle('');
+      setNewProvenance(DEFAULT_CONTENT_SOURCE_PROVENANCE);
       await load();
     } catch (e) {
       const detail = (e as Error & { detail?: { error?: string } }).detail;
@@ -167,7 +171,10 @@ export default function ContentPapersListPage() {
           <Select label="Status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} options={STATUSES} />
           <Input label="Search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Title or slug" />
           <div className="flex items-end gap-2">
-            <Button variant="primary" onClick={() => setShowCreate(true)}>
+            <Button variant="primary" onClick={() => {
+              setNewProvenance(DEFAULT_CONTENT_SOURCE_PROVENANCE);
+              setShowCreate(true);
+            }}>
               <Plus className="w-4 h-4 mr-1" /> New paper
             </Button>
             <Link href="/admin/content-papers/import">
@@ -204,6 +211,14 @@ export default function ContentPapersListPage() {
           {!newApplyAll && (
             <Input label="Profession ID" value={newProfession} onChange={(e) => setNewProfession(e.target.value)} />
           )}
+          <div className="col-span-2">
+            <Input
+              label="Source provenance"
+              value={newProvenance}
+              onChange={(e) => setNewProvenance(e.target.value)}
+              placeholder={DEFAULT_CONTENT_SOURCE_PROVENANCE}
+            />
+          </div>
         </div>
         <div className="flex gap-3 mt-4 justify-end">
           <Button variant="ghost" onClick={() => setShowCreate(false)}>Cancel</Button>

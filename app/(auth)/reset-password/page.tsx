@@ -91,12 +91,6 @@ export default function ResetPasswordPage() {
       }
     >
       <form onSubmit={handleSubmit} className={styles.passwordFlowForm}>
-        <div className={styles.summaryCard}>
-          <h4>Password Reset Context</h4>
-          <p>{email}</p>
-          <p>This password change applies to your verified reset request.</p>
-        </div>
-
         <div className={styles.field}>
           <label htmlFor="reset-email">Email</label>
           <input
@@ -109,17 +103,26 @@ export default function ResetPasswordPage() {
           />
         </div>
 
-        <div className={styles.field}>
-          <label htmlFor="reset-code">Reset Code</label>
-          <input
-            id="reset-code"
-            className={styles.input}
-            value={resetToken}
-            onChange={(event) => setResetToken(event.target.value)}
-            placeholder="Enter your 6 digit reset code"
-            required
-          />
-        </div>
+        {/* Reset Code field is shown only when we don't already have a token
+            from the URL (e.g. the learner skipped the verify step or arrived
+            here directly). When the verify page redirected here the token is
+            already in state; no need to re-expose it. Hidden field still
+            submits the value. */}
+        {searchParams.get('token') ? (
+          <input type="hidden" value={resetToken} readOnly />
+        ) : (
+          <div className={styles.field}>
+            <label htmlFor="reset-code">Reset Code</label>
+            <input
+              id="reset-code"
+              className={styles.input}
+              value={resetToken}
+              onChange={(event) => setResetToken(event.target.value)}
+              placeholder="Enter your 6 digit reset code"
+              required
+            />
+          </div>
+        )}
 
         <PasswordField
           id="newPassword"

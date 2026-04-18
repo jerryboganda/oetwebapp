@@ -149,7 +149,8 @@ public sealed class ContentBulkImportService(
             var prof = approval.OverrideProfessionId ?? (applyAll ? null : proposal.ProfessionId);
             var card = approval.OverrideCardType ?? proposal.CardType;
             var letter = approval.OverrideLetterType ?? proposal.LetterType;
-            var provenance = approval.OverrideSourceProvenance ?? proposal.SourceProvenance;
+            var provenance = approval.OverrideSourceProvenance ?? proposal.SourceProvenance
+                ?? ContentDefaults.DefaultSourceProvenance;
 
             ContentPaper paper;
             try

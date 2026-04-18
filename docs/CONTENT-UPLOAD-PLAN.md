@@ -468,8 +468,10 @@ Every upload path enforces:
   reviewer must confirm the paper contains no real patient data before
   publish.
 - **Copyright provenance** — add `ContentPaper.SourceProvenance` (e.g.
-  "Authored by Dr Hesham", "Licensed from publisher X", "Public domain").
-  Required field at create time. Surfaces in admin UI as a dropdown.
+  "Source: Project Real Content folder supplied by the project owner.
+  Internal practice use only. Redistribution requires rights review.").
+  Required field before publish. Surfaces in admin UI as a recommended default
+  with manual override.
 - **Retention** — published papers kept indefinitely (educational
   reference). Drafts auto-archived after 90 days of inactivity. Staged
   uploads cleaned at 24h.
@@ -559,8 +561,8 @@ Items that genuinely require operator action, not code:
 2. **Decide the storage backend for production** before Slice 8: stay on the
    VPS local disk, or move to S3/R2. Either works; the abstraction is in
    place for both.
-3. **Author the provenance copy** for each paper so QA can confirm
-   "Authored by Dr Hesham" / "Licensed from X" before approving publish.
+3. **Author the provenance copy** for each paper so QA can confirm the
+   recommended rights wording before approving publish.
 4. **Confirm the result-table screenshots** in `Project Real Content/Create
    Similar Table Formats…` are reference only (my read) — if they need to
    appear inside the app, that is a separate UI design task, not an upload

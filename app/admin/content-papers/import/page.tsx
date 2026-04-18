@@ -11,6 +11,7 @@ import { InlineAlert, Toast } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { env } from '@/lib/env';
 import { ensureFreshAccessToken } from '@/lib/auth-client';
+import { DEFAULT_CONTENT_SOURCE_PROVENANCE } from '@/lib/content-upload-defaults';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
@@ -45,7 +46,7 @@ export default function BulkImportPage() {
   const [uploading, setUploading] = useState(false);
   const [staged, setStaged] = useState<StagedResponse | null>(null);
   const [approved, setApproved] = useState<Record<string, boolean>>({});
-  const [provenance, setProvenance] = useState('Authored by Dr Hesham');
+  const [provenance, setProvenance] = useState(DEFAULT_CONTENT_SOURCE_PROVENANCE);
   const [committing, setCommitting] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
   const fileRef = useRef<HTMLInputElement>(null);
@@ -89,7 +90,7 @@ export default function BulkImportPage() {
       const approvals = staged.papers.map((p) => ({
         proposalId: p.proposalId,
         approve: Boolean(approved[p.proposalId]),
-        overrideSourceProvenance: provenance,
+        overrideSourceProvenance: provenance.trim() || DEFAULT_CONTENT_SOURCE_PROVENANCE,
       }));
       const res = await fetch(`${env.apiBaseUrl}/v1/admin/imports/zip/${staged.sessionId}/commit`, {
         method: 'POST',
@@ -180,7 +181,7 @@ export default function BulkImportPage() {
               className="w-full border rounded-lg p-2"
               value={provenance}
               onChange={(e) => setProvenance(e.target.value)}
-              placeholder="Authored by Dr Hesham / Licensed from X / Public domain"
+              placeholder={DEFAULT_CONTENT_SOURCE_PROVENANCE}
             />
           </AdminRoutePanel>
 

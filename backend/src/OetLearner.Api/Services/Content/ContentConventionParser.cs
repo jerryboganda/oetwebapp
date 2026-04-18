@@ -106,7 +106,7 @@ public sealed class ContentConventionParser : IContentConventionParser
                     AppliesToAllProfessions: applyAll,
                     CardType: cardType,
                     LetterType: letterType,
-                    SourceProvenance: "Authored by Dr Hesham",
+                    SourceProvenance: ContentDefaults.DefaultSourceProvenance,
                     Assets: new List<ProposedAsset>());
                 paperBuckets[bucketKey] = paper;
             }

@@ -8,6 +8,19 @@ public class ContentConventionParserTests
     private readonly ContentConventionParser _parser = new();
 
     [Fact]
+    public void Defaults_provenance_for_imported_papers()
+    {
+        var paths = new[]
+        {
+            "Reading ( IMPORTANT NOTE = Same for All Professions )/Reading Sample 1/Part A Reading ( Diarrhea & Dehydration in Children ).pdf",
+        };
+
+        var m = _parser.Parse(paths);
+        var paper = Assert.Single(m.Papers);
+        Assert.Equal(ContentDefaults.DefaultSourceProvenance, paper.SourceProvenance);
+    }
+
+    [Fact]
     public void Recognises_listening_sample_folder_and_roles()
     {
         var paths = new[]
