@@ -261,6 +261,18 @@ public class MediaAsset
 
     public MediaAssetStatus Status { get; set; }
 
+    /// <summary>SHA-256 of the stored file, hex-encoded lowercase. Used for
+    /// content-addressed storage and cross-upload dedup (Slice 2).
+    /// Nullable so the column can be back-filled for rows that pre-date
+    /// the Content Upload subsystem.</summary>
+    [MaxLength(64)]
+    public string? Sha256 { get; set; }
+
+    /// <summary>Optional classification to aid query ("image" | "audio" |
+    /// "document"). Derived from MimeType at upload time.</summary>
+    [MaxLength(16)]
+    public string? MediaKind { get; set; }
+
     [MaxLength(64)]
     public string? UploadedBy { get; set; }
 

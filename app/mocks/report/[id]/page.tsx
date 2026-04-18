@@ -16,12 +16,14 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
+import { OetStatementOfResultsCard } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { fetchMockReport } from '@/lib/api';
 import type { MockReport } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
 import { oetGradeFromScaled } from '@/lib/scoring';
+import { mockReportToStatementOfResults } from '@/lib/adapters/oet-sor-adapter';
 
 const SUBTEST_META: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
   listening: { icon: Headphones, color: 'text-indigo-600', bg: 'bg-indigo-100' },
@@ -93,9 +95,16 @@ function MockReportContent() {
     >
       <div className="space-y-8">
 
+        {/* 0. OET Statement of Results — pixel-faithful CBLA format.
+            Mission-critical: this is the single place the "official" OET
+            result card is rendered. See docs/OET-RESULT-CARD-SPEC.md. */}
+        <MotionSection delayIndex={0}>
+          <OetStatementOfResultsCard data={mockReportToStatementOfResults({ report })} />
+        </MotionSection>
+
         {/* 1. Overall Score */}
         <MotionSection
-          delayIndex={0}
+          delayIndex={1}
           className="bg-surface rounded-[32px] border border-gray-200 p-8 sm:p-10 text-center shadow-sm flex flex-col items-center"
         >
           <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center mb-6">

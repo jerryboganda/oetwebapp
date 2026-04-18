@@ -230,6 +230,20 @@ builder.Services.AddRateLimiter(options =>
             QueueLimit = 0
         });
     });
+    options.AddPolicy("AiCredentialValidate", httpContext =>
+    {
+        // Tight limit: this endpoint pings external providers and costs us
+        // reputation + rate-limit budget if abused. See §8 of the policy.
+        var key = httpContext.User.FindFirst(System.Security.Claims.ClaimTypes.NameIdentifier)?.Value
+            ?? httpContext.Connection.RemoteIpAddress?.ToString()
+            ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter($"ai-validate-{key}", _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = 5,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0,
+        });
+    });
 });
 
 var defaultAuthScheme = useDevelopmentAuth ? HybridDevelopmentAuthScheme : JwtBearerDefaults.AuthenticationScheme;
@@ -399,6 +413,9 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminReviewOps", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "review_ops", "system_admin")));
+    options.AddPolicy("AdminAiConfig", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "ai_config", "system_admin")));
     options.AddPolicy("AdminSystemAdmin", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "system_admin")));
@@ -459,8 +476,63 @@ builder.Services.AddHttpClient("AiOpenAiCompatible", client =>
 });
 builder.Services.AddSingleton<OetLearner.Api.Services.Rulebook.IAiModelProvider,
     OetLearner.Api.Services.Rulebook.MockAiProvider>();
-builder.Services.AddSingleton<OetLearner.Api.Services.Rulebook.IAiModelProvider,
-    OetLearner.Api.Services.Rulebook.OpenAiCompatibleProvider>();
+// Legacy config-only OpenAiCompatibleProvider is retained in-code for tests
+// but no longer registered in DI — the registry-backed provider supersedes
+// it. Admins configure the real provider via /admin/ai-usage → Providers.
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiUsageRecorder,
+    OetLearner.Api.Services.Rulebook.AiUsageRecorder>();
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<OetLearner.Api.Services.AiManagement.IAiQuotaService,
+    OetLearner.Api.Services.AiManagement.AiQuotaService>();
+builder.Services.AddHttpClient("AiCredentialValidator");
+builder.Services.AddScoped<OetLearner.Api.Services.AiManagement.IAiCredentialVault,
+    OetLearner.Api.Services.AiManagement.AiCredentialVault>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiManagement.IAiCredentialResolver,
+    OetLearner.Api.Services.AiManagement.AiCredentialResolver>();
+builder.Services.AddHttpClient("AiRegistryClient", c => c.Timeout = TimeSpan.FromMinutes(30));
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiProviderRegistry,
+    OetLearner.Api.Services.Rulebook.AiProviderRegistry>();
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
+    OetLearner.Api.Services.Rulebook.RegistryBackedProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
+    OetLearner.Api.Services.Rulebook.AnthropicProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.AiManagement.IAiCreditService,
+    OetLearner.Api.Services.AiManagement.AiCreditService>();
+builder.Services.AddHostedService<OetLearner.Api.Services.AiManagement.AiCreditRenewalWorker>();
+
+// Content Upload subsystem (Slice 2). IFileStorage sits in front of disk
+// access so future S3/R2 swap is a DI-only change.
+builder.Services.AddSingleton<OetLearner.Api.Services.Content.IFileStorage,
+    OetLearner.Api.Services.Content.LocalFileStorage>();
+builder.Services.AddSingleton<OetLearner.Api.Services.Content.IUploadContentValidator,
+    OetLearner.Api.Services.Content.MagicByteValidator>();
+builder.Services.AddSingleton<OetLearner.Api.Services.Content.IUploadScanner,
+    OetLearner.Api.Services.Content.NoOpUploadScanner>();
+builder.Services.AddScoped<OetLearner.Api.Services.Content.IChunkedUploadService,
+    OetLearner.Api.Services.Content.ChunkedUploadService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Content.IContentPaperService,
+    OetLearner.Api.Services.Content.ContentPaperService>();
+builder.Services.AddSingleton<OetLearner.Api.Services.Content.IContentConventionParser,
+    OetLearner.Api.Services.Content.ContentConventionParser>();
+builder.Services.AddScoped<OetLearner.Api.Services.Content.IContentBulkImportService,
+    OetLearner.Api.Services.Content.ContentBulkImportService>();
+builder.Services.AddSingleton<OetLearner.Api.Services.Content.IPdfTextExtractor,
+    OetLearner.Api.Services.Content.NoOpPdfTextExtractor>();
+builder.Services.AddScoped<OetLearner.Api.Services.Content.IContentTextExtractionService,
+    OetLearner.Api.Services.Content.ContentTextExtractionService>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Content.ContentTextExtractionWorker>();
+
+// Reading Authoring subsystem (Slices R1–R7).
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingStructureService,
+    OetLearner.Api.Services.Reading.ReadingStructureService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingPolicyService,
+    OetLearner.Api.Services.Reading.ReadingPolicyService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingGradingService,
+    OetLearner.Api.Services.Reading.ReadingGradingService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingAttemptService,
+    OetLearner.Api.Services.Reading.ReadingAttemptService>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Reading.ReadingAttemptExpireWorker>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Content.AdminUploadCleanupWorker>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiGatewayService,
     OetLearner.Api.Services.Rulebook.AiGatewayService>();
 
@@ -683,6 +755,13 @@ app.MapNotificationEndpoints();
 app.MapLearnerEndpoints();
 app.MapExpertEndpoints();
 app.MapAdminEndpoints();
+app.MapAiUsageAdminEndpoints();
+app.MapAiMeEndpoints();
+app.MapContentPapersAdminEndpoints();
+app.MapContentPapersLearnerEndpoints();
+app.MapReadingAuthoringAdminEndpoints();
+app.MapReadingLearnerEndpoints();
+app.MapReadingPolicyAdminEndpoints();
 app.MapContentHierarchyEndpoints();
 
 // ── Phase 1 new endpoints ──

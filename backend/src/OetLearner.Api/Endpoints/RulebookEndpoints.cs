@@ -1,3 +1,5 @@
+using System.Security.Claims;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Endpoints;
@@ -107,7 +109,11 @@ public static class RulebookEndpoints
         }).RequireAuthorization();
 
         // Grounded AI gateway
-        app.MapPost("/v1/ai/complete", async (AiCompleteRequest body, IAiGatewayService gateway, CancellationToken ct) =>
+        app.MapPost("/v1/ai/complete", async (
+            AiCompleteRequest body,
+            IAiGatewayService gateway,
+            HttpContext http,
+            CancellationToken ct) =>
         {
             if (!Enum.TryParse<RuleKind>(body.Kind ?? "writing", ignoreCase: true, out var kind))
                 return Results.BadRequest(new { error = "Unknown rulebook kind." });
@@ -126,24 +132,71 @@ public static class RulebookEndpoints
                 CandidateCountry = body.CandidateCountry,
             };
             var prompt = gateway.BuildGroundedPrompt(ctx);
-            var result = await gateway.CompleteAsync(new AiGatewayRequest
+
+            // Classify this call into the feature-eligibility matrix so the
+            // resolver, quota service, and admin explorer can reason about
+            // it correctly. See docs/AI-USAGE-POLICY.md §5.
+            var featureCode = ClassifyFeature(kind, task);
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+            var authAccountId = http.User.FindFirstValue("aid");
+
+            try
             {
-                Prompt = prompt,
-                UserInput = body.UserInput,
-                Provider = body.Provider ?? string.Empty,
-                Model = body.Model ?? "mock",
-                Temperature = body.Temperature ?? 0.2,
-                MaxTokens = body.MaxTokens,
-            }, ct);
-            return Results.Ok(new
+                var result = await gateway.CompleteAsync(new AiGatewayRequest
+                {
+                    Prompt = prompt,
+                    UserInput = body.UserInput,
+                    Provider = body.Provider ?? string.Empty,
+                    Model = body.Model ?? "mock",
+                    Temperature = body.Temperature ?? 0.2,
+                    MaxTokens = body.MaxTokens,
+                    UserId = userId,
+                    AuthAccountId = authAccountId,
+                    FeatureCode = featureCode,
+                }, ct);
+                return Results.Ok(new
+                {
+                    completion = result.Completion,
+                    rulebookVersion = result.RulebookVersion,
+                    appliedRuleIds = result.AppliedRuleIds,
+                    metadata = result.Metadata,
+                    promptHeadSnippet = prompt.SystemPrompt.Length > 400 ? prompt.SystemPrompt[..400] + "…" : prompt.SystemPrompt,
+                });
+            }
+            catch (OetLearner.Api.Services.AiManagement.AiQuotaDeniedException qex)
             {
-                completion = result.Completion,
-                rulebookVersion = result.RulebookVersion,
-                appliedRuleIds = result.AppliedRuleIds,
-                metadata = result.Metadata,
-                promptHeadSnippet = prompt.SystemPrompt.Length > 400 ? prompt.SystemPrompt[..400] + "…" : prompt.SystemPrompt,
-            });
+                // 429 is the right code for rate/quota denials. The UI maps
+                // errorCode to an upgrade CTA; see docs/AI-USAGE-POLICY.md §4.
+                return Results.Json(new
+                {
+                    errorCode = qex.ErrorCode,
+                    error = qex.Message,
+                }, statusCode: StatusCodes.Status429TooManyRequests);
+            }
         }).RequireAuthorization();
+    }
+
+    /// <summary>
+    /// Map the grounded prompt kind + task to a canonical feature code. Keep
+    /// in sync with <c>AiFeatureCodes</c> and the matrix in
+    /// <c>docs/AI-USAGE-POLICY.md</c> §5.
+    /// </summary>
+    private static string ClassifyFeature(RuleKind kind, AiTaskMode task)
+    {
+        return (kind, task) switch
+        {
+            (RuleKind.Writing, AiTaskMode.Score) => AiFeatureCodes.WritingGrade,
+            (RuleKind.Writing, AiTaskMode.Coach) => AiFeatureCodes.WritingCoachExplain,
+            (RuleKind.Writing, AiTaskMode.Correct) => AiFeatureCodes.WritingCoachSuggest,
+            (RuleKind.Writing, AiTaskMode.Summarise) => AiFeatureCodes.SummarisePassage,
+            (RuleKind.Writing, AiTaskMode.GenerateFeedback) => AiFeatureCodes.WritingCoachExplain,
+            (RuleKind.Writing, AiTaskMode.GenerateContent) => AiFeatureCodes.AdminContentGeneration,
+            (RuleKind.Speaking, AiTaskMode.Score) => AiFeatureCodes.SpeakingGrade,
+            (RuleKind.Speaking, AiTaskMode.Coach) => AiFeatureCodes.PronunciationTip,
+            (RuleKind.Speaking, AiTaskMode.Correct) => AiFeatureCodes.PronunciationTip,
+            (RuleKind.Speaking, AiTaskMode.GenerateContent) => AiFeatureCodes.AdminContentGeneration,
+            _ => AiFeatureCodes.Unclassified,
+        };
     }
 }
 

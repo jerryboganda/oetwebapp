@@ -91,6 +91,27 @@ public static class SeedData
             hasChanges = true;
         }
 
+        if (!await db.AiQuotaPlans.AnyAsync(cancellationToken))
+        {
+            SeedAiQuotaPlans(db);
+            hasChanges = true;
+        }
+
+        if (!await db.AiGlobalPolicies.AnyAsync(cancellationToken))
+        {
+            SeedAiGlobalPolicy(db);
+            hasChanges = true;
+        }
+
+        if (!await db.AiProviders.AnyAsync(cancellationToken))
+        {
+            // Note: platform API key is NOT seeded here — admins must register
+            // it via /admin/ai-usage/providers so the encrypted ciphertext
+            // lives under the production Data Protection key ring.
+            SeedAiProviderStub(db);
+            hasChanges = true;
+        }
+
         if (hasChanges)
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -2281,5 +2302,122 @@ public static class SeedData
             new FreePreviewAsset { Id = "fp-reading-sample", Title = "OET Reading Sample", PreviewType = "sample_lesson", ConversionCtaText = "Improve your OET Reading", TargetPackageId = "pkg-full-en-2026", Status = ContentStatus.Published, DisplayOrder = 4, CreatedAt = now },
             new FreePreviewAsset { Id = "fp-listening-sample", Title = "OET Listening Sample", PreviewType = "sample_lesson", ConversionCtaText = "Sharpen your Listening skills", TargetPackageId = "pkg-full-en-2026", Status = ContentStatus.Published, DisplayOrder = 5, CreatedAt = now }
         );
+    }
+
+    // ────────────────────────────────────────────────────────────────────
+    // AI Usage Management seed data. See docs/AI-USAGE-POLICY.md.
+    // ────────────────────────────────────────────────────────────────────
+
+    private static void SeedAiQuotaPlans(LearnerDbContext db)
+    {
+        var now = DateTimeOffset.UtcNow;
+        db.AiQuotaPlans.AddRange(
+            new AiQuotaPlan
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Code = "free", Name = "Free tier",
+                Description = "Entry tier — tight caps, conversational features only.",
+                Period = AiQuotaPeriod.Monthly,
+                MonthlyTokenCap = 20_000, DailyTokenCap = 5_000,
+                RolloverPolicy = AiQuotaRolloverPolicy.Expire, RolloverCapPct = 0,
+                OveragePolicy = AiOveragePolicy.Deny,
+                AllowedFeaturesCsv = string.Join(",",
+                    AiFeatureCodes.ConversationReply,
+                    AiFeatureCodes.VocabularyGloss,
+                    AiFeatureCodes.SummarisePassage),
+                IsActive = true, DisplayOrder = 10,
+                CreatedAt = now, UpdatedAt = now,
+            },
+            new AiQuotaPlan
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Code = "starter", Name = "Starter",
+                Description = "Entry paid tier — all practice features, capped grading.",
+                Period = AiQuotaPeriod.Monthly,
+                MonthlyTokenCap = 200_000, DailyTokenCap = 50_000,
+                RolloverPolicy = AiQuotaRolloverPolicy.Expire, RolloverCapPct = 0,
+                OveragePolicy = AiOveragePolicy.Deny,
+                AllowedFeaturesCsv = string.Empty, // all features
+                IsActive = true, DisplayOrder = 20,
+                CreatedAt = now, UpdatedAt = now,
+            },
+            new AiQuotaPlan
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Code = "pro", Name = "Pro",
+                Description = "Unlimited practice + generous grading allowance.",
+                Period = AiQuotaPeriod.Monthly,
+                MonthlyTokenCap = 1_000_000, DailyTokenCap = 200_000,
+                RolloverPolicy = AiQuotaRolloverPolicy.RolloverCapped, RolloverCapPct = 20,
+                OveragePolicy = AiOveragePolicy.Deny,
+                AllowedFeaturesCsv = string.Empty,
+                IsActive = true, DisplayOrder = 30,
+                CreatedAt = now, UpdatedAt = now,
+            },
+            new AiQuotaPlan
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Code = "enterprise", Name = "Enterprise",
+                Description = "Sponsored / institutional tier, very high limits.",
+                Period = AiQuotaPeriod.Monthly,
+                MonthlyTokenCap = 10_000_000, DailyTokenCap = 2_000_000,
+                RolloverPolicy = AiQuotaRolloverPolicy.RolloverCapped, RolloverCapPct = 50,
+                OveragePolicy = AiOveragePolicy.AllowWithCharge,
+                OverageRatePer1kTokens = 0.004m,
+                AllowedFeaturesCsv = string.Empty,
+                IsActive = true, DisplayOrder = 40,
+                CreatedAt = now, UpdatedAt = now,
+            }
+        );
+    }
+
+    private static void SeedAiGlobalPolicy(LearnerDbContext db)
+    {
+        db.AiGlobalPolicies.Add(new AiGlobalPolicy
+        {
+            Id = "global",
+            KillSwitchEnabled = false,
+            KillSwitchScope = AiKillSwitchScope.PlatformKeysOnly,
+            MonthlyBudgetUsd = 0m,                  // admin sets this on /admin/ai-usage → Budget
+            SoftWarnPct = 80,
+            HardKillPct = 100,
+            AllowByokOnScoringFeatures = false,     // safe default; see §1
+            AllowByokOnNonScoringFeatures = true,
+            DefaultPlatformProviderId = "digitalocean-serverless",
+            ByokErrorCooldownHours = 24,
+            ByokTransientRetryCount = 2,
+            AnomalyDetectionEnabled = true,
+            AnomalyMultiplierX = 10m,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+    }
+
+    private static void SeedAiProviderStub(LearnerDbContext db)
+    {
+        // Stub only: no API key. Admins must edit this row via the UI to
+        // supply the encrypted platform API key (or register a different
+        // provider). Seeding the stub means the system boots pointing at a
+        // named provider row instead of "undefined".
+        var now = DateTimeOffset.UtcNow;
+        db.AiProviders.Add(new AiProvider
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Code = "digitalocean-serverless",
+            Name = "DigitalOcean Serverless Inference",
+            Dialect = AiProviderDialect.OpenAiCompatible,
+            BaseUrl = "https://inference.do-ai.run/v1",
+            EncryptedApiKey = string.Empty,  // must be set via admin UI
+            ApiKeyHint = "(not set)",
+            DefaultModel = "gpt-4o",
+            PricePer1kPromptTokens = 0.0025m,
+            PricePer1kCompletionTokens = 0.010m,
+            RetryCount = 2,
+            CircuitBreakerThreshold = 5,
+            CircuitBreakerWindowSeconds = 30,
+            FailoverPriority = 100,
+            IsActive = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
     }
 }
