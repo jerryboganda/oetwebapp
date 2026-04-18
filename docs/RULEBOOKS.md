@@ -117,6 +117,25 @@ grounded builder as the public path to prompt construction.
 - `OpenAiCompatibleProvider` — real provider for DigitalOcean Serverless
   Inference and any other OpenAI-compatible `/chat/completions` API.
 
+### Usage accounting (Slice 1, AI Usage Management)
+
+`AiGatewayService` is now paired with an optional `IAiUsageRecorder`
+(default: `AiUsageRecorder`). Every call — success, provider error, or
+gateway refusal (ungrounded prompt / missing provider) — produces exactly
+one `AiUsageRecord` row in the `AiUsageRecords` table.
+
+Admin read-only surface:
+
+- `GET /v1/admin/ai/usage` — paginated, filterable log.
+- `GET /v1/admin/ai/usage/summary` — monthly roll-ups by feature / provider
+  / outcome / user.
+
+Policy options that govern the rest of the subsystem (quotas, BYOK,
+fallback, kill-switch, overage, custody) live in
+[`docs/AI-USAGE-POLICY.md`](AI-USAGE-POLICY.md). Slice 1 touches none of
+those policies — it only establishes the audit trail they will share.
+
+
 Configuration comes from the `AI` section in `appsettings.json` (or env vars):
 
 ```json

@@ -150,6 +150,46 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<AIConfigVersion> AIConfigVersions => Set<AIConfigVersion>();
     public DbSet<FeatureFlag> FeatureFlags => Set<FeatureFlag>();
     public DbSet<AuditEvent> AuditEvents => Set<AuditEvent>();
+
+    // AI usage accounting. See docs/AI-USAGE-POLICY.md. Every AI call made
+    // through AiGatewayService produces exactly one AiUsageRecord row.
+    public DbSet<AiUsageRecord> AiUsageRecords => Set<AiUsageRecord>();
+
+    // AI quota + policy (Slice 2). Admin-configurable surfaces for the
+    // policies documented in docs/AI-USAGE-POLICY.md §3, §4, §7.
+    public DbSet<AiQuotaPlan> AiQuotaPlans => Set<AiQuotaPlan>();
+    public DbSet<AiQuotaCounter> AiQuotaCounters => Set<AiQuotaCounter>();
+    public DbSet<AiUserQuotaOverride> AiUserQuotaOverrides => Set<AiUserQuotaOverride>();
+    public DbSet<AiGlobalPolicy> AiGlobalPolicies => Set<AiGlobalPolicy>();
+
+    // BYOK (Slice 3). Encrypted via ASP.NET Data Protection; KeyHint is the
+    // only display-safe field.
+    public DbSet<UserAiCredential> UserAiCredentials => Set<UserAiCredential>();
+    public DbSet<UserAiPreferences> UserAiPreferences => Set<UserAiPreferences>();
+
+    // Provider registry (Slice 5). DB-backed replacement for the previous
+    // config-only provider registration.
+    public DbSet<AiProvider> AiProviders => Set<AiProvider>();
+
+    // Credit ledger (Slice 6). Append-only; balance = SUM(TokensDelta).
+    public DbSet<AiCreditLedgerEntry> AiCreditLedger => Set<AiCreditLedgerEntry>();
+
+    // Content Paper subsystem (Content Upload, Slice 1). Curatorial papers
+    // that bundle typed assets pointing at MediaAsset rows.
+    public DbSet<ContentPaper> ContentPapers => Set<ContentPaper>();
+    public DbSet<ContentPaperAsset> ContentPaperAssets => Set<ContentPaperAsset>();
+
+    // Content Upload chunked session (Slice 2).
+    public DbSet<AdminUploadSession> AdminUploadSessions => Set<AdminUploadSession>();
+
+    // Reading Authoring subsystem (Reading Slice R1).
+    public DbSet<ReadingPart> ReadingParts => Set<ReadingPart>();
+    public DbSet<ReadingText> ReadingTexts => Set<ReadingText>();
+    public DbSet<ReadingQuestion> ReadingQuestions => Set<ReadingQuestion>();
+    public DbSet<ReadingAttempt> ReadingAttempts => Set<ReadingAttempt>();
+    public DbSet<ReadingAnswer> ReadingAnswers => Set<ReadingAnswer>();
+    public DbSet<ReadingPolicy> ReadingPolicies => Set<ReadingPolicy>();
+    public DbSet<ReadingUserPolicyOverride> ReadingUserPolicyOverrides => Set<ReadingUserPolicyOverride>();
     public DbSet<BillingPlan> BillingPlans => Set<BillingPlan>();
     public DbSet<AdminPermissionGrant> AdminPermissionGrants => Set<AdminPermissionGrant>();
     public DbSet<AdminUser> AdminUsers => Set<AdminUser>();
@@ -259,6 +299,60 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<AuditEvent>().HasIndex(x => x.OccurredAt);
         modelBuilder.Entity<AuditEvent>().HasIndex(x => x.ActorId);
         modelBuilder.Entity<AuditEvent>().HasIndex(x => new { x.ResourceType, x.ResourceId });
+
+        // AiUsageRecord: keep rows even if the auth account is later deleted
+        // (we still need historical usage / cost data). Indexes declared via
+        // [Index] on the entity cover the common access paths; this just
+        // pins the delete behaviour so a user delete does not cascade into
+        // usage history.
+        modelBuilder.Entity<AiUsageRecord>()
+            .HasOne(x => x.AuthAccount)
+            .WithMany()
+            .HasForeignKey(x => x.AuthAccountId)
+            .OnDelete(DeleteBehavior.SetNull);
+
+        // Content Paper subsystem (Slice 1). Cascade delete: removing a paper
+        // also removes its asset links, but NOT the underlying MediaAsset
+        // (same file may be referenced by other papers under SHA dedup).
+        modelBuilder.Entity<ContentPaperAsset>()
+            .HasOne(x => x.Paper)
+            .WithMany(p => p.Assets)
+            .HasForeignKey(x => x.PaperId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ContentPaperAsset>()
+            .HasOne(x => x.MediaAsset)
+            .WithMany()
+            .HasForeignKey(x => x.MediaAssetId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        // Reading Authoring (R1). A ReadingPart belongs to a ContentPaper.
+        // Cascade: archive a paper → archive its structure. Answers and
+        // attempts stay (historical record of a user's study).
+        modelBuilder.Entity<ReadingText>()
+            .HasOne(x => x.Part)
+            .WithMany(p => p.Texts)
+            .HasForeignKey(x => x.ReadingPartId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ReadingQuestion>()
+            .HasOne(x => x.Part)
+            .WithMany(p => p.Questions)
+            .HasForeignKey(x => x.ReadingPartId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ReadingQuestion>()
+            .HasOne(x => x.Text)
+            .WithMany()
+            .HasForeignKey(x => x.ReadingTextId)
+            .OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<ReadingAnswer>()
+            .HasOne(x => x.Attempt)
+            .WithMany(a => a.Answers)
+            .HasForeignKey(x => x.ReadingAttemptId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ReadingAnswer>()
+            .HasOne(x => x.Question)
+            .WithMany()
+            .HasForeignKey(x => x.ReadingQuestionId)
+            .OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<NotificationPreference>().HasIndex(x => x.AuthAccountId).IsUnique();
         modelBuilder.Entity<NotificationPolicyOverride>().HasIndex(x => new { x.AudienceRole, x.EventKey }).IsUnique();
         modelBuilder.Entity<NotificationDeliveryAttempt>().HasIndex(x => new { x.NotificationEventId, x.Channel, x.AttemptedAt });
