@@ -275,5 +275,14 @@ public enum MediaAssetStatus
 {
     Processing,
     Ready,
-    Failed
+    Failed,
+    /// <summary>
+    /// Content Upload subsystem (Slice 1): the file has been streamed into
+    /// staging and is waiting for post-processing (scan, thumbnail, extract).
+    /// </summary>
+    Staged,
+    /// <summary>Scanner / virus check in progress.</summary>
+    Scanning,
+    /// <summary>Scanner rejected the file.</summary>
+    Quarantined,
 }

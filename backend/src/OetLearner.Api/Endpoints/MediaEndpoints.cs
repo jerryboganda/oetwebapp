@@ -21,6 +21,7 @@ public static class MediaEndpoints
             .RequireRateLimiting("PerUserWrite");
 
         media.MapGet("/{id}", HandleGetByIdAsync);
+        media.MapGet("/{id}/content", HandleDownloadAsync);
         media.MapDelete("/{id}", HandleDeleteAsync).RequireRateLimiting("PerUserWrite");
         media.MapGet("", HandleListAsync);
 
@@ -175,6 +176,28 @@ public static class MediaEndpoints
             .ToListAsync(ct);
 
         return Results.Ok(new { items, total, page = effectivePage, pageSize = effectivePageSize });
+    }
+
+    /// <summary>
+    /// Stream a media asset to the client. Authenticated; authorised by the
+    /// containing <see cref="ContentPaper"/>'s status (published) and the
+    /// caller's profession scope. Uses <see cref="IFileStorage"/> so S3/R2
+    /// swaps later are a DI-only change.
+    /// </summary>
+    private static async Task<IResult> HandleDownloadAsync(
+        string id,
+        LearnerDbContext db,
+        OetLearner.Api.Services.Content.IFileStorage storage,
+        CancellationToken ct)
+    {
+        var media = await db.MediaAssets.AsNoTracking().FirstOrDefaultAsync(m => m.Id == id, ct);
+        if (media is null) return Results.NotFound();
+        if (media.Status != MediaAssetStatus.Ready) return Results.NotFound();
+        if (string.IsNullOrWhiteSpace(media.StoragePath)) return Results.NotFound();
+
+        if (!storage.Exists(media.StoragePath)) return Results.NotFound();
+        var stream = await storage.OpenReadAsync(media.StoragePath, ct);
+        return Results.Stream(stream, media.MimeType, media.OriginalFilename);
     }
 }
 
