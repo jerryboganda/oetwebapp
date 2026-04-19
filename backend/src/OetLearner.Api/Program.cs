@@ -427,6 +427,14 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminStudyPlannerWrite", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "study_planner:write", "system_admin")));
+
+    // ── Progress v2 ──
+    options.AddPolicy("AdminProgressPolicyRead", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "progress_policy:read", "progress_policy:write", "system_admin")));
+    options.AddPolicy("AdminProgressPolicyWrite", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "progress_policy:write", "system_admin")));
 });
 
 builder.Services.AddScoped<LearnerService>();
@@ -566,6 +574,10 @@ builder.Services.AddHttpClient();
 builder.Services.AddDataProtection();
 builder.Services.AddScoped<OetLearner.Api.Services.StudyPlanner.IGoogleCalendarService,
     OetLearner.Api.Services.StudyPlanner.GoogleCalendarService>();
+
+// ── Progress v2 ──
+builder.Services.AddScoped<OetLearner.Api.Services.Progress.IProgressService,
+    OetLearner.Api.Services.Progress.ProgressService>();
 
 var app = builder.Build();
 
@@ -789,6 +801,8 @@ app.MapReadingPolicyAdminEndpoints();
 app.MapContentHierarchyEndpoints();
 app.MapStudyPlannerAdminEndpoints();
 app.MapStudyPlannerLearnerEndpoints();
+app.MapProgressLearnerEndpoints();
+app.MapProgressAdminEndpoints();
 
 // ── Phase 1 new endpoints ──
 app.MapGamificationEndpoints();

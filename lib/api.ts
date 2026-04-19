@@ -1742,6 +1742,131 @@ export async function fetchProgressEvidenceSummary(): Promise<ProgressEvidenceSu
   };
 }
 
+// ── Progress v2 (new admin-managed, scoring-canonical Progress surface) ─────
+
+export type ProgressRange = '14d' | '30d' | '90d' | 'all';
+
+export interface ProgressV2Payload {
+  meta: {
+    range: ProgressRange;
+    examFamilyCode: string;
+    targetCountry: string | null;
+    scoreAxisMin: number;
+    scoreAxisMax: number;
+    gradeBThreshold: number;
+    writingThreshold: number | null;
+    writingThresholdGrade: string | null;
+    writingThresholdReason: string | null;
+    showScoreGuaranteeStrip: boolean;
+    showCriterionConfidenceBand: boolean;
+    minEvaluationsForTrend: number;
+  };
+  subtests: ProgressSubtestSummary[];
+  trend: ProgressWeeklyPoint[];
+  criterionTrend: ProgressCriterionPoint[];
+  completion: ProgressCompletionPoint[];
+  submissionVolume: ProgressVolumePoint[];
+  reviewUsage: {
+    totalRequests: number;
+    completedRequests: number;
+    averageTurnaroundHours: number | null;
+    creditsConsumed: number;
+  };
+  goals: {
+    targetWritingScore: number | null;
+    targetSpeakingScore: number | null;
+    targetReadingScore: number | null;
+    targetListeningScore: number | null;
+    targetExamDate: string | null;
+    daysToExam: number | null;
+    targetCountry: string | null;
+  };
+  comparative: ProgressComparativeBlock | null;
+  totals: {
+    completedAttempts: number;
+    completedEvaluations: number;
+    mockAttempts: number;
+    writingSubmissions: number;
+    speakingSubmissions: number;
+  };
+  freshness: {
+    generatedAt: string;
+    usesFallbackSeries: boolean;
+    eTag: string;
+  };
+}
+
+export interface ProgressSubtestSummary {
+  subtestCode: 'writing' | 'speaking' | 'reading' | 'listening';
+  latestScaled: number | null;
+  latestGrade: string | null;
+  targetScaled: number | null;
+  gapToTarget: number | null;
+  deltaLast30Days: number | null;
+  attemptCount: number;
+  evaluationCount: number;
+  thresholdScaled: number | null;
+  thresholdReason: string | null;
+}
+
+export interface ProgressWeeklyPoint {
+  weekKey: string;
+  weekStart: string;
+  subtestScaled: Record<string, number | null>;
+  subtestCount: Record<string, number>;
+  mockScaled: Record<string, number | null>;
+  mockCount: Record<string, number>;
+}
+
+export interface ProgressCriterionPoint {
+  weekKey: string;
+  weekStart: string;
+  subtestCode: string;
+  criterionCode: string;
+  criterionLabel: string;
+  averageScaled: number;
+  sampleCount: number;
+}
+
+export interface ProgressCompletionPoint {
+  date: string; // ISO
+  completed: number;
+}
+
+export interface ProgressVolumePoint {
+  weekKey: string;
+  weekStart: string;
+  writing: number;
+  speaking: number;
+}
+
+export interface ProgressComparativeBlock {
+  subtests: {
+    subtestCode: string;
+    yourScaled: number;
+    cohortAverage: number;
+    cohortMedian: number;
+    percentile: number;
+    tier: 'top10' | 'top25' | 'aboveMedian' | 'belowMedian';
+  }[];
+  cohortSize: number;
+  minCohortSize: number;
+  hasSufficientCohort: boolean;
+  cohortScopeDescription: string;
+}
+
+export async function fetchProgressV2(range: ProgressRange = '90d'): Promise<ProgressV2Payload> {
+  return apiRequest<ProgressV2Payload>(`/v1/progress/v2?range=${range}`);
+}
+
+export async function fetchProgressComparative(): Promise<ProgressComparativeBlock | null> {
+  return apiRequest<ProgressComparativeBlock | null>('/v1/progress/v2/comparative');
+}
+
+export function progressPdfUrl(): string {
+  return '/v1/progress/v2/export.pdf';
+}
+
 export async function fetchSubmissions(): Promise<Submission[]> {
   const response = await apiRequest<{ items: ApiRecord[] }>('/v1/submissions');
   return response.items.map((item) => ({

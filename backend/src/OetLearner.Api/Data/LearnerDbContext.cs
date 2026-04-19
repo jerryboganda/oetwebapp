@@ -247,6 +247,9 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<StudyPlanAdminOverride> StudyPlanAdminOverrides => Set<StudyPlanAdminOverride>();
     public DbSet<LearnerCalendarLink> LearnerCalendarLinks => Set<LearnerCalendarLink>();
 
+    // ── Progress v2 ──
+    public DbSet<ProgressPolicy> ProgressPolicies => Set<ProgressPolicy>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ContentItem>().HasIndex(x => new { x.SubtestCode, x.Status });

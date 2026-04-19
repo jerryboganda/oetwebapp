@@ -124,6 +124,12 @@ public static class SeedData
             hasChanges = true;
         }
 
+        if (!await db.ProgressPolicies.AnyAsync(cancellationToken))
+        {
+            SeedProgressPolicy(db);
+            hasChanges = true;
+        }
+
         if (hasChanges)
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -2561,6 +2567,30 @@ public static class SeedData
             SevereCopy = "Your plan needs a reset. Regenerate to tailor a fresh path forward.",
             AutoRegenerateOnModerate = false,
             AutoRegenerateOnSevere = true,
+            UpdatedAt = now,
+        });
+    }
+
+    /// <summary>
+    /// Seed the singleton Progress v2 policy for the OET exam family. Admins
+    /// can edit via <c>/admin/progress-policy</c>; until then the defaults
+    /// keep the dashboard sane and the PDF export off (legal kill-switch).
+    /// </summary>
+    private static void SeedProgressPolicy(LearnerDbContext db)
+    {
+        var now = DateTimeOffset.UtcNow;
+        db.ProgressPolicies.Add(new ProgressPolicy
+        {
+            Id = "pp-oet",
+            ExamFamilyCode = "oet",
+            DefaultTimeRange = "90d",
+            SmoothingWindow = 3,
+            MinCohortSize = 30,
+            MockDistinctStyle = true,
+            ShowScoreGuaranteeStrip = true,
+            ShowCriterionConfidenceBand = true,
+            MinEvaluationsForTrend = 2,
+            ExportPdfEnabled = false,
             UpdatedAt = now,
         });
     }

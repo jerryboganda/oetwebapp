@@ -17,6 +17,8 @@ export const AdminPermission = {
   SystemAdmin: 'system_admin',
   StudyPlannerRead: 'study_planner:read',
   StudyPlannerWrite: 'study_planner:write',
+  ProgressPolicyRead: 'progress_policy:read',
+  ProgressPolicyWrite: 'progress_policy:write',
 } as const;
 
 export type AdminPermissionValue = (typeof AdminPermission)[keyof typeof AdminPermission];
@@ -72,4 +74,5 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/study-planner/rules': [AdminPermission.StudyPlannerRead],
   '/admin/study-planner/drift-policy': [AdminPermission.StudyPlannerRead],
   '/admin/study-planner/insights': [AdminPermission.StudyPlannerRead],
+  '/admin/progress-policy': [AdminPermission.ProgressPolicyRead],
 };
