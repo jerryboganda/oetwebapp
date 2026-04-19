@@ -15,6 +15,8 @@ export const AdminPermission = {
   FeatureFlags: 'feature_flags',
   AuditLogs: 'audit_logs',
   SystemAdmin: 'system_admin',
+  StudyPlannerRead: 'study_planner:read',
+  StudyPlannerWrite: 'study_planner:write',
 } as const;
 
 export type AdminPermissionValue = (typeof AdminPermission)[keyof typeof AdminPermission];
@@ -64,4 +66,10 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/webhooks': [AdminPermission.SystemAdmin],
   '/admin/escalations': [AdminPermission.SystemAdmin],
   '/admin/private-speaking': [AdminPermission.ReviewOps],
+  '/admin/study-planner': [AdminPermission.StudyPlannerRead],
+  '/admin/study-planner/tasks': [AdminPermission.StudyPlannerRead],
+  '/admin/study-planner/templates': [AdminPermission.StudyPlannerRead],
+  '/admin/study-planner/rules': [AdminPermission.StudyPlannerRead],
+  '/admin/study-planner/drift-policy': [AdminPermission.StudyPlannerRead],
+  '/admin/study-planner/insights': [AdminPermission.StudyPlannerRead],
 };

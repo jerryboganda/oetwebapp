@@ -118,7 +118,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 await CompleteSpeakingEvaluationAsync(db, notifications, job, cancellationToken);
                 break;
             case JobType.StudyPlanRegeneration:
-                await CompleteStudyPlanRegenerationAsync(db, notifications, job, cancellationToken);
+                await CompleteStudyPlanRegenerationAsync(services, db, notifications, job, cancellationToken);
                 break;
             case JobType.MockReportGeneration:
                 await CompleteMockReportGenerationAsync(db, notifications, job, cancellationToken);
@@ -525,20 +525,33 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             cancellationToken);
     }
 
-    private static async Task CompleteStudyPlanRegenerationAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
+    private static async Task CompleteStudyPlanRegenerationAsync(IServiceProvider services, LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(job.ResourceId)) return;
         var plan = await db.StudyPlans.FirstAsync(x => x.Id == job.ResourceId, cancellationToken);
-        plan.State = AsyncState.Completed;
-        plan.Version += 1;
-        plan.GeneratedAt = DateTimeOffset.UtcNow;
-        plan.Checkpoint = "Regenerated after your latest evaluated attempt.";
-        plan.WeakSkillFocus = "Writing conciseness and speaking fluency remain top priority.";
 
-        var items = await db.StudyPlanItems.Where(x => x.StudyPlanId == plan.Id).ToListAsync(cancellationToken);
-        foreach (var item in items.Where(x => x.Status == StudyPlanItemStatus.NotStarted))
+        // Study Planner v2 HARD CUTOVER: delegate to the new generator. Falls
+        // back to a safe no-op message if the new service is unavailable
+        // (e.g. during upgrade rollout without templates yet seeded).
+        try
         {
-            item.DueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+            var planner = services.GetRequiredService<OetLearner.Api.Services.StudyPlanner.IStudyPlannerService>();
+            await planner.GenerateForLearnerAsync(plan.UserId, "background_job", cancellationToken);
+            // Reload to get the refreshed state.
+            await db.Entry(plan).ReloadAsync(cancellationToken);
+        }
+        catch (Exception ex)
+        {
+            // Fail soft: if no template has been authored yet, mark the plan
+            // completed with a safe message so the learner is not stuck in Queued.
+            plan.State = AsyncState.Completed;
+            plan.Version += 1;
+            plan.GeneratedAt = DateTimeOffset.UtcNow;
+            plan.Checkpoint = "Plan refreshed";
+            plan.WeakSkillFocus = "Complete a diagnostic to personalise your plan.";
+            await db.SaveChangesAsync(cancellationToken);
+            // Swallow the exception trace but preserve message for downstream logging.
+            System.Diagnostics.Trace.TraceWarning($"StudyPlanner v2 generator fallback: {ex.Message}");
         }
 
         await notifications.CreateForLearnerAsync(

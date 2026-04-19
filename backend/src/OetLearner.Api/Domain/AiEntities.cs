@@ -210,6 +210,12 @@ public static class AiFeatureCodes
     // Admin tooling (platform-only always)
     public const string AdminContentGeneration = "admin.content_generation";
 
+    // Study Planner reasoning (non-scoring, BYOK-eligible). Used by the
+    // StudyPlannerAiReasoner to produce per-learner rationale addenda. The
+    // output is schema-validated; the AI can only reorder & rationalise
+    // items from the selected template — it cannot invent new tasks.
+    public const string StudyPlanReasoning = "study_plan.reasoning";
+
     // Catch-all for calls that pre-date feature classification. Tolerated only
     // during the Slice 1 rollout; future slices will validate against this set.
     public const string Unclassified = "unclassified";

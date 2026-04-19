@@ -1,4 +1,4 @@
-﻿import type { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { screen } from '@testing-library/react';
 const navigation = vi.hoisted(() => ({
   pathname: '/admin',
@@ -266,7 +266,7 @@ describe('Admin Non-Editor Pages', () => {
     renderPage(<AdminDashboardPage />);
 
     expect(await screen.findByRole('main', { name: /admin operations/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /keep platform health, review risk, and rollout signals in one place/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /platform health, review risk, and rollout in one place/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /operational shortcuts/i })).toBeInTheDocument();
     expect(screen.getAllByRole('link', { name: /open review ops/i })).toHaveLength(2);
   });

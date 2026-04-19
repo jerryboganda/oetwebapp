@@ -137,7 +137,10 @@ public enum JobType
     PrivateSpeakingZoomCreate,           // Create Zoom meeting after payment confirmation
     PrivateSpeakingBookingConfirmation,  // Send booking confirmation notifications
     PrivateSpeakingReminder,             // Session reminder notifications
-    PrivateSpeakingReservationExpiry     // Expire unpaid reservations
+    PrivateSpeakingReservationExpiry,    // Expire unpaid reservations
+
+    // ── Study Planner v2 ──
+    StudyPlanDriftCheck                  // Daily per-learner drift evaluation + auto-regen
 }
 
 public enum ConfidenceBand

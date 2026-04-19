@@ -112,6 +112,18 @@ public static class SeedData
             hasChanges = true;
         }
 
+        if (!await db.StudyPlanTaskTemplates.AnyAsync(cancellationToken))
+        {
+            SeedStudyPlannerDefaults(db);
+            hasChanges = true;
+        }
+
+        if (!await db.StudyPlanDriftPolicies.AnyAsync(cancellationToken))
+        {
+            SeedStudyPlanDriftPolicy(db);
+            hasChanges = true;
+        }
+
         if (hasChanges)
         {
             await db.SaveChangesAsync(cancellationToken);
@@ -2417,6 +2429,138 @@ public static class SeedData
             FailoverPriority = 100,
             IsActive = true,
             CreatedAt = now,
+            UpdatedAt = now,
+        });
+    }
+
+    /// <summary>
+    /// Seed a minimal Study Planner v2 library so a fresh deployment produces
+    /// a working learner experience out of the box. Admins can edit/replace
+    /// these via the <c>/admin/study-planner</c> UI.
+    /// </summary>
+    private static void SeedStudyPlannerDefaults(LearnerDbContext db)
+    {
+        var now = DateTimeOffset.UtcNow;
+        const string adminId = "system_seed";
+
+        var tasks = new[]
+        {
+            new StudyPlanTaskTemplate
+            {
+                Id = "spt-task-seed-writing-referral",
+                Slug = "writing-discharge-summary",
+                Title = "Writing: Discharge Summary Practice",
+                SubtestCode = "writing", ItemType = "practice", DurationMinutes = 45,
+                RationaleMarkdown = "Condense patient notes into a focused discharge summary. Builds conciseness and purpose-first structure, which map directly to OET Writing band C+.",
+                ProfessionScopeJson = "[]", ExamFamilyCode = "oet", TargetCountriesJson = "[]",
+                DifficultyMin = 2, DifficultyMax = 5, DefaultSection = "today",
+                TagsCsv = "writing,discharge,core", IsArchived = false,
+                CreatedByAdminId = adminId, CreatedAt = now, UpdatedAt = now,
+            },
+            new StudyPlanTaskTemplate
+            {
+                Id = "spt-task-seed-speaking-handover",
+                Slug = "speaking-patient-handover",
+                Title = "Speaking: Patient Handover Role Play",
+                SubtestCode = "speaking", ItemType = "roleplay", DurationMinutes = 20,
+                RationaleMarkdown = "Rehearse a structured SBAR-style handover. Targets fluency and clinical communication — the two levers that shift Speaking scores from 320 to 350+.",
+                ProfessionScopeJson = "[]", ExamFamilyCode = "oet", TargetCountriesJson = "[]",
+                DifficultyMin = 2, DifficultyMax = 5, DefaultSection = "today",
+                TagsCsv = "speaking,handover,core", IsArchived = false,
+                CreatedByAdminId = adminId, CreatedAt = now, UpdatedAt = now,
+            },
+            new StudyPlanTaskTemplate
+            {
+                Id = "spt-task-seed-reading-partc",
+                Slug = "reading-part-c-detail",
+                Title = "Reading: Part C Detail Extraction",
+                SubtestCode = "reading", ItemType = "practice", DurationMinutes = 30,
+                RationaleMarkdown = "Targets the 16 Part C items where most OET Reading points are won or lost. Focus on inference + tone questions to lift overall raw score past the 30/42 anchor.",
+                ProfessionScopeJson = "[]", ExamFamilyCode = "oet", TargetCountriesJson = "[]",
+                DifficultyMin = 2, DifficultyMax = 5, DefaultSection = "thisWeek",
+                TagsCsv = "reading,part-c,inference", IsArchived = false,
+                CreatedByAdminId = adminId, CreatedAt = now, UpdatedAt = now,
+            },
+            new StudyPlanTaskTemplate
+            {
+                Id = "spt-task-seed-listening-numbers",
+                Slug = "listening-number-frequency",
+                Title = "Listening: Number & Frequency Drill",
+                SubtestCode = "listening", ItemType = "drill", DurationMinutes = 15,
+                RationaleMarkdown = "Numbers, dosages, and frequencies are the highest-yield misses in Part A. A focused 15-minute drill fixes the mechanical error class that most costs learners marks.",
+                ProfessionScopeJson = "[]", ExamFamilyCode = "oet", TargetCountriesJson = "[]",
+                DifficultyMin = 1, DifficultyMax = 4, DefaultSection = "thisWeek",
+                TagsCsv = "listening,part-a,drill", IsArchived = false,
+                CreatedByAdminId = adminId, CreatedAt = now, UpdatedAt = now,
+            },
+            new StudyPlanTaskTemplate
+            {
+                Id = "spt-task-seed-mock-full",
+                Slug = "mock-full-paper",
+                Title = "Full OET Mock Test",
+                SubtestCode = "mock", ItemType = "mock", DurationMinutes = 180,
+                RationaleMarkdown = "A full timed mock exposes stamina and pacing gaps no single-subtest drill can reveal. Essential as a checkpoint every 2–3 weeks before exam day.",
+                ProfessionScopeJson = "[]", ExamFamilyCode = "oet", TargetCountriesJson = "[]",
+                DifficultyMin = 3, DifficultyMax = 5, DefaultSection = "nextCheckpoint",
+                TagsCsv = "mock,checkpoint", IsArchived = false,
+                CreatedByAdminId = adminId, CreatedAt = now, UpdatedAt = now,
+            },
+        };
+        db.StudyPlanTaskTemplates.AddRange(tasks);
+
+        var plan = new StudyPlanTemplate
+        {
+            Id = "spt-plan-seed-standard",
+            Slug = "std-8w-oet",
+            Name = "Standard 8-Week OET Plan",
+            Description = "The default OET preparation plan: mixes writing + speaking practice with targeted reading and listening drills and a mock checkpoint.",
+            DurationWeeks = 8, DefaultHoursPerWeek = 10,
+            ExamFamilyCode = "oet", IsArchived = false,
+            CreatedByAdminId = adminId, CreatedAt = now, UpdatedAt = now,
+        };
+        db.StudyPlanTemplates.Add(plan);
+
+        var items = new[]
+        {
+            new StudyPlanTemplateItem { Id = "spti-seed-1", PlanTemplateId = plan.Id, TaskTemplateId = tasks[0].Id, WeekOffset = 0, DayOffsetWithinWeek = 0, Section = "today", Priority = 90, IsMandatory = true, Ordering = 0 },
+            new StudyPlanTemplateItem { Id = "spti-seed-2", PlanTemplateId = plan.Id, TaskTemplateId = tasks[1].Id, WeekOffset = 0, DayOffsetWithinWeek = 0, Section = "today", Priority = 85, IsMandatory = true, Ordering = 1 },
+            new StudyPlanTemplateItem { Id = "spti-seed-3", PlanTemplateId = plan.Id, TaskTemplateId = tasks[2].Id, WeekOffset = 0, DayOffsetWithinWeek = 1, Section = "thisWeek", Priority = 70, IsMandatory = true, Ordering = 2 },
+            new StudyPlanTemplateItem { Id = "spti-seed-4", PlanTemplateId = plan.Id, TaskTemplateId = tasks[3].Id, WeekOffset = 0, DayOffsetWithinWeek = 2, Section = "thisWeek", Priority = 60, IsMandatory = true, Ordering = 3 },
+            new StudyPlanTemplateItem { Id = "spti-seed-5", PlanTemplateId = plan.Id, TaskTemplateId = tasks[4].Id, WeekOffset = 1, DayOffsetWithinWeek = 0, Section = "nextCheckpoint", Priority = 80, IsMandatory = true, Ordering = 4 },
+        };
+        db.StudyPlanTemplateItems.AddRange(items);
+
+        db.StudyPlanAssignmentRules.Add(new StudyPlanAssignmentRule
+        {
+            Id = "spar-seed-default",
+            Name = "Default OET plan (all learners)",
+            ExamFamilyCode = "oet",
+            Priority = 1000, Weight = 10,
+            ConditionJson = "{}",
+            TargetTemplateId = plan.Id,
+            IsActive = true,
+            CreatedByAdminId = adminId, CreatedAt = now, UpdatedAt = now,
+        });
+    }
+
+    /// <summary>
+    /// Seed the singleton drift policy for the OET exam family with the
+    /// values that used to be hardcoded in <c>LearnerService</c>.
+    /// </summary>
+    private static void SeedStudyPlanDriftPolicy(LearnerDbContext db)
+    {
+        var now = DateTimeOffset.UtcNow;
+        db.StudyPlanDriftPolicies.Add(new StudyPlanDriftPolicy
+        {
+            Id = "spdp-oet",
+            ExamFamilyCode = "oet",
+            MildDays = 3, ModerateDays = 7, SevereDays = 14,
+            OnTrackCopy = "You're on track — keep going.",
+            MildCopy = "You're slightly behind — spend 15 minutes today to catch up.",
+            ModerateCopy = "You're falling behind. We recommend regenerating your plan to refocus.",
+            SevereCopy = "Your plan needs a reset. Regenerate to tailor a fresh path forward.",
+            AutoRegenerateOnModerate = false,
+            AutoRegenerateOnSevere = true,
             UpdatedAt = now,
         });
     }

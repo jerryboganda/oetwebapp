@@ -354,7 +354,7 @@ function isRetryable(status: number): boolean {
   return status >= 500 || status === 408 || status === 429;
 }
 
-async function apiRequest<T = any>(path: string, init?: RequestInit): Promise<T> {
+export async function apiRequest<T = any>(path: string, init?: RequestInit): Promise<T> {
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -990,6 +990,33 @@ export async function updateUserProfile(updates: Partial<UserProfile>): Promise<
 }
 
 export async function fetchStudyPlan(): Promise<StudyPlanTask[]> {
+  // Try v2 first (admin-managed generator); fall back to legacy on any error
+  // so older learners with no template seeded continue to function.
+  try {
+    const v2 = await apiRequest<ApiRecord>('/v1/study-plan/v2');
+    const items = (v2.items ?? []) as ApiRecord[];
+    if (items.length > 0) {
+      return items.map((item) => ({
+        id: item.id,
+        title: item.title,
+        subTest: toSubTest(item.subtestCode),
+        duration: minutesToLabel(item.durationMinutes),
+        rationale: item.rationale,
+        dueDate: item.dueDate,
+        status: item.status,
+        section: item.section,
+        contentId: item.contentId ?? undefined,
+        type: item.itemType ?? undefined,
+        contentPaperId: item.contentPaperId ?? undefined,
+        startUrl: item.startUrl ?? undefined,
+        aiRationaleAddendum: item.aiRationaleAddendum ?? undefined,
+        priority: item.priority,
+        snoozedUntil: item.snoozedUntil ?? undefined,
+      }));
+    }
+  } catch {
+    // fall through
+  }
   const plan = await apiRequest<ApiRecord>('/v1/study-plan');
   return (plan.items ?? []).map((item: ApiRecord) => ({
     id: item.itemId,
@@ -1003,6 +1030,60 @@ export async function fetchStudyPlan(): Promise<StudyPlanTask[]> {
     contentId: item.contentId ?? undefined,
     type: item.itemType ?? undefined,
   }));
+}
+
+export async function rescheduleStudyPlanTask(taskId: string, dueDate: string): Promise<void> {
+  await apiRequest(`/v1/study-plan/items/${taskId}/reschedule`, {
+    method: 'POST', body: JSON.stringify({ dueDate }),
+  });
+}
+
+export async function swapStudyPlanTask(taskId: string, replacementContentId: string): Promise<void> {
+  await apiRequest(`/v1/study-plan/items/${taskId}/swap`, {
+    method: 'POST', body: JSON.stringify({ replacementContentId }),
+  });
+}
+
+export async function snoozeStudyPlanTask(taskId: string, until?: string): Promise<void> {
+  await apiRequest(`/v1/study-plan/items/${taskId}/snooze`, {
+    method: 'POST', body: JSON.stringify({ until: until ?? null }),
+  });
+}
+
+export async function startStudyPlanTask(taskId: string): Promise<{ startUrl: string }> {
+  return apiRequest<{ startUrl: string }>(`/v1/study-plan/items/${taskId}/start`, { method: 'POST' });
+}
+
+export async function regenerateStudyPlan(): Promise<{ planId: string; version: number; state: string }> {
+  return apiRequest('/v1/study-plan/regenerate-v2', { method: 'POST' });
+}
+
+export function studyPlanIcsUrl(): string {
+  return '/v1/study-plan/ics';
+}
+
+// ── Google Calendar integration ────────────────────────────────────────────
+
+export async function getGoogleCalendarStatus(): Promise<{ connected: boolean; calendarId?: string; tokenHint?: string; lastSyncedAt?: string; lastError?: string }> {
+  return apiRequest('/v1/study-plan/google-calendar');
+}
+
+export async function startGoogleCalendarAuthorize(): Promise<{ url: string }> {
+  return apiRequest('/v1/study-plan/google-calendar/authorize');
+}
+
+export async function completeGoogleCalendarCallback(code: string): Promise<{ connected: boolean }> {
+  return apiRequest('/v1/study-plan/google-calendar/callback', {
+    method: 'POST', body: JSON.stringify({ code }),
+  });
+}
+
+export async function disconnectGoogleCalendar(): Promise<void> {
+  await apiRequest('/v1/study-plan/google-calendar', { method: 'DELETE' });
+}
+
+export async function syncStudyPlanToGoogleCalendar(): Promise<{ pushed: number }> {
+  return apiRequest('/v1/study-plan/google-calendar/sync', { method: 'POST' });
 }
 
 export async function updateStudyPlanTask(taskId: string, updates: Partial<StudyPlanTask>): Promise<StudyPlanTask> {
