@@ -85,8 +85,12 @@ public sealed class ProgressService(LearnerDbContext db) : IProgressService
         // ── Subtest summaries ──
         var subtests = BuildSubtestSummaries(evaluations, attempts, goal, country, writingThreshold, now);
 
-        // ── Weekly trend ──
+        // ── Weekly trend (with policy-controlled rolling smoothing) ──
         var trend = BuildWeeklyTrend(evaluations, attemptsById);
+        if (policy.SmoothingWindow > 1)
+        {
+            trend = ApplyRollingAverage(trend, policy.SmoothingWindow);
+        }
 
         // ── Criterion trend ──
         var criterionTrend = BuildCriterionTrend(evaluations);
@@ -406,6 +410,10 @@ public sealed class ProgressService(LearnerDbContext db) : IProgressService
         // criterion score JSON payload entries are `{ criterionCode, scoreRange: "4/6" }`.
         // We convert each criterion scoreRange to a scaled-equivalent integer (out of 500)
         // so the frontend can plot criterion trend lines on the same canonical axis.
+        // A 95% CI band is also computed from the sample mean + sample standard
+        // deviation (t-distribution approximated by z=1.96 for N≥3 to keep the
+        // math dependency-free). Learners see the band only when admin policy
+        // enables it; the payload always carries the numbers so toggling is free.
         var points = new List<CriterionTrendPoint>();
         var grouped = evaluations
             .Where(e => e.GeneratedAt is not null)
@@ -413,7 +421,7 @@ public sealed class ProgressService(LearnerDbContext db) : IProgressService
         foreach (var group in grouped)
         {
             var weekStart = IsoWeekStart(group.First().GeneratedAt!.Value);
-            var perCriterion = new Dictionary<string, (int Sum, int Count)>();
+            var perCriterionSamples = new Dictionary<string, List<int>>();
             foreach (var e in group)
             {
                 var list = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(e.CriterionScoresJson, []);
@@ -423,24 +431,52 @@ public sealed class ProgressService(LearnerDbContext db) : IProgressService
                     if (string.IsNullOrWhiteSpace(code)) continue;
                     var scaled = ScaleCriterionScore(c.GetValueOrDefault("scoreRange")?.ToString());
                     if (!scaled.HasValue) continue;
-                    var prev = perCriterion.TryGetValue(code, out var existing) ? existing : (Sum: 0, Count: 0);
-                    perCriterion[code] = (prev.Sum + scaled.Value, prev.Count + 1);
+                    if (!perCriterionSamples.TryGetValue(code, out var bucket))
+                    {
+                        bucket = new List<int>();
+                        perCriterionSamples[code] = bucket;
+                    }
+                    bucket.Add(scaled.Value);
                 }
             }
-            foreach (var kvp in perCriterion)
+            foreach (var kvp in perCriterionSamples)
             {
                 if (kvp.Value.Count == 0) continue;
+                var mean = kvp.Value.Average();
+                var (lower, upper) = ComputeConfidenceInterval(kvp.Value, mean);
                 points.Add(new CriterionTrendPoint(
                     WeekKey: group.Key.Week,
                     WeekStart: weekStart,
                     SubtestCode: group.Key.SubtestCode,
                     CriterionCode: kvp.Key,
                     CriterionLabel: CriterionLabel(kvp.Key),
-                    AverageScaled: (int)Math.Round(kvp.Value.Sum / (double)kvp.Value.Count),
-                    SampleCount: kvp.Value.Count));
+                    AverageScaled: (int)Math.Round(mean),
+                    SampleCount: kvp.Value.Count,
+                    LowerCi95: lower,
+                    UpperCi95: upper));
             }
         }
         return points.OrderBy(p => p.WeekStart).ThenBy(p => p.SubtestCode).ThenBy(p => p.CriterionCode).ToList();
+    }
+
+    /// <summary>
+    /// 95% CI using z=1.96. Returns (mean, mean) when N&lt;3 — the sample is
+    /// too small for a meaningful interval and we'd rather surface no band
+    /// than an overconfident one.
+    /// </summary>
+    public static (int Lower, int Upper) ComputeConfidenceInterval(IReadOnlyList<int> samples, double mean)
+    {
+        if (samples.Count < 3)
+        {
+            var rounded = (int)Math.Round(mean);
+            return (rounded, rounded);
+        }
+        var variance = samples.Sum(s => (s - mean) * (s - mean)) / (samples.Count - 1);
+        var stdDev = Math.Sqrt(variance);
+        var margin = 1.96 * stdDev / Math.Sqrt(samples.Count);
+        var lower = Math.Max(OetScoring.ScaledMin, (int)Math.Round(mean - margin));
+        var upper = Math.Min(OetScoring.ScaledMax, (int)Math.Round(mean + margin));
+        return (lower, upper);
     }
 
     private static IReadOnlyList<CompletionPoint> BuildCompletion(IReadOnlyList<Attempt> attempts, DateTimeOffset now, int days)
@@ -484,6 +520,60 @@ public sealed class ProgressService(LearnerDbContext db) : IProgressService
 
     internal static bool IsMockContext(string? context) =>
         string.Equals(context, "mock", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Apply a centred rolling average with window <paramref name="window"/> to each
+    /// subtest series inside the weekly trend. Preserves the shape of
+    /// <see cref="WeeklyTrendPoint"/> and ONLY touches the per-week averages —
+    /// counts are not smoothed because they retain volume semantics.
+    /// </summary>
+    public static IReadOnlyList<WeeklyTrendPoint> ApplyRollingAverage(IReadOnlyList<WeeklyTrendPoint> trend, int window)
+    {
+        if (window <= 1 || trend.Count <= 1) return trend;
+        var clampedWindow = Math.Min(window, trend.Count);
+        var smoothed = new List<WeeklyTrendPoint>(trend.Count);
+        for (var i = 0; i < trend.Count; i++)
+        {
+            var windowStart = Math.Max(0, i - clampedWindow + 1);
+            var windowPoints = trend.Skip(windowStart).Take(i - windowStart + 1).ToList();
+            var practiceScaled = SmoothMap(windowPoints.Select(p => p.SubtestScaled));
+            var mockScaled = SmoothMap(windowPoints.Select(p => p.MockScaled));
+            smoothed.Add(new WeeklyTrendPoint(
+                trend[i].WeekKey,
+                trend[i].WeekStart,
+                practiceScaled,
+                trend[i].SubtestCount,
+                mockScaled,
+                trend[i].MockCount));
+        }
+        return smoothed;
+    }
+
+    private static Dictionary<string, int?> SmoothMap(IEnumerable<Dictionary<string, int?>> windows)
+    {
+        // Average the non-null values per-subtest across the window. When every
+        // value in the window is null the smoothed result stays null (no fake
+        // synthesis).
+        var sums = new Dictionary<string, int>();
+        var counts = new Dictionary<string, int>();
+        foreach (var map in windows)
+        {
+            foreach (var kvp in map)
+            {
+                if (!kvp.Value.HasValue) continue;
+                sums[kvp.Key] = sums.GetValueOrDefault(kvp.Key, 0) + kvp.Value.Value;
+                counts[kvp.Key] = counts.GetValueOrDefault(kvp.Key, 0) + 1;
+            }
+        }
+        var output = new Dictionary<string, int?>();
+        foreach (var subtest in SubtestCodes)
+        {
+            output[subtest] = counts.GetValueOrDefault(subtest, 0) == 0
+                ? (int?)null
+                : (int)Math.Round(sums[subtest] / (double)counts[subtest]);
+        }
+        return output;
+    }
 
     // ── Score parsing utilities (canonical) ───────────────────────────────
 

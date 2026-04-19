@@ -1,8 +1,15 @@
 import { render, screen } from '@testing-library/react';
 
-const { mockFetchProgressV2, mockTrack } = vi.hoisted(() => ({
+const { mockFetchProgressV2, mockTrack, mockPush } = vi.hoisted(() => ({
   mockFetchProgressV2: vi.fn(),
   mockTrack: vi.fn(),
+  mockPush: vi.fn(),
+}));
+
+vi.mock('next/navigation', () => ({
+  useRouter: () => ({ push: mockPush, replace: vi.fn(), back: vi.fn() }),
+  usePathname: () => '/progress',
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock('recharts', () => ({
@@ -140,5 +147,32 @@ describe('Progress dashboard page (v2)', () => {
     expect(screen.getByRole('tab', { name: /Trend/ })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Criterion/ })).toBeInTheDocument();
     expect(screen.getByRole('tab', { name: /Comparative/ })).toBeInTheDocument();
+  });
+
+  it('switches tabs and fires analytics event', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    render(<ProgressDashboard />);
+    await screen.findByText('See whether recent effort is turning into better evidence');
+    fireEvent.click(screen.getByRole('tab', { name: /Criterion/ }));
+    expect(mockTrack).toHaveBeenCalledWith('progress_tab_switched', { tab: 'criterion' });
+  });
+
+  it('refetches data when range changes', async () => {
+    const { fireEvent } = await import('@testing-library/react');
+    render(<ProgressDashboard />);
+    await screen.findByText('See whether recent effort is turning into better evidence');
+    mockFetchProgressV2.mockClear();
+    fireEvent.click(screen.getByRole('radio', { name: '14d' }));
+    expect(mockTrack).toHaveBeenCalledWith('progress_range_changed', { range: '14d' });
+  });
+
+  it('hides the score-guarantee strip when policy disables it', async () => {
+    mockFetchProgressV2.mockResolvedValue({
+      ...samplePayload,
+      meta: { ...samplePayload.meta, showScoreGuaranteeStrip: false },
+    });
+    render(<ProgressDashboard />);
+    await screen.findByText('See whether recent effort is turning into better evidence');
+    expect(screen.queryByText(/Score Guarantee eligible/)).not.toBeInTheDocument();
   });
 });

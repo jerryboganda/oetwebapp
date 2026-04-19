@@ -45,7 +45,8 @@ export interface ProgressTrendChartProps {
 /**
  * Canonical 0-500 trend chart. Grade-B reference line at 350 is ALWAYS
  * visible. For Writing with a US/QA target country the line additionally
- * shows the 300 threshold. Click any dot to drill into that subtest history.
+ * shows the 300 threshold. Click any line dot to drill into that subtest
+ * in the submissions history.
  */
 export function ProgressTrendChart({ payload, visibleSubtests, onPointClick }: ProgressTrendChartProps) {
   const { trend, meta } = payload;
@@ -59,6 +60,11 @@ export function ProgressTrendChart({ payload, visibleSubtests, onPointClick }: P
   // The Writing threshold is country-aware; only render the extra line when
   // it differs from the Grade-B line (300 for US/QA) to avoid stacking.
   const showWritingCPlus = meta.writingThreshold !== null && meta.writingThreshold !== meta.gradeBThreshold;
+
+  const handleDotClick = (subtest: string) => (dotPayload: unknown) => {
+    const key = (dotPayload as { payload?: { weekKey?: string } } | undefined)?.payload?.weekKey ?? 'latest';
+    onPointClick?.(subtest, key);
+  };
 
   return (
     <div className="relative">
@@ -113,9 +119,11 @@ export function ProgressTrendChart({ payload, visibleSubtests, onPointClick }: P
                 name={SUBTEST_LABELS[subtest]}
                 stroke={SUBTEST_COLORS[subtest]}
                 strokeWidth={3}
-                dot={{ r: 4, strokeWidth: 2, onClick: () => onPointClick?.(subtest, 'latest') }}
+                dot={{ r: 4, strokeWidth: 2 }}
                 activeDot={{ r: 6 }}
                 connectNulls={false}
+                style={{ cursor: onPointClick ? 'pointer' : 'default' }}
+                onClick={onPointClick ? handleDotClick(subtest) : undefined}
               />
             ))}
           </LineChart>

@@ -6,6 +6,7 @@ import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/form-controls';
+import { Switch } from '@/components/ui/switch';
 import { Toast } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { getProgressPolicy, updateProgressPolicy, type ProgressPolicyDto } from '@/lib/progress-policy-admin-api';
@@ -143,10 +144,10 @@ export default function ProgressPolicyAdminPage() {
 
             <AdminRoutePanel eyebrow="Toggles" title="Display and feature kill-switches" dense>
               <div className="space-y-3">
-                <Switch label="Show mocks as a dashed series" checked={mockDistinctStyle} onChange={setMockDistinctStyle} />
-                <Switch label="Show Score Guarantee strip" checked={showScoreGuaranteeStrip} onChange={setShowScoreGuaranteeStrip} />
-                <Switch label="Show 95% confidence band on criterion charts" checked={showCriterionConfidenceBand} onChange={setShowCriterionConfidenceBand} />
-                <Switch label="Enable PDF export endpoint (legal kill-switch)" checked={exportPdfEnabled} onChange={setExportPdfEnabled} />
+                <Switch label="Show mocks as a dashed series" checked={mockDistinctStyle} onCheckedChange={setMockDistinctStyle} />
+                <Switch label="Show Score Guarantee strip" checked={showScoreGuaranteeStrip} onCheckedChange={setShowScoreGuaranteeStrip} />
+                <Switch label="Show 95% confidence band on criterion charts" checked={showCriterionConfidenceBand} onCheckedChange={setShowCriterionConfidenceBand} />
+                <Switch label="Enable PDF export endpoint (legal kill-switch)" checked={exportPdfEnabled} onCheckedChange={setExportPdfEnabled} />
               </div>
             </AdminRoutePanel>
 
@@ -164,14 +165,5 @@ export default function ProgressPolicyAdminPage() {
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
     </AdminRouteWorkspace>
-  );
-}
-
-function Switch({ label, checked, onChange }: { label: string; checked: boolean; onChange: (v: boolean) => void }) {
-  return (
-    <label className="flex items-center gap-2 text-sm">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} />
-      {label}
-    </label>
   );
 }

@@ -15,9 +15,11 @@ namespace OetLearner.Api.Services.Progress;
 /// <c>OetStatementOfResultsCard</c> visual.
 /// </para>
 /// </summary>
-internal static class ProgressPdfRenderer
+public static class ProgressPdfRenderer
 {
-    public static byte[] Render(ProgressPayload payload)
+    public static byte[] Render(ProgressPayload payload) => RenderInternal(payload);
+
+    internal static byte[] RenderInternal(ProgressPayload payload)
     {
         var lines = new List<string>
         {

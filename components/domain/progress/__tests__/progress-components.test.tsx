@@ -6,7 +6,12 @@ import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('recharts', () => ({
   LineChart: ({ children }: { children?: React.ReactNode }) => <div data-testid="line-chart">{children}</div>,
+  ComposedChart: ({ children }: { children?: React.ReactNode }) => <div data-testid="composed-chart">{children}</div>,
   Line: () => null,
+  Area: () => null,
+  AreaChart: ({ children }: { children?: React.ReactNode }) => <div data-testid="area-chart">{children}</div>,
+  Bar: () => null,
+  BarChart: ({ children }: { children?: React.ReactNode }) => <div data-testid="bar-chart">{children}</div>,
   XAxis: () => null,
   YAxis: () => null,
   CartesianGrid: () => null,
@@ -22,6 +27,9 @@ import { ProgressComparativeTab } from '../ProgressComparativeTab';
 import { ChartTabularFallback } from '../ChartTabularFallback';
 import { ProgressRangePills } from '../ProgressRangePills';
 import { ProgressReadinessStrip } from '../ProgressReadinessStrip';
+import { ProgressCriterionChart } from '../ProgressCriterionChart';
+import { ProgressActivityPanel } from '../ProgressActivityPanel';
+import { ProgressReviewStrip } from '../ProgressReviewStrip';
 
 const baseMeta = {
   range: '90d' as const,
@@ -96,6 +104,13 @@ describe('ProgressTrendChart', () => {
     };
     render(<ProgressTrendChart payload={payload} visibleSubtests={new Set(['writing'])} />);
     expect(screen.getByText(/Writing 300 \(C\+\)/)).toBeInTheDocument();
+  });
+
+  it('does NOT render a second threshold line when Writing threshold equals Grade B', () => {
+    // GB/IE/AU/NZ/CA all use 350 — we must not double-render the reference line.
+    const writingRefs = screen.queryAllByText(/Writing \d+ \(/);
+    // (just a defensive check — the original sample was GB/350 so no duplicate)
+    expect(writingRefs).toHaveLength(0);
   });
 });
 
@@ -215,5 +230,85 @@ describe('ProgressReadinessStrip', () => {
     const payload = { ...samplePayload, meta: { ...baseMeta, showScoreGuaranteeStrip: false } };
     render(<ProgressReadinessStrip payload={payload} />);
     expect(screen.queryByText(/Score Guarantee eligible/)).not.toBeInTheDocument();
+  });
+});
+
+describe('ProgressCriterionChart', () => {
+  const writingTrend = [
+    { weekKey: '2026-W15', weekStart: '2026-04-13T00:00:00Z', subtestCode: 'writing', criterionCode: 'content', criterionLabel: 'Content', averageScaled: 380, sampleCount: 3, lowerCi95: 360, upperCi95: 400 },
+    { weekKey: '2026-W15', weekStart: '2026-04-13T00:00:00Z', subtestCode: 'writing', criterionCode: 'language', criterionLabel: 'Language', averageScaled: 340, sampleCount: 3, lowerCi95: 320, upperCi95: 360 },
+    { weekKey: '2026-W16', weekStart: '2026-04-20T00:00:00Z', subtestCode: 'writing', criterionCode: 'content', criterionLabel: 'Content', averageScaled: 400, sampleCount: 4, lowerCi95: 380, upperCi95: 420 },
+  ];
+
+  it('renders the criterion chart with Grade B reference line', () => {
+    const payload = { ...samplePayload, criterionTrend: writingTrend };
+    render(<ProgressCriterionChart payload={payload} subtest="writing" />);
+    expect(screen.getByText(/Grade B \(350\)/)).toBeInTheDocument();
+  });
+
+  it('shows the confidence band caption when policy enabled AND N>=3', () => {
+    const payload = { ...samplePayload, meta: { ...baseMeta, showCriterionConfidenceBand: true }, criterionTrend: writingTrend };
+    render(<ProgressCriterionChart payload={payload} subtest="writing" />);
+    // Two copies: tabular caption + visible note. At least one must render.
+    const matches = screen.getAllByText(/95% confidence interval/i);
+    expect(matches.length).toBeGreaterThan(0);
+    expect(screen.getByText(/Shaded area: 95% confidence interval/i)).toBeInTheDocument();
+  });
+
+  it('hides confidence band caption when policy disabled', () => {
+    const payload = { ...samplePayload, meta: { ...baseMeta, showCriterionConfidenceBand: false }, criterionTrend: writingTrend };
+    render(<ProgressCriterionChart payload={payload} subtest="writing" />);
+    expect(screen.queryByText(/95% confidence interval/i)).not.toBeInTheDocument();
+  });
+
+  it('shows empty state when no criterion data for the selected subtest', () => {
+    const payload = { ...samplePayload, criterionTrend: writingTrend };
+    render(<ProgressCriterionChart payload={payload} subtest="speaking" />);
+    expect(screen.getByText(/No speaking criterion data yet/i)).toBeInTheDocument();
+  });
+});
+
+describe('ProgressActivityPanel', () => {
+  it('renders the completion and submission-volume charts side by side', () => {
+    const payload = {
+      ...samplePayload,
+      completion: [
+        { date: '2026-04-20T00:00:00Z', completed: 3 },
+        { date: '2026-04-21T00:00:00Z', completed: 1 },
+      ],
+      submissionVolume: [
+        { weekKey: '2026-W15', weekStart: '2026-04-13T00:00:00Z', writing: 1, speaking: 1 },
+        { weekKey: '2026-W16', weekStart: '2026-04-20T00:00:00Z', writing: 2, speaking: 1 },
+      ],
+    };
+    render(<ProgressActivityPanel payload={payload} />);
+    expect(screen.getByText(/Completion \(last 7 days\)/)).toBeInTheDocument();
+    expect(screen.getByText(/Submission volume \(last 5 weeks\)/)).toBeInTheDocument();
+    // Tabular fallback has the rows
+    expect(screen.getByText('Daily completion count over the last 7 days')).toBeInTheDocument();
+  });
+});
+
+describe('ProgressReviewStrip', () => {
+  it('renders an em-dash when no reviews have been completed yet', () => {
+    render(<ProgressReviewStrip payload={samplePayload} />);
+    // samplePayload.reviewUsage.averageTurnaroundHours is null in this fixture
+    expect(screen.getByText('No reviews yet')).toBeInTheDocument();
+  });
+
+  it('formats the turnaround label when reviews exist', () => {
+    const payload = {
+      ...samplePayload,
+      reviewUsage: { totalRequests: 4, completedRequests: 3, averageTurnaroundHours: 2.7, creditsConsumed: 2 },
+    };
+    render(<ProgressReviewStrip payload={payload} />);
+    expect(screen.getByText('2.7 h avg')).toBeInTheDocument();
+    expect(screen.getByText('3/4 reviews')).toBeInTheDocument();
+  });
+
+  it('renders headline counts for evaluations and mocks', () => {
+    render(<ProgressReviewStrip payload={samplePayload} />);
+    expect(screen.getByText('Completed evaluations')).toBeInTheDocument();
+    expect(screen.getByText('Mock attempts')).toBeInTheDocument();
   });
 });

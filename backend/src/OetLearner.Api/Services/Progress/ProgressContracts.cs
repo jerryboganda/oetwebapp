@@ -58,7 +58,11 @@ public sealed record CriterionTrendPoint(
     string CriterionCode,
     string CriterionLabel,
     int AverageScaled,
-    int SampleCount);
+    int SampleCount,
+    /// <summary>Lower bound of the 95% confidence interval, clamped to 0. Equals <c>AverageScaled</c> when N &lt; 3.</summary>
+    int LowerCi95,
+    /// <summary>Upper bound of the 95% confidence interval, clamped to 500. Equals <c>AverageScaled</c> when N &lt; 3.</summary>
+    int UpperCi95);
 
 public sealed record CompletionPoint(
     DateOnly Date,

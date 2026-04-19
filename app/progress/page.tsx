@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { TrendingUp, Download, BarChart3, Activity } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -25,6 +26,7 @@ const ALL_SUBTESTS = ['reading', 'listening', 'writing', 'speaking'] as const;
 type Tab = 'trend' | 'criterion' | 'comparative';
 
 export default function ProgressDashboard() {
+  const router = useRouter();
   const [range, setRange] = useState<ProgressRange>('90d');
   const [payload, setPayload] = useState<ProgressV2Payload | null>(null);
   const [loading, setLoading] = useState(true);
@@ -77,14 +79,40 @@ export default function ProgressDashboard() {
     analytics.track('progress_criterion_switched', { subtest: next });
   };
 
-  const onExportPdf = () => {
+  const onTrendPointClick = (subtest: string, weekKey: string) => {
+    analytics.track('progress_chart_point_clicked', { subtest, weekKey });
+    router.push(`/submissions?subtest=${encodeURIComponent(subtest)}`);
+  };
+
+  const onExportPdf = async () => {
     analytics.track('progress_pdf_exported');
-    const a = document.createElement('a');
-    a.href = progressPdfUrl();
-    a.download = 'progress.pdf';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
+    // Download via fetch+blob so the Bearer token is attached; a plain <a href>
+    // to /v1/... would be unauthenticated and 401.
+    try {
+      const { env } = await import('@/lib/env');
+      const { ensureFreshAccessToken } = await import('@/lib/auth-client');
+      const token = await ensureFreshAccessToken();
+      const res = await fetch(`${env.apiBaseUrl}${progressPdfUrl()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        setError(res.status === 403
+          ? 'PDF export is currently disabled by the admin. Try again later.'
+          : `Could not export PDF (${res.status}).`);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'progress.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError((e as Error).message ?? 'Could not export PDF.');
+    }
   };
 
   const heroHighlights = useMemo(() => {
@@ -189,7 +217,7 @@ export default function ProgressDashboard() {
                 )}
               </div>
 
-              {activeTab === 'trend' && <ProgressTrendChart payload={payload} visibleSubtests={visibleSubtests} />}
+              {activeTab === 'trend' && <ProgressTrendChart payload={payload} visibleSubtests={visibleSubtests} onPointClick={onTrendPointClick} />}
               {activeTab === 'criterion' && <ProgressCriterionChart payload={payload} subtest={criterionSubtest} />}
               {activeTab === 'comparative' && <ProgressComparativeTab comparative={payload.comparative} />}
             </section>

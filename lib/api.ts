@@ -1826,6 +1826,8 @@ export interface ProgressCriterionPoint {
   criterionLabel: string;
   averageScaled: number;
   sampleCount: number;
+  lowerCi95: number;
+  upperCi95: number;
 }
 
 export interface ProgressCompletionPoint {
