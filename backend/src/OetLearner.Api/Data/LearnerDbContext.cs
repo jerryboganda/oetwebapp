@@ -97,8 +97,10 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<WritingCoachSession> WritingCoachSessions => Set<WritingCoachSession>();
     public DbSet<WritingCoachSuggestion> WritingCoachSuggestions => Set<WritingCoachSuggestion>();
     public DbSet<PronunciationAssessment> PronunciationAssessments => Set<PronunciationAssessment>();
+    public DbSet<PronunciationAttempt> PronunciationAttempts => Set<PronunciationAttempt>();
     public DbSet<PronunciationDrill> PronunciationDrills => Set<PronunciationDrill>();
     public DbSet<LearnerPronunciationProgress> LearnerPronunciationProgress => Set<LearnerPronunciationProgress>();
+    public DbSet<LearnerPronunciationDiscriminationAttempt> LearnerPronunciationDiscriminationAttempts => Set<LearnerPronunciationDiscriminationAttempt>();
     public DbSet<PredictionSnapshot> PredictionSnapshots => Set<PredictionSnapshot>();
 
     // Learning content entities
@@ -408,9 +410,9 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<WritingCoachSession>().HasIndex(x => x.AttemptId);
         modelBuilder.Entity<WritingCoachSuggestion>().HasIndex(x => new { x.AttemptId, x.Resolution });
 
-        // Pronunciation indexes
-        modelBuilder.Entity<PronunciationAssessment>().HasIndex(x => x.UserId);
-        modelBuilder.Entity<LearnerPronunciationProgress>().HasIndex(x => new { x.UserId, x.PhonemeCode });
+        // Pronunciation indexes (base indexes declared via [Index] attributes on entities)
+        // Compound attempt index added below for fast drill-list lookups
+        modelBuilder.Entity<PronunciationAttempt>().HasIndex(x => new { x.UserId, x.DrillId, x.CreatedAt });
 
         // Prediction indexes
         modelBuilder.Entity<PredictionSnapshot>().HasIndex(x => new { x.UserId, x.ExamTypeCode, x.SubtestCode, x.ComputedAt });

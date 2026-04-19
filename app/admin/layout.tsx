@@ -33,6 +33,7 @@ import {
   Mic,
   GraduationCap,
   MessageSquareText,
+  BookOpenText,
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
 
@@ -66,6 +67,7 @@ const adminNavItems: NavItem[] = [
   { href: '/admin/escalations', label: 'Escalations', icon: <Scale className="w-5 h-5" />, matchPrefix: '/admin/escalations' },
   { href: '/admin/private-speaking', label: 'Private Speaking', icon: <Mic className="w-5 h-5" />, matchPrefix: '/admin/private-speaking' },
   { href: '/admin/community', label: 'Community', icon: <MessageSquareText className="w-5 h-5" />, matchPrefix: '/admin/community' },
+  { href: '/admin/strategies', label: 'Strategy Guides', icon: <BookOpenText className="w-5 h-5" />, matchPrefix: '/admin/strategies' },
 ];
 
 const adminMobileNavItems: NavItem[] = [
@@ -84,7 +86,7 @@ const adminMobileMenuSections: MobileMenuSection[] = [
   },
   {
     label: 'Content',
-    items: [adminNavItems[1], adminNavItems[13], adminNavItems[14], adminNavItems[15], adminNavItems[16], adminNavItems[19], adminNavItems[20]],
+    items: [adminNavItems[1], adminNavItems[13], adminNavItems[14], adminNavItems[15], adminNavItems[16], adminNavItems[19], adminNavItems[20], adminNavItems[29]],
   },
   {
     label: 'Governance',
@@ -195,6 +197,10 @@ function getAdminPageTitle(pathname: string | null) {
 
   if (pathname.startsWith('/admin/community')) {
     return 'Community Moderation';
+  }
+
+  if (pathname.startsWith('/admin/strategies')) {
+    return 'Strategy Guides';
   }
 
   return undefined;

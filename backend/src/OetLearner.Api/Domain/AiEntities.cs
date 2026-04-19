@@ -207,9 +207,14 @@ public static class AiFeatureCodes
     public const string SummarisePassage = "summarise.passage";
     public const string VocabularyGloss = "vocabulary.gloss";
 
+    // Pronunciation analysis (platform-only by default — scoring-critical)
+    public const string PronunciationScore = "pronunciation.score";
+    public const string PronunciationFeedback = "pronunciation.feedback";
+
     // Admin tooling (platform-only always)
     public const string AdminContentGeneration = "admin.content_generation";
     public const string AdminGrammarDraft = "admin.grammar_draft";
+    public const string AdminPronunciationDraft = "admin.pronunciation_draft";
 
     // Catch-all for calls that pre-date feature classification. Tolerated only
     // during the Slice 1 rollout; future slices will validate against this set.

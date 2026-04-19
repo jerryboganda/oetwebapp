@@ -326,6 +326,64 @@ public static class OetScoring
     }
 
     // -----------------------------------------------------------------------
+    // Pronunciation projection (authority: /rulebooks/pronunciation/common/assessment-criteria.json)
+    // -----------------------------------------------------------------------
+    //
+    // Pronunciation accuracy/fluency/completeness/prosody are scored 0-100 by
+    // the pronunciation ASR pipeline. The composite "overall" is projected
+    // into the OET Speaking 0-500 scale via the canonical anchor table. The
+    // projection is ADVISORY only — the authoritative Speaking scaled score
+    // still comes from expert-reviewed speaking attempts.
+    //
+    // Anchors (overall → scaled):
+    //   0 → 0
+    //   60 → 300 (C+ US/QA pass threshold)
+    //   70 → 350 (B pass — universal Speaking)
+    //   80 → 400
+    //   90 → 450
+    //   100 → 500
+    //
+    // Between anchors, piecewise-linear interpolation. This KEEPS the 70↔350
+    // anchor sacrosanct so the pronunciation engine never tells a learner
+    // they are passing when the underlying overall < 70.
+
+    /// <summary>
+    /// Project a pronunciation overall score (0-100 composite) onto the
+    /// 0-500 Speaking scaled scale. Advisory only.
+    /// </summary>
+    public static int PronunciationProjectedScaled(double overall0To100)
+    {
+        if (double.IsNaN(overall0To100)) return 0;
+        var o = Math.Clamp(overall0To100, 0.0, 100.0);
+        (double From, double To, int ScaledFrom, int ScaledTo)[] anchors =
+        {
+            (0,   60,  0,   300),
+            (60,  70,  300, 350),
+            (70,  80,  350, 400),
+            (80,  90,  400, 450),
+            (90,  100, 450, 500),
+        };
+        foreach (var (f, t, sf, st) in anchors)
+        {
+            if (o >= f && o <= t)
+            {
+                var ratio = (o - f) / (t - f == 0 ? 1 : (t - f));
+                return (int)Math.Round(sf + ratio * (st - sf));
+            }
+        }
+        return ScaledMax;
+    }
+
+    /// <summary>
+    /// Project a pronunciation overall score into a full Speaking pass/fail result.
+    /// </summary>
+    public static SpeakingResult PronunciationProjectedBand(double overall0To100)
+    {
+        var scaled = PronunciationProjectedScaled(overall0To100);
+        return GradeSpeaking(scaled);
+    }
+
+    // -----------------------------------------------------------------------
     // Display formatting
     // -----------------------------------------------------------------------
 

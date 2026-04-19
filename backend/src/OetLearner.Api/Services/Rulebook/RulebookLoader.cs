@@ -82,6 +82,7 @@ public sealed class RulebookLoader : IRulebookLoader
         RuleKind.Writing => "writing",
         RuleKind.Speaking => "speaking",
         RuleKind.Grammar => "grammar",
+        RuleKind.Pronunciation => "pronunciation",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
     };
 
@@ -120,7 +121,7 @@ public sealed class RulebookNotFoundException(RuleKind kind, ExamProfession prof
 // Types — mirror lib/rulebook/types.ts
 // ---------------------------------------------------------------------------
 
-public enum RuleKind { Writing, Speaking, Grammar }
+public enum RuleKind { Writing, Speaking, Grammar, Pronunciation }
 
 public enum ExamProfession
 {

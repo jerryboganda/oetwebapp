@@ -1,0 +1,44 @@
+{
+  "version": "1.0.0",
+  "kind": "pronunciation",
+  "scope": "common",
+  "publishedAt": "2026-04-19T00:00:00Z",
+  "authoritySource": "OET Speaking intelligibility descriptors v2023 + Dr. Ahmed Hesham pronunciation guide",
+  "bandDescriptors": {
+    "intelligibility": {
+      "6": "Pronunciation is easily understood; prosodic features (stress, intonation, rhythm) are used effectively with no strain on the listener.",
+      "5": "Easily understood; a few pronunciation or prosodic errors do not impede communication.",
+      "4": "Generally understood; pronunciation or prosodic errors and/or L1 accent cause occasional strain.",
+      "3": "Errors in pronunciation/stress/intonation and/or strong L1 accent cause serious strain for the listener.",
+      "2": "Often unintelligible. Frequent errors in pronunciation/stress/intonation.",
+      "1": "Largely unintelligible."
+    }
+  },
+  "scoreToScaled": {
+    "note": "Overall pronunciation score is a 0-100 composite that maps into the OET Speaking 0-500 scale via lib/scoring.ts:pronunciationProjectedBand().",
+    "anchors": [
+      { "overall": 0, "scaled": 0 },
+      { "overall": 60, "scaled": 300 },
+      { "overall": 70, "scaled": 350 },
+      { "overall": 80, "scaled": 400 },
+      { "overall": 90, "scaled": 450 },
+      { "overall": 100, "scaled": 500 }
+    ],
+    "passBand": { "scaled": 350, "grade": "B" }
+  },
+  "dimensions": {
+    "accuracy": "Phoneme-level articulation accuracy: how closely each sound matches the reference IPA.",
+    "fluency": "Speech rate and smoothness; absence of unnatural pauses, false starts, or disfluencies.",
+    "completeness": "Proportion of the reference text actually uttered (missed or dropped syllables lower this score).",
+    "prosody": "Word stress, sentence stress, intonation contour, and rhythm. Critical for medical terminology and patient reassurance."
+  },
+  "commonL1Accents": [
+    { "code": "ar", "label": "Arabic", "typicalDifficulties": ["p/b confusion", "/v/ → /f/", "/ŋ/", "consonant clusters like /spr/"] },
+    { "code": "hi", "label": "Hindi/Urdu", "typicalDifficulties": ["retroflex /t,d/", "/v/ vs /w/", "unaspirated stops"] },
+    { "code": "zh", "label": "Mandarin/Cantonese", "typicalDifficulties": ["/θ/ /ð/ (th)", "final consonants", "/r/ /l/", "syllable-timed rhythm"] },
+    { "code": "es", "label": "Spanish", "typicalDifficulties": ["/v/ vs /b/", "/z/ /ʃ/ /tʃ/", "schwa neutralisation"] },
+    { "code": "tl", "label": "Tagalog/Filipino", "typicalDifficulties": ["/f/ /v/ /θ/ /ð/", "schwa", "word stress"] },
+    { "code": "ru", "label": "Russian", "typicalDifficulties": ["/θ/ /ð/", "/w/ vs /v/", "final devoicing"] },
+    { "code": "ja", "label": "Japanese", "typicalDifficulties": ["/r/ vs /l/", "consonant clusters", "vowel epenthesis"] }
+  ]
+}

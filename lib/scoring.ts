@@ -417,6 +417,65 @@ export function gradeSpeaking(scaled: number): PassFailResult {
 }
 
 // ---------------------------------------------------------------------------
+// Pronunciation projection (advisory)
+// ---------------------------------------------------------------------------
+//
+// Authority: /rulebooks/pronunciation/common/assessment-criteria.json
+//
+// Pronunciation accuracy/fluency/completeness/prosody are scored 0-100 by
+// the pronunciation ASR pipeline. The composite "overall" is projected
+// into the OET Speaking 0-500 scale via the canonical anchor table. The
+// projection is ADVISORY only — the authoritative Speaking scaled score
+// still comes from expert-reviewed speaking attempts.
+//
+// Anchors (overall → scaled):
+//   0 → 0
+//   60 → 300
+//   70 → 350 (B pass — universal Speaking)
+//   80 → 400
+//   90 → 450
+//   100 → 500
+//
+// Between anchors: piecewise-linear interpolation.
+
+const PRONUNCIATION_ANCHORS: ReadonlyArray<readonly [number, number]> = [
+  [0, 0],
+  [60, 300],
+  [70, 350],
+  [80, 400],
+  [90, 450],
+  [100, 500],
+] as const;
+
+/**
+ * Project a pronunciation overall score (0-100) onto the OET Speaking
+ * 0-500 scaled scale. Advisory only — never a substitute for expert grading.
+ */
+export function pronunciationProjectedScaled(overall0To100: number): number {
+  if (!Number.isFinite(overall0To100)) return 0;
+  const o = Math.max(0, Math.min(100, overall0To100));
+  for (let i = 0; i < PRONUNCIATION_ANCHORS.length - 1; i++) {
+    const [fromO, fromS] = PRONUNCIATION_ANCHORS[i];
+    const [toO, toS] = PRONUNCIATION_ANCHORS[i + 1];
+    if (o >= fromO && o <= toO) {
+      const span = toO - fromO || 1;
+      const ratio = (o - fromO) / span;
+      return Math.round(fromS + ratio * (toS - fromS));
+    }
+  }
+  return OET_SCALED_MAX;
+}
+
+/**
+ * Project a pronunciation overall score into a Speaking PassFailResult.
+ * Grade/pass reflect the Speaking universal 350 threshold.
+ */
+export function pronunciationProjectedBand(overall0To100: number): PassFailResult {
+  const scaled = pronunciationProjectedScaled(overall0To100);
+  return gradeSpeaking(scaled);
+}
+
+// ---------------------------------------------------------------------------
 // Display formatting
 // ---------------------------------------------------------------------------
 

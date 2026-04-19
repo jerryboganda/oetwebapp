@@ -12,7 +12,7 @@
     },
     "kind": {
       "type": "string",
-      "enum": ["writing", "speaking", "grammar"]
+      "enum": ["writing", "speaking", "grammar", "pronunciation"]
     },
     "profession": {
       "type": "string",

@@ -15,11 +15,13 @@ public sealed class StrategyGuideService(LearnerDbContext db)
 
     public async Task<bool> IsEnabledAsync(CancellationToken ct)
     {
-        var flag = await db.FeatureFlags
+        var flags = await db.FeatureFlags
             .AsNoTracking()
             .Where(f => f.Key == FeatureFlagKey || f.Key == "strategy-guides")
+            .ToListAsync(ct);
+        var flag = flags
             .OrderByDescending(f => f.UpdatedAt)
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefault();
 
         return flag?.Enabled ?? true;
     }
@@ -468,11 +470,14 @@ public sealed class StrategyGuideService(LearnerDbContext db)
 
     private async Task<IReadOnlySet<string>> LoadWeakSubtestsAsync(string userId, string examTypeCode, CancellationToken ct)
     {
-        var json = await db.Goals.AsNoTracking()
+        var goals = await db.Goals.AsNoTracking()
             .Where(goal => goal.UserId == userId && goal.ExamTypeCode == examTypeCode)
+            .Select(goal => new { goal.UpdatedAt, goal.WeakSubtestsJson })
+            .ToListAsync(ct);
+        var json = goals
             .OrderByDescending(goal => goal.UpdatedAt)
             .Select(goal => goal.WeakSubtestsJson)
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefault();
 
         if (string.IsNullOrWhiteSpace(json))
         {

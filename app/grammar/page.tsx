@@ -1,14 +1,15 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { BookMarked, CheckCircle2, Clock, Sparkles, Trophy } from 'lucide-react';
+import { BookMarked, CheckCircle2, Sparkles, Trophy } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { MotionSection } from '@/components/ui/motion-primitives';
+import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { ProgressBar } from '@/components/ui/progress';
 import {
   GrammarTopicCard,
   GrammarLessonCard,
@@ -27,32 +28,33 @@ import type {
   GrammarTopicLearner,
 } from '@/lib/grammar/types';
 
+// ── constants ─────────────────────────────────────────────────────────────
 const EXAM_TYPES = [
-  { value: 'oet', label: 'OET' },
+  { value: 'oet',   label: 'OET'   },
   { value: 'ielts', label: 'IELTS' },
-  { value: 'pte', label: 'PTE' },
+  { value: 'pte',   label: 'PTE'   },
 ];
 
 const LEVELS = [
-  { value: '', label: 'All levels' },
-  { value: 'beginner', label: 'Beginner' },
+  { value: '',             label: 'All levels'   },
+  { value: 'beginner',     label: 'Beginner'     },
   { value: 'intermediate', label: 'Intermediate' },
-  { value: 'advanced', label: 'Advanced' },
+  { value: 'advanced',     label: 'Advanced'     },
 ];
 
+// ── page ──────────────────────────────────────────────────────────────────
 export default function GrammarPage() {
-  const [overview, setOverview] = useState<GrammarOverview | null>(null);
-  const [lessons, setLessons] = useState<GrammarLessonSummary[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [overview,       setOverview]       = useState<GrammarOverview | null>(null);
+  const [lessons,        setLessons]        = useState<GrammarLessonSummary[]>([]);
+  const [loading,        setLoading]        = useState(true);
   const [loadingLessons, setLoadingLessons] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [examType, setExamType] = useState('oet');
-  const [level, setLevel] = useState('');
+  const [error,          setError]          = useState<string | null>(null);
+  const [examType,       setExamType]       = useState('oet');
+  const [level,          setLevel]          = useState('');
 
-  useEffect(() => {
-    analytics.track('grammar_page_viewed');
-  }, []);
+  useEffect(() => { analytics.track('grammar_page_viewed'); }, []);
 
+  // fetch overview when exam type changes
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -67,11 +69,10 @@ export default function GrammarPage() {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [examType]);
 
+  // fetch lessons when exam type OR level changes
   useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -85,180 +86,194 @@ export default function GrammarPage() {
         if (!cancelled) setLoadingLessons(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [examType, level]);
 
   const selectedExamLabel = EXAM_TYPES.find((x) => x.value === examType)?.label ?? 'OET';
   const selectedLevelLabel = LEVELS.find((x) => x.value === level)?.label ?? 'All levels';
 
   const heroHighlights = useMemo(() => {
-    const t = overview?.topics?.length ?? 0;
-    const l = lessons.length;
-    const m = overview?.lessonsMastered ?? 0;
+    const topicCount   = overview?.topics?.length ?? 0;
+    const lessonCount  = lessons.length;
+    const masteredCount = overview?.lessonsMastered ?? 0;
     return [
-      { icon: BookMarked, label: 'Exam path', value: selectedExamLabel },
-      { icon: Sparkles, label: 'Topics', value: loading ? 'Loading…' : `${t} available` },
-      { icon: CheckCircle2, label: 'Lessons', value: loading ? 'Loading…' : `${l} available` },
-      { icon: Trophy, label: 'Mastered', value: loading ? 'Loading…' : `${m} lessons` },
+      { icon: BookMarked,  label: 'Exam path', value: selectedExamLabel },
+      { icon: Sparkles,    label: 'Topics',    value: loading ? 'Loading…' : `${topicCount} available` },
+      { icon: CheckCircle2, label: 'Lessons',  value: loading ? 'Loading…' : `${lessonCount} available` },
+      { icon: Trophy,      label: 'Mastered',  value: loading ? 'Loading…' : `${masteredCount} lessons` },
     ];
   }, [overview, lessons.length, selectedExamLabel, loading]);
 
-  const resetFilters = () => {
-    setExamType('oet');
-    setLevel('');
-  };
+  const resetFilters = () => { setExamType('oet'); setLevel(''); };
 
   async function onDismiss(id: string) {
     try {
       await dismissGrammarRecommendation(id);
-      setOverview((prev) => prev ? { ...prev, recommendations: prev.recommendations.filter((r) => r.id !== id) } : prev);
+      setOverview((prev) =>
+        prev ? { ...prev, recommendations: prev.recommendations.filter((r) => r.id !== id) } : prev,
+      );
       analytics.track('grammar_recommendation_dismissed', { id });
-    } catch {
-      // non-fatal
-    }
+    } catch { /* non-fatal */ }
   }
 
+  // ── render ───────────────────────────────────────────────────────────
   return (
-    <LearnerDashboardShell>
-      <div className="space-y-6">
+    <LearnerDashboardShell pageTitle="Grammar">
+      <div className="space-y-8">
+
+        {/* ── Hero ── */}
         <LearnerPageHero
           title="Grammar Lessons"
-          description="Strengthen the grammar patterns that matter for OET and other English exams."
+          description="Strengthen the grammar patterns that matter for OET, IELTS, and PTE — every lesson graded server-side."
           icon={BookMarked}
           highlights={heroHighlights}
         />
 
         {error ? <InlineAlert variant="warning">{error}</InlineAlert> : null}
 
-        <MotionSection className="space-y-6">
-          {overview && overview.recommendations?.length > 0 ? (
-            <GrammarRecommendationStrip
-              recommendations={overview.recommendations}
-              onOpen={(r) => analytics.track('grammar_recommendation_clicked', { id: r.id })}
-              onDismiss={(r) => onDismiss(r.id)}
-            />
+        <MotionSection className="space-y-8">
+
+          {/* ── Recommendations ── */}
+          {!loading && overview && (overview.recommendations?.length ?? 0) > 0 ? (
+            <MotionItem>
+              <GrammarRecommendationStrip
+                recommendations={overview.recommendations}
+                onOpen={(r)   => analytics.track('grammar_recommendation_clicked', { id: r.id })}
+                onDismiss={(r) => onDismiss(r.id)}
+              />
+            </MotionItem>
           ) : null}
 
-          {/* Topic-first hub */}
+          {/* ── Topic grid ── */}
           <section aria-label="Grammar topics">
             <LearnerSurfaceSectionHeader
               eyebrow="Topic path"
               title={`Browse ${selectedExamLabel} grammar topics`}
               description="Build mastery topic by topic. Every lesson is graded server-side and drives your readiness score."
-              className="mb-3"
+              action={
+                <div className="flex flex-wrap gap-2">
+                  {EXAM_TYPES.map((item) => (
+                    <FilterChip
+                      key={item.value}
+                      active={examType === item.value}
+                      onClick={() => setExamType(item.value)}
+                    >
+                      {item.label}
+                    </FilterChip>
+                  ))}
+                </div>
+              }
+              className="mb-5"
             />
+
             {loading ? (
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
                 {Array.from({ length: 6 }).map((_, i) => (
-                  <Skeleton key={i} className="h-44 rounded-2xl" />
+                  <Skeleton key={i} className="h-52 rounded-2xl" />
                 ))}
               </div>
             ) : (overview?.topics?.length ?? 0) === 0 ? (
-              <EmptyTopicState examLabel={selectedExamLabel} />
+              <EmptyState
+                heading={`No ${selectedExamLabel} topics published yet`}
+                body="Our content team is finalising this library. Check back soon, or explore the OET library."
+                action={<Button variant="outline" size="sm" onClick={() => setExamType('oet')}>Browse OET topics</Button>}
+              />
             ) : (
               <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                {overview!.topics.map((t: GrammarTopicLearner) => (
-                  <GrammarTopicCard key={t.id} topic={t} />
+                {overview!.topics.map((t: GrammarTopicLearner, i) => (
+                  <MotionItem key={t.id} delayIndex={i}>
+                    <GrammarTopicCard topic={t} />
+                  </MotionItem>
                 ))}
               </div>
             )}
           </section>
 
-          {/* Filters */}
-          <Card className="p-5 sm:p-6">
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-              <div className="max-w-2xl space-y-2">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Refine the library</p>
-                <h2 className="text-xl font-bold tracking-tight text-navy sm:text-2xl">Filter by exam and level.</h2>
-                <p className="text-sm leading-6 text-muted">Use the filters to narrow the full lesson list below.</p>
-              </div>
-              {examType !== 'oet' || level !== '' ? (
-                <Button variant="ghost" size="sm" onClick={resetFilters} className="self-start lg:self-auto">
-                  Reset filters
-                </Button>
-              ) : null}
-            </div>
-
-            <div className="mt-6 grid gap-4 lg:grid-cols-2">
-              <FilterGroup label="Exam type">
-                {EXAM_TYPES.map((item) => (
-                  <FilterChip key={item.value} active={examType === item.value} onClick={() => setExamType(item.value)}>
-                    {item.label}
-                  </FilterChip>
-                ))}
-              </FilterGroup>
-              <FilterGroup label="Level">
-                {LEVELS.map((item) => (
-                  <FilterChip key={item.value || 'all'} active={level === item.value} onClick={() => setLevel(item.value)}>
-                    {item.label}
-                  </FilterChip>
-                ))}
-              </FilterGroup>
-            </div>
-          </Card>
-
-          {/* Flat lesson list */}
+          {/* ── Filter + Lesson list ── */}
           <section aria-label="Lesson library">
             <LearnerSurfaceSectionHeader
               eyebrow="Lesson library"
-              title={`Browse ${selectedExamLabel} grammar lessons`}
-              description={`${selectedLevelLabel} · ${lessons.length} lessons available.`}
-              className="mb-4"
+              title={`${selectedExamLabel} grammar lessons`}
+              description={`${selectedLevelLabel} · ${lessons.length} lessons available`}
+              action={
+                <div className="flex flex-wrap items-center gap-2">
+                  {LEVELS.map((item) => (
+                    <FilterChip
+                      key={item.value || 'all'}
+                      active={level === item.value}
+                      onClick={() => setLevel(item.value)}
+                    >
+                      {item.label}
+                    </FilterChip>
+                  ))}
+                  {(examType !== 'oet' || level !== '') ? (
+                    <button
+                      type="button"
+                      onClick={resetFilters}
+                      className="text-xs font-semibold text-muted underline underline-offset-2 hover:text-navy"
+                    >
+                      Reset
+                    </button>
+                  ) : null}
+                </div>
+              }
+              className="mb-5"
             />
+
             {loadingLessons ? (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 {Array.from({ length: 4 }).map((_, i) => (
-                  <Skeleton key={i} className="h-44 rounded-2xl" />
+                  <Skeleton key={i} className="h-52 rounded-2xl" />
                 ))}
               </div>
             ) : lessons.length === 0 ? (
-              <Card className="border-dashed border-border p-8 text-center shadow-sm">
-                <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                  <Sparkles className="h-5 w-5" />
-                </div>
-                <h3 className="mt-4 text-lg font-bold text-navy">No lessons match your filter</h3>
-                <p className="mt-2 text-sm leading-6 text-muted">Try a different exam family or level.</p>
-                <Button variant="outline" size="sm" className="mt-6" onClick={resetFilters}>
-                  Show all lessons
-                </Button>
-              </Card>
+              <EmptyState
+                heading="No lessons match your filter"
+                body="Try a different exam family or level."
+                action={<Button variant="outline" size="sm" onClick={resetFilters}>Show all lessons</Button>}
+              />
             ) : (
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-                {lessons.map((lesson) => (
-                  <GrammarLessonCard key={lesson.id} lesson={lesson} />
+                {lessons.map((lesson, i) => (
+                  <MotionItem key={lesson.id} delayIndex={i}>
+                    <GrammarLessonCard lesson={lesson} />
+                  </MotionItem>
                 ))}
               </div>
             )}
           </section>
+
         </MotionSection>
 
+        {/* ── Overall progress footer ── */}
         <GlobalProgressFooter overview={overview} loading={loading} />
+
       </div>
     </LearnerDashboardShell>
   );
 }
 
-function FilterGroup({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="space-y-3 rounded-2xl border border-border bg-background-light/70 p-4">
-      <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">{label}</p>
-      <div className="flex flex-wrap gap-2">{children}</div>
-    </div>
-  );
-}
+// ── sub-components ────────────────────────────────────────────────────────
 
-function FilterChip({ active, onClick, children }: { active: boolean; onClick: () => void; children: React.ReactNode }) {
+/** Active = violet fill chip; inactive = cream surface chip. Matches dashboard CriterionChip token language. */
+function FilterChip({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean;
+  onClick: () => void;
+  children: React.ReactNode;
+}) {
   return (
     <button
       type="button"
       onClick={onClick}
       className={cn(
-        'pressable inline-flex items-center rounded-2xl border px-4 py-2 text-sm font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
+        'inline-flex items-center rounded-full border px-4 py-1.5 text-sm font-semibold transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:scale-95',
         active
-          ? 'border-primary/20 bg-primary/10 text-primary-dark shadow-sm'
-          : 'border-border bg-surface text-muted hover:bg-white hover:text-navy',
+          ? 'border-primary/20 bg-primary/10 text-primary shadow-sm'
+          : 'border-border bg-surface text-muted hover:border-primary/20 hover:bg-lavender/30 hover:text-navy',
       )}
     >
       {children}
@@ -266,43 +281,57 @@ function FilterChip({ active, onClick, children }: { active: boolean; onClick: (
   );
 }
 
-function EmptyTopicState({ examLabel }: { examLabel: string }) {
+/** Empty state inside a soft dashed card — DESIGN.md §4: "Centered, explanatory, and framed inside a card." */
+function EmptyState({
+  heading,
+  body,
+  action,
+}: {
+  heading: string;
+  body: string;
+  action?: React.ReactNode;
+}) {
   return (
-    <Card className="border-dashed border-border p-8 text-center shadow-sm">
+    <Card className="border-dashed border-border p-10 text-center shadow-sm">
       <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
         <Sparkles className="h-5 w-5" />
       </div>
-      <h3 className="mt-4 text-lg font-bold text-navy">No {examLabel} topics are published yet</h3>
-      <p className="mt-2 text-sm leading-6 text-muted">
-        Our content team is finalising the {examLabel} grammar library. Check back soon, or explore the OET library in the meantime.
-      </p>
+      <h3 className="mt-4 text-lg font-bold text-navy">{heading}</h3>
+      <p className="mt-2 text-sm leading-6 text-muted">{body}</p>
+      {action ? <div className="mt-6 flex justify-center">{action}</div> : null}
     </Card>
   );
 }
 
-function GlobalProgressFooter({ overview, loading }: { overview: GrammarOverview | null; loading: boolean }) {
+/** Bottom-of-page overall mastery strip — uses `bg-surface` (Surface White), navy text, primary progress bar. */
+function GlobalProgressFooter({
+  overview,
+  loading,
+}: {
+  overview: GrammarOverview | null;
+  loading: boolean;
+}) {
   if (loading || !overview) return null;
-  const pct = Math.round(overview.overallMasteryScore);
+  const pct = Math.min(100, Math.max(0, Math.round(overview.overallMasteryScore ?? 0)));
+
   return (
-    <Card className="border-border bg-white p-5 dark:border-gray-700 dark:bg-gray-800">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <Card className="bg-surface">
+      <div className="flex flex-wrap items-center justify-between gap-6">
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Your grammar progress</p>
-          <p className="text-base font-semibold text-navy dark:text-white">
-            {overview.lessonsMastered} mastered · {overview.lessonsCompleted} completed · {overview.lessonsTotal} lessons available
+          <p className="mt-1 text-base font-bold text-navy">
+            {overview.lessonsMastered} mastered ·{' '}
+            {overview.lessonsCompleted} completed ·{' '}
+            {overview.lessonsTotal} total
           </p>
         </div>
-        <div className="min-w-[220px] flex-1">
-          <div className="flex items-center justify-between text-xs text-muted">
+        <div className="min-w-[200px] flex-1 space-y-2">
+          <div className="flex items-center justify-between text-xs font-semibold text-muted">
             <span>Overall mastery</span>
-            <span className="font-semibold text-navy dark:text-white">{pct}%</span>
+            <span className="text-navy">{pct}%</span>
           </div>
-          <div className="mt-1 h-2 w-full overflow-hidden rounded-full bg-background-light dark:bg-gray-900">
-            <div className="h-full rounded-full bg-gradient-to-r from-primary to-primary-dark" style={{ width: `${Math.min(100, pct)}%` }} aria-hidden />
-          </div>
-          <div className="mt-2 flex items-center gap-1 text-xs text-muted">
-            <Clock className="h-3.5 w-3.5" /> Updated after every attempt
-          </div>
+          <ProgressBar value={pct} ariaLabel={`Overall grammar mastery ${pct}%`} color="primary" />
+          <p className="text-xs text-muted">Updates after every submitted attempt.</p>
         </div>
       </div>
     </Card>

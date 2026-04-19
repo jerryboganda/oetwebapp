@@ -37,7 +37,7 @@ function renderInline(text: string): ReactNode {
     const token = match[0];
     if (token.startsWith('**')) tokens.push(<strong key={key++}>{token.slice(2, -2)}</strong>);
     else if (token.startsWith('*')) tokens.push(<em key={key++}>{token.slice(1, -1)}</em>);
-    else if (token.startsWith('`')) tokens.push(<code key={key++} className="rounded bg-background-light px-1 py-0.5 text-[0.85em] text-navy">{token.slice(1, -1)}</code>);
+    else if (token.startsWith('`')) tokens.push(<code key={key++} className="rounded border border-border bg-background-light px-1 py-0.5 text-[0.85em] font-mono text-navy">{token.slice(1, -1)}</code>);
     last = regex.lastIndex;
   }
   if (last < text.length) tokens.push(text.slice(last));
@@ -56,7 +56,7 @@ export function GrammarContentRenderer({ blocks }: { blocks: GrammarContentBlock
 }
 
 function GrammarContentBlockView({ block }: { block: GrammarContentBlockLearner }) {
-  const baseCard = 'rounded-2xl border border-border bg-white p-4 shadow-sm dark:border-gray-700 dark:bg-gray-800';
+  const baseCard = 'rounded-2xl border border-border bg-surface p-4 shadow-sm';
 
   switch (block.type) {
     case 'callout':
@@ -67,22 +67,22 @@ function GrammarContentBlockView({ block }: { block: GrammarContentBlockLearner 
       );
     case 'example':
       return (
-        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm leading-6 text-emerald-900 dark:border-emerald-900/40 dark:bg-emerald-900/20 dark:text-emerald-100">
-          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.15em] opacity-70">Example</p>
-          <SafeRichText markdown={block.contentMarkdown} className="text-emerald-900 dark:text-emerald-100" />
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50/70 p-4 text-sm leading-6 text-emerald-900">
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-emerald-600">Example</p>
+          <SafeRichText markdown={block.contentMarkdown} className="text-emerald-900" />
         </div>
       );
     case 'note':
       return (
-        <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm leading-6 text-amber-900 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-100">
-          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.15em] opacity-70">Note</p>
-          <SafeRichText markdown={block.contentMarkdown} className="text-amber-900 dark:text-amber-100" />
+        <div className="rounded-2xl border border-amber-200 bg-amber-50/70 p-4 text-sm leading-6 text-amber-900">
+          <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.15em] text-amber-600">Note</p>
+          <SafeRichText markdown={block.contentMarkdown} className="text-amber-900" />
         </div>
       );
     default:
       return (
         <div className={baseCard}>
-          <SafeRichText markdown={block.contentMarkdown} className="text-gray-800 dark:text-gray-200" />
+          <SafeRichText markdown={block.contentMarkdown} className="text-navy" />
         </div>
       );
   }

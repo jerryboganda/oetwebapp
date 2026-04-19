@@ -2,14 +2,13 @@
 
 import Link from 'next/link';
 import { ArrowRight, CheckCircle2, Clock3, LayoutGrid, Sparkles, Target, Trophy, XCircle } from 'lucide-react';
-import { useMemo } from 'react';
-import { Badge } from '@/components/ui/badge';
+import { useMemo, type ElementType } from 'react';import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Input, RadioGroup, Select, Textarea } from '@/components/ui/form-controls';
+import { ProgressBar } from '@/components/ui/progress';
+import { RadioGroup, Select, Textarea } from '@/components/ui/form-controls';
 import { cn } from '@/lib/utils';
 import type {
-  GrammarExerciseAuthoring,
   GrammarExerciseChoiceOption,
   GrammarExerciseLearner,
   GrammarExerciseResult,
@@ -30,39 +29,63 @@ function isMatchingPair(option: GrammarExerciseChoiceOption | GrammarMatchingPai
 
 function formatTopicLabel(topic: GrammarTopicLearner | undefined, fallback: string) {
   if (topic?.name) return topic.name;
-  return fallback;
+  return fallback.replace(/_/g, ' ');
 }
 
+function titleCase(value: string) {
+  return value
+    .split(/[\s_-]+/)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+// ─── GrammarTopicCard ─────────────────────────────────────────────────────
+// Mirrors the dashboard's action cards: cream surface, soft border, violet
+// icon tile, navy headline, muted metadata, primary link-action footer.
 export function GrammarTopicCard({ topic }: { topic: GrammarTopicLearner }) {
   const href = `/grammar/topics/${encodeURIComponent(topic.slug)}`;
+  const masteryPct = topic.lessonCount > 0
+    ? Math.round((topic.masteredLessonCount / topic.lessonCount) * 100)
+    : 0;
 
   return (
-    <Link href={href} className="block">
-      <Card hoverable className="h-full border-border transition-transform duration-200 hover:-translate-y-0.5">
-        <div className="flex h-full flex-col gap-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-xl text-primary-dark">
-                {topic.iconEmoji ?? '📘'}
-              </div>
-              <div className="min-w-0">
-                <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">{topic.levelHint}</p>
-                <h3 className="truncate text-lg font-bold text-navy dark:text-white">{topic.name}</h3>
-              </div>
+    <Link href={href} className="block focus-visible:outline-none">
+      <Card hoverable className="h-full">
+        <div className="flex h-full flex-col">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-lg">
+              <span className="text-primary">{topic.iconEmoji ?? '📘'}</span>
             </div>
-            <Badge variant="muted">{topic.lessonCount} lessons</Badge>
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">{titleCase(topic.levelHint || 'All levels')}</p>
+              <h3 className="mt-0.5 text-base font-bold leading-snug text-navy">{topic.name}</h3>
+            </div>
+            <Badge variant="muted">{topic.lessonCount} {topic.lessonCount === 1 ? 'lesson' : 'lessons'}</Badge>
           </div>
 
-          {topic.description ? <p className="line-clamp-3 text-sm leading-6 text-muted">{topic.description}</p> : null}
+          {topic.description ? (
+            <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted">{topic.description}</p>
+          ) : null}
 
-          <div className="mt-auto grid grid-cols-3 gap-2 text-center text-xs">
-            <StatPill label="Lessons" value={topic.lessonCount} icon={LayoutGrid} />
-            <StatPill label="Done" value={topic.completedLessonCount} icon={CheckCircle2} />
-            <StatPill label="Mastered" value={topic.masteredLessonCount} icon={Trophy} />
+          <div className="mt-4 grid grid-cols-3 gap-2">
+            <StatPill icon={LayoutGrid} label="Lessons" value={topic.lessonCount} />
+            <StatPill icon={CheckCircle2} label="Done" value={topic.completedLessonCount} />
+            <StatPill icon={Trophy} label="Mastered" value={topic.masteredLessonCount} />
           </div>
 
-          <div className="flex items-center justify-end text-sm font-semibold text-primary">
-            Explore <ArrowRight className="ml-1 h-4 w-4" />
+          {topic.lessonCount > 0 ? (
+            <div className="mt-4">
+              <div className="mb-1 flex items-center justify-between text-xs text-muted">
+                <span>Mastery</span>
+                <span className="font-semibold text-navy">{masteryPct}%</span>
+              </div>
+              <ProgressBar value={masteryPct} ariaLabel={`${topic.name} mastery ${masteryPct}%`} color="primary" />
+            </div>
+          ) : null}
+
+          <div className="mt-4 flex items-center justify-end border-t border-gray-200/60 pt-3 text-sm font-semibold text-primary">
+            Explore topic <ArrowRight className="ml-1 h-4 w-4" />
           </div>
         </div>
       </Card>
@@ -70,46 +93,70 @@ export function GrammarTopicCard({ topic }: { topic: GrammarTopicLearner }) {
   );
 }
 
+// ─── GrammarLessonCard ────────────────────────────────────────────────────
+// Same rhythm as dashboard task cards. Cream surface, soft border, small
+// icon tile, navy headline, meta row, mastery bar when progress exists.
 export function GrammarLessonCard({ lesson }: { lesson: GrammarLessonSummary }) {
   const topicLabel = useMemo(() => formatTopicLabel(undefined, lesson.topicName ?? lesson.category), [lesson.category, lesson.topicName]);
-  const progressPct = lesson.progress?.masteryScore ?? 0;
+  const progressPct = Math.max(0, Math.min(100, lesson.progress?.masteryScore ?? 0));
+  const status = lesson.mastered
+    ? { label: 'Mastered', variant: 'success' as const }
+    : lesson.progress?.status === 'in_progress'
+      ? { label: 'In progress', variant: 'info' as const }
+      : lesson.progress?.status === 'completed'
+        ? { label: 'Completed', variant: 'success' as const }
+        : { label: 'New', variant: 'muted' as const };
 
   return (
-    <Link href={`/grammar/${encodeURIComponent(lesson.id)}`} className="block">
-      <Card hoverable className="h-full border-border transition-transform duration-200 hover:-translate-y-0.5">
-        <div className="flex h-full flex-col gap-4">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <Badge variant="outline" className="mb-2">{topicLabel}</Badge>
-              <h3 className="truncate text-lg font-bold text-navy dark:text-white">{lesson.title}</h3>
+    <Link href={`/grammar/${encodeURIComponent(lesson.id)}`} className="block focus-visible:outline-none">
+      <Card hoverable className="h-full">
+        <div className="flex h-full flex-col">
+          <div className="flex items-start gap-3">
+            <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+              <Sparkles className="h-5 w-5" />
             </div>
-            {lesson.mastered ? <Badge variant="success">Mastered</Badge> : lesson.progress?.status === 'in_progress' ? <Badge variant="info">In progress</Badge> : <Badge variant="muted">New</Badge>}
+            <div className="min-w-0 flex-1">
+              <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">{titleCase(topicLabel)}</p>
+              <h3 className="mt-0.5 text-base font-bold leading-snug text-navy">{lesson.title}</h3>
+            </div>
+            <Badge variant={status.variant}>{status.label}</Badge>
           </div>
 
-          {lesson.description ? <p className="line-clamp-3 text-sm leading-6 text-muted">{lesson.description}</p> : null}
+          {lesson.description ? (
+            <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted">{lesson.description}</p>
+          ) : null}
 
-          <div className="flex flex-wrap gap-2 text-xs text-muted">
-            <MetaBadge icon={Clock3} label={`${lesson.estimatedMinutes} min`} />
-            <MetaBadge icon={Target} label={lesson.level} />
-            <MetaBadge icon={Sparkles} label={`${lesson.exerciseCount} exercises`} />
+          <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-2 text-sm font-semibold text-muted">
+            <span className="inline-flex items-center gap-1.5">
+              <Clock3 className="h-4 w-4" />
+              {lesson.estimatedMinutes} min
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Target className="h-4 w-4" />
+              {titleCase(lesson.level)}
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <Sparkles className="h-4 w-4" />
+              {lesson.exerciseCount} exercises
+            </span>
           </div>
 
-          <div className="mt-auto space-y-2">
-            {lesson.progress ? (
-              <div>
-                <div className="flex items-center justify-between text-xs text-muted">
-                  <span>Mastery</span>
-                  <span className="font-semibold text-navy dark:text-white">{Math.max(0, Math.min(100, progressPct))}%</span>
-                </div>
-                <div className="mt-1 h-2 overflow-hidden rounded-full bg-background-light dark:bg-gray-900">
-                  <div className="h-full rounded-full bg-gradient-to-r from-primary to-primary-dark" style={{ width: `${Math.max(0, Math.min(100, progressPct))}%` }} />
-                </div>
+          {lesson.progress ? (
+            <div className="mt-4">
+              <div className="mb-1 flex items-center justify-between text-xs text-muted">
+                <span>Mastery</span>
+                <span className="font-semibold text-navy">{progressPct}%</span>
               </div>
-            ) : null}
-
-            <div className="flex items-center justify-end text-sm font-semibold text-primary">
-              Open lesson <ArrowRight className="ml-1 h-4 w-4" />
+              <ProgressBar
+                value={progressPct}
+                ariaLabel={`${lesson.title} mastery ${progressPct}%`}
+                color={progressPct >= 80 ? 'success' : 'primary'}
+              />
             </div>
+          ) : null}
+
+          <div className="mt-4 flex items-center justify-end border-t border-gray-200/60 pt-3 text-sm font-semibold text-primary">
+            Open lesson <ArrowRight className="ml-1 h-4 w-4" />
           </div>
         </div>
       </Card>
@@ -117,6 +164,9 @@ export function GrammarLessonCard({ lesson }: { lesson: GrammarLessonSummary }) 
   );
 }
 
+// ─── GrammarRecommendationStrip ──────────────────────────────────────────
+// Light cream card, violet eyebrow, inner cards on `bg-surface` so the
+// composition feels like the dashboard "Next action" rail — not a dark panel.
 export function GrammarRecommendationStrip({
   recommendations,
   onOpen,
@@ -129,64 +179,77 @@ export function GrammarRecommendationStrip({
   if (recommendations.length === 0) return null;
 
   return (
-    <div className="space-y-3 rounded-[24px] border border-primary/15 bg-primary/5 p-4 sm:p-5">
-      <div className="flex items-center gap-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+    <Card padding="md" className="border-primary/15 bg-primary/5">
+      <div className="mb-4 flex items-center gap-3">
+        <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
           <Sparkles className="h-4 w-4" />
         </div>
         <div>
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Recommended next</p>
-          <h3 className="text-sm font-bold text-navy dark:text-white">Pick up where you left off</h3>
+          <h3 className="text-base font-bold text-navy">Pick up where you left off</h3>
         </div>
       </div>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
-        {recommendations.map((rec) => (
-          <Link
-            key={rec.id}
-            href={`/grammar/${encodeURIComponent(rec.lessonId)}`}
-            onClick={() => onOpen?.(rec)}
-            className="block"
-          >
-            <Card hoverable className="h-full border-border bg-white/90 transition-transform duration-200 hover:-translate-y-0.5 dark:bg-gray-800">
-              <div className="flex h-full flex-col gap-3">
-                <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">{rec.topicName ?? rec.topicSlug ?? 'Grammar'}</p>
-                    <h4 className="truncate text-sm font-bold text-navy dark:text-white">{rec.title}</h4>
+        {recommendations.slice(0, 3).map((rec) => (
+          <div key={rec.id} className="relative">
+            <Link
+              href={`/grammar/${encodeURIComponent(rec.lessonId)}`}
+              onClick={() => onOpen?.(rec)}
+              className="block h-full focus-visible:outline-none"
+            >
+              <Card hoverable className="h-full bg-surface">
+                <div className="flex h-full flex-col">
+                  <div className="flex items-start gap-3">
+                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                      <Target className="h-4 w-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
+                        {rec.topicName ?? (rec.topicSlug ? titleCase(rec.topicSlug) : 'Grammar')}
+                      </p>
+                      <h4 className="mt-0.5 line-clamp-2 text-sm font-bold leading-snug text-navy">{rec.title}</h4>
+                    </div>
+                    <Badge variant="info">{titleCase(rec.level)}</Badge>
                   </div>
-                  <Badge variant="info">{rec.level}</Badge>
-                </div>
 
-                <p className="line-clamp-3 text-sm leading-6 text-muted">{rec.reason}</p>
+                  {rec.reason ? (
+                    <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted">{rec.reason}</p>
+                  ) : null}
 
-                <div className="mt-auto flex items-center justify-between gap-2">
-                  <div className="inline-flex items-center gap-2 text-xs text-muted">
-                    <Clock3 className="h-3.5 w-3.5" /> {rec.estimatedMinutes} min
+                  <div className="mt-auto flex items-center justify-between gap-2 border-t border-gray-200/60 pt-3 text-xs text-muted">
+                    <span className="inline-flex items-center gap-1.5 font-semibold">
+                      <Clock3 className="h-3.5 w-3.5" /> {rec.estimatedMinutes} min
+                    </span>
+                    <span className="inline-flex items-center gap-1 font-semibold text-primary">
+                      Start <ArrowRight className="h-3.5 w-3.5" />
+                    </span>
                   </div>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="ghost"
-                    onClick={(event) => {
-                      event.preventDefault();
-                      event.stopPropagation();
-                      onDismiss?.(rec);
-                    }}
-                    className="px-2 text-muted hover:text-navy"
-                  >
-                    <XCircle className="h-4 w-4" />
-                  </Button>
                 </div>
-              </div>
-            </Card>
-          </Link>
+              </Card>
+            </Link>
+            {onDismiss ? (
+              <button
+                type="button"
+                aria-label="Dismiss recommendation"
+                className="absolute right-3 top-3 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-muted shadow-sm transition-colors hover:bg-white hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  onDismiss(rec);
+                }}
+              >
+                <XCircle className="h-4 w-4" />
+              </button>
+            ) : null}
+          </div>
         ))}
       </div>
-    </div>
+    </Card>
   );
 }
 
+// ─── GrammarExerciseRunner ───────────────────────────────────────────────
 export function GrammarExerciseRunner({
   exercise,
   answer,
@@ -201,34 +264,46 @@ export function GrammarExerciseRunner({
   result?: GrammarExerciseResult | null;
 }) {
   const isResultMode = Boolean(result);
-  const tone = result ? (result.isCorrect ? 'border-emerald-200 bg-emerald-50/70 dark:border-emerald-900/40 dark:bg-emerald-900/10' : 'border-rose-200 bg-rose-50/70 dark:border-rose-900/40 dark:bg-rose-900/10') : 'border-border bg-white dark:bg-gray-800';
+  const tone = result
+    ? result.isCorrect
+      ? 'border-emerald-200 bg-emerald-50/60'
+      : 'border-rose-200 bg-rose-50/60'
+    : '';
 
   return (
-    <Card className={cn('space-y-4 border p-5 shadow-sm', tone)}>
+    <Card className={cn('space-y-4', tone)}>
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="space-y-1">
-          <div className="flex items-center gap-2 text-xs uppercase tracking-[0.18em] text-muted">
+        <div className="space-y-2">
+          <div className="flex items-center gap-2">
             <Badge variant="muted">{exercise.type.replace(/_/g, ' ')}</Badge>
-            <span>{exercise.points} pts</span>
+            <span className="text-xs font-semibold text-muted">{exercise.points} pts</span>
           </div>
-          <SafeRichText markdown={exercise.promptMarkdown} className="text-sm leading-6 text-navy dark:text-white" />
+          <SafeRichText markdown={exercise.promptMarkdown} className="text-sm leading-6 text-navy" />
         </div>
-        {result ? <Badge variant={result.isCorrect ? 'success' : 'danger'}>{result.isCorrect ? 'Correct' : 'Review'}</Badge> : null}
+        {result ? (
+          <Badge variant={result.isCorrect ? 'success' : 'danger'}>
+            {result.isCorrect ? 'Correct' : 'Review'}
+          </Badge>
+        ) : null}
       </div>
 
       <ExerciseInput exercise={exercise} answer={answer} disabled={disabled || isResultMode} onAnswer={onAnswer} result={result} />
 
       {result ? (
-        <div className="space-y-2 rounded-2xl border border-border bg-white/80 p-4 text-sm dark:border-gray-700 dark:bg-gray-900/40">
-          <div className="flex flex-wrap gap-2 text-xs">
-            <Badge variant={result.isCorrect ? 'success' : 'danger'}>{result.pointsAwarded}/{result.pointsPossible} points</Badge>
+        <div className="space-y-3 rounded-xl border border-gray-200/60 bg-surface p-4 text-sm shadow-sm">
+          <div className="flex flex-wrap gap-2">
+            <Badge variant={result.isCorrect ? 'success' : 'danger'}>
+              {result.pointsAwarded}/{result.pointsPossible} points
+            </Badge>
             {result.reviewItemCreated ? <Badge variant="warning">Added to review</Badge> : null}
           </div>
           <div className="grid gap-3 md:grid-cols-2">
             <ResultPanel title="Your answer" value={formatAnswer(answer, exercise.type)} />
             <ResultPanel title="Correct answer" value={formatAnswer(result.correctAnswer, exercise.type)} accent="success" />
           </div>
-          {result.explanationMarkdown ? <SafeRichText markdown={result.explanationMarkdown} className="text-muted" /> : null}
+          {result.explanationMarkdown ? (
+            <SafeRichText markdown={result.explanationMarkdown} className="text-sm leading-6 text-muted" />
+          ) : null}
         </div>
       ) : null}
     </Card>
@@ -272,7 +347,7 @@ function ExerciseInput({
         <div className="space-y-3">
           {pairs.map((pair, index) => (
             <div key={`${pair.left}-${index}`} className="grid gap-3 md:grid-cols-[1fr_auto_1fr] md:items-center">
-              <div className="rounded-2xl border border-border bg-background-light px-4 py-3 text-sm text-navy dark:bg-gray-900/40">
+              <div className="rounded-lg border border-gray-200/60 bg-surface px-4 py-3 text-sm text-navy shadow-sm">
                 {pair.left}
               </div>
               <div className="hidden justify-center text-muted md:flex">→</div>
@@ -314,29 +389,27 @@ function ExerciseInput({
 
 function ResultPanel({ title, value, accent = 'default' }: { title: string; value: string; accent?: 'default' | 'success' }) {
   return (
-    <div className={cn('rounded-2xl border px-4 py-3 text-sm', accent === 'success' ? 'border-emerald-200 bg-emerald-50/80 text-emerald-950 dark:border-emerald-900/40 dark:bg-emerald-900/10 dark:text-emerald-50' : 'border-border bg-background-light text-navy dark:bg-gray-900/40 dark:text-white')}>
+    <div
+      className={cn(
+        'rounded-lg border px-4 py-3 text-sm shadow-sm',
+        accent === 'success'
+          ? 'border-emerald-200 bg-emerald-50/80 text-emerald-900'
+          : 'border-gray-200/70 bg-surface text-navy',
+      )}
+    >
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">{title}</p>
       <p className="mt-1 whitespace-pre-wrap leading-6">{value || '—'}</p>
     </div>
   );
 }
 
-function MetaBadge({ icon: Icon, label }: { icon: typeof Clock3; label: string }) {
+function StatPill({ icon: Icon, label, value }: { icon: ElementType; label: string; value: number }) {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background-light px-3 py-1 font-medium text-navy dark:bg-gray-900/40 dark:text-white">
-      <Icon className="h-3.5 w-3.5 text-muted" />
-      {label}
-    </span>
-  );
-}
-
-function StatPill({ icon: Icon, label, value }: { icon: typeof Clock3; label: string; value: number }) {
-  return (
-    <div className="rounded-2xl border border-border bg-background-light px-3 py-2 text-left dark:bg-gray-900/40">
-      <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-muted">
+    <div className="rounded-lg border border-gray-200/60 bg-surface px-3 py-2 shadow-sm">
+      <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
         <Icon className="h-3.5 w-3.5" /> {label}
       </div>
-      <div className="mt-1 text-sm font-bold text-navy dark:text-white">{value}</div>
+      <div className="mt-0.5 text-base font-bold text-navy">{value}</div>
     </div>
   );
 }

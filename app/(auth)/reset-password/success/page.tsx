@@ -3,7 +3,7 @@
 import { IconArrowRight, IconCheck, IconShieldLock } from '@tabler/icons-react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AuthScreenShell } from '@/components/auth/auth-screen-shell';
 import styles from '@/components/auth/auth-screen-shell.module.scss';
 import { AUTH_ROUTES } from '@/lib/auth/routes';
@@ -26,16 +26,36 @@ export default function ResetPasswordSuccessPage() {
   // railroaded.
   const [secondsLeft, setSecondsLeft] = useState(REDIRECT_SECONDS);
   const [paused, setPaused] = useState(false);
+  const secondsLeftRef = useRef(REDIRECT_SECONDS);
+
+  useEffect(() => {
+    secondsLeftRef.current = secondsLeft;
+  }, [secondsLeft]);
 
   useEffect(() => {
     if (paused) return;
-    if (secondsLeft <= 0) {
+    if (secondsLeftRef.current <= 0) return;
+
+    const interval = window.setInterval(() => {
+      setSecondsLeft((n) => {
+        const next = Math.max(0, n - 1);
+        secondsLeftRef.current = next;
+        return next;
+      });
+    }, 1000);
+
+    const timeout = window.setTimeout(() => {
+      window.clearInterval(interval);
+      secondsLeftRef.current = 0;
+      setSecondsLeft(0);
       router.replace(signInHref);
-      return;
-    }
-    const timeout = window.setTimeout(() => setSecondsLeft((n) => n - 1), 1000);
-    return () => window.clearTimeout(timeout);
-  }, [secondsLeft, paused, router, signInHref]);
+    }, secondsLeftRef.current * 1000);
+
+    return () => {
+      window.clearInterval(interval);
+      window.clearTimeout(timeout);
+    };
+  }, [paused, router, signInHref]);
 
   return (
     <AuthScreenShell

@@ -479,6 +479,9 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
         if (ctx.Kind == RuleKind.Grammar)
             return (OetScoring.ScaledPassGradeB, "B");
 
+        if (ctx.Kind == RuleKind.Pronunciation)
+            return (OetScoring.ScaledPassGradeB, "B");
+
         var t = OetScoring.GetWritingPassThreshold(ctx.CandidateCountry);
         if (t is null) return (OetScoring.ScaledPassGradeB, "B");
         return (t.Threshold, t.Grade);
@@ -538,6 +541,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
             RuleKind.Writing => "**This call concerns WRITING** — apply the country-aware pass mark above. Never use the universal 350 threshold for Writing without verifying the country.",
             RuleKind.Speaking => "**This call concerns SPEAKING** — apply the universal 350/500 pass mark regardless of country.",
             RuleKind.Grammar => "**This call concerns GRAMMAR authoring** — the scoring table is background context only. Do NOT produce a candidate score; you are producing teaching content grounded in the rulebook.",
+            RuleKind.Pronunciation => "**This call concerns PRONUNCIATION** — overall 0-100 scores map to the universal Speaking 0-500 scale using the anchor table in /rulebooks/pronunciation/common/assessment-criteria.json (60=300, 70=350=pass, 80=400, 90=450, 100=500). Never produce a grade that contradicts the Speaking pass at 350.",
             _ => ""
         });
         sb.AppendLine();
@@ -583,6 +587,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
         {
             RuleKind.Speaking => "8. For speaking: respect the 13-stage consultation state machine and the Breaking Bad News 7-step protocol when analysing transcripts.",
             RuleKind.Grammar => "8. For grammar authoring: every exercise you emit must cite at least one grammar rule ID (e.g. \"G02.1\") in appliedRuleIds. If a concept falls outside the rulebook, omit it rather than invent.",
+            RuleKind.Pronunciation => "8. For pronunciation: every finding MUST cite a rule ID from the pronunciation rulebook (e.g. \"P01.1\", \"P04.1\"). Never invent a phoneme or stress-pattern rule. If the input shows issues outside the rulebook, describe them as observations rather than scored findings.",
             _ => "8. For writing: respect the letter structure order (Address → Date → Salutation → Re: line → Body → Yours sincerely/faithfully → Doctor) and flag layout violations."
         });
         sb.AppendLine();
@@ -656,6 +661,55 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 sb.AppendLine("```");
                 sb.AppendLine("Hard requirements: 3–12 exercises, ≥1 content block, every exercise has non-empty explanationMarkdown, every appliedRuleIds value appears in the rulebook.");
                 break;
+            case AiTaskMode.ScorePronunciationAttempt:
+                sb.AppendLine("Return a SINGLE JSON object scoring the learner's pronunciation attempt against the reference text. Cite ONE OR MORE pronunciation rule IDs (e.g. \"P01.1\", \"P04.2\") in `appliedRuleIds` and in each finding's `ruleId`. Never invent a rule.");
+                sb.AppendLine("```json");
+                sb.AppendLine("{");
+                sb.AppendLine("  \"accuracyScore\": 0,");
+                sb.AppendLine("  \"fluencyScore\": 0,");
+                sb.AppendLine("  \"completenessScore\": 0,");
+                sb.AppendLine("  \"prosodyScore\": 0,");
+                sb.AppendLine("  \"overallScore\": 0,");
+                sb.AppendLine("  \"wordScores\": [ { \"word\": \"...\", \"accuracyScore\": 0, \"errorType\": \"None|Mispronunciation|Omission|Insertion\" } ],");
+                sb.AppendLine("  \"problematicPhonemes\": [ { \"phoneme\": \"θ\", \"score\": 0, \"occurrences\": 0, \"ruleId\": \"P01.1\" } ],");
+                sb.AppendLine("  \"fluencyMarkers\": { \"speechRateWpm\": 0, \"pauseCount\": 0, \"averagePauseDurationMs\": 0 },");
+                sb.AppendLine("  \"findings\": [ { \"ruleId\": \"P01.1\", \"severity\": \"critical|major|minor\", \"message\": \"...\", \"fixSuggestion\": \"...\" } ],");
+                sb.AppendLine("  \"appliedRuleIds\": [\"P01.1\"],");
+                sb.AppendLine("  \"projectedSpeakingBand\": { \"scaled\": 0, \"grade\": \"B\", \"passed\": true },");
+                sb.AppendLine("  \"advisory\": \"AI-generated — advisory only, not a CBLA result.\"");
+                sb.AppendLine("}");
+                sb.AppendLine("```");
+                sb.AppendLine("Scoring anchors (overall → scaled): 0→0, 60→300, 70→350 (PASS), 80→400, 90→450, 100→500. Use linear interpolation.");
+                break;
+            case AiTaskMode.GeneratePronunciationDrill:
+                sb.AppendLine("Return a SINGLE JSON object describing a new pronunciation drill. Every field below is mandatory. Cite exactly one primary rule ID.");
+                sb.AppendLine("```json");
+                sb.AppendLine("{");
+                sb.AppendLine("  \"targetPhoneme\": \"θ\",");
+                sb.AppendLine("  \"label\": \"... (≤ 80 chars, e.g. 'th (voiceless) — as in think')\",");
+                sb.AppendLine("  \"difficulty\": \"easy|medium|hard\",");
+                sb.AppendLine("  \"focus\": \"phoneme|cluster|stress|intonation|prosody\",");
+                sb.AppendLine("  \"exampleWords\": [\"...\"] ,      // 6–10 medical-context words");
+                sb.AppendLine("  \"minimalPairs\": [ { \"a\": \"think\", \"b\": \"sink\" } ],  // 2–5 pairs");
+                sb.AppendLine("  \"sentences\": [\"...\"] ,          // 3–5 practice sentences, OET-clinical");
+                sb.AppendLine("  \"tipsHtml\": \"<p>...</p>\",       // articulation guidance, safe HTML only");
+                sb.AppendLine("  \"appliedRuleIds\": [\"P01.1\"],    // every ID must exist in the loaded rulebook");
+                sb.AppendLine("  \"selfCheckNotes\": \"...\"");
+                sb.AppendLine("}");
+                sb.AppendLine("```");
+                break;
+            case AiTaskMode.GeneratePronunciationFeedback:
+                sb.AppendLine("Return a SINGLE JSON object with learner-facing coaching copy grounded in the scored attempt. Do not re-score; only explain.");
+                sb.AppendLine("```json");
+                sb.AppendLine("{");
+                sb.AppendLine("  \"summary\": \"... (≤ 60 words)\",");
+                sb.AppendLine("  \"strengths\": [\"...\"],");
+                sb.AppendLine("  \"improvements\": [ { \"ruleId\": \"P01.1\", \"message\": \"...\", \"drillSuggestion\": \"...\" } ],");
+                sb.AppendLine("  \"appliedRuleIds\": [\"P01.1\"],");
+                sb.AppendLine("  \"nextDrillTargetPhoneme\": \"θ|ð|v|...\"");
+                sb.AppendLine("}");
+                sb.AppendLine("```");
+                break;
             default:
                 sb.AppendLine("Plain text, concise, ≤ 200 words. Cite rule IDs in parentheses when invoking rules.");
                 break;
@@ -669,9 +723,18 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
             RuleKind.Writing => $"Task: analyse the candidate's OET Writing letter ({ctx.LetterType ?? "letter type TBD"}) against the active rulebook, and produce rule-cited feedback.",
             RuleKind.Speaking => $"Task: analyse the candidate's OET Speaking transcript ({ctx.CardType ?? "card type TBD"}) against the active rulebook, and produce rule-cited feedback.",
             RuleKind.Grammar => "Task: produce a grammar teaching draft (title, content blocks, exercises) grounded in the grammar rulebook. Every exercise must cite ≥1 grammar rule ID in appliedRuleIds.",
+            RuleKind.Pronunciation => ctx.Task switch
+            {
+                AiTaskMode.ScorePronunciationAttempt => "Task: score the learner's pronunciation attempt against the reference text and the active pronunciation rulebook. Every finding and problematic phoneme must cite a P-rule ID.",
+                AiTaskMode.GeneratePronunciationDrill => "Task: author one new pronunciation drill grounded in the active pronunciation rulebook. Every appliedRuleIds value must exist in the rulebook.",
+                AiTaskMode.GeneratePronunciationFeedback => "Task: produce learner-facing coaching text for a scored pronunciation attempt. Do not re-score. Every improvement must cite a P-rule ID.",
+                _ => "Task: respond according to the reply format above."
+            },
             _ => "Task: respond according to the reply format above."
         };
         if (ctx.Kind == RuleKind.Grammar)
+            return $"{baseText} Respond strictly in the reply format above.";
+        if (ctx.Kind == RuleKind.Pronunciation)
             return $"{baseText} Respond strictly in the reply format above.";
         return $"{baseText} Apply the {passMark}/500 (Grade {passGrade}) pass mark for this {ctx.Kind.ToString().ToLowerInvariant()} call. Respond strictly in the reply format above.";
     }
@@ -681,7 +744,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
 // Types
 // ---------------------------------------------------------------------------
 
-public enum AiTaskMode { Score, Coach, Correct, Summarise, GenerateFeedback, GenerateContent, GenerateGrammarLesson }
+public enum AiTaskMode { Score, Coach, Correct, Summarise, GenerateFeedback, GenerateContent, GenerateGrammarLesson, ScorePronunciationAttempt, GeneratePronunciationDrill, GeneratePronunciationFeedback }
 
 public sealed class AiGroundingContext
 {

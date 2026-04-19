@@ -75,6 +75,7 @@ interface FieldConfig {
 
 interface SectionConfig {
   title: string;
+  heroTitle?: string;
   description: string;
   eyebrow: string;
   icon: LucideIcon;
@@ -189,6 +190,7 @@ const tagToneStyles: Record<Exclude<FieldTagTone, 'section'>, string> = {
 const SECTION_CONFIG: Record<SettingsSectionId, SectionConfig> = {
   profile: {
     title: 'Profile',
+    heroTitle: 'Keep profile settings clear before you change them',
     description: 'Manage your name, email, profession, and identity details.',
     eyebrow: 'Account & Identity',
     icon: User,
@@ -1008,12 +1010,12 @@ export default function LearnerSettingsSectionPage() {
         </Button>
 
         {config ? (
-          <LearnerPageHero
-            eyebrow={config.eyebrow}
-            icon={config.icon}
-            accent={config.accent}
-            title={config.title}
-            description={`Review and update your ${config.title.toLowerCase()} settings.`}
+            <LearnerPageHero
+              eyebrow={config.eyebrow}
+              icon={config.icon}
+              accent={config.accent}
+              title={config.heroTitle ?? config.title}
+              description={`Review and update your ${config.title.toLowerCase()} settings.`}
             highlights={[
               { icon: config.icon, label: 'Controls', value: `${config.fields.length} settings` },
               { icon: Save, label: 'Configured', value: `${configuredFieldCount} set` },

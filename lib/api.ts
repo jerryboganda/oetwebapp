@@ -87,10 +87,14 @@ import type {
   VideoProgressUpdateResponse,
 } from './types/video-lessons';
 import type {
+  StrategyGuideAdminItem,
   StrategyGuideBookmarkUpdateResponse,
   StrategyGuideDetail,
   StrategyGuideLibrary,
+  StrategyGuidePublishResult,
+  StrategyGuidePublishValidation,
   StrategyGuideProgressUpdateResponse,
+  StrategyGuideUpsertPayload,
 } from './types/strategies';
 import type {
   AdminGrammarLessonFull,
@@ -4726,6 +4730,48 @@ export async function setStrategyGuideBookmark(guideId: string, bookmarked: bool
   return apiRequest<StrategyGuideBookmarkUpdateResponse>(`/v1/strategies/${encodeURIComponent(guideId)}/bookmark`, {
     method: 'POST',
     body: JSON.stringify({ bookmarked }),
+  });
+}
+
+export async function adminListStrategyGuides(params?: { status?: string; examTypeCode?: string; search?: string }) {
+  const p = new URLSearchParams();
+  if (params?.status) p.set('status', params.status);
+  if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
+  if (params?.search) p.set('search', params.search);
+  return apiRequest<StrategyGuideAdminItem[]>(`/v1/admin/strategies?${p}`);
+}
+
+export async function adminGetStrategyGuide(guideId: string) {
+  return apiRequest<StrategyGuideAdminItem>(`/v1/admin/strategies/${encodeURIComponent(guideId)}`);
+}
+
+export async function adminCreateStrategyGuide(payload: StrategyGuideUpsertPayload) {
+  return apiRequest<StrategyGuideAdminItem>('/v1/admin/strategies', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function adminUpdateStrategyGuide(guideId: string, payload: StrategyGuideUpsertPayload) {
+  return apiRequest<StrategyGuideAdminItem>(`/v1/admin/strategies/${encodeURIComponent(guideId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function adminValidateStrategyGuidePublish(guideId: string) {
+  return apiRequest<StrategyGuidePublishValidation>(`/v1/admin/strategies/${encodeURIComponent(guideId)}/publish-gate`);
+}
+
+export async function adminPublishStrategyGuide(guideId: string) {
+  return apiRequest<StrategyGuidePublishResult>(`/v1/admin/strategies/${encodeURIComponent(guideId)}/publish`, {
+    method: 'POST',
+  });
+}
+
+export async function adminArchiveStrategyGuide(guideId: string) {
+  return apiRequest<StrategyGuideAdminItem>(`/v1/admin/strategies/${encodeURIComponent(guideId)}/archive`, {
+    method: 'POST',
   });
 }
 

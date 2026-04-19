@@ -55,6 +55,7 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/dedup': [AdminPermission.ContentWrite],
   '/admin/media': [AdminPermission.ContentRead],
   '/admin/content-generation': [AdminPermission.ContentWrite],
+  '/admin/strategies': [AdminPermission.ContentRead],
   '/admin/marketplace-review': [AdminPermission.ContentPublish],
   '/admin/freeze': [AdminPermission.ContentPublish],
   '/admin/content-hierarchy': [AdminPermission.ContentRead],

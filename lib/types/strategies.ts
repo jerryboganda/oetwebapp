@@ -79,3 +79,61 @@ export type StrategyGuideProgressUpdateResponse = {
 export type StrategyGuideBookmarkUpdateResponse = {
   progress: StrategyGuideProgress;
 };
+
+export type StrategyGuidePublishValidationError = {
+  field: string;
+  message: string;
+};
+
+export type StrategyGuidePublishValidation = {
+  canPublish: boolean;
+  errors: StrategyGuidePublishValidationError[];
+};
+
+export type StrategyGuideAdminItem = {
+  id: string;
+  slug: string | null;
+  examTypeCode: string;
+  subtestCode: string | null;
+  title: string;
+  summary: string;
+  category: string;
+  readingTimeMinutes: number;
+  sortOrder: number;
+  status: string;
+  isPreviewEligible: boolean;
+  contentLessonId: string | null;
+  contentJson: string | null;
+  contentHtml: string | null;
+  sourceProvenance: string | null;
+  rightsStatus: string | null;
+  freshnessConfidence: string | null;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt: string | null;
+  archivedAt: string | null;
+};
+
+export type StrategyGuideUpsertPayload = {
+  slug?: string | null;
+  examTypeCode: string;
+  subtestCode?: string | null;
+  title: string;
+  summary: string;
+  category: string;
+  readingTimeMinutes: number;
+  sortOrder: number;
+  isPreviewEligible: boolean;
+  contentLessonId?: string | null;
+  contentJson?: string | null;
+  contentHtml?: string | null;
+  sourceProvenance?: string | null;
+  rightsStatus?: string | null;
+  freshnessConfidence?: string | null;
+};
+
+export type StrategyGuidePublishResult = {
+  published: boolean;
+  validation: StrategyGuidePublishValidation;
+  guide: StrategyGuideAdminItem | null;
+};

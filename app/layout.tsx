@@ -51,14 +51,12 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       <head>
         {/*
           CSP for Capacitor WebView and web — restrict script/style/connect sources.
-          NOTE: `frame-ancestors 'none'` is critical here. The meta CSP is the
-          only frame-ancestors defense inside the Capacitor WebView and the
-          Electron renderer, where the response header from next.config.ts is
-          not authoritative. Keep it in sync with `X-Frame-Options: DENY`.
+          `frame-ancestors` is intentionally enforced only by response headers
+          in next.config.ts; browsers ignore it when delivered through meta CSP.
         */}
         <meta
           httpEquiv="Content-Security-Policy"
-          content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.oetwithdrhesham.co.uk wss://*.oetwithdrhesham.co.uk https://generativelanguage.googleapis.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none';"
+          content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.oetwithdrhesham.co.uk wss://*.oetwithdrhesham.co.uk https://generativelanguage.googleapis.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self';"
         />
       </head>
       <body className="font-sans antialiased min-h-[var(--app-viewport-height,100dvh)] bg-background-light text-navy overflow-x-hidden selection:bg-primary/15 selection:text-navy" suppressHydrationWarning>

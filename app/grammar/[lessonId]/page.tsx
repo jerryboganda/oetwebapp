@@ -3,13 +3,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, BookMarked, CheckCircle2, Clock, Sparkles, Trophy } from 'lucide-react';
+import { ArrowLeft, BookMarked, CheckCircle2, Clock, Sparkles, Target, Trophy } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero } from '@/components/domain';
+import { MotionPage, MotionItem } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { MotionPage } from '@/components/ui/motion-primitives';
+import { Badge } from '@/components/ui/badge';
+import { ProgressBar } from '@/components/ui/progress';
 import {
   GrammarContentRenderer,
   GrammarEntitlementBanner,
@@ -32,18 +35,19 @@ import type {
 
 type View = 'intro' | 'study' | 'practice' | 'result';
 
+// ─────────────────────────────────────────────────────────────────────────
 export default function GrammarLessonPage() {
-  const params = useParams<{ lessonId: string }>();
+  const params   = useParams<{ lessonId: string }>();
   const lessonId = params?.lessonId ?? '';
 
-  const [lesson, setLesson] = useState<GrammarLessonLearner | null>(null);
+  const [lesson,      setLesson]      = useState<GrammarLessonLearner | null>(null);
   const [entitlement, setEntitlement] = useState<GrammarEntitlement | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [view, setView] = useState<View>('intro');
-  const [answers, setAnswers] = useState<Record<string, unknown>>({});
-  const [submitting, setSubmitting] = useState(false);
-  const [result, setResult] = useState<GrammarAttemptResult | null>(null);
+  const [loading,     setLoading]     = useState(true);
+  const [error,       setError]       = useState<string | null>(null);
+  const [view,        setView]        = useState<View>('intro');
+  const [answers,     setAnswers]     = useState<Record<string, unknown>>({});
+  const [submitting,  setSubmitting]  = useState(false);
+  const [result,      setResult]      = useState<GrammarAttemptResult | null>(null);
 
   useEffect(() => {
     if (!lessonId) return;
@@ -52,13 +56,13 @@ export default function GrammarLessonPage() {
       setLoading(true);
       setError(null);
       try {
-        const [data, entitlementResult] = await Promise.all([
+        const [data, ent] = await Promise.all([
           fetchGrammarLesson(lessonId) as Promise<GrammarLessonLearner>,
           fetchGrammarEntitlement().catch(() => null),
         ]);
         if (cancelled) return;
         setLesson(data);
-        setEntitlement(entitlementResult);
+        setEntitlement(ent);
         setAnswers({});
         setResult(null);
         setView(data.progress?.status === 'in_progress' ? 'study' : 'intro');
@@ -69,9 +73,7 @@ export default function GrammarLessonPage() {
         if (!cancelled) setLoading(false);
       }
     })();
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
   }, [lessonId]);
 
   const onStart = useCallback(async () => {
@@ -93,7 +95,11 @@ export default function GrammarLessonPage() {
       const res = (await submitGrammarAttempt(lesson.id, answers)) as GrammarAttemptResult;
       setResult(res);
       setView('result');
-      analytics.track('grammar_lesson_completed', { lessonId: lesson.id, score: res.score, masteryScore: res.masteryScore });
+      analytics.track('grammar_lesson_completed', {
+        lessonId: lesson.id,
+        score: res.score,
+        masteryScore: res.masteryScore,
+      });
       if (res.mastered) analytics.track('grammar_lesson_mastered', { lessonId: lesson.id });
     } catch (e) {
       setError((e as Error).message ?? 'Could not grade your attempt.');
@@ -114,11 +120,14 @@ export default function GrammarLessonPage() {
     return map;
   }, [result]);
 
+  // ── loading ────────────────────────────────────────────────────────
   if (loading) {
     return (
       <LearnerDashboardShell>
-        <Skeleton className="mb-4 h-8 w-48 rounded" />
-        <Skeleton className="h-64 rounded-2xl" />
+        <div className="space-y-6">
+          <Skeleton className="h-40 rounded-[24px]" />
+          <Skeleton className="h-64 rounded-2xl" />
+        </div>
       </LearnerDashboardShell>
     );
   }
@@ -126,180 +135,309 @@ export default function GrammarLessonPage() {
   if (!lesson) {
     return (
       <LearnerDashboardShell>
-        <InlineAlert variant="warning">Lesson not found.</InlineAlert>
+        <div className="space-y-4">
+          <BackLink />
+          <InlineAlert variant="warning">Lesson not found.</InlineAlert>
+        </div>
       </LearnerDashboardShell>
     );
   }
 
   const exerciseCount = lesson.exercises.length;
-  const answered = Object.values(answers).filter((v) => {
+  const answered      = Object.values(answers).filter((v) => {
     if (typeof v === 'string') return v.trim().length > 0;
     if (v && typeof v === 'object') return Object.values(v as Record<string, string>).some((x) => x && String(x).length > 0);
     return false;
   }).length;
-  const canSubmit = exerciseCount > 0 && answered === exerciseCount && !submitting;
+  const canSubmit    = exerciseCount > 0 && answered === exerciseCount && !submitting;
+  const isBlocked    = entitlement ? !entitlement.allowed : false;
+  const masteryScore = lesson.progress?.masteryScore ?? 0;
 
+  // Hero highlight chips — same token pattern as dashboard.
+  const heroHighlights = [
+    { icon: Target,        label: 'Level',     value: lesson.level },
+    { icon: Clock,         label: 'Duration',  value: `${lesson.estimatedMinutes} min` },
+    { icon: Sparkles,      label: 'Exercises', value: `${exerciseCount} exercises` },
+    ...(lesson.progress
+      ? [{ icon: CheckCircle2, label: 'Mastery', value: `${Math.round(masteryScore)}%` }]
+      : []),
+  ];
+
+  // ── render ─────────────────────────────────────────────────────────
   return (
     <LearnerDashboardShell>
-      <div className="flex items-center gap-3">
-        <Link href="/grammar" className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" aria-label="Back to grammar">
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <div className="min-w-0 flex-1">
-          <div className="flex items-center gap-2">
-            <BookMarked className="h-5 w-5 text-primary" />
-            <span className="text-xs uppercase tracking-[0.15em] text-muted">{lesson.level}</span>
-            <span className="inline-flex items-center gap-1 text-xs text-muted">
-              <Clock className="h-3.5 w-3.5" /> {lesson.estimatedMinutes} min
-            </span>
-          </div>
-          <h1 className="truncate text-2xl font-bold text-navy dark:text-white">{lesson.title}</h1>
-        </div>
-      </div>
+      <div className="space-y-8">
 
-      {lesson.description ? (
-        <p className="mt-2 text-sm leading-6 text-muted">{lesson.description}</p>
-      ) : null}
+        {/* Back breadcrumb */}
+        <BackLink topicSlug={lesson.topicSlug} topicName={lesson.topicName} />
 
-      {error ? <InlineAlert variant="warning" className="mt-4">{error}</InlineAlert> : null}
+        {/* ── Hero — same visual contract as every learner page ── */}
+        <LearnerPageHero
+          eyebrow="Grammar lesson"
+          icon={BookMarked}
+          accent="primary"
+          title={lesson.title}
+          description={lesson.description ?? `Strengthen ${lesson.topicName ?? lesson.category} patterns graded server-side.`}
+          highlights={heroHighlights}
+        />
 
-      {entitlement ? (
-        <div className="mt-4 max-w-3xl">
+        {/* Paywall banner — only renders when free tier is exhausted */}
+        {entitlement ? (
           <GrammarEntitlementBanner entitlement={entitlement} lessonId={lesson.id} />
-        </div>
-      ) : null}
-
-      <div className="mt-6 max-w-3xl space-y-6">
-        {view === 'intro' ? (
-          <Card className="p-6 text-center">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-              <Sparkles className="h-5 w-5" />
-            </div>
-            <h2 className="mt-4 text-lg font-bold text-navy dark:text-white">Ready to learn?</h2>
-            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">
-              You&apos;ll review the teaching content, then complete {exerciseCount} exercises that are graded by the server.
-            </p>
-            <Button className="mt-6" onClick={onStart} disabled={entitlement ? !entitlement.allowed : false}>
-              {entitlement && !entitlement.allowed ? 'Upgrade to unlock' : 'Start lesson'}
-            </Button>
-          </Card>
         ) : null}
 
-        {view === 'study' ? (
-          <div className="space-y-5">
-            <GrammarContentRenderer blocks={lesson.contentBlocks} />
-            <div className="flex justify-end gap-2">
-              <Button variant="outline" onClick={() => setView('intro')}>Back</Button>
-              <Button onClick={() => setView('practice')} disabled={exerciseCount === 0}>
-                {exerciseCount === 0 ? 'No practice available' : `Continue to practice (${exerciseCount})`}
-              </Button>
-            </div>
-            {exerciseCount === 0 ? (
-              <p className="text-sm text-muted">This lesson has no practice exercises yet.</p>
-            ) : null}
-          </div>
-        ) : null}
+        {error ? <InlineAlert variant="warning">{error}</InlineAlert> : null}
 
-        {view === 'practice' ? (
-          <div className="space-y-4">
-            <ProgressHeader answered={answered} total={exerciseCount} />
-            {lesson.exercises.map((ex) => (
-              <GrammarExerciseRunner
-                key={ex.id}
-                exercise={ex}
-                answer={answers[ex.id]}
-                disabled={submitting}
-                onAnswer={(value) => setAnswers((prev) => ({ ...prev, [ex.id]: value }))}
-              />
-            ))}
-            <div className="flex flex-col items-stretch justify-end gap-2 sm:flex-row">
-              <Button variant="outline" onClick={() => setView('study')}>Back to study</Button>
-              <Button onClick={onSubmit} disabled={!canSubmit}>
-                {submitting ? 'Grading…' : `Submit for grading (${answered}/${exerciseCount})`}
-              </Button>
-            </div>
-          </div>
-        ) : null}
+        {/* ── Content area — max 3xl keeps it readable ── */}
+        <div className="max-w-3xl space-y-6">
 
-        {view === 'result' && result ? (
-          <MotionPage className="space-y-5">
-            <ResultSummary result={result} />
-            <div className="space-y-4">
-              {lesson.exercises.map((ex) => {
-                const r = resultsByExerciseId.get(ex.id) ?? null;
-                return (
+          {/* ── INTRO view ── */}
+          {view === 'intro' ? (
+            <MotionItem>
+              <Card>
+                <div className="flex flex-col items-center gap-5 py-4 text-center sm:py-6">
+                  {/* Icon tile matching dashboard task-card icon style */}
+                  <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                    <Sparkles className="h-7 w-7" />
+                  </div>
+
+                  <div className="space-y-2">
+                    <h2 className="text-xl font-bold text-navy">Ready to learn?</h2>
+                    <p className="mx-auto max-w-md text-sm leading-6 text-muted">
+                      Review the teaching notes, then complete{' '}
+                      <span className="font-semibold text-navy">{exerciseCount} exercises</span>{' '}
+                      graded instantly by the server.
+                    </p>
+                  </div>
+
+                  {lesson.progress && masteryScore > 0 ? (
+                    <div className="w-full max-w-xs space-y-1.5">
+                      <div className="flex items-center justify-between text-xs font-semibold text-muted">
+                        <span>Previous mastery</span>
+                        <span className="text-navy">{Math.round(masteryScore)}%</span>
+                      </div>
+                      <ProgressBar
+                        value={masteryScore}
+                        ariaLabel={`Previous mastery ${Math.round(masteryScore)}%`}
+                        color={masteryScore >= 80 ? 'success' : 'primary'}
+                      />
+                    </div>
+                  ) : null}
+
+                  {lesson.mastered ? (
+                    <Badge variant="success" size="md">
+                      <Trophy className="mr-1.5 h-3.5 w-3.5" /> Mastered
+                    </Badge>
+                  ) : null}
+
+                  <Button
+                    variant="primary"
+                    size="sm"
+                    className="min-w-[140px]"
+                    onClick={onStart}
+                    disabled={isBlocked}
+                  >
+                    {isBlocked ? 'Upgrade to unlock' : 'Start lesson'}
+                  </Button>
+                </div>
+              </Card>
+            </MotionItem>
+          ) : null}
+
+          {/* ── STUDY view ── */}
+          {view === 'study' ? (
+            <MotionItem className="space-y-5">
+              {/* Teaching content inside cream surface cards */}
+              <GrammarContentRenderer blocks={lesson.contentBlocks} />
+
+              <div className="flex items-center justify-between gap-3 border-t border-gray-200/60 pt-4">
+                <Button variant="outline" size="sm" onClick={() => setView('intro')}>
+                  <ArrowLeft className="mr-1.5 h-4 w-4" /> Back
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={() => setView('practice')}
+                  disabled={exerciseCount === 0}
+                >
+                  {exerciseCount === 0
+                    ? 'No exercises yet'
+                    : `Practise now · ${exerciseCount} exercises`}
+                </Button>
+              </div>
+
+              {exerciseCount === 0 ? (
+                <p className="text-sm text-muted">Exercises for this lesson are coming soon.</p>
+              ) : null}
+            </MotionItem>
+          ) : null}
+
+          {/* ── PRACTICE view ── */}
+          {view === 'practice' ? (
+            <div className="space-y-5">
+              {/* Inline progress strip — uses primary bar on cream background */}
+              <AnswerProgress answered={answered} total={exerciseCount} />
+
+              {lesson.exercises.map((ex, i) => (
+                <MotionItem key={ex.id} delayIndex={i}>
                   <GrammarExerciseRunner
-                    key={ex.id}
                     exercise={ex}
-                    answer={r?.userAnswer ?? answers[ex.id]}
-                    disabled
-                    onAnswer={() => {}}
-                    result={r}
+                    answer={answers[ex.id]}
+                    disabled={submitting}
+                    onAnswer={(value) =>
+                      setAnswers((prev) => ({ ...prev, [ex.id]: value }))
+                    }
                   />
-                );
-              })}
+                </MotionItem>
+              ))}
+
+              <div className="flex flex-col items-stretch justify-end gap-2 border-t border-gray-200/60 pt-4 sm:flex-row">
+                <Button variant="outline" size="sm" onClick={() => setView('study')}>
+                  Back to study notes
+                </Button>
+                <Button
+                  variant="primary"
+                  size="sm"
+                  onClick={onSubmit}
+                  disabled={!canSubmit}
+                  className="min-w-[180px]"
+                >
+                  {submitting
+                    ? 'Grading…'
+                    : canSubmit
+                      ? `Submit (${answered}/${exerciseCount} answered)`
+                      : `Answer all exercises (${answered}/${exerciseCount})`}
+                </Button>
+              </div>
             </div>
-            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
-              <Button variant="outline" onClick={onRetry}>Try again</Button>
-              <Link
-                href="/grammar"
-                className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
-              >
-                Back to grammar hub
-              </Link>
-            </div>
-          </MotionPage>
-        ) : null}
+          ) : null}
+
+          {/* ── RESULT view ── */}
+          {view === 'result' && result ? (
+            <MotionPage className="space-y-6">
+              <ResultSummary result={result} />
+
+              {/* Per-exercise results */}
+              <div className="space-y-4">
+                {lesson.exercises.map((ex, i) => {
+                  const r = resultsByExerciseId.get(ex.id) ?? null;
+                  return (
+                    <MotionItem key={ex.id} delayIndex={i}>
+                      <GrammarExerciseRunner
+                        exercise={ex}
+                        answer={r?.userAnswer ?? answers[ex.id]}
+                        disabled
+                        onAnswer={() => {}}
+                        result={r}
+                      />
+                    </MotionItem>
+                  );
+                })}
+              </div>
+
+              <div className="flex flex-col gap-2 border-t border-gray-200/60 pt-4 sm:flex-row sm:justify-end">
+                <Button variant="outline" size="sm" onClick={onRetry}>Try again</Button>
+                <Link href="/grammar">
+                  <Button variant="primary" size="sm">Back to grammar hub</Button>
+                </Link>
+              </div>
+            </MotionPage>
+          ) : null}
+
+        </div>
       </div>
     </LearnerDashboardShell>
   );
 }
 
-function ProgressHeader({ answered, total }: { answered: number; total: number }) {
-  const pct = total === 0 ? 0 : Math.round((answered / total) * 100);
+// ── sub-components ────────────────────────────────────────────────────────
+
+function BackLink({
+  topicSlug,
+  topicName,
+}: {
+  topicSlug?: string | null;
+  topicName?: string | null;
+}) {
+  const href  = topicSlug ? `/grammar/topics/${encodeURIComponent(topicSlug)}` : '/grammar';
+  const label = topicName ?? 'Back to grammar';
   return (
-    <div>
-      <div className="flex items-center justify-between text-xs text-muted">
-        <span>Practice progress</span>
-        <span className="font-semibold">{answered}/{total}</span>
-      </div>
-      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-background-light dark:bg-gray-900">
-        <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} aria-hidden />
-      </div>
-    </div>
+    <Link
+      href={href}
+      className="inline-flex items-center gap-2 text-sm font-semibold text-muted transition-colors hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+    >
+      <ArrowLeft className="h-4 w-4" />
+      {label}
+    </Link>
   );
 }
 
+/** Slim progress strip above exercises — cream background, primary fill. */
+function AnswerProgress({ answered, total }: { answered: number; total: number }) {
+  const pct = total === 0 ? 0 : Math.round((answered / total) * 100);
+  return (
+    <Card padding="sm">
+      <div className="flex items-center justify-between text-xs font-semibold text-muted">
+        <span>Exercises answered</span>
+        <span className="text-navy">{answered} / {total}</span>
+      </div>
+      <div className="mt-2">
+        <ProgressBar value={pct} ariaLabel={`${answered} of ${total} exercises answered`} color="primary" />
+      </div>
+    </Card>
+  );
+}
+
+/** Result summary card — cream surface, violet score, soft amber/emerald badges. */
 function ResultSummary({ result }: { result: GrammarAttemptResult }) {
   const { score, correctCount, incorrectCount, masteryScore, mastered, xpAwarded, reviewItemsCreated } = result;
+
   return (
-    <Card className="border-primary/20 bg-primary/5 p-6 text-center">
-      {mastered ? (
-        <Trophy className="mx-auto h-10 w-10 text-amber-500" />
-      ) : (
-        <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-500" />
-      )}
-      <h2 className="mt-3 text-2xl font-bold text-navy dark:text-white">
-        {mastered ? 'Topic mastery achieved!' : 'Lesson complete'}
-      </h2>
-      <div className="mt-2 text-4xl font-extrabold text-primary">{score}%</div>
-      <p className="mt-1 text-sm text-muted">
-        {correctCount} correct · {incorrectCount} to review · mastery {masteryScore}%
-      </p>
-      <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs">
-        <span className="rounded-full bg-white px-3 py-1 font-semibold text-primary-dark shadow-sm">+{xpAwarded} XP</span>
-        {reviewItemsCreated > 0 ? (
-          <span className="rounded-full bg-amber-100 px-3 py-1 font-semibold text-amber-800">
-            {reviewItemsCreated} added to your review queue
+    <Card className="text-center">
+      <div className="flex flex-col items-center gap-4 py-2">
+        {/* Trophy or check icon */}
+        <div className={`flex h-16 w-16 items-center justify-center rounded-2xl ${mastered ? 'bg-amber-50 text-amber-500' : 'bg-emerald-50 text-emerald-600'}`}>
+          {mastered
+            ? <Trophy    className="h-8 w-8" />
+            : <CheckCircle2 className="h-8 w-8" />}
+        </div>
+
+        {/* Score */}
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">
+            {mastered ? 'Mastery achieved!' : 'Lesson complete'}
+          </p>
+          <div className="mt-1 text-5xl font-extrabold text-primary">{score}%</div>
+          <p className="mt-2 text-sm text-muted">
+            {correctCount} correct · {incorrectCount} to review · mastery {masteryScore}%
+          </p>
+        </div>
+
+        {/* Reward chips — same style as dashboard engagement row */}
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <span className="inline-flex items-center gap-1 rounded-full border border-primary/20 bg-primary/10 px-3 py-1 text-xs font-bold text-primary">
+            +{xpAwarded} XP
           </span>
-        ) : null}
-      </div>
-      <div className="mt-4 text-left">
+          {reviewItemsCreated > 0 ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-amber-200/60 bg-amber-50 px-3 py-1 text-xs font-bold text-amber-800">
+              {reviewItemsCreated} added to review queue
+            </span>
+          ) : null}
+          {mastered ? (
+            <span className="inline-flex items-center gap-1 rounded-full border border-emerald-200/60 bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-800">
+              <Trophy className="h-3 w-3" /> Mastered
+            </span>
+          ) : null}
+        </div>
+
+        {/* Coaching text */}
         <SafeRichText
-          markdown={mastered
-            ? 'Fantastic work. Keep this mastery streak alive by tackling a related topic.'
-            : 'Review the explanations below, retry incorrect items, and your mastery score will climb.'}
-          className="text-center text-sm text-muted"
+          markdown={
+            mastered
+              ? 'Brilliant work — mastery level reached. Tackle a related topic to build on this momentum.'
+              : 'Review the explanations below. Retry the incorrect items and your mastery score will climb.'
+          }
+          className="max-w-sm text-center text-sm leading-6 text-muted"
         />
       </div>
     </Card>

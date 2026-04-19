@@ -461,6 +461,33 @@ builder.Services.AddScoped<PronunciationService>();
 builder.Services.AddScoped<WritingCoachService>();
 builder.Services.AddScoped<MarketplaceService>();
 
+// ── Pronunciation subsystem (Phase 2+) ───────────────────────────────────
+builder.Services.Configure<OetLearner.Api.Configuration.PronunciationOptions>(
+    builder.Configuration.GetSection(OetLearner.Api.Configuration.PronunciationOptions.SectionName));
+builder.Services.AddHttpClient("PronunciationAzureClient", c =>
+{
+    c.Timeout = TimeSpan.FromMinutes(3);
+});
+builder.Services.AddHttpClient("PronunciationWhisperClient", c =>
+{
+    c.Timeout = TimeSpan.FromMinutes(3);
+});
+builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationAsrProvider,
+    OetLearner.Api.Services.Pronunciation.MockPronunciationAsrProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationAsrProvider,
+    OetLearner.Api.Services.Pronunciation.AzurePronunciationAsrProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationAsrProvider,
+    OetLearner.Api.Services.Pronunciation.WhisperPronunciationAsrProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationAsrProviderSelector,
+    OetLearner.Api.Services.Pronunciation.PronunciationAsrProviderSelector>();
+builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationFeedbackService,
+    OetLearner.Api.Services.Pronunciation.PronunciationFeedbackService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationSchedulerService,
+    OetLearner.Api.Services.Pronunciation.PronunciationSchedulerService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationEntitlementService,
+    OetLearner.Api.Services.Pronunciation.PronunciationEntitlementService>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Pronunciation.PronunciationAudioRetentionWorker>();
+
 // OET rulebook engine + grounded AI gateway. These services are the single
 // source of truth for rule enforcement and for every AI call: no code path
 // invokes a model without a rulebook-grounded prompt built here.
