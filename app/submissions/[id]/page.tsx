@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft,
@@ -48,15 +48,24 @@ export default function SubmissionEvidencePage() {
   const [error, setError] = useState<string | null>(null);
   const [hideBusy, setHideBusy] = useState(false);
 
+  const load = useCallback(async (id: string) => {
+    setLoading(true);
+    analytics.track('content_view', { page: 'submission-detail', submissionId: id });
+    try {
+      const d = await fetchSubmissionDetail(id);
+      setDetail(d);
+      setError(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not load submission evidence.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (!submissionId) return;
-    analytics.track('content_view', { page: 'submission-detail', submissionId });
-    setLoading(true);
-    fetchSubmissionDetail(submissionId)
-      .then((d) => { setDetail(d); setError(null); })
-      .catch((err) => setError(err instanceof Error ? err.message : 'Could not load submission evidence.'))
-      .finally(() => setLoading(false));
-  }, [submissionId]);
+    load(submissionId).catch(() => {});
+  }, [submissionId, load]);
 
   const requestReviewHref = useMemo(() => (detail ? reviewRoute(detail) : null), [detail]);
   const requestReviewPrompt = searchParams?.get('requestReview') === '1';

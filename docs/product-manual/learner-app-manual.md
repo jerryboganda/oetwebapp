@@ -1024,30 +1024,50 @@ Support and account routes exist separately under the auth route group and are n
 ## 13. Submission History and Compare
 
 - Status: `implemented`
-- Purpose: Give the learner a history of attempts, review state, and comparison views.
-- Business logic served: Preserves evidence and makes improvement reviewable.
+- Purpose: Give the learner a filterable, scoreable history of evidence attempts with review state, comparison views, and self-service hide.
+- Business logic served: Preserves evidence and makes improvement reviewable. Surfaces canonical OET scaled scores with country-aware Writing pass/fail.
 - Location:
   - `/submissions`
   - `/submissions/[id]`
   - `/submissions/compare`
+- Spec: see `docs/SUBMISSION-HISTORY-PLAN.md`
 - Who uses it: Learners
-- When it is used: After multiple attempts exist
+- When it is used: After any submitted/evaluating/completed/failed attempt exists.
 - Inputs:
-  - submission records
-  - per-attempt detail
+  - filter query string (sub-test, context, review status, date range, search, sort, include-hidden, pass-only)
+  - cursor for keyset pagination
+  - learner target country (from `Goal.TargetCountry`) for Writing pass resolution
 - Outputs / Results:
-  - history cards
-  - detail pages
-  - comparison views
+  - paginated history cards with scaled score + pass badge
+  - facet counts and per sub-test sparkline trend
+  - detail page with strengths, issues, criterion scores, revision lineage, review lineage
+  - deterministic comparison view with scaled + criterion deltas
+  - CSV export mirroring current filters
 - Main user actions:
-  - open a prior attempt
+  - filter / sort / search / date-range
+  - open an attempt
   - reopen feedback
-  - request review
-  - compare attempts
+  - request review (single or bulk up to 5)
+  - compare attempts (2-slot picker, cross-subtest disallowed)
+  - hide / unhide attempts (soft, learner-only, never affects analytics)
+  - export CSV
+- Scoring rules:
+  - Every row displays a scaled 0–500 score via `lib/scoring.ts::summarizeCardScore` / `OetScoring.ResolvePassState`. Percentages are banned by test.
+  - Writing pass resolution is country-aware (`GB|IE|AU|NZ|CA` → Grade B 350, `US|QA` → Grade C+ 300). Missing country surfaces as `country_required` rather than assuming.
+  - Listening/Reading/Speaking pass is always scaled ≥ 350 (Grade B).
+- Non-evidence attempts (NotStarted, Paused, Abandoned) are filtered out at the source and never appear.
 - Connected features / Dependencies:
-  - Writing result and feedback
+  - Writing result, feedback, revision
   - Speaking results and transcript
-  - expert review requests
+  - Expert review requests (including bulk path)
+  - Progress, Readiness, Cohort analytics (unaffected by user hide)
+- What to test:
+  - filter persistence in URL
+  - scaled score rendering, never a percentage
+  - compare produces a real deterministic summary
+  - hide/unhide round-trip + analytics parity
+  - bulk review batch cap (max 5) + error surface per item
+  - CSV export header + no percentage
 
 ## 14. Billing and Entitlements
 

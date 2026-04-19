@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, GitCompare, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -15,14 +15,6 @@ import { fetchSubmissionComparison } from '@/lib/api';
 import type { SubmissionComparison } from '@/lib/mock-data';
 import { cn } from '@/lib/utils';
 
-/**
- * Compare Attempts — `/submissions/compare?leftId=…&rightId=…`
- *
- * The page is driven entirely by URL state so it is shareable. Picking a
- * pair through the <CompareSelector/> updates the URL; the effect below
- * refetches the comparison whenever left/right change. Cross-subtest
- * comparison is forbidden by contract (server returns canCompare=false).
- */
 export default function SubmissionComparisonPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -33,26 +25,27 @@ export default function SubmissionComparisonPage() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!leftId && !rightId) {
+  const load = useCallback(async (l: string | undefined, r: string | undefined) => {
+    if (!l && !r) {
+      setComparison(null);
       return;
     }
-    let cancelled = false;
-    // Defer state mutation until after commit to satisfy react-hooks/set-state-in-effect.
-    queueMicrotask(() => { if (!cancelled) setLoading(true); });
-    analytics.track('content_view', { page: 'submission-compare', leftId, rightId });
-    fetchSubmissionComparison(leftId, rightId)
-      .then((result) => { if (!cancelled) setComparison(result); })
-      .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : 'Could not compare submissions.'); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [leftId, rightId]);
+    setLoading(true);
+    setError(null);
+    analytics.track('content_view', { page: 'submission-compare', leftId: l, rightId: r });
+    try {
+      const result = await fetchSubmissionComparison(l, r);
+      setComparison(result);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not compare submissions.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    if (!leftId && !rightId) {
-      queueMicrotask(() => setComparison(null));
-    }
-  }, [leftId, rightId]);
+    load(leftId, rightId);
+  }, [load, leftId, rightId]);
 
   function onPickerChange(next: { leftId?: string; rightId?: string }) {
     const p = new URLSearchParams();

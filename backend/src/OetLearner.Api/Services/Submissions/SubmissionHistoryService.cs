@@ -61,41 +61,76 @@ public sealed class SubmissionHistoryService
         var goal = await _db.Goals.AsNoTracking().FirstOrDefaultAsync(x => x.UserId == userId, ct);
         var country = OetScoring.NormalizeWritingCountry(goal?.TargetCountry);
 
-        var baseQuery = BuildBaseQuery(userId, query);
+        // Build a simple filtered query of Attempt rows first (no cross-join
+        // SQL translation headaches), then hydrate the related data in a
+        // single extra query per table. Keeps the whole listing to 3
+        // round-trips regardless of page size.
+        var attemptsQuery = BuildAttemptsQuery(userId, query);
 
-        // ── Facet counts (computed BEFORE pagination/limit, respect filters
-        //    except the one being faceted). We keep the simple version here:
-        //    facets reflect the current filter combination and are a hint
-        //    for what would be available under the current state.
+        // ── Facet counts (respect filters except include-hidden semantics).
         var facets = await ComputeFacetsAsync(userId, query, country, ct);
 
-        // ── Total (current filter combination)
-        var total = await baseQuery.CountAsync(ct);
+        // ── Total (current filter combination).
+        var total = await attemptsQuery.CountAsync(ct);
 
-        // ── Ordering + keyset cursor
-        var ordered = ApplyOrdering(baseQuery, query.Sort);
+        // ── Ordering + keyset cursor.
+        var ordered = ApplyAttemptOrdering(attemptsQuery, query.Sort);
 
         var limit = Math.Clamp(query.Limit ?? DefaultPageSize, 1, MaxPageSize);
         var cursorFilter = DecodeCursor(query.Cursor, query.Sort);
-
         if (cursorFilter is { } cf)
         {
-            ordered = ApplyCursorFilter(ordered, cf, query.Sort);
+            ordered = ApplyAttemptCursorFilter(ordered, cf, query.Sort);
         }
 
-        var rows = await ordered
-            .Take(limit + 1)
-            .ToListAsync(ct);
+        var attempts = await ordered.Take(limit + 1).ToListAsync(ct);
 
         string? nextCursor = null;
-        if (rows.Count > limit)
+        if (attempts.Count > limit)
         {
-            var cursorRow = rows[limit - 1];
-            nextCursor = EncodeCursor(cursorRow.SubmittedAtUtc, cursorRow.AttemptId, query.Sort);
-            rows = rows.Take(limit).ToList();
+            var cursorRow = attempts[limit - 1];
+            nextCursor = EncodeCursor(cursorRow.SubmittedAt ?? cursorRow.StartedAt, cursorRow.Id, query.Sort);
+            attempts = attempts.Take(limit).ToList();
         }
 
-        var items = rows.Select(r => MapListItem(r, country)).ToList();
+        var attemptIds = attempts.Select(a => a.Id).ToList();
+        var contentIds = attempts.Select(a => a.ContentId).Distinct().ToList();
+
+        var contents = await _db.ContentItems.AsNoTracking()
+            .Where(c => contentIds.Contains(c.Id))
+            .Select(c => new { c.Id, c.Title })
+            .ToListAsync(ct);
+        var contentMap = contents.ToDictionary(c => c.Id, c => c.Title);
+
+        var evaluations = await _db.Evaluations.AsNoTracking()
+            .Where(e => attemptIds.Contains(e.AttemptId))
+            .ToListAsync(ct);
+        var evalByAttempt = evaluations
+            .GroupBy(e => e.AttemptId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(e => e.GeneratedAt).First());
+
+        var reviews = await _db.ReviewRequests.AsNoTracking()
+            .Where(r => attemptIds.Contains(r.AttemptId))
+            .ToListAsync(ct);
+        var reviewByAttempt = reviews
+            .GroupBy(r => r.AttemptId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(r => r.CreatedAt).First());
+
+        var items = attempts.Select(a =>
+        {
+            evalByAttempt.TryGetValue(a.Id, out var eval);
+            reviewByAttempt.TryGetValue(a.Id, out var review);
+            contentMap.TryGetValue(a.ContentId, out var title);
+            return MapAttemptToListItem(a, eval, review, title ?? "Untitled paper", country);
+        }).ToList();
+
+        // Apply pass-only filter in-memory (country-aware Writing resolution
+        // cannot be translated to SQL reliably).
+        if (query.PassOnly)
+        {
+            items = items.Where(i => i.PassState == "pass").ToList();
+        }
+
         var sparkline = await ComputeSparklineAsync(userId, query, ct);
 
         return new SubmissionListResponse(
@@ -370,114 +405,132 @@ public sealed class SubmissionHistoryService
         AttemptState.Failed,
     };
 
-    private IQueryable<AttemptProjection> BuildBaseQuery(string userId, SubmissionListQuery query)
+    private IQueryable<Attempt> BuildAttemptsQuery(string userId, SubmissionListQuery query)
     {
-        var q = from a in _db.Attempts.AsNoTracking()
-                where a.UserId == userId
-                   && EvidenceStates.Contains(a.State)
-                join c in _db.ContentItems.AsNoTracking() on a.ContentId equals c.Id into cg
-                from c in cg.DefaultIfEmpty()
-                join e in _db.Evaluations.AsNoTracking() on a.Id equals e.AttemptId into eg
-                from e in eg.OrderByDescending(x => x.GeneratedAt).Take(1).DefaultIfEmpty()
-                join r in _db.ReviewRequests.AsNoTracking() on a.Id equals r.AttemptId into rg
-                from r in rg.OrderByDescending(x => x.CreatedAt).Take(1).DefaultIfEmpty()
-                select new AttemptProjection
-                {
-                    AttemptId = a.Id,
-                    ContentId = a.ContentId,
-                    Title = c != null ? c.Title : "Untitled paper",
-                    Subtest = a.SubtestCode,
-                    Context = a.Context,
-                    State = a.State,
-                    ParentAttemptId = a.ParentAttemptId,
-                    ComparisonGroupId = a.ComparisonGroupId,
-                    HiddenByUserAt = a.HiddenByUserAt,
-                    SubmittedAtUtc = a.SubmittedAt ?? a.StartedAt,
-                    EvaluationId = e != null ? e.Id : null,
-                    ScoreRange = e != null ? e.ScoreRange : null,
-                    EvaluationState = e != null ? e.State : (AsyncState?)null,
-                    ReviewId = r != null ? r.Id : null,
-                    ReviewState = r != null ? r.State : (ReviewRequestState?)null,
-                    ReviewRequestedAt = r != null ? r.CreatedAt : (DateTimeOffset?)null,
-                    ReviewCompletedAt = r != null ? r.CompletedAt : (DateTimeOffset?)null,
-                    ReviewPrice = r != null ? r.PriceSnapshot : (decimal?)null,
-                    ReviewTurnaround = r != null ? r.TurnaroundOption : null,
-                };
+        var q = _db.Attempts.AsNoTracking()
+            .Where(a => a.UserId == userId && EvidenceStates.Contains(a.State));
 
         if (!query.IncludeHidden)
         {
-            q = q.Where(x => x.HiddenByUserAt == null);
+            q = q.Where(a => a.HiddenByUserAt == null);
         }
 
         if (!string.IsNullOrWhiteSpace(query.Subtest))
         {
             var subtest = query.Subtest.Trim().ToLowerInvariant();
-            q = q.Where(x => x.Subtest.ToLower() == subtest);
+            q = q.Where(a => a.SubtestCode.ToLower() == subtest);
         }
         if (!string.IsNullOrWhiteSpace(query.Context))
         {
             var context = query.Context.Trim().ToLowerInvariant();
-            q = q.Where(x => x.Context.ToLower() == context);
+            q = q.Where(a => a.Context.ToLower() == context);
         }
         if (query.From.HasValue)
         {
-            q = q.Where(x => x.SubmittedAtUtc >= query.From.Value);
+            q = q.Where(a => (a.SubmittedAt ?? a.StartedAt) >= query.From.Value);
         }
         if (query.To.HasValue)
         {
-            q = q.Where(x => x.SubmittedAtUtc <= query.To.Value);
+            q = q.Where(a => (a.SubmittedAt ?? a.StartedAt) <= query.To.Value);
         }
         if (!string.IsNullOrWhiteSpace(query.Q))
         {
             var needle = query.Q.Trim().ToLowerInvariant();
-            q = q.Where(x => x.Title.ToLower().Contains(needle));
+            // Task title lives on ContentItem — join via ContentId.
+            var matchingIds = _db.ContentItems.AsNoTracking()
+                .Where(c => c.Title.ToLower().Contains(needle))
+                .Select(c => c.Id);
+            q = q.Where(a => matchingIds.Contains(a.ContentId));
         }
         if (!string.IsNullOrWhiteSpace(query.ReviewStatus))
         {
             var rs = query.ReviewStatus.Trim().ToLowerInvariant();
-            q = rs switch
+            if (rs == "reviewed")
             {
-                "reviewed" => q.Where(x => x.ReviewState == ReviewRequestState.Completed),
-                "pending" => q.Where(x => x.ReviewState == ReviewRequestState.Submitted
-                                          || x.ReviewState == ReviewRequestState.Queued
-                                          || x.ReviewState == ReviewRequestState.InReview
-                                          || x.ReviewState == ReviewRequestState.AwaitingPayment),
-                "not_requested" => q.Where(x => x.ReviewState == null),
-                _ => q,
-            };
+                var reviewedIds = _db.ReviewRequests.AsNoTracking()
+                    .Where(r => r.State == ReviewRequestState.Completed)
+                    .Select(r => r.AttemptId);
+                q = q.Where(a => reviewedIds.Contains(a.Id));
+            }
+            else if (rs == "pending")
+            {
+                var pendingIds = _db.ReviewRequests.AsNoTracking()
+                    .Where(r => r.State == ReviewRequestState.Submitted
+                              || r.State == ReviewRequestState.Queued
+                              || r.State == ReviewRequestState.InReview
+                              || r.State == ReviewRequestState.AwaitingPayment)
+                    .Select(r => r.AttemptId);
+                q = q.Where(a => pendingIds.Contains(a.Id));
+            }
+            else if (rs == "not_requested")
+            {
+                var reviewedAttempts = _db.ReviewRequests.AsNoTracking().Select(r => r.AttemptId);
+                q = q.Where(a => !reviewedAttempts.Contains(a.Id));
+            }
         }
-        // pass-only filter cannot be translated to SQL reliably (it needs
-        // country-aware Writing resolution); we apply it in-memory on the
-        // projection after materialisation via ListAsync using a small
-        // predicate wrapper.
         return q;
     }
 
-    private static IQueryable<AttemptProjection> ApplyOrdering(
-        IQueryable<AttemptProjection> q,
-        string? sort)
+    private static IQueryable<Attempt> ApplyAttemptOrdering(IQueryable<Attempt> q, string? sort)
     {
         return sort?.ToLowerInvariant() switch
         {
-            "date-asc" => q.OrderBy(x => x.SubmittedAtUtc).ThenBy(x => x.AttemptId),
-            "score-desc" => q.OrderByDescending(x => x.ScoreRange).ThenByDescending(x => x.AttemptId),
-            "score-asc" => q.OrderBy(x => x.ScoreRange).ThenBy(x => x.AttemptId),
-            _ => q.OrderByDescending(x => x.SubmittedAtUtc).ThenByDescending(x => x.AttemptId),
+            "date-asc" => q.OrderBy(a => a.SubmittedAt ?? a.StartedAt).ThenBy(a => a.Id),
+            _ => q.OrderByDescending(a => a.SubmittedAt ?? a.StartedAt).ThenByDescending(a => a.Id),
         };
     }
 
-    private static IQueryable<AttemptProjection> ApplyCursorFilter(
-        IQueryable<AttemptProjection> q,
+    private static IQueryable<Attempt> ApplyAttemptCursorFilter(
+        IQueryable<Attempt> q,
         (DateTimeOffset SubmittedAt, string AttemptId) cf,
         string? sort)
     {
         return sort?.ToLowerInvariant() switch
         {
-            "date-asc" => q.Where(x => x.SubmittedAtUtc > cf.SubmittedAt
-                                       || (x.SubmittedAtUtc == cf.SubmittedAt && string.Compare(x.AttemptId, cf.AttemptId, StringComparison.Ordinal) > 0)),
-            _ => q.Where(x => x.SubmittedAtUtc < cf.SubmittedAt
-                               || (x.SubmittedAtUtc == cf.SubmittedAt && string.Compare(x.AttemptId, cf.AttemptId, StringComparison.Ordinal) < 0)),
+            "date-asc" => q.Where(a => (a.SubmittedAt ?? a.StartedAt) > cf.SubmittedAt
+                                       || ((a.SubmittedAt ?? a.StartedAt) == cf.SubmittedAt && string.Compare(a.Id, cf.AttemptId, StringComparison.Ordinal) > 0)),
+            _ => q.Where(a => (a.SubmittedAt ?? a.StartedAt) < cf.SubmittedAt
+                               || ((a.SubmittedAt ?? a.StartedAt) == cf.SubmittedAt && string.Compare(a.Id, cf.AttemptId, StringComparison.Ordinal) < 0)),
         };
+    }
+
+    private static SubmissionListItem MapAttemptToListItem(
+        Attempt a,
+        Evaluation? eval,
+        ReviewRequest? review,
+        string title,
+        string? country)
+    {
+        var scaled = ProgressService.ParseScaledScore(eval?.ScoreRange);
+        var pass = ResolvePassState(a.SubtestCode, scaled, country);
+        var canReview = a.State == AttemptState.Completed
+                        && (a.SubtestCode == "writing" || a.SubtestCode == "speaking")
+                        && review is null;
+        return new SubmissionListItem(
+            SubmissionId: a.Id,
+            ContentId: a.ContentId,
+            TaskName: title,
+            Subtest: a.SubtestCode,
+            Context: a.Context ?? "practice",
+            AttemptDate: a.SubmittedAt ?? a.StartedAt,
+            State: ToApiAttemptState(a.State),
+            ReviewStatus: review is null ? "not_requested" : ToReviewStatus(review.State),
+            EvaluationId: eval?.Id,
+            ScaledScore: scaled,
+            ScoreLabel: FormatScoreLabel(scaled),
+            PassState: pass.State,
+            PassLabel: pass.Label,
+            RequiredScaled: pass.RequiredScaled,
+            Grade: scaled is null ? null : OetScoring.OetGradeLetterFromScaled(scaled.Value),
+            ComparisonGroupId: a.ComparisonGroupId,
+            ParentAttemptId: a.ParentAttemptId,
+            RevisionDepth: 0,
+            CanRequestReview: canReview,
+            IsHidden: a.HiddenByUserAt.HasValue,
+            Actions: new SubmissionActions(
+                ReopenFeedbackRoute: $"/submissions/{a.Id}",
+                CompareRoute: $"/submissions/compare?leftId={a.Id}",
+                RequestReviewRoute: canReview ? $"/submissions/{a.Id}?requestReview=1" : null));
     }
 
     private static string EncodeCursor(DateTimeOffset at, string id, string? sort)
@@ -525,14 +578,23 @@ public sealed class SubmissionHistoryService
             .Select(g => new { k = g.Key, n = g.Count() })
             .ToListAsync(ct);
 
-        var reviewCounts = await baseQuery
-            .GroupJoin(_db.ReviewRequests.AsNoTracking(),
-                a => a.Id, r => r.AttemptId,
-                (a, rs) => new { AttemptId = a.Id, State = rs.OrderByDescending(z => z.CreatedAt).Select(z => (ReviewRequestState?)z.State).FirstOrDefault() })
+        // For review-status facets, fetch the attempt IDs + latest review state
+        // per attempt with two small queries and aggregate in memory.
+        var attemptIds = await baseQuery.Select(a => a.Id).ToListAsync(ct);
+        var reviewsForAttempts = await _db.ReviewRequests.AsNoTracking()
+            .Where(r => attemptIds.Contains(r.AttemptId))
+            .Select(r => new { r.AttemptId, r.State, r.CreatedAt })
             .ToListAsync(ct);
-        var reviewDict = reviewCounts
-            .GroupBy(x => x.State is null ? "not_requested" : ToReviewStatus(x.State.Value))
-            .ToDictionary(g => g.Key, g => g.Count());
+        var latestByAttempt = reviewsForAttempts
+            .GroupBy(r => r.AttemptId)
+            .ToDictionary(g => g.Key, g => g.OrderByDescending(x => x.CreatedAt).First().State);
+
+        var reviewDict = new Dictionary<string, int>(StringComparer.Ordinal);
+        foreach (var aid in attemptIds)
+        {
+            var key = latestByAttempt.TryGetValue(aid, out var state) ? ToReviewStatus(state) : "not_requested";
+            reviewDict[key] = reviewDict.TryGetValue(key, out var n) ? n + 1 : 1;
+        }
 
         return new SubmissionFacets(
             BySubtest: subtestCounts.ToDictionary(x => x.k, x => x.n),
@@ -545,74 +607,40 @@ public sealed class SubmissionHistoryService
         SubmissionListQuery query,
         CancellationToken ct)
     {
-        var q = _db.Attempts.AsNoTracking()
+        var attempts = _db.Attempts.AsNoTracking()
             .Where(a => a.UserId == userId && EvidenceStates.Contains(a.State));
-        if (!query.IncludeHidden) q = q.Where(a => a.HiddenByUserAt == null);
+        if (!query.IncludeHidden) attempts = attempts.Where(a => a.HiddenByUserAt == null);
 
-        var rows = await (from a in q
-                          join e in _db.Evaluations.AsNoTracking() on a.Id equals e.AttemptId
-                          where e.ScoreRange != null
-                          orderby a.SubmittedAt descending
-                          select new { a.SubtestCode, a.SubmittedAt, e.ScoreRange })
-                         .Take(500)
-                         .ToListAsync(ct);
+        var attemptIds = await attempts
+            .Select(a => new { a.Id, a.SubtestCode, a.SubmittedAt })
+            .ToListAsync(ct);
+        if (attemptIds.Count == 0) return new Dictionary<string, List<SparklinePoint>>(StringComparer.OrdinalIgnoreCase);
+
+        var ids = attemptIds.Select(a => a.Id).ToList();
+        var evals = await _db.Evaluations.AsNoTracking()
+            .Where(e => ids.Contains(e.AttemptId) && e.ScoreRange != null)
+            .Select(e => new { e.AttemptId, e.ScoreRange })
+            .ToListAsync(ct);
+        var evalByAttempt = evals.ToDictionary(e => e.AttemptId, e => e.ScoreRange);
 
         var result = new Dictionary<string, List<SparklinePoint>>(StringComparer.OrdinalIgnoreCase);
-        foreach (var group in rows.GroupBy(x => x.SubtestCode))
+        foreach (var group in attemptIds.GroupBy(a => a.SubtestCode))
         {
             var points = group
-                .OrderBy(x => x.SubmittedAt)
-                .Select(x => new SparklinePoint(
-                    x.SubmittedAt ?? DateTimeOffset.MinValue,
-                    ProgressService.ParseScaledScore(x.ScoreRange)))
+                .OrderBy(a => a.SubmittedAt)
+                .Select(a =>
+                {
+                    evalByAttempt.TryGetValue(a.Id, out var score);
+                    return new SparklinePoint(
+                        a.SubmittedAt ?? DateTimeOffset.MinValue,
+                        ProgressService.ParseScaledScore(score));
+                })
                 .Where(p => p.Scaled.HasValue)
                 .TakeLast(SparklineMaxPoints)
                 .ToList();
             if (points.Count > 0) result[group.Key] = points;
         }
         return result;
-    }
-
-    private static SubmissionListItem MapListItem(AttemptProjection r, string? country)
-    {
-        var scaled = ProgressService.ParseScaledScore(r.ScoreRange);
-        var pass = ResolvePassState(r.Subtest, scaled, country);
-        var actions = BuildActionsFromProjection(r);
-        return new SubmissionListItem(
-            SubmissionId: r.AttemptId,
-            ContentId: r.ContentId,
-            TaskName: r.Title,
-            Subtest: r.Subtest,
-            Context: r.Context ?? "practice",
-            AttemptDate: r.SubmittedAtUtc,
-            State: ToApiAttemptState(r.State),
-            ReviewStatus: r.ReviewState is null ? "not_requested" : ToReviewStatus(r.ReviewState.Value),
-            EvaluationId: r.EvaluationId,
-            ScaledScore: scaled,
-            ScoreLabel: FormatScoreLabel(scaled),
-            PassState: pass.State,
-            PassLabel: pass.Label,
-            RequiredScaled: pass.RequiredScaled,
-            Grade: scaled is null ? null : OetScoring.OetGradeLetterFromScaled(scaled.Value),
-            ComparisonGroupId: r.ComparisonGroupId,
-            ParentAttemptId: r.ParentAttemptId,
-            RevisionDepth: 0, // resolved in detail only
-            CanRequestReview: r.State == AttemptState.Completed
-                              && (r.Subtest == "writing" || r.Subtest == "speaking")
-                              && r.ReviewState is null,
-            IsHidden: r.HiddenByUserAt.HasValue,
-            Actions: actions);
-    }
-
-    private static SubmissionActions BuildActionsFromProjection(AttemptProjection r)
-    {
-        var canReview = r.State == AttemptState.Completed
-                        && (r.Subtest == "writing" || r.Subtest == "speaking")
-                        && r.ReviewState is null;
-        return new SubmissionActions(
-            ReopenFeedbackRoute: $"/submissions/{r.AttemptId}",
-            CompareRoute: $"/submissions/compare?leftId={r.AttemptId}",
-            RequestReviewRoute: canReview ? $"/submissions/{r.AttemptId}?requestReview=1" : null);
     }
 
     private static SubmissionActions BuildActions(Attempt attempt, ReviewRequest? review)
@@ -911,27 +939,4 @@ public sealed class SubmissionHistoryService
         string PassState,
         string? Grade,
         bool Hidden);
-
-    private sealed class AttemptProjection
-    {
-        public string AttemptId { get; set; } = default!;
-        public string ContentId { get; set; } = default!;
-        public string Title { get; set; } = default!;
-        public string Subtest { get; set; } = default!;
-        public string Context { get; set; } = default!;
-        public AttemptState State { get; set; }
-        public string? ParentAttemptId { get; set; }
-        public string? ComparisonGroupId { get; set; }
-        public DateTimeOffset? HiddenByUserAt { get; set; }
-        public DateTimeOffset SubmittedAtUtc { get; set; }
-        public string? EvaluationId { get; set; }
-        public string? ScoreRange { get; set; }
-        public AsyncState? EvaluationState { get; set; }
-        public string? ReviewId { get; set; }
-        public ReviewRequestState? ReviewState { get; set; }
-        public DateTimeOffset? ReviewRequestedAt { get; set; }
-        public DateTimeOffset? ReviewCompletedAt { get; set; }
-        public decimal? ReviewPrice { get; set; }
-        public string? ReviewTurnaround { get; set; }
-    }
 }

@@ -72,10 +72,10 @@ public static class LearnerEndpoints
             [FromQuery] string? reviewStatus,
             [FromQuery] DateTimeOffset? from,
             [FromQuery] DateTimeOffset? to,
-            [FromQuery] bool passOnly,
+            [FromQuery] bool? passOnly,
             [FromQuery] string? q,
             [FromQuery] string? sort,
-            [FromQuery] bool includeHidden,
+            [FromQuery] bool? includeHidden,
             CancellationToken ct) =>
         {
             var query = new SubmissionListQuery(
@@ -86,10 +86,10 @@ public static class LearnerEndpoints
                 ReviewStatus: reviewStatus,
                 From: from,
                 To: to,
-                PassOnly: passOnly,
+                PassOnly: passOnly ?? false,
                 Q: q,
                 Sort: sort,
-                IncludeHidden: includeHidden);
+                IncludeHidden: includeHidden ?? false);
             return Results.Ok(await submissions.ListAsync(http.UserId(), query, ct));
         });
 
@@ -108,10 +108,10 @@ public static class LearnerEndpoints
             [FromQuery] string? reviewStatus,
             [FromQuery] DateTimeOffset? from,
             [FromQuery] DateTimeOffset? to,
-            [FromQuery] bool passOnly,
+            [FromQuery] bool? passOnly,
             [FromQuery] string? q,
             [FromQuery] string? sort,
-            [FromQuery] bool includeHidden,
+            [FromQuery] bool? includeHidden,
             CancellationToken ct) =>
         {
             var query = new SubmissionListQuery(
@@ -122,10 +122,10 @@ public static class LearnerEndpoints
                 ReviewStatus: reviewStatus,
                 From: from,
                 To: to,
-                PassOnly: passOnly,
+                PassOnly: passOnly ?? false,
                 Q: q,
                 Sort: sort,
-                IncludeHidden: includeHidden);
+                IncludeHidden: includeHidden ?? false);
             var bytes = await submissions.ExportCsvAsync(http.UserId(), query, ct);
             return Results.File(bytes, "text/csv; charset=utf-8", "submissions.csv");
         });

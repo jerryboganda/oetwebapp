@@ -66,23 +66,26 @@ export default function SubmissionHistory() {
 
   // Fetch on query change. Cancel stale responses.
   const requestIdRef = useRef(0);
-  useEffect(() => {
-    analytics.track('evaluation_viewed', { type: 'submissions' });
+  const loadPage = useCallback(async (q: SubmissionListQuery, requestId: number) => {
     setLoading(true);
     setError(null);
+    try {
+      const res = await fetchSubmissionsPage(q);
+      if (requestIdRef.current !== requestId) return;
+      setPage(res);
+    } catch {
+      if (requestIdRef.current !== requestId) return;
+      setError('Failed to load submissions. Please try again.');
+    } finally {
+      if (requestIdRef.current === requestId) setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    analytics.track('evaluation_viewed', { type: 'submissions' });
     const thisId = ++requestIdRef.current;
-    fetchSubmissionsPage(query)
-      .then((res) => {
-        if (requestIdRef.current !== thisId) return;
-        setPage(res);
-        setLoading(false);
-      })
-      .catch(() => {
-        if (requestIdRef.current !== thisId) return;
-        setError('Failed to load submissions. Please try again.');
-        setLoading(false);
-      });
-  }, [query]);
+    loadPage(query, thisId).catch(() => {});
+  }, [query, loadPage]);
 
   // Apply pass-only filter client-side (country-aware Writing resolution
   // cannot be translated to SQL safely).
@@ -277,6 +280,7 @@ export default function SubmissionHistory() {
             <Button
               variant={compareMode ? 'primary' : 'outline'}
               onClick={() => { setCompareMode((v) => !v); setPicked([]); }}
+              aria-label={compareMode ? 'Exit compare mode' : 'Enter compare mode'}
             >
               <GitCompare className="w-4 h-4" />
               {compareMode ? 'Exit compare mode' : 'Compare attempts'}
