@@ -419,6 +419,14 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminSystemAdmin", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "system_admin")));
+
+    // ── Study Planner v2 ──
+    options.AddPolicy("AdminStudyPlannerRead", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "study_planner:read", "study_planner:write", "system_admin")));
+    options.AddPolicy("AdminStudyPlannerWrite", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "study_planner:write", "system_admin")));
 });
 
 builder.Services.AddScoped<LearnerService>();
@@ -542,6 +550,22 @@ builder.Services.AddHttpClient("ZoomApi");
 builder.Services.AddHttpClient("ZoomAuth");
 builder.Services.AddSingleton<ZoomMeetingService>();
 builder.Services.AddScoped<PrivateSpeakingService>();
+
+// ── Study Planner v2 ──
+builder.Services.AddScoped<OetLearner.Api.Services.StudyPlanner.IStudyPlannerAdminService,
+    OetLearner.Api.Services.StudyPlanner.StudyPlannerAdminService>();
+builder.Services.AddScoped<OetLearner.Api.Services.StudyPlanner.IStudyPlannerRuleEngine,
+    OetLearner.Api.Services.StudyPlanner.StudyPlannerRuleEngine>();
+builder.Services.AddScoped<OetLearner.Api.Services.StudyPlanner.IStudyPlannerAiReasoner,
+    OetLearner.Api.Services.StudyPlanner.StudyPlannerAiReasoner>();
+builder.Services.AddScoped<OetLearner.Api.Services.StudyPlanner.IStudyPlannerService,
+    OetLearner.Api.Services.StudyPlanner.StudyPlannerService>();
+builder.Services.Configure<OetLearner.Api.Services.StudyPlanner.GoogleCalendarOptions>(
+    builder.Configuration.GetSection("GoogleCalendar"));
+builder.Services.AddHttpClient();
+builder.Services.AddDataProtection();
+builder.Services.AddScoped<OetLearner.Api.Services.StudyPlanner.IGoogleCalendarService,
+    OetLearner.Api.Services.StudyPlanner.GoogleCalendarService>();
 
 var app = builder.Build();
 
@@ -763,6 +787,8 @@ app.MapReadingAuthoringAdminEndpoints();
 app.MapReadingLearnerEndpoints();
 app.MapReadingPolicyAdminEndpoints();
 app.MapContentHierarchyEndpoints();
+app.MapStudyPlannerAdminEndpoints();
+app.MapStudyPlannerLearnerEndpoints();
 
 // ── Phase 1 new endpoints ──
 app.MapGamificationEndpoints();

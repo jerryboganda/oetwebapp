@@ -8,7 +8,7 @@
 export type SubTest = 'Writing' | 'Speaking' | 'Reading' | 'Listening';
 export type ExamFamilyCode = 'oet' | 'ielts' | 'pte';
 export type Difficulty = 'Easy' | 'Medium' | 'Hard';
-export type TaskStatus = 'not_started' | 'in_progress' | 'completed' | 'failed';
+export type TaskStatus = 'not_started' | 'in_progress' | 'completed' | 'failed' | 'skipped' | 'rescheduled';
 export type ReviewStatus = 'reviewed' | 'pending' | 'not_requested';
 export type EvalStatus = 'queued' | 'processing' | 'completed' | 'failed';
 export type Confidence = 'High' | 'Medium' | 'Low';
@@ -43,6 +43,12 @@ export interface StudyPlanTask {
   section: 'today' | 'thisWeek' | 'nextCheckpoint' | 'weakSkillFocus';
   contentId?: string;
   type?: string;
+  // Study Planner v2 additions (optional; populated when server sends new shape)
+  contentPaperId?: string;
+  startUrl?: string;
+  aiRationaleAddendum?: string;
+  priority?: number;
+  snoozedUntil?: string;
 }
 
 // ═══════════════════ WRITING TYPES ═══════════════════

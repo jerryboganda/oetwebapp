@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { AlertTriangle, CheckCircle2, RefreshCw, Calendar, TrendingDown } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
@@ -10,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
-import { fetchStudyPlanDrift } from '@/lib/api';
+import { fetchStudyPlanDrift, regenerateStudyPlan } from '@/lib/api';
 
 interface DriftData {
   hasPlan: boolean;
@@ -38,13 +39,31 @@ const DRIFT_COLOR: Record<string, string> = {
 };
 
 export default function StudyPlanDriftPage() {
+  const router = useRouter();
   const [data, setData] = useState<DriftData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [regenerating, setRegenerating] = useState(false);
+
+  const load = useCallback(() => {
+    setLoading(true);
+    fetchStudyPlanDrift().then((d) => setData(d as DriftData)).catch(() => {}).finally(() => setLoading(false));
+  }, []);
 
   useEffect(() => {
     analytics.track('study_plan_drift_viewed');
-    fetchStudyPlanDrift().then((d) => setData(d as DriftData)).catch(() => {}).finally(() => setLoading(false));
-  }, []);
+    queueMicrotask(() => { load(); });
+  }, [load]);
+
+  const handleRegenerate = async () => {
+    setRegenerating(true);
+    analytics.track('study_plan_drift_regenerate_clicked');
+    try {
+      await regenerateStudyPlan();
+      router.push('/study-plan');
+    } catch {
+      setRegenerating(false);
+    }
+  };
 
   return (
     <LearnerDashboardShell>
@@ -57,7 +76,6 @@ export default function StudyPlanDriftPage() {
           <Card className="p-8 text-center text-muted-foreground"><Calendar className="w-8 h-8 mx-auto mb-3 opacity-50" /><p>No study plan found. Generate one from your dashboard.</p></Card>
         ) : data.drift ? (
           <>
-            {/* Main drift card */}
             <MotionItem>
               <Card className={`p-6 ${DRIFT_COLOR[data.drift.level] ?? ''}`}>
                 <div className="flex items-start gap-4">
@@ -71,14 +89,16 @@ export default function StudyPlanDriftPage() {
                       <span className="text-sm">Progress: <strong>{data.drift.actualCompleted}/{data.drift.totalItems}</strong></span>
                     </div>
                     {data.drift.shouldRegenerate && (
-                      <Button variant="primary" size="sm" className="mt-3"><RefreshCw className="w-4 h-4 mr-1" /> Regenerate Plan</Button>
+                      <Button variant="primary" size="sm" className="mt-3" onClick={handleRegenerate} disabled={regenerating}>
+                        <RefreshCw className={`w-4 h-4 mr-1 ${regenerating ? 'animate-spin' : ''}`} />
+                        {regenerating ? 'Regenerating…' : 'Regenerate Plan'}
+                      </Button>
                     )}
                   </div>
                 </div>
               </Card>
             </MotionItem>
 
-            {/* Subtest breakdown */}
             {data.subtestDrift && data.subtestDrift.length > 0 && (
               <>
                 <LearnerSurfaceSectionHeader title="Per-Subtest Status" />
@@ -101,7 +121,6 @@ export default function StudyPlanDriftPage() {
               </>
             )}
 
-            {/* Overdue items */}
             {data.overdueItems && data.overdueItems.length > 0 && (
               <>
                 <LearnerSurfaceSectionHeader title="Overdue Items" />

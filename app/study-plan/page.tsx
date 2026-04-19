@@ -18,13 +18,23 @@ import {
   ChevronDown,
   ChevronUp,
   Target,
-  Flame,
+  Moon,
+  Download,
+  Sparkles,
 } from 'lucide-react';
-import { Button, Badge } from '@/components/ui';
+import { Button } from '@/components/ui';
 import { LearnerDashboardShell } from '@/components/layout';
 import { AsyncStateWrapper } from '@/components/state';
 import { useAnalytics } from '@/hooks/use-analytics';
-import { fetchStudyPlan, updateStudyPlanTask } from '@/lib/api';
+import {
+  fetchStudyPlan,
+  updateStudyPlanTask,
+  rescheduleStudyPlanTask,
+  snoozeStudyPlanTask,
+  startStudyPlanTask,
+  regenerateStudyPlan,
+  studyPlanIcsUrl,
+} from '@/lib/api';
 import type { StudyPlanTask, SubTest } from '@/lib/mock-data';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 
@@ -51,6 +61,13 @@ const SECTIONS: { type: SectionType; title: string; icon: React.ElementType; ico
   { type: 'weakSkillFocus', title: 'Weak-Skill Focus', icon: AlertTriangle, iconColor: 'text-amber-500' },
 ];
 
+function addDaysIso(iso: string, days: number): string {
+  const [y, m, d] = iso.split('-').map(Number);
+  const dt = new Date(Date.UTC(y, (m ?? 1) - 1, d ?? 1));
+  dt.setUTCDate(dt.getUTCDate() + days);
+  return dt.toISOString().slice(0, 10);
+}
+
 export default function StudyPlanPage() {
   const router = useRouter();
   const { track } = useAnalytics();
@@ -58,6 +75,8 @@ export default function StudyPlanPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [expandedRationale, setExpandedRationale] = useState<string | null>(null);
+  const [regenerating, setRegenerating] = useState(false);
+  const [rescheduling, setRescheduling] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -84,7 +103,6 @@ export default function StudyPlanPage() {
       await updateStudyPlanTask(id, { status: 'completed' });
       track('plan_item_completed');
     } catch {
-      // Rollback on failure
       if (prev) setTasks((all) => all.map((t) => (t.id === id ? { ...t, status: prev.status } : t)));
     }
   };
@@ -99,18 +117,75 @@ export default function StudyPlanPage() {
     }
   };
 
-  const handleReschedule = (id: string) => {
-    track('plan_item_rescheduled');
+  // Reschedule: now actually calls the API. Defaults to +1 day; future work =
+  // open a date picker popover.
+  const handleReschedule = async (id: string) => {
+    const current = tasks.find(t => t.id === id);
+    if (!current) return;
+    setRescheduling(id);
+    const nextDate = addDaysIso(current.dueDate, 1);
+    const prev = { ...current };
+    setTasks((all) => all.map((t) => (t.id === id ? { ...t, dueDate: nextDate, status: 'rescheduled' } : t)));
+    try {
+      await rescheduleStudyPlanTask(id, nextDate);
+      track('plan_item_rescheduled', { newDueDate: nextDate });
+    } catch {
+      setTasks((all) => all.map((t) => (t.id === id ? prev : t)));
+    } finally {
+      setRescheduling(null);
+    }
   };
 
-  const handleStart = (task: StudyPlanTask) => {
+  // Snooze: hides from "today" for 1 day. Replaces the previously dead Swap
+  // button with a useful behaviour for learners.
+  const handleSnooze = async (id: string) => {
+    const tomorrow = new Date(Date.now() + 86_400_000).toISOString();
+    try {
+      await snoozeStudyPlanTask(id, tomorrow);
+      track('study_plan_item_snoozed', { itemId: id });
+      setTasks((all) => all.map((t) => (t.id === id ? { ...t, snoozedUntil: tomorrow } : t)));
+    } catch {
+      // no-op; ghost button
+    }
+  };
+
+  const handleStart = async (task: StudyPlanTask) => {
     track('task_started', { subTest: task.subTest, contentId: task.contentId });
-    router.push(`/${task.subTest.toLowerCase()}`);
+    try {
+      const { startUrl } = await startStudyPlanTask(task.id);
+      router.push(startUrl || task.startUrl || `/${task.subTest.toLowerCase()}`);
+    } catch {
+      router.push(task.startUrl || `/${task.subTest.toLowerCase()}`);
+    }
+  };
+
+  const handleRegenerate = async () => {
+    setRegenerating(true);
+    track('study_plan_regenerate_clicked');
+    try {
+      await regenerateStudyPlan();
+      await loadData();
+    } finally {
+      setRegenerating(false);
+    }
+  };
+
+  const handleExportIcs = () => {
+    track('study_plan_ics_exported');
+    // Use full URL so cookie auth applies. Opening in a new tab triggers a
+    // download because of the text/calendar MIME type.
+    const a = document.createElement('a');
+    a.href = studyPlanIcsUrl();
+    a.download = 'oet-study-plan.ics';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
   };
 
   const renderTaskCard = (task: StudyPlanTask) => {
     const isCompleted = task.status === 'completed';
     const SubIcon = SUBTEST_ICONS[task.subTest];
+    const isRescheduling = rescheduling === task.id;
 
     return (
       <motion.div
@@ -125,7 +200,6 @@ export default function StudyPlanPage() {
       >
         <div className="p-4 sm:p-5">
           <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-            {/* Info */}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-2 flex-wrap">
                 <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-bold uppercase tracking-wider border ${SUBTEST_COLORS[task.subTest]}`}>
@@ -135,6 +209,11 @@ export default function StudyPlanPage() {
                 {isCompleted && (
                   <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold uppercase bg-green-100 text-green-700 border border-green-200">
                     <CheckCircle2 className="w-3.5 h-3.5" /> Done
+                  </span>
+                )}
+                {task.aiRationaleAddendum && (
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold uppercase bg-violet-100 text-violet-700 border border-violet-200" title="Personalised by AI">
+                    <Sparkles className="w-3.5 h-3.5" /> AI
                   </span>
                 )}
               </div>
@@ -148,7 +227,6 @@ export default function StudyPlanPage() {
                 <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{task.dueDate}</span>
               </div>
 
-              {/* Rationale */}
               <div className="mt-2">
                 <button
                   onClick={() => setExpandedRationale(expandedRationale === task.id ? null : task.id)}
@@ -167,8 +245,9 @@ export default function StudyPlanPage() {
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden"
                     >
-                      <p className="mt-2 p-3 bg-blue-50/50 border border-blue-100 rounded-lg text-sm text-navy/80 leading-relaxed">
+                      <p className="mt-2 p-3 bg-blue-50/50 border border-blue-100 rounded-lg text-sm text-navy/80 leading-relaxed whitespace-pre-wrap">
                         {task.rationale}
+                        {task.aiRationaleAddendum ? `\n\n${task.aiRationaleAddendum}` : ''}
                       </p>
                     </motion.div>
                   )}
@@ -176,7 +255,6 @@ export default function StudyPlanPage() {
               </div>
             </div>
 
-            {/* Actions */}
             <div className="flex flex-row sm:flex-col items-center sm:items-stretch justify-end gap-2 shrink-0 border-t sm:border-t-0 pt-3 sm:pt-0 border-gray-100">
               {!isCompleted ? (
                 <>
@@ -184,14 +262,14 @@ export default function StudyPlanPage() {
                     <PlayCircle className="w-4 h-4 mr-1" /> Start
                   </Button>
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <Button variant="ghost" size="sm" onClick={() => handleMarkComplete(task.id)} title="Mark Complete">
+                    <Button variant="ghost" size="sm" onClick={() => handleMarkComplete(task.id)} title="Mark complete" aria-label="Mark complete">
                       <CheckCircle2 className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleReschedule(task.id)} title="Reschedule">
+                    <Button variant="ghost" size="sm" onClick={() => handleReschedule(task.id)} disabled={isRescheduling} title="Move to tomorrow" aria-label="Reschedule to tomorrow">
                       <Calendar className="w-4 h-4" />
                     </Button>
-                    <Button variant="ghost" size="sm" title="Swap Task">
-                      <RefreshCw className="w-4 h-4" />
+                    <Button variant="ghost" size="sm" onClick={() => handleSnooze(task.id)} title="Snooze 1 day" aria-label="Snooze this task">
+                      <Moon className="w-4 h-4" />
                     </Button>
                   </div>
                 </>
@@ -240,7 +318,17 @@ export default function StudyPlanPage() {
             ]}
           />
 
-          {/* Sections */}
+          {/* Plan actions toolbar */}
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <Button variant="ghost" size="sm" onClick={handleExportIcs}>
+              <Download className="w-4 h-4 mr-1" /> Add to calendar
+            </Button>
+            <Button variant="ghost" size="sm" onClick={handleRegenerate} disabled={regenerating} aria-label="Regenerate study plan">
+              <RefreshCw className={`w-4 h-4 mr-1 ${regenerating ? 'animate-spin' : ''}`} />
+              {regenerating ? 'Regenerating…' : 'Regenerate plan'}
+            </Button>
+          </div>
+
           {SECTIONS.map(({ type, title, icon: SectionIcon, iconColor }) => {
             const sectionTasks = tasks.filter((t) => t.section === type);
             if (sectionTasks.length === 0) return null;

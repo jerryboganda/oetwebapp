@@ -237,6 +237,16 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<ConversationTemplate> ConversationTemplates => Set<ConversationTemplate>();
     public DbSet<FreeTierConfig> FreeTierConfigs => Set<FreeTierConfig>();
 
+    // ── Study Planner v2 ──
+    public DbSet<StudyPlanTaskTemplate> StudyPlanTaskTemplates => Set<StudyPlanTaskTemplate>();
+    public DbSet<StudyPlanTemplate> StudyPlanTemplates => Set<StudyPlanTemplate>();
+    public DbSet<StudyPlanTemplateItem> StudyPlanTemplateItems => Set<StudyPlanTemplateItem>();
+    public DbSet<StudyPlanAssignmentRule> StudyPlanAssignmentRules => Set<StudyPlanAssignmentRule>();
+    public DbSet<StudyPlanDriftPolicy> StudyPlanDriftPolicies => Set<StudyPlanDriftPolicy>();
+    public DbSet<StudyPlanGenerationLog> StudyPlanGenerationLogs => Set<StudyPlanGenerationLog>();
+    public DbSet<StudyPlanAdminOverride> StudyPlanAdminOverrides => Set<StudyPlanAdminOverride>();
+    public DbSet<LearnerCalendarLink> LearnerCalendarLinks => Set<LearnerCalendarLink>();
+
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<ContentItem>().HasIndex(x => new { x.SubtestCode, x.Status });
