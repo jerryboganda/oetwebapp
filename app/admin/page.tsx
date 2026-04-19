@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
   AlertTriangle,
   ArrowRight,
@@ -12,7 +13,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { CardLink } from '@/components/ui';
-import { cn } from '@/lib/utils';
+import { Button } from '@/components/ui/button';
 import {
   AdminRouteFreshnessBadge,
   AdminRouteHero,
@@ -29,14 +30,6 @@ import type { AdminDashboardData } from '@/lib/types/admin';
 
 type PageStatus = 'loading' | 'success' | 'error';
 
-const QUICK_ACTION_BASE =
-  'inline-flex w-full items-center justify-center gap-2 rounded-lg px-5 py-2 text-sm font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:scale-[0.98]';
-
-const QUICK_ACTION_VARIANTS = {
-  primary: 'bg-primary text-white hover:bg-primary/90 shadow-sm',
-  outline: 'border border-border text-navy hover:bg-surface hover:border-border-hover',
-} as const;
-
 const SHORTCUT_LINKS = [
   { href: '/admin/content', label: 'Content Library', hint: 'Papers, drafts, archive' },
   { href: '/admin/review-ops', label: 'Review Ops', hint: 'Backlog, assignments' },
@@ -49,6 +42,7 @@ const SHORTCUT_LINKS = [
 ];
 
 export default function AdminDashboardPage() {
+  const router = useRouter();
   const { isAuthenticated, role } = useAdminAuth();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
   const [dashboard, setDashboard] = useState<AdminDashboardData | null>(null);
@@ -115,24 +109,15 @@ export default function AdminDashboardPage() {
                     </p>
                   </div>
                   <div className="space-y-2">
-                    <Link
-                      href="/admin/review-ops"
-                      className={cn(QUICK_ACTION_BASE, QUICK_ACTION_VARIANTS.primary)}
-                    >
+                    <Button fullWidth onClick={() => router.push('/admin/review-ops')}>
                       Open Review Ops
-                    </Link>
-                    <Link
-                      href="/admin/freeze"
-                      className={cn(QUICK_ACTION_BASE, QUICK_ACTION_VARIANTS.outline)}
-                    >
+                    </Button>
+                    <Button fullWidth variant="outline" onClick={() => router.push('/admin/freeze')}>
                       Open Freeze Center
-                    </Link>
-                    <Link
-                      href="/admin/business-intelligence"
-                      className={cn(QUICK_ACTION_BASE, QUICK_ACTION_VARIANTS.outline)}
-                    >
+                    </Button>
+                    <Button fullWidth variant="outline" onClick={() => router.push('/admin/business-intelligence')}>
                       Open BI Dashboard
-                    </Link>
+                    </Button>
                   </div>
                   <div className="flex items-center justify-between gap-3 border-t border-border pt-3 text-xs text-muted">
                     <AdminRouteFreshnessBadge value={dashboard.generatedAt} />

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -25,6 +25,7 @@ const PAGE_SIZE = 25;
 
 export default function AdminContentImportPage() {
   const { isAuthenticated } = useAdminAuth();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
   const [items, setItems] = useState<ContentInventoryItem[]>([]);
   const [total, setTotal] = useState(0);
@@ -76,7 +77,7 @@ export default function AdminContentImportPage() {
     { key: 'subtestCode', header: 'Subtest', render: (r) => <Badge variant="muted">{r.subtestCode}</Badge> },
     { key: 'difficulty', header: 'Difficulty', render: (r) => <Badge variant="muted">{r.difficulty}</Badge> },
     { key: 'sourceProvenance', header: 'Source', render: (r) => <span className="text-xs text-muted">{r.sourceProvenance}</span> },
-    { key: 'status', header: 'Status', render: (r) => <Badge variant={r.status === 'Published' ? 'default' : 'muted'}>{r.status}</Badge> },
+    { key: 'status', header: 'Status', render: (r) => <Badge variant={r.status === 'Published' ? 'success' : 'muted'}>{r.status}</Badge> },
     { key: 'qualityScore', header: 'Quality', render: (r) => <span className="text-xs">{r.qualityScore}</span> },
     {
       key: 'flags', header: 'Flags', render: (r) => (
@@ -101,12 +102,23 @@ export default function AdminContentImportPage() {
       <AdminRoutePanel title="Content Inventory">
         <div className="flex items-center justify-between mb-4">
           <div className="flex items-center gap-2">
-            <label className="cursor-pointer">
-              <input type="file" accept=".json" className="hidden" onChange={handleFileImport} disabled={importing} />
-              <Button variant="primary" size="sm" disabled={importing}>
-                <Upload className="w-4 h-4 mr-1" /> {importing ? 'Importing…' : 'Import JSON'}
-              </Button>
-            </label>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              className="hidden"
+              onChange={handleFileImport}
+              disabled={importing}
+              aria-label="Import JSON file"
+            />
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={importing}
+              onClick={() => fileInputRef.current?.click()}
+            >
+              <Upload className="w-4 h-4 mr-1" /> {importing ? 'Importing…' : 'Import JSON'}
+            </Button>
             <Button variant="outline" size="sm" onClick={() => setReloadNonce(n => n + 1)}>
               <RefreshCw className="w-4 h-4 mr-1" /> Refresh
             </Button>
@@ -123,7 +135,7 @@ export default function AdminContentImportPage() {
             <div className="text-muted">
               Created: {importResult.created} | Failed: {importResult.failed}
               {importResult.errors.length > 0 && (
-                <ul className="mt-1 list-disc list-inside text-destructive">
+                <ul className="mt-1 list-disc list-inside text-danger">
                   {importResult.errors.slice(0, 5).map((e, i) => (
                     <li key={i}>Row {e.rowIndex}: {e.message}</li>
                   ))}

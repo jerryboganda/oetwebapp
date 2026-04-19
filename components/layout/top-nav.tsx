@@ -5,7 +5,7 @@ import { cn } from '@/lib/utils';
 import { buildSupportMailto } from '@/lib/auth/support';
 import { AuthContext } from '@/contexts/auth-context';
 import type { UserRole } from '@/lib/types/auth';
-import { BriefcaseMedical, HelpCircle, LogOut, Menu, Settings, X } from 'lucide-react';
+import { BriefcaseMedical, ChevronRight, HelpCircle, LogOut, Menu, Settings, X } from 'lucide-react';
 import Link from 'next/link';
 import { type ReactNode, useContext, useState } from 'react';
 import { mainNavItems, type NavItem, type ShellUserSummary } from './sidebar';
@@ -15,6 +15,8 @@ import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 import { getSurfaceTransition } from '@/lib/motion';
 import { ThemeToggle } from '@/components/ui/theme-toggle';
+import { CommandPaletteTrigger } from '@/components/ui/command-palette';
+import type { BreadcrumbItem } from '@/components/ui/breadcrumbs';
 
 export interface MobileMenuSection {
   label: string;
@@ -29,6 +31,9 @@ interface TopNavProps {
   sectionedItems?: MobileMenuSection[];
   userSummary?: ShellUserSummary;
   workspaceRole?: UserRole;
+  breadcrumbs?: BreadcrumbItem[];
+  /** Show the command palette trigger button (admin workspace). */
+  showCommandPalette?: boolean;
 }
 
 export function TopNav({
@@ -39,6 +44,8 @@ export function TopNav({
   sectionedItems,
   userSummary,
   workspaceRole,
+  breadcrumbs,
+  showCommandPalette = false,
 }: TopNavProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const pathname = usePathname() ?? '/';
@@ -146,17 +153,50 @@ export function TopNav({
             {pageTitle && (
               <motion.div
                 key={pageTitle}
-                className="hidden items-center gap-2 sm:flex"
+                className="hidden min-w-0 items-center gap-2 sm:flex"
                 {...getSurfaceMotion('state', reducedMotion)}
               >
-                <span className="text-gray-300">/</span>
-                <span className="text-sm font-semibold text-navy">{pageTitle}</span>
+                <span className="text-gray-300" aria-hidden>/</span>
+                {breadcrumbs && breadcrumbs.length > 0 ? (
+                  <ol className="flex min-w-0 items-center gap-1.5 text-sm">
+                    {breadcrumbs.map((crumb, index) => {
+                      const isLast = index === breadcrumbs.length - 1;
+                      return (
+                        <li key={`${crumb.label}-${index}`} className="flex min-w-0 items-center gap-1.5">
+                          {isLast || !crumb.href ? (
+                            <span
+                              className={cn(
+                                'truncate font-semibold',
+                                isLast ? 'text-navy' : 'text-muted',
+                              )}
+                              aria-current={isLast ? 'page' : undefined}
+                            >
+                              {crumb.label}
+                            </span>
+                          ) : (
+                            <Link href={crumb.href} className="truncate text-muted transition-colors hover:text-navy">
+                              {crumb.label}
+                            </Link>
+                          )}
+                          {!isLast && (
+                            <ChevronRight aria-hidden className="h-3.5 w-3.5 shrink-0 text-muted/60" />
+                          )}
+                        </li>
+                      );
+                    })}
+                  </ol>
+                ) : (
+                  <span className="truncate text-sm font-semibold text-navy">{pageTitle}</span>
+                )}
               </motion.div>
             )}
           </AnimatePresence>
         </div>
 
         <motion.div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3" layout={!reducedMotion}>
+          {showCommandPalette ? (
+            <CommandPaletteTrigger className="hidden md:inline-flex" />
+          ) : null}
           {actions}
           <ThemeToggle />
           <NotificationCenter />

@@ -7,7 +7,8 @@ import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { Input, Select } from '@/components/ui/form-controls';
+import { Input, Select, Textarea } from '@/components/ui/form-controls';
+import { Switch } from '@/components/ui/switch';
 import { Modal } from '@/components/ui/modal';
 import { Toast } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
@@ -152,7 +153,7 @@ export default function StudyPlannerTaskTemplatesPage() {
     }
   };
 
-  const onArchive = async (id: string) => {
+  const onArchive = useCallback(async (id: string) => {
     try {
       await archiveTaskTemplate(id);
       setToast({ variant: 'success', message: 'Archived.' });
@@ -160,7 +161,7 @@ export default function StudyPlannerTaskTemplatesPage() {
     } catch (e) {
       setToast({ variant: 'error', message: (e as Error).message });
     }
-  };
+  }, [load]);
 
   const columns: Column<TaskTemplateDto>[] = useMemo(() => [
     { key: 'subtest', header: 'Subtest', render: (r) => <Badge variant="info">{r.subtestCode}</Badge> },
@@ -177,7 +178,7 @@ export default function StudyPlannerTaskTemplatesPage() {
         </div>
       ),
     },
-  ], []);
+  ], [onArchive]);
 
   if (!isAuthenticated || role !== 'admin') {
     return <AdminRouteWorkspace><p className="text-sm text-muted">Admin access required.</p></AdminRouteWorkspace>;
@@ -192,19 +193,18 @@ export default function StudyPlannerTaskTemplatesPage() {
       />
 
       <AdminRoutePanel eyebrow="Filters" title="Search task library" dense>
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-          <Select label="Subtest" value={filterSubtest} onChange={(e) => setFilterSubtest(e.target.value)} options={SUBTESTS} />
-          <Input label="Search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Title or slug" />
-          <label className="flex items-end gap-2 text-sm pb-2">
-            <input type="checkbox" checked={includeArchived} onChange={(e) => setIncludeArchived(e.target.checked)} />
-            Include archived
-          </label>
-          <div className="flex items-end">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-3 items-end">
+            <Select label="Subtest" value={filterSubtest} onChange={(e) => setFilterSubtest(e.target.value)} options={SUBTESTS} />
+            <Input label="Search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Title or slug" />
+            <Switch
+              checked={includeArchived}
+              onCheckedChange={setIncludeArchived}
+              label="Include archived"
+            />
             <Button variant="primary" onClick={() => { resetForm(); setShowForm(true); }}>
               <Plus className="w-4 h-4 mr-1" /> New task template
             </Button>
           </div>
-        </div>
       </AdminRoutePanel>
 
       <AsyncStateWrapper status={status}>
@@ -226,9 +226,9 @@ export default function StudyPlannerTaskTemplatesPage() {
           <Input label="Profession scope (CSV, empty = all)" value={fProfScope} onChange={(e) => setFProfScope(e.target.value)} placeholder="medicine,nursing" />
           <Input label="Target countries (CSV, empty = all)" value={fCountries} onChange={(e) => setFCountries(e.target.value)} placeholder="UK,IE,AU" />
           <div className="col-span-2">
-            <label className="text-sm font-semibold block mb-1">Rationale (Markdown — shown as &ldquo;Why this is recommended&rdquo;)</label>
-            <textarea
-              className="w-full min-h-[120px] rounded-md border border-gray-300 p-2 text-sm"
+            <Textarea
+              label="Rationale (Markdown — shown as &ldquo;Why this is recommended&rdquo;)"
+              rows={4}
               value={fRationale}
               onChange={(e) => setFRationale(e.target.value)}
               placeholder="Practice condensing patient notes into a concise referral letter. Focuses on purpose, context, and word economy."

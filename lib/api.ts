@@ -31,6 +31,10 @@ import type {
   Submission,
   SubmissionComparison,
   SubmissionDetail,
+  SubmissionListQuery,
+  SubmissionListResponse,
+  RevisionNode,
+  ReviewLineage,
   TurnaroundOption,
   FocusArea,
   DiagnosticSession,
@@ -1869,109 +1873,153 @@ export function progressPdfUrl(): string {
   return '/v1/progress/v2/export.pdf';
 }
 
-export async function fetchSubmissions(): Promise<Submission[]> {
-  const response = await apiRequest<{ items: ApiRecord[] }>('/v1/submissions');
-  return response.items.map((item) => ({
+// ───────────────────────────────────────────────────────────────────────────
+// Submission History API
+//
+// Shape is server-driven — we trust the backend's SubmissionHistoryService
+// to emit scaled scores, pass/fail flags, and revision lineage. The client
+// NEVER recomputes pass/fail from percentages.
+// ───────────────────────────────────────────────────────────────────────────
+
+function buildSubmissionQueryString(query?: SubmissionListQuery): string {
+  const params = new URLSearchParams();
+  if (!query) return '';
+  if (query.cursor) params.set('cursor', query.cursor);
+  if (query.limit !== undefined) params.set('limit', String(query.limit));
+  if (query.subtest) params.set('subtest', query.subtest);
+  if (query.context) params.set('context', query.context);
+  if (query.reviewStatus) params.set('reviewStatus', query.reviewStatus);
+  if (query.from) params.set('from', query.from);
+  if (query.to) params.set('to', query.to);
+  if (query.passOnly) params.set('passOnly', 'true');
+  if (query.q) params.set('q', query.q);
+  if (query.sort) params.set('sort', query.sort);
+  if (query.includeHidden) params.set('includeHidden', 'true');
+  const q = params.toString();
+  return q ? `?${q}` : '';
+}
+
+function mapServerSubmission(item: ApiRecord): Submission {
+  const scaledScore: number | null = item.scaledScore === null || item.scaledScore === undefined ? null : Number(item.scaledScore);
+  const requiredScaled: number | null = item.requiredScaled === null || item.requiredScaled === undefined ? null : Number(item.requiredScaled);
+  return {
     id: item.submissionId,
     contentId: item.contentId,
     taskName: item.taskName,
     subTest: toSubTest(item.subtest),
+    context: item.context ?? 'practice',
     attemptDate: item.attemptDate,
-    scoreEstimate: scoreRangeDisplay(item.scoreEstimate ?? ''),
+    scoreEstimate: item.scoreLabel ?? scoreRangeDisplay(item.scoreEstimate ?? ''),
+    scaledScore,
+    passState: item.passState ?? (scaledScore === null ? 'pending' : undefined),
+    passLabel: item.passLabel,
+    requiredScaled,
+    grade: item.grade ?? null,
+    revisionDepth: item.revisionDepth ?? 0,
+    isHidden: Boolean(item.isHidden),
     reviewStatus: toReviewStatus(item.reviewStatus),
     evaluationId: item.evaluationId ?? undefined,
     state: item.state ?? undefined,
     comparisonGroupId: item.comparisonGroupId ?? null,
+    parentAttemptId: item.parentAttemptId ?? null,
     canRequestReview: Boolean(item.canRequestReview),
     actions: {
       reopenFeedbackRoute: item.actions?.reopenFeedbackRoute ?? null,
       compareRoute: item.actions?.compareRoute ?? null,
       requestReviewRoute: item.actions?.requestReviewRoute ?? null,
     },
-  }));
+  };
 }
 
-export async function fetchSubmissionDetail(submissionId: string): Promise<SubmissionDetail> {
-  const submissions = await fetchSubmissions();
-  const submission = submissions.find((item) => item.id === submissionId || item.evaluationId === submissionId);
-  if (!submission) {
-    throw new Error('Submission not found.');
-  }
+/**
+ * Fetch a page of Submission History rows with optional filters/sort.
+ * Returns the full paginated envelope including facets + sparkline data
+ * so the page can render control bars without a second roundtrip.
+ */
+export async function fetchSubmissionsPage(query?: SubmissionListQuery): Promise<SubmissionListResponse> {
+  const qs = buildSubmissionQueryString(query);
+  const response = await apiRequest<ApiRecord>(`/v1/submissions${qs}`);
+  const items = Array.isArray(response.items) ? response.items.map(mapServerSubmission) : [];
+  const facets = response.facets ?? {};
+  return {
+    items,
+    nextCursor: response.nextCursor ?? null,
+    total: Number(response.total ?? items.length),
+    facets: {
+      bySubtest: (facets.bySubtest ?? {}) as Record<string, number>,
+      byContext: (facets.byContext ?? {}) as Record<string, number>,
+      byReviewStatus: (facets.byReviewStatus ?? {}) as Record<string, number>,
+    },
+    sparkline: (response.sparkline ?? {}) as Record<string, Array<{ at: string; scaled: number | null }>>,
+  };
+}
 
-  const baseDetail: SubmissionDetail = {
+/**
+ * Flat-list convenience helper (used by older surfaces that don't care
+ * about pagination). Fetches up to the first page only.
+ */
+export async function fetchSubmissions(): Promise<Submission[]> {
+  const page = await fetchSubmissionsPage({ limit: 50 });
+  return page.items;
+}
+
+/**
+ * Single-round-trip detail fetch — replaces the prior N+1 cascade through
+ * evaluation/transcript/reading/listening endpoints. The server composes
+ * the full SubmissionDetail shape.
+ */
+export async function fetchSubmissionDetail(submissionId: string): Promise<SubmissionDetail> {
+  const response = await apiRequest<ApiRecord>(`/v1/submissions/${encodeURIComponent(submissionId)}`);
+  const submission = mapServerSubmission(response.submission);
+  const revisionLineage: RevisionNode[] = Array.isArray(response.revisionLineage)
+    ? response.revisionLineage.map((node: ApiRecord) => ({
+        attemptId: node.attemptId,
+        order: Number(node.order ?? 0),
+        label: node.label ?? 'Attempt',
+        submittedAt: node.submittedAt,
+        scaledScore: node.scaledScore === null || node.scaledScore === undefined ? null : Number(node.scaledScore),
+        isCurrent: Boolean(node.isCurrent),
+      }))
+    : [];
+  const reviewLineage: ReviewLineage | null = response.reviewLineage
+    ? {
+        reviewRequestId: response.reviewLineage.reviewRequestId,
+        state: toReviewStatus(response.reviewLineage.state),
+        stateLabel: response.reviewLineage.stateLabel ?? '',
+        turnaroundOption: response.reviewLineage.turnaroundOption ?? null,
+        creditsCharged: Number(response.reviewLineage.creditsCharged ?? 0),
+        requestedAt: response.reviewLineage.requestedAt,
+        completedAt: response.reviewLineage.completedAt ?? null,
+      }
+    : null;
+  return {
     submission,
     evidenceSummary: {
-      title: submission.taskName,
-      scoreLabel: submission.scoreEstimate || 'Pending',
-      stateLabel: titleCase(submission.state ?? 'completed'),
-      reviewLabel: titleCase(submission.reviewStatus.replace(/_/g, ' ')),
-      nextActionLabel: submission.canRequestReview ? 'Request review' : 'Review current evidence',
+      title: response.evidenceSummary?.title ?? submission.taskName,
+      scoreLabel: response.evidenceSummary?.scoreLabel ?? submission.scoreEstimate,
+      stateLabel: response.evidenceSummary?.stateLabel ?? '',
+      reviewLabel: response.evidenceSummary?.reviewLabel ?? '',
+      nextActionLabel: response.evidenceSummary?.nextActionLabel ?? 'Review current evidence',
     },
-    strengths: [],
-    issues: [],
-  };
-
-  if (!submission.evaluationId) {
-    return baseDetail;
-  }
-
-  if (submission.subTest === 'Writing') {
-    const result = await fetchWritingResult(submission.evaluationId);
-    return {
-      ...baseDetail,
-      strengths: result.topStrengths,
-      issues: result.topIssues,
-      criteria: result.criteria,
-    };
-  }
-
-  if (submission.subTest === 'Speaking') {
-    const [result, transcript] = await Promise.all([
-      fetchSpeakingResult(submission.evaluationId),
-      fetchTranscript(submission.evaluationId),
-    ]);
-    return {
-      ...baseDetail,
-      strengths: result.strengths,
-      issues: result.improvements,
-      transcript: transcript.transcript,
-    };
-  }
-
-  if (submission.subTest === 'Reading') {
-    const result = await fetchReadingResult(submission.contentId);
-    return {
-      ...baseDetail,
-      strengths: [`${result.score}/${result.totalQuestions} questions answered correctly.`],
-      issues: result.errorClusters.filter((cluster) => cluster.count > 0).map((cluster) => `${cluster.type}: ${cluster.count} items to review.`),
-      questionReview: result.items.map((item) => ({
-        id: item.id,
-        number: item.number,
-        text: item.text,
-        learnerAnswer: item.userAnswer,
-        correctAnswer: item.correctAnswer,
-        isCorrect: item.isCorrect,
-        explanation: item.explanation,
-      })),
-    };
-  }
-
-  const result = await fetchListeningResult(submission.contentId);
-  return {
-    ...baseDetail,
-    strengths: [`${result.score}/${result.total} listening items captured correctly.`],
-    issues: result.questions.filter((question) => !question.isCorrect).map((question) => question.distractorExplanation ?? question.explanation),
-    questionReview: result.questions.map((question) => ({
-      id: question.id,
-      number: question.number,
-      text: question.text,
-      learnerAnswer: question.userAnswer,
-      correctAnswer: question.correctAnswer,
-      isCorrect: question.isCorrect,
-      explanation: question.explanation,
-      transcriptExcerpt: question.transcriptExcerpt,
-      distractorExplanation: question.distractorExplanation,
-    })),
+    strengths: Array.isArray(response.strengths) ? response.strengths : [],
+    issues: Array.isArray(response.issues) ? response.issues : [],
+    criteria: Array.isArray(response.criteria)
+      ? response.criteria.map((c: ApiRecord) => ({
+          name: c.name,
+          score: Number(c.score ?? 0),
+          maxScore: Number(c.maxScore ?? 0),
+          grade: c.grade ?? '',
+          explanation: c.explanation ?? '',
+          anchoredComments: [],
+          omissions: [],
+          unnecessaryDetails: [],
+          revisionSuggestions: [],
+          strengths: [],
+          issues: [],
+        }))
+      : undefined,
+    revisionLineage,
+    reviewLineage,
   };
 }
 
@@ -1983,13 +2031,28 @@ export async function fetchSubmissionComparison(leftId?: string, rightId?: strin
   return {
     canCompare: Boolean(response.canCompare),
     reason: response.reason ?? undefined,
+    reasonLabel: response.reasonLabel ?? undefined,
     summary: response.summary ?? undefined,
     comparisonGroupId: response.comparisonGroupId ?? null,
+    scaledDelta: response.scaledDelta ?? null,
+    criterionDeltas: Array.isArray(response.criterionDeltas)
+      ? response.criterionDeltas.map((d: ApiRecord) => ({
+          name: d.name,
+          leftScore: Number(d.leftScore ?? 0),
+          rightScore: Number(d.rightScore ?? 0),
+          maxScore: Number(d.maxScore ?? 0),
+          direction: (d.direction ?? 'flat') as 'up' | 'down' | 'flat',
+        }))
+      : [],
     left: response.left
       ? {
           attemptId: response.left.attemptId,
           evaluationId: response.left.evaluationId ?? undefined,
-          scoreRange: scoreRangeDisplay(response.left.scoreRange ?? ''),
+          scoreRange: response.left.scoreLabel ?? scoreRangeDisplay(response.left.scoreRange ?? ''),
+          scaledScore: response.left.scaledScore ?? null,
+          passState: response.left.passState ?? undefined,
+          grade: response.left.grade ?? null,
+          submittedAt: response.left.submittedAt,
           subtest: toSubTest(response.left.subtest),
         }
       : undefined,
@@ -1997,11 +2060,49 @@ export async function fetchSubmissionComparison(leftId?: string, rightId?: strin
       ? {
           attemptId: response.right.attemptId,
           evaluationId: response.right.evaluationId ?? undefined,
-          scoreRange: scoreRangeDisplay(response.right.scoreRange ?? ''),
+          scoreRange: response.right.scoreLabel ?? scoreRangeDisplay(response.right.scoreRange ?? ''),
+          scaledScore: response.right.scaledScore ?? null,
+          passState: response.right.passState ?? undefined,
+          grade: response.right.grade ?? null,
+          submittedAt: response.right.submittedAt,
           subtest: toSubTest(response.right.subtest),
         }
       : undefined,
   };
+}
+
+/** POST /v1/submissions/{id}/hide — soft-hide from History only. */
+export async function hideSubmission(submissionId: string): Promise<void> {
+  await apiRequest(`/v1/submissions/${encodeURIComponent(submissionId)}/hide`, { method: 'POST' });
+}
+
+/** POST /v1/submissions/{id}/unhide — restore to History. */
+export async function unhideSubmission(submissionId: string): Promise<void> {
+  await apiRequest(`/v1/submissions/${encodeURIComponent(submissionId)}/unhide`, { method: 'POST' });
+}
+
+/** Authenticated URL builder for CSV export. */
+export function submissionsExportCsvUrl(query?: SubmissionListQuery): string {
+  return `/v1/submissions/export.csv${buildSubmissionQueryString(query)}`;
+}
+
+/** POST /v1/reviews/requests/batch — bulk review request (up to 5). */
+export async function createBulkReviewRequests(payload: {
+  items: Array<{
+    attemptId: string;
+    subtest: string;
+    turnaroundOption: string;
+    focusAreas?: string[];
+    learnerNotes?: string | null;
+    paymentSource: string;
+    idempotencyKey?: string;
+  }>;
+}): Promise<{ items: Array<{ attemptId: string; ok: boolean; error?: string }> }> {
+  const response = await apiRequest<{ items: Array<{ attemptId: string; ok: boolean; error?: string }> }>(
+    '/v1/reviews/requests/batch',
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+  return response;
 }
 
 export async function fetchBilling(): Promise<BillingData> {

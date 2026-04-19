@@ -8,7 +8,7 @@ import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { Input, Select } from '@/components/ui/form-controls';
+import { Input, Select, Checkbox } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import { Toast } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
@@ -165,7 +165,7 @@ export default function ContentPapersListPage() {
         description="Author and publish Listening, Reading, Writing, and Speaking papers. Uploaded files are stored content-addressed and dedup automatically."
       />
 
-      <AdminRoutePanel title="Filters">
+      <AdminRoutePanel eyebrow="Filters" title="Search papers" dense>
         <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
           <Select label="Subtest" value={filterSubtest} onChange={(e) => setFilterSubtest(e.target.value)} options={SUBTESTS} />
           <Select label="Status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} options={STATUSES} />
@@ -185,8 +185,8 @@ export default function ContentPapersListPage() {
       </AdminRoutePanel>
 
       <AsyncStateWrapper status={status}>
-        <AdminRoutePanel title={`Papers (${rows.length})`}>
-          <DataTable data={rows} columns={columns} keyExtractor={(p) => p.id} />
+        <AdminRoutePanel eyebrow="Library" title={`Papers (${rows.length})`} dense>
+          <DataTable density="compact" data={rows} columns={columns} keyExtractor={(p) => p.id} />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 
@@ -204,10 +204,13 @@ export default function ContentPapersListPage() {
             ]}
           />
           <Input label="Title" value={newTitle} onChange={(e) => setNewTitle(e.target.value)} placeholder="e.g. Listening Sample 1" />
-          <label className="flex items-center gap-2 col-span-2">
-            <input type="checkbox" checked={newApplyAll} onChange={(e) => setNewApplyAll(e.target.checked)} />
-            Applies to all professions
-          </label>
+          <div className="col-span-2">
+            <Checkbox
+              label="Applies to all professions"
+              checked={newApplyAll}
+              onChange={(e) => setNewApplyAll(e.target.checked)}
+            />
+          </div>
           {!newApplyAll && (
             <Input label="Profession ID" value={newProfession} onChange={(e) => setNewProfession(e.target.value)} />
           )}

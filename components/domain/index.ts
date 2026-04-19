@@ -21,3 +21,21 @@ export { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceMetaRow, LearnerSurf
 export { AchievementToast } from './achievement-toast';
 export { ExamTypeBadge } from './exam-type-badge';
 export { OetStatementOfResultsCard, type OetStatementOfResults, type OetStatementOfResultsProps } from './OetStatementOfResultsCard';
+export {
+  AdminRouteWorkspace,
+  AdminRouteHero,
+  AdminRouteSectionHeader,
+  AdminRouteFreshnessBadge,
+  AdminRouteSummaryCard,
+  AdminRoutePanel,
+  AdminRouteStatRow,
+  AdminRouteTabs,
+  AdminTableCellLink,
+  AdminRoutePanelFooter,
+  AdminRouteBreadcrumbs,
+  type AdminRoutePanelProps,
+  type AdminRouteStatRowItem,
+  type AdminRouteTabsProps,
+  type AdminTableCellLinkProps,
+  type AdminRoutePanelFooterProps,
+} from './admin-route-surface';

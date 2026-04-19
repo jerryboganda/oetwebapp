@@ -339,6 +339,14 @@ public class Attempt
 
     [MaxLength(16)]
     public string ExamTypeCode { get; set; } = "oet";
+
+    /// <summary>
+    /// Timestamp at which the learner chose to hide this attempt from the
+    /// Submission History UI (<see cref="SubmissionHistoryService"/>).
+    /// Null = visible; non-null = soft-hidden but never excluded from
+    /// analytics / progress / readiness / cohort computations.
+    /// </summary>
+    public DateTimeOffset? HiddenByUserAt { get; set; }
 }
 
 public class Evaluation

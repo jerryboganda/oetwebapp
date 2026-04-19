@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { FileSearch, CheckCircle2, AlertCircle, RefreshCw } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRoutePanel, AdminRoutePanelFooter, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { Toast } from '@/components/ui/alert';
@@ -29,9 +29,9 @@ interface ContentQualityItem {
   updatedAt: string;
 }
 
-const QA_BADGE: Record<string, { label: string; variant: 'default' | 'success' | 'danger' | 'outline' }> = {
+const QA_BADGE: Record<string, { label: string; variant: 'muted' | 'success' | 'danger' | 'outline' | 'warning' }> = {
   approved: { label: 'Approved', variant: 'success' },
-  needs_review: { label: 'Needs Review', variant: 'default' },
+  needs_review: { label: 'Needs Review', variant: 'warning' },
   rejected: { label: 'Rejected', variant: 'danger' },
 };
 
@@ -125,7 +125,7 @@ export default function ContentQualityPage() {
     <AdminRouteWorkspace>
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
-      <AdminRouteSectionHeader title="Content Quality Scoring" icon={<FileSearch className="w-5 h-5" />} />
+      <AdminRouteSectionHeader title="Content Quality Scoring" description="Score library items for QA readiness and review backlog." icon={<FileSearch className="w-5 h-5" />} />
 
       <div className="grid grid-cols-3 gap-4 mb-6">
         <AdminRouteSummaryCard label="Total Content" value={total} />
@@ -135,7 +135,8 @@ export default function ContentQualityPage() {
 
       <AsyncStateWrapper status={status} errorMessage="Failed to load content quality data." onRetry={loadData}>
         <AdminRoutePanel>
-          <DataTable columns={columns} data={items} keyExtractor={(row) => row.id} />
+          <DataTable density="compact" columns={columns} data={items} keyExtractor={(row) => row.id} />
+          <AdminRoutePanelFooter source="Quality scoring queue" />
         </AdminRoutePanel>
       </AsyncStateWrapper>
     </AdminRouteWorkspace>

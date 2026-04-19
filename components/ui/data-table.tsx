@@ -26,6 +26,12 @@ interface DataTableProps<T> {
   mobileCardRender?: (row: T, index: number) => ReactNode;
   emptyMessage?: string;
   className?: string;
+  /**
+   * Table row density.
+   * - `default` (44px rows): standard learner + general admin tables.
+   * - `compact` (30px rows): admin data-heavy tables (users, audit-logs, ai-usage, billing).
+   */
+  density?: 'default' | 'compact';
   'aria-label'?: string;
 }
 
@@ -37,6 +43,7 @@ export function DataTable<T>({
   mobileCardRender,
   emptyMessage = 'No data',
   className,
+  density = 'default',
   'aria-label': ariaLabel,
 }: DataTableProps<T>) {
   const reducedMotion = prefersReducedMotion(useReducedMotion());
@@ -158,7 +165,8 @@ export function DataTable<T>({
                     key={column.key}
                     scope="col"
                     className={cn(
-                      'px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-muted',
+                      'text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-muted',
+                      density === 'compact' ? 'px-4 py-2.5' : 'px-5 py-3.5',
                       column.hideOnMobile && 'hidden md:table-cell',
                       column.className,
                     )}
@@ -196,7 +204,8 @@ export function DataTable<T>({
                     <td
                       key={column.key}
                       className={cn(
-                        'px-5 py-4 align-top text-sm text-navy',
+                        'align-top text-sm text-navy',
+                        density === 'compact' ? 'px-4 py-2.5' : 'px-5 py-4',
                         column.hideOnMobile && 'hidden md:table-cell',
                         column.className,
                       )}

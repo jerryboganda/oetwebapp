@@ -295,7 +295,7 @@ export default function AIConfigPage() {
 
         <AdminRoutePanel title="Configuration Registry" description="Live model metadata, thresholds, routing rules, and activation controls all come from the admin AI config endpoints.">
           <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ status: [] })} />
-          <DataTable columns={columns} data={configs} keyExtractor={(config) => config.id} />
+          <DataTable density="compact" columns={columns} data={configs} keyExtractor={(config) => config.id} />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 

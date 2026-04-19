@@ -5,9 +5,9 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { triggerImpactHaptic } from '@/lib/mobile/haptics';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { fetchXP, fetchStreak } from '@/lib/api';
-import { motion, useReducedMotion } from 'motion/react';
+import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { getSharedLayoutId, getSurfaceMotion, getSurfaceTransition, prefersReducedMotion } from '@/lib/motion';
 import type { UserRole } from '@/lib/types/auth';
 import {
@@ -35,6 +35,7 @@ import {
   Zap,
   MessageSquare,
   AlertTriangle,
+  ChevronDown,
 } from 'lucide-react';
 
 export interface NavItem {
@@ -43,6 +44,13 @@ export interface NavItem {
   icon: React.ReactNode;
   matchPrefix?: string;
   exact?: boolean;
+}
+
+export interface SidebarSection {
+  label: string;
+  items: NavItem[];
+  /** Default expand state; user preference takes precedence after first change. */
+  defaultOpen?: boolean;
 }
 
 export interface ShellUserSummary {
@@ -142,15 +150,113 @@ function NavSection({
   );
 }
 
+function CollapsibleNavSection({
+  label,
+  items,
+  pathname,
+  reducedMotion,
+  open,
+  onToggle,
+}: {
+  label: string;
+  items: NavItem[];
+  pathname: string | null;
+  reducedMotion: boolean;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  const sectionId = `sidebar-section-${label.toLowerCase().replace(/\s+/g, '-')}`;
+  const hasActive = items.some((item) => isActive(pathname, item));
+  return (
+    <div className="mb-3">
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls={sectionId}
+        className={cn(
+          'group flex w-full items-center justify-between rounded-2xl px-2 py-1.5 text-xs font-semibold uppercase tracking-[0.22em] transition-colors',
+          hasActive ? 'text-navy' : 'text-muted hover:text-navy',
+        )}
+      >
+        <span className="flex items-center gap-2">
+          {label}
+          {hasActive && !open ? (
+            <span className="inline-block h-1.5 w-1.5 rounded-full bg-primary" aria-hidden />
+          ) : null}
+        </span>
+        <ChevronDown
+          className={cn(
+            'h-3.5 w-3.5 transition-transform duration-200',
+            open ? 'rotate-0' : '-rotate-90',
+          )}
+          aria-hidden
+        />
+      </button>
+      <AnimatePresence initial={false}>
+        {open && (
+          <motion.ul
+            id={sectionId}
+            className="flex flex-col gap-1 overflow-hidden"
+            initial={reducedMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
+            animate={reducedMotion ? { opacity: 1 } : { opacity: 1, height: 'auto' }}
+            exit={reducedMotion ? { opacity: 0 } : { opacity: 0, height: 0 }}
+            transition={reducedMotion ? { duration: 0 } : getSurfaceTransition('item', false)}
+          >
+            <div className="pt-1">
+              {items.map((item) => {
+                const active = isActive(pathname, item);
+                return (
+                  <li key={item.href}>
+                    <Link
+                      href={item.href}
+                      onClick={() => {
+                        void triggerImpactHaptic('LIGHT');
+                      }}
+                      className={cn(
+                        'pressable relative mt-1 flex items-center gap-3 overflow-hidden rounded-2xl px-4 py-2.5 text-sm font-semibold',
+                        'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2',
+                        active ? 'text-primary-dark dark:text-primary' : 'text-muted hover:bg-white/70 hover:text-navy dark:hover:bg-white/5',
+                      )}
+                      aria-current={active ? 'page' : undefined}
+                    >
+                      {!reducedMotion && active && (
+                        <motion.span
+                          aria-hidden="true"
+                          className="absolute inset-0 rounded-2xl bg-primary/12 shadow-[0_12px_28px_rgba(124,58,237,0.12)] ring-1 ring-primary/15"
+                          layoutId={getSharedLayoutId('sidebar-nav-active', 'pill')}
+                          transition={getSurfaceTransition('item', reducedMotion)}
+                        />
+                      )}
+                      <span className={cn('relative z-10 flex items-center justify-center', active ? 'text-primary-dark dark:text-primary' : 'text-muted')}>
+                        {item.icon}
+                      </span>
+                      <span className="relative z-10">{item.label}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </div>
+          </motion.ul>
+        )}
+      </AnimatePresence>
+    </div>
+  );
+}
+
 /* ─── Desktop Sidebar ─── */
+const SIDEBAR_SECTIONS_STORAGE_KEY = 'oet.sidebar.collapsed-sections';
+
 export function Sidebar({
   className,
   items = mainNavItems,
+  sections,
   userSummary,
   workspaceRole,
 }: {
   className?: string;
   items?: NavItem[];
+  sections?: SidebarSection[];
   userSummary?: ShellUserSummary;
   workspaceRole?: UserRole;
 }) {
@@ -174,6 +280,36 @@ export function Sidebar({
   const [level, setLevel] = useState<number | null>(null);
   const visibleStreak = isLearnerWorkspace ? streak : null;
   const visibleLevel = isLearnerWorkspace ? level : null;
+
+  // Section collapse state (used only when `sections` is provided).
+  const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const raw = window.localStorage.getItem(SIDEBAR_SECTIONS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (parsed && typeof parsed === 'object') {
+          // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrating from localStorage on mount
+          setCollapsed(parsed as Record<string, boolean>);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const toggleSection = useCallback((label: string) => {
+    setCollapsed((prev) => {
+      const next = { ...prev, [label]: !prev[label] };
+      try {
+        window.localStorage.setItem(SIDEBAR_SECTIONS_STORAGE_KEY, JSON.stringify(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (!isLearnerWorkspace) {
@@ -216,12 +352,33 @@ export function Sidebar({
       </div>
 
       <nav className="flex-1 overflow-y-auto px-4 py-5" aria-label="Main navigation">
-        <NavSection label="Practice" items={items} pathname={pathname} reducedMotion={reducedMotion} />
-        {isLearnerWorkspace ? (
+        {sections && sections.length > 0 ? (
+          sections.map((section) => {
+            const isOpen = collapsed[section.label] !== undefined
+              ? !collapsed[section.label]
+              : section.defaultOpen ?? true;
+            return (
+              <CollapsibleNavSection
+                key={section.label}
+                label={section.label}
+                items={section.items}
+                pathname={pathname}
+                reducedMotion={reducedMotion}
+                open={isOpen}
+                onToggle={() => toggleSection(section.label)}
+              />
+            );
+          })
+        ) : (
           <>
-            <NavSection label="Learn" items={learnNavItems} pathname={pathname} reducedMotion={reducedMotion} />
+            <NavSection label="Practice" items={items} pathname={pathname} reducedMotion={reducedMotion} />
+            {isLearnerWorkspace ? (
+              <>
+                <NavSection label="Learn" items={learnNavItems} pathname={pathname} reducedMotion={reducedMotion} />
+              </>
+            ) : null}
           </>
-        ) : null}
+        )}
       </nav>
 
       <div className="mt-auto border-t border-border/60 bg-white/35 p-4 dark:bg-white/5">

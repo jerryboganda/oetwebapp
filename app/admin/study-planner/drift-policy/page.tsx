@@ -5,7 +5,8 @@ import { AlertTriangle } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/form-controls';
+import { Input, Textarea } from '@/components/ui/form-controls';
+import { Switch } from '@/components/ui/switch';
 import { Toast } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { getDriftPolicy, updateDriftPolicy, type DriftPolicyDto } from '@/lib/study-planner-admin-api';
@@ -91,14 +92,18 @@ export default function StudyPlannerDriftPolicyPage() {
             </AdminRoutePanel>
 
             <AdminRoutePanel eyebrow="Auto-regeneration" title="When should the planner rebuild without asking?">
-              <label className="flex items-center gap-2 text-sm mb-2">
-                <input type="checkbox" checked={autoMod} onChange={(e) => setAutoMod(e.target.checked)} />
-                Auto-regenerate on moderate drift
-              </label>
-              <label className="flex items-center gap-2 text-sm">
-                <input type="checkbox" checked={autoSev} onChange={(e) => setAutoSev(e.target.checked)} />
-                Auto-regenerate on severe drift
-              </label>
+              <Switch
+                checked={autoMod}
+                onCheckedChange={setAutoMod}
+                label="Auto-regenerate on moderate drift"
+                description="Silently rebuild the plan when drift reaches the moderate threshold."
+              />
+              <Switch
+                checked={autoSev}
+                onCheckedChange={setAutoSev}
+                label="Auto-regenerate on severe drift"
+                description="Silently rebuild the plan when drift reaches the severe threshold."
+              />
             </AdminRoutePanel>
 
             <AdminRoutePanel eyebrow="Copy" title="Messages shown on the learner drift page">
@@ -124,9 +129,11 @@ export default function StudyPlannerDriftPolicyPage() {
 
 function CopyField({ label, value, onChange }: { label: string; value: string; onChange: (v: string) => void }) {
   return (
-    <div>
-      <label className="text-sm font-semibold block mb-1">{label}</label>
-      <textarea className="w-full min-h-[60px] rounded-md border border-gray-300 p-2 text-sm" value={value} onChange={(e) => onChange(e.target.value)} />
-    </div>
+    <Textarea
+      label={label}
+      rows={2}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+    />
   );
 }

@@ -303,7 +303,7 @@ export default function AuditLogsPage() {
             </div>
           </div>
           <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => { setFilters({ action: [], actor: [] }); setSearchQuery(''); }} />
-          <DataTable columns={columns} data={rows} keyExtractor={(log) => log.id} onRowClick={handleRowClick} mobileCardRender={mobileCardRender} />
+          <DataTable density="compact" columns={columns} data={rows} keyExtractor={(log) => log.id} onRowClick={handleRowClick} mobileCardRender={mobileCardRender} />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 

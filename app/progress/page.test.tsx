@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 
 const { mockFetchProgressV2, mockTrack, mockPush } = vi.hoisted(() => ({
   mockFetchProgressV2: vi.fn(),
@@ -13,17 +13,17 @@ vi.mock('next/navigation', () => ({
 }));
 
 vi.mock('recharts', () => ({
-  LineChart: ({ children }: { children?: React.ReactNode }) => <div data-testid="line-chart">{children}</div>,
+  LineChart: ({ children }: { children?: React.ReactNode }) => <svg data-testid="line-chart">{children}</svg>,
   Line: () => null,
-  AreaChart: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  AreaChart: ({ children }: { children?: React.ReactNode }) => <svg>{children}</svg>,
   Area: () => null,
-  BarChart: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  BarChart: ({ children }: { children?: React.ReactNode }) => <svg>{children}</svg>,
   Bar: () => null,
   XAxis: () => null,
   YAxis: () => null,
   CartesianGrid: () => null,
   Tooltip: () => null,
-  ResponsiveContainer: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  ResponsiveContainer: ({ children }: { children?: React.ReactNode }) => <svg>{children}</svg>,
   Legend: () => null,
   ReferenceLine: () => null,
 }));
@@ -163,6 +163,7 @@ describe('Progress dashboard page (v2)', () => {
     await screen.findByText('See whether recent effort is turning into better evidence');
     mockFetchProgressV2.mockClear();
     fireEvent.click(screen.getByRole('radio', { name: '14d' }));
+    await waitFor(() => expect(mockFetchProgressV2).toHaveBeenCalled());
     expect(mockTrack).toHaveBeenCalledWith('progress_range_changed', { range: '14d' });
   });
 

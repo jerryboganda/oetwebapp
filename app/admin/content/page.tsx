@@ -3,7 +3,7 @@
 import { useDeferredValue, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ChevronLeft, ChevronRight, FileText, History, Plus, Search } from 'lucide-react';
-import { AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace, AdminTableCellLink } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -112,9 +112,9 @@ export default function AdminContentLibraryPage() {
       key: 'title',
       header: 'Title',
       render: (row) => (
-        <button className="text-left font-medium text-primary hover:underline" onClick={() => router.push(`/admin/content/${row.id}`)}>
+        <AdminTableCellLink href={`/admin/content/${row.id}`}>
           {row.title}
-        </button>
+        </AdminTableCellLink>
       ),
     },
     { key: 'type', header: 'Type', render: (row) => <span className="capitalize">{row.type.replace('_', ' ')}</span> },
@@ -133,13 +133,10 @@ export default function AdminContentLibraryPage() {
       key: 'revisions',
       header: 'Revisions',
       render: (row) => (
-        <button
-          className="flex items-center gap-1 text-xs text-muted hover:text-navy"
-          onClick={() => router.push(`/admin/content/${row.id}/revisions`)}
-        >
+        <AdminTableCellLink muted href={`/admin/content/${row.id}/revisions`}>
           <History className="h-3.5 w-3.5" />
           {row.revisionCount}
-        </button>
+        </AdminTableCellLink>
       ),
     },
     { key: 'updatedAt', header: 'Updated', render: (row) => <span className="text-xs text-muted">{new Date(row.updatedAt).toLocaleString()}</span> },
@@ -150,9 +147,9 @@ export default function AdminContentLibraryPage() {
       <div className="flex items-start justify-between gap-3">
         <div className="min-w-0">
           <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{row.id}</p>
-          <button className="truncate text-left font-semibold text-primary hover:underline" onClick={() => router.push(`/admin/content/${row.id}`)}>
+          <AdminTableCellLink href={`/admin/content/${row.id}`} className="truncate font-semibold">
             {row.title}
-          </button>
+          </AdminTableCellLink>
         </div>
         <Badge variant={row.status === 'published' ? 'success' : row.status === 'archived' ? 'muted' : 'warning'}>
           {row.status}
@@ -280,7 +277,7 @@ export default function AdminContentLibraryPage() {
             />
           ) : (
             <div className="space-y-4">
-              <DataTable columns={columns} data={rows} keyExtractor={(row) => row.id} mobileCardRender={mobileCardRender} />
+              <DataTable density="compact" columns={columns} data={rows} keyExtractor={(row) => row.id} mobileCardRender={mobileCardRender} />
               <div className="flex flex-col gap-3 border-t border-border pt-4 text-sm text-muted sm:flex-row sm:items-center sm:justify-between">
                 <p>
                   Page {page} of {Math.max(1, Math.ceil(total / PAGE_SIZE))}

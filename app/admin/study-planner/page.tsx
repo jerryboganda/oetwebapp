@@ -98,20 +98,20 @@ export default function StudyPlannerAdminHub() {
             const Icon = card.icon;
             return (
               <Link key={card.href} href={card.href} className="group">
-                <div className="h-full p-5 rounded-xl border border-gray-200 bg-surface hover:border-primary hover:shadow-md transition-all">
+                <div className="h-full rounded-2xl border border-border bg-surface p-5 shadow-sm transition-all hover:border-primary hover:shadow-clinical">
                   <div className="flex items-start justify-between">
                     <div className="flex items-center gap-3">
-                      <div className="p-2.5 rounded-lg bg-primary/10 text-primary">
-                        <Icon className="w-5 h-5" />
+                      <div className="rounded-xl bg-primary/10 p-2.5 text-primary">
+                        <Icon className="h-5 w-5" />
                       </div>
                       <div>
                         <h3 className="font-bold text-navy group-hover:text-primary">{card.title}</h3>
                         {card.badge && <Badge variant="info" className="mt-1">{card.badge}</Badge>}
                       </div>
                     </div>
-                    <Sparkles className="w-4 h-4 text-muted opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <Sparkles className="h-4 w-4 text-muted opacity-0 transition-opacity group-hover:opacity-100" />
                   </div>
-                  <p className="text-sm text-muted mt-3 leading-relaxed">{card.description}</p>
+                  <p className="mt-3 text-sm leading-relaxed text-muted">{card.description}</p>
                 </div>
               </Link>
             );
@@ -124,9 +124,9 @@ export default function StudyPlannerAdminHub() {
 
 function Stat({ label, value, tone }: { label: string; value: number | string; tone?: 'default' | 'warning' }) {
   return (
-    <div className={`p-3 rounded-lg border ${tone === 'warning' ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-surface'}`}>
+    <div className={`rounded-2xl border p-3 ${tone === 'warning' ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30' : 'border-border bg-background-light'}`}>
       <p className="text-xs font-semibold uppercase tracking-wider text-muted">{label}</p>
-      <p className={`text-2xl font-bold mt-1 ${tone === 'warning' ? 'text-amber-700' : 'text-navy'}`}>{value}</p>
+      <p className={`mt-1 text-2xl font-bold ${tone === 'warning' ? 'text-amber-700 dark:text-amber-400' : 'text-navy'}`}>{value}</p>
     </div>
   );
 }

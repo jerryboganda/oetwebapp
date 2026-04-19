@@ -2,7 +2,7 @@
 
 import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from 'react';
 import { CreditCard, DollarSign, Package, Receipt, Search, Ticket, Users } from 'lucide-react';
-import { AdminRouteSummaryCard, AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRouteSummaryCard, AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace, AdminRoutePanelFooter } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -1189,7 +1189,8 @@ export default function BillingPage() {
           actions={<Button variant="outline" size="sm" onClick={() => openPlanEditor()}>Create Plan</Button>}
         >
           <FilterBar groups={planFilterGroups} selected={planFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setPlanFilters, groupId, optionId)} onClear={() => setPlanFilters({ status: [] })} />
-          <DataTable columns={planColumns} data={plans} keyExtractor={(plan) => plan.id} mobileCardRender={planMobileCardRender} />
+          <DataTable density="compact" columns={planColumns} data={plans} keyExtractor={(plan) => plan.id} mobileCardRender={planMobileCardRender} />
+          <AdminRoutePanelFooter source="Billing plans" />
         </AdminRoutePanel>
 
         <AdminRoutePanel
@@ -1198,7 +1199,8 @@ export default function BillingPage() {
           actions={<Button variant="outline" size="sm" onClick={() => openAddOnEditor()}>Create Add-on</Button>}
         >
           <FilterBar groups={addOnFilterGroups} selected={addOnFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setAddOnFilters, groupId, optionId)} onClear={() => setAddOnFilters({ status: [] })} />
-          <DataTable columns={addOnColumns} data={addOns} keyExtractor={(addOn) => addOn.id} mobileCardRender={addOnMobileCardRender} />
+          <DataTable density="compact" columns={addOnColumns} data={addOns} keyExtractor={(addOn) => addOn.id} mobileCardRender={addOnMobileCardRender} />
+          <AdminRoutePanelFooter source="Add-on catalogue" />
         </AdminRoutePanel>
 
         <AdminRoutePanel
@@ -1207,7 +1209,8 @@ export default function BillingPage() {
           actions={<Button variant="outline" size="sm" onClick={() => openCouponEditor()}>Create Coupon</Button>}
         >
           <FilterBar groups={couponFilterGroups} selected={couponFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setCouponFilters, groupId, optionId)} onClear={() => setCouponFilters({ status: [] })} />
-          <DataTable columns={couponColumns} data={coupons} keyExtractor={(coupon) => coupon.id} mobileCardRender={couponMobileCardRender} />
+          <DataTable density="compact" columns={couponColumns} data={coupons} keyExtractor={(coupon) => coupon.id} mobileCardRender={couponMobileCardRender} />
+          <AdminRoutePanelFooter source="Coupon catalogue" />
         </AdminRoutePanel>
 
         <AdminRoutePanel
@@ -1221,7 +1224,8 @@ export default function BillingPage() {
             </div>
           </div>
           <FilterBar groups={subscriptionFilterGroups} selected={subscriptionFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setSubscriptionFilters, groupId, optionId)} onClear={() => setSubscriptionFilters({ status: [] })} />
-          <DataTable columns={subscriptionColumns} data={subscriptions} keyExtractor={(subscription) => subscription.id} mobileCardRender={subscriptionMobileCardRender} />
+          <DataTable density="compact" columns={subscriptionColumns} data={subscriptions} keyExtractor={(subscription) => subscription.id} mobileCardRender={subscriptionMobileCardRender} />
+          <AdminRoutePanelFooter source="Subscription ledger" />
         </AdminRoutePanel>
 
         <AdminRoutePanel
@@ -1235,7 +1239,8 @@ export default function BillingPage() {
             </div>
           </div>
           <FilterBar groups={redemptionFilterGroups} selected={redemptionFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setRedemptionFilters, groupId, optionId)} onClear={() => setRedemptionFilters({ status: [] })} />
-          <DataTable columns={redemptionColumns} data={redemptions} keyExtractor={(redemption) => redemption.id} mobileCardRender={redemptionMobileCardRender} />
+          <DataTable density="compact" columns={redemptionColumns} data={redemptions} keyExtractor={(redemption) => redemption.id} mobileCardRender={redemptionMobileCardRender} />
+          <AdminRoutePanelFooter source="Coupon redemptions" />
         </AdminRoutePanel>
 
         <AdminRoutePanel title="Invoices" description="Search and filter real invoice records by status and learner reference.">
@@ -1246,7 +1251,8 @@ export default function BillingPage() {
             </div>
           </div>
           <FilterBar groups={invoiceFilterGroups} selected={invoiceFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setInvoiceFilters, groupId, optionId)} onClear={() => { setInvoiceFilters({ status: [] }); setInvoiceSearch(''); }} />
-          <DataTable columns={invoiceColumns} data={invoices} keyExtractor={(invoice) => invoice.id} mobileCardRender={invoiceMobileCardRender} />
+          <DataTable density="compact" columns={invoiceColumns} data={invoices} keyExtractor={(invoice) => invoice.id} mobileCardRender={invoiceMobileCardRender} />
+          <AdminRoutePanelFooter source="Invoice ledger" />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 

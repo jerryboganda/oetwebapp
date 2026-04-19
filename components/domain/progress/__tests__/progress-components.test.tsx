@@ -5,18 +5,18 @@ import { render, screen, fireEvent } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 
 vi.mock('recharts', () => ({
-  LineChart: ({ children }: { children?: React.ReactNode }) => <div data-testid="line-chart">{children}</div>,
-  ComposedChart: ({ children }: { children?: React.ReactNode }) => <div data-testid="composed-chart">{children}</div>,
+  LineChart: ({ children }: { children?: React.ReactNode }) => <svg data-testid="line-chart">{children}</svg>,
+  ComposedChart: ({ children }: { children?: React.ReactNode }) => <svg data-testid="composed-chart">{children}</svg>,
   Line: () => null,
   Area: () => null,
-  AreaChart: ({ children }: { children?: React.ReactNode }) => <div data-testid="area-chart">{children}</div>,
+  AreaChart: ({ children }: { children?: React.ReactNode }) => <svg data-testid="area-chart">{children}</svg>,
   Bar: () => null,
-  BarChart: ({ children }: { children?: React.ReactNode }) => <div data-testid="bar-chart">{children}</div>,
+  BarChart: ({ children }: { children?: React.ReactNode }) => <svg data-testid="bar-chart">{children}</svg>,
   XAxis: () => null,
   YAxis: () => null,
   CartesianGrid: () => null,
   Tooltip: () => null,
-  ResponsiveContainer: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
+  ResponsiveContainer: ({ children }: { children?: React.ReactNode }) => <svg>{children}</svg>,
   Legend: () => null,
   ReferenceLine: ({ label }: { label?: { value?: string } }) => <span data-testid="ref-line">{label?.value ?? ''}</span>,
 }));

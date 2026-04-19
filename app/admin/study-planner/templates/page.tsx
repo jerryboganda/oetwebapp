@@ -7,7 +7,7 @@ import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { Input, Select } from '@/components/ui/form-controls';
+import { Input, Select, Textarea } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import { Toast } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
@@ -157,7 +157,7 @@ export default function StudyPlannerPlanTemplatesPage() {
     }
   };
 
-  const onArchive = async (id: string) => {
+  const onArchive = useCallback(async (id: string) => {
     try {
       await archivePlanTemplate(id);
       setToast({ variant: 'success', message: 'Archived.' });
@@ -165,7 +165,7 @@ export default function StudyPlannerPlanTemplatesPage() {
     } catch (e) {
       setToast({ variant: 'error', message: (e as Error).message });
     }
-  };
+  }, [load]);
 
   const columns: Column<PlanTemplateDto>[] = useMemo(() => [
     { key: 'name', header: 'Name', render: (r) => <span className={r.isArchived ? 'line-through text-muted' : 'font-medium'}>{r.name}</span> },
@@ -183,7 +183,7 @@ export default function StudyPlannerPlanTemplatesPage() {
         </div>
       ),
     },
-  ], []);
+  ], [onArchive]);
 
   if (!isAuthenticated || role !== 'admin') {
     return <AdminRouteWorkspace><p className="text-sm text-muted">Admin access required.</p></AdminRouteWorkspace>;
@@ -215,8 +215,12 @@ export default function StudyPlannerPlanTemplatesPage() {
           <Input label="Duration (weeks)" type="number" value={fWeeks} onChange={(e) => setFWeeks(e.target.value)} />
           <Input label="Default hours/week" type="number" value={fHours} onChange={(e) => setFHours(e.target.value)} />
           <div className="col-span-2">
-            <label className="text-sm font-semibold block mb-1">Description</label>
-            <textarea className="w-full min-h-[80px] rounded-md border border-gray-300 p-2 text-sm" value={fDescription} onChange={(e) => setFDescription(e.target.value)} />
+            <Textarea
+              label="Description"
+              rows={2}
+              value={fDescription}
+              onChange={(e) => setFDescription(e.target.value)}
+            />
           </div>
         </div>
         <div className="flex gap-3 mt-4 justify-end">
@@ -230,7 +234,7 @@ export default function StudyPlannerPlanTemplatesPage() {
           <div className="space-y-3">
             {itemDrafts.length === 0 && <p className="text-sm text-muted">No items yet.</p>}
             {itemDrafts.map((d, idx) => (
-              <div key={d.key} className="p-3 border border-gray-200 rounded-lg grid grid-cols-6 gap-2 items-end">
+              <div key={d.key} className="grid grid-cols-6 items-end gap-2 rounded-2xl border border-border bg-background-light p-3">
                 <div className="col-span-2">
                   <Select
                     label={`#${idx + 1} Task`}

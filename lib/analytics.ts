@@ -202,6 +202,17 @@ const TRACKED_EVENTS = [
   'escalation_submitted',
   // Achievements extended
   'streak_freeze_used',
+  // Submission history events
+  'submissions_filter_applied',
+  'submissions_sort_changed',
+  'submissions_compare_started',
+  'submissions_compare_selected',
+  'submissions_review_requested_from_history',
+  'submissions_hidden',
+  'submissions_unhidden',
+  'submissions_exported',
+  'submissions_bulk_review_requested',
+  'submissions_sparkline_tile_clicked',
   // Generic page view
   'page_viewed',
 ] as const;

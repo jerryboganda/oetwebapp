@@ -56,7 +56,9 @@ export default function ProgressPolicyAdminPage() {
     }
   }, []);
 
-  useEffect(() => { queueMicrotask(() => { void load(); }); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const onSave = async () => {
     setSaving(true);

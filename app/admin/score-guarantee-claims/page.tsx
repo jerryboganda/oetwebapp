@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Shield, CheckCircle2, XCircle } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRoutePanel, AdminRoutePanelFooter, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
@@ -20,9 +20,9 @@ import type { AdminScoreGuaranteeClaim } from '@/lib/types/admin';
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
-const statusBadge: Record<string, { label: string; variant: 'default' | 'success' | 'danger' | 'outline' }> = {
-  active: { label: 'Active', variant: 'default' },
-  claim_submitted: { label: 'Claim Submitted', variant: 'default' },
+const statusBadge: Record<string, { label: string; variant: 'muted' | 'success' | 'danger' | 'outline' | 'warning' | 'info' }> = {
+  active: { label: 'Active', variant: 'info' },
+  claim_submitted: { label: 'Claim Submitted', variant: 'warning' },
   claim_approved: { label: 'Approved', variant: 'success' },
   claim_rejected: { label: 'Rejected', variant: 'danger' },
   expired: { label: 'Expired', variant: 'outline' },
@@ -101,7 +101,7 @@ export default function ScoreGuaranteeClaimsPage() {
     { key: 'actualScore', header: 'Actual', render: (r) => <span className="text-sm">{r.actualScore ?? '—'}</span> },
     {
       key: 'status', header: 'Status', render: (r) => (
-        <Badge variant={statusBadge[r.status]?.variant ?? 'default'}>{statusBadge[r.status]?.label ?? r.status}</Badge>
+        <Badge variant={statusBadge[r.status]?.variant ?? 'muted'}>{statusBadge[r.status]?.label ?? r.status}</Badge>
       ),
     },
     { key: 'activatedAt', header: 'Activated', render: (r) => <span className="text-sm text-muted">{new Date(r.activatedAt).toLocaleDateString()}</span> },
@@ -142,10 +142,12 @@ export default function ScoreGuaranteeClaimsPage() {
       >
         <AdminRoutePanel>
           <DataTable
+            density="compact"
             data={claims}
             columns={columns}
             keyExtractor={(r) => r.id}
           />
+          <AdminRoutePanelFooter source="Score guarantee claims" />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 
@@ -165,8 +167,7 @@ export default function ScoreGuaranteeClaimsPage() {
               </div>
             )}
             <div>
-              <label className="block text-sm font-medium text-navy dark:text-navy mb-1">Review Note (optional)</label>
-              <Input value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} placeholder="Add a note…" />
+              <Input label="Review Note (optional)" value={reviewNote} onChange={(e) => setReviewNote(e.target.value)} placeholder="Add a note…" />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <Button variant="outline" onClick={() => handleReview('reject')} disabled={isMutating}>

@@ -441,6 +441,7 @@ builder.Services.AddScoped<LearnerService>();
 builder.Services.AddScoped<ExpertService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<SponsorService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Submissions.SubmissionHistoryService>();
 builder.Services.AddScoped<ContentHierarchyService>();
 builder.Services.AddScoped<ContentDeduplicationService>();
 builder.Services.AddScoped<ContentAccessService>();

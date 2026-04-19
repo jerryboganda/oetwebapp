@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Scale, UserRoundCheck, CheckCircle2 } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace, AdminRoutePanelFooter } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -20,9 +20,9 @@ import type { AdminReviewEscalation, AdminUserRow } from '@/lib/types/admin';
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
-const statusBadge: Record<string, { label: string; variant: 'default' | 'success' | 'danger' }> = {
-  pending: { label: 'Pending', variant: 'default' },
-  assigned: { label: 'Assigned', variant: 'default' },
+const statusBadge: Record<string, { label: string; variant: 'warning' | 'success' | 'danger' | 'info' }> = {
+  pending: { label: 'Pending', variant: 'warning' },
+  assigned: { label: 'Assigned', variant: 'info' },
   resolved: { label: 'Resolved', variant: 'success' },
 };
 
@@ -128,7 +128,7 @@ export default function EscalationsPage() {
       key: 'divergence',
       header: 'Divergence',
       render: (e) => (
-        <span className={`font-mono font-semibold ${e.divergence >= 50 ? 'text-danger' : 'text-amber-600'}`}>
+        <span className={`font-mono font-semibold ${e.divergence >= 50 ? 'text-danger' : 'text-amber-600 dark:text-amber-400'}`}>
           {e.divergence}
         </span>
       ),
@@ -189,6 +189,7 @@ export default function EscalationsPage() {
       >
         <AdminRoutePanel>
           <DataTable
+            density="compact"
             columns={columns}
             data={escalations}
             keyExtractor={(e) => e.id}
@@ -196,13 +197,14 @@ export default function EscalationsPage() {
               <div className="space-y-1">
                 <div className="flex gap-2">
                   <Badge variant="muted">{e.subtestCode}</Badge>
-                  <Badge variant={statusBadge[e.status]?.variant ?? 'default'}>{statusBadge[e.status]?.label ?? e.status}</Badge>
+                  <Badge variant={statusBadge[e.status]?.variant ?? 'warning'}>{statusBadge[e.status]?.label ?? e.status}</Badge>
                 </div>
                 <p className="text-xs">AI: {e.aiScore} | Human: {e.humanScore} | Div: {e.divergence}</p>
                 {e.finalScore != null && <p className="text-xs font-semibold">Final: {e.finalScore}</p>}
               </div>
             )}
           />
+          <AdminRoutePanelFooter source="Review escalation queue" />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 

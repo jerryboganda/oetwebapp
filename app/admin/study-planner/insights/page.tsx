@@ -54,9 +54,9 @@ export default function StudyPlannerInsightsPage() {
 
 function Metric({ label, value, tone }: { label: string; value: number | string; tone?: 'default' | 'warning' }) {
   return (
-    <div className={`p-4 rounded-lg border ${tone === 'warning' ? 'border-amber-200 bg-amber-50' : 'border-gray-200 bg-surface'}`}>
+    <div className={`rounded-2xl border p-4 ${tone === 'warning' ? 'border-amber-200 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/30' : 'border-border bg-background-light'}`}>
       <p className="text-xs font-semibold uppercase tracking-wider text-muted">{label}</p>
-      <p className={`text-3xl font-bold mt-1 ${tone === 'warning' ? 'text-amber-700' : 'text-navy'}`}>{value}</p>
+      <p className={`mt-1 text-3xl font-bold ${tone === 'warning' ? 'text-amber-700 dark:text-amber-400' : 'text-navy'}`}>{value}</p>
     </div>
   );
 }

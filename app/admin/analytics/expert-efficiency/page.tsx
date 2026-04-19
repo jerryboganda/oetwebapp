@@ -1,109 +1,236 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { UserCheck, Clock, BarChart3, Zap, Download } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { UserCheck, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
+import { SegmentedControl } from '@/components/ui/segmented-control';
+import { DataTable, type Column } from '@/components/ui/data-table';
+import { Badge, type BadgeProps } from '@/components/ui/badge';
+import { EmptyState } from '@/components/ui/empty-error';
 import { exportToCsv, formatDateForExport } from '@/lib/csv-export';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
+import {
+  AdminRouteHero,
+  AdminRoutePanel,
+  AdminRoutePanelFooter,
+  AdminRouteSummaryCard,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
+import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { analytics } from '@/lib/analytics';
 
-interface ExpertReport { expertId: string; expertName: string; period: number; assignmentsReceived: number; reviewsCompleted: number; averageReviewTimeMinutes: number | null; reviewsPerDay: number; aiAlignmentScore: number | null; efficiency: string }
-interface EfficiencyData { period: number; experts: ExpertReport[]; summary: { totalExperts: number; activeExperts: number; totalReviewsCompleted: number; averageReviewsPerExpertPerDay: number }; generatedAt: string }
+interface ExpertReport {
+  expertId: string;
+  expertName: string;
+  period: number;
+  assignmentsReceived: number;
+  reviewsCompleted: number;
+  averageReviewTimeMinutes: number | null;
+  reviewsPerDay: number;
+  aiAlignmentScore: number | null;
+  efficiency: string;
+}
+interface EfficiencyData {
+  period: number;
+  experts: ExpertReport[];
+  summary: {
+    totalExperts: number;
+    activeExperts: number;
+    totalReviewsCompleted: number;
+    averageReviewsPerExpertPerDay: number;
+  };
+  generatedAt: string;
+}
+
+type DaysOption = 7 | 14 | 30 | 60 | 90;
+type Status = 'loading' | 'error' | 'empty' | 'success';
 
 async function apiRequest<T = unknown>(path: string, init?: RequestInit): Promise<T> {
   const { ensureFreshAccessToken } = await import('@/lib/auth-client');
   const { env } = await import('@/lib/env');
   const token = await ensureFreshAccessToken();
-  const res = await fetch(`${env.apiBaseUrl}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...init?.headers } });
+  const res = await fetch(`${env.apiBaseUrl}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...init?.headers,
+    },
+  });
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();
 }
 
-const EFF_BADGE: Record<string, { label: string; color: string }> = { high: { label: 'High', color: 'bg-emerald-100 text-emerald-700' }, medium: { label: 'Medium', color: 'bg-amber-100 text-amber-700' }, low: { label: 'Low', color: 'bg-danger/15 text-danger' }, 'no-data': { label: 'No Data', color: 'bg-muted text-muted' } };
+const EFFICIENCY_VARIANT: Record<string, { label: string; variant: BadgeProps['variant'] }> = {
+  high: { label: 'High', variant: 'success' },
+  medium: { label: 'Medium', variant: 'warning' },
+  low: { label: 'Low', variant: 'danger' },
+  'no-data': { label: 'No data', variant: 'muted' },
+};
 
 export default function ExpertEfficiencyPage() {
   const [data, setData] = useState<EfficiencyData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [days, setDays] = useState(30);
+  const [status, setStatus] = useState<Status>('loading');
+  const [days, setDays] = useState<DaysOption>(30);
 
-  const load = (d: number) => {
-    setLoading(true); setDays(d);
-    apiRequest<EfficiencyData>(`/v1/admin/analytics/expert-efficiency?days=${d}`).then(setData).catch(() => {}).finally(() => setLoading(false));
+  const load = (d: DaysOption) => {
+    setStatus('loading');
+    setDays(d);
+    apiRequest<EfficiencyData>(`/v1/admin/analytics/expert-efficiency?days=${d}`)
+      .then((res) => {
+        setData(res);
+        setStatus(res.experts.length === 0 ? 'empty' : 'success');
+      })
+      .catch(() => setStatus('error'));
   };
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch on mount: setState from API response is the correct pattern
-  useEffect(() => { analytics.track('admin_expert_efficiency_viewed'); load(30); }, []);
+  useEffect(() => {
+    analytics.track('admin_expert_efficiency_viewed');
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch on mount
+    load(30);
+  }, []);
+
+  const columns = useMemo<Column<ExpertReport>[]>(
+    () => [
+      {
+        key: 'expert',
+        header: 'Expert',
+        render: (row) => (
+          <div className="flex items-center gap-2 min-w-0">
+            <UserCheck className="h-4 w-4 shrink-0 text-primary" aria-hidden />
+            <span className="truncate font-semibold text-navy">{row.expertName}</span>
+          </div>
+        ),
+      },
+      {
+        key: 'efficiency',
+        header: 'Efficiency',
+        render: (row) => {
+          const eff = EFFICIENCY_VARIANT[row.efficiency] ?? EFFICIENCY_VARIANT['no-data'];
+          return <Badge variant={eff.variant}>{eff.label}</Badge>;
+        },
+      },
+      { key: 'assigned', header: 'Assigned', render: (row) => row.assignmentsReceived.toLocaleString(), hideOnMobile: true },
+      { key: 'completed', header: 'Completed', render: (row) => row.reviewsCompleted.toLocaleString() },
+      {
+        key: 'avgTime',
+        header: 'Avg time',
+        render: (row) => (row.averageReviewTimeMinutes ? `${row.averageReviewTimeMinutes}m` : '—'),
+        hideOnMobile: true,
+      },
+      {
+        key: 'throughput',
+        header: 'Per day',
+        render: (row) => `${row.reviewsPerDay}/day`,
+      },
+      {
+        key: 'alignment',
+        header: 'AI align',
+        render: (row) => row.aiAlignmentScore ?? '—',
+        hideOnMobile: true,
+      },
+    ],
+    [],
+  );
+
+  const handleExport = () => {
+    if (!data) return;
+    const rows = data.experts.map((e) => ({
+      expertName: e.expertName,
+      assignmentsReceived: e.assignmentsReceived,
+      reviewsCompleted: e.reviewsCompleted,
+      averageReviewTimeMinutes: e.averageReviewTimeMinutes,
+      reviewsPerDay: e.reviewsPerDay,
+      aiAlignmentScore: e.aiAlignmentScore,
+      efficiency: e.efficiency,
+    }));
+    exportToCsv(rows, `expert-efficiency-${days}d-${formatDateForExport(new Date())}.csv`);
+  };
 
   return (
-    <div className="min-h-screen bg-background-light">
-      <div className="max-w-5xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-1">
-          <h1 className="text-2xl font-bold">Expert Efficiency Report</h1>
-          {data && data.experts.length > 0 && (
-            <Button variant="outline" size="sm" className="gap-2" onClick={() => {
-              const rows = data.experts.map(e => ({
-                expertName: e.expertName,
-                assignmentsReceived: e.assignmentsReceived,
-                reviewsCompleted: e.reviewsCompleted,
-                averageReviewTimeMinutes: e.averageReviewTimeMinutes,
-                reviewsPerDay: e.reviewsPerDay,
-                aiAlignmentScore: e.aiAlignmentScore,
-                efficiency: e.efficiency,
-              }));
-              exportToCsv(rows, `expert-efficiency-${days}d-${formatDateForExport(new Date())}.csv`);
-            }}>
-              <Download className="w-4 h-4" />
-              Export CSV
+    <AdminRouteWorkspace role="main" aria-label="Expert efficiency report">
+      <AdminRouteHero
+        eyebrow="Analytics · Experts"
+        icon={UserCheck}
+        accent="navy"
+        title="Expert Efficiency Report"
+        description="Review throughput, quality alignment, and operational efficiency per expert."
+        highlights={
+          data
+            ? [
+                { label: 'Total experts', value: String(data.summary.totalExperts) },
+                { label: 'Active experts', value: String(data.summary.activeExperts) },
+                { label: `Reviews (${days}d)`, value: data.summary.totalReviewsCompleted.toLocaleString() },
+              ]
+            : undefined
+        }
+      />
+
+      <AdminRoutePanel
+        eyebrow="Window"
+        title="Reporting window"
+        description="Rolling window across the active expert pool."
+        actions={
+          data && data.experts.length > 0 ? (
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <Download className="h-4 w-4" /> Export CSV
             </Button>
-          )}
+          ) : undefined
+        }
+      >
+        <SegmentedControl
+          value={String(days)}
+          onChange={(next) => load(Number(next) as DaysOption)}
+          namespace="admin-expert-efficiency"
+          options={[
+            { value: '7', label: '7d' },
+            { value: '14', label: '14d' },
+            { value: '30', label: '30d' },
+            { value: '60', label: '60d' },
+            { value: '90', label: '90d' },
+          ]}
+          aria-label="Reporting window"
+        />
+      </AdminRoutePanel>
+
+      {data ? (
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <AdminRouteSummaryCard label="Total experts" value={data.summary.totalExperts} />
+          <AdminRouteSummaryCard label="Active" value={data.summary.activeExperts} tone="success" />
+          <AdminRouteSummaryCard label="Reviews done" value={data.summary.totalReviewsCompleted} />
+          <AdminRouteSummaryCard label="Avg/expert/day" value={data.summary.averageReviewsPerExpertPerDay} tone="info" />
         </div>
-        <p className="text-muted mb-6">Review throughput, quality alignment, and operational efficiency per expert.</p>
+      ) : null}
 
-        <div className="flex gap-2 mb-6">
-          {[7, 14, 30, 60, 90].map(d => (
-            <button key={d} onClick={() => load(d)} className={`px-4 py-2 rounded-lg text-sm font-medium ${days === d ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>{d}d</button>
-          ))}
-        </div>
-
-        {loading ? <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div> : data ? (
-          <MotionSection className="space-y-6">
-            {/* Summary */}
-            <div className="grid grid-cols-4 gap-4">
-              <Card className="p-4 text-center"><p className="text-2xl font-bold">{data.summary.totalExperts}</p><p className="text-xs text-muted">Total Experts</p></Card>
-              <Card className="p-4 text-center"><p className="text-2xl font-bold">{data.summary.activeExperts}</p><p className="text-xs text-muted">Active</p></Card>
-              <Card className="p-4 text-center"><p className="text-2xl font-bold">{data.summary.totalReviewsCompleted}</p><p className="text-xs text-muted">Reviews Done</p></Card>
-              <Card className="p-4 text-center"><p className="text-2xl font-bold">{data.summary.averageReviewsPerExpertPerDay}</p><p className="text-xs text-muted">Avg/Expert/Day</p></Card>
-            </div>
-
-            {/* Expert list */}
-            <div className="space-y-3">
-              {data.experts.map(e => {
-                const eff = EFF_BADGE[e.efficiency] ?? EFF_BADGE['no-data'];
-                return (
-                  <MotionItem key={e.expertId}>
-                    <Card className="p-4">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-2"><UserCheck className="w-4 h-4 text-primary" /><h3 className="font-semibold">{e.expertName}</h3></div>
-                        <Badge className={eff.color}>{eff.label} Efficiency</Badge>
-                      </div>
-                      <div className="grid grid-cols-5 gap-3 text-center text-sm">
-                        <div><p className="font-bold">{e.assignmentsReceived}</p><p className="text-[10px] text-muted">Assigned</p></div>
-                        <div><p className="font-bold">{e.reviewsCompleted}</p><p className="text-[10px] text-muted">Completed</p></div>
-                        <div><p className="font-bold">{e.averageReviewTimeMinutes ?? '--'}m</p><p className="text-[10px] text-muted">Avg Time</p></div>
-                        <div><p className="font-bold">{e.reviewsPerDay}/day</p><p className="text-[10px] text-muted">Throughput</p></div>
-                        <div><p className="font-bold">{e.aiAlignmentScore ?? '--'}</p><p className="text-[10px] text-muted">AI Align</p></div>
-                      </div>
-                    </Card>
-                  </MotionItem>
-                );
-              })}
-            </div>
-          </MotionSection>
-        ) : <Card className="p-8 text-center text-muted"><p>No data available.</p></Card>}
-      </div>
-    </div>
+      <AdminRoutePanel eyebrow="Breakdown" title="Per-expert efficiency" description="Each row is an expert over the selected window.">
+        <AsyncStateWrapper
+          status={status}
+          onRetry={() => load(days)}
+          emptyContent={
+            <EmptyState
+              icon={<UserCheck className="h-6 w-6" aria-hidden />}
+              title="No expert activity"
+              description="No experts received assignments in this window."
+            />
+          }
+        >
+          {data ? (
+            <DataTable
+              density="compact"
+              data={data.experts}
+              columns={columns}
+              keyExtractor={(row) => row.expertId}
+              aria-label="Expert efficiency breakdown"
+            />
+          ) : null}
+        </AsyncStateWrapper>
+        {data ? (
+          <AdminRoutePanelFooter
+            updatedAt={data.generatedAt}
+            window={`${days}d`}
+            source="Review pipeline"
+          />
+        ) : null}
+      </AdminRoutePanel>
+    </AdminRouteWorkspace>
   );
 }

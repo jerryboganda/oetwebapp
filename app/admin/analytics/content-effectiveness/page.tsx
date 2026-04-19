@@ -1,97 +1,235 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Trophy, BarChart3, Clock, Download } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Trophy, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { exportToCsv, formatDateForExport } from '@/lib/csv-export';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Card } from '@/components/ui/card';
+import { SegmentedControl } from '@/components/ui/segmented-control';
+import { DataTable, type Column } from '@/components/ui/data-table';
 import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/ui/empty-error';
+import { exportToCsv, formatDateForExport } from '@/lib/csv-export';
+import {
+  AdminRouteHero,
+  AdminRoutePanel,
+  AdminRoutePanelFooter,
+  AdminRouteStatRow,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
+import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { analytics } from '@/lib/analytics';
 
-interface ContentItem { contentId: string; title: string; subtestCode: string; difficulty: string; totalAttempts: number; completionRate: number; averageScore: number | null; avgTimeSeconds: number | null; effectivenessScore: number | null }
-interface EffectivenessData { subtestFilter: string | null; items: ContentItem[]; generatedAt: string }
+interface ContentItem {
+  contentId: string;
+  title: string;
+  subtestCode: string;
+  difficulty: string;
+  totalAttempts: number;
+  completionRate: number;
+  averageScore: number | null;
+  avgTimeSeconds: number | null;
+  effectivenessScore: number | null;
+}
+interface EffectivenessData {
+  subtestFilter: string | null;
+  items: ContentItem[];
+  generatedAt: string;
+}
+
+type SubtestFilter = '' | 'writing' | 'speaking' | 'reading' | 'listening';
+type Status = 'loading' | 'error' | 'empty' | 'success';
 
 async function apiRequest<T = unknown>(path: string, init?: RequestInit): Promise<T> {
   const { ensureFreshAccessToken } = await import('@/lib/auth-client');
   const { env } = await import('@/lib/env');
   const token = await ensureFreshAccessToken();
-  const res = await fetch(`${env.apiBaseUrl}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...init?.headers } });
+  const res = await fetch(`${env.apiBaseUrl}${path}`, {
+    ...init,
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+      ...init?.headers,
+    },
+  });
   if (!res.ok) throw new Error(`API error ${res.status}`);
   return res.json();
 }
 
 export default function ContentEffectivenessPage() {
   const [data, setData] = useState<EffectivenessData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [subtest, setSubtest] = useState('');
+  const [status, setStatus] = useState<Status>('loading');
+  const [subtest, setSubtest] = useState<SubtestFilter>('');
 
-  const load = (s: string) => {
-    setLoading(true); setSubtest(s);
+  const load = (s: SubtestFilter) => {
+    setStatus('loading');
+    setSubtest(s);
     const q = s ? `?subtestCode=${s}&top=50` : '?top=50';
-    apiRequest<EffectivenessData>(`/v1/admin/analytics/content-effectiveness${q}`).then(setData).catch(() => {}).finally(() => setLoading(false));
+    apiRequest<EffectivenessData>(`/v1/admin/analytics/content-effectiveness${q}`)
+      .then((res) => {
+        setData(res);
+        setStatus(res.items.length === 0 ? 'empty' : 'success');
+      })
+      .catch(() => setStatus('error'));
   };
 
-  // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch on mount: setState from API response is the correct pattern
-  useEffect(() => { analytics.track('admin_content_effectiveness_viewed'); load(''); }, []);
+  useEffect(() => {
+    analytics.track('admin_content_effectiveness_viewed');
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- data-fetch on mount
+    load('');
+  }, []);
+
+  const columns = useMemo<Column<ContentItem>[]>(
+    () => [
+      {
+        key: 'rank',
+        header: '#',
+        render: (_row, idx) => <span className="font-semibold text-muted">{idx + 1}</span>,
+        className: 'w-10',
+      },
+      {
+        key: 'title',
+        header: 'Content',
+        render: (row) => (
+          <div className="min-w-0">
+            <p className="truncate font-semibold text-navy">{row.title}</p>
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              <Badge variant="outline" className="capitalize">{row.subtestCode}</Badge>
+              <Badge variant="muted">{row.difficulty}</Badge>
+            </div>
+          </div>
+        ),
+      },
+      {
+        key: 'attempts',
+        header: 'Attempts',
+        render: (row) => row.totalAttempts.toLocaleString(),
+        hideOnMobile: true,
+      },
+      {
+        key: 'completion',
+        header: 'Complete',
+        render: (row) => `${row.completionRate}%`,
+      },
+      {
+        key: 'score',
+        header: 'Avg score',
+        render: (row) => <span className="font-semibold text-navy">{row.averageScore ?? '—'}</span>,
+      },
+      {
+        key: 'effectiveness',
+        header: 'Effectiveness',
+        render: (row) => (
+          <span className="font-semibold text-primary">{row.effectivenessScore ?? '—'}</span>
+        ),
+      },
+    ],
+    [],
+  );
+
+  const handleExport = () => {
+    if (!data) return;
+    const rows = data.items.map((item) => ({
+      title: item.title,
+      subtest: item.subtestCode,
+      difficulty: item.difficulty,
+      totalAttempts: item.totalAttempts,
+      completionRate: item.completionRate,
+      averageScore: item.averageScore,
+      avgTimeSeconds: item.avgTimeSeconds,
+      effectivenessScore: item.effectivenessScore,
+    }));
+    exportToCsv(rows, `content-effectiveness-${formatDateForExport(new Date())}.csv`);
+  };
+
+  const totals = useMemo(() => {
+    if (!data) return null;
+    const attempts = data.items.reduce((sum, i) => sum + i.totalAttempts, 0);
+    const avgComplete = data.items.length
+      ? Math.round(data.items.reduce((sum, i) => sum + i.completionRate, 0) / data.items.length)
+      : 0;
+    return { attempts, avgComplete };
+  }, [data]);
 
   return (
-    <div className="min-h-screen bg-background-light">
-      <div className="max-w-5xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-1">
-          <h1 className="text-2xl font-bold">Content Effectiveness</h1>
-          {data && data.items.length > 0 && (
-            <Button variant="outline" size="sm" className="gap-2" onClick={() => {
-              const rows = data.items.map(item => ({
-                title: item.title,
-                subtest: item.subtestCode,
-                difficulty: item.difficulty,
-                totalAttempts: item.totalAttempts,
-                completionRate: item.completionRate,
-                averageScore: item.averageScore,
-                avgTimeSeconds: item.avgTimeSeconds,
-                effectivenessScore: item.effectivenessScore,
-              }));
-              exportToCsv(rows, `content-effectiveness-${formatDateForExport(new Date())}.csv`);
-            }}>
-              <Download className="w-4 h-4" />
-              Export CSV
+    <AdminRouteWorkspace role="main" aria-label="Content effectiveness analytics">
+      <AdminRouteHero
+        eyebrow="Analytics · Content"
+        icon={Trophy}
+        accent="navy"
+        title="Content Effectiveness"
+        description="Which content produces the most improvement and engagement? Use this to prioritise library investment."
+        highlights={
+          data && totals
+            ? [
+                { label: 'Ranked items', value: String(data.items.length) },
+                { label: 'Attempts', value: totals.attempts.toLocaleString() },
+                { label: 'Avg completion', value: `${totals.avgComplete}%` },
+              ]
+            : undefined
+        }
+      />
+
+      <AdminRoutePanel
+        eyebrow="Filter"
+        title="Subtest filter"
+        description="Restrict the ranking to a single productive or receptive skill."
+        actions={
+          data && data.items.length > 0 ? (
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <Download className="h-4 w-4" /> Export CSV
             </Button>
-          )}
-        </div>
-        <p className="text-muted mb-6">Which content produces the most improvement and engagement?</p>
+          ) : undefined
+        }
+      >
+        <SegmentedControl
+          value={subtest}
+          onChange={(next) => load(next)}
+          namespace="admin-content-effectiveness"
+          options={[
+            { value: '', label: 'All' },
+            { value: 'writing', label: 'Writing' },
+            { value: 'speaking', label: 'Speaking' },
+            { value: 'reading', label: 'Reading' },
+            { value: 'listening', label: 'Listening' },
+          ]}
+          aria-label="Subtest filter"
+        />
+        {data && totals ? (
+          <AdminRouteStatRow
+            items={[
+              { label: 'Ranked items', value: String(data.items.length) },
+              { label: 'Attempts', value: totals.attempts.toLocaleString() },
+              { label: 'Avg completion', value: `${totals.avgComplete}%` },
+            ]}
+          />
+        ) : null}
+      </AdminRoutePanel>
 
-        <div className="flex gap-2 mb-6 flex-wrap">
-          {['', 'writing', 'speaking', 'reading', 'listening'].map(s => (
-            <button key={s} onClick={() => load(s)} className={`px-4 py-2 rounded-lg text-sm font-medium capitalize ${subtest === s ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>{s || 'All'}</button>
-          ))}
-        </div>
-
-        {loading ? <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div> : data ? (
-          <MotionSection className="space-y-3">
-            {data.items.map((item, idx) => (
-              <MotionItem key={item.contentId}>
-                <Card className="p-4">
-                  <div className="flex items-start gap-3">
-                    <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center text-sm font-bold flex-shrink-0">{idx + 1}</div>
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-sm font-semibold truncate">{item.title}</h3>
-                      <div className="flex gap-2 mt-1 flex-wrap"><Badge variant="outline" className="capitalize text-[10px]">{item.subtestCode}</Badge><Badge variant="outline" className="text-[10px]">{item.difficulty}</Badge></div>
-                    </div>
-                    <div className="grid grid-cols-4 gap-4 text-center flex-shrink-0">
-                      <div><p className="text-sm font-bold">{item.totalAttempts}</p><p className="text-[10px] text-muted">Attempts</p></div>
-                      <div><p className="text-sm font-bold">{item.completionRate}%</p><p className="text-[10px] text-muted">Complete</p></div>
-                      <div><p className="text-sm font-bold">{item.averageScore ?? '--'}</p><p className="text-[10px] text-muted">Avg Score</p></div>
-                      <div><p className="text-sm font-bold">{item.effectivenessScore ?? '--'}</p><p className="text-[10px] text-muted">Score</p></div>
-                    </div>
-                  </div>
-                </Card>
-              </MotionItem>
-            ))}
-          </MotionSection>
-        ) : <Card className="p-8 text-center text-muted"><p>No data available.</p></Card>}
-      </div>
-    </div>
+      <AdminRoutePanel eyebrow="Ranking" title="Top content by effectiveness" description="Sorted by effectiveness score, capped at 50.">
+        <AsyncStateWrapper
+          status={status}
+          onRetry={() => load(subtest)}
+          emptyContent={
+            <EmptyState
+              icon={<Trophy className="h-6 w-6" aria-hidden />}
+              title="No content effectiveness data"
+              description="There are no attempts recorded for the selected filters."
+            />
+          }
+        >
+          {data ? (
+            <DataTable
+              density="compact"
+              data={data.items}
+              columns={columns}
+              keyExtractor={(row) => row.contentId}
+              aria-label="Content effectiveness ranking"
+            />
+          ) : null}
+        </AsyncStateWrapper>
+        {data ? (
+          <AdminRoutePanelFooter updatedAt={data.generatedAt} source="Attempt telemetry" />
+        ) : null}
+      </AdminRoutePanel>
+    </AdminRouteWorkspace>
   );
 }

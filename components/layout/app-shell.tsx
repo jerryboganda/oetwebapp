@@ -9,8 +9,9 @@ import { getMotionPresenceMode, getSurfaceMotion, prefersReducedMotion } from '@
 import type { UserRole } from '@/lib/types/auth';
 import { cn } from '@/lib/utils';
 import { usePathname } from 'next/navigation';
-import { BottomNav, type NavItem, type ShellUserSummary, Sidebar } from './sidebar';
+import { BottomNav, type NavItem, type ShellUserSummary, Sidebar, type SidebarSection } from './sidebar';
 import { TopNav, type MobileMenuSection } from './top-nav';
+import type { BreadcrumbItem } from '@/components/ui/breadcrumbs';
 
 export interface AppShellProps {
   children: ReactNode;
@@ -21,12 +22,15 @@ export interface AppShellProps {
   navActions?: ReactNode;
   className?: string;
   navItems?: NavItem[];
+  navSections?: SidebarSection[];
   mobileNavItems?: NavItem[];
   mobileMenuSections?: MobileMenuSection[];
   userSummary?: ShellUserSummary;
   requireAuth?: boolean;
   requiredRole?: UserRole;
   workspaceRole?: UserRole;
+  breadcrumbs?: BreadcrumbItem[];
+  showCommandPalette?: boolean;
 }
 
 function ShellFallback() {
@@ -50,12 +54,15 @@ export function AppShell({
   navActions,
   className,
   navItems,
+  navSections,
   mobileNavItems,
   mobileMenuSections,
   userSummary,
   requireAuth = true,
   requiredRole,
   workspaceRole,
+  breadcrumbs,
+  showCommandPalette,
 }: AppShellProps) {
   const authContext = useContext(AuthContext);
   const hasAuthProvider = authContext !== null;
@@ -88,6 +95,8 @@ export function AppShell({
         sectionedItems={mobileMenuSections}
         userSummary={userSummary}
         workspaceRole={workspaceRole}
+        breadcrumbs={breadcrumbs}
+        showCommandPalette={showCommandPalette}
       />
       <AnimatePresence initial={!reducedMotion} mode={presenceMode}>
         <motion.main
@@ -118,8 +127,10 @@ export function AppShell({
         sectionedItems={mobileMenuSections}
         userSummary={userSummary}
         workspaceRole={workspaceRole}
+        breadcrumbs={breadcrumbs}
+        showCommandPalette={showCommandPalette}
       />
-      <Sidebar items={navItems} userSummary={userSummary} workspaceRole={workspaceRole} />
+      <Sidebar items={navItems} sections={navSections} userSummary={userSummary} workspaceRole={workspaceRole} />
       <div className="relative z-10 flex min-w-0 flex-1 min-h-0 flex-col">
         <TopNav
           className="hidden lg:flex"
@@ -128,6 +139,8 @@ export function AppShell({
           items={navItems}
           userSummary={userSummary}
           workspaceRole={workspaceRole}
+          breadcrumbs={breadcrumbs}
+          showCommandPalette={showCommandPalette}
         />
         <AnimatePresence initial={!reducedMotion} mode={presenceMode}>
           <motion.main

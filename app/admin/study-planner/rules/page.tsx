@@ -7,7 +7,7 @@ import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DataTable, type Column } from '@/components/ui/data-table';
-import { Input, Select } from '@/components/ui/form-controls';
+import { Input, Select, Textarea } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import { Toast } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
@@ -100,7 +100,7 @@ export default function StudyPlannerRulesPage() {
     }
   };
 
-  const onDelete = async (id: string) => {
+  const onDelete = useCallback(async (id: string) => {
     try {
       await deleteAssignmentRule(id);
       setToast({ variant: 'success', message: 'Deleted.' });
@@ -108,7 +108,7 @@ export default function StudyPlannerRulesPage() {
     } catch (e) {
       setToast({ variant: 'error', message: (e as Error).message });
     }
-  };
+  }, [load]);
 
   const onPreview = async () => {
     try {
@@ -141,7 +141,7 @@ export default function StudyPlannerRulesPage() {
         </div>
       ),
     },
-  ], []);
+  ], [onDelete]);
 
   if (!isAuthenticated || role !== 'admin') {
     return <AdminRouteWorkspace><p className="text-sm text-muted">Admin access required.</p></AdminRouteWorkspace>;
@@ -167,7 +167,7 @@ export default function StudyPlannerRulesPage() {
           <Button variant="primary" onClick={() => void onPreview()}><Play className="w-4 h-4 mr-1" /> Run</Button>
         </div>
         {pvResult && (
-          <div className="mt-4 p-3 rounded-lg bg-blue-50 border border-blue-200 text-sm">
+          <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-3 text-sm dark:border-blue-800 dark:bg-blue-950/30">
             <p><strong>Match:</strong> {pvResult.templateId ? templateName(pvResult.templateId) : 'No rule matched (fallback used)'}</p>
             <p className="text-xs mt-1 text-muted">Rules matched: {pvResult.matchedRuleIds.join(', ') || 'none'}</p>
           </div>
@@ -190,9 +190,14 @@ export default function StudyPlannerRulesPage() {
           <Input label="Priority (lower = higher prio)" type="number" value={fPriority} onChange={(e) => setFPriority(e.target.value)} />
           <Input label="Weight (higher = stronger match)" type="number" value={fWeight} onChange={(e) => setFWeight(e.target.value)} />
           <div className="col-span-2">
-            <label className="text-sm font-semibold block mb-1">Condition (JSON)</label>
-            <textarea className="w-full min-h-[160px] rounded-md border border-gray-300 p-2 text-sm font-mono" value={fCondition} onChange={(e) => setFCondition(e.target.value)}
-              placeholder='{"professions":["medicine"],"countries":["UK","IE"],"maxWeeksToExam":8,"weakSubtests":["writing"]}' />
+            <Textarea
+              label="Condition (JSON)"
+              rows={5}
+              value={fCondition}
+              onChange={(e) => setFCondition(e.target.value)}
+              placeholder='{"professions":["medicine"],"countries":["UK","IE"],"maxWeeksToExam":8,"weakSubtests":["writing"]}'
+              className="font-mono text-xs"
+            />
           </div>
         </div>
         <div className="flex gap-3 mt-4 justify-end">

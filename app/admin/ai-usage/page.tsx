@@ -2,13 +2,20 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertCircle, Cpu, Gauge, Power, RefreshCw, Server, ShieldCheck } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import {
+  AdminRoutePanel,
+  AdminRouteSectionHeader,
+  AdminRouteStatRow,
+  AdminRouteSummaryCard,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
 import { Input, Select } from '@/components/ui/form-controls';
+import { Switch } from '@/components/ui/switch';
 import { Modal } from '@/components/ui/modal';
 import { Tabs } from '@/components/ui/tabs';
 import { Toast } from '@/components/ui/alert';
@@ -145,22 +152,48 @@ function UsagePanel({ onToast }: { onToast: (t: ToastState) => void }) {
     { key: 'tk', header: 'Tokens', render: (r) => fmt(r.totalTokens) },
     { key: 'o', header: 'Outcome', render: (r) => <Badge variant={r.outcome === 'Success' ? 'success' : 'danger'}>{r.outcome}</Badge> },
     { key: 'l', header: 'Latency', render: (r) => `${r.latencyMs}ms` },
-    { key: 'tr', header: 'Policy trace', render: (r) => <span className="text-xs text-gray-500 truncate max-w-xs">{r.policyTrace ?? ''}</span> },
+    { key: 'tr', header: 'Policy trace', render: (r) => <span className="text-xs text-muted truncate max-w-xs">{r.policyTrace ?? ''}</span> },
   ];
 
   return (
     <AsyncStateWrapper status={status}>
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-        <AdminRouteSummaryCard label="Total calls this month" value={fmt(totals.calls)} icon={<Gauge className="w-5 h-5" />} />
-        <AdminRouteSummaryCard label="Total tokens this month" value={fmt(totals.tokens)} icon={<Cpu className="w-5 h-5" />} />
-        <AdminRouteSummaryCard label="Trend days" value={fmt(trend.length)} icon={<RefreshCw className="w-5 h-5" />} />
-      </div>
-      <AdminRoutePanel title="By feature">
-        <DataTable data={summary} columns={summaryColumns} keyExtractor={(r) => r.key} />
+      {/* Quick-signals summary strip. Replaces the 3 vanity cards
+          (calls/tokens/trend-days) that were the same info at different
+          granularity. Now uses AdminRouteStatRow for a calmer rhythm. */}
+      <AdminRoutePanel
+        eyebrow="This month"
+        title="Usage at a glance"
+        actions={
+          <Button variant="ghost" size="sm" onClick={() => void load()}>
+            <RefreshCw className="h-3.5 w-3.5" aria-hidden /> Refresh
+          </Button>
+        }
+      >
+        <AdminRouteStatRow
+          items={[
+            { label: 'Calls', value: fmt(totals.calls), hint: 'Total invocations' },
+            { label: 'Tokens', value: fmt(totals.tokens), hint: 'Prompt + completion' },
+            {
+              label: 'Active days',
+              value: fmt(trend.length),
+              hint: `${trend.length > 0 ? 'With activity' : 'No recent activity'}`,
+              tone: trend.length === 0 ? 'warning' : 'info',
+            },
+          ]}
+        />
       </AdminRoutePanel>
+
+      <AdminRoutePanel eyebrow="Features" title="By feature">
+        <DataTable density="compact" data={summary} columns={summaryColumns} keyExtractor={(r) => r.key} />
+      </AdminRoutePanel>
+
       {log && (
-        <AdminRoutePanel title={`Recent calls (${log.total} total)`}>
-          <DataTable data={log.rows} columns={logColumns} keyExtractor={(r) => r.id} />
+        <AdminRoutePanel
+          eyebrow="Recent activity"
+          title={`Recent calls (${log.total} total)`}
+          dense
+        >
+          <DataTable density="compact" data={log.rows} columns={logColumns} keyExtractor={(r) => r.id} />
         </AdminRoutePanel>
       )}
     </AsyncStateWrapper>
@@ -203,7 +236,11 @@ function BudgetPanel({ onToast }: { onToast: (t: ToastState) => void }) {
     <AsyncStateWrapper status={status}>
       {policy && (
         <div className="space-y-6 mt-4">
-          <AdminRoutePanel title="Kill-switch">
+          <AdminRoutePanel
+            eyebrow="Platform controls"
+            title="Kill-switch"
+            description="Engage to immediately stop all platform-keyed AI calls. Learners' BYOK keys still function unless scope is set to All calls."
+          >
             <div className="flex flex-wrap items-end gap-4">
               <Badge variant={policy.killSwitchEnabled ? 'danger' : 'success'}>
                 {policy.killSwitchEnabled ? 'ENGAGED' : 'Off'}
@@ -228,7 +265,11 @@ function BudgetPanel({ onToast }: { onToast: (t: ToastState) => void }) {
             </div>
           </AdminRoutePanel>
 
-          <AdminRoutePanel title="Monthly budget">
+          <AdminRoutePanel
+            eyebrow="Spend"
+            title="Monthly budget"
+            description="Protects the platform from runaway usage by auto-disengaging platform-keyed AI when the monthly spend crosses the hard-kill threshold."
+          >
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <Input type="number" step="0.01" label="Monthly budget (USD)" value={policy.monthlyBudgetUsd}
                 onChange={(e) => setPolicy({ ...policy, monthlyBudgetUsd: Number(e.target.value) })} />
@@ -237,37 +278,67 @@ function BudgetPanel({ onToast }: { onToast: (t: ToastState) => void }) {
               <Input type="number" label="Hard-kill at %" value={policy.hardKillPct}
                 onChange={(e) => setPolicy({ ...policy, hardKillPct: Number(e.target.value) })} />
             </div>
-            <p className="text-sm text-gray-500 mt-2">
-              Current platform spend: {fmtUsd(policy.currentSpendUsd)} ({policy.monthlyBudgetUsd > 0
+            {(() => {
+              const pct = policy.monthlyBudgetUsd > 0
                 ? Math.round((policy.currentSpendUsd / policy.monthlyBudgetUsd) * 100)
-                : 0}%).
-            </p>
+                : 0;
+              const barTone = pct >= policy.hardKillPct ? 'bg-danger'
+                : pct >= policy.softWarnPct ? 'bg-amber-500'
+                : 'bg-success';
+              return (
+                <div className="space-y-2">
+                  <div className="flex items-baseline justify-between text-sm">
+                    <span className="text-muted">
+                      Current spend: <span className="font-semibold text-navy">{fmtUsd(policy.currentSpendUsd)}</span>
+                    </span>
+                    <span className="text-muted">
+                      {pct}% of {fmtUsd(policy.monthlyBudgetUsd)} budget
+                    </span>
+                  </div>
+                  <div className="h-1.5 w-full rounded-full bg-background-light overflow-hidden">
+                    <div
+                      className={`h-full ${barTone} transition-all`}
+                      style={{ width: `${Math.min(100, pct)}%` }}
+                    />
+                  </div>
+                </div>
+              );
+            })()}
           </AdminRoutePanel>
 
-          <AdminRoutePanel title="BYOK policy">
+          <AdminRoutePanel
+            eyebrow="Credentials"
+            title="BYOK policy"
+            description="Controls whether learners' own API keys are accepted for various feature classes."
+          >
             <div className="space-y-2">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={policy.allowByokOnScoringFeatures}
-                  onChange={(e) => setPolicy({ ...policy, allowByokOnScoringFeatures: e.target.checked })} />
-                Allow BYOK on scoring-critical features. <strong>Default: off.</strong>
-              </label>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={policy.allowByokOnNonScoringFeatures}
-                  onChange={(e) => setPolicy({ ...policy, allowByokOnNonScoringFeatures: e.target.checked })} />
-                Allow BYOK on practice / conversation / summarisation features.
-              </label>
+              <Switch
+                checked={policy.allowByokOnScoringFeatures}
+                onCheckedChange={(next) => setPolicy({ ...policy, allowByokOnScoringFeatures: next })}
+                label="Allow BYOK on scoring-critical features"
+                description="Default: off. Keeps platform keys in the scoring path for grade integrity."
+              />
+              <Switch
+                checked={policy.allowByokOnNonScoringFeatures}
+                onCheckedChange={(next) => setPolicy({ ...policy, allowByokOnNonScoringFeatures: next })}
+                label="Allow BYOK on practice / conversation / summarisation features"
+              />
               <Input label="Default platform provider code" value={policy.defaultPlatformProviderId}
                 onChange={(e) => setPolicy({ ...policy, defaultPlatformProviderId: e.target.value })} />
             </div>
           </AdminRoutePanel>
 
-          <AdminRoutePanel title="Anomaly detection">
-            <div className="flex flex-wrap gap-4 items-end">
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={policy.anomalyDetectionEnabled}
-                  onChange={(e) => setPolicy({ ...policy, anomalyDetectionEnabled: e.target.checked })} />
-                Enabled
-              </label>
+          <AdminRoutePanel
+            eyebrow="Safety"
+            title="Anomaly detection"
+            description="Flag users whose daily token usage jumps above their trailing 7-day median. Helps catch runaway agents or abuse early."
+          >
+            <div className="flex flex-wrap items-end gap-4">
+              <Switch
+                checked={policy.anomalyDetectionEnabled}
+                onCheckedChange={(next) => setPolicy({ ...policy, anomalyDetectionEnabled: next })}
+                label="Anomaly detection enabled"
+              />
               <Input type="number" step="0.5" label="Flag users at N× median" value={policy.anomalyMultiplierX}
                 onChange={(e) => setPolicy({ ...policy, anomalyMultiplierX: Number(e.target.value) })} />
             </div>
@@ -344,8 +415,8 @@ function PlansPanel({ onToast }: { onToast: (t: ToastState) => void }) {
           });
         }}>+ New plan</Button>
       </div>
-      <AdminRoutePanel title="Quota plans">
-        <DataTable data={plans} columns={columns} keyExtractor={(p) => p.id || p.code} />
+      <AdminRoutePanel eyebrow="Plans" title="Quota plans" dense>
+        <DataTable density="compact" data={plans} columns={columns} keyExtractor={(p) => p.id || p.code} />
       </AdminRoutePanel>
       {editing && (
         <Modal open={true} onClose={() => { setEditing(null); setCreating(false); }} title={creating ? 'New plan' : `Edit ${editing.code}`}>
@@ -394,10 +465,13 @@ function PlanEditor({ value, onChange }: { value: AiQuotaPlan; onChange: (p: AiQ
         ]} />
       <Input label="Allowed features CSV" value={value.allowedFeaturesCsv} onChange={(e) => onChange({ ...value, allowedFeaturesCsv: e.target.value })} />
       <Input label="Allowed models CSV" value={value.allowedModelsCsv} onChange={(e) => onChange({ ...value, allowedModelsCsv: e.target.value })} />
-      <label className="col-span-2 flex items-center gap-2">
-        <input type="checkbox" checked={value.isActive} onChange={(e) => onChange({ ...value, isActive: e.target.checked })} />
-        Active
-      </label>
+      <div className="col-span-2">
+        <Switch
+          checked={value.isActive}
+          onCheckedChange={(next) => onChange({ ...value, isActive: next })}
+          label="Plan active"
+        />
+      </div>
     </div>
   );
 }
@@ -434,7 +508,7 @@ function ProvidersPanel({ onToast }: { onToast: (t: ToastState) => void }) {
     { key: 'code', header: 'Code', render: (p) => <span className="font-mono">{p.code}</span> },
     { key: 'name', header: 'Name', render: (p) => p.name },
     { key: 'd', header: 'Dialect', render: (p) => p.dialect },
-    { key: 'u', header: 'Base URL', render: (p) => <span className="text-xs text-gray-500">{p.baseUrl}</span> },
+    { key: 'u', header: 'Base URL', render: (p) => <span className="text-xs text-muted">{p.baseUrl}</span> },
     { key: 'k', header: 'Key', render: (p) => <span className="font-mono text-xs">{p.apiKeyHint}</span> },
     { key: 'pr', header: 'Price 1k in/out', render: (p) => `${fmtUsd(p.pricePer1kPromptTokens)}/${fmtUsd(p.pricePer1kCompletionTokens)}` },
     { key: 'pri', header: 'Priority', render: (p) => p.failoverPriority },
@@ -464,8 +538,8 @@ function ProvidersPanel({ onToast }: { onToast: (t: ToastState) => void }) {
           });
         }}>+ Register provider</Button>
       </div>
-      <AdminRoutePanel title="AI providers">
-        <DataTable data={rows} columns={columns} keyExtractor={(p) => p.id || p.code} />
+      <AdminRoutePanel eyebrow="Providers" title="AI providers" dense>
+        <DataTable density="compact" data={rows} columns={columns} keyExtractor={(p) => p.id || p.code} />
       </AdminRoutePanel>
       {editing && (
         <Modal open={true} onClose={() => { setEditing(null); setCreating(false); }} title={creating ? 'Register provider' : `Edit ${editing.code}`}>
@@ -486,10 +560,13 @@ function ProvidersPanel({ onToast }: { onToast: (t: ToastState) => void }) {
             <Input label="Price / 1k completion tokens (USD)" type="number" step="0.0001" value={editing.pricePer1kCompletionTokens} onChange={(e) => setEditing({ ...editing, pricePer1kCompletionTokens: Number(e.target.value) })} />
             <Input label="Retry count" type="number" value={editing.retryCount} onChange={(e) => setEditing({ ...editing, retryCount: Number(e.target.value) })} />
             <Input label="Failover priority" type="number" value={editing.failoverPriority} onChange={(e) => setEditing({ ...editing, failoverPriority: Number(e.target.value) })} />
-            <label className="col-span-2 flex items-center gap-2">
-              <input type="checkbox" checked={editing.isActive} onChange={(e) => setEditing({ ...editing, isActive: e.target.checked })} />
-              Active
-            </label>
+            <div className="col-span-2">
+              <Switch
+                checked={editing.isActive}
+                onCheckedChange={(next) => setEditing({ ...editing, isActive: next })}
+                label="Provider active"
+              />
+            </div>
           </div>
           <div className="flex gap-3 mt-4">
             <Button variant="primary" onClick={() => void save()}>Save</Button>
@@ -518,11 +595,16 @@ function AnomaliesPanel({ onToast }: { onToast: (t: ToastState) => void }) {
         <EmptyState icon={<AlertCircle className="w-8 h-8" />} title="Anomaly detection is disabled" description="Enable it on the Budget tab." />
       )}
       {data && data.enabled && (
-        <AdminRoutePanel title={`Flagged users (≥ ${data.multiplier}× trailing 7-day median)`}>
+        <AdminRoutePanel
+          eyebrow="Anomalies"
+          title={`Flagged users (≥ ${data.multiplier}× trailing 7-day median)`}
+          dense
+        >
           {data.rows.length === 0
             ? <EmptyState icon={<ShieldCheck className="w-6 h-6" />} title="No anomalies detected" description="Nothing in the last 24h crossed the threshold." />
             : (
               <DataTable
+                density="compact"
                 data={data.rows}
                 keyExtractor={(r) => r.userId}
                 columns={[

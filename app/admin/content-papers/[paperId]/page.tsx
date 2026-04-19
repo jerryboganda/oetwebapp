@@ -7,7 +7,7 @@ import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input, Select } from '@/components/ui/form-controls';
+import { Input, Select, Checkbox } from '@/components/ui/form-controls';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { ReadingStructureEditor } from '@/components/domain/ReadingStructureEditor';
@@ -167,7 +167,11 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
               </InlineAlert>
             )}
 
-            <AdminRoutePanel title="Metadata">
+            <AdminRoutePanel
+              eyebrow="Paper details"
+              title="Metadata"
+              description="Shapes how this paper shows up in the library and which learners see it."
+            >
               <div className="grid grid-cols-2 gap-4">
                 <Input label="Title" value={paper.title} onChange={(e) => setPaper({ ...paper, title: e.target.value })} />
                 <Input label="Difficulty" value={paper.difficulty} onChange={(e) => setPaper({ ...paper, difficulty: e.target.value })} />
@@ -175,11 +179,19 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
                   onChange={(e) => setPaper({ ...paper, estimatedDurationMinutes: Number(e.target.value) })} />
                 <Input type="number" label="Priority" value={paper.priority}
                   onChange={(e) => setPaper({ ...paper, priority: Number(e.target.value) })} />
-                <label className="flex items-center gap-2 col-span-2">
-                  <input type="checkbox" checked={paper.appliesToAllProfessions}
-                    onChange={(e) => setPaper({ ...paper, appliesToAllProfessions: e.target.checked, professionId: e.target.checked ? null : paper.professionId })} />
-                  Applies to all professions
-                </label>
+                <div className="col-span-2">
+                  <Checkbox
+                    label="Applies to all professions"
+                    checked={paper.appliesToAllProfessions}
+                    onChange={(e) =>
+                      setPaper({
+                        ...paper,
+                        appliesToAllProfessions: e.target.checked,
+                        professionId: e.target.checked ? null : paper.professionId,
+                      })
+                    }
+                  />
+                </div>
                 {!paper.appliesToAllProfessions && (
                   <Input label="Profession ID" value={paper.professionId ?? ''}
                     onChange={(e) => setPaper({ ...paper, professionId: e.target.value || null })} />
@@ -211,7 +223,11 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
               </div>
             </AdminRoutePanel>
 
-            <AdminRoutePanel title="Assets">
+            <AdminRoutePanel
+              eyebrow="Files"
+              title="Assets"
+              description="Upload and attach the original PDFs / audio for this paper. Files are SHA-256 content-addressed — identical uploads automatically deduplicate."
+            >
               <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4 items-end">
                 <Select
                   label="Role"
@@ -221,7 +237,6 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
                 />
                 <Input label="Part (optional)" value={uploadPart} onChange={(e) => setUploadPart(e.target.value)} placeholder='A | B+C | Section1' />
                 <div className="md:col-span-2">
-                  <label className="block text-sm font-medium mb-1">File</label>
                   <input
                     ref={fileInputRef}
                     type="file"
@@ -231,14 +246,25 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
                       if (f) void uploadFile(f);
                     }}
                     disabled={uploadProgress !== null}
-                    className="block w-full text-sm"
+                    className="hidden"
+                    aria-label="Upload file"
                   />
-                  {uploadProgress !== null && (
-                    <div className="mt-2 flex items-center gap-2 text-sm text-muted">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Uploading… {Math.round(uploadProgress * 100)}%
-                    </div>
-                  )}
+                  <Button
+                    type="button"
+                    variant="outline"
+                    fullWidth
+                    disabled={uploadProgress !== null}
+                    onClick={() => fileInputRef.current?.click()}
+                  >
+                    {uploadProgress !== null ? (
+                      <>
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Uploading… {Math.round(uploadProgress * 100)}%
+                      </>
+                    ) : (
+                      'Choose file…'
+                    )}
+                  </Button>
                 </div>
               </div>
 
@@ -262,7 +288,7 @@ function AssetList({ assets, onRemove }: { assets: ContentPaperAssetDto[]; onRem
     return <p className="text-sm text-muted">No assets yet. Upload a file above.</p>;
   }
   return (
-    <ul className="divide-y divide-gray-100">
+    <ul className="divide-y divide-border">
       {assets.map((a) => (
         <li key={a.id} className="py-3 flex items-center justify-between gap-4">
           <div className="min-w-0 flex-1">

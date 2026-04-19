@@ -449,18 +449,63 @@ export interface Submission {
   contentId: string;
   taskName: string;
   subTest: SubTest;
+  /** Context segmentation (practice | mock | diagnostic | revision). */
+  context?: string;
   attemptDate: string;
+  /**
+   * Human-readable score label, e.g. "380 / 500" or "Pending".
+   * NEVER a percentage — always the canonical 0–500 scale per docs/SCORING.md.
+   */
   scoreEstimate: string;
+  /** Scaled 0–500 score, or null when the evaluation is still pending. */
+  scaledScore?: number | null;
+  /**
+   * Three-state pass flag (+ two writing-only variants). See
+   * `SubmissionPassState` in `lib/scoring.ts` for the canonical union.
+   */
+  passState?: 'pass' | 'fail' | 'pending' | 'country_required' | 'country_unsupported';
+  /** Human label for the pass badge, e.g. "Pass (Grade B)". */
+  passLabel?: string;
+  /** Country-aware Writing threshold (null when not applicable). */
+  requiredScaled?: number | null;
+  /** OET grade letter (A / B / C+ / C / D / E) when resolved. */
+  grade?: 'A' | 'B' | 'C+' | 'C' | 'D' | 'E' | null;
+  /** Depth in the revision chain (0 = original). */
+  revisionDepth?: number;
+  /** User-level soft-hide flag. Hidden rows are invisible in History lists. */
+  isHidden?: boolean;
   reviewStatus: ReviewStatus;
   evaluationId?: string;
   state?: string;
   comparisonGroupId?: string | null;
+  parentAttemptId?: string | null;
   canRequestReview: boolean;
   actions: {
     reopenFeedbackRoute?: string | null;
     compareRoute?: string | null;
     requestReviewRoute?: string | null;
   };
+}
+
+/** Small evidence-level revision node for the detail page lineage widget. */
+export interface RevisionNode {
+  attemptId: string;
+  order: number;
+  label: string;
+  submittedAt: string;
+  scaledScore: number | null;
+  isCurrent: boolean;
+}
+
+/** Expert review lineage surfaced on the detail page when a review exists. */
+export interface ReviewLineage {
+  reviewRequestId: string;
+  state: ReviewStatus;
+  stateLabel: string;
+  turnaroundOption?: string | null;
+  creditsCharged: number;
+  requestedAt: string;
+  completedAt?: string | null;
 }
 
 export interface SubmissionDetail {
@@ -476,6 +521,10 @@ export interface SubmissionDetail {
   issues: string[];
   transcript?: TranscriptLine[];
   criteria?: CriterionFeedback[];
+  /** Ordered parent→revision chain for the current attempt. */
+  revisionLineage?: RevisionNode[];
+  /** Expert review lineage card data when a review was requested. */
+  reviewLineage?: ReviewLineage | null;
   questionReview?: Array<{
     id: string;
     number: number;
@@ -492,20 +541,65 @@ export interface SubmissionDetail {
 export interface SubmissionComparison {
   canCompare: boolean;
   reason?: string;
+  reasonLabel?: string;
   left?: {
     attemptId: string;
     evaluationId?: string;
     scoreRange?: string;
+    scaledScore?: number | null;
+    passState?: 'pass' | 'fail' | 'pending';
+    grade?: string | null;
+    submittedAt?: string;
     subtest: SubTest;
   };
   right?: {
     attemptId: string;
     evaluationId?: string;
     scoreRange?: string;
+    scaledScore?: number | null;
+    passState?: 'pass' | 'fail' | 'pending';
+    grade?: string | null;
+    submittedAt?: string;
     subtest: SubTest;
   };
+  scaledDelta?: number | null;
+  criterionDeltas?: Array<{
+    name: string;
+    leftScore: number;
+    rightScore: number;
+    maxScore: number;
+    direction: 'up' | 'down' | 'flat';
+  }>;
   summary?: string;
   comparisonGroupId?: string | null;
+}
+
+/** Submission History list response with facets and sparkline. */
+export interface SubmissionListResponse {
+  items: Submission[];
+  nextCursor: string | null;
+  total: number;
+  facets: {
+    bySubtest: Record<string, number>;
+    byContext: Record<string, number>;
+    byReviewStatus: Record<string, number>;
+  };
+  sparkline: Record<string, Array<{ at: string; scaled: number | null }>>;
+}
+
+/** Filter/sort/pagination params consumed by `fetchSubmissions`. */
+export interface SubmissionListQuery {
+  cursor?: string | null;
+  limit?: number;
+  subtest?: string;
+  context?: string;
+  reviewStatus?: string;
+  from?: string;
+  to?: string;
+  passOnly?: boolean;
+  q?: string;
+  sort?: 'date-desc' | 'date-asc' | 'score-desc' | 'score-asc';
+  includeHidden?: boolean;
 }
 
 // ═══════════════════ BILLING TYPES ═══════════════════

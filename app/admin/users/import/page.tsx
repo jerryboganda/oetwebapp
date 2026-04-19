@@ -2,10 +2,16 @@
 
 import Link from 'next/link';
 import { useCallback, useRef, useState } from 'react';
-import { ArrowLeft, Download, Upload, FileSpreadsheet, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
-import { Toast } from '@/components/ui/alert';
+import { ArrowLeft, Download, Upload, FileSpreadsheet, AlertCircle } from 'lucide-react';
+import {
+  AdminRoutePanel,
+  AdminRouteSectionHeader,
+  AdminRouteStatRow,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
+import { Toast, InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { DataTable, type Column } from '@/components/ui/data-table';
 import { bulkImportUsers } from '@/lib/api';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 
@@ -139,7 +145,7 @@ export default function BulkImportUsersPage() {
               isDragging
                 ? 'border-primary bg-primary/5'
                 : selectedFile
-                  ? 'border-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20'
+                  ? 'border-primary/60 bg-primary/5 dark:bg-primary/10'
                   : 'border-border/60 hover:border-primary/40 hover:bg-background-light'
             }`}
             onDrop={handleDrop}
@@ -157,7 +163,7 @@ export default function BulkImportUsersPage() {
               className="hidden"
               onChange={(e) => handleFileSelect(e.target.files?.[0])}
             />
-            <Upload size={32} className={selectedFile ? 'text-emerald-500' : 'text-muted'} />
+            <Upload size={32} className={selectedFile ? 'text-primary' : 'text-muted'} />
             {selectedFile ? (
               <div className="mt-3">
                 <p className="text-sm font-semibold text-navy">{selectedFile.name}</p>
@@ -211,56 +217,47 @@ export default function BulkImportUsersPage() {
       {/* Results */}
       {result && (
         <AdminRoutePanel className="mt-6">
-          <AdminRouteSectionHeader title="Import Results" />
+          <AdminRouteSectionHeader title="Import Results" description="Summary of the bulk import operation." />
 
-          <div className="mt-4 grid grid-cols-3 gap-4">
-            <div className="rounded-2xl bg-background-light px-4 py-3 text-center">
-              <p className="text-2xl font-bold text-navy">{result.total}</p>
-              <p className="text-xs text-muted">Total rows</p>
-            </div>
-            <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-center dark:bg-emerald-950/30">
-              <p className="text-2xl font-bold text-emerald-600">{result.created}</p>
-              <p className="text-xs text-muted">Created</p>
-            </div>
-            <div className="rounded-2xl bg-amber-50 px-4 py-3 text-center dark:bg-amber-950/30">
-              <p className="text-2xl font-bold text-amber-600">{result.skipped}</p>
-              <p className="text-xs text-muted">Skipped</p>
-            </div>
-          </div>
+          <AdminRouteStatRow
+            items={[
+              { label: 'Total rows', value: result.total },
+              { label: 'Created', value: result.created, tone: result.created > 0 ? 'success' : 'default' },
+              { label: 'Skipped', value: result.skipped, tone: result.skipped > 0 ? 'warning' : 'default' },
+            ]}
+          />
 
           {result.created > 0 && result.errors.length === 0 && (
-            <div className="mt-4 flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">
-              <CheckCircle2 size={16} />
-              All users imported successfully.
-            </div>
+            <InlineAlert variant="success">All users imported successfully.</InlineAlert>
           )}
 
           {result.errors.length > 0 && (
-            <div className="mt-4">
-              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-red-600">
-                <AlertCircle size={16} />
+            <div className="mt-4 space-y-3">
+              <div className="flex items-center gap-2 text-sm font-medium text-danger">
+                <AlertCircle size={16} aria-hidden />
                 {result.errors.length} row(s) had errors
               </div>
-              <div className="overflow-hidden rounded-2xl border border-border/40">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-border/40 bg-background-light">
-                      <th className="px-4 py-2 text-left font-semibold text-navy">Row</th>
-                      <th className="px-4 py-2 text-left font-semibold text-navy">Email</th>
-                      <th className="px-4 py-2 text-left font-semibold text-navy">Error</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {result.errors.map((err, i) => (
-                      <tr key={i} className="border-b border-border/20 last:border-b-0">
-                        <td className="px-4 py-2 text-muted">{err.row}</td>
-                        <td className="px-4 py-2 font-mono text-xs text-navy">{err.email || '—'}</td>
-                        <td className="px-4 py-2 text-red-600">{err.error}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <DataTable
+                density="compact"
+                data={result.errors}
+                keyExtractor={(row, i) => `${row.row}-${i}`}
+                aria-label="Import errors"
+                columns={
+                  [
+                    { key: 'row', header: 'Row', render: (row) => <span className="text-muted">{row.row}</span> },
+                    {
+                      key: 'email',
+                      header: 'Email',
+                      render: (row) => <span className="font-mono text-xs text-navy">{row.email || '—'}</span>,
+                    },
+                    {
+                      key: 'error',
+                      header: 'Error',
+                      render: (row) => <span className="text-danger">{row.error}</span>,
+                    },
+                  ] satisfies Column<ImportError>[]
+                }
+              />
             </div>
           )}
         </AdminRoutePanel>

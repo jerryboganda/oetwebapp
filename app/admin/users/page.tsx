@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
 import { MailPlus, Search, Upload, Users } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace, AdminRoutePanelFooter } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -138,7 +138,7 @@ export default function UsersPage() {
         key: 'role',
         header: 'Role',
         render: (user) => (
-          <Badge variant={user.role === 'admin' ? 'danger' : user.role === 'expert' ? 'warning' : 'default'}>
+          <Badge variant={user.role === 'admin' ? 'danger' : user.role === 'expert' ? 'warning' : 'muted'}>
             {user.role}
           </Badge>
         ),
@@ -174,7 +174,7 @@ export default function UsersPage() {
           </Link>
           <p className="truncate text-sm text-muted">{user.email}</p>
         </div>
-        <Badge variant={user.role === 'admin' ? 'danger' : user.role === 'expert' ? 'warning' : 'default'}>
+        <Badge variant={user.role === 'admin' ? 'danger' : user.role === 'expert' ? 'warning' : 'muted'}>
           {user.role}
         </Badge>
       </div>
@@ -327,7 +327,8 @@ export default function UsersPage() {
               </div>
             </div>
           </div>
-          <DataTable columns={columns} data={users} keyExtractor={(user) => user.id} mobileCardRender={mobileCardRender} />
+          <DataTable density="compact" columns={columns} data={users} keyExtractor={(user) => user.id} mobileCardRender={mobileCardRender} />
+          <AdminRoutePanelFooter source="User directory" />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 
