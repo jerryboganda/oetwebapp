@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { GitCompare, X, ChevronDown } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { Submission } from '@/lib/mock-data';
@@ -25,15 +25,23 @@ export function CompareSelector({ leftId, rightId, onChange }: CompareSelectorPr
   const [options, setOptions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(false);
 
+  const loadOptions = useCallback(async (st: string) => {
+    setLoading(true);
+    try {
+      const page = await fetchSubmissionsPage({ limit: 50, subtest: st || undefined, sort: 'date-desc' });
+      setOptions(page.items);
+    } catch {
+      setOptions([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     let cancelled = false;
-    setLoading(true);
-    fetchSubmissionsPage({ limit: 50, subtest: subtest || undefined, sort: 'date-desc' })
-      .then((page) => { if (!cancelled) setOptions(page.items); })
-      .catch(() => { if (!cancelled) setOptions([]); })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
-  }, [subtest]);
+    loadOptions(subtest).catch(() => {});
+    return () => { cancelled = true; void cancelled; };
+  }, [subtest, loadOptions]);
 
   const leftOption = options.find((o) => o.id === leftId);
   const rightOption = options.find((o) => o.id === rightId);
