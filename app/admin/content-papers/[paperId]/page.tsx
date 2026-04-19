@@ -2,7 +2,7 @@
 
 import { use, useCallback, useEffect, useRef, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, CloudUpload, Loader2, Play, Trash2 } from 'lucide-react';
+import { ArrowLeft, CloudUpload, Loader2, Trash2 } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Badge } from '@/components/ui/badge';
@@ -50,27 +50,40 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
   const [toast, setToast] = useState<ToastState>(null);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const requestSeqRef = useRef(0);
 
   const [uploadRole, setUploadRole] = useState<PaperAssetRole>('QuestionPaper');
   const [uploadPart, setUploadPart] = useState('');
   const [uploadProgress, setUploadProgress] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const updatePaper = useCallback((updater: (current: ContentPaperDto) => ContentPaperDto) => {
+    setPaper((current) => (current ? updater(current) : current));
+  }, []);
+
   const load = useCallback(async () => {
+    const requestSeq = ++requestSeqRef.current;
     setStatus('loading');
+    setPaper(null);
+    setRequiredRoles([]);
     try {
       const p = await getContentPaper(paperId);
+      if (requestSeq !== requestSeqRef.current) return;
       setPaper(p);
       const req = await getRequiredRoles(p.subtestCode);
+      if (requestSeq !== requestSeqRef.current) return;
       setRequiredRoles(req.required);
       setStatus('success');
     } catch (e) {
+      if (requestSeq !== requestSeqRef.current) return;
       setStatus('error');
       setToast({ variant: 'error', message: `${(e as Error).message}` });
     }
   }, [paperId]);
 
-  useEffect(() => { queueMicrotask(() => { void load(); }); }, [load]);
+  useEffect(() => {
+    void load();
+  }, [load]);
 
   const saveMetadata = async () => {
     if (!paper) return;
@@ -168,38 +181,61 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
             )}
 
             <AdminRoutePanel title="Metadata">
-              <div className="grid grid-cols-2 gap-4">
-                <Input label="Title" value={paper.title} onChange={(e) => setPaper({ ...paper, title: e.target.value })} />
-                <Input label="Difficulty" value={paper.difficulty} onChange={(e) => setPaper({ ...paper, difficulty: e.target.value })} />
-                <Input type="number" label="Estimated duration (minutes)" value={paper.estimatedDurationMinutes}
-                  onChange={(e) => setPaper({ ...paper, estimatedDurationMinutes: Number(e.target.value) })} />
-                <Input type="number" label="Priority" value={paper.priority}
-                  onChange={(e) => setPaper({ ...paper, priority: Number(e.target.value) })} />
-                <label className="flex items-center gap-2 col-span-2">
+              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                <Input label="Title" value={paper.title} onChange={(e) => updatePaper((current) => ({ ...current, title: e.target.value }))} />
+                <Input label="Difficulty" value={paper.difficulty} onChange={(e) => updatePaper((current) => ({ ...current, difficulty: e.target.value }))} />
+                <Input
+                  type="number"
+                  label="Estimated duration (minutes)"
+                  value={paper.estimatedDurationMinutes}
+                  min={0}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    if (next === '') return;
+                    const parsed = Number(next);
+                    if (!Number.isFinite(parsed)) return;
+                    updatePaper((current) => ({ ...current, estimatedDurationMinutes: parsed }));
+                  }}
+                />
+                <Input
+                  type="number"
+                  label="Priority"
+                  value={paper.priority}
+                  min={0}
+                  onChange={(e) => {
+                    const next = e.target.value;
+                    if (next === '') return;
+                    const parsed = Number(next);
+                    if (!Number.isFinite(parsed)) return;
+                    updatePaper((current) => ({ ...current, priority: parsed }));
+                  }}
+                />
+                <label className="flex items-center gap-2 lg:col-span-2">
                   <input type="checkbox" checked={paper.appliesToAllProfessions}
-                    onChange={(e) => setPaper({ ...paper, appliesToAllProfessions: e.target.checked, professionId: e.target.checked ? null : paper.professionId })} />
+                    onChange={(e) => updatePaper((current) => ({ ...current, appliesToAllProfessions: e.target.checked, professionId: e.target.checked ? null : current.professionId }))} />
                   Applies to all professions
                 </label>
                 {!paper.appliesToAllProfessions && (
                   <Input label="Profession ID" value={paper.professionId ?? ''}
-                    onChange={(e) => setPaper({ ...paper, professionId: e.target.value || null })} />
+                    onChange={(e) => updatePaper((current) => ({ ...current, professionId: e.target.value || null }))} />
                 )}
                 {paper.subtestCode === 'writing' && (
                   <Input label="Letter type" value={paper.letterType ?? ''}
-                    onChange={(e) => setPaper({ ...paper, letterType: e.target.value || null })}
+                    onChange={(e) => updatePaper((current) => ({ ...current, letterType: e.target.value || null }))}
                     placeholder="routine_referral | urgent_referral | transfer_letter | …" />
                 )}
                 {paper.subtestCode === 'speaking' && (
                   <Input label="Card type" value={paper.cardType ?? ''}
-                    onChange={(e) => setPaper({ ...paper, cardType: e.target.value || null })}
+                    onChange={(e) => updatePaper((current) => ({ ...current, cardType: e.target.value || null }))}
                     placeholder="already_known_pt | examination | first_visit_emergency | …" />
                 )}
                 <Input label="Tags CSV" value={paper.tagsCsv}
-                  onChange={(e) => setPaper({ ...paper, tagsCsv: e.target.value })}
+                  onChange={(e) => updatePaper((current) => ({ ...current, tagsCsv: e.target.value }))}
                   placeholder="dermatology,acne" />
-                <Input label="Source provenance (required to publish)"
+                <Input
+                  label="Source provenance (required to publish)"
                   value={paper.sourceProvenance ?? ''}
-                  onChange={(e) => setPaper({ ...paper, sourceProvenance: e.target.value })}
+                  onChange={(e) => updatePaper((current) => ({ ...current, sourceProvenance: e.target.value }))}
                   placeholder={DEFAULT_CONTENT_SOURCE_PROVENANCE} />
               </div>
               <div className="flex gap-3 mt-4">

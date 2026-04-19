@@ -31,6 +31,24 @@ const PROFESSIONS = [
   'Speech Pathology', 'Veterinary Science'
 ];
 
+const MODE_OPTION_STYLES = {
+  rose: {
+    active: 'border-rose-500 bg-rose-50',
+    icon: 'text-rose-500',
+    title: 'text-rose-700',
+  },
+  blue: {
+    active: 'border-blue-500 bg-blue-50',
+    icon: 'text-blue-500',
+    title: 'text-blue-700',
+  },
+} as const;
+
+const MODE_OPTIONS = [
+  { id: 'exam', icon: ShieldCheck, label: 'Exam Mode', desc: 'Strict timing, no pausing, simulates real test conditions.', color: 'rose' },
+  { id: 'practice', icon: Award, label: 'Practice Mode', desc: 'Flexible timing, ability to pause and review answers.', color: 'blue' },
+] as const;
+
 function buildReviewOptions(mockType: MockType, subType: MockSubType) {
   if (mockType === 'full') {
     return [
@@ -195,20 +213,17 @@ export default function MockSetup() {
             <div>
               <h3 className="text-xs font-bold text-navy uppercase tracking-widest mb-3">Testing Mode</h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                {[
-                  { id: 'exam', icon: ShieldCheck, label: 'Exam Mode', desc: 'Strict timing, no pausing, simulates real test conditions.', color: 'rose' },
-                  { id: 'practice', icon: Award, label: 'Practice Mode', desc: 'Flexible timing, ability to pause and review answers.', color: 'blue' }
-                ].map(({ id, icon: Icon, label, desc, color }) => (
+                {MODE_OPTIONS.map(({ id, icon: Icon, label, desc, color }) => (
                   <button
                     key={id}
                     onClick={() => handleModeChange(id as 'practice' | 'exam')}
                     className={`p-4 rounded-xl border-2 text-left transition-all flex items-start gap-3 ${
-                      mode === id ? `border-${color}-500 bg-${color}-50` : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      mode === id ? MODE_OPTION_STYLES[color].active : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                     }`}
                   >
-                    <Icon className={`w-5 h-5 shrink-0 mt-0.5 ${mode === id ? `text-${color}-500` : 'text-muted'}`} />
+                    <Icon className={`w-5 h-5 shrink-0 mt-0.5 ${mode === id ? MODE_OPTION_STYLES[color].icon : 'text-muted'}`} />
                     <div>
-                      <h4 className={`text-sm font-bold ${mode === id ? `text-${color}-700` : 'text-navy'}`}>{label}</h4>
+                      <h4 className={`text-sm font-bold ${mode === id ? MODE_OPTION_STYLES[color].title : 'text-navy'}`}>{label}</h4>
                       <p className="text-xs text-muted mt-1">{desc}</p>
                     </div>
                   </button>

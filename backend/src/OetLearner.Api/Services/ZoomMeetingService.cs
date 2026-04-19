@@ -137,6 +137,12 @@ public sealed class ZoomMeetingService(
             client.DefaultRequestHeaders.Authorization =
                 new AuthenticationHeaderValue("Basic", credentials);
 
+            if (string.IsNullOrWhiteSpace(_opts.AccountId) ||
+                string.IsNullOrWhiteSpace(_opts.HostUserId))
+            {
+                throw new InvalidOperationException("Zoom credentials are not fully configured.");
+            }
+
             var form = new FormUrlEncodedContent(new Dictionary<string, string>
             {
                 ["grant_type"] = "account_credentials",

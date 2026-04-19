@@ -10,6 +10,7 @@ import { InlineAlert } from '@/components/ui/alert';
 import { MotionPage } from '@/components/ui/motion-primitives';
 import { fetchGrammarLesson, startGrammarLesson, completeGrammarLesson } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { sanitizeRichHtml } from '@/lib/sanitize-html';
 
 type GrammarLesson = {
   id: string;
@@ -182,7 +183,7 @@ export default function GrammarLessonPage() {
               {lesson.contentHtml && (
                 <article
                   className="prose max-w-none rounded-2xl border border-gray-200 bg-white p-5 text-gray-800 shadow-sm dark:prose-invert dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
-                  dangerouslySetInnerHTML={{ __html: lesson.contentHtml }}
+                  dangerouslySetInnerHTML={{ __html: sanitizeRichHtml(lesson.contentHtml) }}
                 />
               )}
 

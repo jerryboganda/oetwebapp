@@ -12,21 +12,6 @@ import { analytics } from '@/lib/analytics';
 import { fetchMockSession, submitMockSession } from '@/lib/api';
 import type { MockSession } from '@/lib/mock-data';
 
-function liveSectionRoute(session: MockSession, sectionId: string): string {
-  switch (sectionId) {
-    case 'reading':
-      return `/reading/task/rt-001?mode=${session.config.mode}`;
-    case 'listening':
-      return `/listening/player/lt-001?mode=${session.config.mode}`;
-    case 'writing':
-      return `/writing/player?taskId=wt-001`;
-    case 'speaking':
-      return `/speaking/check?taskId=st-001`;
-    default:
-      return '/mocks';
-  }
-}
-
 export default function MockPlayerPage() {
   const params = useParams<{ id: string }>();
   const searchParams = useSearchParams();
@@ -43,6 +28,10 @@ export default function MockPlayerPage() {
   useEffect(() => {
     if (!sessionId) return;
     analytics.track('content_view', { page: 'mock-player', sessionId });
+    setLoading(true);
+    setError(null);
+    setSuccess(null);
+    setSession(null);
     fetchMockSession(sessionId)
       .then(setSession)
       .catch((err) => setError(err instanceof Error ? err.message : 'Could not load this mock session.'))
@@ -116,7 +105,7 @@ export default function MockPlayerPage() {
                   {session.sectionStates.map((section) => (
                     <button
                       key={section.id}
-                      onClick={() => router.push(`/mocks/player/${session.sessionId}?section=${section.id}`)}
+                      onClick={() => router.push(section.launchRoute)}
                       className={`flex w-full items-center justify-between rounded-2xl border p-4 text-left transition-colors ${
                         selectedSection?.id === section.id
                           ? 'border-primary bg-primary/5'
@@ -152,7 +141,7 @@ export default function MockPlayerPage() {
                       <p className="mt-1">Review attached: {selectedSection.reviewSelected ? 'Yes' : 'No'}</p>
                     </div>
 
-                    <Button fullWidth onClick={() => router.push(liveSectionRoute(session, selectedSection.id))}>
+                    <Button fullWidth onClick={() => router.push(selectedSection.launchRoute)}>
                       <PlayCircle className="h-4 w-4" />
                       Launch section workspace
                     </Button>

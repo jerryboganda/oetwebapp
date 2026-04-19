@@ -204,27 +204,46 @@ export default function Settings() {
                   const Icon = item.icon;
                   const isDanger = item.id === 'danger-zone';
                   return (
-                    <div
-                      key={item.id}
-                      className={`flex items-center justify-between p-4 sm:p-5 transition-colors ${item.type === 'link' ? (isFrozen ? 'cursor-not-allowed opacity-60' : isDanger ? 'hover:bg-red-50 cursor-pointer' : 'hover:bg-gray-50 cursor-pointer') : ''}`}
-                      onClick={item.type === 'link' ? () => handleOpen(item.id) : undefined}
-                    >
-                      <div className="flex items-center gap-4 pr-4">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${isDanger ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-100'}`}>
-                          <Icon className={`w-5 h-5 ${isDanger ? 'text-red-600' : 'text-gray-600'}`} />
-                        </div>
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <h3 className={`text-base font-bold ${isDanger ? 'text-red-700' : 'text-navy'}`}>{item.title}</h3>
+                    item.type === 'link' ? (
+                      <button
+                        key={item.id}
+                        type="button"
+                        className={`flex w-full items-center justify-between p-4 sm:p-5 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-navy focus-visible:ring-offset-2 ${isFrozen ? 'cursor-not-allowed opacity-60' : isDanger ? 'hover:bg-red-50' : 'hover:bg-gray-50'}`}
+                        onClick={() => handleOpen(item.id)}
+                        disabled={isFrozen}
+                      >
+                        <div className="flex items-center gap-4 pr-4">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${isDanger ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-100'}`}>
+                            <Icon className={`w-5 h-5 ${isDanger ? 'text-red-600' : 'text-gray-600'}`} />
                           </div>
-                          <p className={`text-xs sm:text-sm mt-0.5 ${isDanger ? 'text-red-600/80' : 'text-muted'}`}>{item.description}</p>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className={`text-base font-bold ${isDanger ? 'text-red-700' : 'text-navy'}`}>{item.title}</h3>
+                            </div>
+                            <p className={`text-xs sm:text-sm mt-0.5 ${isDanger ? 'text-red-600/80' : 'text-muted'}`}>{item.description}</p>
+                          </div>
                         </div>
-                      </div>
 
-                      <div className="shrink-0">
-                        {item.type === 'link' ? (
-                          <ChevronRight className="w-5 h-5 text-gray-400" />
-                        ) : (
+                        <ChevronRight className="w-5 h-5 text-gray-400 shrink-0" />
+                      </button>
+                    ) : (
+                      <div
+                        key={item.id}
+                        className="flex items-center justify-between p-4 sm:p-5 transition-colors"
+                      >
+                        <div className="flex items-center gap-4 pr-4">
+                          <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${isDanger ? 'bg-red-50 border-red-200' : 'bg-gray-50 border-gray-100'}`}>
+                            <Icon className={`w-5 h-5 ${isDanger ? 'text-red-600' : 'text-gray-600'}`} />
+                          </div>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <h3 className={`text-base font-bold ${isDanger ? 'text-red-700' : 'text-navy'}`}>{item.title}</h3>
+                            </div>
+                            <p className={`text-xs sm:text-sm mt-0.5 ${isDanger ? 'text-red-600/80' : 'text-muted'}`}>{item.description}</p>
+                          </div>
+                        </div>
+
+                        <div className="shrink-0">
                           <button
                             onClick={() => handleToggle(item.id)}
                             disabled={savingId === item.id || isFrozen}
@@ -232,15 +251,16 @@ export default function Settings() {
                             role="switch"
                             aria-checked={toggles[item.id]}
                             aria-label={`Toggle ${item.title}`}
+                            type="button"
                           >
                             <span className="sr-only">Toggle {item.title}</span>
                             <span
                               className={`inline-block h-5 w-5 transform rounded-full bg-white transition-transform ${toggles[item.id] ? 'translate-x-6' : 'translate-x-1'}`}
                             />
                           </button>
-                        )}
+                        </div>
                       </div>
-                    </div>
+                    )
                   );
                 })}
               </div>

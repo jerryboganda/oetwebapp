@@ -4870,7 +4870,7 @@ var draftTimeEstimates = drafts.Select(d =>
                 var request = await db.ReviewRequests.FindAsync([draft.ReviewRequestId], ct);
                 if (request is null) continue;
                 var aiEval = await db.Evaluations
-                    .FirstOrDefaultAsync(e => e.AttemptId == request.AttemptId && e.ConfidenceBand != null, ct);
+                    .FirstOrDefaultAsync(e => e.AttemptId == request.AttemptId && e.GeneratedAt != null, ct);
                 if (aiEval is null) continue;
 
                 try

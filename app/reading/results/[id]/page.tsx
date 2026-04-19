@@ -21,21 +21,28 @@ import { fetchReadingResult } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { ReadingResult } from '@/lib/mock-data';
 
-function ReadingResultsContent() {
-  const params = useParams();
-  const id = params?.id as string;
-
+function ReadingResultsContent({ id }: { id: string }) {
   const [result, setResult] = useState<ReadingResult | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => Boolean(id));
   const [expandedItems, setExpandedItems] = useState<Record<string, boolean>>({});
 
   useEffect(() => {
+    if (!id) return;
+    let cancelled = false;
     fetchReadingResult(id)
       .then(r => {
+        if (cancelled) return;
+        if (!r) return;
         setResult(r);
         analytics.track('evaluation_viewed', { subtest: 'reading', taskId: id });
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [id]);
 
   const toggleItem = (itemId: string) => {
@@ -265,6 +272,10 @@ function ReadingResultsContent() {
 }
 
 export default function ReadingResults() {
+  const params = useParams();
+  const rawId = params?.id;
+  const id = Array.isArray(rawId) ? rawId[0] : rawId ?? '';
+
   return (
     <Suspense fallback={
       <LearnerDashboardShell pageTitle="Reading Results" backHref="/reading">
@@ -273,7 +284,7 @@ export default function ReadingResults() {
         </div>
       </LearnerDashboardShell>
     }>
-      <ReadingResultsContent />
+      <ReadingResultsContent key={id || 'missing'} id={id} />
     </Suspense>
   );
 }
