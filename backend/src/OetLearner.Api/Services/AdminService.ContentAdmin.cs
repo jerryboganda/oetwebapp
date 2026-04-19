@@ -37,6 +37,7 @@ public partial class AdminService
                 g.Id,
                 g.Title,
                 profession = g.ExamTypeCode,
+                g.Category,
                 g.Description,
                 difficulty = g.Level,
                 estimatedDurationMinutes = g.EstimatedMinutes,
@@ -78,6 +79,7 @@ public partial class AdminService
             Id = id,
             Title = request.Title,
             ExamTypeCode = request.ProfessionId ?? "oet",
+            Category = request.Category ?? string.Empty,
             Description = request.Description,
             ContentHtml = request.Content,
             Level = request.Difficulty ?? "intermediate",
@@ -101,6 +103,7 @@ public partial class AdminService
 
         if (request.Title is not null) entity.Title = request.Title;
         if (request.ProfessionId is not null) entity.ExamTypeCode = request.ProfessionId;
+        if (request.Category is not null) entity.Category = request.Category;
         if (request.Description is not null) entity.Description = request.Description;
         if (request.Content is not null) entity.ContentHtml = request.Content;
         if (request.Difficulty is not null) entity.Level = request.Difficulty;

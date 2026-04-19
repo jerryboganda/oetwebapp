@@ -12,13 +12,16 @@ import { Card } from '@/components/ui/card';
 import { MotionPage } from '@/components/ui/motion-primitives';
 import {
   GrammarContentRenderer,
+  GrammarEntitlementBanner,
   GrammarExerciseRunner,
   SafeRichText,
 } from '@/components/domain/grammar';
 import {
+  fetchGrammarEntitlement,
   fetchGrammarLesson,
   startGrammarLesson,
   submitGrammarAttempt,
+  type GrammarEntitlement,
 } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type {
@@ -34,6 +37,7 @@ export default function GrammarLessonPage() {
   const lessonId = params?.lessonId ?? '';
 
   const [lesson, setLesson] = useState<GrammarLessonLearner | null>(null);
+  const [entitlement, setEntitlement] = useState<GrammarEntitlement | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [view, setView] = useState<View>('intro');
@@ -48,9 +52,13 @@ export default function GrammarLessonPage() {
       setLoading(true);
       setError(null);
       try {
-        const data = (await fetchGrammarLesson(lessonId)) as GrammarLessonLearner;
+        const [data, entitlementResult] = await Promise.all([
+          fetchGrammarLesson(lessonId) as Promise<GrammarLessonLearner>,
+          fetchGrammarEntitlement().catch(() => null),
+        ]);
         if (cancelled) return;
         setLesson(data);
+        setEntitlement(entitlementResult);
         setAnswers({});
         setResult(null);
         setView(data.progress?.status === 'in_progress' ? 'study' : 'intro');
@@ -155,6 +163,12 @@ export default function GrammarLessonPage() {
 
       {error ? <InlineAlert variant="warning" className="mt-4">{error}</InlineAlert> : null}
 
+      {entitlement ? (
+        <div className="mt-4 max-w-3xl">
+          <GrammarEntitlementBanner entitlement={entitlement} lessonId={lesson.id} />
+        </div>
+      ) : null}
+
       <div className="mt-6 max-w-3xl space-y-6">
         {view === 'intro' ? (
           <Card className="p-6 text-center">
@@ -163,9 +177,11 @@ export default function GrammarLessonPage() {
             </div>
             <h2 className="mt-4 text-lg font-bold text-navy dark:text-white">Ready to learn?</h2>
             <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">
-              You'll review the teaching content, then complete {exerciseCount} exercises that are graded by the server.
+              You&apos;ll review the teaching content, then complete {exerciseCount} exercises that are graded by the server.
             </p>
-            <Button className="mt-6" onClick={onStart}>Start lesson</Button>
+            <Button className="mt-6" onClick={onStart} disabled={entitlement ? !entitlement.allowed : false}>
+              {entitlement && !entitlement.allowed ? 'Upgrade to unlock' : 'Start lesson'}
+            </Button>
           </Card>
         ) : null}
 

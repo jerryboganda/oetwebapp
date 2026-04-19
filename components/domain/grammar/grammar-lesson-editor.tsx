@@ -6,7 +6,7 @@ import { Input, Select, Textarea } from '@/components/ui/form-controls';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import type { GrammarExerciseType } from '@/lib/grammar/types';
+import type { GrammarContentBlockLearner, GrammarExerciseAuthoring, GrammarExerciseType, GrammarLessonUpsertPayload } from '@/lib/grammar/types';
 
 export interface ContentBlockDraft {
   id?: string;
@@ -451,7 +451,27 @@ function MatchingPairsEditor({ exercise, onUpdate }: { exercise: ExerciseDraft; 
   );
 }
 
-export function draftToApi(draft: LessonDraft) {
+export function draftToApi(draft: LessonDraft): GrammarLessonUpsertPayload {
+  const contentBlocks: GrammarContentBlockLearner[] = draft.contentBlocks.map((b, i) => ({
+    id: b.id ?? null,
+    sortOrder: b.sortOrder || i + 1,
+    type: b.type,
+    contentMarkdown: b.contentMarkdown,
+    content: null,
+  }));
+  const exercises: GrammarExerciseAuthoring[] = draft.exercises.map((e, i) => ({
+    id: e.id ?? null,
+    sortOrder: e.sortOrder || i + 1,
+    type: e.type,
+    promptMarkdown: e.promptMarkdown,
+    options: e.options ?? [],
+    correctAnswer: e.correctAnswer,
+    acceptedAnswers: e.acceptedAnswers ?? [],
+    explanationMarkdown: e.explanationMarkdown,
+    difficulty: e.difficulty,
+    points: e.points,
+  }));
+
   return {
     examTypeCode: draft.examTypeCode,
     topicId: draft.topicId,
@@ -461,27 +481,9 @@ export function draftToApi(draft: LessonDraft) {
     category: draft.category,
     estimatedMinutes: draft.estimatedMinutes,
     sortOrder: draft.sortOrder,
-    prerequisiteLessonId: null,
     prerequisiteLessonIds: draft.prerequisiteLessonIds,
     sourceProvenance: draft.sourceProvenance,
-    contentBlocks: draft.contentBlocks.map((b, i) => ({
-      id: b.id ?? null,
-      sortOrder: b.sortOrder || i + 1,
-      type: b.type,
-      contentMarkdown: b.contentMarkdown,
-      content: null,
-    })),
-    exercises: draft.exercises.map((e, i) => ({
-      id: e.id ?? null,
-      sortOrder: e.sortOrder || i + 1,
-      type: e.type,
-      promptMarkdown: e.promptMarkdown,
-      options: e.options ?? [],
-      correctAnswer: e.correctAnswer,
-      acceptedAnswers: e.acceptedAnswers ?? [],
-      explanationMarkdown: e.explanationMarkdown,
-      difficulty: e.difficulty,
-      points: e.points,
-    })),
+    contentBlocks,
+    exercises,
   };
 }

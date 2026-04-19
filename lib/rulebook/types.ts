@@ -13,7 +13,7 @@
  * ============================================================================
  */
 
-export type RuleKind = 'writing' | 'speaking';
+export type RuleKind = 'writing' | 'speaking' | 'grammar';
 
 export type RuleSeverity = 'critical' | 'major' | 'minor' | 'info';
 
@@ -163,7 +163,7 @@ export interface AiGroundingContext {
   letterType?: LetterType;
   cardType?: SpeakingCardType;
   /** Task label for the prompt (e.g. "score", "coach", "correct"). */
-  task: 'score' | 'coach' | 'correct' | 'summarise' | 'generate_feedback' | 'generate_content';
+  task: 'score' | 'coach' | 'correct' | 'summarise' | 'generate_feedback' | 'generate_content' | 'generate_grammar_lesson';
   /** Candidate country code — feeds into the pass threshold in Writing scoring. */
   candidateCountry?: string | null;
 }

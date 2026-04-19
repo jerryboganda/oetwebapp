@@ -107,6 +107,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<VideoLesson> VideoLessons => Set<VideoLesson>();
     public DbSet<LearnerVideoProgress> LearnerVideoProgress => Set<LearnerVideoProgress>();
     public DbSet<StrategyGuide> StrategyGuides => Set<StrategyGuide>();
+    public DbSet<LearnerStrategyProgress> LearnerStrategyProgress => Set<LearnerStrategyProgress>();
 
     // Community entities
     public DbSet<ForumCategory> ForumCategories => Set<ForumCategory>();
@@ -420,6 +421,9 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<VideoLesson>().HasIndex(x => new { x.ExamTypeCode, x.Category, x.Status });
         modelBuilder.Entity<LearnerVideoProgress>().HasIndex(x => new { x.UserId, x.VideoLessonId }).IsUnique();
         modelBuilder.Entity<StrategyGuide>().HasIndex(x => new { x.ExamTypeCode, x.Category, x.Status });
+        modelBuilder.Entity<StrategyGuide>().HasIndex(x => x.Slug).IsUnique();
+        modelBuilder.Entity<StrategyGuide>().HasIndex(x => x.ContentLessonId);
+        modelBuilder.Entity<LearnerStrategyProgress>().HasIndex(x => new { x.UserId, x.StrategyGuideId }).IsUnique();
 
         // Community indexes
         modelBuilder.Entity<ForumThread>().HasIndex(x => new { x.CategoryId, x.LastActivityAt });

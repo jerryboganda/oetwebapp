@@ -112,6 +112,7 @@ Every feature the gateway serves is classified. Defaults:
 | `summarise.passage` | ❌ | ✅ | ✅ | Study-notes summarisation |
 | `vocabulary.gloss` | ❌ | ✅ | ✅ | Word gloss |
 | `admin.content_generation` | ❌ | ❌ | ✅ | Admin tooling, platform only |
+| `admin.grammar_draft` | ❌ | ❌ | ✅ | Grammar lesson drafting (grounded), platform only |
 
 Admin can toggle the BYOK column per feature. `AllowByokOnScoringFeatures`
 global switch gates the scoring-critical rows.

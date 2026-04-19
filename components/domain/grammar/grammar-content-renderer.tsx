@@ -1,5 +1,6 @@
 'use client';
 
+import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 import type { GrammarContentBlockLearner } from '@/lib/grammar/types';
 
@@ -25,8 +26,8 @@ export function SafeRichText({ markdown, className }: { markdown: string; classN
   );
 }
 
-function renderInline(text: string): React.ReactNode {
-  const tokens: React.ReactNode[] = [];
+function renderInline(text: string): ReactNode {
+  const tokens: ReactNode[] = [];
   const regex = /(\*\*[^*\n]+\*\*|\*[^*\n]+\*|`[^`\n]+`)/g;
   let last = 0;
   let match: RegExpExecArray | null;

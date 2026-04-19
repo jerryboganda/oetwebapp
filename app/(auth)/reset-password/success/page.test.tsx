@@ -12,16 +12,17 @@ describe('ResetPasswordSuccessPage', () => {
     vi.useFakeTimers();
   });
 
-  it('shows the password reset success state and redirects to sign in after 3 seconds', () => {
+  it('shows the password reset success state and redirects to sign in after the countdown', () => {
     renderWithRouter(<ResetPasswordSuccessPage />, {
       router: { replace: mockReplace },
       searchParams: new URLSearchParams({ email: 'learner@oet-prep.dev' }),
     });
 
-    expect(screen.getByRole('heading', { name: /reset complete/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /you're all set/i })).toBeInTheDocument();
+    expect(screen.getByRole('status')).toHaveTextContent(/redirecting automatically in 12 seconds/i);
 
     act(() => {
-      vi.advanceTimersByTime(3000);
+      vi.advanceTimersByTime(12000);
     });
 
     expect(mockReplace).toHaveBeenCalledWith('/sign-in?email=learner%40oet-prep.dev');

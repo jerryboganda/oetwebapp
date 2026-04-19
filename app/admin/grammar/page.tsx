@@ -16,21 +16,11 @@ import { Badge } from '@/components/ui/badge';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
-import type { AdminGrammarTopic } from '@/lib/grammar/types';
+import type { AdminGrammarLessonRow, AdminGrammarTopic } from '@/lib/grammar/types';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
-interface AdminLessonRow {
-  id: string;
-  title: string;
-  examTypeCode: string;
-  topicId: string | null;
-  level: string;
-  estimatedMinutes: number;
-  status: string;
-  publishState: string;
-  updatedAt: string;
-}
+type AdminLessonRow = AdminGrammarLessonRow;
 
 export default function AdminGrammarDashboard() {
   const [topics, setTopics] = useState<AdminGrammarTopic[]>([]);

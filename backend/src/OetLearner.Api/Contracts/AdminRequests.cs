@@ -308,6 +308,7 @@ public record SponsorLearnerLinkRequest(string SponsorId, string LearnerId);
 public record AdminGrammarLessonCreateRequest(
     string Title,
     string? ProfessionId,
+    string? Category,
     string? Description,
     string? Content,
     string? Difficulty,
@@ -317,12 +318,21 @@ public record AdminGrammarLessonCreateRequest(
 public record AdminGrammarLessonUpdateRequest(
     string? Title,
     string? ProfessionId,
+    string? Category,
     string? Description,
     string? Content,
     string? Difficulty,
     int? EstimatedDurationMinutes,
     int? SortOrder,
     string? Status);
+
+public record AdminGrammarAiDraftRequest(
+    string Prompt,
+    string? ExamTypeCode,
+    string? TopicSlug,
+    string? Level,
+    int? TargetExerciseCount,
+    string? Profession);
 
 // ── Vocabulary Admin ──
 

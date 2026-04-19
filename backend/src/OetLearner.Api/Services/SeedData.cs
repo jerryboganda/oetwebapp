@@ -7,7 +7,7 @@ using OetLearner.Api.Domain;
 
 namespace OetLearner.Api.Services;
 
-public static class SeedData
+public static partial class SeedData
 {
     private static readonly SemaphoreSlim DemoMediaSeedLock = new(1, 1);
 
@@ -88,6 +88,28 @@ public static class SeedData
         if (!await db.ContentPrograms.AnyAsync(cancellationToken))
         {
             SeedContentPrograms(db);
+            hasChanges = true;
+        }
+
+        if (!await db.GrammarLessons.AnyAsync(cancellationToken))
+        {
+            SeedGrammarLessons(db);
+            hasChanges = true;
+        }
+
+        if (!await db.StrategyGuides.AnyAsync(guide => guide.ExamTypeCode == "oet", cancellationToken))
+        {
+            SeedStrategyGuides(db);
+            hasChanges = true;
+        }
+
+        var strategyGuidesFlag = await db.FeatureFlags.FirstOrDefaultAsync(flag => flag.Key == "strategy_guides", cancellationToken);
+        if (strategyGuidesFlag is not null && (!strategyGuidesFlag.Enabled || strategyGuidesFlag.RolloutPercentage < 100))
+        {
+            strategyGuidesFlag.Enabled = true;
+            strategyGuidesFlag.RolloutPercentage = 100;
+            strategyGuidesFlag.Description = "Enable written OET exam strategy guides.";
+            strategyGuidesFlag.UpdatedAt = DateTimeOffset.UtcNow;
             hasChanges = true;
         }
 
@@ -1471,7 +1493,7 @@ public static class SeedData
             // ── Phase 3 new feature flags ──
             new FeatureFlag { Id = "flg-015", Name = "Grammar Lessons", Key = "grammar_lessons", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable structured grammar lesson modules.", Owner = "Content Team", CreatedAt = now, UpdatedAt = now },
             new FeatureFlag { Id = "flg-016", Name = "Video Lessons", Key = "video_lessons", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable video lesson catalogue.", Owner = "Content Team", CreatedAt = now, UpdatedAt = now },
-            new FeatureFlag { Id = "flg-017", Name = "Strategy Guides", Key = "strategy_guides", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable written exam strategy guides.", Owner = "Content Team", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-017", Name = "Strategy Guides", Key = "strategy_guides", FlagType = FeatureFlagType.Release, Enabled = true, RolloutPercentage = 100, Description = "Enable written OET exam strategy guides.", Owner = "Content Team", CreatedAt = now, UpdatedAt = now },
             new FeatureFlag { Id = "flg-018", Name = "Community Forums", Key = "community_forums", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable community discussion forums and study groups.", Owner = "Product", CreatedAt = now, UpdatedAt = now },
             new FeatureFlag { Id = "flg-019", Name = "Live Tutoring", Key = "live_tutoring", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable one-on-one live tutoring sessions with experts.", Owner = "Product", CreatedAt = now, UpdatedAt = now },
             new FeatureFlag { Id = "flg-020", Name = "Certificates", Key = "certificates", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable achievement certificate generation and download.", Owner = "Product", CreatedAt = now, UpdatedAt = now },
@@ -2303,6 +2325,701 @@ public static class SeedData
             new FreePreviewAsset { Id = "fp-listening-sample", Title = "OET Listening Sample", PreviewType = "sample_lesson", ConversionCtaText = "Sharpen your Listening skills", TargetPackageId = "pkg-full-en-2026", Status = ContentStatus.Published, DisplayOrder = 5, CreatedAt = now }
         );
     }
+
+    private static void SeedStrategyGuides(LearnerDbContext db)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        StrategyGuide Guide(
+            string id,
+            string slug,
+            string? subtestCode,
+            string title,
+            string summary,
+            string category,
+            int minutes,
+            int sortOrder,
+            string overview,
+            string[] actions,
+            string[] takeaways,
+            string[] mistakes)
+            => new()
+            {
+                Id = id,
+                Slug = slug,
+                ExamTypeCode = "oet",
+                SubtestCode = subtestCode,
+                Title = title,
+                Summary = summary,
+                Category = category,
+                ReadingTimeMinutes = minutes,
+                SortOrder = sortOrder,
+                Status = "active",
+                IsPreviewEligible = true,
+                ContentHtml = StrategyHtml(overview, actions, takeaways),
+                ContentJson = StrategyContentJson(overview, actions, takeaways, mistakes),
+                SourceProvenance = "Original OET Prep editorial content reviewed for learner guidance.",
+                RightsStatus = "owned",
+                FreshnessConfidence = "current",
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now
+            };
+
+        db.StrategyGuides.AddRange(
+            Guide(
+                "strategy-oet-overview",
+                "oet-strategy-overview",
+                null,
+                "OET Strategy Overview",
+                "A simple plan for turning four subtests into a weekly study system.",
+                "exam_overview",
+                5,
+                10,
+                "Treat OET preparation as four linked skills: language control, task awareness, time management, and healthcare communication.",
+                [
+                    "Start with a diagnostic or recent mock score.",
+                    "Choose one weak subtest and one maintenance subtest for each week.",
+                    "Review mistakes within 24 hours so patterns are still fresh."
+                ],
+                [
+                    "Do not study every resource at once.",
+                    "Use your weakest subtest to choose the next strategy guide."
+                ],
+                [
+                    "Collecting materials without a weekly plan.",
+                    "Ignoring review because the next mock feels more urgent."
+                ]),
+            Guide(
+                "strategy-writing-case-notes",
+                "writing-case-notes-selection",
+                "writing",
+                "Writing: Case Notes Selection",
+                "Select relevant case notes by reader need, not by the order shown on the paper.",
+                "writing",
+                6,
+                20,
+                "High-scoring writing starts before the first sentence: decide the purpose, reader, and clinically relevant notes first.",
+                [
+                    "Underline the task line and identify the reader.",
+                    "Mark notes as must include, useful if space allows, or omit.",
+                    "Group notes by purpose: reason for writing, background, current status, and requested action."
+                ],
+                [
+                    "Relevance is more important than quantity.",
+                    "The task line decides what belongs in the letter."
+                ],
+                [
+                    "Copying every date and medication detail.",
+                    "Writing for the patient instead of the named reader."
+                ]),
+            Guide(
+                "strategy-writing-letter-structure",
+                "writing-letter-structure",
+                "writing",
+                "Writing: Letter Structure",
+                "Build a clear referral, discharge, or transfer letter with a purposeful paragraph plan.",
+                "writing",
+                6,
+                30,
+                "A strong OET letter uses clear paragraph roles so the reader can act quickly.",
+                [
+                    "Open with the purpose and patient identity.",
+                    "Use one paragraph for relevant background only.",
+                    "Put current clinical status and requested action near the end."
+                ],
+                [
+                    "Paragraph order should help the reader make a decision.",
+                    "Avoid long chronological retelling unless the task requires it."
+                ],
+                [
+                    "Starting with irrelevant social history.",
+                    "Ending without a clear request or follow-up action."
+                ]),
+            Guide(
+                "strategy-speaking-roleplay",
+                "speaking-roleplay-flow",
+                "speaking",
+                "Speaking: Roleplay Flow",
+                "Keep the interaction patient-centred while covering the task card naturally.",
+                "speaking",
+                5,
+                40,
+                "OET Speaking rewards natural healthcare communication, not memorised speeches.",
+                [
+                    "Open with a warm greeting and confirm the concern.",
+                    "Ask before explaining, then chunk information into short turns.",
+                    "Check understanding and invite questions before closing."
+                ],
+                [
+                    "The interlocutor is a patient, carer, or colleague, not an examiner.",
+                    "Empathy and structure must work together."
+                ],
+                [
+                    "Reading the card aloud.",
+                    "Explaining for too long without checking understanding."
+                ]),
+            Guide(
+                "strategy-reading-part-a",
+                "reading-part-a-speed",
+                "reading",
+                "Reading Part A: Speed And Accuracy",
+                "Use the 15 minutes to locate facts quickly without sacrificing exact wording.",
+                "reading",
+                5,
+                50,
+                "Reading Part A is a controlled information hunt: headings, keywords, and exact answer format matter.",
+                [
+                    "Scan all headings before answering.",
+                    "Match synonyms, then copy the exact needed word or phrase.",
+                    "Leave hard items and return after easier facts are secured."
+                ],
+                [
+                    "Your first job is location, not deep reading.",
+                    "Answer format errors lose easy marks."
+                ],
+                [
+                    "Reading every text from top to bottom.",
+                    "Changing spelling or grammar when copying short answers."
+                ]),
+            Guide(
+                "strategy-reading-bc",
+                "reading-parts-b-c",
+                "reading",
+                "Reading Parts B/C: Reasoning",
+                "Handle workplace notices and long texts with evidence-based elimination.",
+                "reading",
+                6,
+                60,
+                "Parts B and C test meaning, purpose, opinion, and inference. The correct option must be supported by the text.",
+                [
+                    "Read the question stem before the options.",
+                    "Find the line that proves or rejects each option.",
+                    "Eliminate options that are true but do not answer the question."
+                ],
+                [
+                    "Evidence beats intuition.",
+                    "A partially true option is still wrong if it misses the question."
+                ],
+                [
+                    "Choosing familiar medical vocabulary instead of textual proof.",
+                    "Letting one difficult paragraph consume the clock."
+                ]),
+            Guide(
+                "strategy-listening-part-a",
+                "listening-part-a-notes",
+                "listening",
+                "Listening Part A: Notes",
+                "Capture patient consultation details with abbreviations and prediction.",
+                "listening",
+                5,
+                70,
+                "Listening Part A rewards prediction and fast note completion. You must use the pauses actively.",
+                [
+                    "Read headings and predict the type of answer before audio starts.",
+                    "Write short medical abbreviations during the first pass.",
+                    "Use grammar around the blank to decide singular, plural, or adjective form."
+                ],
+                [
+                    "The pause is part of the task.",
+                    "Prediction reduces panic when the audio begins."
+                ],
+                [
+                    "Waiting until the speaker finishes before writing.",
+                    "Missing plural endings and units."
+                ]),
+            Guide(
+                "strategy-listening-bc",
+                "listening-parts-b-c",
+                "listening",
+                "Listening Parts B/C: Decision Making",
+                "Identify speaker purpose, attitude, and the reason behind each answer.",
+                "listening",
+                6,
+                80,
+                "Parts B and C often test why a speaker says something, not just what words you hear.",
+                [
+                    "Preview the stem and options for the decision you need to make.",
+                    "Listen for contrast markers such as however, but, and actually.",
+                    "Choose after the full exchange, not after one matching word."
+                ],
+                [
+                    "Same-word matches are often traps.",
+                    "Tone and purpose can decide the answer."
+                ],
+                [
+                    "Selecting an option as soon as you hear a keyword.",
+                    "Ignoring the final correction or qualification."
+                ]),
+            Guide(
+                "strategy-time-management",
+                "oet-time-management",
+                null,
+                "Time Management Across The OET",
+                "Use repeatable timing rules for mocks, practice blocks, and exam day.",
+                "time_management",
+                4,
+                90,
+                "Good timing is trained before exam day through consistent cut-off rules.",
+                [
+                    "Practise each subtest under real section timing at least weekly.",
+                    "Set a maximum time for hard items, then move on.",
+                    "Review where time was lost after every mock."
+                ],
+                [
+                    "A timing rule prevents emotional decisions under pressure.",
+                    "Review time loss as carefully as wrong answers."
+                ],
+                [
+                    "Doing untimed practice for too long.",
+                    "Changing timing strategy on exam day."
+                ]),
+            Guide(
+                "strategy-common-mistakes",
+                "common-oet-mistakes",
+                null,
+                "Common OET Mistakes",
+                "Avoid the recurring errors that cost marks across writing, speaking, reading, and listening.",
+                "common_mistakes",
+                5,
+                100,
+                "Most score plateaus come from repeated small errors, not from one missing secret technique.",
+                [
+                    "Keep an error log grouped by subtest.",
+                    "Fix one recurring error at a time.",
+                    "Check whether each mistake is language, strategy, timing, or attention."
+                ],
+                [
+                    "Patterns matter more than isolated mistakes.",
+                    "The error log should drive your next study session."
+                ],
+                [
+                    "Only checking the final score.",
+                    "Repeating full mocks without targeted repair."
+                ]),
+            Guide(
+                "strategy-exam-day-checklist",
+                "oet-exam-day-checklist",
+                null,
+                "Exam-Day Checklist",
+                "Prepare documents, timing, equipment, and mindset before the test begins.",
+                "exam_day",
+                4,
+                110,
+                "Exam day should feel familiar. Reduce avoidable stress before you enter the test room or online check-in.",
+                [
+                    "Confirm identification, test time, venue or online setup, and travel plan.",
+                    "Prepare permitted items the evening before.",
+                    "Use a short warm-up, not a last-minute cram session."
+                ],
+                [
+                    "Preparation reduces cognitive load.",
+                    "Your goal is calm execution of familiar routines."
+                ],
+                [
+                    "Studying new material on the morning of the exam.",
+                    "Arriving without checking ID or technical requirements."
+                ])
+        );
+    }
+
+    private static string StrategyContentJson(string overview, string[] actions, string[] takeaways, string[] mistakes)
+        => JsonSupport.Serialize(new
+        {
+            version = 1,
+            overview,
+            sections = new[]
+            {
+                new { heading = "What to do", body = overview, bullets = actions },
+                new { heading = "Common traps", body = "Avoid these recurring mistakes while practising.", bullets = mistakes }
+            },
+            keyTakeaways = takeaways
+        });
+
+    private static string StrategyHtml(string overview, string[] actions, string[] takeaways)
+        => $"<p>{overview}</p><h2>Action steps</h2><ul>{string.Join("", actions.Select(action => $"<li>{action}</li>"))}</ul><h2>Key takeaways</h2><ul>{string.Join("", takeaways.Select(takeaway => $"<li>{takeaway}</li>"))}</ul>";
+
+    private static void SeedGrammarLessons(LearnerDbContext db)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        SeedGrammarStarterCatalog(db, now);
+    }
+
+    private static void SeedGrammarLessonsLegacy(LearnerDbContext db)
+    {
+        var now = DateTimeOffset.UtcNow;
+
+        db.GrammarLessons.AddRange(
+            CreateGrammarLesson(
+                now,
+                "grm-oet-passive-1",
+                "oet",
+                "Passive voice in handovers",
+                "Use passive forms to emphasise actions and patient care in clinical handovers.",
+                "passive_voice",
+                "intermediate",
+                12,
+                1,
+                "Seeded grammar starter pack v1",
+                [
+                    GrammarContentBlock("intro", 1, "callout", "In handovers, passive voice keeps the focus on the action and the patient."),
+                    GrammarContentBlock("example", 2, "example", "Example: The wound **was cleaned** before the dressing was changed."),
+                    GrammarContentBlock("note", 3, "note", "Use the passive when the agent is obvious, unknown, or less important.")
+                ],
+                [
+                    GrammarExercise(
+                        "exercise-1",
+                        1,
+                        "mcq",
+                        "Which sentence uses the clearest passive form?",
+                        new[]
+                        {
+                            new { id = "a", label = "The nurse checked the blood pressure." },
+                            new { id = "b", label = "The blood pressure was checked by the nurse." },
+                            new { id = "c", label = "The nurse was checking the blood pressure." }
+                        },
+                        "b",
+                        Array.Empty<string>(),
+                        "Passive voice moves the focus to the blood pressure rather than the nurse.",
+                        "intermediate",
+                        1),
+                    GrammarExercise(
+                        "exercise-2",
+                        2,
+                        "fill_blank",
+                        "The medication was ___ at 8:00 am.",
+                        Array.Empty<object>(),
+                        "administered",
+                        new[] { "administered" },
+                        "Administered is the past participle that completes the passive structure.",
+                        "beginner",
+                        1),
+                    GrammarExercise(
+                        "exercise-3",
+                        3,
+                        "matching",
+                        "Match each active sentence to its passive version.",
+                        new[]
+                        {
+                            new { left = "The clinician reviewed the chart", right = "The chart was reviewed by the clinician" },
+                            new { left = "The team arranged follow-up", right = "Follow-up was arranged by the team" },
+                            new { left = "The nurse documents the findings", right = "The findings are documented by the nurse" }
+                        },
+                        new[]
+                        {
+                            new { left = "The clinician reviewed the chart", right = "The chart was reviewed by the clinician" },
+                            new { left = "The team arranged follow-up", right = "Follow-up was arranged by the team" },
+                            new { left = "The nurse documents the findings", right = "The findings are documented by the nurse" }
+                        },
+                        Array.Empty<string>(),
+                        "These passive rewrites keep the patient record style clear and formal.",
+                        "intermediate",
+                        2)
+                ]),
+
+            CreateGrammarLesson(
+                now,
+                "grm-oet-articles-1",
+                "oet",
+                "Articles in clinical writing",
+                "Choose a, an, or the correctly when writing clear medical notes and referrals.",
+                "articles",
+                "beginner",
+                10,
+                2,
+                "Seeded grammar starter pack v1",
+                [
+                    GrammarContentBlock("intro", 1, "callout", "Articles help your message sound precise and professional."),
+                    GrammarContentBlock("example", 2, "example", "Example: **The** patient was transferred to **an** emergency department."),
+                    GrammarContentBlock("note", 3, "note", "Use **the** for specific items and **a/an** for first mention or general reference.")
+                ],
+                [
+                    GrammarExercise(
+                        "exercise-1",
+                        1,
+                        "error_correction",
+                        "Correct the sentence: \"The nurse noted patient was comfortable.\"",
+                        Array.Empty<object>(),
+                        "The nurse noted the patient was comfortable.",
+                        new[] { "The nurse noted the patient was comfortable" },
+                        "The article 'the' is needed before the specific patient.",
+                        "beginner",
+                        1),
+                    GrammarExercise(
+                        "exercise-2",
+                        2,
+                        "fill_blank",
+                        "She was admitted to ___ emergency department.",
+                        Array.Empty<object>(),
+                        "the",
+                        new[] { "the" },
+                        "A specific department needs the definite article.",
+                        "beginner",
+                        1),
+                    GrammarExercise(
+                        "exercise-3",
+                        3,
+                        "sentence_transformation",
+                        "Rewrite the sentence with the correct article: 'Please contact doctor on call.'",
+                        Array.Empty<object>(),
+                        "Please contact the doctor on call.",
+                        new[] { "Please contact the doctor on call" },
+                        "The doctor is a specific person, so the definite article fits.",
+                        "beginner",
+                        2)
+                ],
+                "grm-oet-passive-1"),
+
+            CreateGrammarLesson(
+                now,
+                "grm-ielts-conditionals-1",
+                "ielts",
+                "Conditional clauses for advice",
+                "Practise if-clauses and advice structures for IELTS-style writing and speaking.",
+                "conditionals",
+                "intermediate",
+                11,
+                3,
+                "Seeded grammar starter pack v1",
+                [
+                    GrammarContentBlock("intro", 1, "callout", "Conditionals let you express possibility, advice, and hypothetical situations."),
+                    GrammarContentBlock("example", 2, "example", "Example: If the symptoms worsen, you **should** contact a doctor."),
+                    GrammarContentBlock("note", 3, "note", "Keep the tense pattern consistent in the if-clause and main clause.")
+                ],
+                [
+                    GrammarExercise(
+                        "exercise-1",
+                        1,
+                        "mcq",
+                        "If the symptoms worsen, you ___ contact a doctor.",
+                        new[]
+                        {
+                            new { id = "a", label = "should" },
+                            new { id = "b", label = "might" },
+                            new { id = "c", label = "could to" }
+                        },
+                        "a",
+                        Array.Empty<string>(),
+                        "Should is the clearest choice for advice.",
+                        "intermediate",
+                        1),
+                    GrammarExercise(
+                        "exercise-2",
+                        2,
+                        "fill_blank",
+                        "If I ___ more time, I would check the notes again.",
+                        Array.Empty<object>(),
+                        "had",
+                        new[] { "had" },
+                        "The second conditional uses the past simple in the if-clause.",
+                        "intermediate",
+                        1),
+                    GrammarExercise(
+                        "exercise-3",
+                        3,
+                        "sentence_transformation",
+                        "Rewrite using unless: 'If the medication is not available, call the pharmacy.'",
+                        Array.Empty<object>(),
+                        "Unless the medication is available, call the pharmacy.",
+                        new[] { "Unless the medication is available, call pharmacy", "Unless the medication is available, call the pharmacy" },
+                        "Unless expresses the negative condition more naturally.",
+                        "advanced",
+                        2)
+                ]),
+
+            CreateGrammarLesson(
+                now,
+                "grm-pte-formal-1",
+                "pte",
+                "Formal register in referrals",
+                "Use a professional tone when writing referral notes or patient communications.",
+                "formal_register",
+                "intermediate",
+                11,
+                4,
+                "Seeded grammar starter pack v1",
+                [
+                    GrammarContentBlock("intro", 1, "callout", "Formal register sounds polite, precise, and appropriate for professional contexts."),
+                    GrammarContentBlock("example", 2, "example", "Example: **Please be advised** that the appointment has been rescheduled."),
+                    GrammarContentBlock("note", 3, "note", "Prefer neutral verbs and avoid contractions in formal communication.")
+                ],
+                [
+                    GrammarExercise(
+                        "exercise-1",
+                        1,
+                        "fill_blank",
+                        "Please ___ be advised that the appointment has been rescheduled.",
+                        Array.Empty<object>(),
+                        "kindly",
+                        new[] { "kindly" },
+                        "Kindly is a conventional, polite choice in formal notices.",
+                        "intermediate",
+                        1),
+                    GrammarExercise(
+                        "exercise-2",
+                        2,
+                        "error_correction",
+                        "Correct the sentence: \"Thanks for your quick reply and help.\"",
+                        Array.Empty<object>(),
+                        "Thank you for your prompt reply and assistance.",
+                        new[] { "Thank you for your prompt reply and assistance" },
+                        "Formal register prefers 'thank you', 'prompt', and 'assistance'.",
+                        "intermediate",
+                        1),
+                    GrammarExercise(
+                        "exercise-3",
+                        3,
+                        "matching",
+                        "Match each informal phrase to a more formal version.",
+                        new[]
+                        {
+                            new { left = "Can you send it soon?", right = "Could you please send it as soon as possible?" },
+                            new { left = "I'm writing to tell you", right = "I am writing to inform you" },
+                            new { left = "Thanks for your help", right = "Thank you for your assistance" }
+                        },
+                        new[]
+                        {
+                            new { left = "Can you send it soon?", right = "Could you please send it as soon as possible?" },
+                            new { left = "I'm writing to tell you", right = "I am writing to inform you" },
+                            new { left = "Thanks for your help", right = "Thank you for your assistance" }
+                        },
+                        Array.Empty<string>(),
+                        "Formal register softens the tone without losing clarity.",
+                        "advanced",
+                        2)
+                ]),
+
+            CreateGrammarLesson(
+                now,
+                "grm-oet-sva-1",
+                "oet",
+                "Subject-verb agreement in notes",
+                "Keep subjects and verbs aligned in concise, accurate clinical notes.",
+                "subject_verb_agreement",
+                "beginner",
+                9,
+                5,
+                "Seeded grammar starter pack v1",
+                [
+                    GrammarContentBlock("intro", 1, "callout", "Subject-verb agreement is essential for accuracy in every note and report."),
+                    GrammarContentBlock("example", 2, "example", "Example: **The results indicate** infection, not 'indicates'."),
+                    GrammarContentBlock("note", 3, "note", "Plural subjects take plural verbs; singular subjects take singular verbs.")
+                ],
+                [
+                    GrammarExercise(
+                        "exercise-1",
+                        1,
+                        "mcq",
+                        "Choose the correct sentence.",
+                        new[]
+                        {
+                            new { id = "a", label = "The results indicates infection." },
+                            new { id = "b", label = "The results indicate infection." },
+                            new { id = "c", label = "The result indicate infection." }
+                        },
+                        "b",
+                        Array.Empty<string>(),
+                        "Plural subject 'results' requires the plural verb 'indicate'.",
+                        "beginner",
+                        1),
+                    GrammarExercise(
+                        "exercise-2",
+                        2,
+                        "error_correction",
+                        "Correct the sentence: \"Each of the patients require follow-up.\"",
+                        Array.Empty<object>(),
+                        "Each of the patients requires follow-up.",
+                        new[] { "Each of the patients requires follow-up" },
+                        "'Each' is singular, so the verb should be 'requires'.",
+                        "beginner",
+                        1),
+                    GrammarExercise(
+                        "exercise-3",
+                        3,
+                        "fill_blank",
+                        "A series of tests ___ ordered yesterday.",
+                        Array.Empty<object>(),
+                        "was",
+                        new[] { "was" },
+                        "The head noun 'series' is singular, so use 'was'.",
+                        "intermediate",
+                        2)
+                ])
+        );
+    }
+
+    private static GrammarLesson CreateGrammarLesson(
+        DateTimeOffset now,
+        string id,
+        string examTypeCode,
+        string title,
+        string description,
+        string category,
+        string level,
+        int estimatedMinutes,
+        int sortOrder,
+        string sourceProvenance,
+        object[] contentBlocks,
+        object[] exercises,
+        string? prerequisiteLessonId = null)
+    {
+        var document = new
+        {
+            topicId = category,
+            category,
+            sourceProvenance,
+            prerequisiteLessonIds = prerequisiteLessonId is null ? Array.Empty<string>() : new[] { prerequisiteLessonId },
+            contentBlocks,
+            exercises,
+            version = 1,
+            updatedAt = now.ToString("O")
+        };
+
+        return new GrammarLesson
+        {
+            Id = id,
+            ExamTypeCode = examTypeCode,
+            Title = title,
+            Description = description,
+            Category = category,
+            Level = level,
+            ContentHtml = JsonSupport.Serialize(document),
+            ExercisesJson = JsonSupport.Serialize(exercises),
+            EstimatedMinutes = estimatedMinutes,
+            SortOrder = sortOrder,
+            PrerequisiteLessonId = prerequisiteLessonId,
+            Status = "active"
+        };
+    }
+
+    private static object GrammarContentBlock(string id, int sortOrder, string type, string contentMarkdown)
+        => new { id, sortOrder, type, contentMarkdown };
+
+    private static object GrammarExercise(
+        string id,
+        int sortOrder,
+        string type,
+        string promptMarkdown,
+        object options,
+        object correctAnswer,
+        string[] acceptedAnswers,
+        string explanationMarkdown,
+        string difficulty,
+        int points)
+        => new
+        {
+            id,
+            sortOrder,
+            type,
+            promptMarkdown,
+            options,
+            correctAnswer,
+            acceptedAnswers,
+            explanationMarkdown,
+            difficulty,
+            points
+        };
 
     // ────────────────────────────────────────────────────────────────────
     // AI Usage Management seed data. See docs/AI-USAGE-POLICY.md.

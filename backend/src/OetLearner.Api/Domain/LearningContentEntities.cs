@@ -127,6 +127,9 @@ public class StrategyGuide
     [MaxLength(64)]
     public string Id { get; set; } = default!;
 
+    [MaxLength(160)]
+    public string? Slug { get; set; }
+
     [MaxLength(16)]
     public string ExamTypeCode { get; set; } = default!;
 
@@ -141,6 +144,8 @@ public class StrategyGuide
 
     public string ContentHtml { get; set; } = default!;   // Full article content
 
+    public string? ContentJson { get; set; }
+
     [MaxLength(32)]
     public string Category { get; set; } = default!;     // "exam_overview", "subtest_strategy", "time_management", "scoring_guide", "common_mistakes", "exam_day"
 
@@ -150,5 +155,51 @@ public class StrategyGuide
     [MaxLength(16)]
     public string Status { get; set; } = "active";
 
+    public bool IsPreviewEligible { get; set; }
+
+    [MaxLength(64)]
+    public string? ContentLessonId { get; set; }
+
+    [MaxLength(512)]
+    public string? SourceProvenance { get; set; }
+
+    [MaxLength(32)]
+    public string? RightsStatus { get; set; }
+
+    [MaxLength(32)]
+    public string? FreshnessConfidence { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+
     public DateTimeOffset PublishedAt { get; set; }
+
+    public DateTimeOffset? ArchivedAt { get; set; }
+}
+
+public class LearnerStrategyProgress
+{
+    [Key]
+    public Guid Id { get; set; }
+
+    [MaxLength(64)]
+    public string UserId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string StrategyGuideId { get; set; } = default!;
+
+    public int ReadPercent { get; set; }
+
+    public bool Completed { get; set; }
+
+    public bool Bookmarked { get; set; }
+
+    public DateTimeOffset StartedAt { get; set; }
+
+    public DateTimeOffset LastReadAt { get; set; }
+
+    public DateTimeOffset? CompletedAt { get; set; }
+
+    public DateTimeOffset? BookmarkedAt { get; set; }
 }

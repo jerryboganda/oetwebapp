@@ -10,8 +10,11 @@
 
 import writingMedicineV1 from '../../rulebooks/writing/medicine/rulebook.v1.json';
 import speakingMedicineV1 from '../../rulebooks/speaking/medicine/rulebook.v1.json';
+import grammarMedicineV1 from '../../rulebooks/grammar/medicine/rulebook.v1.json';
+import grammarNursingV1 from '../../rulebooks/grammar/nursing/rulebook.v1.json';
 import writingAssessment from '../../rulebooks/writing/common/assessment-criteria.json';
 import speakingAssessment from '../../rulebooks/speaking/common/assessment-criteria.json';
+import grammarAssessment from '../../rulebooks/grammar/common/assessment-criteria.json';
 
 import type {
   ExamProfession,
@@ -28,11 +31,14 @@ type RulebookKey = `${RuleKind}:${ExamProfession}`;
 const RULEBOOKS: Record<string, Rulebook> = {
   'writing:medicine': writingMedicineV1 as unknown as Rulebook,
   'speaking:medicine': speakingMedicineV1 as unknown as Rulebook,
+  'grammar:medicine': grammarMedicineV1 as unknown as Rulebook,
+  'grammar:nursing': grammarNursingV1 as unknown as Rulebook,
 };
 
 const ASSESSMENT_CRITERIA = {
   writing: writingAssessment as unknown,
   speaking: speakingAssessment as unknown,
+  grammar: grammarAssessment as unknown,
 };
 
 export class RulebookNotFoundError extends Error {

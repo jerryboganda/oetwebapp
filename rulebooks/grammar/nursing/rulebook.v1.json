@@ -1,0 +1,43 @@
+{
+  "version": "1.0.0",
+  "kind": "grammar",
+  "profession": "nursing",
+  "publishedAt": "2026-04-19T00:00:00Z",
+  "authoritySource": "Dr. Ahmed Hesham — OET Grammar Rulebook for Nurses v1 (inherits medicine)",
+  "sections": [
+    { "id": "G01", "title": "Tense Foundations", "order": 1 },
+    { "id": "G02", "title": "Present Perfect vs. Past Simple", "order": 2 },
+    { "id": "G03", "title": "Passive Voice in Nursing Handovers", "order": 3 },
+    { "id": "G04", "title": "Articles for Nursing Documentation", "order": 4 },
+    { "id": "G05", "title": "Subject–Verb Agreement", "order": 5 },
+    { "id": "G06", "title": "Conditionals in Care Planning", "order": 6 },
+    { "id": "G07", "title": "Register & Professional Voice", "order": 7 },
+    { "id": "G08", "title": "Linkers & Punctuation", "order": 8 },
+    { "id": "G09", "title": "Prepositions & Time Markers", "order": 9 },
+    { "id": "G12", "title": "Numeracy, Units & Observations", "order": 12 }
+  ],
+  "rules": [
+    { "id": "G01.1", "section": "G01", "severity": "critical", "title": "Shift events in past simple", "body": "Describe handover events in the past simple: 'The patient was repositioned at 14:00.'", "appliesTo": "all", "exemplarPhrases": ["Observations were recorded at 08:00, 12:00 and 16:00."] },
+    { "id": "G01.3", "section": "G01", "severity": "major", "title": "Ongoing care in present simple", "body": "Use present simple for ongoing nursing care that continues at the time of writing: 'She requires two-hourly repositioning.'", "appliesTo": "all" },
+    { "id": "G02.1", "section": "G02", "severity": "critical", "title": "Since + starting point = present perfect", "body": "Nursing notes that mention 'since' the admission / since the fall / since the last dose require present perfect.", "appliesTo": "all", "checkId": "since_requires_present_perfect", "exemplarPhrases": ["She has been nil by mouth since midnight."] },
+    { "id": "G02.2", "section": "G02", "severity": "critical", "title": "For + duration = present perfect", "body": "Nursing notes with 'for [duration]' require present perfect.", "appliesTo": "all", "checkId": "for_duration_requires_present_perfect", "exemplarPhrases": ["She has been afebrile for 24 hours."] },
+    { "id": "G02.3", "section": "G02", "severity": "critical", "title": "X ago = past simple", "body": "Time markers with 'ago' use past simple.", "appliesTo": "all", "checkId": "ago_requires_past_simple", "exemplarPhrases": ["The wound dressing was changed two hours ago."] },
+    { "id": "G03.1", "section": "G03", "severity": "major", "title": "Handover uses passive voice", "body": "Nursing handover uses passive voice for clinical actions when the performer is implicit: 'IV fluids were commenced.'", "appliesTo": "all", "exemplarPhrases": ["Analgesia was administered as prescribed."] },
+    { "id": "G05.2", "section": "G05", "severity": "critical", "title": "Reverse rule with 'along with'", "body": "'Along with', 'together with', 'as well as' do NOT change subject number.", "appliesTo": "all", "exemplarPhrases": ["The patient, along with family members, was informed of the plan."] },
+    { "id": "G07.1", "section": "G07", "severity": "critical", "title": "No contractions", "body": "Never use contractions in professional nursing letters or handovers.", "appliesTo": "all", "checkId": "no_contractions", "forbiddenPatterns": ["\\b(can't|don't|won't|didn't|isn't|aren't|wasn't|weren't|haven't|hasn't|I'm|you're|we're|they're|it's|doesn't)\\b"] },
+    { "id": "G07.2", "section": "G07", "severity": "critical", "title": "Never use 'the patient' repetitively", "body": "Refer to the patient by title + surname; avoid 'the patient' as a running label.", "appliesTo": "all", "checkId": "body_forbidden_phrase_the_patient" },
+    { "id": "G08.1", "section": "G08", "severity": "critical", "title": "However punctuation", "body": "'; however,' when joining two clauses.", "appliesTo": "all", "checkId": "linker_however_punctuation" },
+    { "id": "G08.2", "section": "G08", "severity": "major", "title": "Therefore punctuation", "body": "'; therefore,' when joining two clauses.", "appliesTo": "all", "checkId": "linker_therefore_punctuation" },
+    { "id": "G09.1", "section": "G09", "severity": "critical", "title": "Care FOR not FROM", "body": "Use 'treatment for', 'admitted for', 'referred for'. Never 'admitted from the ward' to mean 'admitted to the ward for'.", "appliesTo": "all", "checkId": "treatment_for_not_from" },
+    { "id": "G12.1", "section": "G12", "severity": "critical", "title": "Translate Latin abbreviations", "body": "Translate Latin dose abbreviations (od/bd/tds/qds/stat/prn) into plain English in formal letters.", "appliesTo": "all", "checkId": "latin_abbreviations_translated" },
+    { "id": "G12.2", "section": "G12", "severity": "major", "title": "Observations with units", "body": "All observations carry units: BP 120/80 mmHg, HR 72 bpm, SpO₂ 98%, Temp 36.8 °C.", "appliesTo": "all" }
+  ],
+  "tables": {
+    "linkerPunctuation": {
+      "however":    { "preceding": ";", "following": "," },
+      "therefore":  { "preceding": ";", "following": "," },
+      "thus":       { "preceding": ";", "following": "," },
+      "in addition":{ "preceding": ";", "following": "," }
+    }
+  }
+}

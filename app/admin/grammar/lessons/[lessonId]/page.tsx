@@ -126,29 +126,31 @@ export default function EditGrammarLessonPage() {
     examTypeCode: lesson.examTypeCode,
     topicId: lesson.topicId,
     title: lesson.title,
-    description: lesson.description,
+    description: lesson.description ?? '',
     level: lesson.level,
     category: lesson.category,
     estimatedMinutes: lesson.estimatedMinutes,
     sortOrder: lesson.sortOrder,
     sourceProvenance: lesson.sourceProvenance,
-    prerequisiteLessonIds: safeJsonArray(lesson.prerequisiteLessonIds),
+    prerequisiteLessonIds: Array.isArray(lesson.prerequisiteLessonIds)
+      ? lesson.prerequisiteLessonIds.map(String)
+      : [],
     contentBlocks: lesson.contentBlocks.map<ContentBlockDraft>((b) => ({
-      id: b.id,
+      id: b.id ?? undefined,
       sortOrder: b.sortOrder,
       type: b.type,
       contentMarkdown: b.contentMarkdown,
     })),
     exercises: lesson.exercises.map<ExerciseDraft>((e) => ({
-      id: e.id,
+      id: e.id ?? undefined,
       sortOrder: e.sortOrder,
       type: e.type as GrammarExerciseType,
       promptMarkdown: e.promptMarkdown,
-      options: parseJson(e.options, []),
-      correctAnswer: parseJson(e.correctAnswer, ''),
-      acceptedAnswers: parseJson(e.acceptedAnswers, []) as string[],
-      explanationMarkdown: e.explanationMarkdown,
-      difficulty: e.difficulty as ExerciseDraft['difficulty'],
+      options: Array.isArray(e.options) ? e.options : [],
+      correctAnswer: e.correctAnswer ?? '',
+      acceptedAnswers: Array.isArray(e.acceptedAnswers) ? e.acceptedAnswers.map(String) : [],
+      explanationMarkdown: e.explanationMarkdown ?? '',
+      difficulty: (e.difficulty as ExerciseDraft['difficulty']) ?? 'intermediate',
       points: e.points,
     })),
   };
@@ -202,13 +204,4 @@ export default function EditGrammarLessonPage() {
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
     </div>
   );
-}
-
-function parseJson<T>(raw: string | null | undefined, fallback: T): T {
-  if (!raw || raw === '') return fallback;
-  try { return JSON.parse(raw) as T; } catch { return fallback; }
-}
-function safeJsonArray(raw: string | null | undefined): string[] {
-  const v = parseJson<unknown>(raw, []);
-  return Array.isArray(v) ? v.map(String) : [];
 }

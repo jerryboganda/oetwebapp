@@ -1,0 +1,71 @@
+{
+  "version": "1.0.0",
+  "kind": "grammar",
+  "authoritySource": "Dr. Ahmed Hesham — Grammar assessment criteria for healthcare English",
+  "criteria": [
+    {
+      "id": "tense_accuracy",
+      "title": "Tense Accuracy",
+      "description": "Correct tense choice for clinical narratives: past simple for completed events, present perfect for ongoing, present simple for standing facts.",
+      "maxBand": 7,
+      "linkedRuleIds": ["G01.1", "G01.2", "G02.1", "G02.2", "G02.3", "G02.4"]
+    },
+    {
+      "id": "voice_and_agency",
+      "title": "Voice & Agency",
+      "description": "Appropriate use of passive voice for clinical actions and admissions, without over-use.",
+      "maxBand": 7,
+      "linkedRuleIds": ["G03.1", "G03.2", "G03.3", "G03.4"]
+    },
+    {
+      "id": "articles_and_countability",
+      "title": "Articles & Countability",
+      "description": "Correct article usage for diseases (zero article), countable symptoms ('a'), and investigations with vowel sounds ('an ECG').",
+      "maxBand": 7,
+      "linkedRuleIds": ["G04.1", "G04.2", "G04.3", "G04.4", "G04.5"]
+    },
+    {
+      "id": "agreement",
+      "title": "Subject–Verb Agreement",
+      "description": "Correct handling of proximity rule ('or'), reverse rule ('along with'), collective nouns, and medical plurals.",
+      "maxBand": 7,
+      "linkedRuleIds": ["G05.1", "G05.2", "G05.3", "G05.4"]
+    },
+    {
+      "id": "register",
+      "title": "Professional Register",
+      "description": "No contractions, no 'the patient' as running label, no colloquial terms, lowercase conditions, no patient labels.",
+      "maxBand": 7,
+      "linkedRuleIds": ["G07.1", "G07.2", "G07.3", "G07.4", "G07.5", "G07.6", "G07.7"]
+    },
+    {
+      "id": "cohesion",
+      "title": "Linkers & Punctuation",
+      "description": "Correct punctuation of 'however', 'therefore', 'in addition', sparing use (≤2 per paragraph), sensible sentence length (15–25 words).",
+      "maxBand": 7,
+      "linkedRuleIds": ["G08.1", "G08.2", "G08.3", "G08.4", "G08.5", "G08.6", "G08.7"]
+    },
+    {
+      "id": "prepositions_and_time",
+      "title": "Prepositions & Time Markers",
+      "description": "Treatment FOR not FROM; correct 'on/in/at' usage; elapsed-time phrasing; hyphenated duration adjectives.",
+      "maxBand": 7,
+      "linkedRuleIds": ["G09.1", "G09.2", "G09.3", "G09.4"]
+    },
+    {
+      "id": "concession",
+      "title": "Concession & Contrast",
+      "description": "Correct 'despite' + noun/-ING vs. 'although' + clause.",
+      "maxBand": 7,
+      "linkedRuleIds": ["G10.1", "G10.2", "G10.3"]
+    },
+    {
+      "id": "clinical_numeracy",
+      "title": "Clinical Numeracy & Dose Language",
+      "description": "Latin abbreviations translated, values paired with units, dates formatted correctly, no 'PO' for oral route.",
+      "maxBand": 7,
+      "linkedRuleIds": ["G12.1", "G12.2", "G12.3", "G12.4", "G12.5", "G12.6"]
+    }
+  ],
+  "notes": "These criteria feed the Language and Organisation & Layout bands of the OET Writing rubric and map to IELTS Grammatical Range & Accuracy / PTE Grammar trait. Lessons authored against this rulebook must cite the relevant criterion in their sourceProvenance."
+}

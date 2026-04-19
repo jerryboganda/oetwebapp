@@ -121,6 +121,15 @@ function renderHeader(
 }
 
 function renderScoringSection(ctx: AiGroundingContext): string {
+  let focusLine: string;
+  if (ctx.kind === 'writing') {
+    focusLine = '**This call concerns WRITING** — apply the country-aware pass mark above. Never use the universal 350 threshold for Writing without verifying the country.';
+  } else if (ctx.kind === 'speaking') {
+    focusLine = '**This call concerns SPEAKING** — apply the universal 350/500 pass mark regardless of country.';
+  } else {
+    focusLine = '**This call concerns GRAMMAR authoring** — the scoring table is background context only. Do NOT produce a candidate score; you are producing teaching content grounded in the rulebook.';
+  }
+
   return [
     '## Canonical OET Scoring (non-negotiable)',
     '',
@@ -129,9 +138,7 @@ function renderScoringSection(ctx: AiGroundingContext): string {
     `- WRITING (country-aware): Grade B at ${OET_SCALED_PASS_B}/500 for UK/IE/AU/NZ/CA; Grade C+ at ${OET_SCALED_PASS_C_PLUS}/500 for US/QA. Without a confirmed country, return "country_required" instead of a grade.`,
     '- SPEAKING: Grade B at 350/500, universal (no country variation).',
     '',
-    ctx.kind === 'writing'
-      ? '**This call concerns WRITING** — apply the country-aware pass mark above. Never use the universal 350 threshold for Writing without verifying the country.'
-      : '**This call concerns SPEAKING** — apply the universal 350/500 pass mark regardless of country.',
+    focusLine,
     '',
     'Always reference pass/fail using the exact OET grade letters: A, B, C+, C, D, E. Never use generic "pass/high" without the grade letter.',
   ].join('\n');
@@ -160,6 +167,15 @@ function renderRuleLine(rule: Rule): string {
 }
 
 function renderGuardrails(ctx: AiGroundingContext): string {
+  let layoutGuardrail: string;
+  if (ctx.kind === 'speaking') {
+    layoutGuardrail = '8. For speaking: respect the 13-stage consultation state machine and the Breaking Bad News 7-step protocol when analysing transcripts.';
+  } else if (ctx.kind === 'grammar') {
+    layoutGuardrail = '8. For grammar authoring: every exercise you emit must cite at least one grammar rule ID (e.g. "G02.1") in `appliedRuleIds`. If a concept falls outside the rulebook, omit it rather than invent.';
+  } else {
+    layoutGuardrail = '8. For writing: respect the letter structure order (Address → Date → Salutation → Re: line → Body → Yours sincerely/faithfully → Doctor) and flag layout violations.';
+  }
+
   return [
     '## Guardrails (STRICT)',
     '',
@@ -170,9 +186,7 @@ function renderGuardrails(ctx: AiGroundingContext): string {
     '5. Never request the candidate\'s OET score from them; derive grades from the rulebook + the inputs provided.',
     '6. Be concise, clinical, and direct. No filler praise. No motivational platitudes.',
     '7. Use the same tone Dr. Hesham uses: professional, specific, and example-driven.',
-    ctx.kind === 'speaking'
-      ? '8. For speaking: respect the 13-stage consultation state machine and the Breaking Bad News 7-step protocol when analysing transcripts.'
-      : '8. For writing: respect the letter structure order (Address → Date → Salutation → Re: line → Body → Yours sincerely/faithfully → Doctor) and flag layout violations.',
+    layoutGuardrail,
   ].join('\n');
 }
 
@@ -244,6 +258,45 @@ function renderReplyFormat(ctx: AiGroundingContext): string {
         '}',
         '```',
       ].join('\n');
+    case 'generate_grammar_lesson':
+      return [
+        '## Reply format (JSON — grammar lesson draft)',
+        '',
+        'Return a SINGLE JSON object. Every exercise MUST cite one or more grammar rule IDs (e.g. "G02.1") that already exist in the rulebook above. Never invent a rule ID.',
+        '',
+        '```json',
+        '{',
+        '  "title": "...",',
+        '  "topicSlug": "present_perfect_vs_past_simple",',
+        '  "level": "beginner|intermediate|advanced",',
+        '  "estimatedMinutes": 12,',
+        '  "contentBlocks": [',
+        '    { "type": "callout|prose|example|note", "contentMarkdown": "..." }',
+        '  ],',
+        '  "exercises": [',
+        '    {',
+        '      "type": "mcq|fill_blank|error_correction|sentence_transformation|matching",',
+        '      "promptMarkdown": "...",',
+        '      "options": [],',
+        '      "correctAnswer": "...",',
+        '      "acceptedAnswers": [],',
+        '      "explanationMarkdown": "... (cite G-rule IDs)",',
+        '      "difficulty": "beginner|intermediate|advanced",',
+        '      "points": 1,',
+        '      "appliedRuleIds": ["G02.1"]',
+        '    }',
+        '  ],',
+        '  "appliedRuleIds": ["G02.1", "G07.1"],',
+        '  "selfCheckNotes": "..."',
+        '}',
+        '```',
+        '',
+        'Hard requirements:',
+        '- Minimum 3 exercises, maximum 12.',
+        '- Minimum 1 content block with clear explanation.',
+        '- Every exercise has a non-empty explanationMarkdown.',
+        '- Every appliedRuleIds entry appears in the rulebook above. If you cannot satisfy this, emit fewer exercises and explain in selfCheckNotes.',
+      ].join('\n');
     case 'summarise':
     default:
       return [
@@ -259,9 +312,17 @@ function renderTaskInstruction(
   passMark: number,
   passGrade: 'B' | 'C+',
 ): string {
-  const base =
-    ctx.kind === 'writing'
-      ? `Task: analyse the candidate's OET Writing letter (${ctx.letterType ?? 'letter type TBD'}) against the active rulebook, and produce rule-cited feedback.`
-      : `Task: analyse the candidate's OET Speaking transcript (${ctx.cardType ?? 'card type TBD'}) against the active rulebook, and produce rule-cited feedback.`;
+  let base: string;
+  if (ctx.kind === 'writing') {
+    base = `Task: analyse the candidate's OET Writing letter (${ctx.letterType ?? 'letter type TBD'}) against the active rulebook, and produce rule-cited feedback.`;
+  } else if (ctx.kind === 'speaking') {
+    base = `Task: analyse the candidate's OET Speaking transcript (${ctx.cardType ?? 'card type TBD'}) against the active rulebook, and produce rule-cited feedback.`;
+  } else {
+    base = `Task: produce a grammar teaching draft (title, content blocks, exercises) grounded in the grammar rulebook. Every exercise must cite at least one grammar rule ID in appliedRuleIds.`;
+  }
+
+  if (ctx.kind === 'grammar') {
+    return `${base} Respond strictly in the reply format above.`;
+  }
   return `${base} Apply the ${passMark}/500 (Grade ${passGrade}) pass mark for this ${ctx.kind} call. Respond strictly in the reply format above.`;
 }

@@ -583,6 +583,82 @@ public static class AdminEndpoints
             => Results.Ok(await service.ArchiveGrammarLessonAsync(http.AdminId(), http.AdminName(), lessonId, ct)))
             .RequireRateLimiting("PerUserWrite").RequireAuthorization("AdminContentWrite");
 
+        // ── Grammar Publish Gate + AI Draft (Grounded) ────────────────
+
+        admin.MapGet("/grammar/lessons/{lessonId}/publish-gate",
+            async (string lessonId,
+                OetLearner.Api.Services.Grammar.IGrammarPublishGateService gate,
+                CancellationToken ct)
+            => Results.Ok(await gate.EvaluateAsync(lessonId, ct)))
+            .RequireAuthorization("AdminContentRead");
+
+        admin.MapPost("/grammar/lessons/{lessonId}/publish",
+            async (string lessonId, HttpContext http,
+                OetLearner.Api.Services.Grammar.IGrammarPublishGateService gate,
+                CancellationToken ct)
+            =>
+            {
+                var result = await gate.PublishAsync(lessonId, http.AdminId(), http.AdminName(), ct);
+                return result.CanPublish
+                    ? Results.Ok(new { published = true, status = "active", errors = Array.Empty<string>() })
+                    : Results.Json(new { published = false, errors = result.Errors }, statusCode: 422);
+            })
+            .RequireRateLimiting("PerUserWrite").RequireAuthorization("AdminContentWrite");
+
+        admin.MapPost("/grammar/lessons/{lessonId}/unpublish",
+            async (string lessonId, HttpContext http,
+                OetLearner.Api.Services.Grammar.IGrammarPublishGateService gate,
+                CancellationToken ct)
+            => Results.Ok(await gate.UnpublishAsync(lessonId, http.AdminId(), http.AdminName(), ct)))
+            .RequireRateLimiting("PerUserWrite").RequireAuthorization("AdminContentWrite");
+
+        admin.MapGet("/grammar/lessons/{lessonId}/stats",
+            async (string lessonId,
+                OetLearner.Api.Services.Grammar.IGrammarPublishGateService gate,
+                CancellationToken ct)
+            => Results.Ok(await gate.GetStatsAsync(lessonId, ct)))
+            .RequireAuthorization("AdminContentRead");
+
+        admin.MapPost("/grammar/ai-draft",
+            async (HttpContext http,
+                AdminGrammarAiDraftRequest body,
+                OetLearner.Api.Services.Grammar.IGrammarDraftService draft,
+                CancellationToken ct) =>
+            {
+                if (body is null || string.IsNullOrWhiteSpace(body.Prompt))
+                    return Results.BadRequest(new { error = "prompt is required" });
+
+                try
+                {
+                    var result = await draft.GenerateAsync(new OetLearner.Api.Services.Grammar.GrammarDraftRequest(
+                        ExamTypeCode: body.ExamTypeCode ?? "oet",
+                        TopicSlug: body.TopicSlug,
+                        Prompt: body.Prompt,
+                        Level: body.Level ?? "intermediate",
+                        TargetExerciseCount: body.TargetExerciseCount ?? 6,
+                        Profession: body.Profession),
+                        adminId: http.AdminId(),
+                        adminName: http.AdminName(),
+                        authAccountId: http.User.FindFirst("aid")?.Value,
+                        ct);
+                    return Results.Ok(new
+                    {
+                        lessonId = result.LessonId,
+                        title = result.Title,
+                        contentBlockCount = result.ContentBlockCount,
+                        exerciseCount = result.ExerciseCount,
+                        rulebookVersion = result.RulebookVersion,
+                        appliedRuleIds = result.AppliedRuleIds,
+                        warning = result.Warning,
+                    });
+                }
+                catch (OetLearner.Api.Services.AiManagement.AiQuotaDeniedException qex)
+                {
+                    return Results.Json(new { errorCode = qex.ErrorCode, error = qex.Message }, statusCode: 429);
+                }
+            })
+            .RequireRateLimiting("PerUserWrite").RequireAuthorization("AdminContentWrite");
+
         // ── Vocabulary Admin CRUD ────────────────────────
 
         admin.MapGet("/vocabulary/items", async (AdminService service, CancellationToken ct,
@@ -833,6 +909,78 @@ public static class AdminEndpoints
             }).ToArray();
             return Results.Ok(new { permissions });
         }).RequireAuthorization("AdminSystemAdmin");
+
+        // Strategy Guide Management
+        admin.MapGet("/strategies", async (
+            StrategyGuideService service,
+            CancellationToken ct,
+            string? status,
+            string? examTypeCode,
+            string? search)
+            => Results.Ok(await service.ListAdminGuidesAsync(status, examTypeCode, search, ct)))
+            .WithName("AdminListStrategyGuides")
+            .WithSummary("Lists strategy guides for admin publishing workflows.")
+            .RequireAuthorization("AdminContentRead");
+
+        admin.MapGet("/strategies/{guideId}", async (string guideId, StrategyGuideService service, CancellationToken ct) =>
+        {
+            var guide = await service.GetAdminGuideAsync(guideId, ct);
+            return guide is null ? Results.NotFound(new { error = "NOT_FOUND" }) : Results.Ok(guide);
+        })
+        .WithName("AdminGetStrategyGuide")
+        .WithSummary("Gets a strategy guide draft or published record.")
+        .RequireAuthorization("AdminContentRead");
+
+        admin.MapPost("/strategies", async (
+            HttpContext http,
+            StrategyGuideUpsertRequest request,
+            StrategyGuideService service,
+            CancellationToken ct)
+            => Results.Ok(await service.CreateGuideAsync(http.AdminId(), http.AdminName(), request, ct)))
+            .WithName("AdminCreateStrategyGuide")
+            .WithSummary("Creates a draft strategy guide.")
+            .RequireRateLimiting("PerUserWrite").RequireAuthorization("AdminContentWrite");
+
+        admin.MapPut("/strategies/{guideId}", async (
+            string guideId,
+            HttpContext http,
+            StrategyGuideUpsertRequest request,
+            StrategyGuideService service,
+            CancellationToken ct) =>
+        {
+            var guide = await service.UpdateGuideAsync(http.AdminId(), http.AdminName(), guideId, request, ct);
+            return guide is null ? Results.NotFound(new { error = "NOT_FOUND" }) : Results.Ok(guide);
+        })
+        .WithName("AdminUpdateStrategyGuide")
+        .WithSummary("Updates strategy guide metadata and content.")
+        .RequireRateLimiting("PerUserWrite").RequireAuthorization("AdminContentWrite");
+
+        admin.MapGet("/strategies/{guideId}/publish-gate", async (string guideId, StrategyGuideService service, CancellationToken ct) =>
+        {
+            var validation = await service.ValidateGuideForPublishAsync(guideId, ct);
+            return validation is null ? Results.NotFound(new { error = "NOT_FOUND" }) : Results.Ok(validation);
+        })
+        .WithName("AdminValidateStrategyGuidePublish")
+        .WithSummary("Validates required strategy guide fields before publish.")
+        .RequireAuthorization("AdminContentRead");
+
+        admin.MapPost("/strategies/{guideId}/publish", async (string guideId, HttpContext http, StrategyGuideService service, CancellationToken ct) =>
+        {
+            var result = await service.PublishGuideAsync(http.AdminId(), http.AdminName(), guideId, ct);
+            return result.Published ? Results.Ok(result) : Results.BadRequest(result);
+        })
+        .WithName("AdminPublishStrategyGuide")
+        .WithSummary("Publishes a valid strategy guide and writes an audit event.")
+        .RequireRateLimiting("PerUserWrite").RequireAuthorization("AdminContentPublish");
+
+        admin.MapPost("/strategies/{guideId}/archive", async (string guideId, HttpContext http, StrategyGuideService service, CancellationToken ct) =>
+        {
+            var guide = await service.ArchiveGuideAsync(http.AdminId(), http.AdminName(), guideId, ct);
+            return guide is null ? Results.NotFound(new { error = "NOT_FOUND" }) : Results.Ok(guide);
+        })
+        .WithName("AdminArchiveStrategyGuide")
+        .WithSummary("Archives a strategy guide and writes an audit event.")
+        .RequireRateLimiting("PerUserWrite").RequireAuthorization("AdminContentPublish");
 
         return app;
     }

@@ -433,6 +433,7 @@ builder.Services.AddScoped<ContentImportService>();
 builder.Services.AddScoped<ContentSearchService>();
 builder.Services.AddScoped<MediaNormalizationService>();
 builder.Services.AddScoped<VideoLessonService>();
+builder.Services.AddScoped<StrategyGuideService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<AnalyticsIngestionService>();
 builder.Services.AddSingleton<PlatformLinkService>();
@@ -536,6 +537,12 @@ builder.Services.AddHostedService<OetLearner.Api.Services.Reading.ReadingAttempt
 builder.Services.AddHostedService<OetLearner.Api.Services.Content.AdminUploadCleanupWorker>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiGatewayService,
     OetLearner.Api.Services.Rulebook.AiGatewayService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarDraftService,
+    OetLearner.Api.Services.Grammar.GrammarDraftService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarPublishGateService,
+    OetLearner.Api.Services.Grammar.GrammarPublishGateService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarEntitlementService,
+    OetLearner.Api.Services.Grammar.GrammarEntitlementService>();
 
 // ── Private Speaking Sessions ──
 builder.Services.Configure<ZoomOptions>(builder.Configuration.GetSection("Zoom"));

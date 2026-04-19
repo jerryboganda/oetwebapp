@@ -49,6 +49,7 @@ public sealed class AiCredentialResolver(
     private static readonly HashSet<string> PlatformOnlyFeatures = new(StringComparer.OrdinalIgnoreCase)
     {
         AiFeatureCodes.AdminContentGeneration,
+        AiFeatureCodes.AdminGrammarDraft,
     };
 
     public async Task<AiCredentialResolution> ResolveAsync(

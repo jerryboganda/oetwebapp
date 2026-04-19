@@ -1,166 +1,434 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { MotionItem } from '@/components/ui/motion-primitives';
-import { Lightbulb, ArrowLeft, Clock } from 'lucide-react';
 import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
+import {
+  ArrowLeft,
+  ArrowRight,
+  Bookmark,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Lightbulb,
+  Lock,
+  Sparkles,
+} from 'lucide-react';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { LearnerDashboardShell } from '@/components/layout';
-import { Skeleton } from '@/components/ui/skeleton';
-import { InlineAlert } from '@/components/ui/alert';
-import { fetchStrategyGuide } from '@/lib/api';
+import { Badge, Button, Card, InlineAlert, MotionItem, MotionSection, ProgressBar, Skeleton } from '@/components/ui';
+import { fetchStrategyGuide, isApiError, setStrategyGuideBookmark, updateStrategyGuideProgress } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { cn } from '@/lib/utils';
+import type {
+  StrategyGuideDetail,
+  StrategyGuideStructuredContent,
+  StrategyGuideStructuredSection,
+} from '@/lib/types/strategies';
 
-type StrategyGuide = {
-  id: string;
-  examTypeCode: string;
-  subtestCode: string | null;
-  title: string;
-  summary: string | null;
-  contentJson: string | null;
-  contentHtml: string | null;
-  category: string;
-  readingTimeMinutes: number;
-  estimatedMinutes?: number;
-};
-type GuideContent = { overview?: string; tips?: Array<{ title: string; body: string }>; commonMistakes?: string[]; keyTakeaways?: string[] };
+function formatLabel(value: string | null | undefined) {
+  if (!value) return 'General';
+  return value
+    .split(/[_-]/g)
+    .filter(Boolean)
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(' ');
+}
+
+function decodeHtmlEntities(value: string) {
+  return value
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
+function htmlToParagraphs(html: string | null) {
+  if (!html) return [];
+
+  return decodeHtmlEntities(
+    html
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(p|div|h[1-6]|li)>/gi, '\n')
+      .replace(/<li[^>]*>/gi, '- ')
+      .replace(/<[^>]+>/g, ' '),
+  )
+    .split('\n')
+    .map((line) => line.replace(/\s+/g, ' ').trim())
+    .filter(Boolean);
+}
+
+function normaliseSections(raw: unknown): StrategyGuideStructuredSection[] {
+  if (!Array.isArray(raw)) return [];
+
+  const sections: StrategyGuideStructuredSection[] = [];
+  for (const section of raw) {
+    if (!section || typeof section !== 'object') continue;
+    const record = section as Record<string, unknown>;
+    const bullets = Array.isArray(record.bullets)
+      ? record.bullets.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+      : [];
+
+    const candidate: StrategyGuideStructuredSection = {
+      heading: typeof record.heading === 'string' ? record.heading : undefined,
+      body: typeof record.body === 'string' ? record.body : undefined,
+      bullets,
+    };
+
+    if (candidate.heading || candidate.body || (candidate.bullets && candidate.bullets.length)) {
+      sections.push(candidate);
+    }
+  }
+  return sections;
+}
+
+function parseStructuredContent(json: string | null): StrategyGuideStructuredContent | null {
+  if (!json) return null;
+
+  try {
+    const parsed = JSON.parse(json) as Record<string, unknown>;
+    if (!parsed || typeof parsed !== 'object') return null;
+
+    return {
+      version: typeof parsed.version === 'number' ? parsed.version : undefined,
+      overview: typeof parsed.overview === 'string' ? parsed.overview : undefined,
+      sections: normaliseSections(parsed.sections),
+      keyTakeaways: Array.isArray(parsed.keyTakeaways)
+        ? parsed.keyTakeaways.filter((item): item is string => typeof item === 'string' && item.trim().length > 0)
+        : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
+function LoadingState() {
+  return (
+    <LearnerDashboardShell>
+      <div className="space-y-5">
+        <Skeleton className="h-36 rounded-[24px]" />
+        <Skeleton className="h-96 rounded-2xl" />
+      </div>
+    </LearnerDashboardShell>
+  );
+}
+
+function DisabledState() {
+  return (
+    <LearnerDashboardShell>
+      <LearnerPageHero
+        title="Strategy guide unavailable"
+        description="This learner strategy guide is behind a release flag right now."
+        icon={Lightbulb}
+        accent="amber"
+        highlights={[
+          { label: 'Status', value: 'Coming soon', icon: Sparkles },
+          { label: 'Access', value: 'Learner only', icon: Lock },
+        ]}
+      />
+      <Link href="/strategies" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-navy hover:bg-surface">
+        <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+        Back to strategies
+      </Link>
+    </LearnerDashboardShell>
+  );
+}
 
 export default function StrategyGuidePage() {
-  const params = useParams<{ id: string }>();
-  const [guide, setGuide] = useState<StrategyGuide | null>(null);
-  const [content, setContent] = useState<GuideContent | null>(null);
-  const [articleHtml, setArticleHtml] = useState<string | null>(null);
+  const params = useParams<{ id?: string | string[] }>();
+  const guideId = useMemo(() => {
+    const value = params?.id;
+    if (typeof value === 'string') return value;
+    if (Array.isArray(value)) return value[0] ?? null;
+    return null;
+  }, [params]);
+
+  const [guide, setGuide] = useState<StrategyGuideDetail | null>(null);
+  const [content, setContent] = useState<StrategyGuideStructuredContent | null>(null);
+  const [fallbackParagraphs, setFallbackParagraphs] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  const [disabled, setDisabled] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+  const [bookmarking, setBookmarking] = useState(false);
+  const [completing, setCompleting] = useState(false);
 
   useEffect(() => {
-    if (!params.id) return;
-    fetchStrategyGuide(params.id).then(data => {
-      const g = data as StrategyGuide;
-      setGuide(g);
-      if (g.contentJson) {
-        try {
-          setContent(JSON.parse(g.contentJson));
-          setArticleHtml(null);
-        } catch {
-          setContent(null);
-          setArticleHtml(g.contentHtml);
+    let cancelled = false;
+
+    async function loadGuide(id: string) {
+      setLoading(true);
+      setError(null);
+      setActionError(null);
+      setDisabled(false);
+
+      try {
+        const data = await fetchStrategyGuide(id);
+        if (cancelled) return;
+
+        const parsed = parseStructuredContent(data.contentJson);
+        setGuide(data);
+        setContent(parsed);
+        setFallbackParagraphs(parsed ? [] : htmlToParagraphs(data.contentHtml));
+        setLoading(false);
+        analytics.track('strategy_guide_viewed', { guideId: data.id });
+
+        const canTrackProgress = data.isAccessible || data.isPreviewEligible;
+        if (canTrackProgress && data.progress.readPercent < 15) {
+          updateStrategyGuideProgress(data.id, 15)
+            .then((result) => {
+              if (cancelled) return;
+              setGuide((current) => current ? { ...current, progress: result.progress, bookmarked: result.progress.bookmarked } : current);
+            })
+            .catch(() => undefined);
         }
-      } else {
-        setContent(null);
-        setArticleHtml(g.contentHtml);
+      } catch (err) {
+        if (cancelled) return;
+        if (isApiError(err) && err.code === 'FEATURE_DISABLED') {
+          setDisabled(true);
+        } else {
+          setError(isApiError(err) ? err.userMessage : 'Unable to load this strategy guide.');
+        }
+        setLoading(false);
       }
+    }
+
+    if (!guideId) {
+      setError('Strategy guide route is missing an id.');
       setLoading(false);
-      analytics.track('strategy_guide_viewed', { guideId: g.id });
-    }).catch(() => {
-      setError('Could not load strategy guide.');
-      setLoading(false);
-    });
-  }, [params.id]);
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    void loadGuide(guideId);
+
+    return () => {
+      cancelled = true;
+    };
+  }, [guideId]);
+
+  async function toggleBookmark() {
+    if (!guide) return;
+    setBookmarking(true);
+    setActionError(null);
+
+    try {
+      const result = await setStrategyGuideBookmark(guide.id, !guide.bookmarked);
+      setGuide((current) => current ? { ...current, progress: result.progress, bookmarked: result.progress.bookmarked } : current);
+    } catch (err) {
+      setActionError(isApiError(err) ? err.userMessage : 'Unable to update this bookmark.');
+    } finally {
+      setBookmarking(false);
+    }
+  }
+
+  async function markComplete() {
+    if (!guide) return;
+    setCompleting(true);
+    setActionError(null);
+
+    try {
+      const result = await updateStrategyGuideProgress(guide.id, 100);
+      setGuide((current) => current ? { ...current, progress: result.progress, bookmarked: result.progress.bookmarked } : current);
+    } catch (err) {
+      setActionError(isApiError(err) ? err.userMessage : 'Unable to update reading progress.');
+    } finally {
+      setCompleting(false);
+    }
+  }
 
   if (loading) {
-    return <LearnerDashboardShell><Skeleton className="h-8 w-48 mb-4" /><Skeleton className="h-64 rounded-2xl" /></LearnerDashboardShell>;
+    return <LoadingState />;
   }
 
-  if (!guide) {
-    return <LearnerDashboardShell><InlineAlert variant="warning">Strategy guide not found.</InlineAlert></LearnerDashboardShell>;
+  if (disabled) {
+    return <DisabledState />;
   }
+
+  if (error || !guide) {
+    return (
+      <LearnerDashboardShell>
+        <InlineAlert variant="error" title="Strategy guide did not load">{error ?? 'Strategy guide not found.'}</InlineAlert>
+        <Link href="/strategies" className="mt-5 inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-navy hover:bg-surface">
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Back to strategies
+        </Link>
+      </LearnerDashboardShell>
+    );
+  }
+
+  const locked = !guide.isAccessible && guide.requiresUpgrade && !guide.isPreviewEligible;
+  const readable = guide.isAccessible || guide.isPreviewEligible;
+  const sections = content?.sections ?? [];
+  const takeaways = content?.keyTakeaways ?? [];
 
   return (
     <LearnerDashboardShell>
-      <div className="flex items-center gap-3 mb-6">
-        <Link href="/strategies" className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-          <ArrowLeft className="w-5 h-5" />
+      <div className="space-y-7">
+        <Link href="/strategies" className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-4 py-2 text-sm font-semibold text-navy hover:bg-surface">
+          <ArrowLeft className="h-4 w-4" aria-hidden="true" />
+          Back to strategies
         </Link>
-        <div>
-          <div className="flex items-center gap-2 text-xs text-gray-400 mb-0.5">
-            <Lightbulb className="w-3.5 h-3.5 text-yellow-500" />
-            <span className="uppercase font-medium">{guide.examTypeCode}</span>
-            {guide.subtestCode && <span className="capitalize">· {guide.subtestCode}</span>}
-            <span className="capitalize">· {guide.category.replace(/_/g, ' ')}</span>
-            <span className="flex items-center gap-1"><Clock className="w-3 h-3" />{guide.estimatedMinutes ?? guide.readingTimeMinutes} min read</span>
-          </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{guide.title}</h1>
-        </div>
-      </div>
 
-      {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
-
-      <div className="max-w-2xl mx-auto space-y-6">
-        {guide.summary && (
-          <div className="bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl p-4 text-yellow-800 dark:text-yellow-200 text-sm">
-            {guide.summary}
-          </div>
-        )}
-
-        {content?.overview && (
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-2">Overview</h2>
-            <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed">{content.overview}</p>
-          </div>
-        )}
-
-        {content?.tips && content.tips.length > 0 && (
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">Key Strategies</h2>
-            <div className="space-y-4">
-              {content.tips.map((tip, i) => (
-                <MotionItem
-                  key={i}
-                  delayIndex={i}
-                  className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 flex gap-4"
-                >
-                  <div className="flex-shrink-0 w-8 h-8 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center text-yellow-700 dark:text-yellow-300 font-bold text-sm">
-                    {i + 1}
-                  </div>
-                  <div>
-                    <div className="font-medium text-gray-900 dark:text-white mb-1">{tip.title}</div>
-                    <div className="text-sm text-gray-600 dark:text-gray-400">{tip.body}</div>
-                  </div>
-                </MotionItem>
-              ))}
+        <LearnerPageHero
+          title={guide.title}
+          description={guide.summary ?? 'A guided OET strategy article for learner practice.'}
+          icon={Lightbulb}
+          accent="amber"
+          highlights={[
+            { label: 'Subtest', value: formatLabel(guide.subtestCode), icon: CheckCircle2 },
+            { label: 'Category', value: formatLabel(guide.category), icon: Sparkles },
+            { label: 'Reading time', value: `${guide.readingTimeMinutes} min`, icon: Clock },
+          ]}
+          aside={
+            <div className="space-y-3 rounded-2xl border border-border bg-background-light p-4">
+              <ProgressBar value={guide.progress.readPercent} showValue label="Reading progress" color={guide.progress.completed ? 'success' : 'primary'} />
+              <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-1">
+                <Button type="button" variant="outline" onClick={toggleBookmark} loading={bookmarking} disabled={locked}>
+                  <Bookmark className={cn('h-4 w-4', guide.bookmarked && 'fill-primary text-primary')} aria-hidden="true" />
+                  {guide.bookmarked ? 'Bookmarked' : 'Bookmark'}
+                </Button>
+                <Button type="button" onClick={markComplete} loading={completing} disabled={!readable || guide.progress.completed}>
+                  <CheckCircle2 className="h-4 w-4" aria-hidden="true" />
+                  {guide.progress.completed ? 'Completed' : 'Mark read'}
+                </Button>
+              </div>
             </div>
-          </div>
-        )}
+          }
+        />
 
-        {content?.commonMistakes && content.commonMistakes.length > 0 && (
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Common Mistakes to Avoid</h2>
-            <div className="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800 rounded-xl p-4 space-y-2">
-              {content.commonMistakes.map((mistake, i) => (
-                <div key={i} className="flex items-start gap-2 text-sm text-red-700 dark:text-red-300">
-                  <span className="text-red-400 font-bold flex-shrink-0">✗</span>
-                  <span>{mistake}</span>
+        {actionError ? <InlineAlert variant="warning">{actionError}</InlineAlert> : null}
+
+        {locked ? (
+          <InlineAlert
+            variant="warning"
+            title="Upgrade required"
+            action={
+              <Link href="/billing" className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary/90">
+                View plans
+                <ArrowRight className="h-4 w-4" aria-hidden="true" />
+              </Link>
+            }
+          >
+            This guide is attached to package content that is not included in your current access.
+          </InlineAlert>
+        ) : null}
+
+        {!guide.isAccessible && guide.isPreviewEligible ? (
+          <InlineAlert variant="info" title="Preview access">You can preview this strategy guide. Upgrade when you are ready to unlock its linked module content.</InlineAlert>
+        ) : null}
+
+        <MotionSection className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_320px]">
+          <article className="space-y-6">
+            {content?.overview ? (
+              <Card>
+                <p className="text-base leading-8 text-navy">{content.overview}</p>
+              </Card>
+            ) : null}
+
+            {sections.map((section, index) => (
+              <MotionItem key={`${section.heading ?? 'section'}-${index}`} delayIndex={index}>
+                <Card className="space-y-4">
+                  {section.heading ? <h2 className="text-xl font-bold text-navy">{section.heading}</h2> : null}
+                  {section.body ? <p className="text-sm leading-7 text-muted">{section.body}</p> : null}
+                  {section.bullets && section.bullets.length > 0 ? (
+                    <ul className="space-y-2">
+                      {section.bullets.map((bullet) => (
+                        <li key={bullet} className="flex gap-2 text-sm leading-6 text-muted">
+                          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-primary" aria-hidden="true" />
+                          <span>{bullet}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </Card>
+              </MotionItem>
+            ))}
+
+            {takeaways.length > 0 ? (
+              <Card className="border-emerald-200 bg-emerald-50">
+                <h2 className="text-lg font-bold text-emerald-900">Key takeaways</h2>
+                <ul className="mt-3 space-y-2">
+                  {takeaways.map((item) => (
+                    <li key={item} className="flex gap-2 text-sm leading-6 text-emerald-800">
+                      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
+                      <span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </Card>
+            ) : null}
+
+            {!content && fallbackParagraphs.length > 0 ? (
+              <Card className="space-y-4">
+                {fallbackParagraphs.map((paragraph) => (
+                  <p key={paragraph} className="text-sm leading-7 text-muted">{paragraph}</p>
+                ))}
+              </Card>
+            ) : null}
+
+            {!content && fallbackParagraphs.length === 0 ? (
+              <Card className="border-dashed bg-background-light text-sm text-muted">Content for this guide is being prepared.</Card>
+            ) : null}
+          </article>
+
+          <aside className="space-y-5">
+            <Card className="space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-sm font-bold text-navy">Guide status</span>
+                <Badge variant={guide.progress.completed ? 'success' : guide.progress.readPercent > 0 ? 'info' : 'muted'}>
+                  {guide.progress.completed ? 'Completed' : guide.progress.readPercent > 0 ? 'In progress' : 'Not started'}
+                </Badge>
+              </div>
+              <div className="text-sm leading-6 text-muted">
+                {guide.programTitle ? <p>Program: {guide.programTitle}</p> : null}
+                {guide.moduleTitle ? <p>Module: {guide.moduleTitle}</p> : null}
+                {guide.sourceProvenance ? <p>Source: {guide.sourceProvenance}</p> : null}
+              </div>
+            </Card>
+
+            {(guide.previousGuideId || guide.nextGuideId) ? (
+              <Card className="space-y-3">
+                <h2 className="text-sm font-bold text-navy">Reading path</h2>
+                <div className="grid gap-2">
+                  {guide.previousGuideId ? (
+                    <Link href={`/strategies/${encodeURIComponent(guide.previousGuideId)}`} className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-navy hover:bg-surface">
+                      <ChevronLeft className="h-4 w-4" aria-hidden="true" />
+                      Previous guide
+                    </Link>
+                  ) : null}
+                  {guide.nextGuideId ? (
+                    <Link href={`/strategies/${encodeURIComponent(guide.nextGuideId)}`} className="inline-flex min-h-11 items-center justify-between gap-2 rounded-lg border border-border px-3 py-2 text-sm font-semibold text-navy hover:bg-surface">
+                      Next guide
+                      <ChevronRight className="h-4 w-4" aria-hidden="true" />
+                    </Link>
+                  ) : null}
                 </div>
+              </Card>
+            ) : null}
+          </aside>
+        </MotionSection>
+
+        {guide.relatedGuides.length > 0 ? (
+          <MotionSection className="space-y-4">
+            <LearnerSurfaceSectionHeader title="Related Guides" icon={Lightbulb} />
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+              {guide.relatedGuides.map((related) => (
+                <Link key={related.id} href={`/strategies/${encodeURIComponent(related.id)}`} className="block h-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 rounded-2xl">
+                  <Card hoverable className="h-full">
+                    <Badge variant="outline">{formatLabel(related.subtestCode)}</Badge>
+                    <h3 className="mt-3 text-base font-bold text-navy">{related.title}</h3>
+                    {related.summary ? <p className="mt-2 text-sm leading-6 text-muted">{related.summary}</p> : null}
+                  </Card>
+                </Link>
               ))}
             </div>
-          </div>
-        )}
-
-        {content?.keyTakeaways && content.keyTakeaways.length > 0 && (
-          <div>
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-3">Key Takeaways</h2>
-            <div className="bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800 rounded-xl p-4 space-y-2">
-              {content.keyTakeaways.map((point, i) => (
-                <div key={i} className="flex items-start gap-2 text-sm text-green-700 dark:text-green-300">
-                  <span className="text-green-500 flex-shrink-0">✓</span>
-                  <span>{point}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {articleHtml && !content && (
-          <div
-            className="prose prose-slate dark:prose-invert max-w-none rounded-xl border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 p-6"
-            dangerouslySetInnerHTML={{ __html: articleHtml }}
-          />
-        )}
-
-        {!content && !articleHtml && (
-          <div className="text-center py-8 text-gray-400 text-sm">Content for this guide is being prepared.</div>
-        )}
+          </MotionSection>
+        ) : null}
       </div>
     </LearnerDashboardShell>
   );

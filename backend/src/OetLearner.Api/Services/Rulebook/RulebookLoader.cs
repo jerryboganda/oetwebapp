@@ -30,7 +30,7 @@ public sealed class RulebookLoader : IRulebookLoader
 
     public RulebookLoader()
     {
-        foreach (var kind in new[] { RuleKind.Writing, RuleKind.Speaking })
+        foreach (var kind in Enum.GetValues<RuleKind>())
         {
             foreach (var profession in Enum.GetValues<ExamProfession>())
             {
@@ -44,7 +44,7 @@ public sealed class RulebookLoader : IRulebookLoader
             }
         }
 
-        foreach (var kind in new[] { RuleKind.Writing, RuleKind.Speaking })
+        foreach (var kind in Enum.GetValues<RuleKind>())
         {
             var stream = OpenResource($"OetRulebooks/{FolderOf(kind)}/common/assessment-criteria.json");
             if (stream is null) continue;
@@ -81,6 +81,7 @@ public sealed class RulebookLoader : IRulebookLoader
     {
         RuleKind.Writing => "writing",
         RuleKind.Speaking => "speaking",
+        RuleKind.Grammar => "grammar",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
     };
 
@@ -119,7 +120,7 @@ public sealed class RulebookNotFoundException(RuleKind kind, ExamProfession prof
 // Types — mirror lib/rulebook/types.ts
 // ---------------------------------------------------------------------------
 
-public enum RuleKind { Writing, Speaking }
+public enum RuleKind { Writing, Speaking, Grammar }
 
 public enum ExamProfession
 {

@@ -476,6 +476,9 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
         if (ctx.Kind == RuleKind.Speaking)
             return (OetScoring.ScaledPassGradeB, "B");
 
+        if (ctx.Kind == RuleKind.Grammar)
+            return (OetScoring.ScaledPassGradeB, "B");
+
         var t = OetScoring.GetWritingPassThreshold(ctx.CandidateCountry);
         if (t is null) return (OetScoring.ScaledPassGradeB, "B");
         return (t.Threshold, t.Grade);
@@ -530,9 +533,13 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
         sb.AppendLine($"- WRITING (country-aware): Grade B at {OetScoring.ScaledPassGradeB}/500 for UK/IE/AU/NZ/CA; Grade C+ at {OetScoring.ScaledPassGradeCPlus}/500 for US/QA.");
         sb.AppendLine("- SPEAKING: Grade B at 350/500, universal (no country variation).");
         sb.AppendLine();
-        sb.AppendLine(ctx.Kind == RuleKind.Writing
-            ? "**This call concerns WRITING** — apply the country-aware pass mark above. Never use the universal 350 threshold for Writing without verifying the country."
-            : "**This call concerns SPEAKING** — apply the universal 350/500 pass mark regardless of country.");
+        sb.AppendLine(ctx.Kind switch
+        {
+            RuleKind.Writing => "**This call concerns WRITING** — apply the country-aware pass mark above. Never use the universal 350 threshold for Writing without verifying the country.",
+            RuleKind.Speaking => "**This call concerns SPEAKING** — apply the universal 350/500 pass mark regardless of country.",
+            RuleKind.Grammar => "**This call concerns GRAMMAR authoring** — the scoring table is background context only. Do NOT produce a candidate score; you are producing teaching content grounded in the rulebook.",
+            _ => ""
+        });
         sb.AppendLine();
         sb.AppendLine("Always reference pass/fail using the exact OET grade letters: A, B, C+, C, D, E.");
         sb.AppendLine();
@@ -572,9 +579,12 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
         sb.AppendLine("5. Never request the candidate's OET score from them; derive grades from the rulebook + inputs.");
         sb.AppendLine("6. Be concise, clinical, and direct. No filler praise. No motivational platitudes.");
         sb.AppendLine("7. Use the same tone Dr. Hesham uses: professional, specific, example-driven.");
-        sb.AppendLine(ctx.Kind == RuleKind.Speaking
-            ? "8. For speaking: respect the 13-stage consultation state machine and the Breaking Bad News 7-step protocol when analysing transcripts."
-            : "8. For writing: respect the letter structure order (Address → Date → Salutation → Re: line → Body → Yours sincerely/faithfully → Doctor) and flag layout violations.");
+        sb.AppendLine(ctx.Kind switch
+        {
+            RuleKind.Speaking => "8. For speaking: respect the 13-stage consultation state machine and the Breaking Bad News 7-step protocol when analysing transcripts.",
+            RuleKind.Grammar => "8. For grammar authoring: every exercise you emit must cite at least one grammar rule ID (e.g. \"G02.1\") in appliedRuleIds. If a concept falls outside the rulebook, omit it rather than invent.",
+            _ => "8. For writing: respect the letter structure order (Address → Date → Salutation → Re: line → Body → Yours sincerely/faithfully → Doctor) and flag layout violations."
+        });
         sb.AppendLine();
     }
 
@@ -618,6 +628,34 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 sb.AppendLine("{ \"content\": \"...\", \"appliedRuleIds\": [\"R03.4\"], \"selfCheckNotes\": \"...\" }");
                 sb.AppendLine("```");
                 break;
+            case AiTaskMode.GenerateGrammarLesson:
+                sb.AppendLine("Return a SINGLE JSON object. Every exercise MUST cite one or more grammar rule IDs (e.g. \"G02.1\") that exist in the rulebook above. Never invent a rule ID.");
+                sb.AppendLine("```json");
+                sb.AppendLine("{");
+                sb.AppendLine("  \"title\": \"...\",");
+                sb.AppendLine("  \"topicSlug\": \"present_perfect_vs_past_simple\",");
+                sb.AppendLine("  \"level\": \"beginner|intermediate|advanced\",");
+                sb.AppendLine("  \"estimatedMinutes\": 12,");
+                sb.AppendLine("  \"contentBlocks\": [ { \"type\": \"callout|prose|example|note\", \"contentMarkdown\": \"...\" } ],");
+                sb.AppendLine("  \"exercises\": [");
+                sb.AppendLine("    {");
+                sb.AppendLine("      \"type\": \"mcq|fill_blank|error_correction|sentence_transformation|matching\",");
+                sb.AppendLine("      \"promptMarkdown\": \"...\",");
+                sb.AppendLine("      \"options\": [],");
+                sb.AppendLine("      \"correctAnswer\": \"...\",");
+                sb.AppendLine("      \"acceptedAnswers\": [],");
+                sb.AppendLine("      \"explanationMarkdown\": \"... (cite G-rule IDs)\",");
+                sb.AppendLine("      \"difficulty\": \"beginner|intermediate|advanced\",");
+                sb.AppendLine("      \"points\": 1,");
+                sb.AppendLine("      \"appliedRuleIds\": [\"G02.1\"]");
+                sb.AppendLine("    }");
+                sb.AppendLine("  ],");
+                sb.AppendLine("  \"appliedRuleIds\": [\"G02.1\"],");
+                sb.AppendLine("  \"selfCheckNotes\": \"...\"");
+                sb.AppendLine("}");
+                sb.AppendLine("```");
+                sb.AppendLine("Hard requirements: 3–12 exercises, ≥1 content block, every exercise has non-empty explanationMarkdown, every appliedRuleIds value appears in the rulebook.");
+                break;
             default:
                 sb.AppendLine("Plain text, concise, ≤ 200 words. Cite rule IDs in parentheses when invoking rules.");
                 break;
@@ -626,9 +664,15 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
 
     private static string RenderTaskInstruction(AiGroundingContext ctx, int passMark, string passGrade)
     {
-        var baseText = ctx.Kind == RuleKind.Writing
-            ? $"Task: analyse the candidate's OET Writing letter ({ctx.LetterType ?? "letter type TBD"}) against the active rulebook, and produce rule-cited feedback."
-            : $"Task: analyse the candidate's OET Speaking transcript ({ctx.CardType ?? "card type TBD"}) against the active rulebook, and produce rule-cited feedback.";
+        var baseText = ctx.Kind switch
+        {
+            RuleKind.Writing => $"Task: analyse the candidate's OET Writing letter ({ctx.LetterType ?? "letter type TBD"}) against the active rulebook, and produce rule-cited feedback.",
+            RuleKind.Speaking => $"Task: analyse the candidate's OET Speaking transcript ({ctx.CardType ?? "card type TBD"}) against the active rulebook, and produce rule-cited feedback.",
+            RuleKind.Grammar => "Task: produce a grammar teaching draft (title, content blocks, exercises) grounded in the grammar rulebook. Every exercise must cite ≥1 grammar rule ID in appliedRuleIds.",
+            _ => "Task: respond according to the reply format above."
+        };
+        if (ctx.Kind == RuleKind.Grammar)
+            return $"{baseText} Respond strictly in the reply format above.";
         return $"{baseText} Apply the {passMark}/500 (Grade {passGrade}) pass mark for this {ctx.Kind.ToString().ToLowerInvariant()} call. Respond strictly in the reply format above.";
     }
 }
@@ -637,7 +681,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
 // Types
 // ---------------------------------------------------------------------------
 
-public enum AiTaskMode { Score, Coach, Correct, Summarise, GenerateFeedback, GenerateContent }
+public enum AiTaskMode { Score, Coach, Correct, Summarise, GenerateFeedback, GenerateContent, GenerateGrammarLesson }
 
 public sealed class AiGroundingContext
 {
