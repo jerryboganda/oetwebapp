@@ -60,6 +60,10 @@ public static class ContentHierarchyEndpoints
 
         // ── Packages ──
 
+        admin.MapPut("/lessons/{lessonId}", async (string lessonId, ContentLesson update, ContentHierarchyService service, CancellationToken ct)
+            => await service.UpdateLessonAsync(lessonId, update, ct) is { } lesson ? Results.Ok(lesson) : Results.NotFound())
+            .RequireRateLimiting("PerUserWrite");
+
         admin.MapGet("/packages", async (ContentHierarchyService service, CancellationToken ct,
             string? type, string? status, int? page, int? pageSize)
             => Results.Ok(await service.GetPackagesAsync(type, status, page ?? 1, pageSize ?? 20, ct)));

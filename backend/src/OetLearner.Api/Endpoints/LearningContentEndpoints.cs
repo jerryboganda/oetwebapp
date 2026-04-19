@@ -1,8 +1,10 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -11,6 +13,20 @@ public static class LearningContentEndpoints
     public static IEndpointRouteBuilder MapLearningContentEndpoints(this IEndpointRouteBuilder app)
     {
         var v1 = app.MapGroup("/v1").RequireAuthorization("LearnerOnly");
+
+        // Learner-visible release gates. Keep this allow-listed so internal
+        // operational flags are not exposed through the learner API surface.
+        var features = v1.MapGroup("/features");
+        features.MapGet("/{featureKey}", async (string featureKey, VideoLessonService videoLessons, CancellationToken ct) =>
+        {
+            var normalized = featureKey.Trim().ToLowerInvariant();
+            if (normalized is not ("video_lessons" or "video-lessons"))
+            {
+                return Results.NotFound(new { error = "NOT_FOUND" });
+            }
+
+            return Results.Ok(new LearnerFeatureFlagResponse("video_lessons", await videoLessons.IsEnabledAsync(ct)));
+        });
 
         // ── Grammar Lessons ───────────────────────────────────────────────
         var grammar = v1.MapGroup("/grammar");
@@ -74,52 +90,55 @@ public static class LearningContentEndpoints
 
         // ── Video Lessons ─────────────────────────────────────────────────
         var lessons = v1.MapGroup("/lessons");
+        static IResult FeatureDisabled() => Results.NotFound(new { code = "FEATURE_DISABLED", message = "Video lessons are not enabled." });
 
         lessons.MapGet("/", async (
+            HttpContext http,
             [FromQuery] string? examTypeCode,
             [FromQuery] string? subtestCode,
             [FromQuery] string? category,
-            LearnerDbContext db, CancellationToken ct) =>
+            VideoLessonService service,
+            CancellationToken ct) =>
         {
-            var query = db.VideoLessons.Where(l => l.Status == "active");
-            if (!string.IsNullOrEmpty(examTypeCode)) query = query.Where(l => l.ExamTypeCode == examTypeCode);
-            if (!string.IsNullOrEmpty(subtestCode)) query = query.Where(l => l.SubtestCode == subtestCode);
-            if (!string.IsNullOrEmpty(category)) query = query.Where(l => l.Category == category);
-            var vids = await query.OrderBy(l => l.SortOrder).ToListAsync(ct);
-            return Results.Ok(vids.Select(l => new { id = l.Id, title = l.Title, description = l.Description, thumbnailUrl = l.ThumbnailUrl, durationSeconds = l.DurationSeconds, category = l.Category, instructorName = l.InstructorName, sortOrder = l.SortOrder }));
-        });
-
-        lessons.MapGet("/{lessonId}", async (HttpContext http, string lessonId, LearnerDbContext db, CancellationToken ct) =>
-        {
-            var lesson = await db.VideoLessons.FindAsync([lessonId], ct);
-            if (lesson == null || lesson.Status != "active") return Results.NotFound(new { error = "NOT_FOUND" });
-
-            var progress = await db.LearnerVideoProgress.FirstOrDefaultAsync(p => p.UserId == http.UserId() && p.VideoLessonId == lessonId, ct);
-            return Results.Ok(new
+            if (!await service.IsEnabledAsync(ct))
             {
-                id = lesson.Id, title = lesson.Title, description = lesson.Description, videoUrl = lesson.VideoUrl,
-                thumbnailUrl = lesson.ThumbnailUrl, durationSeconds = lesson.DurationSeconds, category = lesson.Category,
-                instructorName = lesson.InstructorName, chaptersJson = lesson.ChaptersJson, resourcesJson = lesson.ResourcesJson,
-                progress = progress == null ? null : new { watchedSeconds = progress.WatchedSeconds, completed = progress.Completed, lastWatchedAt = progress.LastWatchedAt }
-            });
-        });
-
-        lessons.MapPost("/{lessonId}/progress", async (HttpContext http, string lessonId, VideoProgressRequest req, LearnerDbContext db, CancellationToken ct) =>
-        {
-            var lesson = await db.VideoLessons.FindAsync([lessonId], ct);
-            if (lesson == null) return Results.NotFound(new { error = "NOT_FOUND" });
-
-            var progress = await db.LearnerVideoProgress.FirstOrDefaultAsync(p => p.UserId == http.UserId() && p.VideoLessonId == lessonId, ct);
-            if (progress == null)
-            {
-                progress = new LearnerVideoProgress { Id = Guid.NewGuid(), UserId = http.UserId(), VideoLessonId = lessonId };
-                db.LearnerVideoProgress.Add(progress);
+                return FeatureDisabled();
             }
-            progress.WatchedSeconds = req.WatchedSeconds;
-            progress.Completed = req.WatchedSeconds >= lesson.DurationSeconds * 0.9;
-            progress.LastWatchedAt = DateTimeOffset.UtcNow;
-            await db.SaveChangesAsync(ct);
-            return Results.Ok(new { completed = progress.Completed });
+
+            return Results.Ok(await service.ListLessonsAsync(http.UserId(), examTypeCode ?? "oet", subtestCode, category, ct));
+        });
+
+        lessons.MapGet("/programs/{programId}", async (HttpContext http, string programId, VideoLessonService service, CancellationToken ct) =>
+        {
+            if (!await service.IsEnabledAsync(ct))
+            {
+                return FeatureDisabled();
+            }
+
+            var program = await service.GetProgramAsync(http.UserId(), programId, ct);
+            return program is null ? Results.NotFound(new { error = "NOT_FOUND" }) : Results.Ok(program);
+        });
+
+        lessons.MapGet("/{lessonId}", async (HttpContext http, string lessonId, VideoLessonService service, CancellationToken ct) =>
+        {
+            if (!await service.IsEnabledAsync(ct))
+            {
+                return FeatureDisabled();
+            }
+
+            var lesson = await service.GetLessonAsync(http.UserId(), lessonId, ct);
+            return lesson is null ? Results.NotFound(new { error = "NOT_FOUND" }) : Results.Ok(lesson);
+        });
+
+        lessons.MapPost("/{lessonId}/progress", async (HttpContext http, string lessonId, VideoProgressRequest req, VideoLessonService service, CancellationToken ct) =>
+        {
+            if (!await service.IsEnabledAsync(ct))
+            {
+                return FeatureDisabled();
+            }
+
+            var progress = await service.UpdateProgressAsync(http.UserId(), lessonId, req.WatchedSeconds, ct);
+            return progress is null ? Results.NotFound(new { error = "NOT_FOUND" }) : Results.Ok(progress);
         });
 
         // ── Strategy Guides ───────────────────────────────────────────────
@@ -153,7 +172,8 @@ public static class LearningContentEndpoints
 }
 
 public record GrammarCompletionRequest(int Score, string AnswersJson);
-public record VideoProgressRequest(int WatchedSeconds);
+
+public record LearnerFeatureFlagResponse(string Key, bool Enabled);
 
 file static class LearningContentHttpContextExtensions
 {

@@ -1,126 +1,115 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { BookMarked, ArrowLeft, Clock, CheckCircle2 } from 'lucide-react';
-import Link from 'next/link';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams } from 'next/navigation';
+import Link from 'next/link';
+import { ArrowLeft, BookMarked, CheckCircle2, Clock, Sparkles, Trophy } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { MotionPage } from '@/components/ui/motion-primitives';
-import { fetchGrammarLesson, startGrammarLesson, completeGrammarLesson } from '@/lib/api';
+import {
+  GrammarContentRenderer,
+  GrammarExerciseRunner,
+  SafeRichText,
+} from '@/components/domain/grammar';
+import {
+  fetchGrammarLesson,
+  startGrammarLesson,
+  submitGrammarAttempt,
+} from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import type {
+  GrammarAttemptResult,
+  GrammarExerciseResult,
+  GrammarLessonLearner,
+} from '@/lib/grammar/types';
 
-type GrammarLesson = {
-  id: string;
-  title: string;
-  description: string | null;
-  level: string;
-  estimatedMinutes: number;
-  contentHtml: string | null;
-  exercisesJson: string | null;
-};
-
-type GrammarExercise = { question: string; options?: string[]; answer: string };
-
-function parseExercises(value: string | null | undefined): GrammarExercise[] {
-  if (!value) return [];
-
-  try {
-    const parsed = JSON.parse(value) as unknown;
-    if (!Array.isArray(parsed)) return [];
-
-    return parsed.filter((exercise): exercise is GrammarExercise => {
-      if (!exercise || typeof exercise !== 'object') return false;
-      const item = exercise as Record<string, unknown>;
-      return typeof item.question === 'string' && typeof item.answer === 'string';
-    });
-  } catch {
-    return [];
-  }
-}
+type View = 'intro' | 'study' | 'practice' | 'result';
 
 export default function GrammarLessonPage() {
   const params = useParams<{ lessonId: string }>();
-  const [lesson, setLesson] = useState<GrammarLesson | null>(null);
-  const [exercises, setExercises] = useState<GrammarExercise[]>([]);
+  const lessonId = params?.lessonId ?? '';
+
+  const [lesson, setLesson] = useState<GrammarLessonLearner | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [started, setStarted] = useState(false);
-  const [completed, setCompleted] = useState(false);
-  const [score, setScore] = useState<number | null>(null);
-  const [answers, setAnswers] = useState<Record<number, string>>({});
+  const [view, setView] = useState<View>('intro');
+  const [answers, setAnswers] = useState<Record<string, unknown>>({});
   const [submitting, setSubmitting] = useState(false);
+  const [result, setResult] = useState<GrammarAttemptResult | null>(null);
 
   useEffect(() => {
-    if (!params.lessonId) return;
+    if (!lessonId) return;
     let cancelled = false;
-
     (async () => {
       setLoading(true);
       setError(null);
-
       try {
-        const data = await fetchGrammarLesson(params.lessonId);
+        const data = (await fetchGrammarLesson(lessonId)) as GrammarLessonLearner;
         if (cancelled) return;
-
-        const l = data as GrammarLesson;
-        setLesson(l);
-        setExercises(parseExercises(l.exercisesJson));
-        setStarted(false);
-        setCompleted(false);
-        setScore(null);
+        setLesson(data);
         setAnswers({});
-        analytics.track('grammar_lesson_viewed', { lessonId: l.id });
+        setResult(null);
+        setView(data.progress?.status === 'in_progress' ? 'study' : 'intro');
+        analytics.track('grammar_lesson_viewed', { lessonId: data.id });
       } catch {
-        if (!cancelled) {
-          setError('Could not load lesson.');
-        }
+        if (!cancelled) setError('Could not load this lesson.');
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     })();
-
     return () => {
       cancelled = true;
     };
-  }, [params.lessonId]);
+  }, [lessonId]);
 
-  async function handleStart() {
+  const onStart = useCallback(async () => {
     if (!lesson) return;
     try {
       await startGrammarLesson(lesson.id);
-      setStarted(true);
+      analytics.track('grammar_lesson_started', { lessonId: lesson.id });
+      setView('study');
     } catch {
-      setError('Could not start lesson.');
+      setError('Could not start this lesson.');
     }
-  }
+  }, [lesson]);
 
-  async function handleComplete() {
+  const onSubmit = useCallback(async () => {
     if (!lesson || submitting) return;
-    let correct = 0;
-    exercises.forEach((ex, i) => {
-      if (answers[i]?.trim().toLowerCase() === ex.answer.toLowerCase()) correct++;
-    });
-    const finalScore = exercises.length > 0 ? Math.round((correct / exercises.length) * 100) : 100;
     setSubmitting(true);
+    setError(null);
     try {
-      await completeGrammarLesson(lesson.id, finalScore, JSON.stringify(answers));
-      setScore(finalScore);
-      setCompleted(true);
-    } catch {
-      setError('Could not save completion.');
+      const res = (await submitGrammarAttempt(lesson.id, answers)) as GrammarAttemptResult;
+      setResult(res);
+      setView('result');
+      analytics.track('grammar_lesson_completed', { lessonId: lesson.id, score: res.score, masteryScore: res.masteryScore });
+      if (res.mastered) analytics.track('grammar_lesson_mastered', { lessonId: lesson.id });
+    } catch (e) {
+      setError((e as Error).message ?? 'Could not grade your attempt.');
     } finally {
       setSubmitting(false);
     }
-  }
+  }, [lesson, answers, submitting]);
+
+  const onRetry = useCallback(() => {
+    setResult(null);
+    setAnswers({});
+    setView('practice');
+  }, []);
+
+  const resultsByExerciseId = useMemo(() => {
+    const map = new Map<string, GrammarExerciseResult>();
+    result?.exercises.forEach((r) => map.set(r.exerciseId, r));
+    return map;
+  }, [result]);
 
   if (loading) {
     return (
       <LearnerDashboardShell>
-        <Skeleton className="h-8 w-48 mb-4 rounded" />
+        <Skeleton className="mb-4 h-8 w-48 rounded" />
         <Skeleton className="h-64 rounded-2xl" />
       </LearnerDashboardShell>
     );
@@ -134,109 +123,169 @@ export default function GrammarLessonPage() {
     );
   }
 
+  const exerciseCount = lesson.exercises.length;
+  const answered = Object.values(answers).filter((v) => {
+    if (typeof v === 'string') return v.trim().length > 0;
+    if (v && typeof v === 'object') return Object.values(v as Record<string, string>).some((x) => x && String(x).length > 0);
+    return false;
+  }).length;
+  const canSubmit = exerciseCount > 0 && answered === exerciseCount && !submitting;
+
   return (
     <LearnerDashboardShell>
-      <div className="flex items-center gap-3 mb-6">
-        <Link href="/grammar" className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-          <ArrowLeft className="w-5 h-5" />
+      <div className="flex items-center gap-3">
+        <Link href="/grammar" className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" aria-label="Back to grammar">
+          <ArrowLeft className="h-5 w-5" />
         </Link>
-        <div>
+        <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <BookMarked className="w-5 h-5 text-purple-500" />
-            <span className="text-xs text-gray-400 uppercase font-medium">{lesson.level}</span>
-            <span className="text-xs text-gray-400 flex items-center gap-1"><Clock className="w-3 h-3" />{lesson.estimatedMinutes} min</span>
+            <BookMarked className="h-5 w-5 text-primary" />
+            <span className="text-xs uppercase tracking-[0.15em] text-muted">{lesson.level}</span>
+            <span className="inline-flex items-center gap-1 text-xs text-muted">
+              <Clock className="h-3.5 w-3.5" /> {lesson.estimatedMinutes} min
+            </span>
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{lesson.title}</h1>
+          <h1 className="truncate text-2xl font-bold text-navy dark:text-white">{lesson.title}</h1>
         </div>
       </div>
 
-      {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
+      {lesson.description ? (
+        <p className="mt-2 text-sm leading-6 text-muted">{lesson.description}</p>
+      ) : null}
 
-      {completed ? (
-        <MotionPage className="max-w-md mx-auto text-center py-16">
-          <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
-          <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Lesson Complete!</h2>
-          <div className="text-5xl font-bold text-indigo-600 dark:text-indigo-400 mb-2">{score}%</div>
-          <p className="text-gray-500 mb-6">Great work on this grammar topic.</p>
-          <Link href="/grammar" className="px-6 py-2.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-medium inline-block">
-            Back to Grammar Lessons
-          </Link>
-        </MotionPage>
-      ) : (
-        <div className="max-w-2xl mx-auto">
-          {/* Intro */}
-          {lesson.description && (
-            <div className="bg-purple-50 dark:bg-purple-900/20 rounded-xl p-4 mb-6 text-purple-800 dark:text-purple-200 text-sm">
-              {lesson.description}
+      {error ? <InlineAlert variant="warning" className="mt-4">{error}</InlineAlert> : null}
+
+      <div className="mt-6 max-w-3xl space-y-6">
+        {view === 'intro' ? (
+          <Card className="p-6 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+              <Sparkles className="h-5 w-5" />
             </div>
-          )}
+            <h2 className="mt-4 text-lg font-bold text-navy dark:text-white">Ready to learn?</h2>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted">
+              You'll review the teaching content, then complete {exerciseCount} exercises that are graded by the server.
+            </p>
+            <Button className="mt-6" onClick={onStart}>Start lesson</Button>
+          </Card>
+        ) : null}
 
-          {!started ? (
-            <div className="text-center py-8">
-              <button onClick={handleStart} className="px-8 py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-xl transition-colors">
-                Start Lesson
-              </button>
+        {view === 'study' ? (
+          <div className="space-y-5">
+            <GrammarContentRenderer blocks={lesson.contentBlocks} />
+            <div className="flex justify-end gap-2">
+              <Button variant="outline" onClick={() => setView('intro')}>Back</Button>
+              <Button onClick={() => setView('practice')} disabled={exerciseCount === 0}>
+                {exerciseCount === 0 ? 'No practice available' : `Continue to practice (${exerciseCount})`}
+              </Button>
             </div>
-          ) : (
-            <div className="space-y-6">
-              {lesson.contentHtml && (
-                <article
-                  className="prose max-w-none rounded-2xl border border-gray-200 bg-white p-5 text-gray-800 shadow-sm dark:prose-invert dark:border-gray-700 dark:bg-gray-800 dark:text-gray-200"
-                  dangerouslySetInnerHTML={{ __html: lesson.contentHtml }}
-                />
-              )}
+            {exerciseCount === 0 ? (
+              <p className="text-sm text-muted">This lesson has no practice exercises yet.</p>
+            ) : null}
+          </div>
+        ) : null}
 
-              {exercises.length > 0 ? (
-                <div>
-                  <h3 className="font-semibold text-gray-900 dark:text-white mb-4">Practice Exercises</h3>
-                  <div className="space-y-4">
-                    {exercises.map((ex, i) => (
-                      <div key={i} className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
-                        <div className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-3">{i + 1}. {ex.question}</div>
-                        {ex.options ? (
-                          <div className="space-y-2">
-                            {ex.options.map((opt, j) => (
-                              <button
-                                key={j}
-                                onClick={() => setAnswers(prev => ({ ...prev, [i]: opt }))}
-                                className={`w-full text-left px-3 py-2 rounded-lg text-sm border transition-colors ${answers[i] === opt ? 'border-purple-400 bg-purple-50 dark:bg-purple-900/20 text-purple-800 dark:text-purple-200' : 'border-gray-200 dark:border-gray-700 hover:border-purple-300'}`}
-                              >
-                                {opt}
-                              </button>
-                            ))}
-                          </div>
-                        ) : (
-                          <input
-                            type="text"
-                            placeholder="Your answer..."
-                            value={answers[i] ?? ''}
-                            onChange={e => setAnswers(prev => ({ ...prev, [i]: e.target.value }))}
-                            className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-800 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-purple-400"
-                          />
-                        )}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              ) : (
-                <div className="rounded-2xl border border-dashed border-gray-300 bg-gray-50 p-5 text-sm text-gray-500 dark:border-gray-700 dark:bg-gray-900/40 dark:text-gray-400">
-                  No interactive exercises are attached to this lesson yet.
-                </div>
-              )}
-
-              <div className="pt-4 flex justify-end">
-                <button
-                  onClick={handleComplete}
-                  disabled={submitting}
-                  className="px-8 py-3 bg-purple-600 hover:bg-purple-700 text-white font-semibold rounded-xl transition-colors disabled:opacity-50"
-                >
-                  {submitting ? 'Saving...' : 'Complete Lesson'}
-                </button>
-              </div>
+        {view === 'practice' ? (
+          <div className="space-y-4">
+            <ProgressHeader answered={answered} total={exerciseCount} />
+            {lesson.exercises.map((ex) => (
+              <GrammarExerciseRunner
+                key={ex.id}
+                exercise={ex}
+                answer={answers[ex.id]}
+                disabled={submitting}
+                onAnswer={(value) => setAnswers((prev) => ({ ...prev, [ex.id]: value }))}
+              />
+            ))}
+            <div className="flex flex-col items-stretch justify-end gap-2 sm:flex-row">
+              <Button variant="outline" onClick={() => setView('study')}>Back to study</Button>
+              <Button onClick={onSubmit} disabled={!canSubmit}>
+                {submitting ? 'Grading…' : `Submit for grading (${answered}/${exerciseCount})`}
+              </Button>
             </div>
-          )}
-        </div>
-      )}
+          </div>
+        ) : null}
+
+        {view === 'result' && result ? (
+          <MotionPage className="space-y-5">
+            <ResultSummary result={result} />
+            <div className="space-y-4">
+              {lesson.exercises.map((ex) => {
+                const r = resultsByExerciseId.get(ex.id) ?? null;
+                return (
+                  <GrammarExerciseRunner
+                    key={ex.id}
+                    exercise={ex}
+                    answer={r?.userAnswer ?? answers[ex.id]}
+                    disabled
+                    onAnswer={() => {}}
+                    result={r}
+                  />
+                );
+              })}
+            </div>
+            <div className="flex flex-col gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={onRetry}>Try again</Button>
+              <Link
+                href="/grammar"
+                className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-semibold text-white hover:bg-primary-dark"
+              >
+                Back to grammar hub
+              </Link>
+            </div>
+          </MotionPage>
+        ) : null}
+      </div>
     </LearnerDashboardShell>
+  );
+}
+
+function ProgressHeader({ answered, total }: { answered: number; total: number }) {
+  const pct = total === 0 ? 0 : Math.round((answered / total) * 100);
+  return (
+    <div>
+      <div className="flex items-center justify-between text-xs text-muted">
+        <span>Practice progress</span>
+        <span className="font-semibold">{answered}/{total}</span>
+      </div>
+      <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-background-light dark:bg-gray-900">
+        <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${pct}%` }} aria-hidden />
+      </div>
+    </div>
+  );
+}
+
+function ResultSummary({ result }: { result: GrammarAttemptResult }) {
+  const { score, correctCount, incorrectCount, masteryScore, mastered, xpAwarded, reviewItemsCreated } = result;
+  return (
+    <Card className="border-primary/20 bg-primary/5 p-6 text-center">
+      {mastered ? (
+        <Trophy className="mx-auto h-10 w-10 text-amber-500" />
+      ) : (
+        <CheckCircle2 className="mx-auto h-10 w-10 text-emerald-500" />
+      )}
+      <h2 className="mt-3 text-2xl font-bold text-navy dark:text-white">
+        {mastered ? 'Topic mastery achieved!' : 'Lesson complete'}
+      </h2>
+      <div className="mt-2 text-4xl font-extrabold text-primary">{score}%</div>
+      <p className="mt-1 text-sm text-muted">
+        {correctCount} correct · {incorrectCount} to review · mastery {masteryScore}%
+      </p>
+      <div className="mt-3 flex flex-wrap items-center justify-center gap-2 text-xs">
+        <span className="rounded-full bg-white px-3 py-1 font-semibold text-primary-dark shadow-sm">+{xpAwarded} XP</span>
+        {reviewItemsCreated > 0 ? (
+          <span className="rounded-full bg-amber-100 px-3 py-1 font-semibold text-amber-800">
+            {reviewItemsCreated} added to your review queue
+          </span>
+        ) : null}
+      </div>
+      <div className="mt-4 text-left">
+        <SafeRichText
+          markdown={mastered
+            ? 'Fantastic work. Keep this mastery streak alive by tackling a related topic.'
+            : 'Review the explanations below, retry incorrect items, and your mastery score will climb.'}
+          className="text-center text-sm text-muted"
+        />
+      </div>
+    </Card>
   );
 }

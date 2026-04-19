@@ -56,6 +56,7 @@ const adminNavItems: NavItem[] = [
   { href: '/admin/dedup', label: 'Deduplication', icon: <Copy className="w-5 h-5" />, matchPrefix: '/admin/dedup' },
   { href: '/admin/media', label: 'Media Assets', icon: <ImageIcon className="w-5 h-5" />, matchPrefix: '/admin/media' },
   { href: '/admin/content-generation', label: 'Content Generation', icon: <Sparkles className="w-5 h-5" />, matchPrefix: '/admin/content-generation' },
+  { href: '/admin/grammar', label: 'Grammar CMS', icon: <Library className="w-5 h-5" />, matchPrefix: '/admin/grammar' },
   { href: '/admin/marketplace-review', label: 'Marketplace Review', icon: <Store className="w-5 h-5" />, matchPrefix: '/admin/marketplace-review' },
   { href: '/admin/freeze', label: 'Content Freeze', icon: <Snowflake className="w-5 h-5" />, matchPrefix: '/admin/freeze' },
   { href: '/admin/content-hierarchy', label: 'Content Hierarchy', icon: <GitBranch className="w-5 h-5" />, matchPrefix: '/admin/content-hierarchy' },

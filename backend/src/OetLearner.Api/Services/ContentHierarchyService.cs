@@ -119,6 +119,21 @@ public class ContentHierarchyService(LearnerDbContext db)
         return lesson;
     }
 
+    public async Task<ContentLesson?> UpdateLessonAsync(string lessonId, ContentLesson update, CancellationToken ct)
+    {
+        var existing = await db.ContentLessons.FindAsync([lessonId], ct);
+        if (existing is null) return null;
+        existing.ModuleId = update.ModuleId;
+        existing.ContentItemId = update.ContentItemId;
+        existing.Title = update.Title;
+        existing.LessonType = update.LessonType;
+        existing.MediaAssetId = update.MediaAssetId;
+        existing.DisplayOrder = update.DisplayOrder;
+        existing.Status = update.Status;
+        await db.SaveChangesAsync(ct);
+        return existing;
+    }
+
     // ── Packages ──
 
     public async Task<object> GetPackagesAsync(string? type, string? status, int page, int pageSize, CancellationToken ct)

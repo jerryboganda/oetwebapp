@@ -80,9 +80,20 @@ import type {
   SpeakingAuditInput,
   WritingLintInput,
 } from './rulebook';
+import type {
+  VideoLessonDetail,
+  VideoLessonListItem,
+  VideoLessonProgram,
+  VideoProgressUpdateResponse,
+} from './types/video-lessons';
 
 const API_BASE_URL = env.apiBaseUrl;
 type ApiRecord = Record<string, any>;
+
+export interface LearnerFeatureFlag {
+  key: string;
+  enabled: boolean;
+}
 
 function asRecord(value: unknown): ApiRecord {
   return value && typeof value === 'object' ? (value as ApiRecord) : {};
@@ -3016,6 +3027,10 @@ export async function fetchStreak() {
   return apiRequest('/v1/gamification/streak');
 }
 
+export async function fetchLearnerFeatureFlag(featureKey: string) {
+  return apiRequest<LearnerFeatureFlag>(`/v1/features/${encodeURIComponent(featureKey)}`);
+}
+
 export async function recordActivity() {
   return apiRequest('/v1/gamification/streak/activity', { method: 'POST' });
 }
@@ -3375,6 +3390,13 @@ export async function createAdminLesson(payload: Record<string, unknown>) {
   });
 }
 
+export async function updateAdminLesson(lessonId: string, payload: Record<string, unknown>) {
+  return apiRequest(`/v1/admin/lessons/${encodeURIComponent(lessonId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function fetchAdminPackage(packageId: string) {
   return apiRequest(`/v1/admin/packages/${encodeURIComponent(packageId)}`);
 }
@@ -3627,18 +3649,22 @@ export async function fetchVideoLessons(params?: { examTypeCode?: string; subtes
   if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
   if (params?.subtestCode) p.set('subtestCode', params.subtestCode);
   if (params?.category) p.set('category', params.category);
-  return apiRequest(`/v1/lessons?${p}`);
+  return apiRequest<VideoLessonListItem[]>(`/v1/lessons?${p}`);
 }
 
 export async function fetchVideoLesson(lessonId: string) {
-  return apiRequest(`/v1/lessons/${encodeURIComponent(lessonId)}`);
+  return apiRequest<VideoLessonDetail>(`/v1/lessons/${encodeURIComponent(lessonId)}`);
 }
 
 export async function updateVideoProgress(lessonId: string, watchedSeconds: number) {
-  return apiRequest(`/v1/lessons/${encodeURIComponent(lessonId)}/progress`, {
+  return apiRequest<VideoProgressUpdateResponse>(`/v1/lessons/${encodeURIComponent(lessonId)}/progress`, {
     method: 'POST',
     body: JSON.stringify({ watchedSeconds }),
   });
+}
+
+export async function fetchVideoLessonProgram(programId: string) {
+  return apiRequest<VideoLessonProgram>(`/v1/lessons/programs/${encodeURIComponent(programId)}`);
 }
 
 // ── Strategy Guides ───────────────────────────────────────────────────────────

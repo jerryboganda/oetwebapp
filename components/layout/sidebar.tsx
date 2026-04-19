@@ -5,11 +5,12 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { triggerImpactHaptic } from '@/lib/mobile/haptics';
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { fetchXP, fetchStreak } from '@/lib/api';
 import { motion, useReducedMotion } from 'motion/react';
 import { getSharedLayoutId, getSurfaceMotion, getSurfaceTransition, prefersReducedMotion } from '@/lib/motion';
 import type { UserRole } from '@/lib/types/auth';
+import { collectFeatureFlagKeys, isFeatureFlaggedItemVisible, useFeatureFlagMap } from '@/hooks/use-feature-flag-map';
 import {
   LayoutDashboard,
   FilePenLine,
@@ -43,6 +44,7 @@ export interface NavItem {
   icon: React.ReactNode;
   matchPrefix?: string;
   exact?: boolean;
+  featureFlag?: string;
 }
 
 export interface ShellUserSummary {
@@ -67,7 +69,7 @@ export const mainNavItems: NavItem[] = [
 
 export const learnNavItems: NavItem[] = [
   { href: '/grammar', label: 'Grammar', icon: <BookMarked className="w-5 h-5" />, matchPrefix: '/grammar' },
-  { href: '/lessons', label: 'Video Lessons', icon: <Video className="w-5 h-5" />, matchPrefix: '/lessons' },
+  { href: '/lessons', label: 'Video Lessons', icon: <Video className="w-5 h-5" />, matchPrefix: '/lessons', featureFlag: 'video_lessons' },
   { href: '/strategies', label: 'Strategies', icon: <Lightbulb className="w-5 h-5" />, matchPrefix: '/strategies' },
   { href: '/pronunciation', label: 'Pronunciation', icon: <Mic className="w-5 h-5" />, matchPrefix: '/pronunciation' },
   { href: '/vocabulary', label: 'Vocabulary', icon: <Layers className="w-5 h-5" />, matchPrefix: '/vocabulary' },
@@ -174,6 +176,12 @@ export function Sidebar({
   const [level, setLevel] = useState<number | null>(null);
   const visibleStreak = isLearnerWorkspace ? streak : null;
   const visibleLevel = isLearnerWorkspace ? level : null;
+  const learnFeatureKeys = useMemo(() => collectFeatureFlagKeys(learnNavItems), []);
+  const learnerFeatureFlags = useFeatureFlagMap(learnFeatureKeys, isLearnerWorkspace);
+  const visibleLearnNavItems = useMemo(
+    () => learnNavItems.filter((item) => isFeatureFlaggedItemVisible(item, learnerFeatureFlags, isLearnerWorkspace)),
+    [isLearnerWorkspace, learnerFeatureFlags],
+  );
 
   useEffect(() => {
     if (!isLearnerWorkspace) {
@@ -219,7 +227,7 @@ export function Sidebar({
         <NavSection label="Practice" items={items} pathname={pathname} reducedMotion={reducedMotion} />
         {isLearnerWorkspace ? (
           <>
-            <NavSection label="Learn" items={learnNavItems} pathname={pathname} reducedMotion={reducedMotion} />
+            <NavSection label="Learn" items={visibleLearnNavItems} pathname={pathname} reducedMotion={reducedMotion} />
           </>
         ) : null}
       </nav>

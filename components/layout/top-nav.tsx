@@ -4,10 +4,11 @@ import { getMotionDelay, getMotionPresenceMode, getSurfaceMotion, prefersReduced
 import { cn } from '@/lib/utils';
 import { buildSupportMailto } from '@/lib/auth/support';
 import { AuthContext } from '@/contexts/auth-context';
+import { collectFeatureFlagKeys, isFeatureFlaggedItemVisible, useFeatureFlagMap } from '@/hooks/use-feature-flag-map';
 import type { UserRole } from '@/lib/types/auth';
 import { BriefcaseMedical, HelpCircle, LogOut, Menu, Settings, X } from 'lucide-react';
 import Link from 'next/link';
-import { type ReactNode, useContext, useState } from 'react';
+import { type ReactNode, useContext, useMemo, useState } from 'react';
 import { mainNavItems, type NavItem, type ShellUserSummary } from './sidebar';
 import { usePathname, useRouter } from 'next/navigation';
 import { NotificationCenter } from './notification-center';
@@ -54,6 +55,22 @@ export function TopNav({
         : 'Learner workspace';
   const authContext = useContext(AuthContext);
   const signOut = authContext?.signOut;
+  const shouldFilterFeatures = workspaceRole === 'learner';
+  const sectionFeatureKeys = useMemo(
+    () => collectFeatureFlagKeys(sectionedItems?.flatMap((section) => section.items) ?? []),
+    [sectionedItems],
+  );
+  const learnerFeatureFlags = useFeatureFlagMap(sectionFeatureKeys, shouldFilterFeatures && Boolean(sectionedItems?.length));
+  const visibleSectionedItems = useMemo(
+    () =>
+      sectionedItems
+        ?.map((section) => ({
+          ...section,
+          items: section.items.filter((item) => isFeatureFlaggedItemVisible(item, learnerFeatureFlags, shouldFilterFeatures)),
+        }))
+        .filter((section) => section.items.length > 0),
+    [learnerFeatureFlags, sectionedItems, shouldFilterFeatures],
+  );
   const hasSectionedMenu = Boolean(sectionedItems?.length);
 
   const menuMotionProps = reducedMotion
@@ -194,7 +211,7 @@ export function TopNav({
                 <div className="flex-1 overflow-y-auto px-3 py-3">
                   {hasSectionedMenu ? (
                     <div className="space-y-4">
-                      {sectionedItems?.map((section) => (
+                      {visibleSectionedItems?.map((section) => (
                         <div key={section.label}>
                           <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">{section.label}</div>
                           <ul className="flex flex-col gap-1">

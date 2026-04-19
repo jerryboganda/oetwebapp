@@ -432,6 +432,7 @@ builder.Services.AddScoped<MockDiagnosticService>();
 builder.Services.AddScoped<ContentImportService>();
 builder.Services.AddScoped<ContentSearchService>();
 builder.Services.AddScoped<MediaNormalizationService>();
+builder.Services.AddScoped<VideoLessonService>();
 builder.Services.AddScoped<NotificationService>();
 builder.Services.AddScoped<AnalyticsIngestionService>();
 builder.Services.AddSingleton<PlatformLinkService>();

@@ -24,6 +24,7 @@ import {
   updateAdminModule,
   fetchAdminLessons,
   createAdminLesson,
+  updateAdminLesson,
   createAdminPackage,
   updateAdminPackage,
 } from '@/lib/api';
@@ -78,8 +79,10 @@ interface ModuleFormState {
 
 interface LessonFormState {
   moduleId: string;
+  contentItemId: string;
   title: string;
   lessonType: LessonType;
+  mediaAssetId: string;
   displayOrder: string;
   status: ContentStatus;
 }
@@ -112,7 +115,7 @@ const defaultModuleForm: ModuleFormState = {
 };
 
 const defaultLessonForm: LessonFormState = {
-  moduleId: '', title: '', lessonType: 'video_lesson', displayOrder: '0', status: 'Draft',
+  moduleId: '', contentItemId: '', title: '', lessonType: 'video_lesson', mediaAssetId: '', displayOrder: '0', status: 'Draft',
 };
 
 const defaultPackageForm: PackageFormState = {
@@ -182,7 +185,8 @@ function toModuleForm(m: ContentModule): ModuleFormState {
 
 function toLessonForm(l: ContentLesson): LessonFormState {
   return {
-    moduleId: l.moduleId, title: l.title, lessonType: l.lessonType,
+    moduleId: l.moduleId, contentItemId: l.contentItemId ?? '', title: l.title, lessonType: l.lessonType,
+    mediaAssetId: l.mediaAssetId ?? '',
     displayOrder: String(l.displayOrder), status: l.status,
   };
 }
@@ -233,6 +237,7 @@ export default function AdminContentHierarchyPage() {
   const [editingProgramId, setEditingProgramId] = useState<string | null>(null);
   const [editingTrackId, setEditingTrackId] = useState<string | null>(null);
   const [editingModuleId, setEditingModuleId] = useState<string | null>(null);
+  const [editingLessonId, setEditingLessonId] = useState<string | null>(null);
   const [editingPackageId, setEditingPackageId] = useState<string | null>(null);
 
   // ── Saving flags ──
@@ -343,8 +348,13 @@ export default function AdminContentHierarchyPage() {
     setIsModuleModalOpen(true);
   }
 
-  function openLessonEditor(parentModuleId?: string) {
-    setLessonForm({ ...defaultLessonForm, moduleId: parentModuleId ?? selectedModuleId ?? '' });
+  function openLessonEditor(lesson?: ContentLesson, parentModuleId?: string) {
+    setEditingLessonId(lesson?.id ?? null);
+    if (lesson) {
+      setLessonForm(toLessonForm(lesson));
+    } else {
+      setLessonForm({ ...defaultLessonForm, moduleId: parentModuleId ?? selectedModuleId ?? '' });
+    }
     setIsLessonModalOpen(true);
   }
 
@@ -480,16 +490,23 @@ export default function AdminContentHierarchyPage() {
     try {
       const payload = {
         moduleId: lessonForm.moduleId,
+        contentItemId: lessonForm.contentItemId || null,
         title: lessonForm.title,
         lessonType: lessonForm.lessonType,
+        mediaAssetId: lessonForm.mediaAssetId || null,
         displayOrder: toNumber(lessonForm.displayOrder),
         status: lessonForm.status,
       };
-      await createAdminLesson(payload);
+      if (editingLessonId) {
+        await updateAdminLesson(editingLessonId, payload);
+      } else {
+        await createAdminLesson(payload);
+      }
       setIsLessonModalOpen(false);
       setLessonForm(defaultLessonForm);
+      setEditingLessonId(null);
       setReloadNonce((n) => n + 1);
-      setToast({ variant: 'success', message: 'Lesson created.' });
+      setToast({ variant: 'success', message: editingLessonId ? 'Lesson updated.' : 'Lesson created.' });
     } catch {
       setToast({ variant: 'error', message: 'Failed to save lesson.' });
     } finally {
@@ -639,8 +656,18 @@ export default function AdminContentHierarchyPage() {
   const lessonColumns: Column<ContentLesson>[] = [
     { key: 'title', header: 'Title', render: (row) => <span className="font-medium">{row.title}</span> },
     { key: 'lessonType', header: 'Type', render: (row) => <Badge variant="info">{row.lessonType}</Badge> },
+    { key: 'mediaAssetId', header: 'Media Asset', render: (row) => row.mediaAssetId ? <span className="text-xs text-muted">{row.mediaAssetId}</span> : '—' },
+    { key: 'contentItemId', header: 'Content Item', render: (row) => row.contentItemId ? <span className="text-xs text-muted">{row.contentItemId}</span> : '—' },
     { key: 'displayOrder', header: 'Order', render: (row) => row.displayOrder },
     { key: 'status', header: 'Status', render: (row) => <Badge variant={row.status === 'Published' ? 'success' : row.status === 'Archived' ? 'danger' : 'muted'}>{row.status}</Badge> },
+    {
+      key: 'actions', header: '',
+      render: (row) => (
+        <div className="flex gap-1">
+          <Button variant="outline" size="sm" onClick={() => openLessonEditor(row)}>Edit</Button>
+        </div>
+      ),
+    },
   ];
 
   const packageColumns: Column<ContentPackage>[] = [
@@ -766,7 +793,7 @@ export default function AdminContentHierarchyPage() {
             {selectedProgramId && !selectedTrackId && (
               <AdminRoutePanel
                 title={`Tracks in "${selectedProgram?.title ?? ''}"`}
-                actions={<Button variant="outline" size="sm" onClick={() => openTrackEditor(undefined, selectedProgramId)}>Create Track</Button>}
+                actions={<Button variant="outline" size="sm" onClick={() => openTrackEditor(undefined, selectedProgramId ?? undefined)}>Create Track</Button>}
               >
                 {tracks.length === 0 ? (
                   <EmptyState title="No tracks" description="Create a track for this program." icon={<Layers className="w-8 h-8 text-muted" />} />
@@ -780,7 +807,7 @@ export default function AdminContentHierarchyPage() {
             {selectedTrackId && !selectedModuleId && (
               <AdminRoutePanel
                 title={`Modules in "${selectedTrack?.title ?? ''}"`}
-                actions={<Button variant="outline" size="sm" onClick={() => openModuleEditor(undefined, selectedTrackId)}>Create Module</Button>}
+                actions={<Button variant="outline" size="sm" onClick={() => openModuleEditor(undefined, selectedTrackId ?? undefined)}>Create Module</Button>}
               >
                 {modules.length === 0 ? (
                   <EmptyState title="No modules" description="Create a module for this track." icon={<Layers className="w-8 h-8 text-muted" />} />
@@ -794,7 +821,7 @@ export default function AdminContentHierarchyPage() {
             {selectedModuleId && (
               <AdminRoutePanel
                 title={`Lessons in "${selectedModule?.title ?? ''}"`}
-                actions={<Button variant="outline" size="sm" onClick={() => openLessonEditor(selectedModuleId)}>Create Lesson</Button>}
+                actions={<Button variant="outline" size="sm" onClick={() => openLessonEditor(undefined, selectedModuleId ?? undefined)}>Create Lesson</Button>}
               >
                 {lessons.length === 0 ? (
                   <EmptyState title="No lessons" description="Create a lesson for this module." icon={<BookOpen className="w-8 h-8 text-muted" />} />
@@ -899,8 +926,8 @@ export default function AdminContentHierarchyPage() {
       {/* ── Lesson Modal ── */}
       <Modal
         open={isLessonModalOpen}
-        onClose={() => { setIsLessonModalOpen(false); setLessonForm(defaultLessonForm); }}
-        title="Create Lesson"
+        onClose={() => { setIsLessonModalOpen(false); setEditingLessonId(null); setLessonForm(defaultLessonForm); }}
+        title={editingLessonId ? 'Edit Lesson' : 'Create Lesson'}
       >
         <div className="space-y-4 py-2">
           <Select
@@ -915,9 +942,23 @@ export default function AdminContentHierarchyPage() {
             <Select label="Status" value={lessonForm.status} onChange={(e) => setLessonForm((c) => ({ ...c, status: e.target.value as ContentStatus }))} options={statusOptions} />
             <Input label="Display Order" type="number" min={0} value={lessonForm.displayOrder} onChange={(e) => setLessonForm((c) => ({ ...c, displayOrder: e.target.value }))} />
           </div>
+          <div className="grid gap-4 md:grid-cols-2">
+            <Input
+              label="Media Asset ID"
+              value={lessonForm.mediaAssetId}
+              onChange={(e) => setLessonForm((c) => ({ ...c, mediaAssetId: e.target.value }))}
+              hint="Required for published video lessons; captions and transcripts are read from this asset."
+            />
+            <Input
+              label="Linked Content Item ID"
+              value={lessonForm.contentItemId}
+              onChange={(e) => setLessonForm((c) => ({ ...c, contentItemId: e.target.value }))}
+              hint="Provides difficulty, duration, preview eligibility, and content metadata."
+            />
+          </div>
           <div className="flex justify-end gap-3 border-t border-border pt-4">
-            <Button variant="outline" onClick={() => { setIsLessonModalOpen(false); setLessonForm(defaultLessonForm); }}>Cancel</Button>
-            <Button onClick={handleSaveLesson} loading={isSaving}>Save Lesson</Button>
+            <Button variant="outline" onClick={() => { setIsLessonModalOpen(false); setEditingLessonId(null); setLessonForm(defaultLessonForm); }}>Cancel</Button>
+            <Button onClick={handleSaveLesson} loading={isSaving}>{editingLessonId ? 'Update Lesson' : 'Save Lesson'}</Button>
           </div>
         </div>
       </Modal>

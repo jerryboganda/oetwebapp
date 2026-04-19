@@ -11,7 +11,7 @@ const learnerContentRoutes = [
   {
     path: '/lessons/discover',
     assertions: async (page: Page) => {
-      await expect(page.getByRole('heading', { name: /discover content/i })).toBeVisible();
+      await expect(page.getByRole('heading', { name: /discover video lessons/i })).toBeVisible();
       await expect(page.getByPlaceholder(/search/i)).toBeVisible();
     },
   },
