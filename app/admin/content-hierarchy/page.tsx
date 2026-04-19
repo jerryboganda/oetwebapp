@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace, AdminTableCellLink } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -9,6 +9,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input, Select, Textarea } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
+import { SegmentedControl } from '@/components/ui/segmented-control';
 import { Toast } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import {
@@ -557,13 +558,13 @@ export default function AdminContentHierarchyPage() {
     {
       key: 'title', header: 'Title',
       render: (row) => (
-        <button className="text-left font-medium text-primary hover:underline" onClick={() => {
+        <AdminTableCellLink onClick={() => {
           setSelectedProgramId(row.id);
           setSelectedTrackId(null);
           setSelectedModuleId(null);
         }}>
           {row.title}
-        </button>
+        </AdminTableCellLink>
       ),
     },
     { key: 'programType', header: 'Type', render: (row) => <Badge variant="info">{row.programType}</Badge> },
@@ -587,12 +588,12 @@ export default function AdminContentHierarchyPage() {
     {
       key: 'title', header: 'Title',
       render: (row) => (
-        <button className="text-left font-medium text-primary hover:underline" onClick={() => {
+        <AdminTableCellLink onClick={() => {
           setSelectedTrackId(row.id);
           setSelectedModuleId(null);
         }}>
           {row.title}
-        </button>
+        </AdminTableCellLink>
       ),
     },
     { key: 'subtestCode', header: 'Subtest', render: (row) => row.subtestCode ?? '—' },
@@ -615,9 +616,9 @@ export default function AdminContentHierarchyPage() {
     {
       key: 'title', header: 'Title',
       render: (row) => (
-        <button className="text-left font-medium text-primary hover:underline" onClick={() => setSelectedModuleId(row.id)}>
+        <AdminTableCellLink onClick={() => setSelectedModuleId(row.id)}>
           {row.title}
-        </button>
+        </AdminTableCellLink>
       ),
     },
     { key: 'displayOrder', header: 'Order', render: (row) => row.displayOrder },
@@ -683,30 +684,30 @@ export default function AdminContentHierarchyPage() {
               <Plus className="h-4 w-4" />
               {tab === 'programs' ? 'New Program' : 'New Package'}
             </Button>
-            <button
-              onClick={() => setReloadNonce((n) => n + 1)}
-              className="inline-flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm hover:bg-muted"
-            >
-              <RefreshCw className="w-4 h-4" /> Refresh
-            </button>
+            <Button variant="outline" size="sm" onClick={() => setReloadNonce((n) => n + 1)}>
+              <RefreshCw className="h-4 w-4" /> Refresh
+            </Button>
           </div>
         }
       />
 
       {/* Tab selector */}
-      <div className="flex gap-2 mb-4">
-        <button
-          onClick={() => { setTab('programs'); setSelectedProgramId(null); setSelectedTrackId(null); setSelectedModuleId(null); }}
-          className={`px-4 py-2 text-sm rounded-md ${tab === 'programs' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
-        >
-          <GitBranch className="w-4 h-4 inline mr-1" /> Programs ({programs.length})
-        </button>
-        <button
-          onClick={() => { setTab('packages'); setSelectedProgramId(null); setSelectedTrackId(null); setSelectedModuleId(null); }}
-          className={`px-4 py-2 text-sm rounded-md ${tab === 'packages' ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-muted/80'}`}
-        >
-          <Package className="w-4 h-4 inline mr-1" /> Packages ({packages.length})
-        </button>
+      <div className="mb-4">
+        <SegmentedControl
+          value={tab}
+          onChange={(next) => {
+            setTab(next as 'programs' | 'packages');
+            setSelectedProgramId(null);
+            setSelectedTrackId(null);
+            setSelectedModuleId(null);
+          }}
+          namespace="admin-content-hierarchy"
+          options={[
+            { value: 'programs', label: `Programs (${programs.length})` },
+            { value: 'packages', label: `Packages (${packages.length})` },
+          ]}
+          aria-label="Content hierarchy view"
+        />
       </div>
 
       <AsyncStateWrapper
@@ -726,30 +727,30 @@ export default function AdminContentHierarchyPage() {
           <>
             {/* Breadcrumb */}
             {selectedProgramId && (
-              <div className="flex items-center gap-1 text-sm text-muted mb-4 flex-wrap">
-                <button className="hover:text-primary hover:underline" onClick={() => { setSelectedProgramId(null); setSelectedTrackId(null); setSelectedModuleId(null); }}>
+              <div className="mb-4 flex flex-wrap items-center gap-1 text-sm text-muted">
+                <AdminTableCellLink muted onClick={() => { setSelectedProgramId(null); setSelectedTrackId(null); setSelectedModuleId(null); }}>
                   Programs
-                </button>
+                </AdminTableCellLink>
                 {selectedProgram && (
                   <>
-                    <ChevronRight className="w-3 h-3" />
-                    <button className="hover:text-primary hover:underline" onClick={() => { setSelectedTrackId(null); setSelectedModuleId(null); }}>
+                    <ChevronRight className="h-3 w-3" aria-hidden />
+                    <AdminTableCellLink muted onClick={() => { setSelectedTrackId(null); setSelectedModuleId(null); }}>
                       {selectedProgram.title}
-                    </button>
+                    </AdminTableCellLink>
                   </>
                 )}
                 {selectedTrack && (
                   <>
-                    <ChevronRight className="w-3 h-3" />
-                    <button className="hover:text-primary hover:underline" onClick={() => setSelectedModuleId(null)}>
+                    <ChevronRight className="h-3 w-3" aria-hidden />
+                    <AdminTableCellLink muted onClick={() => setSelectedModuleId(null)}>
                       {selectedTrack.title}
-                    </button>
+                    </AdminTableCellLink>
                   </>
                 )}
                 {selectedModule && (
                   <>
-                    <ChevronRight className="w-3 h-3" />
-                    <span className="text-foreground">{selectedModule.title}</span>
+                    <ChevronRight className="h-3 w-3" aria-hidden />
+                    <span className="text-navy">{selectedModule.title}</span>
                   </>
                 )}
               </div>

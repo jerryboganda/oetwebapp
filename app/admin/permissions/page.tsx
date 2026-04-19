@@ -2,13 +2,13 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { KeyRound, Search, Plus, Trash2, FileKey, Users } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteTabs, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { EmptyState } from '@/components/ui/empty-error';
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/form-controls';
+import { Input, Checkbox } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import {
   fetchAllPermissions,
@@ -77,21 +77,17 @@ export default function PermissionsPage() {
         description="Manage permission templates and user access control."
       />
 
-      {/* Tab bar */}
-      <div className="flex gap-1 mb-6 border-b border-border">
-        <button
-          onClick={() => setTab('templates')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${tab === 'templates' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-foreground'}`}
-        >
-          <FileKey className="inline w-4 h-4 mr-1.5 -mt-0.5" />Templates
-        </button>
-        <button
-          onClick={() => setTab('users')}
-          className={`px-4 py-2 text-sm font-medium border-b-2 transition-colors ${tab === 'users' ? 'border-primary text-primary' : 'border-transparent text-muted hover:text-foreground'}`}
-        >
-          <Users className="inline w-4 h-4 mr-1.5 -mt-0.5" />User Permissions
-        </button>
-      </div>
+      <AdminRouteTabs
+        activeTab={tab}
+        onChange={(id) => setTab(id as Tab)}
+        aria-label="Permission management tabs"
+        tabs={[
+          { id: 'templates', label: 'Templates', icon: <FileKey className="w-4 h-4" /> },
+          { id: 'users', label: 'User Permissions', icon: <Users className="w-4 h-4" /> },
+        ]}
+        className="mb-6"
+        scrollable={false}
+      />
 
       {tab === 'templates' && (
         <TemplatesTab
@@ -192,7 +188,7 @@ function TemplatesTab({ allPerms, groups, onToast }: { allPerms: string[]; group
                     ))}
                   </div>
                 </div>
-                <Button size="sm" variant="ghost" className="text-destructive" onClick={() => handleDelete(tpl.id, tpl.name)}>
+                <Button size="sm" variant="destructive" onClick={() => handleDelete(tpl.id, tpl.name)}>
                   <Trash2 className="w-3.5 h-3.5" />
                 </Button>
               </div>
@@ -203,30 +199,21 @@ function TemplatesTab({ allPerms, groups, onToast }: { allPerms: string[]; group
 
       {showCreate && (
         <Modal open onClose={() => setShowCreate(false)} title="Create Permission Template">
-          <div className="space-y-4 p-4">
-            <div>
-              <label className="block text-xs font-medium mb-1">Name</label>
-              <Input value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Content Editor" />
-            </div>
-            <div>
-              <label className="block text-xs font-medium mb-1">Description</label>
-              <Input value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="Optional description" />
-            </div>
+            <div className="space-y-4 p-4">
+            <Input label="Name" value={newName} onChange={(e) => setNewName(e.target.value)} placeholder="e.g. Content Editor" />
+            <Input label="Description" value={newDesc} onChange={(e) => setNewDesc(e.target.value)} placeholder="Optional description" />
             <div className="max-h-[40vh] overflow-y-auto space-y-3">
               {groups.map((group) => (
                 <div key={group}>
-                  <h4 className="text-xs font-semibold uppercase tracking-wide text-muted mb-2">{group}</h4>
+                  <h4 className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted">{group}</h4>
                   <div className="grid grid-cols-2 gap-2">
                     {allPerms.filter((p) => (PERM_GROUPS[p] ?? 'Other') === group).map((perm) => (
-                      <label key={perm} className="flex items-center gap-2 text-sm cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={newPerms.has(perm)}
-                          onChange={() => setNewPerms(prev => { const n = new Set(prev); if (n.has(perm)) n.delete(perm); else n.add(perm); return n; })}
-                          className="rounded border-border text-primary focus:ring-primary"
-                        />
-                        {permLabel(perm)}
-                      </label>
+                      <Checkbox
+                        key={perm}
+                        label={permLabel(perm)}
+                        checked={newPerms.has(perm)}
+                        onChange={() => setNewPerms(prev => { const n = new Set(prev); if (n.has(perm)) n.delete(perm); else n.add(perm); return n; })}
+                      />
                     ))}
                   </div>
                 </div>
@@ -386,16 +373,13 @@ function UserPermissionsTab({ allPerms, groups, onToast }: { allPerms: string[];
                 <h4 className="text-xs font-semibold uppercase tracking-wide text-muted mb-2">{group}</h4>
                 <div className="grid grid-cols-2 gap-2">
                   {allPerms.filter((p) => (PERM_GROUPS[p] ?? 'Other') === group).map((perm) => (
-                    <label key={perm} className="flex items-center gap-2 text-sm cursor-pointer">
-                      <input
-                        type="checkbox"
+                      <Checkbox
+                        key={perm}
+                        label={permLabel(perm)}
                         checked={userPerms.includes(perm)}
                         onChange={() => togglePermission(perm)}
-                        className="rounded border-border text-primary focus:ring-primary"
                       />
-                      {permLabel(perm)}
-                    </label>
-                  ))}
+                    ))}
                 </div>
               </div>
             ))}

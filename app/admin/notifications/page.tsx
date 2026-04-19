@@ -232,18 +232,19 @@ export default function AdminNotificationsPage() {
         const key = policyKey(row.audienceRole, row.eventKey);
         const draft = drafts[key] ?? row;
         return (
-          <select
-            className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-navy"
+          <Select
             value={draft.emailMode}
             onChange={(event) => setDrafts((current) => ({
               ...current,
               [key]: { ...draft, emailMode: event.target.value as NotificationEmailMode },
             }))}
-          >
-            <option value="off">Off</option>
-            <option value="immediate">Immediate</option>
-            <option value="daily_digest">Daily Digest</option>
-          </select>
+            options={[
+              { value: 'off', label: 'Off' },
+              { value: 'immediate', label: 'Immediate' },
+              { value: 'daily_digest', label: 'Daily Digest' },
+            ]}
+            aria-label="Email mode"
+          />
         );
       },
       className: 'min-w-44',
@@ -499,6 +500,7 @@ export default function AdminNotificationsPage() {
             description={`Per-event channel policy for ${audienceRole} notifications. Email modes are off, immediate, or daily digest.`}
           >
             <DataTable
+              density="compact"
               columns={policyColumns}
               data={policies.filter((row) => row.audienceRole === audienceRole)}
               keyExtractor={(row) => policyKey(row.audienceRole, row.eventKey)}
@@ -579,7 +581,7 @@ export default function AdminNotificationsPage() {
         <div className="grid gap-6 xl:grid-cols-2">
           <AdminRoutePanel title="Failure Queue" description="Manual visibility into delivery failures and threshold-triggered alert candidates.">
             {health?.failureQueue?.length ? (
-              <DataTable columns={failureQueueColumns} data={health.failureQueue} keyExtractor={(row) => `${row.eventId}:${row.channel}:${row.attemptedAt}`} />
+              <DataTable density="compact" columns={failureQueueColumns} data={health.failureQueue} keyExtractor={(row) => `${row.eventId}:${row.channel}:${row.attemptedAt}`} />
             ) : (
               <p className="text-sm text-muted">No failed or expired deliveries are currently queued for investigation.</p>
             )}
@@ -587,7 +589,7 @@ export default function AdminNotificationsPage() {
 
           <AdminRoutePanel title="Recent Deliveries" description="Latest delivery attempts across in-app, email, and push channels.">
             {deliveries.length ? (
-              <DataTable columns={deliveryColumns} data={deliveries} keyExtractor={(row) => row.id} />
+              <DataTable density="compact" columns={deliveryColumns} data={deliveries} keyExtractor={(row) => row.id} />
             ) : (
               <p className="text-sm text-muted">No delivery attempts have been recorded yet.</p>
             )}
@@ -597,6 +599,7 @@ export default function AdminNotificationsPage() {
         <AdminRoutePanel title="Policy Change Audit Trail" description="Every policy update is written into the existing admin audit stream. Manual test sends also land in audit logs for traceability.">
           {auditRows.length ? (
             <DataTable
+              density="compact"
               columns={[
                 {
                   key: 'timestamp',

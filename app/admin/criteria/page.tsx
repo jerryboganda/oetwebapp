@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Edit3, Plus, Target } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace, AdminRoutePanelFooter } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -254,7 +254,8 @@ export default function CriteriaPage() {
       >
         <AdminRoutePanel title="Criteria Library" description="Every row below is backed by the live admin criteria endpoint and persists status changes.">
           <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ status: [] })} />
-          <DataTable columns={columns} data={criteria} keyExtractor={(criterion) => criterion.id} />
+          <DataTable density="compact" columns={columns} data={criteria} keyExtractor={(criterion) => criterion.id} />
+          <AdminRoutePanelFooter source="Criteria repository" />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 

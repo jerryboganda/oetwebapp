@@ -14,7 +14,7 @@ export function AdminDashboardShell({
 }: AdminDashboardShellProps) {
   return (
     <AppShell {...shellProps} workspaceRole="admin">
-      <LearnerWorkspaceContainer className={workspaceClassName}>
+      <LearnerWorkspaceContainer maxWidth="admin" className={workspaceClassName}>
         {children}
       </LearnerWorkspaceContainer>
     </AppShell>

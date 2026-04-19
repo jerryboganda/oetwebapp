@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Edit2, ListTree, Plus } from 'lucide-react';
-import { AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace, AdminRoutePanelFooter } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -87,7 +87,7 @@ export default function AdminTaxonomyPage() {
             <Edit2 className="h-4 w-4" /> Edit
           </Button>
           {row.status === 'active' ? (
-            <Button variant="outline" size="sm" onClick={() => void archiveNode(row)} className="text-rose-600">
+            <Button variant="destructive" size="sm" onClick={() => void archiveNode(row)}>
               Archive
             </Button>
           ) : null}
@@ -180,6 +180,7 @@ export default function AdminTaxonomyPage() {
 
         <AdminRoutePanel title="Professions" description="Create, update, and archive professions with live impact checks before change.">
           <DataTable columns={columns} data={nodes} keyExtractor={(row) => row.id} />
+          <AdminRoutePanelFooter source="Profession taxonomy" />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 

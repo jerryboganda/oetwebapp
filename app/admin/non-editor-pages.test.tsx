@@ -1,4 +1,4 @@
-﻿import type { ReactNode } from 'react';
+import type { ReactNode } from 'react';
 import { screen } from '@testing-library/react';
 const navigation = vi.hoisted(() => ({
   pathname: '/admin',
@@ -255,7 +255,11 @@ describe('Admin Non-Editor Pages', () => {
   it('renders the root dashboard inside the learner-style route surface', async () => {
     admin.getAdminDashboardData.mockResolvedValue({
       generatedAt: '2026-04-01T09:00:00.000Z',
-      freshness: { qualityWindow: '30d' },
+      freshness: {
+        qualityWindow: '30d',
+        contentUpdatedAt: '2026-04-01T09:00:00.000Z',
+        reviewUpdatedAt: '2026-04-01T09:00:00.000Z',
+      },
       contentHealth: { published: 12, drafts: 3, archived: 2, staleDrafts: 1 },
       reviewOps: { backlog: 5, overdue: 1, inProgress: 2, failedReviews: 1, failedJobs: 0 },
       billingRisk: { failedInvoices: 2, pendingInvoices: 1, legacyPlans: 1, activeSubscribers: 123 },
@@ -266,9 +270,10 @@ describe('Admin Non-Editor Pages', () => {
     renderPage(<AdminDashboardPage />);
 
     expect(await screen.findByRole('main', { name: /admin operations/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /keep platform health, review risk, and rollout signals in one place/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /platform health, review risk, and rollout in one place/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /operational shortcuts/i })).toBeInTheDocument();
-    expect(screen.getAllByRole('link', { name: /open review ops/i })).toHaveLength(2);
+    expect(screen.getByRole('button', { name: /open review ops/i })).toBeInTheDocument();
+    expect(screen.getAllByRole('link', { name: /review ops/i }).length).toBeGreaterThan(0);
   });
 
   it('renders the content library inside the learner-style route surface', async () => {

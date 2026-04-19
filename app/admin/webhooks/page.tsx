@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { Webhook, RefreshCw, AlertTriangle } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRoutePanel, AdminRoutePanelFooter, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -18,9 +18,9 @@ import type { AdminWebhookEvent, AdminWebhookSummary } from '@/lib/types/admin';
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
-const statusColors: Record<string, 'default' | 'success' | 'danger' | 'muted'> = {
+const statusColors: Record<string, 'info' | 'success' | 'danger' | 'muted'> = {
   received: 'muted',
-  processing: 'default',
+  processing: 'info',
   completed: 'success',
   failed: 'danger',
   ignored: 'muted',
@@ -103,7 +103,7 @@ export default function WebhooksPage() {
     {
       key: 'processingStatus',
       header: 'Status',
-      render: (e) => <Badge variant={statusColors[e.processingStatus] ?? 'default'}>{e.processingStatus}</Badge>,
+      render: (e) => <Badge variant={statusColors[e.processingStatus] ?? 'muted'}>{e.processingStatus}</Badge>,
     },
     {
       key: 'receivedAt',
@@ -165,6 +165,7 @@ export default function WebhooksPage() {
       >
         <AdminRoutePanel>
           <DataTable
+            density="compact"
             columns={columns}
             data={events}
             keyExtractor={(e) => e.id}
@@ -173,12 +174,13 @@ export default function WebhooksPage() {
                 <p className="font-mono text-xs">{e.eventType}</p>
                 <div className="flex gap-2">
                   <Badge variant="muted">{e.gateway}</Badge>
-                  <Badge variant={statusColors[e.processingStatus] ?? 'default'}>{e.processingStatus}</Badge>
+                  <Badge variant={statusColors[e.processingStatus] ?? 'muted'}>{e.processingStatus}</Badge>
                 </div>
                 {e.errorMessage && <p className="text-xs text-danger">{e.errorMessage}</p>}
               </div>
             )}
           />
+          <AdminRoutePanelFooter source="Webhook events" />
         </AdminRoutePanel>
       </AsyncStateWrapper>
     </AdminRouteWorkspace>

@@ -22,17 +22,17 @@ import type { AdminPublishRequest } from '@/lib/types/admin';
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
-const statusBadge: Record<string, { label: string; variant: 'default' | 'success' | 'danger' | 'info' | 'warning' }> = {
-  pending: { label: 'Pending', variant: 'default' },
+const statusBadge: Record<string, { label: string; variant: 'muted' | 'success' | 'danger' | 'info' | 'warning' }> = {
+  pending: { label: 'Pending', variant: 'warning' },
   editor_review: { label: 'Editor Review', variant: 'info' },
   publisher_approval: { label: 'Publisher Approval', variant: 'warning' },
   approved: { label: 'Published', variant: 'success' },
   rejected: { label: 'Rejected', variant: 'danger' },
 };
 
-const stageBadge: Record<string, { label: string; variant: 'default' | 'info' }> = {
+const stageBadge: Record<string, { label: string; variant: 'warning' | 'info' }> = {
   editor_review: { label: 'Editor Review', variant: 'info' },
-  publisher_approval: { label: 'Publisher Approval', variant: 'default' },
+  publisher_approval: { label: 'Publisher Approval', variant: 'warning' },
 };
 
 function StatusPipeline({ status }: { status: string }) {
@@ -298,6 +298,7 @@ export default function PublishRequestsPage() {
       >
         <AdminRoutePanel>
           <DataTable
+            density="compact"
             columns={columns}
             data={requests}
             keyExtractor={(r) => r.id}

@@ -1,10 +1,38 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Users, Calendar, BarChart3, Settings, Plus, Trash2, RefreshCw, X } from 'lucide-react';
-import { AdminRouteHero, AdminRoutePanel, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
-import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Users,
+  Calendar,
+  BarChart3,
+  Settings,
+  Plus,
+  Trash2,
+  RefreshCw,
+  Mic,
+  CheckCircle2,
+  Clock,
+  XCircle,
+  DollarSign,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge, type BadgeProps } from '@/components/ui/badge';
+import { Input, Select, Textarea } from '@/components/ui/form-controls';
+import { Switch } from '@/components/ui/switch';
+import { Tabs } from '@/components/ui/tabs';
+import { DataTable, type Column } from '@/components/ui/data-table';
 import { InlineAlert } from '@/components/ui/alert';
+import { EmptyState } from '@/components/ui/empty-error';
+import { StickyActionBar } from '@/components/ui/sticky-action-bar';
+import {
+  AdminRouteHero,
+  AdminRoutePanel,
+  AdminRoutePanelFooter,
+  AdminRouteSummaryCard,
+  AdminRouteStatRow,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
+import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import {
   fetchAdminPrivateSpeakingConfig,
   updateAdminPrivateSpeakingConfig,
@@ -23,49 +51,106 @@ import {
 } from '@/lib/api';
 
 type Stats = {
-  totalBookings: number; confirmedBookings: number; completedBookings: number;
-  cancelledBookings: number; failedPayments: number; zoomFailures: number;
-  activeTutors: number; upcomingSessions: number; revenueMinorUnitsLast30Days: number;
+  totalBookings: number;
+  confirmedBookings: number;
+  completedBookings: number;
+  cancelledBookings: number;
+  failedPayments: number;
+  zoomFailures: number;
+  activeTutors: number;
+  upcomingSessions: number;
+  revenueMinorUnitsLast30Days: number;
 };
 
 type Config = {
-  isEnabled: boolean; defaultPriceMinorUnits: number; currency: string;
-  defaultSlotDurationMinutes: number; bufferMinutesBetweenSlots: number;
-  minBookingLeadTimeHours: number; maxBookingAdvanceDays: number;
-  cancellationWindowHours: number; rescheduleWindowHours: number;
-  reservationTimeoutMinutes: number; reminderOffsetsHoursJson: string;
+  isEnabled: boolean;
+  defaultPriceMinorUnits: number;
+  currency: string;
+  defaultSlotDurationMinutes: number;
+  bufferMinutesBetweenSlots: number;
+  minBookingLeadTimeHours: number;
+  maxBookingAdvanceDays: number;
+  cancellationWindowHours: number;
+  rescheduleWindowHours: number;
+  reservationTimeoutMinutes: number;
+  reminderOffsetsHoursJson: string;
 };
 
 type TutorProfile = {
-  id: string; expertUserId: string; displayName: string; bio: string | null;
-  timezone: string; priceOverrideMinorUnits: number | null;
-  slotDurationOverrideMinutes: number | null; specialtiesJson: string;
-  isActive: boolean; averageRating: number; totalSessions: number;
+  id: string;
+  expertUserId: string;
+  displayName: string;
+  bio: string | null;
+  timezone: string;
+  priceOverrideMinorUnits: number | null;
+  slotDurationOverrideMinutes: number | null;
+  specialtiesJson: string;
+  isActive: boolean;
+  averageRating: number;
+  totalSessions: number;
 };
 
 type AvailabilityRule = {
-  id: string; dayOfWeek: number; startTime: string; endTime: string;
-  effectiveFrom: string | null; effectiveTo: string | null; isActive: boolean;
+  id: string;
+  dayOfWeek: number;
+  startTime: string;
+  endTime: string;
+  effectiveFrom: string | null;
+  effectiveTo: string | null;
+  isActive: boolean;
 };
 
 type AdminBooking = {
-  id: string; tutorProfileId: string; tutorName: string | null;
-  learnerUserId: string; status: string; sessionStartUtc: string;
-  durationMinutes: number; priceMinorUnits: number; currency: string;
-  paymentStatus: string; zoomStatus: string; createdAt: string;
+  id: string;
+  tutorProfileId: string;
+  tutorName: string | null;
+  learnerUserId: string;
+  status: string;
+  sessionStartUtc: string;
+  durationMinutes: number;
+  priceMinorUnits: number;
+  currency: string;
+  paymentStatus: string;
+  zoomStatus: string;
+  createdAt: string;
 };
 
 type AuditLog = {
-  id: string; bookingId: string | null; actorId: string; actorRole: string;
-  action: string; details: string | null; createdAt: string;
+  id: string;
+  bookingId: string | null;
+  actorId: string;
+  actorRole: string;
+  action: string;
+  details: string | null;
+  createdAt: string;
 };
 
 const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+const DAY_OPTIONS = DAY_NAMES.map((label, value) => ({ value: String(value), label }));
 
 type AdminTab = 'overview' | 'config' | 'tutors' | 'bookings' | 'audit';
 
+const TABS = [
+  { id: 'overview', label: 'Overview' },
+  { id: 'config', label: 'Configuration' },
+  { id: 'tutors', label: 'Tutors' },
+  { id: 'bookings', label: 'Bookings' },
+  { id: 'audit', label: 'Audit' },
+];
+
+type Status = 'loading' | 'error' | 'success';
+
 function formatPrice(minorUnits: number, currency = 'aud') {
-  return new Intl.NumberFormat('en-AU', { style: 'currency', currency }).format(minorUnits / 100);
+  return new Intl.NumberFormat('en-AU', { style: 'currency', currency: currency.toUpperCase() }).format(minorUnits / 100);
+}
+
+function statusBadgeVariant(status: string): BadgeProps['variant'] {
+  const lower = status.toLowerCase();
+  if (lower === 'completed') return 'success';
+  if (lower === 'confirmed' || lower === 'zoomcreated') return 'info';
+  if (lower === 'cancelled' || lower === 'failed') return 'danger';
+  if (lower === 'reserved' || lower === 'pending') return 'warning';
+  return 'muted';
 }
 
 export default function AdminPrivateSpeakingPage() {
@@ -75,25 +160,24 @@ export default function AdminPrivateSpeakingPage() {
   const [tutors, setTutors] = useState<TutorProfile[]>([]);
   const [bookings, setBookings] = useState<AdminBooking[]>([]);
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [configDirty, setConfigDirty] = useState(false);
 
-  // Create tutor form
   const [showCreateTutor, setShowCreateTutor] = useState(false);
   const [newTutor, setNewTutor] = useState({ expertUserId: '', displayName: '', timezone: 'Australia/Sydney', bio: '' });
 
-  // Selected tutor for availability management
   const [selectedTutorId, setSelectedTutorId] = useState<string | null>(null);
   const [availability, setAvailability] = useState<AvailabilityRule[]>([]);
-  const [newRule, setNewRule] = useState({ dayOfWeek: 1, startTime: '09:00', endTime: '17:00' });
+  const [newRule, setNewRule] = useState({ dayOfWeek: '1', startTime: '09:00', endTime: '17:00' });
 
   useEffect(() => {
     loadOverview();
   }, []);
 
   async function loadOverview() {
-    setLoading(true);
+    setStatus('loading');
     try {
       const [s, c, t] = await Promise.all([
         fetchAdminPrivateSpeakingStats(),
@@ -103,10 +187,10 @@ export default function AdminPrivateSpeakingPage() {
       setStats(s as Stats);
       setConfig(c as Config);
       setTutors(t as TutorProfile[]);
+      setStatus('success');
     } catch {
       setError('Failed to load private speaking data.');
-    } finally {
-      setLoading(false);
+      setStatus('error');
     }
   }
 
@@ -114,9 +198,12 @@ export default function AdminPrivateSpeakingPage() {
     if (!config) return;
     setSaving(true);
     try {
-      const updated = await updateAdminPrivateSpeakingConfig(config as unknown as Record<string, unknown>) as Config;
+      const updated = (await updateAdminPrivateSpeakingConfig(
+        config as unknown as Record<string, unknown>,
+      )) as Config;
       setConfig(updated);
       setError(null);
+      setConfigDirty(false);
     } catch {
       setError('Failed to save config.');
     } finally {
@@ -133,7 +220,7 @@ export default function AdminPrivateSpeakingPage() {
         timezone: newTutor.timezone,
         bio: newTutor.bio || undefined,
       });
-      const updated = await fetchAdminPrivateSpeakingTutors() as TutorProfile[];
+      const updated = (await fetchAdminPrivateSpeakingTutors()) as TutorProfile[];
       setTutors(updated);
       setShowCreateTutor(false);
       setNewTutor({ expertUserId: '', displayName: '', timezone: 'Australia/Sydney', bio: '' });
@@ -146,342 +233,525 @@ export default function AdminPrivateSpeakingPage() {
 
   async function handleToggleTutor(profileId: string, isActive: boolean) {
     await updateAdminPrivateSpeakingTutor(profileId, { isActive: !isActive });
-    setTutors(prev => prev.map(t => t.id === profileId ? { ...t, isActive: !isActive } : t));
+    setTutors((prev) => prev.map((t) => (t.id === profileId ? { ...t, isActive: !isActive } : t)));
   }
 
   async function handleLoadAvailability(profileId: string) {
     setSelectedTutorId(profileId);
-    const rules = await fetchAdminPrivateSpeakingAvailability(profileId) as AvailabilityRule[];
+    const rules = (await fetchAdminPrivateSpeakingAvailability(profileId)) as AvailabilityRule[];
     setAvailability(rules);
   }
 
   async function handleAddRule() {
     if (!selectedTutorId) return;
-    await createAdminPrivateSpeakingAvailabilityRule(selectedTutorId, newRule);
-    const rules = await fetchAdminPrivateSpeakingAvailability(selectedTutorId) as AvailabilityRule[];
+    await createAdminPrivateSpeakingAvailabilityRule(selectedTutorId, {
+      dayOfWeek: Number(newRule.dayOfWeek),
+      startTime: newRule.startTime,
+      endTime: newRule.endTime,
+    });
+    const rules = (await fetchAdminPrivateSpeakingAvailability(selectedTutorId)) as AvailabilityRule[];
     setAvailability(rules);
   }
 
   async function handleDeleteRule(ruleId: string) {
     if (!selectedTutorId) return;
     await deleteAdminPrivateSpeakingAvailabilityRule(selectedTutorId, ruleId);
-    setAvailability(prev => prev.filter(r => r.id !== ruleId));
+    setAvailability((prev) => prev.filter((r) => r.id !== ruleId));
   }
 
   async function loadBookings() {
-    const data = await fetchAdminPrivateSpeakingBookings() as { items: AdminBooking[] };
+    const data = (await fetchAdminPrivateSpeakingBookings()) as { items: AdminBooking[] };
     setBookings(data.items);
   }
 
   async function loadAuditLogs() {
-    const data = await fetchAdminPrivateSpeakingAuditLogs() as AuditLog[];
+    const data = (await fetchAdminPrivateSpeakingAuditLogs()) as AuditLog[];
     setAuditLogs(data);
   }
 
   useEffect(() => {
-    if (tab === 'bookings') loadBookings();
-    if (tab === 'audit') loadAuditLogs();
+    if (tab === 'bookings') void loadBookings();
+    if (tab === 'audit') void loadAuditLogs();
   }, [tab]);
 
-  if (loading) {
-    return (
-      <div className="space-y-4"><Skeleton className="h-20 rounded-xl" /><Skeleton className="h-48 rounded-xl" /></div>
-    );
-  }
+  const bookingColumns: Column<AdminBooking>[] = [
+    {
+      key: 'id',
+      header: 'Booking',
+      render: (row) => (
+        <div className="min-w-0">
+          <p className="font-mono text-xs text-navy">{row.id.slice(0, 12)}…</p>
+          <p className="text-[10px] text-muted">{row.tutorName ?? '—'}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'session',
+      header: 'Session',
+      render: (row) =>
+        new Date(row.sessionStartUtc).toLocaleString('en-AU', {
+          month: 'short',
+          day: 'numeric',
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (row) => <Badge variant={statusBadgeVariant(row.status)}>{row.status}</Badge>,
+    },
+    { key: 'payment', header: 'Payment', render: (row) => row.paymentStatus, hideOnMobile: true },
+    { key: 'zoom', header: 'Zoom', render: (row) => row.zoomStatus ?? '—', hideOnMobile: true },
+    {
+      key: 'actions',
+      header: 'Actions',
+      render: (row) => (
+        <div className="flex items-center gap-1.5">
+          {(row.status === 'Confirmed' || row.status === 'ZoomCreated') && (
+            <>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={async () => {
+                  await completeAdminPrivateSpeakingBooking(row.id);
+                  await loadBookings();
+                }}
+              >
+                Complete
+              </Button>
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={async () => {
+                  await cancelAdminPrivateSpeakingBooking(row.id, 'Admin cancelled');
+                  await loadBookings();
+                }}
+              >
+                Cancel
+              </Button>
+            </>
+          )}
+          {row.zoomStatus === 'Failed' && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={async () => {
+                await retryAdminPrivateSpeakingZoom(row.id);
+                await loadBookings();
+              }}
+            >
+              <RefreshCw className="h-3 w-3" /> Retry
+            </Button>
+          )}
+        </div>
+      ),
+    },
+  ];
 
   return (
-    <>
-      <AdminRouteHero title="Private Speaking Sessions" description="Manage tutors, availability, bookings, and session configuration" />
+    <AdminRouteWorkspace role="main" aria-label="Private speaking admin">
+      <AdminRouteHero
+        eyebrow="People & Billing"
+        icon={Mic}
+        accent="purple"
+        title="Private Speaking Sessions"
+        description="Manage tutors, availability, bookings, and session configuration across the paid 1:1 speaking program."
+        highlights={
+          stats
+            ? [
+                { icon: Users, label: 'Active tutors', value: String(stats.activeTutors) },
+                { icon: Calendar, label: 'Upcoming', value: String(stats.upcomingSessions) },
+                {
+                  icon: DollarSign,
+                  label: 'Revenue (30d)',
+                  value: formatPrice(stats.revenueMinorUnitsLast30Days, config?.currency),
+                },
+              ]
+            : undefined
+        }
+      />
 
-      {error && <InlineAlert variant="warning" className="mb-4">{error}<button onClick={() => setError(null)} className="ml-2"><X className="w-4 h-4 inline" /></button></InlineAlert>}
+      {error ? (
+        <InlineAlert variant="warning" dismissible>
+          {error}
+        </InlineAlert>
+      ) : null}
 
-      {/* Tab navigation */}
-      <div className="flex gap-1 border-b border-border dark:border-border mb-6">
-        {(['overview', 'config', 'tutors', 'bookings', 'audit'] as AdminTab[]).map(t => (
-          <button key={t} onClick={() => setTab(t)}
-            className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors capitalize ${
-              tab === t ? 'border-primary text-primary dark:text-primary' : 'border-transparent text-muted hover:text-navy'
-            }`}>
-            {t}
-          </button>
-        ))}
-      </div>
+      <Tabs
+        tabs={TABS}
+        activeTab={tab}
+        onChange={(id) => setTab(id as AdminTab)}
+      />
 
-      {/* ── Overview Tab ────────────────────────────── */}
-      {tab === 'overview' && stats && (
-        <AdminRouteWorkspace>
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
-            <AdminRouteSummaryCard label="Active Tutors" value={String(stats.activeTutors)} icon={Users} />
-            <AdminRouteSummaryCard label="Upcoming" value={String(stats.upcomingSessions)} icon={Calendar} />
-            <AdminRouteSummaryCard label="Completed" value={String(stats.completedBookings)} icon={BarChart3} />
-            <AdminRouteSummaryCard label="Cancelled" value={String(stats.cancelledBookings)} tone={stats.cancelledBookings > 0 ? 'danger' : 'default'} />
-            <AdminRouteSummaryCard label="Revenue (30d)" value={formatPrice(stats.revenueMinorUnitsLast30Days, config?.currency)} />
-          </div>
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <AdminRoutePanel title="Total Bookings" className="text-center">
-              <span className="text-2xl font-bold text-navy dark:text-navy">{stats.totalBookings}</span>
-            </AdminRoutePanel>
-            <AdminRoutePanel title="Confirmed" className="text-center">
-              <span className="text-2xl font-bold text-primary">{stats.confirmedBookings}</span>
-            </AdminRoutePanel>
-            <AdminRoutePanel title="Payment Failures" className="text-center">
-              <span className={`text-2xl font-bold ${stats.failedPayments > 0 ? 'text-danger' : 'text-success'}`}>{stats.failedPayments}</span>
-            </AdminRoutePanel>
-            <AdminRoutePanel title="Zoom Failures" className="text-center">
-              <span className={`text-2xl font-bold ${stats.zoomFailures > 0 ? 'text-danger' : 'text-success'}`}>{stats.zoomFailures}</span>
-            </AdminRoutePanel>
-          </div>
-        </AdminRouteWorkspace>
-      )}
-
-      {/* ── Config Tab ──────────────────────────────── */}
-      {tab === 'config' && config && (
-        <AdminRouteWorkspace>
-          <AdminRoutePanel title="Module Configuration">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <label className="flex items-center gap-3">
-                <input type="checkbox" checked={config.isEnabled} onChange={e => setConfig(c => c ? { ...c, isEnabled: e.target.checked } : c)}
-                  className="w-4 h-4 rounded text-primary" />
-                <span className="text-sm text-navy dark:text-navy">Module Enabled</span>
-              </label>
-              <div>
-                <label className="text-xs text-muted mb-1 block">Default Price (minor units)</label>
-                <input type="number" value={config.defaultPriceMinorUnits}
-                  onChange={e => setConfig(c => c ? { ...c, defaultPriceMinorUnits: Number(e.target.value) } : c)}
-                  className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
-              </div>
-              <div>
-                <label className="text-xs text-muted mb-1 block">Currency</label>
-                <input type="text" value={config.currency}
-                  onChange={e => setConfig(c => c ? { ...c, currency: e.target.value } : c)}
-                  className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
-              </div>
-              <div>
-                <label className="text-xs text-muted mb-1 block">Slot Duration (minutes)</label>
-                <input type="number" value={config.defaultSlotDurationMinutes}
-                  onChange={e => setConfig(c => c ? { ...c, defaultSlotDurationMinutes: Number(e.target.value) } : c)}
-                  className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
-              </div>
-              <div>
-                <label className="text-xs text-muted mb-1 block">Buffer Between Slots (minutes)</label>
-                <input type="number" value={config.bufferMinutesBetweenSlots}
-                  onChange={e => setConfig(c => c ? { ...c, bufferMinutesBetweenSlots: Number(e.target.value) } : c)}
-                  className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
-              </div>
-              <div>
-                <label className="text-xs text-muted mb-1 block">Min Lead Time (hours)</label>
-                <input type="number" value={config.minBookingLeadTimeHours}
-                  onChange={e => setConfig(c => c ? { ...c, minBookingLeadTimeHours: Number(e.target.value) } : c)}
-                  className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
-              </div>
-              <div>
-                <label className="text-xs text-muted mb-1 block">Max Advance Days</label>
-                <input type="number" value={config.maxBookingAdvanceDays}
-                  onChange={e => setConfig(c => c ? { ...c, maxBookingAdvanceDays: Number(e.target.value) } : c)}
-                  className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
-              </div>
-              <div>
-                <label className="text-xs text-muted mb-1 block">Cancellation Window (hours)</label>
-                <input type="number" value={config.cancellationWindowHours}
-                  onChange={e => setConfig(c => c ? { ...c, cancellationWindowHours: Number(e.target.value) } : c)}
-                  className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
-              </div>
-              <div>
-                <label className="text-xs text-muted mb-1 block">Reservation Timeout (minutes)</label>
-                <input type="number" value={config.reservationTimeoutMinutes}
-                  onChange={e => setConfig(c => c ? { ...c, reservationTimeoutMinutes: Number(e.target.value) } : c)}
-                  className="w-full px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
-              </div>
+      <AsyncStateWrapper status={status} onRetry={() => void loadOverview()}>
+        {tab === 'overview' && stats ? (
+          <>
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <AdminRouteSummaryCard
+                label="Active Tutors"
+                value={stats.activeTutors}
+                icon={<Users className="h-5 w-5" />}
+              />
+              <AdminRouteSummaryCard
+                label="Upcoming"
+                value={stats.upcomingSessions}
+                icon={<Calendar className="h-5 w-5" />}
+                tone="info"
+              />
+              <AdminRouteSummaryCard
+                label="Completed"
+                value={stats.completedBookings}
+                icon={<CheckCircle2 className="h-5 w-5" />}
+                tone="success"
+              />
+              <AdminRouteSummaryCard
+                label="Cancelled"
+                value={stats.cancelledBookings}
+                icon={<XCircle className="h-5 w-5" />}
+                tone={stats.cancelledBookings > 0 ? 'danger' : 'default'}
+              />
             </div>
-            <button onClick={handleSaveConfig} disabled={saving}
-              className="mt-4 px-5 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium disabled:opacity-50">
-              {saving ? 'Saving...' : 'Save Configuration'}
-            </button>
+
+            <AdminRoutePanel
+              eyebrow="Reliability"
+              title="Session reliability signals"
+              description="Aggregate booking, payment, and Zoom pipeline signals over the operational window."
+            >
+              <AdminRouteStatRow
+                items={[
+                  { label: 'Total bookings', value: stats.totalBookings.toLocaleString() },
+                  { label: 'Confirmed', value: stats.confirmedBookings.toLocaleString() },
+                  {
+                    label: 'Payment failures',
+                    value: stats.failedPayments.toLocaleString(),
+                    tone: stats.failedPayments > 0 ? 'danger' : 'success',
+                  },
+                  {
+                    label: 'Zoom failures',
+                    value: stats.zoomFailures.toLocaleString(),
+                    tone: stats.zoomFailures > 0 ? 'danger' : 'success',
+                  },
+                ]}
+              />
+              <AdminRoutePanelFooter source="Booking + Zoom pipelines" />
+            </AdminRoutePanel>
+          </>
+        ) : null}
+
+        {tab === 'config' && config ? (
+          <AdminRoutePanel
+            eyebrow="Settings"
+            title="Module configuration"
+            description="Enable the module and tune pricing, scheduling windows, and reservation policy."
+          >
+            <Switch
+              checked={config.isEnabled}
+              onCheckedChange={(checked) => {
+                setConfig((c) => (c ? { ...c, isEnabled: checked } : c));
+                setConfigDirty(true);
+              }}
+              label="Module enabled"
+              description="When disabled, learners cannot book new sessions. Existing sessions remain valid."
+            />
+
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Input
+                label="Default price (minor units)"
+                type="number"
+                value={config.defaultPriceMinorUnits}
+                onChange={(e) => {
+                  setConfig((c) => (c ? { ...c, defaultPriceMinorUnits: Number(e.target.value) } : c));
+                  setConfigDirty(true);
+                }}
+              />
+              <Input
+                label="Currency"
+                value={config.currency}
+                onChange={(e) => {
+                  setConfig((c) => (c ? { ...c, currency: e.target.value } : c));
+                  setConfigDirty(true);
+                }}
+              />
+              <Input
+                label="Slot duration (minutes)"
+                type="number"
+                value={config.defaultSlotDurationMinutes}
+                onChange={(e) => {
+                  setConfig((c) => (c ? { ...c, defaultSlotDurationMinutes: Number(e.target.value) } : c));
+                  setConfigDirty(true);
+                }}
+              />
+              <Input
+                label="Buffer between slots (minutes)"
+                type="number"
+                value={config.bufferMinutesBetweenSlots}
+                onChange={(e) => {
+                  setConfig((c) => (c ? { ...c, bufferMinutesBetweenSlots: Number(e.target.value) } : c));
+                  setConfigDirty(true);
+                }}
+              />
+              <Input
+                label="Min lead time (hours)"
+                type="number"
+                value={config.minBookingLeadTimeHours}
+                onChange={(e) => {
+                  setConfig((c) => (c ? { ...c, minBookingLeadTimeHours: Number(e.target.value) } : c));
+                  setConfigDirty(true);
+                }}
+              />
+              <Input
+                label="Max advance (days)"
+                type="number"
+                value={config.maxBookingAdvanceDays}
+                onChange={(e) => {
+                  setConfig((c) => (c ? { ...c, maxBookingAdvanceDays: Number(e.target.value) } : c));
+                  setConfigDirty(true);
+                }}
+              />
+              <Input
+                label="Cancellation window (hours)"
+                type="number"
+                value={config.cancellationWindowHours}
+                onChange={(e) => {
+                  setConfig((c) => (c ? { ...c, cancellationWindowHours: Number(e.target.value) } : c));
+                  setConfigDirty(true);
+                }}
+              />
+              <Input
+                label="Reservation timeout (minutes)"
+                type="number"
+                value={config.reservationTimeoutMinutes}
+                onChange={(e) => {
+                  setConfig((c) => (c ? { ...c, reservationTimeoutMinutes: Number(e.target.value) } : c));
+                  setConfigDirty(true);
+                }}
+              />
+            </div>
           </AdminRoutePanel>
-        </AdminRouteWorkspace>
-      )}
+        ) : null}
 
-      {/* ── Tutors Tab ──────────────────────────────── */}
-      {tab === 'tutors' && (
-        <AdminRouteWorkspace>
-          <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-navy dark:text-navy">Tutor Profiles</h3>
-            <button onClick={() => setShowCreateTutor(true)} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium">
-              <Plus className="w-4 h-4" /> Add Tutor
-            </button>
-          </div>
-
-          {showCreateTutor && (
-            <AdminRoutePanel title="Create Tutor Profile" className="mb-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <input type="text" placeholder="Expert User ID" value={newTutor.expertUserId}
-                  onChange={e => setNewTutor(p => ({ ...p, expertUserId: e.target.value }))}
-                  className="px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
-                <input type="text" placeholder="Display Name" value={newTutor.displayName}
-                  onChange={e => setNewTutor(p => ({ ...p, displayName: e.target.value }))}
-                  className="px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
-                <input type="text" placeholder="Timezone (e.g. Australia/Sydney)" value={newTutor.timezone}
-                  onChange={e => setNewTutor(p => ({ ...p, timezone: e.target.value }))}
-                  className="px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
-                <input type="text" placeholder="Bio (optional)" value={newTutor.bio}
-                  onChange={e => setNewTutor(p => ({ ...p, bio: e.target.value }))}
-                  className="px-3 py-2 border border-border dark:border-border rounded-lg text-sm bg-surface dark:bg-surface" />
-              </div>
-              <div className="flex gap-2 mt-3">
-                <button onClick={handleCreateTutor} disabled={saving || !newTutor.expertUserId || !newTutor.displayName}
-                  className="px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium disabled:opacity-50">
-                  {saving ? 'Creating...' : 'Create'}
-                </button>
-                <button onClick={() => setShowCreateTutor(false)} className="px-4 py-2 border border-border dark:border-border rounded-lg text-sm text-muted dark:text-muted">Cancel</button>
-              </div>
-            </AdminRoutePanel>
-          )}
-
-          <div className="space-y-3">
-            {tutors.map(tutor => (
-              <AdminRoutePanel key={tutor.id} title="" className="!p-4">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium text-navy dark:text-navy">{tutor.displayName}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${tutor.isActive ? 'bg-success/10 text-success dark:bg-green-900/30 dark:text-success' : 'bg-lavender/30 text-muted'}`}>
-                        {tutor.isActive ? 'Active' : 'Inactive'}
-                      </span>
-                    </div>
-                    <div className="text-xs text-muted mt-0.5">
-                      {tutor.timezone} · {tutor.totalSessions} sessions · Rating: {tutor.averageRating.toFixed(1)}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <button onClick={() => handleToggleTutor(tutor.id, tutor.isActive)}
-                      className={`text-xs px-3 py-2 rounded-lg ${tutor.isActive ? 'bg-danger/10 text-danger hover:bg-danger/15' : 'bg-success/10 text-success hover:bg-success/10'}`}>
-                      {tutor.isActive ? 'Deactivate' : 'Activate'}
-                    </button>
-                    <button onClick={() => handleLoadAvailability(tutor.id)}
-                      className="text-xs px-3 py-2 bg-lavender/30 dark:bg-surface rounded-lg text-muted dark:text-navy hover:bg-lavender/60">
-                      <Settings className="w-3.5 h-3.5 inline mr-1" /> Availability
-                    </button>
-                  </div>
+        {tab === 'tutors' ? (
+          <AdminRoutePanel
+            eyebrow="Roster"
+            title="Tutor profiles"
+            description="Manage speaking tutors, activation state, and weekly availability."
+            actions={
+              <Button size="sm" onClick={() => setShowCreateTutor((v) => !v)}>
+                <Plus className="h-4 w-4" /> Add tutor
+              </Button>
+            }
+          >
+            {showCreateTutor ? (
+              <div className="rounded-2xl border border-border bg-background-light p-4">
+                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                  <Input
+                    label="Expert user ID"
+                    value={newTutor.expertUserId}
+                    onChange={(e) => setNewTutor((p) => ({ ...p, expertUserId: e.target.value }))}
+                  />
+                  <Input
+                    label="Display name"
+                    value={newTutor.displayName}
+                    onChange={(e) => setNewTutor((p) => ({ ...p, displayName: e.target.value }))}
+                  />
+                  <Input
+                    label="Timezone"
+                    value={newTutor.timezone}
+                    onChange={(e) => setNewTutor((p) => ({ ...p, timezone: e.target.value }))}
+                  />
+                  <Textarea
+                    label="Bio (optional)"
+                    value={newTutor.bio}
+                    onChange={(e) => setNewTutor((p) => ({ ...p, bio: e.target.value }))}
+                  />
                 </div>
+                <div className="mt-3 flex gap-2">
+                  <Button onClick={handleCreateTutor} disabled={saving || !newTutor.expertUserId || !newTutor.displayName} loading={saving}>
+                    Create
+                  </Button>
+                  <Button variant="outline" onClick={() => setShowCreateTutor(false)}>
+                    Cancel
+                  </Button>
+                </div>
+              </div>
+            ) : null}
 
-                {/* Availability panel */}
-                {selectedTutorId === tutor.id && (
-                  <div className="mt-4 pt-4 border-t border-border dark:border-border">
-                    <h4 className="text-sm font-medium text-navy dark:text-navy mb-3">Weekly Availability Rules</h4>
-                    {availability.length === 0 && <p className="text-xs text-muted mb-3">No availability rules yet.</p>}
-                    <div className="space-y-2 mb-3">
-                      {availability.map(rule => (
-                        <div key={rule.id} className="flex items-center justify-between bg-background-light dark:bg-surface rounded-lg px-3 py-2">
-                          <span className="text-sm text-navy dark:text-navy">
-                            {DAY_NAMES[rule.dayOfWeek]} {rule.startTime} – {rule.endTime}
-                          </span>
-                          <button onClick={() => handleDeleteRule(rule.id)} className="text-danger hover:text-danger">
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+            {tutors.length === 0 ? (
+              <EmptyState
+                icon={<Users className="h-6 w-6" aria-hidden />}
+                title="No tutors"
+                description="Add a tutor profile to start offering private speaking sessions."
+              />
+            ) : (
+              <div className="space-y-3">
+                {tutors.map((tutor) => (
+                  <div key={tutor.id} className="rounded-2xl border border-border bg-surface p-4 shadow-sm">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="font-semibold text-navy">{tutor.displayName}</span>
+                          <Badge variant={tutor.isActive ? 'success' : 'muted'}>
+                            {tutor.isActive ? 'Active' : 'Inactive'}
+                          </Badge>
                         </div>
-                      ))}
+                        <p className="mt-0.5 text-xs text-muted">
+                          {tutor.timezone} · {tutor.totalSessions} sessions · Rating {tutor.averageRating.toFixed(1)}
+                        </p>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          variant={tutor.isActive ? 'destructive' : 'primary'}
+                          size="sm"
+                          onClick={() => void handleToggleTutor(tutor.id, tutor.isActive)}
+                        >
+                          {tutor.isActive ? 'Deactivate' : 'Activate'}
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() =>
+                            selectedTutorId === tutor.id
+                              ? setSelectedTutorId(null)
+                              : void handleLoadAvailability(tutor.id)
+                          }
+                        >
+                          <Settings className="h-3.5 w-3.5" /> Availability
+                        </Button>
+                      </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <select value={newRule.dayOfWeek} onChange={e => setNewRule(r => ({ ...r, dayOfWeek: Number(e.target.value) }))}
-                        className="px-2 py-1.5 border border-border dark:border-border rounded text-xs bg-surface dark:bg-surface">
-                        {DAY_NAMES.map((name, i) => <option key={i} value={i}>{name}</option>)}
-                      </select>
-                      <input type="time" value={newRule.startTime} onChange={e => setNewRule(r => ({ ...r, startTime: e.target.value }))}
-                        className="px-2 py-1.5 border border-border dark:border-border rounded text-xs bg-surface dark:bg-surface" />
-                      <span className="text-xs text-muted">to</span>
-                      <input type="time" value={newRule.endTime} onChange={e => setNewRule(r => ({ ...r, endTime: e.target.value }))}
-                        className="px-2 py-1.5 border border-border dark:border-border rounded text-xs bg-surface dark:bg-surface" />
-                      <button onClick={handleAddRule} className="px-3 py-1.5 bg-primary text-white rounded text-xs hover:bg-primary-dark">
-                        <Plus className="w-3.5 h-3.5 inline" /> Add
-                      </button>
+
+                    {selectedTutorId === tutor.id ? (
+                      <div className="mt-4 border-t border-border pt-4">
+                        <h4 className="mb-3 text-sm font-semibold text-navy">Weekly availability rules</h4>
+                        {availability.length === 0 ? (
+                          <p className="mb-3 text-xs text-muted">No availability rules yet.</p>
+                        ) : (
+                          <div className="mb-3 space-y-2">
+                            {availability.map((rule) => (
+                              <div
+                                key={rule.id}
+                                className="flex items-center justify-between rounded-lg bg-background-light px-3 py-2"
+                              >
+                                <span className="text-sm text-navy">
+                                  {DAY_NAMES[rule.dayOfWeek]} · {rule.startTime} – {rule.endTime}
+                                </span>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  onClick={() => void handleDeleteRule(rule.id)}
+                                  aria-label="Delete rule"
+                                >
+                                  <Trash2 className="h-3.5 w-3.5 text-danger" />
+                                </Button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        <div className="grid grid-cols-1 gap-2 sm:grid-cols-4 sm:items-end">
+                          <Select
+                            label="Day"
+                            value={newRule.dayOfWeek}
+                            onChange={(e) => setNewRule((r) => ({ ...r, dayOfWeek: e.target.value }))}
+                            options={DAY_OPTIONS}
+                          />
+                          <Input
+                            label="From"
+                            type="time"
+                            value={newRule.startTime}
+                            onChange={(e) => setNewRule((r) => ({ ...r, startTime: e.target.value }))}
+                          />
+                          <Input
+                            label="To"
+                            type="time"
+                            value={newRule.endTime}
+                            onChange={(e) => setNewRule((r) => ({ ...r, endTime: e.target.value }))}
+                          />
+                          <Button onClick={() => void handleAddRule()}>
+                            <Plus className="h-3.5 w-3.5" /> Add
+                          </Button>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                ))}
+              </div>
+            )}
+          </AdminRoutePanel>
+        ) : null}
+
+        {tab === 'bookings' ? (
+          <AdminRoutePanel
+            eyebrow="Sessions"
+            title="All bookings"
+            description="Live booking ledger with complete / cancel / retry Zoom actions."
+          >
+            {bookings.length === 0 ? (
+              <EmptyState
+                icon={<Calendar className="h-6 w-6" aria-hidden />}
+                title="No bookings"
+                description="Booked and recently-cancelled sessions will appear here."
+              />
+            ) : (
+              <DataTable
+                density="compact"
+                data={bookings}
+                columns={bookingColumns}
+                keyExtractor={(row) => row.id}
+                aria-label="Private speaking bookings"
+              />
+            )}
+          </AdminRoutePanel>
+        ) : null}
+
+        {tab === 'audit' ? (
+          <AdminRoutePanel
+            eyebrow="Compliance"
+            title="Audit logs"
+            description="Every admin action on the private speaking module is recorded here."
+          >
+            {auditLogs.length === 0 ? (
+              <EmptyState
+                icon={<BarChart3 className="h-6 w-6" aria-hidden />}
+                title="No audit events"
+                description="Audit entries will appear as admins manage tutors, bookings, and config."
+              />
+            ) : (
+              <div className="space-y-2">
+                {auditLogs.map((log) => (
+                  <div key={log.id} className="rounded-2xl border border-border bg-background-light px-4 py-3 text-sm">
+                    <div className="flex flex-wrap items-center gap-2 text-xs text-muted">
+                      <Clock className="h-3 w-3" aria-hidden />
+                      <span>{new Date(log.createdAt).toLocaleString('en-AU')}</span>
+                      <Badge variant="muted">
+                        {log.actorRole}/{log.actorId.slice(0, 10)}
+                      </Badge>
                     </div>
+                    <div className="mt-1 text-navy">
+                      <span className="font-semibold">{log.action}</span>
+                      {log.bookingId ? (
+                        <span className="ml-2 text-xs text-muted">Booking {log.bookingId.slice(0, 12)}</span>
+                      ) : null}
+                    </div>
+                    {log.details ? <p className="mt-0.5 text-xs text-muted">{log.details}</p> : null}
                   </div>
-                )}
-              </AdminRoutePanel>
-            ))}
-          </div>
-        </AdminRouteWorkspace>
-      )}
+                ))}
+              </div>
+            )}
+            <AdminRoutePanelFooter source="Audit ledger" />
+          </AdminRoutePanel>
+        ) : null}
+      </AsyncStateWrapper>
 
-      {/* ── Bookings Tab ────────────────────────────── */}
-      {tab === 'bookings' && (
-        <AdminRouteWorkspace>
-          <h3 className="text-lg font-semibold text-navy dark:text-navy mb-4">All Bookings</h3>
-          {bookings.length === 0 ? (
-            <p className="text-sm text-muted text-center py-8">No bookings found.</p>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-border dark:border-border text-left text-xs text-muted uppercase">
-                    <th className="pb-2 pr-3">Booking</th>
-                    <th className="pb-2 pr-3">Tutor</th>
-                    <th className="pb-2 pr-3">Session</th>
-                    <th className="pb-2 pr-3">Status</th>
-                    <th className="pb-2 pr-3">Payment</th>
-                    <th className="pb-2 pr-3">Zoom</th>
-                    <th className="pb-2">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bookings.map(b => (
-                    <tr key={b.id} className="border-b border-border dark:border-border">
-                      <td className="py-2 pr-3 font-mono text-xs">{b.id.slice(0, 12)}…</td>
-                      <td className="py-2 pr-3">{b.tutorName ?? '—'}</td>
-                      <td className="py-2 pr-3">{new Date(b.sessionStartUtc).toLocaleString('en-AU', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}</td>
-                      <td className="py-2 pr-3"><span className="text-xs px-2 py-0.5 rounded-full bg-lavender/30 dark:bg-surface">{b.status}</span></td>
-                      <td className="py-2 pr-3 text-xs">{b.paymentStatus}</td>
-                      <td className="py-2 pr-3 text-xs">{b.zoomStatus ?? '—'}</td>
-                      <td className="py-2 flex items-center gap-1.5">
-                        {(b.status === 'Confirmed' || b.status === 'ZoomCreated') && (
-                          <>
-                            <button onClick={async () => { await completeAdminPrivateSpeakingBooking(b.id); loadBookings(); }}
-                              className="text-xs px-2 py-2 bg-success/10 text-success rounded hover:bg-success/10">Complete</button>
-                            <button onClick={async () => { await cancelAdminPrivateSpeakingBooking(b.id, 'Admin cancelled'); loadBookings(); }}
-                              className="text-xs px-2 py-2 bg-danger/10 text-danger rounded hover:bg-danger/15">Cancel</button>
-                          </>
-                        )}
-                        {b.zoomStatus === 'Failed' && (
-                          <button onClick={async () => { await retryAdminPrivateSpeakingZoom(b.id); loadBookings(); }}
-                            className="text-xs px-2 py-2 bg-lavender text-primary rounded hover:bg-lavender/60 flex items-center gap-1">
-                            <RefreshCw className="w-3 h-3" /> Retry Zoom
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </AdminRouteWorkspace>
-      )}
-
-      {/* ── Audit Logs Tab ──────────────────────────── */}
-      {tab === 'audit' && (
-        <AdminRouteWorkspace>
-          <h3 className="text-lg font-semibold text-navy dark:text-navy mb-4">Audit Logs</h3>
-          {auditLogs.length === 0 ? (
-            <p className="text-sm text-muted text-center py-8">No audit logs found.</p>
-          ) : (
-            <div className="space-y-2">
-              {auditLogs.map(log => (
-                <div key={log.id} className="bg-background-light dark:bg-surface rounded-lg px-4 py-2 text-sm">
-                  <div className="flex items-center gap-2 text-xs text-muted">
-                    <span>{new Date(log.createdAt).toLocaleString('en-AU')}</span>
-                    <span className="font-mono">{log.actorRole}/{log.actorId.slice(0, 10)}</span>
-                  </div>
-                  <div className="text-navy dark:text-navy mt-0.5">
-                    <span className="font-medium">{log.action}</span>
-                    {log.bookingId && <span className="text-xs ml-2 text-muted">Booking: {log.bookingId.slice(0, 12)}</span>}
-                  </div>
-                  {log.details && <p className="text-xs text-muted mt-0.5">{log.details}</p>}
-                </div>
-              ))}
-            </div>
-          )}
-        </AdminRouteWorkspace>
-      )}
-    </>
+      {tab === 'config' && config ? (
+        <StickyActionBar
+          description={configDirty ? 'Unsaved changes' : 'Configuration synced'}
+        >
+          <Button onClick={handleSaveConfig} disabled={saving || !configDirty} loading={saving}>
+            Save configuration
+          </Button>
+        </StickyActionBar>
+      ) : null}
+    </AdminRouteWorkspace>
   );
 }

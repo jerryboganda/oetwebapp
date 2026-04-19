@@ -1,10 +1,28 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { MotionItem } from '@/components/ui/motion-primitives';
-import { Wand2, Loader2, CheckCircle2, AlertCircle, Copy, RefreshCw, Clock3, FileJson2 } from 'lucide-react';
-import { AdminDashboardShell } from '@/components/layout';
+import {
+  Wand2,
+  Loader2,
+  CheckCircle2,
+  AlertCircle,
+  Copy,
+  RefreshCw,
+  Clock3,
+  FileJson2,
+} from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Input, Select, Textarea } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
+import { EmptyState } from '@/components/ui/empty-error';
+import {
+  AdminRouteHero,
+  AdminRoutePanel,
+  AdminRoutePanelFooter,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { fetchContentGenerationJob, fetchContentGenerationJobs, queueContentGeneration } from '@/lib/api';
 
 type GenerationRequest = {
@@ -51,6 +69,26 @@ const CONTENT_TYPES = [
   { value: 'pronunciation_drill', label: 'Pronunciation Drill' },
   { value: 'vocabulary_term', label: 'Vocabulary Term' },
   { value: 'mock_question', label: 'Mock Question' },
+];
+
+const EXAM_OPTIONS = [
+  { value: 'oet', label: 'OET' },
+  { value: 'ielts', label: 'IELTS' },
+  { value: 'pte', label: 'PTE' },
+];
+
+const SUBTEST_OPTIONS = [
+  { value: 'writing', label: 'Writing' },
+  { value: 'speaking', label: 'Speaking' },
+  { value: 'reading', label: 'Reading' },
+  { value: 'listening', label: 'Listening' },
+  { value: 'general', label: 'General' },
+];
+
+const DIFFICULTY_OPTIONS = [
+  { value: 'beginner', label: 'Beginner' },
+  { value: 'intermediate', label: 'Intermediate' },
+  { value: 'advanced', label: 'Advanced' },
 ];
 
 function prettyContentType(value: string | null | undefined) {
@@ -113,7 +151,10 @@ export default function AdminContentGenerationPage() {
   async function loadJobs() {
     setLoadingJobs(true);
     try {
-      const response = await fetchContentGenerationJobs(1, 12) as { total?: number; items?: ContentGenerationJob[] };
+      const response = (await fetchContentGenerationJobs(1, 12)) as {
+        total?: number;
+        items?: ContentGenerationJob[];
+      };
       const jobs = Array.isArray(response?.items) ? response.items : [];
       setResults(jobs.map(mapJobToResult));
       setJobsTotal(typeof response?.total === 'number' ? response.total : jobs.length);
@@ -145,7 +186,7 @@ export default function AdminContentGenerationPage() {
         customInstructions: buildCustomInstructions(form.topic, form.additionalContext),
       };
 
-      const response = await queueContentGeneration(request) as {
+      const response = (await queueContentGeneration(request)) as {
         jobId?: string;
         state?: string;
         examTypeCode?: string;
@@ -176,7 +217,7 @@ export default function AdminContentGenerationPage() {
   async function inspectJob(jobId: string) {
     setCopied(null);
     try {
-      const detail = await fetchContentGenerationJob(jobId) as ContentGenerationJob;
+      const detail = (await fetchContentGenerationJob(jobId)) as ContentGenerationJob;
       const mapped = mapJobToResult(detail);
       setResults((prev) => prev.map((result) => (result.id === jobId ? mapped : result)));
     } catch (err) {
@@ -192,195 +233,164 @@ export default function AdminContentGenerationPage() {
   }
 
   return (
-    <AdminDashboardShell>
-      <div className="max-w-5xl mx-auto">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2.5 bg-lavender dark:bg-primary/15 rounded-xl">
-            <Wand2 className="w-6 h-6 text-primary dark:text-primary" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-navy dark:text-navy">AI Content Generation</h1>
-            <p className="text-sm text-muted">Generate learning content using AI for the OET platform</p>
-          </div>
-        </div>
+    <AdminRouteWorkspace role="main" aria-label="AI content generation">
+      <AdminRouteHero
+        eyebrow="Content · AI"
+        icon={Wand2}
+        accent="purple"
+        title="AI Content Generation"
+        description="Queue AI-generated learning content for the OET Prep platform. All generations route through the grounded AI gateway."
+        highlights={[
+          { label: 'Queued jobs', value: jobsTotal.toLocaleString() },
+          { label: 'Exam', value: form.examTypeCode.toUpperCase() },
+          { label: 'Subtest', value: form.subtestCode },
+        ]}
+      />
 
-        {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
+      {error ? <InlineAlert variant="warning">{error}</InlineAlert> : null}
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Form */}
-          <div className="bg-surface dark:bg-surface rounded-2xl border border-border dark:border-border p-6">
-            <h2 className="font-semibold text-navy dark:text-navy mb-4">Generation Parameters</h2>
-            <form onSubmit={handleGenerate} className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-navy dark:text-navy mb-1.5">Content Type</label>
-                <select
-                  value={form.contentType}
-                  onChange={e => setForm(p => ({ ...p, contentType: e.target.value as GenerationRequest['contentType'] }))}
-                  className="w-full px-3 py-2.5 border border-border dark:border-border rounded-xl bg-surface dark:bg-surface text-navy dark:text-muted text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                >
-                  {CONTENT_TYPES.map(ct => <option key={ct.value} value={ct.value}>{ct.label}</option>)}
-                </select>
-              </div>
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+        <AdminRoutePanel
+          eyebrow="Request"
+          title="Generation parameters"
+          description="Tune the prompt. Topic is required; additional context is optional."
+        >
+          <form onSubmit={handleGenerate} className="space-y-4">
+            <Select
+              label="Content type"
+              value={form.contentType}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, contentType: e.target.value as GenerationRequest['contentType'] }))
+              }
+              options={CONTENT_TYPES}
+            />
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-sm font-medium text-navy dark:text-navy mb-1.5">Exam</label>
-                  <select
-                    value={form.examTypeCode}
-                    onChange={e => setForm(p => ({ ...p, examTypeCode: e.target.value }))}
-                    className="w-full px-3 py-2 border border-border dark:border-border rounded-xl bg-surface dark:bg-surface text-navy dark:text-muted text-sm"
-                  >
-                    <option value="oet">OET</option>
-                    <option value="ielts">IELTS</option>
-                    <option value="pte">PTE</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-navy dark:text-navy mb-1.5">Subtest</label>
-                  <select
-                    value={form.subtestCode}
-                    onChange={e => setForm(p => ({ ...p, subtestCode: e.target.value }))}
-                    className="w-full px-3 py-2 border border-border dark:border-border rounded-xl bg-surface dark:bg-surface text-navy dark:text-muted text-sm"
-                  >
-                    <option value="writing">Writing</option>
-                    <option value="speaking">Speaking</option>
-                    <option value="reading">Reading</option>
-                    <option value="listening">Listening</option>
-                    <option value="general">General</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-navy dark:text-navy mb-1.5">Difficulty</label>
-                <select
-                  value={form.difficulty}
-                  onChange={e => setForm(p => ({ ...p, difficulty: e.target.value }))}
-                  className="w-full px-3 py-2 border border-border dark:border-border rounded-xl bg-surface dark:bg-surface text-navy dark:text-muted text-sm"
-                >
-                  <option value="beginner">Beginner</option>
-                  <option value="intermediate">Intermediate</option>
-                  <option value="advanced">Advanced</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-navy dark:text-navy mb-1.5">Topic / Prompt</label>
-                <input
-                  type="text"
-                  value={form.topic}
-                  onChange={e => setForm(p => ({ ...p, topic: e.target.value }))}
-                  required
-                  placeholder="e.g. Passive voice in clinical reports"
-                  className="w-full px-3 py-2.5 border border-border dark:border-border rounded-xl bg-surface dark:bg-surface text-navy dark:text-muted text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-navy dark:text-navy mb-1.5">Additional Context</label>
-                <textarea
-                  value={form.additionalContext}
-                  onChange={e => setForm(p => ({ ...p, additionalContext: e.target.value }))}
-                  rows={3}
-                  placeholder="Any additional requirements or context..."
-                  className="w-full px-3 py-2.5 border border-border dark:border-border rounded-xl bg-surface dark:bg-surface text-navy dark:text-muted text-sm resize-none focus:outline-none focus:ring-2 focus:ring-primary"
-                />
-              </div>
-
-              <button
-                type="submit"
-                disabled={submitting || !form.topic.trim()}
-                className="w-full flex items-center justify-center gap-2 py-3 bg-primary hover:bg-primary-dark text-white rounded-xl font-semibold text-sm disabled:opacity-50 transition-colors"
-              >
-                {submitting ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /> Generating...</>
-                ) : (
-                  <><Wand2 className="w-4 h-4" /> Generate Content</>
-                )}
-              </button>
-            </form>
-          </div>
-
-          {/* Results */}
-          <div>
-            <div className="mb-4 flex items-center justify-between gap-3">
-              <div>
-                <h2 className="font-semibold text-navy dark:text-navy">Generation History</h2>
-                <p className="text-xs text-muted">{jobsTotal.toLocaleString()} queued jobs in the live admin catalogue.</p>
-              </div>
-              <button
-                type="button"
-                onClick={() => void loadJobs()}
-                className="inline-flex items-center gap-2 rounded-xl border border-border bg-surface px-3 py-2 text-xs font-semibold text-navy transition-colors hover:border-primary/40 hover:text-primary-dark dark:border-border dark:bg-surface dark:text-muted"
-              >
-                <RefreshCw className={`h-3.5 w-3.5 ${loadingJobs ? 'animate-spin' : ''}`} />
-                Refresh jobs
-              </button>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <Select
+                label="Exam"
+                value={form.examTypeCode}
+                onChange={(e) => setForm((p) => ({ ...p, examTypeCode: e.target.value }))}
+                options={EXAM_OPTIONS}
+              />
+              <Select
+                label="Subtest"
+                value={form.subtestCode}
+                onChange={(e) => setForm((p) => ({ ...p, subtestCode: e.target.value }))}
+                options={SUBTEST_OPTIONS}
+              />
             </div>
-            {results.length === 0 ? (
-              <div className="bg-background-light dark:bg-surface rounded-2xl border border-dashed border-border dark:border-border p-8 text-center text-muted">
-                <Wand2 className="w-8 h-8 mx-auto mb-2 opacity-40" />
-                <p className="text-sm">Queued generation jobs will appear here</p>
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {results.map((result) => (
-                  <MotionItem
-                    key={result.id}
-                    className="bg-surface dark:bg-surface rounded-xl border border-border dark:border-border p-4"
-                  >
-                    <div className="flex items-start gap-3 mb-2">
-                      <div className="flex-shrink-0 mt-0.5">
-                        {result.status === 'processing' && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
-                        {result.status === 'done' && <CheckCircle2 className="w-4 h-4 text-green-500" />}
-                        {result.status === 'error' && <AlertCircle className="w-4 h-4 text-danger" />}
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="font-medium text-sm text-navy dark:text-navy truncate">{result.title}</div>
-                        <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
-                          <span className="rounded-full bg-lavender/30 px-2 py-0.5 font-semibold text-muted dark:bg-surface dark:text-navy">
-                            {prettyContentType(result.contentType)}
+
+            <Select
+              label="Difficulty"
+              value={form.difficulty}
+              onChange={(e) => setForm((p) => ({ ...p, difficulty: e.target.value }))}
+              options={DIFFICULTY_OPTIONS}
+            />
+
+            <Input
+              label="Topic / prompt"
+              value={form.topic}
+              onChange={(e) => setForm((p) => ({ ...p, topic: e.target.value }))}
+              required
+              placeholder="e.g. Passive voice in clinical reports"
+            />
+
+            <Textarea
+              label="Additional context"
+              rows={3}
+              value={form.additionalContext}
+              onChange={(e) => setForm((p) => ({ ...p, additionalContext: e.target.value }))}
+              placeholder="Any additional requirements or context…"
+            />
+
+            <Button type="submit" fullWidth disabled={!form.topic.trim()} loading={submitting}>
+              <Wand2 className="h-4 w-4" /> Generate Content
+            </Button>
+          </form>
+        </AdminRoutePanel>
+
+        <AdminRoutePanel
+          eyebrow="History"
+          title="Generation history"
+          description={`${jobsTotal.toLocaleString()} queued jobs in the live admin catalogue.`}
+          actions={
+            <Button variant="outline" size="sm" onClick={() => void loadJobs()} disabled={loadingJobs}>
+              <RefreshCw className={`h-3.5 w-3.5 ${loadingJobs ? 'animate-spin' : ''}`} /> Refresh
+            </Button>
+          }
+        >
+          {results.length === 0 ? (
+            <EmptyState
+              icon={<Wand2 className="h-6 w-6" aria-hidden />}
+              title="No generation jobs yet"
+              description="Queued generation jobs will appear here with preview JSON and refresh controls."
+            />
+          ) : (
+            <div className="space-y-3">
+              {results.map((result) => (
+                <MotionItem
+                  key={result.id}
+                  className="rounded-xl border border-border bg-surface p-4 shadow-sm"
+                >
+                  <div className="mb-2 flex items-start gap-3">
+                    <span className="mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-background-light">
+                      {result.status === 'processing' && <Loader2 className="h-4 w-4 animate-spin text-primary" />}
+                      {result.status === 'done' && <CheckCircle2 className="h-4 w-4 text-success" />}
+                      {result.status === 'error' && <AlertCircle className="h-4 w-4 text-danger" />}
+                      {result.status === 'pending' && <Clock3 className="h-4 w-4 text-muted" />}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-navy">{result.title}</p>
+                      <div className="mt-1 flex flex-wrap items-center gap-2 text-xs text-muted">
+                        <Badge variant="muted">{prettyContentType(result.contentType)}</Badge>
+                        <span>{result.summary}</span>
+                        {result.createdAt && (
+                          <span className="inline-flex items-center gap-1">
+                            <Clock3 className="h-3 w-3" /> {new Date(result.createdAt).toLocaleString()}
                           </span>
-                          <span>{result.summary}</span>
-                          {result.createdAt && (
-                            <span className="inline-flex items-center gap-1"><Clock3 className="h-3 w-3" /> {new Date(result.createdAt).toLocaleString()}</span>
-                          )}
-                        </div>
-                        {result.error && <div className="text-xs text-danger mt-1">{result.error}</div>}
-                      </div>
-                      <div className="flex flex-shrink-0 items-center gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => void inspectJob(result.id)}
-                          className="rounded-lg p-2.5 -m-1 text-muted transition-colors hover:bg-lavender/40 hover:text-primary dark:hover:bg-surface"
-                          title="Refresh job details"
-                        >
-                          <FileJson2 className="w-4 h-4" />
-                        </button>
-                        {result.previewJson && (
-                          <button
-                            type="button"
-                            onClick={() => copyToClipboard(result.previewJson, result.id)}
-                            className="rounded-lg p-2.5 -m-1 text-muted transition-colors hover:bg-lavender/40 hover:text-primary dark:hover:bg-surface"
-                            title="Copy JSON"
-                          >
-                            {copied === result.id ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
-                          </button>
                         )}
                       </div>
+                      {result.error ? <p className="mt-1 text-xs text-danger">{result.error}</p> : null}
                     </div>
-                    {result.previewJson && (
-                      <pre className="text-xs bg-background-light dark:bg-surface rounded-lg p-3 overflow-x-auto max-h-48 text-navy dark:text-navy">
-                        {result.previewJson}
-                      </pre>
-                    )}
-                  </MotionItem>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        onClick={() => void inspectJob(result.id)}
+                        aria-label="Refresh job details"
+                      >
+                        <FileJson2 className="h-4 w-4" />
+                      </Button>
+                      {result.previewJson && (
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => copyToClipboard(result.previewJson, result.id)}
+                          aria-label="Copy JSON"
+                        >
+                          {copied === result.id ? (
+                            <CheckCircle2 className="h-4 w-4 text-success" />
+                          ) : (
+                            <Copy className="h-4 w-4" />
+                          )}
+                        </Button>
+                      )}
+                    </div>
+                  </div>
+                  {result.previewJson ? (
+                    <pre className="max-h-48 overflow-x-auto rounded-lg bg-background-light p-3 text-xs text-navy">
+                      {result.previewJson}
+                    </pre>
+                  ) : null}
+                </MotionItem>
+              ))}
+            </div>
+          )}
+          <AdminRoutePanelFooter source="AI gateway" />
+        </AdminRoutePanel>
       </div>
-    </AdminDashboardShell>
+    </AdminRouteWorkspace>
   );
 }

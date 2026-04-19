@@ -2,8 +2,13 @@
 
 import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, CreditCard, Shield, User } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { ArrowLeft, User } from 'lucide-react';
+import {
+  AdminRoutePanel,
+  AdminRouteSectionHeader,
+  AdminRouteStatRow,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -80,14 +85,14 @@ export default function AdminUserAiPage({ params }: { params: Promise<{ userId: 
     { key: 's', header: 'Source', render: (r) => <Badge variant="info">{r.source}</Badge> },
     {
       key: 'd', header: 'Tokens', render: (r) => (
-        <span className={r.tokensDelta > 0 ? 'text-emerald-600' : 'text-red-600'}>
+        <span className={r.tokensDelta > 0 ? 'text-success' : 'text-danger'}>
           {r.tokensDelta > 0 ? '+' : ''}{r.tokensDelta.toLocaleString()}
         </span>
       ),
     },
     { key: 'ex', header: 'Expires', render: (r) => r.expiresAt ? new Date(r.expiresAt).toLocaleDateString() : '—' },
     { key: 'x', header: 'State', render: (r) => r.expiredByEntryId ? <Badge variant="muted">Expired</Badge> : <Badge variant="success">Active</Badge> },
-    { key: 'desc', header: 'Description', render: (r) => <span className="text-xs text-gray-500">{r.description ?? ''}</span> },
+    { key: 'desc', header: 'Description', render: (r) => <span className="text-xs text-muted">{r.description ?? ''}</span> },
   ];
 
   return (
@@ -105,14 +110,35 @@ export default function AdminUserAiPage({ params }: { params: Promise<{ userId: 
 
       <AsyncStateWrapper status={status}>
         {balance && (
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <StatCard label="Available tokens" value={balance.tokensAvailable.toLocaleString()} icon={<CreditCard className="w-5 h-5" />} />
-            <StatCard label="Granted lifetime" value={balance.tokensGrantedLifetime.toLocaleString()} icon={<Shield className="w-5 h-5" />} />
-            <StatCard label="Consumed lifetime" value={balance.tokensConsumedLifetime.toLocaleString()} icon={<Shield className="w-5 h-5" />} />
-          </div>
+          <AdminRoutePanel eyebrow="Credit balance" title={`Standing for ${userId}`}>
+            <AdminRouteStatRow
+              items={[
+                {
+                  label: 'Available tokens',
+                  value: balance.tokensAvailable.toLocaleString(),
+                  hint: balance.tokensAvailable > 0 ? 'Spendable' : 'None available',
+                  tone: balance.tokensAvailable === 0 ? 'warning' : 'success',
+                },
+                {
+                  label: 'Granted lifetime',
+                  value: balance.tokensGrantedLifetime.toLocaleString(),
+                  hint: 'Cumulative grants',
+                },
+                {
+                  label: 'Consumed lifetime',
+                  value: balance.tokensConsumedLifetime.toLocaleString(),
+                  hint: 'Debits to date',
+                },
+              ]}
+            />
+          </AdminRoutePanel>
         )}
 
-        <AdminRoutePanel title="Grant credits">
+        <AdminRoutePanel
+          eyebrow="Top up"
+          title="Grant credits"
+          description="Add tokens to this user's balance. Promo grants respect the expiry window; Admin adjustments are treated as corrections in the ledger."
+        >
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
             <Input type="number" label="Tokens" value={tokens} onChange={(e) => setTokens(Number(e.target.value))} />
             <Select
@@ -133,19 +159,10 @@ export default function AdminUserAiPage({ params }: { params: Promise<{ userId: 
           </div>
         </AdminRoutePanel>
 
-        <AdminRoutePanel title="Ledger history">
+        <AdminRoutePanel eyebrow="Audit trail" title="Ledger history" dense>
           <DataTable data={entries} columns={columns} keyExtractor={(r) => r.id} />
         </AdminRoutePanel>
       </AsyncStateWrapper>
     </AdminRouteWorkspace>
-  );
-}
-
-function StatCard({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
-  return (
-    <div className="bg-surface rounded-[20px] border border-gray-200 p-4">
-      <div className="flex items-center gap-2 text-sm text-muted mb-1">{icon}{label}</div>
-      <div className="text-2xl font-semibold text-navy">{value}</div>
-    </div>
   );
 }

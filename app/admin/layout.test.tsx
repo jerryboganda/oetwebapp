@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import React from 'react';
 import { screen } from '@testing-library/react';
 import { AdminPermission } from '@/lib/admin-permissions';
 const state = vi.hoisted(() => ({
@@ -27,6 +28,12 @@ vi.mock('@/components/auth/privileged-mfa-banner', () => ({
   PrivilegedMfaBanner: () => <div data-testid="mfa-banner">MFA banner</div>,
 }));
 
+vi.mock('@/components/ui/command-palette', () => ({
+  CommandPalette: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  CommandPaletteTrigger: () => null,
+  useCommandPalette: () => null,
+}));
+
 vi.mock('@/components/layout', () => ({
   AppShell: ({
     children,
@@ -36,6 +43,13 @@ vi.mock('@/components/layout', () => ({
     children: ReactNode;
     pageTitle?: string;
     distractionFree?: boolean;
+    navItems?: unknown;
+    navSections?: unknown;
+    mobileNavItems?: unknown;
+    mobileMenuSections?: unknown;
+    requiredRole?: unknown;
+    breadcrumbs?: unknown;
+    showCommandPalette?: unknown;
   }) => (
     <div
       data-testid="app-shell"
@@ -51,6 +65,13 @@ vi.mock('@/components/layout', () => ({
   }: {
     children: ReactNode;
     pageTitle?: string;
+    navSections?: unknown;
+    navItems?: unknown;
+    mobileNavItems?: unknown;
+    mobileMenuSections?: unknown;
+    requiredRole?: unknown;
+    breadcrumbs?: unknown;
+    showCommandPalette?: unknown;
   }) => (
     <div data-testid="admin-dashboard-shell" data-page-title={pageTitle ?? ''}>
       {children}

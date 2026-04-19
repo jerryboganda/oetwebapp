@@ -23,10 +23,10 @@ const decimalFormatter = new Intl.NumberFormat('en-AU', {
 });
 
 const efficiencyBadgeClasses: Record<string, string> = {
-  high: 'bg-emerald-100 text-emerald-700',
-  medium: 'bg-amber-100 text-amber-700',
-  low: 'bg-rose-100 text-rose-700',
-  'no-data': 'bg-muted text-muted-foreground',
+  high: 'bg-emerald-50 text-emerald-700 dark:bg-emerald-900/30 dark:text-emerald-400',
+  medium: 'bg-amber-50 text-amber-700 dark:bg-amber-900/30 dark:text-amber-400',
+  low: 'bg-danger/10 text-danger dark:bg-danger/10 dark:text-danger',
+  'no-data': 'bg-background-light text-muted',
 };
 
 function formatCurrency(value: number, maximumFractionDigits = 0) {
@@ -268,8 +268,8 @@ export default function BusinessIntelligencePage() {
                           <span className="w-16 text-xs font-medium text-muted">{point.month}</span>
                           <div className="flex h-6 flex-1 overflow-hidden rounded-full bg-surface">
                             <div className="flex h-full" style={{ width: barWidth(total, maxTrendVolume) }}>
-                              <div className="h-full bg-emerald-500" style={{ width: total > 0 ? `${(point.newSubscriptions / total) * 100}%` : '0%' }} />
-                              <div className="h-full bg-rose-500" style={{ width: total > 0 ? `${(point.cancellations / total) * 100}%` : '0%' }} />
+                              <div className="h-full bg-success" style={{ width: total > 0 ? `${(point.newSubscriptions / total) * 100}%` : '0%' }} />
+                              <div className="h-full bg-danger" style={{ width: total > 0 ? `${(point.cancellations / total) * 100}%` : '0%' }} />
                             </div>
                           </div>
                           <span className="w-24 text-right text-xs text-muted">+{point.newSubscriptions} / -{point.cancellations}</span>

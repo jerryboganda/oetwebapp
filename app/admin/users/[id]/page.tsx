@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Coins, Mail, Shield, User as UserIcon, UserLock } from 'lucide-react';
 import {
   AdminRouteSectionHeader,
@@ -26,6 +26,7 @@ type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
 export default function UserDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const userId = params?.id;
   const { isAuthenticated, role } = useAdminAuth();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
@@ -214,12 +215,12 @@ export default function UserDetailPage() {
                       {user.status === 'active' ? 'Suspend Account' : 'Reactivate Account'}
                     </Button>
                   ) : null}
-                  <Link
-                    href={`/admin/freeze?userId=${encodeURIComponent(user.id)}`}
-                    className="inline-flex items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-medium text-navy transition-colors hover:bg-surface"
+                  <Button
+                    variant="outline"
+                    onClick={() => router.push(`/admin/freeze?userId=${encodeURIComponent(user.id)}`)}
                   >
                     Freeze Controls
-                  </Link>
+                  </Button>
                   {user.availableActions.canDelete ? (
                     <Button variant="destructive" onClick={() => openLifecycleModal('delete')} loading={isMutating}>
                       Delete Account
@@ -243,7 +244,7 @@ export default function UserDetailPage() {
                   <div className="space-y-2">
                     <p className="text-lg font-semibold text-navy">{user.name}</p>
                     <div className="flex flex-wrap items-center justify-center gap-2">
-                      <Badge variant={user.role === 'admin' ? 'danger' : user.role === 'expert' ? 'warning' : 'default'}>
+                      <Badge variant={user.role === 'admin' ? 'danger' : user.role === 'expert' ? 'warning' : 'muted'}>
                         {user.role}
                       </Badge>
                       <Badge variant={user.status === 'active' ? 'success' : user.status === 'deleted' ? 'danger' : 'muted'}>

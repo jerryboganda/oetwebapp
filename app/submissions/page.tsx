@@ -1,94 +1,236 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { MotionItem } from '@/components/ui/motion-primitives';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  FileText,
-  Headphones,
-  PenTool,
-  Mic,
-  MessageSquare,
   GitCompare,
   Send,
   Clock,
-  CheckCircle2,
-  AlertCircle,
   History,
+  CheckCircle2,
+  XCircle,
+  Download,
+  AlertTriangle,
 } from 'lucide-react';
-import React from 'react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-error';
-import { fetchSubmissions } from '@/lib/api';
-import type { Submission, SubTest, ReviewStatus } from '@/lib/mock-data';
-import { analytics } from '@/lib/analytics';
+import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import {
+  SubmissionCard,
+  SubmissionFilterBar,
+  SparklineStrip,
+} from '@/components/domain/submissions';
+import {
+  fetchSubmissionsPage,
+  hideSubmission,
+  unhideSubmission,
+  submissionsExportCsvUrl,
+  createBulkReviewRequests,
+} from '@/lib/api';
+import type { Submission, SubmissionListQuery, SubmissionListResponse } from '@/lib/mock-data';
+import { analytics } from '@/lib/analytics';
 
-const SUBTEST_STYLE: Record<SubTest, { icon: React.ElementType; badge: string }> = {
-  Reading:   { icon: FileText,   badge: 'bg-blue-100 text-blue-700' },
-  Listening: { icon: Headphones, badge: 'bg-indigo-100 text-indigo-700' },
-  Writing:   { icon: PenTool,    badge: 'bg-rose-100 text-rose-700' },
-  Speaking:  { icon: Mic,        badge: 'bg-purple-100 text-purple-700' },
-};
-
-function formatSubmissionAttemptDate(value: string) {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) {
-    return value;
-  }
-
-  const includesTime = /T\d{2}:\d{2}/.test(value);
-
-  return new Intl.DateTimeFormat(undefined, includesTime
-    ? {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-        hour: 'numeric',
-        minute: '2-digit',
-      }
-    : {
-        year: 'numeric',
-        month: 'short',
-        day: 'numeric',
-      }).format(parsed);
-}
-
-function ReviewBadge({ status }: { status: ReviewStatus }) {
-  if (status === 'reviewed') return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-green-100 text-green-700">
-      <CheckCircle2 className="w-3.5 h-3.5" /> Reviewed
-    </span>
-  );
-  if (status === 'pending') return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-amber-100 text-amber-700">
-      <Clock className="w-3.5 h-3.5" /> Pending
-    </span>
-  );
-  return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-600">
-      <AlertCircle className="w-3.5 h-3.5" /> Not Requested
-    </span>
-  );
-}
-
+/**
+ * Submission History (learner-facing) — `/submissions`.
+ *
+ * This page orchestrates:
+ *   - Filter/sort/search/pagination state (URL-synced so shareable).
+ *   - Canonical scoring via server-provided `scaledScore` + `passState`.
+ *   - Compare-pick multi-select mode with a clear CTA.
+ *   - Soft hide / unhide with optimistic updates.
+ *   - CSV export and bulk review request for up to 5 attempts.
+ *   - Sparkline strip over recent scaled scores per sub-test.
+ */
 export default function SubmissionHistory() {
   const router = useRouter();
-  const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const searchParams = useSearchParams();
+
+  // ── Query state (URL-synced) ──────────────────────────────────────────
+  const [query, setQuery] = useState<SubmissionListQuery>(() => readQueryFromUrl(searchParams));
+  const [page, setPage] = useState<SubmissionListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [nextLoading, setNextLoading] = useState(false);
+
+  // Keep URL in sync with query.
+  useEffect(() => {
+    const qs = writeQueryToUrl(query);
+    const current = searchParams?.toString();
+    if (qs !== current) {
+      router.replace(`/submissions${qs ? `?${qs}` : ''}`, { scroll: false });
+    }
+  }, [query, router, searchParams]);
+
+  // Fetch on query change. Cancel stale responses.
+  const requestIdRef = useRef(0);
+  const loadPage = useCallback(async (q: SubmissionListQuery, requestId: number) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await fetchSubmissionsPage(q);
+      if (requestIdRef.current !== requestId) return;
+      setPage(res);
+    } catch {
+      if (requestIdRef.current !== requestId) return;
+      setError('Failed to load submissions. Please try again.');
+    } finally {
+      if (requestIdRef.current === requestId) setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     analytics.track('evaluation_viewed', { type: 'submissions' });
-    fetchSubmissions()
-      .then((data) => { setSubmissions(data); setLoading(false); })
-      .catch(() => { setError('Failed to load submissions. Please try again.'); setLoading(false); });
-  }, []);
+    const thisId = ++requestIdRef.current;
+    loadPage(query, thisId).catch(() => {});
+  }, [query, loadPage]);
 
-  const pendingReviewCount = submissions.filter((submission) => submission.reviewStatus === 'pending').length;
-  const comparisonReadyCount = submissions.filter((submission) => Boolean(submission.actions.compareRoute)).length;
+  // Apply pass-only filter client-side (country-aware Writing resolution
+  // cannot be translated to SQL safely).
+  const visibleItems = useMemo(() => {
+    if (!page) return [] as Submission[];
+    if (!query.passOnly) return page.items;
+    return page.items.filter((i) => i.passState === 'pass');
+  }, [page, query.passOnly]);
+
+  const pendingReviewCount = useMemo(
+    () => (page?.items ?? []).filter((s) => s.reviewStatus === 'pending').length,
+    [page],
+  );
+  const passCount = useMemo(
+    () => (page?.items ?? []).filter((s) => s.passState === 'pass').length,
+    [page],
+  );
+
+  // ── Compare-pick multi-select mode ────────────────────────────────────
+  const [compareMode, setCompareMode] = useState(false);
+  const [picked, setPicked] = useState<string[]>([]);
+  const togglePick = useCallback((id: string) => {
+    setPicked((prev) => {
+      if (prev.includes(id)) return prev.filter((x) => x !== id);
+      if (prev.length >= 2) return [prev[1], id];
+      return [...prev, id];
+    });
+  }, []);
+  const startCompare = () => {
+    if (picked.length !== 2) return;
+    analytics.track('submissions_compare_started', { leftId: picked[0], rightId: picked[1] });
+    router.push(`/submissions/compare?leftId=${picked[0]}&rightId=${picked[1]}`);
+  };
+
+  // ── Bulk review ───────────────────────────────────────────────────────
+  const [bulkRunning, setBulkRunning] = useState(false);
+  const [bulkMessage, setBulkMessage] = useState<string | null>(null);
+  const pickedSubmissions = useMemo(
+    () => visibleItems.filter((i) => picked.includes(i.id)),
+    [visibleItems, picked],
+  );
+  const canBulkReview = pickedSubmissions.length > 0
+    && pickedSubmissions.length <= 5
+    && pickedSubmissions.every((s) => s.canRequestReview
+      && (s.subTest === 'Writing' || s.subTest === 'Speaking'));
+
+  async function submitBulkReview() {
+    if (!canBulkReview) return;
+    setBulkRunning(true);
+    setBulkMessage(null);
+    try {
+      const result = await createBulkReviewRequests({
+        items: pickedSubmissions.map((s) => ({
+          attemptId: s.id,
+          subtest: s.subTest.toLowerCase(),
+          turnaroundOption: 'standard_72h',
+          focusAreas: [],
+          learnerNotes: null,
+          paymentSource: 'credits',
+          idempotencyKey: `bulk-${s.id}-${Date.now()}`,
+        })),
+      });
+      const ok = result.items.filter((r) => r.ok).length;
+      analytics.track('submissions_bulk_review_requested', { count: pickedSubmissions.length, ok });
+      setBulkMessage(`Requested ${ok} of ${result.items.length} reviews.`);
+      setPicked([]);
+      // Refresh the page to reflect new review status.
+      setQuery((q) => ({ ...q }));
+    } catch (err) {
+      setBulkMessage(err instanceof Error ? err.message : 'Bulk review request failed.');
+    } finally {
+      setBulkRunning(false);
+    }
+  }
+
+  // ── Hide / unhide handlers (optimistic) ───────────────────────────────
+  async function onHide(id: string) {
+    setPage((prev) => prev ? {
+      ...prev,
+      items: prev.items.map((i) => i.id === id ? { ...i, isHidden: true } : i),
+    } : prev);
+    analytics.track('submissions_hidden', { submissionId: id });
+    try { await hideSubmission(id); } catch { /* noop — next refresh restores truth */ }
+  }
+  async function onUnhide(id: string) {
+    setPage((prev) => prev ? {
+      ...prev,
+      items: prev.items.map((i) => i.id === id ? { ...i, isHidden: false } : i),
+    } : prev);
+    analytics.track('submissions_unhidden', { submissionId: id });
+    try { await unhideSubmission(id); } catch { /* noop */ }
+  }
+
+  // ── Filter bar handlers ───────────────────────────────────────────────
+  function onFilterChange(delta: Partial<SubmissionListQuery>) {
+    analytics.track('submissions_filter_applied', {
+      subtest: delta.subtest ?? null,
+      context: delta.context ?? null,
+      reviewStatus: delta.reviewStatus ?? null,
+      passOnly: delta.passOnly ?? null,
+      q: delta.q ?? null,
+    });
+    setQuery((prev) => ({ ...prev, ...delta, cursor: undefined }));
+  }
+  function onSortChange(sort: SubmissionListQuery['sort']) {
+    analytics.track('submissions_sort_changed', { sort });
+    setQuery((prev) => ({ ...prev, sort, cursor: undefined }));
+  }
+  function onClearFilters() {
+    setQuery({ sort: query.sort });
+  }
+  function onLoadMore() {
+    if (!page?.nextCursor) return;
+    setNextLoading(true);
+    fetchSubmissionsPage({ ...query, cursor: page.nextCursor })
+      .then((res) => {
+        setPage((prev) => prev ? {
+          ...res,
+          items: [...prev.items, ...res.items],
+        } : res);
+      })
+      .finally(() => setNextLoading(false));
+  }
+
+  function onExportCsv() {
+    analytics.track('submissions_exported', {
+      subtest: query.subtest ?? null,
+      context: query.context ?? null,
+      reviewStatus: query.reviewStatus ?? null,
+      passOnly: query.passOnly ?? null,
+    });
+    const url = submissionsExportCsvUrl(query);
+    // Use a plain link to let the browser handle the download via cookie/auth.
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'submissions.csv';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+
+  function onSparklineTileClick(subtest: string) {
+    analytics.track('submissions_sparkline_tile_clicked', { subtest });
+    setQuery((prev) => ({ ...prev, subtest: prev.subtest === subtest ? undefined : subtest, cursor: undefined }));
+  }
 
   return (
     <LearnerDashboardShell
@@ -96,7 +238,7 @@ export default function SubmissionHistory() {
       subtitle="Review your past work and follow up on feedback"
       backHref="/"
     >
-      <div className="space-y-8">
+      <div className="space-y-6">
         <LearnerPageHero
           eyebrow="Evidence History"
           icon={History}
@@ -104,29 +246,87 @@ export default function SubmissionHistory() {
           title="Reopen the attempts that need review or comparison"
           description="Use submission history to find the attempts that still need feedback, comparison, or a fresh follow-up decision."
           highlights={[
-            { icon: History, label: 'Attempts', value: `${submissions.length} recorded` },
+            { icon: History, label: 'Attempts', value: `${page?.total ?? 0} recorded` },
             { icon: Clock, label: 'Pending reviews', value: `${pendingReviewCount} waiting` },
-            { icon: GitCompare, label: 'Compare ready', value: `${comparisonReadyCount} attempts` },
+            { icon: CheckCircle2, label: 'Passing', value: `${passCount} attempts` },
           ]}
         />
 
-        {loading ? (
-          <div className="space-y-4">
-            {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-36 rounded-2xl" />
-            ))}
+        {/* Sparkline strip */}
+        {page && Object.keys(page.sparkline ?? {}).length > 0 ? (
+          <SparklineStrip
+            data={page.sparkline}
+            activeSubtest={query.subtest}
+            onTileClick={onSparklineTileClick}
+          />
+        ) : null}
+
+        {/* Control bar */}
+        <SubmissionFilterBar
+          query={query}
+          facets={page?.facets}
+          total={page?.total ?? 0}
+          onChange={(delta) => {
+            if ('sort' in delta) onSortChange(delta.sort ?? 'date-desc');
+            else onFilterChange(delta);
+          }}
+          onClear={onClearFilters}
+          onExportCsv={onExportCsv}
+        />
+
+        {/* Compare & bulk toolbar */}
+        <div className="flex items-center justify-between gap-3 flex-wrap">
+          <div className="flex items-center gap-2">
+            <Button
+              variant={compareMode ? 'primary' : 'outline'}
+              onClick={() => { setCompareMode((v) => !v); setPicked([]); }}
+              aria-label={compareMode ? 'Exit compare mode' : 'Enter compare mode'}
+            >
+              <GitCompare className="w-4 h-4" />
+              {compareMode ? 'Exit compare mode' : 'Compare attempts'}
+            </Button>
+            {compareMode && picked.length === 2 ? (
+              <Button variant="primary" onClick={startCompare}>
+                Compare selected
+              </Button>
+            ) : null}
+            {compareMode && picked.length > 0 ? (
+              <span className="text-sm text-muted">{picked.length}/2 selected</span>
+            ) : null}
+          </div>
+          {compareMode && canBulkReview ? (
+            <Button
+              variant="outline"
+              onClick={submitBulkReview}
+              loading={bulkRunning}
+            >
+              <Send className="w-4 h-4" />
+              Request review for {pickedSubmissions.length} selected
+            </Button>
+          ) : null}
+        </div>
+
+        {bulkMessage ? <InlineAlert variant="info">{bulkMessage}</InlineAlert> : null}
+
+        {/* List states */}
+        {loading && !page ? (
+          <div className="space-y-4" aria-busy="true">
+            {[1, 2, 3].map((i) => <Skeleton key={i} className="h-36 rounded-[24px]" />)}
           </div>
         ) : null}
 
-        {!loading && error ? (
-          <InlineAlert variant="error">{error}</InlineAlert>
+        {!loading && error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+
+        {!loading && !error && visibleItems.length === 0 ? (
+          <EmptyState
+            title="No submissions match these filters"
+            description="Clear filters to see all attempts, or start a writing or speaking task to record new evidence."
+            action={{ label: 'Clear filters', onClick: onClearFilters }}
+            className="py-16"
+          />
         ) : null}
 
-        {!loading && !error && submissions.length === 0 ? (
-          <EmptyState title="No submissions yet" description="Complete a writing or speaking task to see your history here." action={{ label: 'Start a writing task', onClick: () => router.push('/writing') }} className="py-24" />
-        ) : null}
-
-        {!loading && !error && submissions.length > 0 ? (
+        {!loading && !error && visibleItems.length > 0 ? (
           <section>
             <LearnerSurfaceSectionHeader
               eyebrow="Past Evidence"
@@ -136,74 +336,70 @@ export default function SubmissionHistory() {
             />
 
             <div className="space-y-4">
-              {submissions.map((sub, idx) => {
-                const meta = SUBTEST_STYLE[sub.subTest] ?? SUBTEST_STYLE.Writing;
-                const Icon = meta.icon;
-                const canRequest = sub.canRequestReview;
-                return (
-                  <MotionItem
-                    key={sub.id}
-                    delayIndex={idx}
-                    className="bg-surface rounded-[24px] border border-gray-200 p-5 sm:p-6 shadow-sm flex flex-col md:flex-row gap-6 justify-between hover:border-gray-300 transition-colors"
-                  >
-                    <div className="flex-1 space-y-4">
-                      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-                        <div>
-                          <div className="flex items-center gap-3 mb-2">
-                            <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-black uppercase tracking-widest ${meta.badge}`}>
-                              <Icon className="w-4 h-4" />
-                              {sub.subTest}
-                            </span>
-                            <span className="text-sm text-muted font-medium">{formatSubmissionAttemptDate(sub.attemptDate)}</span>
-                          </div>
-                          <h2 className="text-lg font-bold text-navy leading-tight">{sub.taskName}</h2>
-                        </div>
-                        <div className="sm:text-right bg-background-light sm:bg-transparent p-3 sm:p-0 rounded-xl border border-gray-100 sm:border-none">
-                          <div className="text-xs font-bold text-muted uppercase tracking-widest mb-1">Score Estimate</div>
-                          <div className={`text-xl font-black ${sub.scoreEstimate === 'Pending' ? 'text-muted' : 'text-navy'}`}>
-                            {sub.scoreEstimate}
-                          </div>
-                        </div>
-                      </div>
-                      <div className="flex items-center gap-3 pt-2 border-t border-gray-50">
-                        <span className="text-sm font-medium text-muted">Review Status:</span>
-                        <ReviewBadge status={sub.reviewStatus} />
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-2 md:w-48 shrink-0 border-t md:border-t-0 md:border-l border-gray-100 pt-5 md:pt-0 md:pl-6 justify-center">
-                      <button
-                        onClick={() => sub.actions.reopenFeedbackRoute && router.push(sub.actions.reopenFeedbackRoute)}
-                        disabled={!sub.actions.reopenFeedbackRoute}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-navy text-sm font-bold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <MessageSquare className="w-4 h-4" />
-                        Reopen Feedback
-                      </button>
-                      <button
-                        onClick={() => sub.actions.compareRoute && router.push(sub.actions.compareRoute)}
-                        disabled={!sub.actions.compareRoute}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-navy text-sm font-bold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <GitCompare className="w-4 h-4" />
-                        Compare Attempts
-                      </button>
-                      <button
-                        onClick={() => sub.actions.requestReviewRoute && router.push(sub.actions.requestReviewRoute)}
-                        disabled={!canRequest || !sub.actions.requestReviewRoute}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-navy text-white text-sm font-bold rounded-xl hover:bg-navy/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                      >
-                        <Send className="w-4 h-4" />
-                        Request Review
-                      </button>
-                    </div>
-                  </MotionItem>
-                );
-              })}
+              {visibleItems.map((submission, idx) => (
+                <SubmissionCard
+                  key={submission.id}
+                  submission={submission}
+                  compareMode={compareMode}
+                  isComparePicked={picked.includes(submission.id)}
+                  onTogglePick={togglePick}
+                  onHide={onHide}
+                  onUnhide={onUnhide}
+                  delayIndex={idx}
+                />
+              ))}
             </div>
+
+            {page?.nextCursor ? (
+              <div className="flex justify-center pt-6">
+                <Button variant="outline" onClick={onLoadMore} loading={nextLoading}>
+                  Load more
+                </Button>
+              </div>
+            ) : null}
           </section>
         ) : null}
       </div>
     </LearnerDashboardShell>
   );
+}
+
+// ──────────────────────────────────────────────────────────────────────────
+// URL state helpers — the full filter state lives in the query string so
+// the page is shareable + survives back/forward navigation.
+// ──────────────────────────────────────────────────────────────────────────
+
+const ALLOWED_SORTS = new Set(['date-desc', 'date-asc', 'score-desc', 'score-asc']);
+
+function readQueryFromUrl(sp: URLSearchParams | null): SubmissionListQuery {
+  const get = (k: string) => sp?.get(k) ?? undefined;
+  const sortRaw = get('sort');
+  const sort = sortRaw && ALLOWED_SORTS.has(sortRaw) ? (sortRaw as SubmissionListQuery['sort']) : 'date-desc';
+  return {
+    cursor: undefined,
+    limit: 20,
+    subtest: get('subtest') || undefined,
+    context: get('context') || undefined,
+    reviewStatus: get('reviewStatus') || undefined,
+    from: get('from') || undefined,
+    to: get('to') || undefined,
+    passOnly: get('passOnly') === 'true',
+    q: get('q') || undefined,
+    sort,
+    includeHidden: get('includeHidden') === 'true',
+  };
+}
+
+function writeQueryToUrl(q: SubmissionListQuery): string {
+  const p = new URLSearchParams();
+  if (q.subtest) p.set('subtest', q.subtest);
+  if (q.context) p.set('context', q.context);
+  if (q.reviewStatus) p.set('reviewStatus', q.reviewStatus);
+  if (q.from) p.set('from', q.from);
+  if (q.to) p.set('to', q.to);
+  if (q.passOnly) p.set('passOnly', 'true');
+  if (q.q) p.set('q', q.q);
+  if (q.sort && q.sort !== 'date-desc') p.set('sort', q.sort);
+  if (q.includeHidden) p.set('includeHidden', 'true');
+  return p.toString();
 }

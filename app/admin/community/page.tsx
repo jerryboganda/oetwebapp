@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { MessageSquareText, Pin, Lock, Trash2, Eye, MessageCircle, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace, AdminRoutePanelFooter } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -124,12 +124,12 @@ export default function AdminCommunityPage() {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
             {row.isPinned && (
-              <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 text-[10px] px-1.5 py-0">
+              <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-600 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-400 text-[10px] px-1.5 py-0">
                 <Pin className="mr-0.5 h-2.5 w-2.5" /> Pinned
               </Badge>
             )}
             {row.isLocked && (
-              <Badge variant="outline" className="text-gray-500 border-gray-300 text-[10px] px-1.5 py-0">
+              <Badge variant="outline" className="text-muted border-border text-[10px] px-1.5 py-0">
                 <Lock className="mr-0.5 h-2.5 w-2.5" /> Locked
               </Badge>
             )}
@@ -172,7 +172,7 @@ export default function AdminCommunityPage() {
             disabled={isMutating}
             title={row.isPinned ? 'Unpin thread' : 'Pin thread'}
           >
-            <Pin className={`h-3.5 w-3.5 ${row.isPinned ? 'text-amber-600' : ''}`} />
+            <Pin className={`h-3.5 w-3.5 ${row.isPinned ? 'text-amber-600 dark:text-amber-400' : ''}`} />
           </Button>
           <Button
             variant="outline"
@@ -181,14 +181,13 @@ export default function AdminCommunityPage() {
             disabled={isMutating}
             title={row.isLocked ? 'Unlock thread' : 'Lock thread'}
           >
-            <Lock className={`h-3.5 w-3.5 ${row.isLocked ? 'text-red-600' : ''}`} />
+            <Lock className={`h-3.5 w-3.5 ${row.isLocked ? 'text-danger' : ''}`} />
           </Button>
           <Button
-            variant="outline"
+            variant="destructive"
             size="sm"
             onClick={() => setDeleteTarget(row)}
             disabled={isMutating}
-            className="text-red-600 hover:bg-red-50"
             title="Delete thread"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -204,7 +203,7 @@ export default function AdminCommunityPage() {
     <AdminRouteWorkspace role="main" aria-label="Community moderation">
       <AsyncStateWrapper status={pageStatus} onRetry={() => loadThreads(page)}>
         <div className="space-y-6">
-          <AdminRouteSectionHeader title="Community Moderation" />
+          <AdminRouteSectionHeader title="Community Moderation" description="Review, pin, lock, and remove community threads across the platform forum." />
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <AdminRouteSummaryCard label="Total Threads" value={String(total)} />
@@ -222,6 +221,7 @@ export default function AdminCommunityPage() {
             ) : (
               <>
                 <DataTable<ForumThreadSummary>
+                  density="compact"
                   columns={columns}
                   data={threads}
                   keyExtractor={(row) => row.id}
@@ -230,12 +230,12 @@ export default function AdminCommunityPage() {
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-1.5">
                         {row.isPinned && (
-                          <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 text-xs">
+                          <Badge variant="outline" className="border-amber-300 bg-amber-50 text-amber-600 dark:border-amber-800 dark:bg-amber-900/30 dark:text-amber-400 text-xs">
                             <Pin className="mr-0.5 h-3 w-3" /> Pinned
                           </Badge>
                         )}
                         {row.isLocked && (
-                          <Badge variant="outline" className="text-gray-500 border-gray-300 text-xs">
+                          <Badge variant="outline" className="text-muted border-border text-xs">
                             <Lock className="mr-0.5 h-3 w-3" /> Locked
                           </Badge>
                         )}
@@ -248,14 +248,14 @@ export default function AdminCommunityPage() {
                       </div>
                       <div className="flex items-center gap-1.5 pt-1">
                         <Button variant="outline" size="sm" onClick={() => handlePin(row)} disabled={isMutating}>
-                          <Pin className={`h-3.5 w-3.5 mr-1 ${row.isPinned ? 'text-amber-600' : ''}`} />
+                          <Pin className={`h-3.5 w-3.5 mr-1 ${row.isPinned ? 'text-amber-600 dark:text-amber-400' : ''}`} />
                           {row.isPinned ? 'Unpin' : 'Pin'}
                         </Button>
                         <Button variant="outline" size="sm" onClick={() => handleLock(row)} disabled={isMutating}>
-                          <Lock className={`h-3.5 w-3.5 mr-1 ${row.isLocked ? 'text-red-600' : ''}`} />
+                          <Lock className={`h-3.5 w-3.5 mr-1 ${row.isLocked ? 'text-danger' : ''}`} />
                           {row.isLocked ? 'Unlock' : 'Lock'}
                         </Button>
-                        <Button variant="outline" size="sm" onClick={() => setDeleteTarget(row)} disabled={isMutating} className="text-red-600 hover:bg-red-50">
+                        <Button variant="destructive" size="sm" onClick={() => setDeleteTarget(row)} disabled={isMutating}>
                           <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
                         </Button>
                       </div>
@@ -277,6 +277,7 @@ export default function AdminCommunityPage() {
                 )}
               </>
             )}
+            <AdminRoutePanelFooter source="Community forum" />
           </AdminRoutePanel>
         </div>
       </AsyncStateWrapper>
@@ -293,10 +294,11 @@ export default function AdminCommunityPage() {
               Cancel
             </Button>
             <Button
+              variant="destructive"
               size="sm"
               onClick={handleDeleteConfirm}
               disabled={isMutating}
-              className="bg-red-600 text-white hover:bg-red-700"
+              loading={isMutating}
             >
               {isMutating ? 'Deleting…' : 'Delete Thread'}
             </Button>

@@ -899,72 +899,83 @@ public partial class LearnerService(
     public async Task<object> GetProgressAsync(string userId, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
-        var submissions = await db.Attempts.Where(x => x.UserId == userId && x.State == AttemptState.Completed).ToListAsync(cancellationToken);
-        var attemptIds = submissions.Select(x => x.Id).ToList();
-        var evaluations = (await db.Evaluations
-                .Where(x => x.State == AsyncState.Completed && attemptIds.Contains(x.AttemptId))
-                .ToListAsync(cancellationToken))
-            .OrderBy(x => x.GeneratedAt)
-            .ToList();
-        var criterionTrend = evaluations
-            .SelectMany(evaluation =>
-                JsonSupport.Deserialize<List<Dictionary<string, object?>>>(evaluation.CriterionScoresJson, [])
-                    .Select(criterion => new
-                    {
-                        criterionCode = criterion.GetValueOrDefault("criterionCode")?.ToString(),
-                        criterionLabel = CriterionLabelFromCode(criterion.GetValueOrDefault("criterionCode")?.ToString()),
-                        score = ParseCriterionScore(criterion.GetValueOrDefault("scoreRange")?.ToString()),
-                        generatedAt = evaluation.GeneratedAt,
-                        subtest = evaluation.SubtestCode
-                    }))
-            .ToList();
-        var reviews = (await db.ReviewRequests
-                .Where(x => attemptIds.Contains(x.AttemptId))
-                .ToListAsync(cancellationToken))
-            .OrderBy(x => x.CreatedAt)
-            .ToList();
-        var completedReviews = reviews.Where(x => x.CompletedAt.HasValue).ToList();
-        var averageTurnaroundHours = completedReviews.Count == 0
-            ? (double?)null
-            : Math.Round(completedReviews.Average(x => (x.CompletedAt!.Value - x.CreatedAt).TotalHours), 1);
+
+        // Progress v2 HARD CUTOVER: delegate to the new service. This preserves
+        // the legacy response shape (trend/completion/submissionVolume/reviewUsage/
+        // totals/freshness) while retiring the hardcoded stubs and the naive
+        // score-range regex. Fields unused by legacy callers are omitted.
+        var progress = new OetLearner.Api.Services.Progress.ProgressService(db);
+        var payload = await progress.GetProgressAsync(userId, "90d", cancellationToken);
 
         return new
         {
-            trend = evaluations.Select((x, index) => new { week = $"Week {index + 1}", subtest = x.SubtestCode, scoreRange = x.ScoreRange, generatedAt = x.GeneratedAt }),
-            subtestTrend = evaluations.Select((x, index) => new { week = $"Week {index + 1}", subtest = x.SubtestCode, scoreRange = x.ScoreRange, generatedAt = x.GeneratedAt }),
-            criterionTrend,
-            completion = new[]
-            {
-                new { day = "Mon", completed = 3 },
-                new { day = "Tue", completed = 2 },
-                new { day = "Wed", completed = 4 },
-                new { day = "Thu", completed = 1 },
-                new { day = "Fri", completed = 3 },
-                new { day = "Sat", completed = 5 },
-                new { day = "Sun", completed = 2 }
-            },
-            submissionVolume = new[]
-            {
-                new { week = "W1", submissions = 4 },
-                new { week = "W2", submissions = 6 },
-                new { week = "W3", submissions = 5 },
-                new { week = "W4", submissions = 8 },
-                new { week = "W5", submissions = 7 }
-            },
+            // Legacy `trend` + `subtestTrend` both flattened into one evaluation-per-row
+            // series. Kept for the old `/v1/progress` callers until the frontend cutover
+            // removes them.
+            trend = payload.Trend
+                .SelectMany(w => new[] { "writing", "speaking", "reading", "listening" }
+                    .Where(s => w.SubtestScaled.TryGetValue(s, out var v) && v.HasValue)
+                    .Select(s => new
+                    {
+                        week = FormatWeekLabel(w.WeekKey),
+                        subtest = s,
+                        scoreRange = $"{w.SubtestScaled[s]}",
+                        generatedAt = w.WeekStart
+                    }))
+                .ToList(),
+            subtestTrend = payload.Trend
+                .SelectMany(w => new[] { "writing", "speaking", "reading", "listening" }
+                    .Where(s => w.SubtestScaled.TryGetValue(s, out var v) && v.HasValue)
+                    .Select(s => new
+                    {
+                        week = FormatWeekLabel(w.WeekKey),
+                        subtest = s,
+                        scoreRange = $"{w.SubtestScaled[s]}",
+                        generatedAt = w.WeekStart
+                    }))
+                .ToList(),
+            criterionTrend = payload.CriterionTrend
+                .Select(c => new
+                {
+                    criterionCode = c.CriterionCode,
+                    criterionLabel = c.CriterionLabel,
+                    score = c.AverageScaled,
+                    generatedAt = c.WeekStart,
+                    subtest = c.SubtestCode
+                }).ToList(),
+            completion = payload.Completion
+                .Select(c => new { day = c.Date.DayOfWeek.ToString()[..3], completed = c.Completed })
+                .ToList(),
+            submissionVolume = payload.SubmissionVolume
+                .Select((v, i) => new { week = $"W{i + 1}", submissions = v.Writing + v.Speaking })
+                .ToList(),
             reviewUsage = new
             {
-                totalRequests = reviews.Count,
-                completedRequests = completedReviews.Count,
-                averageTurnaroundHours,
-                creditsConsumed = reviews.Count(x => string.Equals(x.PaymentSource, "credits", StringComparison.OrdinalIgnoreCase))
+                totalRequests = payload.ReviewUsage.TotalRequests,
+                completedRequests = payload.ReviewUsage.CompletedRequests,
+                averageTurnaroundHours = payload.ReviewUsage.AverageTurnaroundHours,
+                creditsConsumed = payload.ReviewUsage.CreditsConsumed
             },
-            totals = new { completedAttempts = submissions.Count, completedEvaluations = evaluations.Count },
+            totals = new
+            {
+                completedAttempts = payload.Totals.CompletedAttempts,
+                completedEvaluations = payload.Totals.CompletedEvaluations
+            },
             freshness = new
             {
-                generatedAt = DateTimeOffset.UtcNow,
-                usesFallbackSeries = evaluations.Count == 0
+                generatedAt = payload.Freshness.GeneratedAt,
+                usesFallbackSeries = payload.Freshness.UsesFallbackSeries
             }
         };
+    }
+
+    private static string FormatWeekLabel(string isoWeekKey)
+    {
+        // "2026-W16" → "Week 16"
+        var wIdx = isoWeekKey.IndexOf('W');
+        if (wIdx < 0) return isoWeekKey;
+        var num = isoWeekKey[(wIdx + 1)..];
+        return $"Week {int.Parse(num)}";
     }
 
     public async Task<object> GetSubmissionsAsync(string userId, CancellationToken cancellationToken)

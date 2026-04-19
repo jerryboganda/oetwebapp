@@ -4,7 +4,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { MotionConfig, motion, useReducedMotion } from 'motion/react';
 import type { Transition } from 'motion/react';
 import { AlertTriangle, CheckCircle2, Clock, Inbox, UserRoundCheck } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace, AdminRoutePanelFooter } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -571,7 +571,7 @@ export default function ReviewOpsPage() {
                       transition={cardTransition}
                     />
                     <motion.div
-                      className="bg-emerald-500"
+                      className="bg-success"
                       initial={{ width: 0 }}
                       animate={{ width: `${(summary.statusDistribution.completed / totalReviews) * 100}%` }}
                       transition={cardTransition}
@@ -591,6 +591,7 @@ export default function ReviewOpsPage() {
             <AdminRoutePanel title="Live Queue" description="Assign or cancel queued reviews with real backend mutations.">
               <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ status: [], priority: [] })} />
               <DataTable columns={queueColumns} data={queue} keyExtractor={(item) => item.id} mobileCardRender={queueMobileCardRender} />
+              <AdminRoutePanelFooter source="Review pipeline" />
             </AdminRoutePanel>
           </motion.div>
 

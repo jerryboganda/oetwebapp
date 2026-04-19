@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { Edit3, Flag, Plus, Power } from 'lucide-react';
-import { AdminRouteSummaryCard, AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRouteSummaryCard, AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace, AdminRoutePanelFooter } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -126,7 +126,7 @@ export default function FlagsPage() {
       key: 'type',
       header: 'Type',
       render: (flag) => (
-        <Badge variant={flag.type === 'experiment' ? 'warning' : flag.type === 'operational' ? 'info' : 'default'}>
+        <Badge variant={flag.type === 'experiment' ? 'warning' : flag.type === 'operational' ? 'info' : 'muted'}>
           {flag.type}
         </Badge>
       ),
@@ -184,7 +184,7 @@ export default function FlagsPage() {
           <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{flag.key}</p>
         </div>
         <div className="flex flex-col items-end gap-1">
-          <Badge variant={flag.type === 'experiment' ? 'warning' : flag.type === 'operational' ? 'info' : 'default'}>
+          <Badge variant={flag.type === 'experiment' ? 'warning' : flag.type === 'operational' ? 'info' : 'muted'}>
             {flag.type}
           </Badge>
           <Badge variant={flag.enabled ? 'success' : 'muted'}>
@@ -350,7 +350,8 @@ export default function FlagsPage() {
 
         <AdminRoutePanel title="Rollout Registry" description="All visible enable, disable, and edit controls are backed by the admin feature flag endpoints and audit events.">
           <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => setFilters({ type: [] })} />
-          <DataTable columns={columns} data={flags} keyExtractor={(flag) => flag.id} mobileCardRender={mobileCardRender} />
+          <DataTable density="compact" columns={columns} data={flags} keyExtractor={(flag) => flag.id} mobileCardRender={mobileCardRender} />
+          <AdminRoutePanelFooter source="Feature flag registry" />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 

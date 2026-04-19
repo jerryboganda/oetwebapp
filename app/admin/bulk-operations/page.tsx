@@ -133,19 +133,12 @@ export default function BulkOperationsPage() {
                 Add or deduct credits from multiple learner accounts at once. Use negative values to debit.
               </InlineAlert>
               <div>
-                <label className="text-sm font-medium">User IDs (one per line or comma-separated)</label>
-                <Textarea value={creditUserIds} onChange={(e) => setCreditUserIds(e.target.value)} rows={4} placeholder="user-id-1&#10;user-id-2" />
+                <Textarea label="User IDs (one per line or comma-separated)" value={creditUserIds} onChange={(e) => setCreditUserIds(e.target.value)} rows={4} placeholder="user-id-1&#10;user-id-2" />
                 <p className="text-xs text-muted mt-1">{parseUserIds(creditUserIds).length} users</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">Credit Amount</label>
-                  <Input type="number" value={creditAmount} onChange={(e) => setCreditAmount(e.target.value)} placeholder="50" />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Reason</label>
-                  <Input value={creditReason} onChange={(e) => setCreditReason(e.target.value)} placeholder="Promotional credits" />
-                </div>
+                <Input label="Credit Amount" type="number" value={creditAmount} onChange={(e) => setCreditAmount(e.target.value)} placeholder="50" />
+                <Input label="Reason" value={creditReason} onChange={(e) => setCreditReason(e.target.value)} placeholder="Promotional credits" />
               </div>
               <Button onClick={handleCreditSubmit} disabled={submitting || parseUserIds(creditUserIds).length === 0}>
                 {submitting ? 'Processing…' : 'Apply Credits'}
@@ -161,18 +154,11 @@ export default function BulkOperationsPage() {
                 Send a notification to multiple learners simultaneously.
               </InlineAlert>
               <div>
-                <label className="text-sm font-medium">User IDs (one per line or comma-separated)</label>
-                <Textarea value={notifUserIds} onChange={(e) => setNotifUserIds(e.target.value)} rows={4} placeholder="user-id-1&#10;user-id-2" />
+                <Textarea label="User IDs (one per line or comma-separated)" value={notifUserIds} onChange={(e) => setNotifUserIds(e.target.value)} rows={4} placeholder="user-id-1&#10;user-id-2" />
                 <p className="text-xs text-muted mt-1">{parseUserIds(notifUserIds).length} users</p>
               </div>
-              <div>
-                <label className="text-sm font-medium">Title</label>
-                <Input value={notifTitle} onChange={(e) => setNotifTitle(e.target.value)} placeholder="Important Update" />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Message</label>
-                <Textarea value={notifMessage} onChange={(e) => setNotifMessage(e.target.value)} rows={3} placeholder="Your message here..." />
-              </div>
+              <Input label="Title" value={notifTitle} onChange={(e) => setNotifTitle(e.target.value)} placeholder="Important Update" />
+              <Textarea label="Message" value={notifMessage} onChange={(e) => setNotifMessage(e.target.value)} rows={3} placeholder="Your message here..." />
               <Button onClick={handleNotificationSubmit} disabled={submitting || parseUserIds(notifUserIds).length === 0}>
                 {submitting ? 'Sending…' : 'Send Notifications'}
               </Button>
@@ -187,19 +173,12 @@ export default function BulkOperationsPage() {
                 Change the account status of multiple learners. This action may restrict their access.
               </InlineAlert>
               <div>
-                <label className="text-sm font-medium">User IDs (one per line or comma-separated)</label>
-                <Textarea value={statusUserIds} onChange={(e) => setStatusUserIds(e.target.value)} rows={4} placeholder="user-id-1&#10;user-id-2" />
+                <Textarea label="User IDs (one per line or comma-separated)" value={statusUserIds} onChange={(e) => setStatusUserIds(e.target.value)} rows={4} placeholder="user-id-1&#10;user-id-2" />
                 <p className="text-xs text-muted mt-1">{parseUserIds(statusUserIds).length} users</p>
               </div>
               <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">New Status</label>
-                  <Select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} options={[{ value: 'active', label: 'Active' }, { value: 'suspended', label: 'Suspended' }]} />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Reason</label>
-                  <Input value={statusReason} onChange={(e) => setStatusReason(e.target.value)} placeholder="Compliance review" />
-                </div>
+                <Select label="New Status" value={newStatus} onChange={(e) => setNewStatus(e.target.value)} options={[{ value: 'active', label: 'Active' }, { value: 'suspended', label: 'Suspended' }]} />
+                <Input label="Reason" value={statusReason} onChange={(e) => setStatusReason(e.target.value)} placeholder="Compliance review" />
               </div>
               <Button variant="destructive" onClick={handleStatusSubmit} disabled={submitting || parseUserIds(statusUserIds).length === 0}>
                 {submitting ? 'Processing…' : 'Change Status'}

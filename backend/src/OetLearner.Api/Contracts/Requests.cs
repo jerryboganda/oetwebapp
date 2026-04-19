@@ -57,6 +57,8 @@ public record ReviewRequestCreateRequest(
     string PaymentSource,
     string? IdempotencyKey);
 
+public record BulkReviewRequest(List<ReviewRequestCreateRequest> Items);
+
 public record CheckoutSessionCreateRequest(
     string ProductType,
     int Quantity,

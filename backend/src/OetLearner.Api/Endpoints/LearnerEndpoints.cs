@@ -1,7 +1,9 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using OetLearner.Api.Contracts;
+using OetLearner.Api.Contracts.Submissions;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Submissions;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -60,8 +62,103 @@ public static class LearnerEndpoints
         v1.MapPost("/study-plan/items/{itemId}/swap", async (HttpContext http, string itemId, StudyPlanSwapRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.SwapStudyPlanItemAsync(http.UserId(), itemId, request, ct)));
         v1.MapGet("/readiness", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReadinessAsync(http.UserId(), ct)));
         v1.MapGet("/progress", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetProgressAsync(http.UserId(), ct)));
-        v1.MapGet("/submissions", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSubmissionsAsync(http.UserId(), ct)));
-        v1.MapGet("/submissions/compare", async (HttpContext http, [FromQuery] string? leftId, [FromQuery] string? rightId, LearnerService service, CancellationToken ct) => Results.Ok(await service.CompareSubmissionsAsync(http.UserId(), leftId, rightId, ct)));
+        v1.MapGet("/submissions", async (
+            HttpContext http,
+            SubmissionHistoryService submissions,
+            [FromQuery] string? cursor,
+            [FromQuery] int? limit,
+            [FromQuery] string? subtest,
+            [FromQuery] string? context,
+            [FromQuery] string? reviewStatus,
+            [FromQuery] DateTimeOffset? from,
+            [FromQuery] DateTimeOffset? to,
+            [FromQuery] bool? passOnly,
+            [FromQuery] string? q,
+            [FromQuery] string? sort,
+            [FromQuery] bool? includeHidden,
+            CancellationToken ct) =>
+        {
+            var query = new SubmissionListQuery(
+                Cursor: cursor,
+                Limit: limit,
+                Subtest: subtest,
+                Context: context,
+                ReviewStatus: reviewStatus,
+                From: from,
+                To: to,
+                PassOnly: passOnly ?? false,
+                Q: q,
+                Sort: sort,
+                IncludeHidden: includeHidden ?? false);
+            return Results.Ok(await submissions.ListAsync(http.UserId(), query, ct));
+        });
+
+        v1.MapGet("/submissions/compare", async (
+            HttpContext http,
+            [FromQuery] string? leftId,
+            [FromQuery] string? rightId,
+            SubmissionHistoryService submissions,
+            CancellationToken ct) => Results.Ok(await submissions.CompareAsync(http.UserId(), leftId, rightId, ct)));
+
+        v1.MapGet("/submissions/export.csv", async (
+            HttpContext http,
+            SubmissionHistoryService submissions,
+            [FromQuery] string? subtest,
+            [FromQuery] string? context,
+            [FromQuery] string? reviewStatus,
+            [FromQuery] DateTimeOffset? from,
+            [FromQuery] DateTimeOffset? to,
+            [FromQuery] bool? passOnly,
+            [FromQuery] string? q,
+            [FromQuery] string? sort,
+            [FromQuery] bool? includeHidden,
+            CancellationToken ct) =>
+        {
+            var query = new SubmissionListQuery(
+                Cursor: null,
+                Limit: null,
+                Subtest: subtest,
+                Context: context,
+                ReviewStatus: reviewStatus,
+                From: from,
+                To: to,
+                PassOnly: passOnly ?? false,
+                Q: q,
+                Sort: sort,
+                IncludeHidden: includeHidden ?? false);
+            var bytes = await submissions.ExportCsvAsync(http.UserId(), query, ct);
+            return Results.File(bytes, "text/csv; charset=utf-8", "submissions.csv");
+        });
+
+        v1.MapGet("/submissions/{submissionId}", async (
+            HttpContext http,
+            string submissionId,
+            SubmissionHistoryService submissions,
+            CancellationToken ct) =>
+        {
+            var detail = await submissions.GetDetailAsync(http.UserId(), submissionId, ct);
+            return detail is null ? Results.NotFound(new { error = "submission_not_found" }) : Results.Ok(detail);
+        });
+
+        v1.MapPost("/submissions/{submissionId}/hide", async (
+            HttpContext http,
+            string submissionId,
+            SubmissionHistoryService submissions,
+            CancellationToken ct) =>
+        {
+            var ok = await submissions.HideAsync(http.UserId(), submissionId, ct);
+            return ok ? Results.Ok(new { ok = true }) : Results.NotFound();
+        });
+
+        v1.MapPost("/submissions/{submissionId}/unhide", async (
+            HttpContext http,
+            string submissionId,
+            SubmissionHistoryService submissions,
+            CancellationToken ct) =>
+        {
+            var ok = await submissions.UnhideAsync(http.UserId(), submissionId, ct);
+            return ok ? Results.Ok(new { ok = true }) : Results.NotFound();
+        });
 
         var writing = v1.MapGroup("/writing");
         writing.MapGet("/home", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetWritingHomeAsync(http.UserId(), ct)));
@@ -131,6 +228,34 @@ public static class LearnerEndpoints
         reviews.MapGet("/", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReviewsAsync(http.UserId(), ct)));
         reviews.MapGet("/eligibility", async (HttpContext http, [FromQuery] string? attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReviewEligibilityAsync(http.UserId(), attemptId, ct)));
         reviews.MapPost("/requests", async (HttpContext http, ReviewRequestCreateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateReviewRequestAsync(http.UserId(), request, ct)));
+        reviews.MapPost("/requests/batch", async (HttpContext http, BulkReviewRequest request, LearnerService service, CancellationToken ct) =>
+        {
+            if (request.Items is null || request.Items.Count == 0) return Results.BadRequest(new { error = "empty_batch" });
+            if (request.Items.Count > 5) return Results.BadRequest(new { error = "batch_too_large", max = 5 });
+            var results = new List<object>();
+            var seen = new HashSet<string>();
+            foreach (var item in request.Items)
+            {
+                if (!seen.Add(item.AttemptId)) continue;
+                try
+                {
+                    var result = await service.CreateReviewRequestAsync(http.UserId(), new ReviewRequestCreateRequest(
+                        AttemptId: item.AttemptId,
+                        Subtest: item.Subtest,
+                        TurnaroundOption: item.TurnaroundOption,
+                        FocusAreas: item.FocusAreas ?? new List<string>(),
+                        LearnerNotes: item.LearnerNotes,
+                        PaymentSource: item.PaymentSource,
+                        IdempotencyKey: item.IdempotencyKey), ct);
+                    results.Add(new { attemptId = item.AttemptId, ok = true, result });
+                }
+                catch (Exception ex)
+                {
+                    results.Add(new { attemptId = item.AttemptId, ok = false, error = ex.Message });
+                }
+            }
+            return Results.Ok(new { items = results });
+        });
         reviews.MapGet("/requests/{reviewRequestId}", async (HttpContext http, string reviewRequestId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReviewRequestAsync(http.UserId(), reviewRequestId, ct)));
 
         var billing = v1.MapGroup("/billing");

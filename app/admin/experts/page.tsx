@@ -17,6 +17,8 @@ import {
   AdminRouteSectionHeader,
   AdminRouteSummaryCard,
   AdminRouteWorkspace,
+  AdminRoutePanelFooter,
+  AdminTableCellLink,
 } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -296,17 +298,13 @@ export default function ExpertManagementPage() {
         render: (expert) => {
           const tutor = tutorByExpert.get(expert.id);
           return (
-            <div className="space-y-1">
-              <button
-                type="button"
-                onClick={() => openExpertDetail(expert)}
-                className="text-left font-medium text-primary hover:underline"
-              >
+              <div className="space-y-1">
+              <AdminTableCellLink onClick={() => openExpertDetail(expert)}>
                 {expert.name}
-              </button>
+              </AdminTableCellLink>
               <p className="text-sm text-muted">{expert.email}</p>
               {tutor ? (
-                <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                <span className="inline-flex items-center gap-1 text-xs text-success">
                   <Mic className="h-3 w-3" />
                   PS Tutor
                   {tutor.totalSessions > 0 && (
@@ -357,16 +355,12 @@ export default function ExpertManagementPage() {
       <div className="space-y-3">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0">
-            <button
-              type="button"
-              onClick={() => openExpertDetail(expert)}
-              className="truncate font-semibold text-primary hover:underline"
-            >
+            <AdminTableCellLink onClick={() => openExpertDetail(expert)} className="truncate font-semibold">
               {expert.name}
-            </button>
+            </AdminTableCellLink>
             <p className="truncate text-sm text-muted">{expert.email}</p>
             {tutor ? (
-              <span className="mt-1 inline-flex items-center gap-1 text-xs text-emerald-600">
+              <span className="mt-1 inline-flex items-center gap-1 text-xs text-success">
                 <Mic className="h-3 w-3" />
                 PS Tutor &middot; {tutor.totalSessions} sessions
               </span>
@@ -504,7 +498,8 @@ export default function ExpertManagementPage() {
               </div>
             </div>
           </div>
-          <DataTable columns={columns} data={experts} keyExtractor={(e) => e.id} mobileCardRender={mobileCardRender} />
+          <DataTable density="compact" columns={columns} data={experts} keyExtractor={(e) => e.id} mobileCardRender={mobileCardRender} />
+          <AdminRoutePanelFooter source="Expert directory" />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 
@@ -598,7 +593,7 @@ export default function ExpertManagementPage() {
                 <p className="text-xs uppercase tracking-wide text-muted">Specialties</p>
                 <div className="mt-1 flex flex-wrap gap-2">
                   {selectedExpert.specialties.map((s) => (
-                    <Badge key={s} variant="default">
+                    <Badge key={s} variant="muted">
                       {s}
                     </Badge>
                   ))}
@@ -635,18 +630,18 @@ export default function ExpertManagementPage() {
               const tutor = tutorByExpert.get(selectedExpert.id);
               if (tutor) {
                 return (
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4 dark:border-emerald-800 dark:bg-emerald-950/30">
                     <div className="flex items-center gap-2">
-                      <Mic className="h-5 w-5 text-emerald-600" />
-                      <p className="font-medium text-emerald-800">Private Speaking Tutor</p>
+                      <Mic className="h-5 w-5 text-success" />
+                      <p className="font-medium text-emerald-800 dark:text-emerald-300">Private Speaking Tutor</p>
                     </div>
-                    <p className="mt-1 text-sm text-emerald-700">
+                    <p className="mt-1 text-sm text-emerald-700 dark:text-emerald-400">
                       {tutor.totalSessions} sessions &middot; ★{tutor.averageRating.toFixed(1)} avg rating &middot;{' '}
                       {tutor.isActive ? 'Active' : 'Inactive'}
                     </p>
                     <Link
                       href="/admin/private-speaking"
-                      className="mt-2 inline-block text-sm font-medium text-emerald-700 hover:underline"
+                      className="mt-2 inline-block text-sm font-medium text-primary hover:text-primary-dark hover:underline"
                     >
                       Manage in Private Speaking →
                     </Link>

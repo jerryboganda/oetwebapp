@@ -47,9 +47,21 @@ describe('ApiError', () => {
 
 describe('learner route normalization', () => {
   const originalFetch = globalThis.fetch;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation((message?: unknown) => {
+      const first = typeof message === 'string' ? message : '';
+      if (first.includes('[API] No auth token available for production request to')) {
+        return;
+      }
+      return;
+    });
+  });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
+    consoleErrorSpy.mockRestore();
     vi.resetModules();
   });
 
@@ -107,11 +119,23 @@ describe('API retry logic', () => {
   const env = process.env as Record<string, string | undefined>;
   const originalMockAuth = env.NEXT_PUBLIC_ENABLE_MOCK_AUTH;
   const originalNodeEnv = env.NODE_ENV;
+  let consoleErrorSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation((message?: unknown) => {
+      const first = typeof message === 'string' ? message : '';
+      if (first.includes('[API] No auth token available for production request to')) {
+        return;
+      }
+      return;
+    });
+  });
 
   afterEach(() => {
     globalThis.fetch = originalFetch;
     env.NEXT_PUBLIC_ENABLE_MOCK_AUTH = originalMockAuth;
     env.NODE_ENV = originalNodeEnv;
+    consoleErrorSpy.mockRestore();
     vi.resetModules();
   });
 

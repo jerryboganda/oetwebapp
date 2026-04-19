@@ -161,6 +161,14 @@ public static class AdminPermissions
     public const string SystemAdmin = "system_admin";
     public const string ManagePermissions = "manage_permissions";
 
+    // ── Study Planner v2 ──
+    public const string StudyPlannerRead = "study_planner:read";
+    public const string StudyPlannerWrite = "study_planner:write";
+
+    // ── Progress v2 ──
+    public const string ProgressPolicyRead = "progress_policy:read";
+    public const string ProgressPolicyWrite = "progress_policy:write";
+
     /// <summary>Full permission set granted to system administrators.</summary>
     public static readonly string[] All =
     [
@@ -170,7 +178,9 @@ public static class AdminPermissions
         UsersRead, UsersWrite,
         ReviewOps, QualityAnalytics, AiConfig,
         FeatureFlags, AuditLogs, SystemAdmin,
-        ManagePermissions
+        ManagePermissions,
+        StudyPlannerRead, StudyPlannerWrite,
+        ProgressPolicyRead, ProgressPolicyWrite
     ];
 }
 

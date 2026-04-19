@@ -1,5 +1,127 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "model": "digitalocean/do-claude-opus-4.7",
+  "small_model": "digitalocean/openai-gpt-5-mini",
+  "provider": {
+    "digitalocean": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "DigitalOcean Inference",
+      "options": {
+        "baseURL": "https://inference.do-ai.run/v1",
+        "apiKey": "{env:DO_INFERENCE_API_KEY}"
+      },
+      "models": {
+        "openai-o3": {
+          "name": "OpenAI o3"
+        },
+        "openai-gpt-5.4-pro": {
+          "name": "GPT-5.4 Pro"
+        },
+        "openai-gpt-5.4": {
+          "name": "GPT-5.4"
+        },
+        "openai-gpt-5-mini": {
+          "name": "GPT-5 Mini"
+        },
+        "openai-gpt-oss-120b": {
+          "name": "GPT OSS 120B"
+        },
+        "deepseek-r1-distill-llama-70b": {
+          "name": "DeepSeek R1 Distill Llama 70B"
+        },
+        "alibaba-qwen3-32b": {
+          "name": "Qwen3 32B"
+        },
+        "kimi-k2.5": {
+          "name": "Kimi K2.5",
+          "limit": {
+            "context": 256000,
+            "output": 32768
+          },
+          "options": {
+            "reasoningEffort": "max"
+          },
+          "variants": {
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
+          }
+        },
+        "nvidia-nemotron-3-super-120b": {
+          "name": "Nemotron 3 Super 120B",
+          "limit": {
+            "context": 1000000,
+            "output": 32768
+          },
+          "options": {
+            "reasoningEffort": "max"
+          },
+          "variants": {
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
+          }
+        },
+        "arcee-trinity-large-thinking": {
+          "name": "Trinity Large Thinking",
+          "limit": {
+            "context": 512000,
+            "output": 128000
+          },
+          "options": {
+            "reasoningEffort": "max"
+          },
+          "variants": {
+            "high": {
+              "reasoningEffort": "high"
+            },
+            "max": {
+              "reasoningEffort": "max"
+            }
+          }
+        },
+        "do-claude-opus-4.7": {
+          "id": "anthropic-claude-opus-4.7",
+          "name": "Claude Opus 4.7",
+          "limit": {
+            "context": 1000000,
+            "output": 128000
+          },
+          "options": {
+            "reasoning_effort": "max"
+          }
+        },
+        "do-claude-opus-4.6": {
+          "id": "anthropic-claude-opus-4.6",
+          "name": "Claude Opus 4.6",
+          "limit": {
+            "context": 1000000,
+            "output": 128000
+          },
+          "options": {
+            "reasoning_effort": "max"
+          }
+        },
+        "do-claude-sonnet-4.6": {
+          "id": "anthropic-claude-4.6-sonnet",
+          "name": "Claude Sonnet 4.6"
+          ,"limit": {
+            "context": 1000000,
+            "output": 64000
+          },
+          "options": {
+            "reasoning_effort": "max"
+          }
+        }
+      }
+    }
+  },
   "permission": {
     "read": {
       "C:/Users/Admin/Desktop/New OET Web App/oetwebapp/.opencode/get-shit-done/*": "allow"

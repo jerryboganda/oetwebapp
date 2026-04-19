@@ -7,6 +7,8 @@ import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DataTable, type Column } from '@/components/ui/data-table';
+import { Input } from '@/components/ui/form-controls';
+import { Switch } from '@/components/ui/switch';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { env } from '@/lib/env';
@@ -117,10 +119,12 @@ export default function BulkImportPage() {
     {
       key: 'a', header: 'Approve',
       render: (p) => (
-        <input
-          type="checkbox"
+        <Switch
+          standalone
+          size="sm"
           checked={approved[p.proposalId] ?? false}
-          onChange={(e) => setApproved({ ...approved, [p.proposalId]: e.target.checked })}
+          onCheckedChange={(next) => setApproved({ ...approved, [p.proposalId]: next })}
+          aria-label={`Approve ${p.title}`}
         />
       ),
     },
@@ -154,15 +158,25 @@ export default function BulkImportPage() {
         description="Upload a ZIP matching the Project Real Content folder structure. The system proposes papers, you approve, and assets are stored content-addressed with SHA-256 dedup."
       />
 
-      <AdminRoutePanel title="Upload ZIP">
+      <AdminRoutePanel
+        eyebrow="Step 1"
+        title="Upload ZIP"
+        description="Drop a ZIP that mirrors the Project Real Content folder layout. We parse filenames with a convention parser, detect subtest + profession + part, and stage a manifest for your review."
+      >
         <div className="flex items-center gap-4">
-          <input
-            ref={fileRef}
-            type="file"
-            accept=".zip,application/zip"
-            disabled={uploading}
-            onChange={(e) => { const f = e.target.files?.[0]; if (f) void doUpload(f); }}
-          />
+          <label className="cursor-pointer">
+            <input
+              ref={fileRef}
+              type="file"
+              accept=".zip,application/zip"
+              disabled={uploading}
+              className="hidden"
+              onChange={(e) => { const f = e.target.files?.[0]; if (f) void doUpload(f); }}
+            />
+            <Button variant="outline" disabled={uploading} onClick={(e) => { e.preventDefault(); fileRef.current?.click(); }}>
+              <CloudUpload className="h-4 w-4" /> Choose ZIP file
+            </Button>
+          </label>
           {uploading && <span className="text-sm text-muted flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Staging…</span>}
         </div>
       </AdminRoutePanel>
@@ -175,17 +189,25 @@ export default function BulkImportPage() {
             </InlineAlert>
           )}
 
-          <AdminRoutePanel title="Source provenance (required before commit)">
-            <input
-              type="text"
-              className="w-full border rounded-lg p-2"
+          <AdminRoutePanel
+            eyebrow="Step 2"
+            title="Source provenance"
+            description="Required before commit. Applied to every paper in this import batch."
+          >
+            <Input
+              label="Source provenance"
               value={provenance}
               onChange={(e) => setProvenance(e.target.value)}
               placeholder={DEFAULT_CONTENT_SOURCE_PROVENANCE}
             />
           </AdminRoutePanel>
 
-          <AdminRoutePanel title={`Proposed papers (${staged.papers.length})`}>
+          <AdminRoutePanel
+            eyebrow="Step 3"
+            title={`Proposed papers (${staged.papers.length})`}
+            description="Tick the papers you want to commit. Unchecked rows are skipped."
+            dense
+          >
             <DataTable data={staged.papers} columns={columns} keyExtractor={(p) => p.proposalId} />
             <div className="flex gap-3 mt-4 justify-end">
               <Button variant="ghost" onClick={() => { setStaged(null); setApproved({}); }}>Discard</Button>

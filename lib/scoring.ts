@@ -441,6 +441,113 @@ export function formatListeningReadingDisplay(rawCorrect: number): string {
 }
 
 // ---------------------------------------------------------------------------
+// Card scoring summary (Submission History, Progress lists, Dashboard tiles)
+// ---------------------------------------------------------------------------
+
+/**
+ * Unified three-state pass summary used by every learner-facing list card.
+ *
+ * - `pass` / `fail` — scaled score available and resolved against the
+ *   canonical threshold (country-aware for Writing).
+ * - `pending` — no usable scaled score yet (evaluation in flight).
+ * - `country_required` / `country_unsupported` — Writing-only; surfaced
+ *   explicitly instead of silently defaulting to a threshold.
+ */
+export type SubmissionPassState =
+  | 'pass'
+  | 'fail'
+  | 'pending'
+  | 'country_required'
+  | 'country_unsupported';
+
+export interface CardScoreSummary {
+  scaledScore: number | null;
+  scoreLabel: string;
+  passState: SubmissionPassState;
+  grade: OetGrade | null;
+  passLabel: string;
+  requiredScaled: number | null;
+}
+
+function pendingCardSummary(
+  reason: Extract<SubmissionPassState, 'pending' | 'country_required' | 'country_unsupported'>,
+): CardScoreSummary {
+  return {
+    scaledScore: null,
+    scoreLabel: 'Pending',
+    passState: reason,
+    grade: null,
+    passLabel:
+      reason === 'pending'
+        ? 'Pending'
+        : reason === 'country_required'
+          ? 'Country required'
+          : 'Unsupported country',
+    requiredScaled: null,
+  };
+}
+
+/**
+ * Canonical helper for list-card score display. Every row in Submission
+ * History, Readiness, Progress, etc. MUST route through this function.
+ * Never format scores as percentages — the canonical 0–500 scale is the
+ * only UI representation allowed per docs/SCORING.md.
+ */
+export function summarizeCardScore(
+  subtest: OetSubtest | string | null | undefined,
+  scaled: number | null | undefined,
+  country: string | null | undefined,
+): CardScoreSummary {
+  const normalizedSubtest = (typeof subtest === 'string' ? subtest.trim().toLowerCase() : '') as OetSubtest;
+  if (scaled === null || scaled === undefined || !Number.isFinite(scaled)) {
+    return pendingCardSummary('pending');
+  }
+  const s = clampInt(scaled, OET_SCALED_MIN, OET_SCALED_MAX);
+  const grade = oetGradeFromScaled(s);
+  const scoreLabel = `${s} / ${OET_SCALED_MAX}`;
+
+  if (normalizedSubtest === 'writing') {
+    const result = gradeWriting(s, country ?? null);
+    if (result.passed === null) {
+      const summary = pendingCardSummary(result.reason);
+      return { ...summary, scaledScore: s, scoreLabel, grade };
+    }
+    return {
+      scaledScore: s,
+      scoreLabel,
+      passState: result.passed ? 'pass' : 'fail',
+      grade,
+      passLabel: result.passed
+        ? `Pass (Grade ${result.requiredGrade})`
+        : `Fail \u00b7 needs ${result.requiredScaled}`,
+      requiredScaled: result.requiredScaled,
+    };
+  }
+
+  if (normalizedSubtest === 'listening' || normalizedSubtest === 'reading' || normalizedSubtest === 'speaking') {
+    const passed = s >= OET_SCALED_PASS_B;
+    return {
+      scaledScore: s,
+      scoreLabel,
+      passState: passed ? 'pass' : 'fail',
+      grade,
+      passLabel: passed ? 'Pass (Grade B)' : `Fail \u00b7 needs ${OET_SCALED_PASS_B}`,
+      requiredScaled: OET_SCALED_PASS_B,
+    };
+  }
+
+  // Unknown subtest — do not assert pass/fail.
+  return {
+    scaledScore: s,
+    scoreLabel,
+    passState: 'pending',
+    grade,
+    passLabel: 'Pending',
+    requiredScaled: null,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Invariants (runtime self-check — runs at module load in non-production)
 // ---------------------------------------------------------------------------
 //

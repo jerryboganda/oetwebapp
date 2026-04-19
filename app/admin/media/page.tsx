@@ -160,7 +160,7 @@ export default function AdminMediaPage() {
     { key: 'sizeBytes', header: 'Size', render: (r) => <span className="text-xs">{formatFileSize(r.sizeBytes)}</span> },
     {
       key: 'status', header: 'Status', render: (r) => (
-        <Badge variant={r.status === 'Ready' ? 'default' : r.status === 'Processing' ? 'muted' : 'danger'}>
+        <Badge variant={r.status === 'Ready' ? 'success' : r.status === 'Processing' ? 'muted' : 'danger'}>
           {r.status}
         </Badge>
       ),
@@ -259,13 +259,13 @@ export default function AdminMediaPage() {
               <div><strong>Total:</strong> {audit.totalAssets}</div>
               <div><strong>Ready:</strong> {audit.readyCount}</div>
               <div><strong>Processing:</strong> {audit.processingCount}</div>
-              <div className="text-destructive"><strong>Failed:</strong> {audit.failedCount}</div>
+              <div className="text-danger"><strong>Failed:</strong> {audit.failedCount}</div>
             </div>
             {audit.missingThumbnails.length > 0 && (
-              <div className="text-xs text-amber-600">⚠ {audit.missingThumbnails.length} missing thumbnails</div>
+              <div className="text-xs text-amber-600 dark:text-amber-400">⚠ {audit.missingThumbnails.length} missing thumbnails</div>
             )}
             {audit.missingTranscripts.length > 0 && (
-              <div className="text-xs text-amber-600">⚠ {audit.missingTranscripts.length} missing transcripts</div>
+              <div className="text-xs text-amber-600 dark:text-amber-400">⚠ {audit.missingTranscripts.length} missing transcripts</div>
             )}
           </div>
         )}
@@ -274,7 +274,7 @@ export default function AdminMediaPage() {
           {pageStatus === 'empty' ? (
             <EmptyState icon={<Film className="w-8 h-8 text-muted" />} title="No media assets" description="Upload files or import content to see media assets here." />
           ) : (
-            <DataTable columns={columns} data={assets} keyExtractor={(r) => r.id} />
+            <DataTable density="compact" columns={columns} data={assets} keyExtractor={(r) => r.id} />
           )}
         </AsyncStateWrapper>
 

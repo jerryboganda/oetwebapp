@@ -31,6 +31,10 @@ import type {
   Submission,
   SubmissionComparison,
   SubmissionDetail,
+  SubmissionListQuery,
+  SubmissionListResponse,
+  RevisionNode,
+  ReviewLineage,
   TurnaroundOption,
   FocusArea,
   DiagnosticSession,
@@ -354,7 +358,7 @@ function isRetryable(status: number): boolean {
   return status >= 500 || status === 408 || status === 429;
 }
 
-async function apiRequest<T = any>(path: string, init?: RequestInit): Promise<T> {
+export async function apiRequest<T = any>(path: string, init?: RequestInit): Promise<T> {
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
@@ -990,6 +994,33 @@ export async function updateUserProfile(updates: Partial<UserProfile>): Promise<
 }
 
 export async function fetchStudyPlan(): Promise<StudyPlanTask[]> {
+  // Try v2 first (admin-managed generator); fall back to legacy on any error
+  // so older learners with no template seeded continue to function.
+  try {
+    const v2 = await apiRequest<ApiRecord>('/v1/study-plan/v2');
+    const items = (v2.items ?? []) as ApiRecord[];
+    if (items.length > 0) {
+      return items.map((item) => ({
+        id: item.id,
+        title: item.title,
+        subTest: toSubTest(item.subtestCode),
+        duration: minutesToLabel(item.durationMinutes),
+        rationale: item.rationale,
+        dueDate: item.dueDate,
+        status: item.status,
+        section: item.section,
+        contentId: item.contentId ?? undefined,
+        type: item.itemType ?? undefined,
+        contentPaperId: item.contentPaperId ?? undefined,
+        startUrl: item.startUrl ?? undefined,
+        aiRationaleAddendum: item.aiRationaleAddendum ?? undefined,
+        priority: item.priority,
+        snoozedUntil: item.snoozedUntil ?? undefined,
+      }));
+    }
+  } catch {
+    // fall through
+  }
   const plan = await apiRequest<ApiRecord>('/v1/study-plan');
   return (plan.items ?? []).map((item: ApiRecord) => ({
     id: item.itemId,
@@ -1003,6 +1034,60 @@ export async function fetchStudyPlan(): Promise<StudyPlanTask[]> {
     contentId: item.contentId ?? undefined,
     type: item.itemType ?? undefined,
   }));
+}
+
+export async function rescheduleStudyPlanTask(taskId: string, dueDate: string): Promise<void> {
+  await apiRequest(`/v1/study-plan/items/${taskId}/reschedule`, {
+    method: 'POST', body: JSON.stringify({ dueDate }),
+  });
+}
+
+export async function swapStudyPlanTask(taskId: string, replacementContentId: string): Promise<void> {
+  await apiRequest(`/v1/study-plan/items/${taskId}/swap`, {
+    method: 'POST', body: JSON.stringify({ replacementContentId }),
+  });
+}
+
+export async function snoozeStudyPlanTask(taskId: string, until?: string): Promise<void> {
+  await apiRequest(`/v1/study-plan/items/${taskId}/snooze`, {
+    method: 'POST', body: JSON.stringify({ until: until ?? null }),
+  });
+}
+
+export async function startStudyPlanTask(taskId: string): Promise<{ startUrl: string }> {
+  return apiRequest<{ startUrl: string }>(`/v1/study-plan/items/${taskId}/start`, { method: 'POST' });
+}
+
+export async function regenerateStudyPlan(): Promise<{ planId: string; version: number; state: string }> {
+  return apiRequest('/v1/study-plan/regenerate-v2', { method: 'POST' });
+}
+
+export function studyPlanIcsUrl(): string {
+  return '/v1/study-plan/ics';
+}
+
+// ── Google Calendar integration ────────────────────────────────────────────
+
+export async function getGoogleCalendarStatus(): Promise<{ connected: boolean; calendarId?: string; tokenHint?: string; lastSyncedAt?: string; lastError?: string }> {
+  return apiRequest('/v1/study-plan/google-calendar');
+}
+
+export async function startGoogleCalendarAuthorize(): Promise<{ url: string }> {
+  return apiRequest('/v1/study-plan/google-calendar/authorize');
+}
+
+export async function completeGoogleCalendarCallback(code: string): Promise<{ connected: boolean }> {
+  return apiRequest('/v1/study-plan/google-calendar/callback', {
+    method: 'POST', body: JSON.stringify({ code }),
+  });
+}
+
+export async function disconnectGoogleCalendar(): Promise<void> {
+  await apiRequest('/v1/study-plan/google-calendar', { method: 'DELETE' });
+}
+
+export async function syncStudyPlanToGoogleCalendar(): Promise<{ pushed: number }> {
+  return apiRequest('/v1/study-plan/google-calendar/sync', { method: 'POST' });
 }
 
 export async function updateStudyPlanTask(taskId: string, updates: Partial<StudyPlanTask>): Promise<StudyPlanTask> {
@@ -1661,109 +1746,280 @@ export async function fetchProgressEvidenceSummary(): Promise<ProgressEvidenceSu
   };
 }
 
-export async function fetchSubmissions(): Promise<Submission[]> {
-  const response = await apiRequest<{ items: ApiRecord[] }>('/v1/submissions');
-  return response.items.map((item) => ({
+// ── Progress v2 (new admin-managed, scoring-canonical Progress surface) ─────
+
+export type ProgressRange = '14d' | '30d' | '90d' | 'all';
+
+export interface ProgressV2Payload {
+  meta: {
+    range: ProgressRange;
+    examFamilyCode: string;
+    targetCountry: string | null;
+    scoreAxisMin: number;
+    scoreAxisMax: number;
+    gradeBThreshold: number;
+    writingThreshold: number | null;
+    writingThresholdGrade: string | null;
+    writingThresholdReason: string | null;
+    showScoreGuaranteeStrip: boolean;
+    showCriterionConfidenceBand: boolean;
+    minEvaluationsForTrend: number;
+  };
+  subtests: ProgressSubtestSummary[];
+  trend: ProgressWeeklyPoint[];
+  criterionTrend: ProgressCriterionPoint[];
+  completion: ProgressCompletionPoint[];
+  submissionVolume: ProgressVolumePoint[];
+  reviewUsage: {
+    totalRequests: number;
+    completedRequests: number;
+    averageTurnaroundHours: number | null;
+    creditsConsumed: number;
+  };
+  goals: {
+    targetWritingScore: number | null;
+    targetSpeakingScore: number | null;
+    targetReadingScore: number | null;
+    targetListeningScore: number | null;
+    targetExamDate: string | null;
+    daysToExam: number | null;
+    targetCountry: string | null;
+  };
+  comparative: ProgressComparativeBlock | null;
+  totals: {
+    completedAttempts: number;
+    completedEvaluations: number;
+    mockAttempts: number;
+    writingSubmissions: number;
+    speakingSubmissions: number;
+  };
+  freshness: {
+    generatedAt: string;
+    usesFallbackSeries: boolean;
+    eTag: string;
+  };
+}
+
+export interface ProgressSubtestSummary {
+  subtestCode: 'writing' | 'speaking' | 'reading' | 'listening';
+  latestScaled: number | null;
+  latestGrade: string | null;
+  targetScaled: number | null;
+  gapToTarget: number | null;
+  deltaLast30Days: number | null;
+  attemptCount: number;
+  evaluationCount: number;
+  thresholdScaled: number | null;
+  thresholdReason: string | null;
+}
+
+export interface ProgressWeeklyPoint {
+  weekKey: string;
+  weekStart: string;
+  subtestScaled: Record<string, number | null>;
+  subtestCount: Record<string, number>;
+  mockScaled: Record<string, number | null>;
+  mockCount: Record<string, number>;
+}
+
+export interface ProgressCriterionPoint {
+  weekKey: string;
+  weekStart: string;
+  subtestCode: string;
+  criterionCode: string;
+  criterionLabel: string;
+  averageScaled: number;
+  sampleCount: number;
+  lowerCi95: number;
+  upperCi95: number;
+}
+
+export interface ProgressCompletionPoint {
+  date: string; // ISO
+  completed: number;
+}
+
+export interface ProgressVolumePoint {
+  weekKey: string;
+  weekStart: string;
+  writing: number;
+  speaking: number;
+}
+
+export interface ProgressComparativeBlock {
+  subtests: {
+    subtestCode: string;
+    yourScaled: number;
+    cohortAverage: number;
+    cohortMedian: number;
+    percentile: number;
+    tier: 'top10' | 'top25' | 'aboveMedian' | 'belowMedian';
+  }[];
+  cohortSize: number;
+  minCohortSize: number;
+  hasSufficientCohort: boolean;
+  cohortScopeDescription: string;
+}
+
+export async function fetchProgressV2(range: ProgressRange = '90d'): Promise<ProgressV2Payload> {
+  return apiRequest<ProgressV2Payload>(`/v1/progress/v2?range=${range}`);
+}
+
+export async function fetchProgressComparative(): Promise<ProgressComparativeBlock | null> {
+  return apiRequest<ProgressComparativeBlock | null>('/v1/progress/v2/comparative');
+}
+
+export function progressPdfUrl(): string {
+  return '/v1/progress/v2/export.pdf';
+}
+
+// ───────────────────────────────────────────────────────────────────────────
+// Submission History API
+//
+// Shape is server-driven — we trust the backend's SubmissionHistoryService
+// to emit scaled scores, pass/fail flags, and revision lineage. The client
+// NEVER recomputes pass/fail from percentages.
+// ───────────────────────────────────────────────────────────────────────────
+
+function buildSubmissionQueryString(query?: SubmissionListQuery): string {
+  const params = new URLSearchParams();
+  if (!query) return '';
+  if (query.cursor) params.set('cursor', query.cursor);
+  if (query.limit !== undefined) params.set('limit', String(query.limit));
+  if (query.subtest) params.set('subtest', query.subtest);
+  if (query.context) params.set('context', query.context);
+  if (query.reviewStatus) params.set('reviewStatus', query.reviewStatus);
+  if (query.from) params.set('from', query.from);
+  if (query.to) params.set('to', query.to);
+  if (query.passOnly) params.set('passOnly', 'true');
+  if (query.q) params.set('q', query.q);
+  if (query.sort) params.set('sort', query.sort);
+  if (query.includeHidden) params.set('includeHidden', 'true');
+  const q = params.toString();
+  return q ? `?${q}` : '';
+}
+
+function mapServerSubmission(item: ApiRecord): Submission {
+  const scaledScore: number | null = item.scaledScore === null || item.scaledScore === undefined ? null : Number(item.scaledScore);
+  const requiredScaled: number | null = item.requiredScaled === null || item.requiredScaled === undefined ? null : Number(item.requiredScaled);
+  return {
     id: item.submissionId,
     contentId: item.contentId,
     taskName: item.taskName,
     subTest: toSubTest(item.subtest),
+    context: item.context ?? 'practice',
     attemptDate: item.attemptDate,
-    scoreEstimate: scoreRangeDisplay(item.scoreEstimate ?? ''),
+    scoreEstimate: item.scoreLabel ?? scoreRangeDisplay(item.scoreEstimate ?? ''),
+    scaledScore,
+    passState: item.passState ?? (scaledScore === null ? 'pending' : undefined),
+    passLabel: item.passLabel,
+    requiredScaled,
+    grade: item.grade ?? null,
+    revisionDepth: item.revisionDepth ?? 0,
+    isHidden: Boolean(item.isHidden),
     reviewStatus: toReviewStatus(item.reviewStatus),
     evaluationId: item.evaluationId ?? undefined,
     state: item.state ?? undefined,
     comparisonGroupId: item.comparisonGroupId ?? null,
+    parentAttemptId: item.parentAttemptId ?? null,
     canRequestReview: Boolean(item.canRequestReview),
     actions: {
       reopenFeedbackRoute: item.actions?.reopenFeedbackRoute ?? null,
       compareRoute: item.actions?.compareRoute ?? null,
       requestReviewRoute: item.actions?.requestReviewRoute ?? null,
     },
-  }));
+  };
 }
 
-export async function fetchSubmissionDetail(submissionId: string): Promise<SubmissionDetail> {
-  const submissions = await fetchSubmissions();
-  const submission = submissions.find((item) => item.id === submissionId || item.evaluationId === submissionId);
-  if (!submission) {
-    throw new Error('Submission not found.');
-  }
+/**
+ * Fetch a page of Submission History rows with optional filters/sort.
+ * Returns the full paginated envelope including facets + sparkline data
+ * so the page can render control bars without a second roundtrip.
+ */
+export async function fetchSubmissionsPage(query?: SubmissionListQuery): Promise<SubmissionListResponse> {
+  const qs = buildSubmissionQueryString(query);
+  const response = await apiRequest<ApiRecord>(`/v1/submissions${qs}`);
+  const items = Array.isArray(response.items) ? response.items.map(mapServerSubmission) : [];
+  const facets = response.facets ?? {};
+  return {
+    items,
+    nextCursor: response.nextCursor ?? null,
+    total: Number(response.total ?? items.length),
+    facets: {
+      bySubtest: (facets.bySubtest ?? {}) as Record<string, number>,
+      byContext: (facets.byContext ?? {}) as Record<string, number>,
+      byReviewStatus: (facets.byReviewStatus ?? {}) as Record<string, number>,
+    },
+    sparkline: (response.sparkline ?? {}) as Record<string, Array<{ at: string; scaled: number | null }>>,
+  };
+}
 
-  const baseDetail: SubmissionDetail = {
+/**
+ * Flat-list convenience helper (used by older surfaces that don't care
+ * about pagination). Fetches up to the first page only.
+ */
+export async function fetchSubmissions(): Promise<Submission[]> {
+  const page = await fetchSubmissionsPage({ limit: 50 });
+  return page.items;
+}
+
+/**
+ * Single-round-trip detail fetch — replaces the prior N+1 cascade through
+ * evaluation/transcript/reading/listening endpoints. The server composes
+ * the full SubmissionDetail shape.
+ */
+export async function fetchSubmissionDetail(submissionId: string): Promise<SubmissionDetail> {
+  const response = await apiRequest<ApiRecord>(`/v1/submissions/${encodeURIComponent(submissionId)}`);
+  const submission = mapServerSubmission(response.submission);
+  const revisionLineage: RevisionNode[] = Array.isArray(response.revisionLineage)
+    ? response.revisionLineage.map((node: ApiRecord) => ({
+        attemptId: node.attemptId,
+        order: Number(node.order ?? 0),
+        label: node.label ?? 'Attempt',
+        submittedAt: node.submittedAt,
+        scaledScore: node.scaledScore === null || node.scaledScore === undefined ? null : Number(node.scaledScore),
+        isCurrent: Boolean(node.isCurrent),
+      }))
+    : [];
+  const reviewLineage: ReviewLineage | null = response.reviewLineage
+    ? {
+        reviewRequestId: response.reviewLineage.reviewRequestId,
+        state: toReviewStatus(response.reviewLineage.state),
+        stateLabel: response.reviewLineage.stateLabel ?? '',
+        turnaroundOption: response.reviewLineage.turnaroundOption ?? null,
+        creditsCharged: Number(response.reviewLineage.creditsCharged ?? 0),
+        requestedAt: response.reviewLineage.requestedAt,
+        completedAt: response.reviewLineage.completedAt ?? null,
+      }
+    : null;
+  return {
     submission,
     evidenceSummary: {
-      title: submission.taskName,
-      scoreLabel: submission.scoreEstimate || 'Pending',
-      stateLabel: titleCase(submission.state ?? 'completed'),
-      reviewLabel: titleCase(submission.reviewStatus.replace(/_/g, ' ')),
-      nextActionLabel: submission.canRequestReview ? 'Request review' : 'Review current evidence',
+      title: response.evidenceSummary?.title ?? submission.taskName,
+      scoreLabel: response.evidenceSummary?.scoreLabel ?? submission.scoreEstimate,
+      stateLabel: response.evidenceSummary?.stateLabel ?? '',
+      reviewLabel: response.evidenceSummary?.reviewLabel ?? '',
+      nextActionLabel: response.evidenceSummary?.nextActionLabel ?? 'Review current evidence',
     },
-    strengths: [],
-    issues: [],
-  };
-
-  if (!submission.evaluationId) {
-    return baseDetail;
-  }
-
-  if (submission.subTest === 'Writing') {
-    const result = await fetchWritingResult(submission.evaluationId);
-    return {
-      ...baseDetail,
-      strengths: result.topStrengths,
-      issues: result.topIssues,
-      criteria: result.criteria,
-    };
-  }
-
-  if (submission.subTest === 'Speaking') {
-    const [result, transcript] = await Promise.all([
-      fetchSpeakingResult(submission.evaluationId),
-      fetchTranscript(submission.evaluationId),
-    ]);
-    return {
-      ...baseDetail,
-      strengths: result.strengths,
-      issues: result.improvements,
-      transcript: transcript.transcript,
-    };
-  }
-
-  if (submission.subTest === 'Reading') {
-    const result = await fetchReadingResult(submission.contentId);
-    return {
-      ...baseDetail,
-      strengths: [`${result.score}/${result.totalQuestions} questions answered correctly.`],
-      issues: result.errorClusters.filter((cluster) => cluster.count > 0).map((cluster) => `${cluster.type}: ${cluster.count} items to review.`),
-      questionReview: result.items.map((item) => ({
-        id: item.id,
-        number: item.number,
-        text: item.text,
-        learnerAnswer: item.userAnswer,
-        correctAnswer: item.correctAnswer,
-        isCorrect: item.isCorrect,
-        explanation: item.explanation,
-      })),
-    };
-  }
-
-  const result = await fetchListeningResult(submission.contentId);
-  return {
-    ...baseDetail,
-    strengths: [`${result.score}/${result.total} listening items captured correctly.`],
-    issues: result.questions.filter((question) => !question.isCorrect).map((question) => question.distractorExplanation ?? question.explanation),
-    questionReview: result.questions.map((question) => ({
-      id: question.id,
-      number: question.number,
-      text: question.text,
-      learnerAnswer: question.userAnswer,
-      correctAnswer: question.correctAnswer,
-      isCorrect: question.isCorrect,
-      explanation: question.explanation,
-      transcriptExcerpt: question.transcriptExcerpt,
-      distractorExplanation: question.distractorExplanation,
-    })),
+    strengths: Array.isArray(response.strengths) ? response.strengths : [],
+    issues: Array.isArray(response.issues) ? response.issues : [],
+    criteria: Array.isArray(response.criteria)
+      ? response.criteria.map((c: ApiRecord) => ({
+          name: c.name,
+          score: Number(c.score ?? 0),
+          maxScore: Number(c.maxScore ?? 0),
+          grade: c.grade ?? '',
+          explanation: c.explanation ?? '',
+          anchoredComments: [],
+          omissions: [],
+          unnecessaryDetails: [],
+          revisionSuggestions: [],
+          strengths: [],
+          issues: [],
+        }))
+      : undefined,
+    revisionLineage,
+    reviewLineage,
   };
 }
 
@@ -1775,13 +2031,28 @@ export async function fetchSubmissionComparison(leftId?: string, rightId?: strin
   return {
     canCompare: Boolean(response.canCompare),
     reason: response.reason ?? undefined,
+    reasonLabel: response.reasonLabel ?? undefined,
     summary: response.summary ?? undefined,
     comparisonGroupId: response.comparisonGroupId ?? null,
+    scaledDelta: response.scaledDelta ?? null,
+    criterionDeltas: Array.isArray(response.criterionDeltas)
+      ? response.criterionDeltas.map((d: ApiRecord) => ({
+          name: d.name,
+          leftScore: Number(d.leftScore ?? 0),
+          rightScore: Number(d.rightScore ?? 0),
+          maxScore: Number(d.maxScore ?? 0),
+          direction: (d.direction ?? 'flat') as 'up' | 'down' | 'flat',
+        }))
+      : [],
     left: response.left
       ? {
           attemptId: response.left.attemptId,
           evaluationId: response.left.evaluationId ?? undefined,
-          scoreRange: scoreRangeDisplay(response.left.scoreRange ?? ''),
+          scoreRange: response.left.scoreLabel ?? scoreRangeDisplay(response.left.scoreRange ?? ''),
+          scaledScore: response.left.scaledScore ?? null,
+          passState: response.left.passState ?? undefined,
+          grade: response.left.grade ?? null,
+          submittedAt: response.left.submittedAt,
           subtest: toSubTest(response.left.subtest),
         }
       : undefined,
@@ -1789,11 +2060,49 @@ export async function fetchSubmissionComparison(leftId?: string, rightId?: strin
       ? {
           attemptId: response.right.attemptId,
           evaluationId: response.right.evaluationId ?? undefined,
-          scoreRange: scoreRangeDisplay(response.right.scoreRange ?? ''),
+          scoreRange: response.right.scoreLabel ?? scoreRangeDisplay(response.right.scoreRange ?? ''),
+          scaledScore: response.right.scaledScore ?? null,
+          passState: response.right.passState ?? undefined,
+          grade: response.right.grade ?? null,
+          submittedAt: response.right.submittedAt,
           subtest: toSubTest(response.right.subtest),
         }
       : undefined,
   };
+}
+
+/** POST /v1/submissions/{id}/hide — soft-hide from History only. */
+export async function hideSubmission(submissionId: string): Promise<void> {
+  await apiRequest(`/v1/submissions/${encodeURIComponent(submissionId)}/hide`, { method: 'POST' });
+}
+
+/** POST /v1/submissions/{id}/unhide — restore to History. */
+export async function unhideSubmission(submissionId: string): Promise<void> {
+  await apiRequest(`/v1/submissions/${encodeURIComponent(submissionId)}/unhide`, { method: 'POST' });
+}
+
+/** Authenticated URL builder for CSV export. */
+export function submissionsExportCsvUrl(query?: SubmissionListQuery): string {
+  return `/v1/submissions/export.csv${buildSubmissionQueryString(query)}`;
+}
+
+/** POST /v1/reviews/requests/batch — bulk review request (up to 5). */
+export async function createBulkReviewRequests(payload: {
+  items: Array<{
+    attemptId: string;
+    subtest: string;
+    turnaroundOption: string;
+    focusAreas?: string[];
+    learnerNotes?: string | null;
+    paymentSource: string;
+    idempotencyKey?: string;
+  }>;
+}): Promise<{ items: Array<{ attemptId: string; ok: boolean; error?: string }> }> {
+  const response = await apiRequest<{ items: Array<{ attemptId: string; ok: boolean; error?: string }> }>(
+    '/v1/reviews/requests/batch',
+    { method: 'POST', body: JSON.stringify(payload) },
+  );
+  return response;
 }
 
 export async function fetchBilling(): Promise<BillingData> {
@@ -3597,11 +3906,17 @@ export async function adminDeleteCommunityReply(threadId: string, replyId: strin
 
 // ── Grammar ───────────────────────────────────────────────────────────────────
 
-export async function fetchGrammarLessons(params?: { examTypeCode?: string; category?: string; level?: string }) {
+export async function fetchGrammarLessons(params?: {
+  examTypeCode?: string;
+  category?: string;
+  level?: string;
+  topicSlug?: string;
+}) {
   const p = new URLSearchParams();
   if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
   if (params?.category) p.set('category', params.category);
   if (params?.level) p.set('level', params.level);
+  if (params?.topicSlug) p.set('topicSlug', params.topicSlug);
   return apiRequest(`/v1/grammar/lessons?${p}`);
 }
 
@@ -3613,11 +3928,161 @@ export async function startGrammarLesson(lessonId: string) {
   return apiRequest(`/v1/grammar/lessons/${encodeURIComponent(lessonId)}/start`, { method: 'POST' });
 }
 
+/**
+ * @deprecated Use {@link submitGrammarAttempt} instead. This endpoint
+ * still works but the server now grades the submission authoritatively
+ * using the learner's answers — the `score` argument is ignored.
+ */
 export async function completeGrammarLesson(lessonId: string, score: number, answersJson: string) {
   return apiRequest(`/v1/grammar/lessons/${encodeURIComponent(lessonId)}/complete`, {
     method: 'POST',
     body: JSON.stringify({ score, answersJson }),
   });
+}
+
+export async function submitGrammarAttempt(lessonId: string, answers: Record<string, unknown>) {
+  return apiRequest(`/v1/grammar/lessons/${encodeURIComponent(lessonId)}/attempts`, {
+    method: 'POST',
+    body: JSON.stringify({ answers }),
+  });
+}
+
+export async function fetchGrammarOverview(examTypeCode?: string) {
+  const p = new URLSearchParams();
+  if (examTypeCode) p.set('examTypeCode', examTypeCode);
+  return apiRequest(`/v1/grammar/overview?${p}`);
+}
+
+export async function fetchGrammarTopics(examTypeCode?: string) {
+  const p = new URLSearchParams();
+  if (examTypeCode) p.set('examTypeCode', examTypeCode);
+  return apiRequest(`/v1/grammar/topics?${p}`);
+}
+
+export async function fetchGrammarTopicDetail(slug: string, examTypeCode?: string) {
+  const p = new URLSearchParams();
+  if (examTypeCode) p.set('examTypeCode', examTypeCode);
+  return apiRequest(`/v1/grammar/topics/${encodeURIComponent(slug)}?${p}`);
+}
+
+export async function fetchGrammarProgress() {
+  return apiRequest('/v1/grammar/progress');
+}
+
+export async function fetchGrammarRecommendations() {
+  return apiRequest('/v1/grammar/recommendations');
+}
+
+export async function dismissGrammarRecommendation(id: string) {
+  return apiRequest(`/v1/grammar/recommendations/${encodeURIComponent(id)}/dismiss`, { method: 'POST' });
+}
+
+// ── Admin Grammar (v2) ──
+
+export async function adminListGrammarTopics(params?: { examTypeCode?: string; status?: string }) {
+  const p = new URLSearchParams();
+  if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
+  if (params?.status) p.set('status', params.status);
+  return apiRequest(`/v1/admin/grammar/topics?${p}`);
+}
+
+export async function adminGetGrammarTopic(topicId: string) {
+  return apiRequest(`/v1/admin/grammar/topics/${encodeURIComponent(topicId)}`);
+}
+
+export async function adminCreateGrammarTopic(body: {
+  examTypeCode: string;
+  slug: string;
+  name: string;
+  description?: string | null;
+  iconEmoji?: string | null;
+  levelHint?: string | null;
+  sortOrder?: number | null;
+}) {
+  return apiRequest('/v1/admin/grammar/topics', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export async function adminUpdateGrammarTopic(topicId: string, body: {
+  slug?: string;
+  name?: string;
+  description?: string | null;
+  iconEmoji?: string | null;
+  levelHint?: string | null;
+  sortOrder?: number | null;
+  status?: string;
+}) {
+  return apiRequest(`/v1/admin/grammar/topics/${encodeURIComponent(topicId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function adminArchiveGrammarTopic(topicId: string) {
+  return apiRequest(`/v1/admin/grammar/topics/${encodeURIComponent(topicId)}/archive`, { method: 'POST' });
+}
+
+export async function adminListGrammarLessonsV2(params?: {
+  topicId?: string;
+  examTypeCode?: string;
+  status?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  const p = new URLSearchParams();
+  if (params?.topicId) p.set('topicId', params.topicId);
+  if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
+  if (params?.status) p.set('status', params.status);
+  if (params?.search) p.set('search', params.search);
+  if (params?.page) p.set('page', String(params.page));
+  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
+  return apiRequest(`/v1/admin/grammar/v2/lessons?${p}`);
+}
+
+export async function adminGetGrammarLessonV2(lessonId: string) {
+  return apiRequest(`/v1/admin/grammar/v2/lessons/${encodeURIComponent(lessonId)}`);
+}
+
+export async function adminCreateGrammarLessonV2(body: unknown) {
+  return apiRequest('/v1/admin/grammar/v2/lessons', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export async function adminUpdateGrammarLessonV2(lessonId: string, body: unknown) {
+  return apiRequest(`/v1/admin/grammar/v2/lessons/${encodeURIComponent(lessonId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function adminArchiveGrammarLessonV2(lessonId: string) {
+  return apiRequest(`/v1/admin/grammar/v2/lessons/${encodeURIComponent(lessonId)}/archive`, { method: 'POST' });
+}
+
+export async function adminPublishGrammarLesson(lessonId: string) {
+  return apiRequest(`/v1/admin/grammar/v2/lessons/${encodeURIComponent(lessonId)}/publish`, { method: 'POST' });
+}
+
+export async function adminUnpublishGrammarLesson(lessonId: string) {
+  return apiRequest(`/v1/admin/grammar/v2/lessons/${encodeURIComponent(lessonId)}/unpublish`, { method: 'POST' });
+}
+
+export async function adminEvaluateGrammarPublishGate(lessonId: string) {
+  return apiRequest(`/v1/admin/grammar/v2/lessons/${encodeURIComponent(lessonId)}/publish-gate`);
+}
+
+export async function adminGenerateGrammarAiDraft(body: {
+  examTypeCode: string;
+  topicSlug?: string;
+  prompt: string;
+  level?: string;
+  targetExerciseCount?: number;
+  model?: string;
+}) {
+  return apiRequest('/v1/admin/grammar/ai-draft', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export async function adminBulkImportGrammar(lessons: unknown[]) {
+  return apiRequest('/v1/admin/grammar/imports', { method: 'POST', body: JSON.stringify({ lessons }) });
 }
 
 // ── Video Lessons ─────────────────────────────────────────────────────────────

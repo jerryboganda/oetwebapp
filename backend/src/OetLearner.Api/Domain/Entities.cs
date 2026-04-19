@@ -339,6 +339,14 @@ public class Attempt
 
     [MaxLength(16)]
     public string ExamTypeCode { get; set; } = "oet";
+
+    /// <summary>
+    /// Timestamp at which the learner chose to hide this attempt from the
+    /// Submission History UI (<see cref="SubmissionHistoryService"/>).
+    /// Null = visible; non-null = soft-hidden but never excluded from
+    /// analytics / progress / readiness / cohort computations.
+    /// </summary>
+    public DateTimeOffset? HiddenByUserAt { get; set; }
 }
 
 public class Evaluation
@@ -409,6 +417,18 @@ public class StudyPlan
 
     [MaxLength(16)]
     public string ExamTypeCode { get; set; } = "oet";
+
+    // ── Study Planner v2 ──
+    /// <summary>FK to <see cref="StudyPlanTemplate"/>.Id that produced this plan. Null for legacy plans.</summary>
+    [MaxLength(64)]
+    public string? TemplateId { get; set; }
+
+    /// <summary>CSV of <see cref="StudyPlanAssignmentRule"/>.Id values that matched during generation.</summary>
+    [MaxLength(1024)]
+    public string AssignmentRuleIdsCsv { get; set; } = "";
+
+    /// <summary>Immutable snapshot of the goal+readiness state that produced this plan.</summary>
+    public string GoalSnapshotJson { get; set; } = "{}";
 }
 
 public class StudyPlanItem
@@ -442,6 +462,33 @@ public class StudyPlanItem
 
     [MaxLength(32)]
     public string ItemType { get; set; } = default!;
+
+    // ── Study Planner v2 ──
+    /// <summary>FK to <see cref="StudyPlanTaskTemplate"/>.Id. Null only for legacy rows.</summary>
+    [MaxLength(64)]
+    public string? TaskTemplateId { get; set; }
+
+    /// <summary>Preferred deep-link target (FK to ContentPaper.Id). Populated by the v2 generator.</summary>
+    [MaxLength(64)]
+    public string? ContentPaperId { get; set; }
+
+    public int Priority { get; set; } = 50;
+
+    [MaxLength(64)]
+    public string? PrerequisiteItemId { get; set; }
+
+    /// <summary>AI-generated per-learner addendum to the template rationale. Optional.</summary>
+    [MaxLength(2000)]
+    public string? AiRationaleAddendum { get; set; }
+
+    /// <summary>When the learner first hit Start — enables accurate elapsed-time analytics.</summary>
+    public DateTimeOffset? StartedAt { get; set; }
+
+    /// <summary>When a completion/skip/snooze last occurred.</summary>
+    public DateTimeOffset? UpdatedAt { get; set; }
+
+    /// <summary>Snooze target — until this time the item is hidden from "today".</summary>
+    public DateTimeOffset? SnoozedUntil { get; set; }
 }
 
 public class ReviewRequest

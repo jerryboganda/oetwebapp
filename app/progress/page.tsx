@@ -1,329 +1,248 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { MotionSection } from '@/components/ui/motion-primitives';
-import {
-  LineChart,
-  Line,
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend
-} from 'recharts';
-import {
-  TrendingUp,
-  Activity,
-  CheckCircle2,
-  Send,
-  Clock
-} from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { TrendingUp, Download, BarChart3, Activity } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchTrendData, fetchCompletionData, fetchSubmissionVolume, fetchProgressEvidenceSummary } from '@/lib/api';
-import type { ProgressEvidenceSummary, TrendPoint } from '@/lib/mock-data';
-import { analytics } from '@/lib/analytics';
 import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import {
+  ChartTabularFallback,
+  ProgressActivityPanel,
+  ProgressComparativeTab,
+  ProgressCriterionChart,
+  ProgressRangePills,
+  ProgressReadinessStrip,
+  ProgressReviewStrip,
+  ProgressSubtestMiniCards,
+  ProgressTrendChart,
+} from '@/components/domain/progress';
+import { fetchProgressV2, progressPdfUrl, type ProgressRange, type ProgressV2Payload } from '@/lib/api';
+import { analytics } from '@/lib/analytics';
 
-type CompletionPoint = { day: string; completed: number };
-type VolumePoint = { week: string; submissions: number };
+const ALL_SUBTESTS = ['reading', 'listening', 'writing', 'speaking'] as const;
+
+type Tab = 'trend' | 'criterion' | 'comparative';
 
 export default function ProgressDashboard() {
-  const [criterionFilter, setCriterionFilter] = useState('Writing');
-  const [trendData, setTrendData] = useState<TrendPoint[]>([]);
-  const [completionData, setCompletionData] = useState<CompletionPoint[]>([]);
-  const [volumeData, setVolumeData] = useState<VolumePoint[]>([]);
-  const [progressSummary, setProgressSummary] = useState<ProgressEvidenceSummary | null>(null);
+  const router = useRouter();
+  const [range, setRange] = useState<ProgressRange>('90d');
+  const [payload, setPayload] = useState<ProgressV2Payload | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [visibleSubtests, setVisibleSubtests] = useState<Set<string>>(() => new Set(ALL_SUBTESTS));
+  const [criterionSubtest, setCriterionSubtest] = useState<'writing' | 'speaking'>('writing');
+  const [activeTab, setActiveTab] = useState<Tab>('trend');
+
+  const load = useCallback(async (currentRange: ProgressRange) => {
+    setLoading(true);
+    setError(null);
+    try {
+      const next = await fetchProgressV2(currentRange);
+      setPayload(next);
+    } catch (e) {
+      const err = e as { userMessage?: string; message?: string };
+      setError(err.userMessage ?? err.message ?? 'Failed to load progress data.');
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     analytics.track('progress_viewed');
-    Promise.allSettled([
-      fetchTrendData(),
-      fetchCompletionData(),
-      fetchSubmissionVolume(),
-      fetchProgressEvidenceSummary(),
-    ]).then((results) => {
-      const [trendResult, completionResult, volumeResult, summaryResult] = results;
-      if (trendResult.status === 'fulfilled') setTrendData(trendResult.value);
-      if (completionResult.status === 'fulfilled') setCompletionData(completionResult.value as CompletionPoint[]);
-      if (volumeResult.status === 'fulfilled') setVolumeData(volumeResult.value as VolumePoint[]);
-      if (summaryResult.status === 'fulfilled') setProgressSummary(summaryResult.value);
+    queueMicrotask(() => { void load(range); });
+  }, [load, range]);
 
-      const anyFailed = results.some(r => r.status === 'rejected');
-      const allFailed = results.every(r => r.status === 'rejected');
+  const onRangeChange = (next: ProgressRange) => {
+    setRange(next);
+    analytics.track('progress_range_changed', { range: next });
+  };
 
-      if (allFailed) {
-        setError('Failed to load progress data. Please try again.');
-      } else if (anyFailed) {
-        setError('Some progress data could not be loaded.');
-      }
-      setLoading(false);
+  const onSubtestToggle = (subtest: string) => {
+    setVisibleSubtests((prev) => {
+      const next = new Set(prev);
+      if (next.has(subtest)) next.delete(subtest);
+      else next.add(subtest);
+      analytics.track('progress_subtest_toggled', { subtest, visible: next.has(subtest) });
+      return next;
     });
-  }, []);
+  };
 
-  const completedLast7 = completionData.reduce((sum, point) => sum + point.completed, 0);
-  const averageTurnaroundLabel = progressSummary?.reviewUsage.averageTurnaroundHours
-    ? `${progressSummary.reviewUsage.averageTurnaroundHours}h avg`
-    : 'Pending';
-  const hasTrendData = trendData.length > 0;
+  const onTabChange = (next: Tab) => {
+    setActiveTab(next);
+    analytics.track('progress_tab_switched', { tab: next });
+  };
 
-  const trendEmptyState = (
-    <div className="flex h-full min-h-[240px] items-center justify-center rounded-3xl border border-dashed border-gray-200 bg-background-light/60 px-6 text-center">
-      <div className="max-w-sm space-y-2">
-        <p className="text-sm font-black uppercase tracking-widest text-muted">No trend data yet</p>
-        <p className="text-sm text-muted">
-          Complete a few scored submissions to unlock the movement chart across Reading, Listening, Writing, and Speaking.
-        </p>
-      </div>
-    </div>
-  );
+  const onCriterionChange = (next: 'writing' | 'speaking') => {
+    setCriterionSubtest(next);
+    analytics.track('progress_criterion_switched', { subtest: next });
+  };
+
+  const onTrendPointClick = (subtest: string, weekKey: string) => {
+    analytics.track('progress_chart_point_clicked', { subtest, weekKey });
+    router.push(`/submissions?subtest=${encodeURIComponent(subtest)}`);
+  };
+
+  const onExportPdf = async () => {
+    analytics.track('progress_pdf_exported');
+    // Download via fetch+blob so the Bearer token is attached; a plain <a href>
+    // to /v1/... would be unauthenticated and 401.
+    try {
+      const { env } = await import('@/lib/env');
+      const { ensureFreshAccessToken } = await import('@/lib/auth-client');
+      const token = await ensureFreshAccessToken();
+      const res = await fetch(`${env.apiBaseUrl}${progressPdfUrl()}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        setError(res.status === 403
+          ? 'PDF export is currently disabled by the admin. Try again later.'
+          : `Could not export PDF (${res.status}).`);
+        return;
+      }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'progress.pdf';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (e) {
+      setError((e as Error).message ?? 'Could not export PDF.');
+    }
+  };
+
+  const heroHighlights = useMemo(() => {
+    if (!payload) return [];
+    const turnaround = payload.reviewUsage.averageTurnaroundHours;
+    return [
+      { icon: Activity, label: 'Evaluations', value: payload.totals.completedEvaluations.toString() },
+      { icon: TrendingUp, label: 'Mock attempts', value: payload.totals.mockAttempts.toString() },
+      {
+        icon: BarChart3,
+        label: 'Review turnaround',
+        value: turnaround === null ? 'Pending' : `${turnaround.toFixed(1)} h`,
+      },
+    ];
+  }, [payload]);
 
   return (
-    <LearnerDashboardShell
-      pageTitle="Progress Dashboard"
-      subtitle="Track your performance and activity over time"
-      backHref="/"
-    >
+    <LearnerDashboardShell pageTitle="Progress Dashboard" subtitle="Track your performance and activity over time" backHref="/">
       <div className="space-y-8">
         <LearnerPageHero
           eyebrow="Evidence Check"
           icon={TrendingUp}
           accent="primary"
           title="See whether recent effort is turning into better evidence"
-          description="Use this page to connect score movement, completed work, and review throughput before you choose the next focus."
-          highlights={[
-            { icon: Activity, label: 'Trend coverage', value: trendData.length ? `${trendData.length} checkpoints` : 'Loading...' },
-            { icon: CheckCircle2, label: 'Completed work', value: completionData.length ? `${completedLast7} tasks` : 'Loading...' },
-            { icon: Clock, label: 'Review speed', value: averageTurnaroundLabel },
-          ]}
+          description="Use this page to connect score movement, completed work, review throughput, and where you stand against your goals before choosing the next focus."
+          highlights={heroHighlights.length ? heroHighlights : [{ icon: Activity, label: 'Loading', value: '…' }]}
         />
+
+        {/* Toolbar */}
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <ProgressRangePills value={range} onChange={onRangeChange} />
+          {payload?.meta.showScoreGuaranteeStrip === false ? null : null}
+          {payload && (
+            <button
+              type="button"
+              onClick={onExportPdf}
+              className="inline-flex items-center gap-1.5 rounded-xl border border-gray-200 bg-surface px-3 py-1.5 text-xs font-bold text-navy hover:bg-lavender/30 transition-colors"
+              aria-label="Export progress as PDF"
+            >
+              <Download className="w-4 h-4" /> Export PDF
+            </button>
+          )}
+        </div>
 
         {loading && (
           <div className="space-y-6">
-            {[1, 2, 3].map(i => (
+            {[1, 2, 3].map((i) => (
               <Skeleton key={i} className="h-64 rounded-2xl" />
             ))}
           </div>
         )}
 
-        {!loading && error && (
-          <InlineAlert variant="error">{error}</InlineAlert>
-        )}
+        {!loading && error && <InlineAlert variant="error">{error}</InlineAlert>}
 
-        {!loading && !error && (
+        {!loading && !error && payload && (
           <>
-            {/* 1. Sub-test Trend */}
-            <MotionSection
-              delayIndex={0}
-              className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm"
-            >
+            <ProgressReviewStrip payload={payload} />
+
+            <section>
               <LearnerSurfaceSectionHeader
                 eyebrow="Sub-test Performance Trend"
-                title="See score movement across all skills"
-                description="This chart should make the learner’s cross-subtest trajectory easy to read before they drill into detail."
-                className="mb-6"
+                title="See score movement on the canonical 0-500 scale"
+                description="Tap any subtest card to hide or show its line. The dashed reference line is the Grade B pass mark (350)."
+                className="mb-3"
               />
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
-                  <TrendingUp className="w-5 h-5 text-blue-600" />
-                </div>
-                <div>
-                  <h2 className="text-base font-black text-navy">Sub-test Performance Trend</h2>
-                  <p className="text-xs text-muted">Score progression across all skills</p>
-                </div>
-              </div>
-              <div className="h-[240px] w-full sm:h-[280px] lg:h-[300px]" role="img" aria-label="Sub-test performance trend chart showing reading, listening, writing, and speaking scores over time">
-                {hasTrendData ? (
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                    <LineChart data={trendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} />
-                      <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
-                      <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
-                      <Line type="monotone" dataKey="reading" name="Reading" stroke="#2563eb" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      <Line type="monotone" dataKey="listening" name="Listening" stroke="#4f46e5" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      <Line type="monotone" dataKey="writing" name="Writing" stroke="#e11d48" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      <Line type="monotone" dataKey="speaking" name="Speaking" stroke="#9333ea" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : trendEmptyState}
-              </div>
-            </MotionSection>
+              <ProgressSubtestMiniCards subtests={payload.subtests} visible={visibleSubtests} onToggle={onSubtestToggle} />
+            </section>
 
-            {/* 2. Criterion Trend */}
-            <MotionSection
-              delayIndex={1}
-              className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm"
-            >
-              <LearnerSurfaceSectionHeader
-                eyebrow="Criterion Trend"
-                title="Filter deeper without losing the main story"
-                description="Writing and speaking criterion filters should feel like a detailed continuation of the learner’s progress narrative."
-                className="mb-6"
-              />
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
-                <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center shrink-0">
-                    <Activity className="w-5 h-5 text-purple-600" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-black text-navy">Criterion Trend</h2>
-                    <p className="text-xs text-muted">Deep dive into specific scoring criteria</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 bg-background-light p-1 rounded-xl border border-gray-200">
-                  {['Writing', 'Speaking'].map(f => (
+            <section className="rounded-[32px] border border-gray-200 bg-surface p-5 sm:p-6 shadow-sm">
+              <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
+                <div className="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-background-light p-1" role="tablist" aria-label="Progress views">
+                  {(['trend', 'criterion', 'comparative'] as const).map((t) => (
                     <button
-                      key={f}
-                      onClick={() => setCriterionFilter(f)}
-                      className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-colors ${criterionFilter === f ? 'bg-white text-navy shadow-sm' : 'text-muted hover:text-navy'}`}
+                      key={t}
+                      role="tab"
+                      aria-selected={activeTab === t}
+                      onClick={() => onTabChange(t)}
+                      className={`px-4 py-1.5 text-xs font-bold rounded-lg transition-colors capitalize ${
+                        activeTab === t ? 'bg-white text-navy shadow-sm' : 'text-muted hover:text-navy'
+                      }`}
                     >
-                      {f}
+                      {t === 'trend' ? 'Trend' : t === 'criterion' ? 'Criterion' : 'Comparative'}
                     </button>
                   ))}
                 </div>
+                {activeTab === 'criterion' && (
+                  <div className="inline-flex items-center gap-1 rounded-xl border border-gray-200 bg-background-light p-1" role="radiogroup" aria-label="Criterion subtest">
+                    {(['writing', 'speaking'] as const).map((s) => (
+                      <button
+                        key={s}
+                        role="radio"
+                        aria-checked={criterionSubtest === s}
+                        onClick={() => onCriterionChange(s)}
+                        className={`px-3 py-1.5 text-xs font-bold rounded-lg transition-colors capitalize ${
+                          criterionSubtest === s ? 'bg-white text-navy shadow-sm' : 'text-muted hover:text-navy'
+                        }`}
+                      >
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div className="h-[240px] w-full sm:h-[280px] lg:h-[300px]" role="img" aria-label={`Criterion trend chart for ${criterionFilter} skills`}>
-                {hasTrendData ? (
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                    <LineChart data={trendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} />
-                      <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
-                      <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
-                      {criterionFilter === 'Writing' ? (
-                        <Line type="monotone" dataKey="writing" name="Writing Score" stroke="#e11d48" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      ) : (
-                        <Line type="monotone" dataKey="speaking" name="Speaking Score" stroke="#9333ea" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      )}
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : trendEmptyState}
-              </div>
-            </MotionSection>
 
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-              {/* 3. Completion Trend */}
-              <MotionSection
-                delayIndex={2}
-                className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm"
-              >
-                <LearnerSurfaceSectionHeader
-                  eyebrow="Completion Trend"
-                  title="Keep task completion visible"
-                  description="Progress is not only score movement; it is also whether the learner is actually completing planned work."
-                  className="mb-6"
-                />
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
-                    <CheckCircle2 className="w-5 h-5 text-green-600" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-black text-navy">Completion Trend</h2>
-                    <p className="text-xs text-muted">Tasks completed over the last 7 days</p>
-                  </div>
-                </div>
-                <div className="h-[220px] w-full sm:h-[240px] lg:h-[250px]">
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                    <AreaChart data={completionData} margin={{ top: 5, right: 0, bottom: 5, left: -20 }}>
-                      <defs>
-                        <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                      <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} />
-                      <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
-                      <Area type="monotone" dataKey="completed" name="Tasks Completed" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorCompleted)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
-                </div>
-              </MotionSection>
+              {activeTab === 'trend' && <ProgressTrendChart payload={payload} visibleSubtests={visibleSubtests} onPointClick={onTrendPointClick} />}
+              {activeTab === 'criterion' && <ProgressCriterionChart payload={payload} subtest={criterionSubtest} />}
+              {activeTab === 'comparative' && <ProgressComparativeTab comparative={payload.comparative} />}
+            </section>
 
-              {/* 4. Submission Volume */}
-              <MotionSection
-                delayIndex={3}
-                className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm"
-              >
-                <LearnerSurfaceSectionHeader
-                  eyebrow="Submission Volume"
-                  title="Make writing and speaking effort visible"
-                  description="Submission volume should reinforce how much evidence the learner has created, not sit as an isolated stat."
-                  className="mb-6"
-                />
-                <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
-                    <Send className="w-5 h-5 text-amber-600" />
-                  </div>
-                  <div>
-                    <h2 className="text-base font-black text-navy">Submission Volume</h2>
-                    <p className="text-xs text-muted">Writing and Speaking tasks submitted</p>
-                  </div>
-                </div>
-                <div className="h-[220px] w-full sm:h-[240px] lg:h-[250px]">
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                    <BarChart data={volumeData} margin={{ top: 5, right: 0, bottom: 5, left: -20 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                      <XAxis dataKey="week" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} />
-                      <Tooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
-                      <Bar dataKey="submissions" name="Submissions" fill="#f59e0b" radius={[6, 6, 0, 0]} barSize={32} />
-                    </BarChart>
-                  </ResponsiveContainer>
-                </div>
-              </MotionSection>
-            </div>
+            <ProgressReadinessStrip payload={payload} />
 
-            {/* 5. Review Usage */}
-            <MotionSection
-              delayIndex={4}
-              className="bg-navy rounded-[32px] p-6 sm:p-8 text-white shadow-lg relative overflow-hidden"
-            >
-              <div className="mb-6 relative z-10">
-                <p className="text-xs font-black uppercase tracking-widest text-white/60 mb-2">Expert Review Turnaround</p>
-                <h2 className="text-xl font-black text-white">Keep human-feedback timing visible</h2>
-                <p className="text-sm text-white/70 mt-1">
-                  Expert review should feel like part of the same learner system, with clear operational expectations.
-                </p>
-              </div>
-              <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
-              <div className="relative z-10 flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-white/10 flex items-center justify-center shrink-0">
-                  <Clock className="w-5 h-5 text-white" />
-                </div>
-                <div>
-                  <h2 className="text-base font-black">Expert Review Turnaround</h2>
-                  <p className="text-xs text-white/70">Average time from submission to feedback</p>
-                </div>
-              </div>
-              <div className="mt-6 bg-white/10 rounded-2xl p-5 border border-white/10 inline-block">
-                <h3 className="text-xs font-bold text-white/70 uppercase tracking-widest mb-1">Avg Turnaround</h3>
-                <div className="flex items-baseline gap-2">
-                  <span className="text-4xl font-black">{progressSummary?.reviewUsage.averageTurnaroundHours ?? 'Pending'}</span>
-                  <span className="text-sm font-bold text-white/70">hours</span>
-                </div>
-              </div>
-              <p className="mt-4 text-xs text-white/60">
-                {progressSummary?.freshness.usesFallbackSeries
-                  ? 'Review timing is still based on limited data and will sharpen after more requests complete.'
-                  : `Updated ${new Date(progressSummary?.freshness.generatedAt ?? new Date().toISOString()).toLocaleString()}.`}
-              </p>
-            </MotionSection>
+            <ProgressActivityPanel payload={payload} />
+
+            {/* Hidden screen-reader summary so the whole dashboard can be linearised */}
+            <ChartTabularFallback
+              caption="Progress dashboard text summary"
+              headers={['Metric', 'Value']}
+              rows={[
+                ['Range', range],
+                ['Target country', payload.meta.targetCountry ?? 'Not set'],
+                ['Completed evaluations', payload.totals.completedEvaluations],
+                ['Mock attempts', payload.totals.mockAttempts],
+                ['Writing submissions', payload.totals.writingSubmissions],
+                ['Speaking submissions', payload.totals.speakingSubmissions],
+                ['Average review turnaround (hours)', payload.reviewUsage.averageTurnaroundHours ?? 'Pending'],
+                ['Days to exam', payload.goals.daysToExam ?? 'Not set'],
+              ]}
+            />
           </>
         )}
-
       </div>
     </LearnerDashboardShell>
   );

@@ -419,12 +419,29 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminSystemAdmin", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "system_admin")));
+
+    // ── Study Planner v2 ──
+    options.AddPolicy("AdminStudyPlannerRead", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "study_planner:read", "study_planner:write", "system_admin")));
+    options.AddPolicy("AdminStudyPlannerWrite", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "study_planner:write", "system_admin")));
+
+    // ── Progress v2 ──
+    options.AddPolicy("AdminProgressPolicyRead", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "progress_policy:read", "progress_policy:write", "system_admin")));
+    options.AddPolicy("AdminProgressPolicyWrite", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "progress_policy:write", "system_admin")));
 });
 
 builder.Services.AddScoped<LearnerService>();
 builder.Services.AddScoped<ExpertService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<SponsorService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Submissions.SubmissionHistoryService>();
 builder.Services.AddScoped<ContentHierarchyService>();
 builder.Services.AddScoped<ContentDeduplicationService>();
 builder.Services.AddScoped<ContentAccessService>();
@@ -536,12 +553,46 @@ builder.Services.AddHostedService<OetLearner.Api.Services.Content.AdminUploadCle
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiGatewayService,
     OetLearner.Api.Services.Rulebook.AiGatewayService>();
 
+// Grammar v2 (MISSION-CRITICAL). See docs/GRAMMAR.md.
+builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarPolicyService,
+    OetLearner.Api.Services.Grammar.GrammarPolicyService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarGradingService,
+    OetLearner.Api.Services.Grammar.GrammarGradingService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarReviewFanOut,
+    OetLearner.Api.Services.Grammar.GrammarReviewFanOut>();
+builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarService,
+    OetLearner.Api.Services.Grammar.GrammarService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarAuthoringService,
+    OetLearner.Api.Services.Grammar.GrammarAuthoringService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarDraftGenerator,
+    OetLearner.Api.Services.Grammar.GrammarDraftGenerator>();
+
 // ── Private Speaking Sessions ──
 builder.Services.Configure<ZoomOptions>(builder.Configuration.GetSection("Zoom"));
 builder.Services.AddHttpClient("ZoomApi");
 builder.Services.AddHttpClient("ZoomAuth");
 builder.Services.AddSingleton<ZoomMeetingService>();
 builder.Services.AddScoped<PrivateSpeakingService>();
+
+// ── Study Planner v2 ──
+builder.Services.AddScoped<OetLearner.Api.Services.StudyPlanner.IStudyPlannerAdminService,
+    OetLearner.Api.Services.StudyPlanner.StudyPlannerAdminService>();
+builder.Services.AddScoped<OetLearner.Api.Services.StudyPlanner.IStudyPlannerRuleEngine,
+    OetLearner.Api.Services.StudyPlanner.StudyPlannerRuleEngine>();
+builder.Services.AddScoped<OetLearner.Api.Services.StudyPlanner.IStudyPlannerAiReasoner,
+    OetLearner.Api.Services.StudyPlanner.StudyPlannerAiReasoner>();
+builder.Services.AddScoped<OetLearner.Api.Services.StudyPlanner.IStudyPlannerService,
+    OetLearner.Api.Services.StudyPlanner.StudyPlannerService>();
+builder.Services.Configure<OetLearner.Api.Services.StudyPlanner.GoogleCalendarOptions>(
+    builder.Configuration.GetSection("GoogleCalendar"));
+builder.Services.AddHttpClient();
+builder.Services.AddDataProtection();
+builder.Services.AddScoped<OetLearner.Api.Services.StudyPlanner.IGoogleCalendarService,
+    OetLearner.Api.Services.StudyPlanner.GoogleCalendarService>();
+
+// ── Progress v2 ──
+builder.Services.AddScoped<OetLearner.Api.Services.Progress.IProgressService,
+    OetLearner.Api.Services.Progress.ProgressService>();
 
 var app = builder.Build();
 
@@ -756,6 +807,7 @@ app.MapLearnerEndpoints();
 app.MapExpertEndpoints();
 app.MapAdminEndpoints();
 app.MapAiUsageAdminEndpoints();
+app.MapAdminGrammarEndpoints();
 app.MapAiMeEndpoints();
 app.MapContentPapersAdminEndpoints();
 app.MapContentPapersLearnerEndpoints();
@@ -763,6 +815,10 @@ app.MapReadingAuthoringAdminEndpoints();
 app.MapReadingLearnerEndpoints();
 app.MapReadingPolicyAdminEndpoints();
 app.MapContentHierarchyEndpoints();
+app.MapStudyPlannerAdminEndpoints();
+app.MapStudyPlannerLearnerEndpoints();
+app.MapProgressLearnerEndpoints();
+app.MapProgressAdminEndpoints();
 
 // ── Phase 1 new endpoints ──
 app.MapGamificationEndpoints();
@@ -775,6 +831,7 @@ app.MapPredictionEndpoints();
 
 // ── Phase 3 new endpoints ──
 app.MapLearningContentEndpoints();
+app.MapGrammarLearnerEndpoints();
 app.MapCommunityEndpoints();
 app.MapSocialEndpoints();
 

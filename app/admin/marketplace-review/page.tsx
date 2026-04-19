@@ -1,12 +1,31 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Shield, CheckCircle2, XCircle, Eye, Clock, Loader2, ChevronDown, BookOpen, Mic, Pen, Headphones } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, ExamTypeBadge } from '@/components/domain';
-import { Skeleton } from '@/components/ui/skeleton';
+import {
+  Shield,
+  CheckCircle2,
+  XCircle,
+  Clock,
+  ChevronDown,
+  BookOpen,
+  Mic,
+  Pen,
+  Headphones,
+} from 'lucide-react';
+import { ExamTypeBadge } from '@/components/domain';
+import {
+  AdminRouteHero,
+  AdminRoutePanel,
+  AdminRoutePanelFooter,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
+import { Button } from '@/components/ui/button';
+import { Badge } from '@/components/ui/badge';
+import { Checkbox, Textarea } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
+import { EmptyState } from '@/components/ui/empty-error';
+import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 
 type Submission = {
   id: string;
@@ -24,6 +43,8 @@ type Submission = {
   reviewNotes: string | null;
   submittedAt: string;
 };
+
+type Status = 'loading' | 'error' | 'empty' | 'success';
 
 const SUBTEST_ICONS: Record<string, typeof BookOpen> = {
   writing: Pen,
@@ -46,7 +67,7 @@ async function apiFetch(path: string, options?: RequestInit) {
 
 export default function AdminMarketplaceReviewPage() {
   const [items, setItems] = useState<Submission[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [status, setStatus] = useState<Status>('loading');
   const [error, setError] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [reviewNotes, setReviewNotes] = useState('');
@@ -54,17 +75,21 @@ export default function AdminMarketplaceReviewPage() {
   const [createContentItem, setCreateContentItem] = useState(true);
 
   const loadPending = useCallback(async () => {
+    setStatus('loading');
     try {
       const data = await apiFetch('/v1/admin/marketplace/pending?page=1&pageSize=50');
-      setItems(Array.isArray(data.items) ? data.items : []);
+      const next = Array.isArray(data.items) ? data.items : [];
+      setItems(next);
+      setStatus(next.length === 0 ? 'empty' : 'success');
     } catch {
       setError('Failed to load pending submissions.');
-    } finally {
-      setLoading(false);
+      setStatus('error');
     }
   }, []);
 
-  useEffect(() => { void loadPending(); }, [loadPending]);
+  useEffect(() => {
+    void loadPending();
+  }, [loadPending]);
 
   async function handleReview(submissionId: string, decision: 'approved' | 'rejected') {
     setProcessing(submissionId);
@@ -72,9 +97,17 @@ export default function AdminMarketplaceReviewPage() {
     try {
       await apiFetch(`/v1/admin/marketplace/submissions/${submissionId}/review`, {
         method: 'POST',
-        body: JSON.stringify({ decision, notes: reviewNotes || null, createContentItem: decision === 'approved' && createContentItem }),
+        body: JSON.stringify({
+          decision,
+          notes: reviewNotes || null,
+          createContentItem: decision === 'approved' && createContentItem,
+        }),
       });
-      setItems(prev => prev.filter(item => item.id !== submissionId));
+      setItems((prev) => {
+        const next = prev.filter((item) => item.id !== submissionId);
+        if (next.length === 0) setStatus('empty');
+        return next;
+      });
       setExpandedId(null);
       setReviewNotes('');
     } catch {
@@ -84,130 +117,167 @@ export default function AdminMarketplaceReviewPage() {
     }
   }
 
-  const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  const dateFormatter = new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
 
   return (
-    <LearnerDashboardShell>
-      <LearnerPageHero
-        title="Marketplace Review Queue"
-        description="Review and moderate community-submitted content before publication."
+    <AdminRouteWorkspace role="main" aria-label="Marketplace review queue">
+      <AdminRouteHero
+        eyebrow="Content · Moderation"
         icon={Shield}
         accent="amber"
+        title="Marketplace Review Queue"
+        description="Review and moderate community-submitted content before publication."
+        highlights={[{ icon: Clock, label: 'Pending', value: String(items.length) }]}
       />
 
-      {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
+      {error ? <InlineAlert variant="warning">{error}</InlineAlert> : null}
 
-      {loading ? (
-        <div className="space-y-4">
-          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)}
-        </div>
-      ) : items.length === 0 ? (
-        <div className="text-center py-16 bg-background-light dark:bg-surface/50 rounded-2xl border border-dashed border-border dark:border-border">
-          <CheckCircle2 className="w-12 h-12 text-green-400 mx-auto mb-3" />
-          <p className="text-sm font-bold text-muted dark:text-muted">All caught up!</p>
-          <p className="text-xs text-muted mt-1">No pending submissions to review.</p>
-        </div>
-      ) : (
-        <div className="space-y-4">
-          <div className="text-sm text-muted">
-            <Clock className="w-4 h-4 inline mr-1" /> {items.length} submission{items.length !== 1 ? 's' : ''} pending review
-          </div>
+      <AdminRoutePanel
+        eyebrow="Queue"
+        title="Pending submissions"
+        description="Expand a row to preview details, leave notes, and approve or reject."
+      >
+        <AsyncStateWrapper
+          status={status}
+          onRetry={() => void loadPending()}
+          emptyContent={
+            <EmptyState
+              icon={<CheckCircle2 className="h-6 w-6 text-success" aria-hidden />}
+              title="All caught up"
+              description="No pending marketplace submissions. Check back after new contributor uploads."
+            />
+          }
+        >
+          <div className="space-y-3">
+            <AnimatePresence>
+              {items.map((item, i) => {
+                const SubIcon = SUBTEST_ICONS[item.subtestCode] ?? BookOpen;
+                const isExpanded = expandedId === item.id;
 
-          <AnimatePresence>
-            {items.map((item, i) => {
-              const SubIcon = SUBTEST_ICONS[item.subtestCode] ?? BookOpen;
-              const isExpanded = expandedId === item.id;
-
-              return (
-                <motion.div
-                  key={item.id}
-                  layout
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, x: -50 }}
-                  transition={{ delay: i * 0.04 }}
-                  className="bg-surface dark:bg-surface rounded-xl border border-border dark:border-border overflow-hidden"
-                >
-                  <button
-                    onClick={() => { setExpandedId(isExpanded ? null : item.id); setReviewNotes(''); }}
-                    className="w-full text-left p-4 flex items-center justify-between gap-3 hover:bg-surface dark:hover:bg-surface transition-colors"
+                return (
+                  <motion.div
+                    key={item.id}
+                    layout
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, x: -50 }}
+                    transition={{ delay: i * 0.04 }}
+                    className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm"
                   >
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400">
-                        <SubIcon className="w-5 h-5" />
-                      </div>
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-2 mb-0.5">
-                          <span className="text-sm font-semibold text-navy dark:text-navy truncate">{item.title}</span>
-                          <ExamTypeBadge examType={item.examFamilyCode} size="sm" />
-                          <span className="text-xs bg-lavender/30 dark:bg-surface text-muted px-1.5 py-0.5 rounded capitalize">{item.difficulty}</span>
-                        </div>
-                        <div className="text-xs text-muted">
-                          {item.subtestCode} • {item.contentType.replace(/_/g, ' ')} • Submitted {dateFormatter.format(new Date(item.submittedAt))}
-                        </div>
-                      </div>
-                    </div>
-                    <ChevronDown className={`w-4 h-4 text-muted transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                  </button>
-
-                  {isExpanded && (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                      className="border-t border-border dark:border-border">
-                      <div className="p-4 space-y-4">
-                        {item.description && (
-                          <div>
-                            <div className="text-xs font-semibold text-muted mb-1 uppercase">Description</div>
-                            <p className="text-sm text-navy dark:text-navy">{item.description}</p>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      fullWidth
+                      onClick={() => {
+                        setExpandedId(isExpanded ? null : item.id);
+                        setReviewNotes('');
+                      }}
+                      className="h-auto justify-between rounded-none p-4 text-left hover:bg-background-light"
+                    >
+                      <div className="flex min-w-0 items-center gap-3">
+                        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-50 text-amber-700">
+                          <SubIcon className="h-5 w-5" aria-hidden />
+                        </span>
+                        <div className="min-w-0">
+                          <div className="flex flex-wrap items-center gap-2">
+                            <span className="truncate text-sm font-semibold text-navy">{item.title}</span>
+                            <ExamTypeBadge examType={item.examFamilyCode} size="sm" />
+                            <Badge variant="muted" className="capitalize">{item.difficulty}</Badge>
                           </div>
-                        )}
+                          <div className="mt-0.5 text-xs text-muted">
+                            {item.subtestCode} · {item.contentType.replace(/_/g, ' ')} · Submitted{' '}
+                            {dateFormatter.format(new Date(item.submittedAt))}
+                          </div>
+                        </div>
+                      </div>
+                      <ChevronDown
+                        className={`h-4 w-4 text-muted transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                        aria-hidden
+                      />
+                    </Button>
 
-                        {item.tags && (
-                          <div>
-                            <div className="text-xs font-semibold text-muted mb-1 uppercase">Tags</div>
-                            <div className="flex flex-wrap gap-1">
-                              {item.tags.split(',').map(tag => (
-                                <span key={tag} className="text-xs bg-lavender/30 dark:bg-surface text-muted dark:text-muted px-2 py-0.5 rounded-full">
-                                  {tag.trim()}
-                                </span>
-                              ))}
+                    {isExpanded && (
+                      <motion.div
+                        initial={{ height: 0, opacity: 0 }}
+                        animate={{ height: 'auto', opacity: 1 }}
+                        exit={{ height: 0, opacity: 0 }}
+                        className="border-t border-border"
+                      >
+                        <div className="space-y-4 p-4">
+                          {item.description ? (
+                            <div>
+                              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
+                                Description
+                              </p>
+                              <p className="text-sm text-navy">{item.description}</p>
                             </div>
+                          ) : null}
+
+                          {item.tags ? (
+                            <div>
+                              <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-muted">
+                                Tags
+                              </p>
+                              <div className="flex flex-wrap gap-1.5">
+                                {item.tags.split(',').map((tag) => (
+                                  <Badge key={tag} variant="muted">
+                                    {tag.trim()}
+                                  </Badge>
+                                ))}
+                              </div>
+                            </div>
+                          ) : null}
+
+                          <Textarea
+                            label="Review notes (optional)"
+                            rows={2}
+                            value={reviewNotes}
+                            onChange={(e) => setReviewNotes(e.target.value)}
+                            placeholder="Add feedback for the contributor…"
+                          />
+
+                          <Checkbox
+                            label="Create ContentItem (Draft) on approval"
+                            checked={createContentItem}
+                            onChange={(e) => setCreateContentItem(e.target.checked)}
+                          />
+
+                          <div className="flex flex-col gap-2 sm:flex-row">
+                            <Button
+                              className="flex-1"
+                              onClick={() => void handleReview(item.id, 'approved')}
+                              loading={processing === item.id}
+                              disabled={processing === item.id}
+                            >
+                              <CheckCircle2 className="h-4 w-4" /> Approve
+                            </Button>
+                            <Button
+                              variant="destructive"
+                              className="flex-1"
+                              onClick={() => void handleReview(item.id, 'rejected')}
+                              loading={processing === item.id}
+                              disabled={processing === item.id}
+                            >
+                              <XCircle className="h-4 w-4" /> Reject
+                            </Button>
                           </div>
-                        )}
-
-                        <div>
-                          <div className="text-xs font-semibold text-muted mb-1 uppercase">Review Notes (optional)</div>
-                          <textarea rows={2} value={reviewNotes} onChange={e => setReviewNotes(e.target.value)}
-                            placeholder="Add feedback for the contributor..."
-                            className="w-full px-3 py-2 bg-background-light dark:bg-surface border border-border dark:border-border rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary resize-none" />
                         </div>
-
-                        <div className="flex items-center gap-2">
-                          <input type="checkbox" id={`ci-${item.id}`} checked={createContentItem} onChange={e => setCreateContentItem(e.target.checked)}
-                            className="w-4 h-4 text-amber-600 rounded" />
-                          <label htmlFor={`ci-${item.id}`} className="text-xs text-muted dark:text-muted">
-                            Create ContentItem (Draft) on approval
-                          </label>
-                        </div>
-
-                        <div className="flex gap-3">
-                          <button onClick={() => handleReview(item.id, 'approved')} disabled={processing === item.id}
-                            className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors">
-                            {processing === item.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} Approve
-                          </button>
-                          <button onClick={() => handleReview(item.id, 'rejected')} disabled={processing === item.id}
-                            className="flex-1 py-2.5 bg-danger hover:bg-danger/90 disabled:opacity-50 text-white rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors">
-                            {processing === item.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />} Reject
-                          </button>
-                        </div>
-                      </div>
-                    </motion.div>
-                  )}
-                </motion.div>
-              );
-            })}
-          </AnimatePresence>
-        </div>
-      )}
-    </LearnerDashboardShell>
+                      </motion.div>
+                    )}
+                  </motion.div>
+                );
+              })}
+            </AnimatePresence>
+          </div>
+        </AsyncStateWrapper>
+        <AdminRoutePanelFooter source="Marketplace submissions" />
+      </AdminRoutePanel>
+    </AdminRouteWorkspace>
   );
 }
