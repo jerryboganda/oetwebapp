@@ -36,6 +36,42 @@ public class GrammarLesson
 
     [MaxLength(16)]
     public string Status { get; set; } = "active";
+
+    // ── Grammar v2 additions (see docs/GRAMMAR.md) ─────────────────────────
+
+    [MaxLength(64)]
+    public string? TopicId { get; set; }                   // FK → GrammarTopic
+
+    public int Version { get; set; } = 1;
+
+    [MaxLength(16)]
+    public string PublishState { get; set; } = "draft";    // draft | review | published | archived
+
+    public string PrerequisiteLessonIds { get; set; } = "[]"; // JSON string[]
+
+    [MaxLength(512)]
+    public string SourceProvenance { get; set; } = "";
+
+    public DateTimeOffset? PublishedAt { get; set; }
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+public class LearnerGrammarMasterySummary
+{
+    [Key]
+    public Guid Id { get; set; }
+
+    [MaxLength(64)]
+    public string UserId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string TopicId { get; set; } = default!;
+
+    public int LessonsCompleted { get; set; }
+    public int LessonsMastered { get; set; }
+    public double AvgMasteryScore { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
 }
 
 public class LearnerGrammarProgress
@@ -56,6 +92,12 @@ public class LearnerGrammarProgress
     public string AnswersJson { get; set; } = "{}";
     public DateTimeOffset? StartedAt { get; set; }
     public DateTimeOffset? CompletedAt { get; set; }
+
+    // ── Grammar v2 additions ─────────────────────────────────────────────
+
+    public int MasteryScore { get; set; }                  // 0-100 EWMA
+    public int AttemptCount { get; set; }
+    public DateTimeOffset? LastAttemptedAt { get; set; }
 }
 
 // ── Video Lessons ──

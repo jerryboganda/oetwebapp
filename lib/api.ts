@@ -3906,11 +3906,17 @@ export async function adminDeleteCommunityReply(threadId: string, replyId: strin
 
 // ── Grammar ───────────────────────────────────────────────────────────────────
 
-export async function fetchGrammarLessons(params?: { examTypeCode?: string; category?: string; level?: string }) {
+export async function fetchGrammarLessons(params?: {
+  examTypeCode?: string;
+  category?: string;
+  level?: string;
+  topicSlug?: string;
+}) {
   const p = new URLSearchParams();
   if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
   if (params?.category) p.set('category', params.category);
   if (params?.level) p.set('level', params.level);
+  if (params?.topicSlug) p.set('topicSlug', params.topicSlug);
   return apiRequest(`/v1/grammar/lessons?${p}`);
 }
 
@@ -3922,11 +3928,161 @@ export async function startGrammarLesson(lessonId: string) {
   return apiRequest(`/v1/grammar/lessons/${encodeURIComponent(lessonId)}/start`, { method: 'POST' });
 }
 
+/**
+ * @deprecated Use {@link submitGrammarAttempt} instead. This endpoint
+ * still works but the server now grades the submission authoritatively
+ * using the learner's answers — the `score` argument is ignored.
+ */
 export async function completeGrammarLesson(lessonId: string, score: number, answersJson: string) {
   return apiRequest(`/v1/grammar/lessons/${encodeURIComponent(lessonId)}/complete`, {
     method: 'POST',
     body: JSON.stringify({ score, answersJson }),
   });
+}
+
+export async function submitGrammarAttempt(lessonId: string, answers: Record<string, unknown>) {
+  return apiRequest(`/v1/grammar/lessons/${encodeURIComponent(lessonId)}/attempts`, {
+    method: 'POST',
+    body: JSON.stringify({ answers }),
+  });
+}
+
+export async function fetchGrammarOverview(examTypeCode?: string) {
+  const p = new URLSearchParams();
+  if (examTypeCode) p.set('examTypeCode', examTypeCode);
+  return apiRequest(`/v1/grammar/overview?${p}`);
+}
+
+export async function fetchGrammarTopics(examTypeCode?: string) {
+  const p = new URLSearchParams();
+  if (examTypeCode) p.set('examTypeCode', examTypeCode);
+  return apiRequest(`/v1/grammar/topics?${p}`);
+}
+
+export async function fetchGrammarTopicDetail(slug: string, examTypeCode?: string) {
+  const p = new URLSearchParams();
+  if (examTypeCode) p.set('examTypeCode', examTypeCode);
+  return apiRequest(`/v1/grammar/topics/${encodeURIComponent(slug)}?${p}`);
+}
+
+export async function fetchGrammarProgress() {
+  return apiRequest('/v1/grammar/progress');
+}
+
+export async function fetchGrammarRecommendations() {
+  return apiRequest('/v1/grammar/recommendations');
+}
+
+export async function dismissGrammarRecommendation(id: string) {
+  return apiRequest(`/v1/grammar/recommendations/${encodeURIComponent(id)}/dismiss`, { method: 'POST' });
+}
+
+// ── Admin Grammar (v2) ──
+
+export async function adminListGrammarTopics(params?: { examTypeCode?: string; status?: string }) {
+  const p = new URLSearchParams();
+  if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
+  if (params?.status) p.set('status', params.status);
+  return apiRequest(`/v1/admin/grammar/topics?${p}`);
+}
+
+export async function adminGetGrammarTopic(topicId: string) {
+  return apiRequest(`/v1/admin/grammar/topics/${encodeURIComponent(topicId)}`);
+}
+
+export async function adminCreateGrammarTopic(body: {
+  examTypeCode: string;
+  slug: string;
+  name: string;
+  description?: string | null;
+  iconEmoji?: string | null;
+  levelHint?: string | null;
+  sortOrder?: number | null;
+}) {
+  return apiRequest('/v1/admin/grammar/topics', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export async function adminUpdateGrammarTopic(topicId: string, body: {
+  slug?: string;
+  name?: string;
+  description?: string | null;
+  iconEmoji?: string | null;
+  levelHint?: string | null;
+  sortOrder?: number | null;
+  status?: string;
+}) {
+  return apiRequest(`/v1/admin/grammar/topics/${encodeURIComponent(topicId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function adminArchiveGrammarTopic(topicId: string) {
+  return apiRequest(`/v1/admin/grammar/topics/${encodeURIComponent(topicId)}/archive`, { method: 'POST' });
+}
+
+export async function adminListGrammarLessonsV2(params?: {
+  topicId?: string;
+  examTypeCode?: string;
+  status?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  const p = new URLSearchParams();
+  if (params?.topicId) p.set('topicId', params.topicId);
+  if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
+  if (params?.status) p.set('status', params.status);
+  if (params?.search) p.set('search', params.search);
+  if (params?.page) p.set('page', String(params.page));
+  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
+  return apiRequest(`/v1/admin/grammar/v2/lessons?${p}`);
+}
+
+export async function adminGetGrammarLessonV2(lessonId: string) {
+  return apiRequest(`/v1/admin/grammar/v2/lessons/${encodeURIComponent(lessonId)}`);
+}
+
+export async function adminCreateGrammarLessonV2(body: unknown) {
+  return apiRequest('/v1/admin/grammar/v2/lessons', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export async function adminUpdateGrammarLessonV2(lessonId: string, body: unknown) {
+  return apiRequest(`/v1/admin/grammar/v2/lessons/${encodeURIComponent(lessonId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function adminArchiveGrammarLessonV2(lessonId: string) {
+  return apiRequest(`/v1/admin/grammar/v2/lessons/${encodeURIComponent(lessonId)}/archive`, { method: 'POST' });
+}
+
+export async function adminPublishGrammarLesson(lessonId: string) {
+  return apiRequest(`/v1/admin/grammar/v2/lessons/${encodeURIComponent(lessonId)}/publish`, { method: 'POST' });
+}
+
+export async function adminUnpublishGrammarLesson(lessonId: string) {
+  return apiRequest(`/v1/admin/grammar/v2/lessons/${encodeURIComponent(lessonId)}/unpublish`, { method: 'POST' });
+}
+
+export async function adminEvaluateGrammarPublishGate(lessonId: string) {
+  return apiRequest(`/v1/admin/grammar/v2/lessons/${encodeURIComponent(lessonId)}/publish-gate`);
+}
+
+export async function adminGenerateGrammarAiDraft(body: {
+  examTypeCode: string;
+  topicSlug?: string;
+  prompt: string;
+  level?: string;
+  targetExerciseCount?: number;
+  model?: string;
+}) {
+  return apiRequest('/v1/admin/grammar/ai-draft', { method: 'POST', body: JSON.stringify(body) });
+}
+
+export async function adminBulkImportGrammar(lessons: unknown[]) {
+  return apiRequest('/v1/admin/grammar/imports', { method: 'POST', body: JSON.stringify({ lessons }) });
 }
 
 // ── Video Lessons ─────────────────────────────────────────────────────────────

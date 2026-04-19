@@ -97,6 +97,17 @@
             "reasoning_effort": "max"
           }
         },
+        "do-claude-opus-4.6": {
+          "id": "anthropic-claude-opus-4.6",
+          "name": "Claude Opus 4.6",
+          "limit": {
+            "context": 1000000,
+            "output": 128000
+          },
+          "options": {
+            "reasoning_effort": "max"
+          }
+        },
         "do-claude-sonnet-4.6": {
           "id": "anthropic-claude-4.6-sonnet",
           "name": "Claude Sonnet 4.6"

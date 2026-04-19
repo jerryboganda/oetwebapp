@@ -553,6 +553,20 @@ builder.Services.AddHostedService<OetLearner.Api.Services.Content.AdminUploadCle
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiGatewayService,
     OetLearner.Api.Services.Rulebook.AiGatewayService>();
 
+// Grammar v2 (MISSION-CRITICAL). See docs/GRAMMAR.md.
+builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarPolicyService,
+    OetLearner.Api.Services.Grammar.GrammarPolicyService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarGradingService,
+    OetLearner.Api.Services.Grammar.GrammarGradingService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarReviewFanOut,
+    OetLearner.Api.Services.Grammar.GrammarReviewFanOut>();
+builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarService,
+    OetLearner.Api.Services.Grammar.GrammarService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarAuthoringService,
+    OetLearner.Api.Services.Grammar.GrammarAuthoringService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Grammar.IGrammarDraftGenerator,
+    OetLearner.Api.Services.Grammar.GrammarDraftGenerator>();
+
 // ── Private Speaking Sessions ──
 builder.Services.Configure<ZoomOptions>(builder.Configuration.GetSection("Zoom"));
 builder.Services.AddHttpClient("ZoomApi");
@@ -793,6 +807,7 @@ app.MapLearnerEndpoints();
 app.MapExpertEndpoints();
 app.MapAdminEndpoints();
 app.MapAiUsageAdminEndpoints();
+app.MapAdminGrammarEndpoints();
 app.MapAiMeEndpoints();
 app.MapContentPapersAdminEndpoints();
 app.MapContentPapersLearnerEndpoints();
@@ -816,6 +831,7 @@ app.MapPredictionEndpoints();
 
 // ── Phase 3 new endpoints ──
 app.MapLearningContentEndpoints();
+app.MapGrammarLearnerEndpoints();
 app.MapCommunityEndpoints();
 app.MapSocialEndpoints();
 

@@ -104,6 +104,12 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     // Learning content entities
     public DbSet<GrammarLesson> GrammarLessons => Set<GrammarLesson>();
     public DbSet<LearnerGrammarProgress> LearnerGrammarProgress => Set<LearnerGrammarProgress>();
+    public DbSet<GrammarTopic> GrammarTopics => Set<GrammarTopic>();
+    public DbSet<GrammarContentBlock> GrammarContentBlocks => Set<GrammarContentBlock>();
+    public DbSet<GrammarExercise> GrammarExercises => Set<GrammarExercise>();
+    public DbSet<GrammarExerciseAttempt> GrammarExerciseAttempts => Set<GrammarExerciseAttempt>();
+    public DbSet<GrammarRecommendation> GrammarRecommendations => Set<GrammarRecommendation>();
+    public DbSet<LearnerGrammarMasterySummary> LearnerGrammarMasterySummaries => Set<LearnerGrammarMasterySummary>();
     public DbSet<VideoLesson> VideoLessons => Set<VideoLesson>();
     public DbSet<LearnerVideoProgress> LearnerVideoProgress => Set<LearnerVideoProgress>();
     public DbSet<StrategyGuide> StrategyGuides => Set<StrategyGuide>();
@@ -429,7 +435,17 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
 
         // Learning content indexes
         modelBuilder.Entity<GrammarLesson>().HasIndex(x => new { x.ExamTypeCode, x.Category, x.Status });
+        modelBuilder.Entity<GrammarLesson>().HasIndex(x => new { x.TopicId, x.PublishState });
         modelBuilder.Entity<LearnerGrammarProgress>().HasIndex(x => new { x.UserId, x.LessonId }).IsUnique();
+        modelBuilder.Entity<GrammarTopic>().HasIndex(x => new { x.ExamTypeCode, x.Slug }).IsUnique();
+        modelBuilder.Entity<GrammarTopic>().HasIndex(x => new { x.ExamTypeCode, x.Status, x.SortOrder });
+        modelBuilder.Entity<GrammarContentBlock>().HasIndex(x => new { x.LessonId, x.SortOrder });
+        modelBuilder.Entity<GrammarExercise>().HasIndex(x => new { x.LessonId, x.SortOrder });
+        modelBuilder.Entity<GrammarExerciseAttempt>().HasIndex(x => new { x.UserId, x.LessonId, x.CreatedAt });
+        modelBuilder.Entity<GrammarExerciseAttempt>().HasIndex(x => new { x.ExerciseId, x.IsCorrect });
+        modelBuilder.Entity<GrammarRecommendation>().HasIndex(x => new { x.UserId, x.DismissedAt });
+        modelBuilder.Entity<GrammarRecommendation>().HasIndex(x => new { x.UserId, x.LessonId }).IsUnique();
+        modelBuilder.Entity<LearnerGrammarMasterySummary>().HasIndex(x => new { x.UserId, x.TopicId }).IsUnique();
         modelBuilder.Entity<VideoLesson>().HasIndex(x => new { x.ExamTypeCode, x.Category, x.Status });
         modelBuilder.Entity<LearnerVideoProgress>().HasIndex(x => new { x.UserId, x.VideoLessonId }).IsUnique();
         modelBuilder.Entity<StrategyGuide>().HasIndex(x => new { x.ExamTypeCode, x.Category, x.Status });

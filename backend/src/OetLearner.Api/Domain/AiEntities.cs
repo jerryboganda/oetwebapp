@@ -216,6 +216,10 @@ public static class AiFeatureCodes
     // items from the selected template — it cannot invent new tasks.
     public const string StudyPlanReasoning = "study_plan.reasoning";
 
+    // Grammar module — admin authoring draft generator. Always grounded
+    // through AiGatewayService.BuildGroundedPrompt.
+    public const string GrammarDraft = "grammar.draft";
+
     // Catch-all for calls that pre-date feature classification. Tolerated only
     // during the Slice 1 rollout; future slices will validate against this set.
     public const string Unclassified = "unclassified";
