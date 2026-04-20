@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -47,6 +48,7 @@ public static class DatabaseBootstrapper
 
         await EnsureAdminSchemaCompatibilityAsync(db, cancellationToken);
         await EnsureExpertSchemaCompatibilityAsync(db, cancellationToken);
+        await EnsureVocabularySchemaCompatibilityAsync(db, cancellationToken);
         await EnsurePronunciationSchemaCompatibilityAsync(db, cancellationToken);
         await EnsureFreezePolicyAsync(db, cancellationToken);
 
@@ -300,6 +302,97 @@ public static class DatabaseBootstrapper
             cancellationToken);
     }
 
+    private static async Task EnsureVocabularySchemaCompatibilityAsync(LearnerDbContext db, CancellationToken cancellationToken)
+    {
+        if (!db.Database.IsRelational())
+        {
+            return;
+        }
+
+        var vocabularyTable = GetQualifiedTableName(db.Model.FindEntityType(typeof(VocabularyTerm)));
+        var learnerVocabularyTable = GetQualifiedTableName(db.Model.FindEntityType(typeof(LearnerVocabulary)));
+        var quizResultTable = GetQualifiedTableName(db.Model.FindEntityType(typeof(VocabularyQuizResult)));
+        var providerName = db.Database.ProviderName ?? string.Empty;
+
+        if (db.Database.IsNpgsql())
+        {
+            if (!string.IsNullOrWhiteSpace(vocabularyTable))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    $"""
+                    ALTER TABLE IF EXISTS {vocabularyTable}
+                        ADD COLUMN IF NOT EXISTS "IpaPronunciation" character varying(64),
+                        ADD COLUMN IF NOT EXISTS "AudioMediaAssetId" character varying(64),
+                        ADD COLUMN IF NOT EXISTS "SourceProvenance" character varying(512),
+                        ADD COLUMN IF NOT EXISTS "CreatedAt" timestamp with time zone NOT NULL DEFAULT now(),
+                        ADD COLUMN IF NOT EXISTS "UpdatedAt" timestamp with time zone NOT NULL DEFAULT now();
+
+                    ALTER TABLE IF EXISTS {vocabularyTable}
+                        ALTER COLUMN "Category" TYPE character varying(64);
+
+                    UPDATE {vocabularyTable}
+                    SET
+                        "CreatedAt" = COALESCE("CreatedAt", now()),
+                        "UpdatedAt" = COALESCE("UpdatedAt", now());
+
+                    CREATE INDEX IF NOT EXISTS "IX_VocabularyTerms_ProfessionId_Category_Status"
+                        ON {vocabularyTable} ("ProfessionId", "Category", "Status");
+
+                    CREATE INDEX IF NOT EXISTS "IX_VocabularyTerms_Term_ExamTypeCode_ProfessionId"
+                        ON {vocabularyTable} ("Term", "ExamTypeCode", "ProfessionId");
+                    """,
+                    cancellationToken);
+            }
+
+            if (!string.IsNullOrWhiteSpace(learnerVocabularyTable))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    $"""ALTER TABLE IF EXISTS {learnerVocabularyTable} ADD COLUMN IF NOT EXISTS "SourceRef" character varying(128);""",
+                    cancellationToken);
+            }
+
+            if (!string.IsNullOrWhiteSpace(quizResultTable))
+            {
+                await db.Database.ExecuteSqlRawAsync(
+                    $"""
+                    ALTER TABLE IF EXISTS {quizResultTable}
+                        ADD COLUMN IF NOT EXISTS "Format" character varying(32) NOT NULL DEFAULT 'definition_match';
+
+                    UPDATE {quizResultTable}
+                    SET "Format" = 'definition_match'
+                    WHERE "Format" IS NULL OR "Format" = '';
+
+                    CREATE INDEX IF NOT EXISTS "IX_VocabularyQuizResults_UserId_CompletedAt"
+                        ON {quizResultTable} ("UserId", "CompletedAt");
+                    """,
+                    cancellationToken);
+            }
+
+            return;
+        }
+
+        if (providerName.Contains("Sqlite", StringComparison.OrdinalIgnoreCase))
+        {
+            await AddSqliteColumnIfMissingAsync(db, "VocabularyTerms", @"""IpaPronunciation"" TEXT NULL", cancellationToken);
+            await AddSqliteColumnIfMissingAsync(db, "VocabularyTerms", @"""AudioMediaAssetId"" TEXT NULL", cancellationToken);
+            await AddSqliteColumnIfMissingAsync(db, "VocabularyTerms", @"""SourceProvenance"" TEXT NULL", cancellationToken);
+            await AddSqliteColumnIfMissingAsync(db, "VocabularyTerms", @"""CreatedAt"" TEXT NOT NULL DEFAULT '0001-01-01T00:00:00.0000000+00:00'", cancellationToken);
+            await AddSqliteColumnIfMissingAsync(db, "VocabularyTerms", @"""UpdatedAt"" TEXT NOT NULL DEFAULT '0001-01-01T00:00:00.0000000+00:00'", cancellationToken);
+            await AddSqliteColumnIfMissingAsync(db, "LearnerVocabularies", @"""SourceRef"" TEXT NULL", cancellationToken);
+            await AddSqliteColumnIfMissingAsync(db, "VocabularyQuizResults", @"""Format"" TEXT NOT NULL DEFAULT 'definition_match'", cancellationToken);
+
+            await db.Database.ExecuteSqlRawAsync(
+                """CREATE INDEX IF NOT EXISTS "IX_VocabularyTerms_ProfessionId_Category_Status" ON "VocabularyTerms" ("ProfessionId", "Category", "Status");""",
+                cancellationToken);
+            await db.Database.ExecuteSqlRawAsync(
+                """CREATE INDEX IF NOT EXISTS "IX_VocabularyTerms_Term_ExamTypeCode_ProfessionId" ON "VocabularyTerms" ("Term", "ExamTypeCode", "ProfessionId");""",
+                cancellationToken);
+            await db.Database.ExecuteSqlRawAsync(
+                """CREATE INDEX IF NOT EXISTS "IX_VocabularyQuizResults_UserId_CompletedAt" ON "VocabularyQuizResults" ("UserId", "CompletedAt");""",
+                cancellationToken);
+        }
+    }
+
     private static async Task AddSqliteColumnIfMissingAsync(
         LearnerDbContext db,
         string tableName,
@@ -366,4 +459,17 @@ public static class DatabaseBootstrapper
 
     private static string QuoteIdentifier(string identifier)
         => $"\"{identifier.Replace("\"", "\"\"", StringComparison.Ordinal)}\"";
+
+    private static string? GetQualifiedTableName(IEntityType? entityType)
+    {
+        var tableName = entityType?.GetTableName();
+        if (string.IsNullOrWhiteSpace(tableName))
+        {
+            return null;
+        }
+
+        return !string.IsNullOrWhiteSpace(entityType?.GetSchema())
+            ? $"{QuoteIdentifier(entityType!.GetSchema()!)}.{QuoteIdentifier(tableName)}"
+            : QuoteIdentifier(tableName);
+    }
 }
