@@ -3,11 +3,13 @@ import { render, screen } from '@testing-library/react';
 const {
   mockFetchMyVocabulary,
   mockFetchVocabularyStats,
+  mockFetchVocabularyDailySet,
   mockRemoveFromMyVocabulary,
   mockTrack,
 } = vi.hoisted(() => ({
   mockFetchMyVocabulary: vi.fn(),
   mockFetchVocabularyStats: vi.fn(),
+  mockFetchVocabularyDailySet: vi.fn(),
   mockRemoveFromMyVocabulary: vi.fn(),
   mockTrack: vi.fn(),
 }));
@@ -55,6 +57,7 @@ vi.mock('@/lib/analytics', () => ({
 vi.mock('@/lib/api', () => ({
   fetchMyVocabulary: mockFetchMyVocabulary,
   fetchVocabularyStats: mockFetchVocabularyStats,
+  fetchVocabularyDailySet: mockFetchVocabularyDailySet,
   removeFromMyVocabulary: mockRemoveFromMyVocabulary,
 }));
 
@@ -77,6 +80,14 @@ describe('Vocabulary hub page', () => {
       dueThisWeek: 5,
       streakDays: 4,
       totalTermsInCatalog: 500,
+    });
+    mockFetchVocabularyDailySet.mockResolvedValue({
+      date: '2026-04-20',
+      newCount: 2,
+      dueCount: 3,
+      cards: [
+        { id: 'lv-1', termId: 'vt-001', term: 'dyspnoea', definition: 'x', mastery: 'learning', exampleSentence: null, contextNotes: null, ipaPronunciation: null, audioUrl: null, synonyms: [] },
+      ],
     });
   });
 
@@ -106,6 +117,9 @@ describe('Vocabulary hub page', () => {
     mockFetchVocabularyStats.mockResolvedValueOnce({
       totalInList: 0, mastered: 0, reviewing: 0, learning: 0, new: 0,
       dueToday: 0, dueThisWeek: 0, streakDays: 0, totalTermsInCatalog: 500,
+    });
+    mockFetchVocabularyDailySet.mockResolvedValueOnce({
+      date: '2026-04-20', newCount: 0, dueCount: 0, cards: [],
     });
     render(<VocabularyPage />);
     expect(await screen.findByText('Your vocabulary list is empty.')).toBeInTheDocument();
