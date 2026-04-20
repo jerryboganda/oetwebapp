@@ -25,7 +25,7 @@ import { Badge, StatusBadge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchWritingHome, fetchWritingTasks, fetchWritingSubmissions } from '@/lib/api';
+import { fetchWritingHome, fetchWritingTasks, fetchWritingSubmissions, type WritingCriterionDrill, type WritingHome } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { EmptyState } from '@/components/ui/empty-error';
 import { InlineAlert } from '@/components/ui/alert';
@@ -35,20 +35,26 @@ import { createLearnerMetaLabel, type LearnerSurfaceCardModel } from '@/lib/lear
 
 type TabType = 'practice' | 'drills' | 'past';
 
-const filterGroups: FilterGroup[] = [
-  { id: 'profession', label: 'Profession', options: [
-    { id: 'Nursing', label: 'Nursing' }, { id: 'Medicine', label: 'Medicine' },
-    { id: 'Physiotherapy', label: 'Physiotherapy' }, { id: 'Dietetics', label: 'Dietetics' },
-  ]},
-  { id: 'difficulty', label: 'Difficulty', options: [
-    { id: 'Easy', label: 'Easy' }, { id: 'Medium', label: 'Medium' }, { id: 'Hard', label: 'Hard' },
-  ]},
-];
+function canonicalPlayerRoute(task: WritingTask, criterionCode?: string) {
+  const route = task.route ?? `/writing/player?taskId=${encodeURIComponent(task.contentId ?? task.id)}`;
+  if (!criterionCode) return route;
+  const separator = route.includes('?') ? '&' : '?';
+  return `${route}${separator}criterion=${encodeURIComponent(criterionCode)}`;
+}
+
+function drillRoute(drill: WritingCriterionDrill, fallbackTask?: WritingTask) {
+  if (drill.route) return drill.route;
+  const taskId = drill.contentId ?? drill.taskId ?? fallbackTask?.contentId ?? fallbackTask?.id;
+  if (!taskId) return '/writing/library';
+  const params = new URLSearchParams({ taskId });
+  if (drill.criterionCode) params.set('criterion', drill.criterionCode);
+  return `/writing/player?${params.toString()}`;
+}
 
 export default function WritingHome() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<TabType>('practice');
-  const [home, setHome] = useState<Record<string, any> | null>(null);
+  const [home, setHome] = useState<WritingHome | null>(null);
   const [tasks, setTasks] = useState<WritingTask[]>([]);
   const [submissions, setSubmissions] = useState<WritingSubmission[]>([]);
   const [loading, setLoading] = useState(true);
@@ -74,14 +80,42 @@ export default function WritingHome() {
     });
   }, []);
 
+  const practiceLibrary = (home?.practiceLibrary?.length ? home.practiceLibrary : tasks) as WritingTask[];
+  const drillLibrary = home?.criterionDrillLibrary ?? [];
+  const pastSubmissions = (home?.pastSubmissions?.length ? home.pastSubmissions : submissions) as WritingSubmission[];
   const hasActiveFilters = Object.values(filters).some(arr => arr && arr.length > 0);
-  const filteredTasks = tasks.filter((t) => {
+  const filterGroups: FilterGroup[] = [
+    {
+      id: 'profession',
+      label: 'Profession',
+      options: Array.from(new Set(practiceLibrary.map((task) => task.profession).filter(Boolean)))
+        .sort()
+        .map((value) => ({ id: value, label: value })),
+    },
+    {
+      id: 'difficulty',
+      label: 'Difficulty',
+      options: Array.from(new Set(practiceLibrary.map((task) => task.difficulty).filter(Boolean)))
+        .sort()
+        .map((value) => ({ id: value, label: value })),
+    },
+  ].filter((group) => group.options.length > 0);
+  const filteredTasks = practiceLibrary.filter((t) => {
     if (filters.profession?.length && !filters.profession.includes(t.profession)) return false;
     if (filters.difficulty?.length && !filters.difficulty.includes(t.difficulty)) return false;
     return true;
   });
+  const fallbackDrills: WritingCriterionDrill[] = filteredTasks.slice(0, 3).map((task) => ({
+    criterionCode: task.criteriaFocusCodes?.[0],
+    criterionLabel: task.criteriaFocus || 'Criterion focus',
+    title: task.title,
+    rationale: `Practise this task with a narrow focus on ${task.criteriaFocus || 'one Writing criterion'}.`,
+    route: canonicalPlayerRoute(task, task.criteriaFocusCodes?.[0]),
+    contentId: task.contentId ?? task.id,
+  }));
+  const visibleDrills = drillLibrary.length > 0 ? drillLibrary : fallbackDrills;
 
-  const recommended = home?.recommendedTask ?? tasks[0];
+  const recommended = (home?.recommendedTask as WritingTask | undefined) ?? practiceLibrary[0];
   const credits = home?.reviewCredits?.available ?? 0;
   const fullMockEntry = home?.fullMockEntry;
   const recommendedCriteriaFocus = Array.isArray(recommended?.criteriaFocus)
@@ -145,7 +179,7 @@ export default function WritingHome() {
     ],
     primaryAction: {
       label: 'Start Recommended Task',
-      href: recommendedTaskId ? `/writing/player?taskId=${recommendedTaskId}` : '/writing/library',
+      href: recommended.route ?? (recommendedTaskId ? `/writing/player?taskId=${recommendedTaskId}` : '/writing/library'),
     },
   } satisfies LearnerSurfaceCardModel) : null;
 
@@ -241,7 +275,7 @@ export default function WritingHome() {
             ))}
           </div>
 
-          <MotionCollapse open={activeTab !== 'past'}>
+          <MotionCollapse open={activeTab === 'practice'}>
                 <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange}
                   onClear={() => setFilters({})} className="mb-6 bg-white p-4 rounded-xl border border-gray-200 shadow-sm" />
           </MotionCollapse>
@@ -256,7 +290,7 @@ export default function WritingHome() {
                     </div>
                   ) : filteredTasks.map((task) => (
                     <div key={task.id} className="p-5 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer"
-                      onClick={() => { analytics.track('task_started', { taskId: task.id, subtest: 'writing' }); router.push(`/writing/player?taskId=${task.id}`); }}>
+                      onClick={() => { analytics.track('task_started', { taskId: task.id, subtest: 'writing' }); router.push(canonicalPlayerRoute(task)); }}>
                       <div>
                         <h3 className="font-bold text-navy mb-1 group-hover:text-primary transition-colors">{task.title}</h3>
                         <div className="flex flex-wrap items-center gap-2 mt-1">
@@ -273,37 +307,46 @@ export default function WritingHome() {
 
               {activeTab === 'drills' && (
                 <motion.div key="drills" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="divide-y divide-gray-100">
-                  {filteredTasks.length === 0 ? (
+                  {visibleDrills.length === 0 ? (
                     <div className="p-10">
-                      <EmptyState title={hasActiveFilters ? 'No drills match your filters' : 'No criterion drills available'} description={hasActiveFilters ? 'Try removing some filters to see more drills.' : 'Check back later for new criterion drills.'} />
+                      <EmptyState title="No criterion drills available" description="Complete a writing task to unlock targeted criterion drills." />
                     </div>
-                  ) : filteredTasks.map((task) => (
-                    <div key={task.id} className="p-5 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer">
+                  ) : visibleDrills.map((drill, index) => {
+                    const fallbackTask = filteredTasks.find((task) => task.id === drill.contentId || task.id === drill.taskId) ?? filteredTasks[0];
+                    const route = drillRoute(drill, fallbackTask);
+                    return (
+                    <div key={drill.route ?? drill.criterionCode ?? index} className="p-5 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer"
+                      onClick={() => { analytics.track('task_started', { subtest: 'writing', mode: 'criterion-drill', criterionCode: drill.criterionCode, route }); router.push(route); }}>
                       <div>
                         <div className="flex items-center gap-2 mb-1">
                           <Target className="w-4 h-4 text-amber-500" />
-                          <h3 className="font-bold text-navy group-hover:text-primary transition-colors">{task.title}</h3>
+                          <h3 className="font-bold text-navy group-hover:text-primary transition-colors">{drill.title ?? drill.criterionLabel ?? fallbackTask?.title ?? 'Criterion drill'}</h3>
                         </div>
+                        {drill.rationale ? <p className="max-w-2xl text-sm leading-6 text-muted">{drill.rationale}</p> : null}
                         <div className="flex flex-wrap items-center gap-2 mt-1">
-                          <Badge variant="warning" size="sm">Focus: {task.criteriaFocus}</Badge>
-                          <Badge variant={task.difficulty === 'Hard' ? 'danger' : task.difficulty === 'Medium' ? 'warning' : 'success'} size="sm">{task.difficulty}</Badge>
+                          <Badge variant="warning" size="sm">Focus: {drill.criterionLabel ?? drill.criterionCode ?? fallbackTask?.criteriaFocus ?? 'Criterion'}</Badge>
+                          {fallbackTask ? <Badge variant={fallbackTask.difficulty === 'Hard' ? 'danger' : fallbackTask.difficulty === 'Medium' ? 'warning' : 'success'} size="sm">{fallbackTask.difficulty}</Badge> : null}
                         </div>
                       </div>
                       <Button size="sm" variant="outline">Start Drill</Button>
                     </div>
-                  ))}
+                  );})}
                 </motion.div>
               )}
 
               {activeTab === 'past' && (
                 <motion.div key="past" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="divide-y divide-gray-100">
-                  {submissions.length === 0 ? (
+                  {pastSubmissions.length === 0 ? (
                     <div className="p-10">
                       <EmptyState title="No submissions yet" description="Complete a writing task to see your history here." />
                     </div>
-                  ) : submissions.map((sub) => (
+                  ) : pastSubmissions.map((sub) => {
+                    const route = sub.route ?? (sub.evalStatus === 'completed'
+                      ? `/writing/result?id=${encodeURIComponent(sub.id)}`
+                      : `/writing/player?taskId=${encodeURIComponent(sub.taskId)}${sub.attemptId ? `&attemptId=${encodeURIComponent(sub.attemptId)}` : ''}`);
+                    return (
                     <div key={sub.id} className="p-5 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer"
-                      onClick={() => router.push(`/writing/result?id=${sub.id}`)}>
+                      onClick={() => router.push(route)}>
                       <div>
                         <h3 className="font-bold text-navy mb-1 group-hover:text-primary transition-colors">{sub.taskTitle}</h3>
                         <div className="flex items-center gap-3 text-sm text-muted">
@@ -316,7 +359,7 @@ export default function WritingHome() {
                         <Button size="sm" variant="ghost">View <ArrowRight className="w-4 h-4" /></Button>
                       </div>
                     </div>
-                  ))}
+                  );})}
                 </motion.div>
               )}
             </AnimatePresence>

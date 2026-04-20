@@ -482,6 +482,9 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
         if (ctx.Kind == RuleKind.Pronunciation)
             return (OetScoring.ScaledPassGradeB, "B");
 
+        if (ctx.Kind == RuleKind.Conversation)
+            return (OetScoring.ScaledPassGradeB, "B");
+
         if (ctx.Kind == RuleKind.Vocabulary)
             return (0, "N/A"); // Vocabulary never projects to a scaled OET score.
 
@@ -525,9 +528,44 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
         sb.AppendLine();
         AppendScoringSection(sb, ctx);
         AppendRulesBlock(sb, critical, major, applicable.Count);
+        AppendConversationContext(sb, ctx);
         AppendGuardrails(sb, ctx);
         AppendReplyFormat(sb, ctx);
         return sb.ToString();
+    }
+
+    private static void AppendConversationContext(StringBuilder sb, AiGroundingContext ctx)
+    {
+        if (ctx.Kind != RuleKind.Conversation) return;
+        sb.AppendLine("## Conversation Session Context");
+        sb.AppendLine();
+        if (!string.IsNullOrWhiteSpace(ctx.ConversationTaskTypeCode))
+            sb.AppendLine($"Task type: `{ctx.ConversationTaskTypeCode}` (oet-roleplay = 5-minute clinical role-play; oet-handover = ISBAR handover).");
+        if (ctx.ConversationTurnIndex is not null)
+            sb.AppendLine($"Current turn index: {ctx.ConversationTurnIndex}.");
+        if (ctx.ConversationElapsedSeconds is not null)
+            sb.AppendLine($"Elapsed time: {ctx.ConversationElapsedSeconds}s.");
+        if (ctx.ConversationRemainingSeconds is not null)
+            sb.AppendLine($"Remaining time: {ctx.ConversationRemainingSeconds}s.");
+        sb.AppendLine();
+        if (!string.IsNullOrWhiteSpace(ctx.ConversationScenarioJson))
+        {
+            sb.AppendLine("### Scenario card (role-play brief)");
+            sb.AppendLine();
+            sb.AppendLine("```json");
+            sb.AppendLine(ctx.ConversationScenarioJson);
+            sb.AppendLine("```");
+            sb.AppendLine();
+        }
+        if (!string.IsNullOrWhiteSpace(ctx.ConversationTranscriptJson))
+        {
+            sb.AppendLine("### Conversation transcript so far");
+            sb.AppendLine();
+            sb.AppendLine("```json");
+            sb.AppendLine(ctx.ConversationTranscriptJson);
+            sb.AppendLine("```");
+            sb.AppendLine();
+        }
     }
 
     private static void AppendScoringSection(StringBuilder sb, AiGroundingContext ctx)
@@ -546,6 +584,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
             RuleKind.Grammar => "**This call concerns GRAMMAR authoring** — the scoring table is background context only. Do NOT produce a candidate score; you are producing teaching content grounded in the rulebook.",
             RuleKind.Pronunciation => "**This call concerns PRONUNCIATION** — overall 0-100 scores map to the universal Speaking 0-500 scale using the anchor table in /rulebooks/pronunciation/common/assessment-criteria.json (60=300, 70=350=pass, 80=400, 90=450, 100=500). Never produce a grade that contradicts the Speaking pass at 350.",
             RuleKind.Vocabulary => "**This call concerns VOCABULARY authoring** — the scoring table is background context only. Do NOT produce a candidate scaled score. You are producing teaching content (terms, glosses) grounded in the vocabulary rulebook. Vocabulary quiz percentages (0–100) are pedagogical metrics and NEVER equivalent to an OET scaled score.",
+            RuleKind.Conversation => "**This call concerns CONVERSATION (OET Speaking practice)** — conversation advisory criteria (0–6 each: Intelligibility, Fluency, Appropriateness, Grammar & Expression) project to the universal Speaking 0–500 scale. Anchor: the weighted mean on 0–6 × (500/6) rounds to scaled. 70% of max = 4.2/6 ≡ 350/500 (Grade B = PASS). Never produce a grade that contradicts the Speaking pass at 350.",
             _ => ""
         });
         sb.AppendLine();
@@ -593,6 +632,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
             RuleKind.Grammar => "8. For grammar authoring: every exercise you emit must cite at least one grammar rule ID (e.g. \"G02.1\") in appliedRuleIds. If a concept falls outside the rulebook, omit it rather than invent.",
             RuleKind.Pronunciation => "8. For pronunciation: every finding MUST cite a rule ID from the pronunciation rulebook (e.g. \"P01.1\", \"P04.1\"). Never invent a phoneme or stress-pattern rule. If the input shows issues outside the rulebook, describe them as observations rather than scored findings.",
             RuleKind.Vocabulary => "8. For vocabulary authoring: every term MUST cite at least one vocabulary rule ID (e.g. \"V02.1\") in appliedRuleIds. Definitions must be clinically accurate, concise (≤ 25 words), and written in formal healthcare register. Example sentences must mirror OET letter register. Never include brand names, trademarks, or colloquialisms. Never invent a rule ID.",
+            RuleKind.Conversation => "8. For conversation: STAY IN ROLE as the patient/colleague specified in the scenario. Do NOT break character. Do NOT dispense real medical advice to the learner. Do NOT score or grade the learner mid-conversation (evaluation is a separate task). Keep replies 1–3 sentences, natural spoken register (contractions allowed in speech). Never volunteer information the scenario says is not given. When evaluating (EvaluateConversation task), every turnAnnotation MUST cite at least one C-rule ID (e.g. \"C01.1\") in ruleId; never invent a rule.",
             _ => "8. For writing: respect the letter structure order (Address → Date → Salutation → Re: line → Body → Yours sincerely/faithfully → Doctor) and flag layout violations."
         });
         sb.AppendLine();
@@ -755,6 +795,70 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 sb.AppendLine("```");
                 sb.AppendLine("If the word is not medically meaningful, set `shortDefinition` to the general English sense and note that in `contextNotes`. Never invent a rule ID.");
                 break;
+            case AiTaskMode.GenerateConversationOpening:
+                sb.AppendLine("Return a SINGLE JSON object with the AI partner's first spoken utterance. Stay in the patient/colleague role defined in the scenario. 1–3 sentences, natural spoken register. Do NOT repeat the scenario brief back to the learner. Cite ≥1 conversation rule ID you are applying.");
+                sb.AppendLine("```json");
+                sb.AppendLine("{");
+                sb.AppendLine("  \"text\": \"... (1–3 sentences, in-role)\",");
+                sb.AppendLine("  \"emotionHint\": \"neutral|worried|frustrated|calm|in-pain\",");
+                sb.AppendLine("  \"appliedRuleIds\": [\"C01.1\"]");
+                sb.AppendLine("}");
+                sb.AppendLine("```");
+                break;
+            case AiTaskMode.GenerateConversationReply:
+                sb.AppendLine("Return a SINGLE JSON object with the AI partner's next spoken reply, grounded in the scenario and transcript above. 1–3 sentences, natural spoken register, stay in role. Never dispense real medical advice to the learner. If the learner has met all scenario objectives or time is nearly out, set `shouldEnd = true`. Cite ≥1 conversation rule ID.");
+                sb.AppendLine("```json");
+                sb.AppendLine("{");
+                sb.AppendLine("  \"text\": \"... (1–3 sentences, in-role)\",");
+                sb.AppendLine("  \"emotionHint\": \"neutral|worried|frustrated|calm|in-pain\",");
+                sb.AppendLine("  \"shouldEnd\": false,");
+                sb.AppendLine("  \"appliedRuleIds\": [\"C01.1\"]");
+                sb.AppendLine("}");
+                sb.AppendLine("```");
+                break;
+            case AiTaskMode.EvaluateConversation:
+                sb.AppendLine("Return a SINGLE JSON object evaluating the learner's OET Speaking practice transcript against the 4-criterion rubric. Each criterion scored 0–6 (integer or 0.5). Every finding / turnAnnotation MUST cite a conversation rule ID (e.g. \"C01.1\") in ruleId. Never invent a rule. Overall projection to 500-scale uses the weighted mean × (500/6).");
+                sb.AppendLine("```json");
+                sb.AppendLine("{");
+                sb.AppendLine("  \"criteria\": [");
+                sb.AppendLine("    { \"id\": \"intelligibility\", \"score06\": 0, \"evidence\": \"...\", \"quotes\": [\"...\"] },");
+                sb.AppendLine("    { \"id\": \"fluency\", \"score06\": 0, \"evidence\": \"...\", \"quotes\": [\"...\"] },");
+                sb.AppendLine("    { \"id\": \"appropriateness\", \"score06\": 0, \"evidence\": \"...\", \"quotes\": [\"...\"] },");
+                sb.AppendLine("    { \"id\": \"grammar_expression\", \"score06\": 0, \"evidence\": \"...\", \"quotes\": [\"...\"] }");
+                sb.AppendLine("  ],");
+                sb.AppendLine("  \"turnAnnotations\": [");
+                sb.AppendLine("    { \"turnNumber\": 1, \"type\": \"strength|error|improvement\", \"category\": \"...\", \"ruleId\": \"C01.1\", \"evidence\": \"...\", \"suggestion\": \"...\" }");
+                sb.AppendLine("  ],");
+                sb.AppendLine("  \"strengths\": [\"...\"],");
+                sb.AppendLine("  \"improvements\": [\"...\"],");
+                sb.AppendLine("  \"suggestedPractice\": [\"...\"],");
+                sb.AppendLine("  \"appliedRuleIds\": [\"C01.1\"],");
+                sb.AppendLine("  \"advisory\": \"AI-generated — advisory only, not a CBLA result.\"");
+                sb.AppendLine("}");
+                sb.AppendLine("```");
+                sb.AppendLine("Hard requirements: exactly 4 criteria with IDs above; every annotation cites a valid C-rule ID; weighted mean rounded → scaled via (score06 × 500/6).");
+                break;
+            case AiTaskMode.GenerateConversationScenario:
+                sb.AppendLine("Return a SINGLE JSON object describing a new OET role-play scenario card. Every field mandatory. Cite ≥1 conversation rule ID.");
+                sb.AppendLine("```json");
+                sb.AppendLine("{");
+                sb.AppendLine("  \"title\": \"...\",");
+                sb.AppendLine("  \"taskTypeCode\": \"oet-roleplay|oet-handover\",");
+                sb.AppendLine("  \"difficulty\": \"easy|medium|hard\",");
+                sb.AppendLine("  \"setting\": \"...\",");
+                sb.AppendLine("  \"patientRole\": \"... (or colleagueRole for handover)\",");
+                sb.AppendLine("  \"clinicianRole\": \"...\",");
+                sb.AppendLine("  \"context\": \"... (≤ 120 words)\",");
+                sb.AppendLine("  \"objectives\": [\"...\", \"...\", \"...\"],");
+                sb.AppendLine("  \"timeLimitSeconds\": 300,");
+                sb.AppendLine("  \"keyVocabulary\": [\"...\"],");
+                sb.AppendLine("  \"expectedRedFlags\": [\"...\"],");
+                sb.AppendLine("  \"patientVoice\": { \"gender\": \"male|female|neutral\", \"age\": 0, \"accent\": \"en-GB|en-US|en-AU\", \"tone\": \"neutral|worried|calm\" },");
+                sb.AppendLine("  \"appliedRuleIds\": [\"C01.1\"],");
+                sb.AppendLine("  \"selfCheckNotes\": \"...\"");
+                sb.AppendLine("}");
+                sb.AppendLine("```");
+                break;
             default:
                 sb.AppendLine("Plain text, concise, ≤ 200 words. Cite rule IDs in parentheses when invoking rules.");
                 break;
@@ -781,6 +885,14 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 AiTaskMode.GenerateVocabularyGloss => "Task: produce a concise, learner-facing gloss of a single word in its supplied medical context. Do not invent meanings. Do not re-score.",
                 _ => "Task: respond according to the reply format above."
             },
+            RuleKind.Conversation => ctx.Task switch
+            {
+                AiTaskMode.GenerateConversationOpening => "Task: deliver the AI partner's first spoken utterance in role, grounded in the scenario above. Stay in character. Do not recite the scenario back.",
+                AiTaskMode.GenerateConversationReply => "Task: deliver the AI partner's next spoken reply in role, grounded in the scenario and transcript above. Stay in character. Never give medical advice to the learner.",
+                AiTaskMode.EvaluateConversation => "Task: evaluate the completed conversation transcript against the 4-criterion rubric (Intelligibility, Fluency, Appropriateness, Grammar & Expression). Produce rule-cited findings and turn annotations. Do not invent rules.",
+                AiTaskMode.GenerateConversationScenario => "Task: author one new OET Speaking role-play or handover scenario card grounded in the conversation rulebook. Every appliedRuleIds value must exist in the rulebook.",
+                _ => "Task: respond according to the reply format above."
+            },
             _ => "Task: respond according to the reply format above."
         };
         if (ctx.Kind == RuleKind.Grammar)
@@ -788,6 +900,8 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
         if (ctx.Kind == RuleKind.Pronunciation)
             return $"{baseText} Respond strictly in the reply format above.";
         if (ctx.Kind == RuleKind.Vocabulary)
+            return $"{baseText} Respond strictly in the reply format above.";
+        if (ctx.Kind == RuleKind.Conversation)
             return $"{baseText} Respond strictly in the reply format above.";
         return $"{baseText} Apply the {passMark}/500 (Grade {passGrade}) pass mark for this {ctx.Kind.ToString().ToLowerInvariant()} call. Respond strictly in the reply format above.";
     }
@@ -797,7 +911,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
 // Types
 // ---------------------------------------------------------------------------
 
-public enum AiTaskMode { Score, Coach, Correct, Summarise, GenerateFeedback, GenerateContent, GenerateGrammarLesson, ScorePronunciationAttempt, GeneratePronunciationDrill, GeneratePronunciationFeedback, GenerateVocabularyTerm, GenerateVocabularyGloss }
+public enum AiTaskMode { Score, Coach, Correct, Summarise, GenerateFeedback, GenerateContent, GenerateGrammarLesson, ScorePronunciationAttempt, GeneratePronunciationDrill, GeneratePronunciationFeedback, GenerateVocabularyTerm, GenerateVocabularyGloss, GenerateConversationOpening, GenerateConversationReply, EvaluateConversation, GenerateConversationScenario }
 
 public sealed class AiGroundingContext
 {
@@ -807,6 +921,17 @@ public sealed class AiGroundingContext
     public string? CardType { get; init; }
     public AiTaskMode Task { get; init; } = AiTaskMode.Score;
     public string? CandidateCountry { get; init; }
+
+    // Conversation-specific context.
+    // ScenarioJson: the full role-play scenario card the AI partner must follow.
+    // TranscriptJson: accumulated learner+AI turns to date.
+    // TaskTypeCode: oet-roleplay | oet-handover (canonical set).
+    public string? ConversationScenarioJson { get; init; }
+    public string? ConversationTranscriptJson { get; init; }
+    public string? ConversationTaskTypeCode { get; init; }
+    public int? ConversationTurnIndex { get; init; }
+    public int? ConversationElapsedSeconds { get; init; }
+    public int? ConversationRemainingSeconds { get; init; }
 }
 
 public sealed class AiGroundedPrompt

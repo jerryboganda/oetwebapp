@@ -49,13 +49,22 @@ export interface StudyPlanTask {
 
 export interface WritingTask {
   id: string;
+  contentId?: string;
   title: string;
   difficulty: Difficulty;
   profession: string;
+  professionId?: string;
   time: string;
+  estimatedDurationMinutes?: number;
+  durationSeconds?: number;
   criteriaFocus: string;
+  criteriaFocusCodes?: string[];
   scenarioType: string;
   caseNotes: string;
+  route?: string;
+  status?: string;
+  modeSupport?: string[];
+  publishedRevisionId?: string;
 }
 
 export interface ChecklistItem {
@@ -103,6 +112,7 @@ export interface WritingResult {
   topStrengths: string[];
   topIssues: string[];
   criteria: CriterionFeedback[];
+  letterBody?: string;
   submittedAt: string;
   evalStatus: EvalStatus;
 }
@@ -134,6 +144,7 @@ export interface ModelAnswer {
 export interface WritingSubmission {
   id: string;
   taskId: string;
+  attemptId?: string;
   taskTitle: string;
   content: string;
   wordCount: number;
@@ -141,6 +152,8 @@ export interface WritingSubmission {
   evalStatus: EvalStatus;
   scoreEstimate?: string;
   reviewStatus: ReviewStatus;
+  route?: string;
+  state?: string;
 }
 
 // ═══════════════════ SPEAKING TYPES ═══════════════════

@@ -1,12 +1,27 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import { renderWithRouter } from '@/tests/test-utils';
-const { mockGetConversationHistory, mockCreateConversation, mockTrack, mockPush } = vi.hoisted(() => ({
+
+const {
+  mockGetConversationHistory,
+  mockGetConversationTaskTypes,
+  mockGetConversationEntitlement,
+  mockCreateConversation,
+  mockTrack,
+  mockPush,
+} = vi.hoisted(() => ({
   mockGetConversationHistory: vi.fn(),
+  mockGetConversationTaskTypes: vi.fn(),
+  mockGetConversationEntitlement: vi.fn(),
   mockCreateConversation: vi.fn(),
   mockTrack: vi.fn(),
   mockPush: vi.fn(),
 }));
-vi.mock('next/link', () => ({ default: ({ children, href }: { children: React.ReactNode; href?: string }) => <a href={href}>{children}</a> }));
+
+vi.mock('next/link', () => ({
+  default: ({ children, href }: { children: React.ReactNode; href?: string }) => (
+    <a href={href}>{children}</a>
+  ),
+}));
 
 vi.mock('@/components/layout', () => ({
   LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => (
@@ -15,15 +30,53 @@ vi.mock('@/components/layout', () => ({
 }));
 
 vi.mock('@/lib/analytics', () => ({ analytics: { track: mockTrack } }));
-vi.mock('@/lib/api', () => ({ getConversationHistory: mockGetConversationHistory, createConversation: mockCreateConversation }));
+vi.mock('@/lib/api', () => ({
+  getConversationHistory: mockGetConversationHistory,
+  getConversationTaskTypes: mockGetConversationTaskTypes,
+  getConversationEntitlement: mockGetConversationEntitlement,
+  createConversation: mockCreateConversation,
+}));
 
 import ConversationPage from './page';
 
 describe('Conversation page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetConversationTaskTypes.mockResolvedValue({
+      taskTypes: [
+        { code: 'oet-roleplay', label: 'OET Clinical Role Play', description: 'Practise 5-minute role plays.' },
+        { code: 'oet-handover', label: 'OET Handover', description: 'Practise structured clinical handovers.' },
+      ],
+      prepDurationSeconds: 120,
+      maxSessionDurationSeconds: 360,
+      maxTurnDurationSeconds: 60,
+    });
+    mockGetConversationEntitlement.mockResolvedValue({
+      allowed: true,
+      tier: 'free',
+      remaining: 3,
+      limit: 3,
+      windowDays: 7,
+      resetAt: null,
+      reason: '3 of 3 free sessions remaining.',
+    });
     mockGetConversationHistory.mockResolvedValue({
-      items: [{ id: 'sess-1', taskTypeCode: 'oet-roleplay', examTypeCode: 'oet', state: 'evaluated', turnCount: 12, durationSeconds: 320, createdAt: '2026-04-01T10:00:00.000Z', completedAt: '2026-04-01T10:05:20.000Z' }],
+      items: [
+        {
+          id: 'sess-1',
+          taskTypeCode: 'oet-roleplay',
+          examTypeCode: 'oet',
+          profession: 'medicine',
+          state: 'evaluated',
+          turnCount: 12,
+          durationSeconds: 320,
+          scaledScore: 370,
+          overallGrade: 'B',
+          passed: true,
+          createdAt: '2026-04-01T10:00:00.000Z',
+          completedAt: '2026-04-01T10:05:20.000Z',
+        },
+      ],
     });
     mockCreateConversation.mockResolvedValue({ id: 'sess-new' });
   });
@@ -40,11 +93,17 @@ describe('Conversation page', () => {
     expect(mockTrack).toHaveBeenCalledWith('conversation_page_viewed');
   });
 
-  it('displays task type options for starting new conversations', async () => {
+  it('renders only OET task types from the backend catalog (no IELTS)', async () => {
     renderWithRouter(<ConversationPage />, { router: { push: mockPush } });
-    // Wait for the page to fully render (hero loads first)
-    await screen.findByText('AI Conversation Practice');
-    expect(screen.getByText('OET Clinical Role Play')).toBeInTheDocument();
-    expect(screen.getByText('IELTS Part 2 Long Turn')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByText('OET Clinical Role Play')).toBeInTheDocument());
+    expect(screen.getByText('OET Handover')).toBeInTheDocument();
+    expect(screen.queryByText(/IELTS/i)).not.toBeInTheDocument();
+  });
+
+  it('shows entitlement remaining in the hero highlights', async () => {
+    renderWithRouter(<ConversationPage />, { router: { push: mockPush } });
+    await waitFor(() =>
+      expect(screen.getAllByText(/3\/3 left/i).length).toBeGreaterThan(0),
+    );
   });
 });

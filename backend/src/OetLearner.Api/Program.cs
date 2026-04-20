@@ -458,11 +458,56 @@ builder.Services.AddScoped<AdaptiveDifficultyService>();
 builder.Services.AddScoped<PredictionService>();
 builder.Services.AddScoped<ScoringService>();
 builder.Services.AddScoped<ContentGenerationService>();
-builder.Services.AddSingleton<SpeechToTextService>();
 builder.Services.AddScoped<ConversationService>();
 builder.Services.AddScoped<PronunciationService>();
 builder.Services.AddScoped<WritingCoachService>();
 builder.Services.AddScoped<MarketplaceService>();
+
+// ── Conversation subsystem (Phase 2+) ────────────────────────────────────
+builder.Services.Configure<OetLearner.Api.Configuration.ConversationOptions>(
+    builder.Configuration.GetSection(OetLearner.Api.Configuration.ConversationOptions.SectionName));
+foreach (var name in new[]
+{
+    "ConversationAzureClient", "ConversationWhisperClient", "ConversationDeepgramClient",
+    "ConversationAzureTtsClient", "ConversationElevenLabsClient",
+    "ConversationCosyVoiceClient", "ConversationChatTtsClient", "ConversationGptSoVitsClient",
+})
+{
+    builder.Services.AddHttpClient(name, c => { c.Timeout = TimeSpan.FromMinutes(2); });
+}
+builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Asr.IConversationAsrProvider,
+    OetLearner.Api.Services.Conversation.Asr.MockConversationAsrProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Asr.IConversationAsrProvider,
+    OetLearner.Api.Services.Conversation.Asr.AzureConversationAsrProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Asr.IConversationAsrProvider,
+    OetLearner.Api.Services.Conversation.Asr.WhisperConversationAsrProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Asr.IConversationAsrProvider,
+    OetLearner.Api.Services.Conversation.Asr.DeepgramConversationAsrProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Asr.IConversationAsrProviderSelector,
+    OetLearner.Api.Services.Conversation.Asr.ConversationAsrProviderSelector>();
+
+builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversationTtsProvider,
+    OetLearner.Api.Services.Conversation.Tts.MockConversationTtsProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversationTtsProvider,
+    OetLearner.Api.Services.Conversation.Tts.AzureConversationTtsProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversationTtsProvider,
+    OetLearner.Api.Services.Conversation.Tts.ElevenLabsConversationTtsProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversationTtsProvider,
+    OetLearner.Api.Services.Conversation.Tts.CosyVoiceConversationTtsProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversationTtsProvider,
+    OetLearner.Api.Services.Conversation.Tts.ChatTtsConversationTtsProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversationTtsProvider,
+    OetLearner.Api.Services.Conversation.Tts.GptSoVitsConversationTtsProvider>();
+builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversationTtsProviderSelector,
+    OetLearner.Api.Services.Conversation.Tts.ConversationTtsProviderSelector>();
+
+builder.Services.AddScoped<OetLearner.Api.Services.Conversation.IConversationAudioService,
+    OetLearner.Api.Services.Conversation.ConversationAudioService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Conversation.IConversationEntitlementService,
+    OetLearner.Api.Services.Conversation.ConversationEntitlementService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Conversation.IConversationAiOrchestrator,
+    OetLearner.Api.Services.Conversation.ConversationAiOrchestrator>();
+builder.Services.AddHostedService<OetLearner.Api.Services.Conversation.ConversationAudioRetentionWorker>();
 
 // ── Pronunciation subsystem (Phase 2+) ───────────────────────────────────
 builder.Services.Configure<OetLearner.Api.Configuration.PronunciationOptions>(

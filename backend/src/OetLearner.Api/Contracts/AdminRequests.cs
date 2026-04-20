@@ -359,23 +359,33 @@ public record AdminVocabularyItemUpdateRequest(
 
 public record AdminConversationTemplateCreateRequest(
     string Title,
+    string? TaskTypeCode,
     string? ProfessionId,
     string Scenario,
     string? RoleDescription,
     string? PatientContext,
     string? ExpectedOutcomes,
     string? Difficulty,
-    int? EstimatedDurationMinutes);
+    int? EstimatedDurationSeconds,
+    string[]? Objectives,
+    string[]? ExpectedRedFlags,
+    string[]? KeyVocabulary,
+    Dictionary<string, object?>? PatientVoice);
 
 public record AdminConversationTemplateUpdateRequest(
     string? Title,
+    string? TaskTypeCode,
     string? ProfessionId,
     string? Scenario,
     string? RoleDescription,
     string? PatientContext,
     string? ExpectedOutcomes,
     string? Difficulty,
-    int? EstimatedDurationMinutes,
+    int? EstimatedDurationSeconds,
+    string[]? Objectives,
+    string[]? ExpectedRedFlags,
+    string[]? KeyVocabulary,
+    Dictionary<string, object?>? PatientVoice,
     string? Status);
 
 // ── Pronunciation Drill Admin ──

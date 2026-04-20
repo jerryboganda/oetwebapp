@@ -35,7 +35,7 @@ const RULEBOOKS: Record<string, Rulebook> = {
   'grammar:nursing': grammarNursingV1 as unknown as Rulebook,
 };
 
-const ASSESSMENT_CRITERIA = {
+const ASSESSMENT_CRITERIA: Partial<Record<RuleKind, unknown>> = {
   writing: writingAssessment as unknown,
   speaking: speakingAssessment as unknown,
   grammar: grammarAssessment as unknown,

@@ -384,6 +384,73 @@ public static class OetScoring
     }
 
     // -----------------------------------------------------------------------
+    // Conversation projection (OET Speaking practice rubric — 4 × 0..6)
+    // -----------------------------------------------------------------------
+    //
+    // AI Conversation sessions grade learners on the OET Speaking 4-criterion
+    // rubric (Intelligibility, Fluency, Appropriateness, Grammar & Expression),
+    // each scored 0–6. We project the weighted mean onto the 0–500 scale
+    // anchored at 350/500 = PASS so results are consistent with expert-graded
+    // Speaking. Conversation results are ADVISORY and never replace expert
+    // grading.
+    //
+    // Anchors (mean06 → scaled):
+    //   0  → 0
+    //   3  → 250   (below pass — C band)
+    //   4.2→ 350   (PASS — universal Speaking Grade B)
+    //   5  → 417
+    //   6  → 500   (Grade A)
+    //
+    // 4.2/6 = 70% of max is the pass anchor: identical anchor as Pronunciation.
+    // Between anchors, piecewise-linear interpolation.
+
+    /// <summary>
+    /// Project a conversation rubric mean (0–6) onto the 0–500 Speaking scale.
+    /// Advisory only. PASS anchor: 4.2/6 ≡ 350/500 (Grade B, universal).
+    /// </summary>
+    public static int ConversationProjectedScaled(double mean0To6)
+    {
+        if (double.IsNaN(mean0To6)) return 0;
+        var m = Math.Clamp(mean0To6, 0.0, 6.0);
+        (double From, double To, int ScaledFrom, int ScaledTo)[] anchors =
+        {
+            (0.0, 3.0, 0,   250),
+            (3.0, 4.2, 250, 350),
+            (4.2, 5.0, 350, 417),
+            (5.0, 6.0, 417, 500),
+        };
+        foreach (var (f, t, sf, st) in anchors)
+        {
+            if (m >= f && m <= t)
+            {
+                var ratio = (m - f) / (t - f == 0 ? 1 : (t - f));
+                return (int)Math.Round(sf + ratio * (st - sf));
+            }
+        }
+        return ScaledMax;
+    }
+
+    /// <summary>
+    /// Convenience: project from the 4-criterion array directly to a full
+    /// Speaking pass/fail result.
+    /// </summary>
+    public static SpeakingResult ConversationProjectedBand(
+        double intelligibility06,
+        double fluency06,
+        double appropriateness06,
+        double grammarExpression06)
+    {
+        var mean = (
+            Math.Clamp(intelligibility06, 0, 6) +
+            Math.Clamp(fluency06, 0, 6) +
+            Math.Clamp(appropriateness06, 0, 6) +
+            Math.Clamp(grammarExpression06, 0, 6)
+        ) / 4.0;
+        var scaled = ConversationProjectedScaled(mean);
+        return GradeSpeaking(scaled);
+    }
+
+    // -----------------------------------------------------------------------
     // Display formatting
     // -----------------------------------------------------------------------
 

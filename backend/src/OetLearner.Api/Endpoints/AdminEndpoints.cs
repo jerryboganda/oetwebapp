@@ -741,6 +741,15 @@ public static class AdminEndpoints
             => Results.Ok(await service.ArchiveConversationTemplateAsync(http.AdminId(), http.AdminName(), templateId, ct)))
             .RequireRateLimiting("PerUserWrite").RequireAuthorization("AdminContentWrite");
 
+        admin.MapPost("/conversation/templates/{templateId}/publish", async (string templateId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.PublishConversationTemplateAsync(http.AdminId(), http.AdminName(), templateId, ct)))
+            .RequireRateLimiting("PerUserWrite").RequireAuthorization("AdminContentWrite");
+
+        // ── Conversation Settings (ConversationOptions snapshot) ─────────
+        admin.MapGet("/conversation/settings", (Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.ConversationOptions> opts)
+            => Results.Ok(opts.Value))
+            .RequireAuthorization("AdminContentRead");
+
         // ── Pronunciation Drill Admin CRUD ──────────────────
 
         admin.MapGet("/pronunciation/drills", async (AdminService service, CancellationToken ct,

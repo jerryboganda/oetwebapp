@@ -13,27 +13,65 @@ import { WritingCaseNotesPanel } from '@/components/domain/writing-case-notes-pa
 import { WritingEditor } from '@/components/domain/writing-editor';
 import { RulebookFindingsPanel } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchWritingTask, fetchWritingChecklist, submitWritingDraft, submitWritingTask } from '@/lib/api';
+import {
+  ApiError,
+  fetchWritingTask,
+  fetchWritingChecklist,
+  heartbeatWritingAttempt,
+  resolveWritingAttempt,
+  submitWritingDraft,
+  submitWritingTask,
+} from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { WritingTask } from '@/lib/mock-data';
 import { useIsMobile } from '@/hooks/use-mobile';
 import { deriveWritingCaseNotesMarkers, inferWritingLetterType, lintWritingLetter } from '@/lib/rulebook';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed';
+type ChecklistState = { id: string; label: string; checked: boolean };
+
+const DEFAULT_WRITING_DURATION_SECONDS = 45 * 60;
+
+function checklistToRecord(checklist: ChecklistState[]): Record<string, boolean> {
+  return Object.fromEntries(checklist.map((item) => [item.id, item.checked]));
+}
+
+function resolveDurationSeconds(task: WritingTask | null): number {
+  if (!task) return DEFAULT_WRITING_DURATION_SECONDS;
+  if (typeof task.durationSeconds === 'number' && task.durationSeconds > 0) return task.durationSeconds;
+  if (typeof task.estimatedDurationMinutes === 'number' && task.estimatedDurationMinutes > 0) {
+    return task.estimatedDurationMinutes * 60;
+  }
+  const minutes = Number(task.time.match(/\d+/)?.[0]);
+  return Number.isFinite(minutes) && minutes > 0 ? minutes * 60 : DEFAULT_WRITING_DURATION_SECONDS;
+}
+
+function resolveRulebookProfession(task: WritingTask): 'medicine' {
+  return task.professionId?.toLowerCase() === 'medicine' || task.profession.toLowerCase() === 'medicine'
+    ? 'medicine'
+    : 'medicine';
+}
 
 export default function WritingPlayer() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const isMobile = useIsMobile();
   const prefersReducedMotion = useReducedMotion();
-  const taskId = searchParams?.get('taskId') ?? 'wt-001';
+  const requestedTaskId = searchParams?.get('taskId') ?? undefined;
+  const requestedAttemptId = searchParams?.get('attemptId') ?? undefined;
+  const taskId = requestedTaskId ?? 'wt-001';
 
   const [task, setTask] = useState<WritingTask | null>(null);
-  const [checklist, setChecklist] = useState<{ id: string; label: string; checked: boolean }[]>([]);
+  const [attemptId, setAttemptId] = useState<string | null>(requestedAttemptId ?? null);
+  const [draftVersion, setDraftVersion] = useState<number | null>(null);
+  const [checklist, setChecklist] = useState<ChecklistState[]>([]);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [content, setContent] = useState('');
   const [scratchpad, setScratchpad] = useState('');
   const [saveStatus, setSaveStatus] = useState<SaveStatus>('idle');
+  const [saveConflictMessage, setSaveConflictMessage] = useState<string | null>(null);
+  const [timerInitialSeconds, setTimerInitialSeconds] = useState(DEFAULT_WRITING_DURATION_SECONDS);
   const [fontSize, setFontSize] = useState(16);
   const [isDistractionFree, setIsDistractionFree] = useState(false);
   const [activeTab, setActiveTab] = useState<'notes' | 'scratchpad' | 'checklist'>('notes');
@@ -45,6 +83,13 @@ export default function WritingPlayer() {
   const saveTimerRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const hasUnsavedChanges = useRef(false);
   const latestContentRef = useRef('');
+  const latestScratchpadRef = useRef('');
+  const latestChecklistRef = useRef<Record<string, boolean>>({});
+  const latestDraftVersionRef = useRef<number | null>(null);
+  const attemptIdRef = useRef<string | null>(requestedAttemptId ?? null);
+  const taskIdRef = useRef(taskId);
+  const timerDurationRef = useRef(DEFAULT_WRITING_DURATION_SECONDS);
+  const elapsedSecondsRef = useRef(0);
   const isSubmittingRef = useRef(false);
   const autosaveSequenceRef = useRef(0);
   const panelTransition: Transition = prefersReducedMotion
@@ -62,7 +107,7 @@ export default function WritingPlayer() {
     return lintWritingLetter({
       letterText: content,
       letterType: inferredLetterType,
-      profession: 'medicine',
+      profession: resolveRulebookProfession(task),
       recipientSpecialty: task.title,
       recipientName: null,
       patientAge: minorAgeMatch ? Number(minorAgeMatch[1]) : null,
@@ -76,13 +121,69 @@ export default function WritingPlayer() {
     : undefined;
 
   useEffect(() => {
-    Promise.all([fetchWritingTask(taskId), fetchWritingChecklist()])
-      .then(([t, cl]) => {
-        setTask(t);
-        setChecklist(cl.map(c => ({ id: String(c.id), label: c.text, checked: c.completed })));
-      })
-      .finally(() => setLoading(false));
-  }, [taskId]);
+    let cancelled = false;
+
+    async function loadAttempt() {
+      setLoading(true);
+      setLoadError(null);
+      try {
+        const [attempt, checklistItems] = await Promise.all([
+          resolveWritingAttempt({ taskId, attemptId: requestedAttemptId, mode: 'timed' }),
+          fetchWritingChecklist(),
+        ]);
+        const fetchedTask = attempt.task ?? await fetchWritingTask(attempt.contentId || taskId);
+        const loadedTask = {
+          ...fetchedTask,
+          id: fetchedTask.id ?? attempt.contentId ?? taskId,
+          contentId: fetchedTask.contentId ?? attempt.contentId ?? taskId,
+        };
+        if (cancelled) return;
+
+        const resolvedChecklist = checklistItems.map((item) => {
+          const id = String(item.id);
+          return {
+            id,
+            label: item.text,
+            checked: Boolean(attempt.checklist[id] ?? attempt.checklist[item.text] ?? item.completed),
+          };
+        });
+        const checklistRecord = checklistToRecord(resolvedChecklist);
+        const durationSeconds = resolveDurationSeconds(loadedTask);
+        const elapsedSeconds = Math.max(0, attempt.elapsedSeconds);
+        const remainingSeconds = Math.max(durationSeconds - elapsedSeconds, 0);
+
+        setTask(loadedTask);
+        setAttemptId(attempt.attemptId);
+        setDraftVersion(attempt.draftVersion);
+        setContent(attempt.content);
+        setScratchpad(attempt.scratchpad);
+        setChecklist(resolvedChecklist);
+        setTimerInitialSeconds(remainingSeconds);
+        setSaveStatus('idle');
+        setSaveConflictMessage(null);
+
+        taskIdRef.current = loadedTask.id;
+        attemptIdRef.current = attempt.attemptId;
+        latestDraftVersionRef.current = attempt.draftVersion;
+        latestContentRef.current = attempt.content;
+        latestScratchpadRef.current = attempt.scratchpad;
+        latestChecklistRef.current = checklistRecord;
+        timerDurationRef.current = durationSeconds;
+        elapsedSecondsRef.current = elapsedSeconds;
+      } catch {
+        if (!cancelled) {
+          setLoadError('We could not load this Writing draft. Please return to the Writing dashboard and try again.');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadAttempt();
+    return () => {
+      cancelled = true;
+    };
+  }, [taskId, requestedAttemptId]);
 
   useEffect(() => {
     return () => {
@@ -91,6 +192,20 @@ export default function WritingPlayer() {
       }
     };
   }, []);
+
+  const handleTimerTick = useCallback((remainingSeconds: number) => {
+    elapsedSecondsRef.current = Math.max(timerDurationRef.current - remainingSeconds, 0);
+  }, []);
+
+  useEffect(() => {
+    if (!attemptId) return undefined;
+    const interval = window.setInterval(() => {
+      heartbeatWritingAttempt(attemptId, elapsedSecondsRef.current).catch(() => {
+        // Heartbeats are opportunistic; autosave owns learner-facing failure states.
+      });
+    }, 30_000);
+    return () => window.clearInterval(interval);
+  }, [attemptId]);
 
   // Auto-save with 3s debounce
   const triggerAutoSave = useCallback((nextContent = latestContentRef.current) => {
@@ -111,15 +226,29 @@ export default function WritingPlayer() {
       }
 
       try {
-        await submitWritingDraft(taskId, nextContent);
+        const saved = await submitWritingDraft(taskIdRef.current, {
+          attemptId: attemptIdRef.current,
+          content: nextContent,
+          scratchpad: latestScratchpadRef.current,
+          checklist: latestChecklistRef.current,
+          draftVersion: latestDraftVersionRef.current,
+        });
         if (isSubmittingRef.current || autosaveSequenceRef.current !== saveSequence) {
           return;
         }
+        setDraftVersion(saved.draftVersion);
+        latestDraftVersionRef.current = saved.draftVersion;
+        attemptIdRef.current = saved.attemptId;
+        setAttemptId(saved.attemptId);
         setSaveStatus('saved');
+        setSaveConflictMessage(null);
         hasUnsavedChanges.current = false;
-      } catch {
+      } catch (error) {
         if (isSubmittingRef.current || autosaveSequenceRef.current !== saveSequence) {
           return;
+        }
+        if (error instanceof ApiError && (error.status === 409 || error.code === 'draft_version_conflict')) {
+          setSaveConflictMessage('This draft changed in another tab or device. Your latest text is still here; reload the saved draft before continuing so nothing is overwritten.');
         }
         setSaveStatus('failed');
       } finally {
@@ -128,12 +257,18 @@ export default function WritingPlayer() {
         }
       }
     }, 3000);
-  }, [taskId]);
+  }, []);
 
   const handleContentChange = useCallback((val: string) => {
     latestContentRef.current = val;
     setContent(val);
     triggerAutoSave(val);
+  }, [triggerAutoSave]);
+
+  const handleScratchpadChange = useCallback((val: string) => {
+    latestScratchpadRef.current = val;
+    setScratchpad(val);
+    triggerAutoSave();
   }, [triggerAutoSave]);
 
   // Prevent accidental navigation
@@ -161,8 +296,13 @@ export default function WritingPlayer() {
     setSubmitting(true);
     setSaveStatus('saving');
     try {
-      const result = await submitWritingTask(taskId, submittedContent);
-      analytics.track('task_submitted', { taskId, subtest: 'writing', wordCount: submittedWordCount });
+      const result = await submitWritingTask(taskIdRef.current, submittedContent, {
+        attemptId: attemptIdRef.current,
+        scratchpad: latestScratchpadRef.current,
+        checklist: latestChecklistRef.current,
+        draftVersion: latestDraftVersionRef.current,
+      });
+      analytics.track('task_submitted', { taskId: taskIdRef.current, attemptId: attemptIdRef.current, subtest: 'writing', wordCount: submittedWordCount });
       hasUnsavedChanges.current = false;
       setSaveStatus('saved');
       setTimerRunning(false);
@@ -173,17 +313,36 @@ export default function WritingPlayer() {
           window.location.assign(resultUrl);
         }
       }, 500);
-    } catch {
+    } catch (error) {
       isSubmittingRef.current = false;
       setSubmitting(false);
+      if (error instanceof ApiError && (error.status === 409 || error.code === 'draft_version_conflict')) {
+        setSaveConflictMessage('This draft changed in another tab or device. Your latest text is still here; reload the saved draft before submitting.');
+      }
       setSaveStatus('failed');
     }
   };
 
   const handleChecklistChange = useCallback((id: string, checked: boolean) => {
-    setChecklist(prev => prev.map(c => c.id === id ? { ...c, checked } : c));
+    setChecklist(prev => {
+      const next = prev.map(c => c.id === id ? { ...c, checked } : c);
+      latestChecklistRef.current = checklistToRecord(next);
+      return next;
+    });
     triggerAutoSave();
   }, [triggerAutoSave]);
+
+  if (loadError) {
+    return (
+      <div className="flex min-h-[var(--app-viewport-height,100dvh)] items-center justify-center bg-background-light p-6">
+        <div className="max-w-md rounded-[24px] border border-gray-200 bg-white p-6 text-center shadow-sm">
+          <h1 className="text-lg font-black text-navy">Writing draft unavailable</h1>
+          <p className="mt-3 text-sm leading-6 text-muted">{loadError}</p>
+          <Button className="mt-5" onClick={() => router.push('/writing')}>Back to Writing</Button>
+        </div>
+      </div>
+    );
+  }
 
   if (loading || !task) {
     return (
@@ -227,12 +386,21 @@ export default function WritingPlayer() {
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-medium text-muted sm:text-xs">
                       <span className="rounded bg-blue-100 px-1.5 py-0.5 text-blue-700">{task.profession}</span>
                       <span>{task.scenarioType}</span>
+                      {draftVersion ? <span>Draft v{draftVersion}</span> : null}
                     </div>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-2 self-end sm:gap-3 sm:self-auto sm:justify-end">
-                  <Timer mode="countdown" initialSeconds={45 * 60} running={timerRunning} size={isMobile ? 'sm' : 'md'} showWarning />
+                  <Timer
+                    key={`header-${attemptId ?? task.id}-${timerInitialSeconds}`}
+                    mode="countdown"
+                    initialSeconds={timerInitialSeconds}
+                    running={timerRunning}
+                    onTick={handleTimerTick}
+                    size={isMobile ? 'sm' : 'md'}
+                    showWarning
+                  />
                   <button
                     onClick={() => setIsDistractionFree(true)}
                     className="pressable hidden touch-target rounded-2xl p-2 text-gray-500 hover:bg-gray-100 hover:text-navy lg:inline-flex"
@@ -261,7 +429,15 @@ export default function WritingPlayer() {
               transition={panelTransition}
               className="absolute left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-4 rounded-full border border-gray-200 bg-white px-4 py-2 shadow-lg"
             >
-              <Timer mode="countdown" initialSeconds={45 * 60} running={timerRunning} size="sm" showWarning />
+              <Timer
+                key={`floating-${attemptId ?? task.id}-${timerInitialSeconds}`}
+                mode="countdown"
+                initialSeconds={timerInitialSeconds}
+                running={timerRunning}
+                onTick={handleTimerTick}
+                size="sm"
+                showWarning
+              />
               <button
                 onClick={() => setIsDistractionFree(false)}
                 className="flex items-center gap-1.5 text-sm font-bold text-primary transition-colors hover:text-primary-dark"
@@ -272,6 +448,17 @@ export default function WritingPlayer() {
             </motion.div>
           )}
         </AnimatePresence>
+
+        {saveConflictMessage ? (
+          <div className="shrink-0 border-b border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+            <div className="mx-auto flex max-w-5xl flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="leading-6">{saveConflictMessage}</p>
+              <Button size="sm" variant="outline" onClick={() => window.location.reload()}>
+                Reload saved draft
+              </Button>
+            </div>
+          </div>
+        ) : null}
 
         {/* Main Workspace */}
         <main className="flex flex-1 min-h-0 flex-col overflow-hidden">
@@ -317,7 +504,7 @@ export default function WritingPlayer() {
                     <WritingCaseNotesPanel
                       caseNotes={task.caseNotes}
                       scratchpad={scratchpad}
-                      onScratchpadChange={setScratchpad}
+                      onScratchpadChange={handleScratchpadChange}
                       checklist={checklist}
                       onChecklistChange={handleChecklistChange}
                       activeTab={activeTab}
@@ -370,7 +557,7 @@ export default function WritingPlayer() {
               <WritingCaseNotesPanel
                 caseNotes={task.caseNotes}
                 scratchpad={scratchpad}
-                onScratchpadChange={setScratchpad}
+                onScratchpadChange={handleScratchpadChange}
                 checklist={checklist}
                 onChecklistChange={handleChecklistChange}
                 activeTab={activeTab}

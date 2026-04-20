@@ -1,7 +1,18 @@
 import { screen } from '@testing-library/react';
-const { mockFetchMockReport, mockTrack } = vi.hoisted(() => ({
+const {
+  mockFetchMockReport,
+  mockTrack,
+  mockFetchVocabularyTerms,
+  mockAddToMyVocabulary,
+  mockLookupVocabularyTerm,
+  mockRequestVocabularyGloss,
+} = vi.hoisted(() => ({
   mockFetchMockReport: vi.fn(),
   mockTrack: vi.fn(),
+  mockFetchVocabularyTerms: vi.fn(),
+  mockAddToMyVocabulary: vi.fn(),
+  mockLookupVocabularyTerm: vi.fn(),
+  mockRequestVocabularyGloss: vi.fn(),
 }));
 
 vi.mock('next/link', () => ({
@@ -23,6 +34,10 @@ vi.mock('@/lib/analytics', () => ({
 
 vi.mock('@/lib/api', () => ({
   fetchMockReport: mockFetchMockReport,
+  fetchVocabularyTerms: mockFetchVocabularyTerms,
+  addToMyVocabulary: mockAddToMyVocabulary,
+  lookupVocabularyTerm: mockLookupVocabularyTerm,
+  requestVocabularyGloss: mockRequestVocabularyGloss,
 }));
 
 import MockReportPage from './page';
@@ -52,6 +67,10 @@ describe('Mock report page', () => {
         description: 'More work is needed on exact detail extraction under time pressure.',
       },
     });
+    mockFetchVocabularyTerms.mockResolvedValue({ items: [] });
+    mockAddToMyVocabulary.mockResolvedValue(undefined);
+    mockLookupVocabularyTerm.mockResolvedValue(null);
+    mockRequestVocabularyGloss.mockResolvedValue(null);
   });
 
   it('renders through the shared learner dashboard shell without a second page-root width wrapper', async () => {

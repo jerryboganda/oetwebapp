@@ -1088,6 +1088,11 @@ public partial class LearnerService(
             .ToListAsync(cancellationToken))
             .OrderByDescending(x => x.GeneratedAt)
             .FirstOrDefault();
+        var drillContentId = await db.ContentItems
+            .Where(x => x.SubtestCode == "writing" && x.Status == ContentStatus.Published)
+            .OrderBy(x => x.Title)
+            .Select(x => x.Id)
+            .FirstOrDefaultAsync(cancellationToken);
         var criterionDrillLibrary = latestEvaluation is not null
             ? JsonSupport.Deserialize<List<Dictionary<string, object?>>>(latestEvaluation.CriterionScoresJson, [])
                 .OrderBy(x => ParseCriterionScore(x.GetValueOrDefault("scoreRange")?.ToString()))
@@ -1097,7 +1102,7 @@ public partial class LearnerService(
                     criterionCode = x.GetValueOrDefault("criterionCode")?.ToString(),
                     criterionLabel = CriterionLabelFromCode(x.GetValueOrDefault("criterionCode")?.ToString()),
                     rationale = x.GetValueOrDefault("explanation")?.ToString() ?? "Target this criterion with a focused writing drill.",
-                    route = $"/writing/tasks?criterion={x.GetValueOrDefault("criterionCode")}"
+                    route = WritingPlayerRoute(drillContentId, criterionCode: x.GetValueOrDefault("criterionCode")?.ToString())
                 })
                 .ToList<object>()
             : tasks.Take(3).Select(task => task).ToList();
@@ -1126,7 +1131,9 @@ public partial class LearnerService(
                     contentId = attempt.ContentId,
                     state = ToApiState(attempt.State),
                     scoreEstimate = evaluation?.ScoreRange,
-                    route = evaluation?.Id is null ? $"/writing/attempt/{attempt.Id}" : $"/writing/result/{evaluation.Id}"
+                    route = evaluation?.Id is null
+                        ? WritingPlayerRoute(attempt.ContentId, attempt.Id)
+                        : $"/writing/result?id={Uri.EscapeDataString(evaluation.Id)}"
                 };
             }),
             reviewCredits = new
@@ -1145,8 +1152,14 @@ public partial class LearnerService(
             latestEvaluation = latestEvaluation is null ? null : await GetWritingEvaluationSummaryAsync(userId, latestEvaluation.Id, cancellationToken),
             actions = new[]
             {
-                new { label = "Browse Writing Tasks", route = "/writing/tasks" },
-                new { label = draftAttempt is null ? "Start Writing Task" : "Resume Draft", route = draftAttempt is null ? "/writing/tasks" : $"/writing/attempt/{draftAttempt.Id}" }
+                new { label = "Browse Writing Tasks", route = "/writing/library" },
+                new
+                {
+                    label = draftAttempt is null ? "Start Writing Task" : "Resume Draft",
+                    route = draftAttempt is null
+                        ? "/writing/library"
+                        : WritingPlayerRoute(draftAttempt.ContentId, draftAttempt.Id)
+                }
             }
         };
     }
@@ -1172,7 +1185,8 @@ public partial class LearnerService(
             ["modeSupport"] = JsonSupport.Deserialize<List<string>>(item.ModeSupportJson, []),
             ["publishedRevisionId"] = item.PublishedRevisionId,
             ["status"] = ToContentStatus(item.Status),
-            ["caseNotes"] = item.CaseNotes
+            ["caseNotes"] = item.CaseNotes,
+            ["route"] = WritingPlayerRoute(item.Id)
         }, detail);
     }
 
@@ -1332,7 +1346,8 @@ public partial class LearnerService(
             escalationRecommended = ShouldRecommendHumanReview(evaluation.ConfidenceBand),
             statusReasonCode = evaluation.StatusReasonCode,
             retryable = evaluation.Retryable,
-            retryAfterMs = evaluation.RetryAfterMs
+            retryAfterMs = evaluation.RetryAfterMs,
+            letterBody = attempt.DraftContent
         };
     }
 
@@ -3509,8 +3524,24 @@ public partial class LearnerService(
             scenarioType = item.ScenarioType,
             modeSupport = JsonSupport.Deserialize<List<string>>(item.ModeSupportJson, []),
             publishedRevisionId = item.PublishedRevisionId,
-            status = ToContentStatus(item.Status)
+            status = ToContentStatus(item.Status),
+            route = subtest == "writing" ? WritingPlayerRoute(item.Id) : null
         }).ToList();
+    }
+
+    private static string WritingPlayerRoute(string? contentId, string? attemptId = null, string? criterionCode = null)
+    {
+        var parameters = new List<string>();
+        if (!string.IsNullOrWhiteSpace(contentId))
+            parameters.Add($"taskId={Uri.EscapeDataString(contentId)}");
+        if (!string.IsNullOrWhiteSpace(attemptId))
+            parameters.Add($"attemptId={Uri.EscapeDataString(attemptId)}");
+        if (!string.IsNullOrWhiteSpace(criterionCode))
+            parameters.Add($"criterion={Uri.EscapeDataString(criterionCode)}");
+
+        return parameters.Count == 0
+            ? "/writing/player"
+            : $"/writing/player?{string.Join("&", parameters)}";
     }
 
     private async Task<object> CreateAttemptAsync(string userId, CreateAttemptRequest request, string subtest, CancellationToken cancellationToken)
@@ -3579,6 +3610,7 @@ public partial class LearnerService(
             comparisonGroupId = attempt.ComparisonGroupId,
             deviceType = attempt.DeviceType,
             lastClientSyncAt = attempt.LastClientSyncAt,
+            route = attempt.SubtestCode == "writing" ? WritingPlayerRoute(attempt.ContentId, attempt.Id) : null,
             draftContent = attempt.DraftContent,
             scratchpad = attempt.Scratchpad,
             checklist = JsonSupport.Deserialize<Dictionary<string, bool>>(attempt.ChecklistJson, new Dictionary<string, bool>()),
@@ -3596,7 +3628,8 @@ public partial class LearnerService(
                 ["estimatedDurationMinutes"] = content.EstimatedDurationMinutes,
                 ["caseNotes"] = content.CaseNotes,
                 ["scenarioType"] = content.ScenarioType,
-                ["criteriaFocus"] = JsonSupport.Deserialize<List<string>>(content.CriteriaFocusJson, [])
+                ["criteriaFocus"] = JsonSupport.Deserialize<List<string>>(content.CriteriaFocusJson, []),
+                ["route"] = content.SubtestCode == "writing" ? WritingPlayerRoute(content.Id, attempt.Id) : null
             }, detail)
         };
     }

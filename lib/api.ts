@@ -346,6 +346,76 @@ export class ApiError extends Error {
   }
 }
 
+export interface WritingDraftPayload {
+  attemptId?: string | null;
+  content: string;
+  scratchpad?: string | null;
+  checklist?: Record<string, boolean> | null;
+  draftVersion?: number | null;
+}
+
+export interface WritingDraftSaveResponse {
+  attemptId: string;
+  saved: boolean;
+  draftVersion: number;
+  lastSavedAt: string | null;
+  state?: string;
+  saveState?: ApiRecord;
+}
+
+export interface WritingAttempt {
+  attemptId: string;
+  contentId: string;
+  draftVersion: number;
+  elapsedSeconds: number;
+  content: string;
+  scratchpad: string;
+  checklist: Record<string, boolean>;
+  state: string;
+  route?: string;
+  lastClientSyncAt?: string | null;
+  task?: WritingTask;
+}
+
+export interface WritingEvaluationSummary {
+  evaluationId?: string;
+  attemptId?: string;
+  taskId?: string;
+  taskTitle?: string;
+  state?: string;
+  scoreRange?: string;
+  gradeRange?: string;
+  confidenceBand?: string;
+  confidenceLabel?: string;
+  strengths?: string[];
+  issues?: string[];
+  letterBody?: string;
+  generatedAt?: string;
+  route?: string;
+}
+
+export interface WritingCriterionDrill {
+  criterionCode?: string;
+  criterionLabel?: string;
+  title?: string;
+  rationale?: string;
+  route?: string;
+  taskId?: string;
+  contentId?: string;
+}
+
+export interface WritingHome {
+  recommendedTask?: WritingTask | ApiRecord | null;
+  practiceLibrary?: Array<WritingTask | ApiRecord>;
+  criterionDrillLibrary?: WritingCriterionDrill[];
+  pastSubmissions?: Array<WritingSubmission | ApiRecord>;
+  reviewCredits?: ApiRecord;
+  latestEvaluation?: WritingEvaluationSummary | ApiRecord | null;
+  fullMockEntry?: ApiRecord | null;
+  actions?: Array<{ label: string; route: string }>;
+  [key: string]: unknown;
+}
+
 export interface WritingLintResponse {
   findings: LintFinding[];
   totals: { critical: number; major: number; minor: number; info: number };
@@ -670,15 +740,92 @@ async function resolveReviewTarget(submissionId: string): Promise<{ attemptId: s
 }
 
 function mapWritingTask(item: ApiRecord): WritingTask {
+  const contentId = item.contentId ?? item.id;
+  const criteriaFocusCodes = Array.isArray(item.criteriaFocus)
+    ? item.criteriaFocus.map((criterion: unknown) => String(criterion)).filter(Boolean)
+    : [];
+  const estimatedDurationMinutes = typeof item.estimatedDurationMinutes === 'number'
+    ? item.estimatedDurationMinutes
+    : Number.isFinite(Number(item.estimatedDurationMinutes))
+      ? Number(item.estimatedDurationMinutes)
+      : undefined;
+
   return {
-    id: item.contentId,
-    title: item.title,
-    difficulty: titleCase(item.difficulty) as WritingTask['difficulty'],
-    profession: titleCase(item.professionId),
-    time: minutesToLabel(item.estimatedDurationMinutes),
-    criteriaFocus: Array.isArray(item.criteriaFocus) ? item.criteriaFocus.map(normalizeCriterionName).join(', ') : '',
-    scenarioType: titleCase(item.scenarioType),
+    id: contentId,
+    contentId,
+    title: item.title ?? 'Writing task',
+    difficulty: titleCase(item.difficulty ?? 'medium') as WritingTask['difficulty'],
+    profession: titleCase(item.professionId ?? item.profession ?? 'medicine'),
+    professionId: item.professionId ?? item.profession,
+    time: minutesToLabel(estimatedDurationMinutes ?? 45),
+    estimatedDurationMinutes,
+    durationSeconds: estimatedDurationMinutes ? estimatedDurationMinutes * 60 : undefined,
+    criteriaFocus: criteriaFocusCodes.length > 0 ? criteriaFocusCodes.map(normalizeCriterionName).join(', ') : String(item.criteriaFocus ?? ''),
+    criteriaFocusCodes,
+    scenarioType: titleCase(item.scenarioType ?? item.letterType ?? 'writing task'),
     caseNotes: item.caseNotes ?? '',
+    route: item.route,
+    status: item.status,
+    modeSupport: Array.isArray(item.modeSupport) ? item.modeSupport.map(String) : undefined,
+    publishedRevisionId: item.publishedRevisionId,
+  };
+}
+
+function mapWritingAttempt(item: ApiRecord): WritingAttempt {
+  const contentRecord = asRecord(item.content);
+  const contentId = item.contentId ?? contentRecord.contentId ?? contentRecord.id;
+  const checklist = asRecord(item.checklist) as Record<string, boolean>;
+  const draftVersion = Number(item.draftVersion ?? 1);
+  const elapsedSeconds = Number(item.elapsedSeconds ?? 0);
+
+  return {
+    attemptId: item.attemptId ?? item.id,
+    contentId,
+    draftVersion: Number.isFinite(draftVersion) ? draftVersion : 1,
+    elapsedSeconds: Number.isFinite(elapsedSeconds) ? elapsedSeconds : 0,
+    content: item.draftContent ?? item.contentText ?? item.content ?? '',
+    scratchpad: item.scratchpad ?? '',
+    checklist,
+    state: item.state ?? 'in_progress',
+    route: item.route,
+    lastClientSyncAt: item.lastClientSyncAt ?? null,
+    task: contentId ? mapWritingTask({ ...contentRecord, contentId }) : undefined,
+  };
+}
+
+function normalizeWritingHome(data: ApiRecord): WritingHome {
+  return {
+    ...data,
+    recommendedTask: data.recommendedTask ? mapWritingTask(asRecord(data.recommendedTask)) : null,
+    practiceLibrary: Array.isArray(data.practiceLibrary)
+      ? data.practiceLibrary.map((item: unknown) => mapWritingTask(asRecord(item)))
+      : undefined,
+    criterionDrillLibrary: Array.isArray(data.criterionDrillLibrary)
+      ? data.criterionDrillLibrary.map((item: unknown) => asRecord(item) as WritingCriterionDrill)
+      : undefined,
+    pastSubmissions: Array.isArray(data.pastSubmissions)
+      ? data.pastSubmissions.map((item: unknown) => mapWritingSubmission(asRecord(item)))
+      : undefined,
+  };
+}
+
+function mapWritingSubmission(item: ApiRecord): WritingSubmission {
+  const evaluationId = item.evaluationId ?? item.id;
+  const attemptId = item.attemptId ?? item.submissionId;
+  const submissionId = evaluationId ?? attemptId ?? item.contentId ?? 'writing-submission';
+  return {
+    id: submissionId,
+    attemptId,
+    taskId: item.contentId ?? item.taskId ?? submissionId,
+    taskTitle: item.taskName ?? item.taskTitle ?? item.title ?? 'Writing task',
+    content: item.content ?? '',
+    wordCount: Number(item.wordCount ?? 0),
+    submittedAt: item.attemptDate ?? item.submittedAt ?? item.generatedAt ?? new Date().toISOString(),
+    evalStatus: item.evaluationId || item.state === 'completed' ? 'completed' : toEvalStatus(item.state ?? item.evalStatus),
+    scoreEstimate: scoreRangeDisplay(item.scoreEstimate ?? item.scoreRange),
+    reviewStatus: toReviewStatus(item.reviewStatus),
+    route: item.route,
+    state: item.state,
   };
 }
 
@@ -976,9 +1123,9 @@ export async function fetchListeningHome(): Promise<ApiRecord> {
   return normalizeRouteValues(data);
 }
 
-export async function fetchWritingHome(): Promise<ApiRecord> {
+export async function fetchWritingHome(): Promise<WritingHome> {
   const data = await apiRequest<ApiRecord>('/v1/writing/home');
-  return normalizeRouteValues(data);
+  return normalizeWritingHome(normalizeRouteValues(data));
 }
 
 export async function fetchSpeakingHome(): Promise<ApiRecord> {
@@ -1086,23 +1233,77 @@ export async function fetchWritingChecklist(): Promise<ChecklistItem[]> {
   return criteria.map((criterion, index) => ({ id: index + 1, text: criterion.label, completed: false }));
 }
 
-export async function submitWritingDraft(taskId: string, content: string): Promise<{ saved: boolean }> {
-  const attempt = await ensureAttempt('writing', taskId, 'timed');
-  const saved = await apiRequest<ApiRecord>(`/v1/writing/attempts/${attempt.attemptId}/draft`, {
-    method: 'PATCH',
-    body: JSON.stringify({ content, scratchpad: null, checklist: null, draftVersion: attempt.draftVersion ?? 1 }),
-  });
-  return { saved: Boolean(saved.saved) };
+export async function resolveWritingAttempt(input: { taskId?: string | null; attemptId?: string | null; mode?: string } = {}): Promise<WritingAttempt> {
+  if (input.attemptId) {
+    const existing = await apiRequest<ApiRecord>(`/v1/writing/attempts/${input.attemptId}`);
+    const mapped = mapWritingAttempt(existing);
+    if (mapped.contentId) {
+      cacheSet(attemptCacheKey('writing', mapped.contentId), mapped.attemptId);
+    }
+    return mapped;
+  }
+
+  if (!input.taskId) {
+    throw new ApiError(400, 'writing_attempt_missing', 'A writing task or attempt is required.', false);
+  }
+
+  const created = await ensureAttempt('writing', input.taskId, input.mode ?? 'timed');
+  return mapWritingAttempt(created);
 }
 
-export async function submitWritingTask(taskId: string, content: string): Promise<WritingSubmission> {
-  const attempt = await ensureAttempt('writing', taskId, 'timed');
-  await apiRequest(`/v1/writing/attempts/${attempt.attemptId}/draft`, {
+export async function heartbeatWritingAttempt(attemptId: string, elapsedSeconds: number): Promise<{ attemptId: string; elapsedSeconds: number; lastClientSyncAt?: string }> {
+  return apiRequest<{ attemptId: string; elapsedSeconds: number; lastClientSyncAt?: string }>(`/v1/writing/attempts/${attemptId}/heartbeat`, {
     method: 'PATCH',
-    body: JSON.stringify({ content, scratchpad: null, checklist: null, draftVersion: attempt.draftVersion ?? 1 }),
+    body: JSON.stringify({ elapsedSeconds, deviceType: 'web' }),
+  });
+}
+
+export async function submitWritingDraft(taskId: string, payloadOrContent: string | WritingDraftPayload): Promise<WritingDraftSaveResponse> {
+  const payload: WritingDraftPayload = typeof payloadOrContent === 'string'
+    ? { content: payloadOrContent }
+    : payloadOrContent;
+  const attempt = payload.attemptId
+    ? await resolveWritingAttempt({ attemptId: payload.attemptId })
+    : await resolveWritingAttempt({ taskId, mode: 'timed' });
+  const saved = await apiRequest<ApiRecord>(`/v1/writing/attempts/${attempt.attemptId}/draft`, {
+    method: 'PATCH',
+    body: JSON.stringify({
+      content: payload.content,
+      scratchpad: payload.scratchpad ?? '',
+      checklist: payload.checklist ?? {},
+      draftVersion: payload.draftVersion ?? attempt.draftVersion ?? 1,
+    }),
   });
 
-  const submitted = await apiRequest<ApiRecord>(`/v1/writing/attempts/${attempt.attemptId}/submit`, {
+  const contentId = attempt.contentId || taskId;
+  if (contentId) {
+    cacheSet(attemptCacheKey('writing', contentId), saved.attemptId ?? attempt.attemptId);
+  }
+
+  return {
+    attemptId: saved.attemptId ?? attempt.attemptId,
+    saved: Boolean(saved.saved),
+    draftVersion: Number(saved.draftVersion ?? attempt.draftVersion ?? 1),
+    lastSavedAt: saved.lastSavedAt ?? saved.saveState?.lastSavedAt ?? null,
+    state: saved.state,
+    saveState: saved.saveState,
+  };
+}
+
+export async function submitWritingTask(
+  taskId: string,
+  content: string,
+  options: { attemptId?: string | null; scratchpad?: string | null; checklist?: Record<string, boolean> | null; draftVersion?: number | null } = {},
+): Promise<WritingSubmission> {
+  const saved = await submitWritingDraft(taskId, {
+    attemptId: options.attemptId,
+    content,
+    scratchpad: options.scratchpad,
+    checklist: options.checklist,
+    draftVersion: options.draftVersion,
+  });
+
+  const submitted = await apiRequest<ApiRecord>(`/v1/writing/attempts/${saved.attemptId}/submit`, {
     method: 'POST',
     body: JSON.stringify({ content, idempotencyKey: crypto.randomUUID?.() ?? String(Date.now()) }),
   });
@@ -1114,12 +1315,14 @@ export async function submitWritingTask(taskId: string, content: string): Promis
   return {
     id: submitted.evaluationId,
     taskId,
+    attemptId: saved.attemptId,
     taskTitle: task.title,
     content,
     wordCount: content.split(/\s+/).filter(Boolean).length,
     submittedAt: new Date().toISOString(),
     evalStatus: toEvalStatus(submitted.state),
     reviewStatus: 'not_requested',
+    route: submitted.evaluationId ? `/writing/result?id=${encodeURIComponent(submitted.evaluationId)}` : `/writing/player?attemptId=${encodeURIComponent(saved.attemptId)}`,
   };
 }
 
@@ -1150,6 +1353,7 @@ export async function fetchWritingResult(resultId: string): Promise<WritingResul
     topStrengths: summary.strengths ?? [],
     topIssues: summary.issues ?? [],
     criteria,
+    letterBody: summary.letterBody ?? '',
     submittedAt: summary.generatedAt ?? new Date().toISOString(),
     evalStatus: toEvalStatus(summary.state),
   };
@@ -1159,17 +1363,7 @@ export async function fetchWritingSubmissions(): Promise<WritingSubmission[]> {
   const response = await apiRequest<{ items: ApiRecord[] }>('/v1/submissions');
   return response.items
     .filter((item) => String(item.subtest).toLowerCase() === 'writing')
-    .map((item) => ({
-      id: item.evaluationId ?? item.submissionId,
-      taskId: item.contentId,
-      taskTitle: item.taskName,
-      content: '',
-      wordCount: 0,
-      submittedAt: item.attemptDate,
-      evalStatus: item.evaluationId ? 'completed' : 'processing',
-      scoreEstimate: scoreRangeDisplay(item.scoreEstimate),
-      reviewStatus: toReviewStatus(item.reviewStatus),
-    }));
+    .map(mapWritingSubmission);
 }
 
 export async function fetchCriteriaDeltas(): Promise<CriteriaDelta[]> {
@@ -5227,7 +5421,13 @@ export async function rateTutoringSession(sessionId: string, rating: number, fee
 
 // ── AI Conversation ─────────────────────────────────────────────────────
 
-export async function createConversation(params: { contentId?: string; examFamilyCode: string; taskTypeCode: string }) {
+export async function createConversation(params: {
+  contentId?: string;
+  examFamilyCode?: string;
+  taskTypeCode: string;
+  profession?: string;
+  difficulty?: string;
+}) {
   return apiRequest('/v1/conversations', {
     method: 'POST',
     body: JSON.stringify(params),
@@ -5250,6 +5450,67 @@ export async function getConversationEvaluation(sessionId: string) {
 
 export async function getConversationHistory(page = 1, pageSize = 10) {
   return apiRequest(`/v1/conversations/history?page=${page}&pageSize=${pageSize}`);
+}
+
+export async function getConversationTaskTypes() {
+  return apiRequest('/v1/conversations/task-types');
+}
+
+export async function getConversationEntitlement() {
+  return apiRequest('/v1/conversations/entitlement');
+}
+
+// ── Admin: Conversation Templates ──────────────────────────────────────
+
+export async function fetchAdminConversationTemplates(params?: {
+  profession?: string;
+  status?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  const q = new URLSearchParams();
+  if (params?.profession) q.set('profession', params.profession);
+  if (params?.status) q.set('status', params.status);
+  if (params?.search) q.set('search', params.search);
+  if (params?.page) q.set('page', String(params.page));
+  if (params?.pageSize) q.set('pageSize', String(params.pageSize));
+  const qs = q.toString();
+  return apiRequest(`/v1/admin/conversation/templates${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchAdminConversationTemplate(templateId: string) {
+  return apiRequest(`/v1/admin/conversation/templates/${encodeURIComponent(templateId)}`);
+}
+
+export async function createAdminConversationTemplate(body: Record<string, unknown>) {
+  return apiRequest('/v1/admin/conversation/templates', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateAdminConversationTemplate(templateId: string, body: Record<string, unknown>) {
+  return apiRequest(`/v1/admin/conversation/templates/${encodeURIComponent(templateId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function publishAdminConversationTemplate(templateId: string) {
+  return apiRequest(`/v1/admin/conversation/templates/${encodeURIComponent(templateId)}/publish`, {
+    method: 'POST',
+  });
+}
+
+export async function archiveAdminConversationTemplate(templateId: string) {
+  return apiRequest(`/v1/admin/conversation/templates/${encodeURIComponent(templateId)}/archive`, {
+    method: 'POST',
+  });
+}
+
+export async function fetchAdminConversationSettings() {
+  return apiRequest('/v1/admin/conversation/settings');
 }
 
 // ── Writing Coach ───────────────────────────────────────────────────────

@@ -476,6 +476,70 @@ export function pronunciationProjectedBand(overall0To100: number): PassFailResul
 }
 
 // ---------------------------------------------------------------------------
+// Conversation projection (advisory) — OET Speaking practice rubric
+// ---------------------------------------------------------------------------
+//
+// AI Conversation sessions grade learners on the 4-criterion rubric
+// (Intelligibility, Fluency, Appropriateness, Grammar & Expression), each
+// scored 0–6. We project the weighted mean onto the 0–500 scale anchored at
+// 350/500 = PASS. Advisory only — never a substitute for expert grading.
+//
+// Anchors (mean06 → scaled):
+//   0   → 0
+//   3   → 250
+//   4.2 → 350   (PASS — 70% of max)
+//   5   → 417
+//   6   → 500
+//
+// Between anchors: piecewise-linear interpolation.
+
+const CONVERSATION_ANCHORS: ReadonlyArray<readonly [number, number]> = [
+  [0, 0],
+  [3, 250],
+  [4.2, 350],
+  [5, 417],
+  [6, 500],
+] as const;
+
+/**
+ * Project a conversation rubric mean (0–6) onto the OET Speaking 0–500 scale.
+ * Advisory only.
+ */
+export function conversationProjectedScaled(mean0To6: number): number {
+  if (!Number.isFinite(mean0To6)) return 0;
+  const m = Math.max(0, Math.min(6, mean0To6));
+  for (let i = 0; i < CONVERSATION_ANCHORS.length - 1; i++) {
+    const [fromM, fromS] = CONVERSATION_ANCHORS[i];
+    const [toM, toS] = CONVERSATION_ANCHORS[i + 1];
+    if (m >= fromM && m <= toM) {
+      const span = toM - fromM || 1;
+      const ratio = (m - fromM) / span;
+      return Math.round(fromS + ratio * (toS - fromS));
+    }
+  }
+  return OET_SCALED_MAX;
+}
+
+/**
+ * Convenience: project from the 4 criteria directly to a Speaking PassFailResult.
+ */
+export function conversationProjectedBand(
+  intelligibility06: number,
+  fluency06: number,
+  appropriateness06: number,
+  grammarExpression06: number,
+): PassFailResult {
+  const clamp = (v: number) => Math.max(0, Math.min(6, Number.isFinite(v) ? v : 0));
+  const mean =
+    (clamp(intelligibility06) +
+      clamp(fluency06) +
+      clamp(appropriateness06) +
+      clamp(grammarExpression06)) /
+    4;
+  return gradeSpeaking(conversationProjectedScaled(mean));
+}
+
+// ---------------------------------------------------------------------------
 // Display formatting
 // ---------------------------------------------------------------------------
 
