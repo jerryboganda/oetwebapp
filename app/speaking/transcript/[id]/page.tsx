@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero, LearnerSurfaceSectionHeader, RulebookFindingsPanel } from '@/components/domain';
+import { SelectionToVocab } from '@/components/domain/vocabulary';
 import { AudioPlayerWaveform } from '@/components/domain/audio-player-waveform';
 import { analytics } from '@/lib/analytics';
 import { fetchSettingsSection, fetchTranscript } from '@/lib/api';
@@ -147,7 +148,7 @@ export default function SpeakingTranscriptPage() {
               className="mb-4"
             />
 
-            <div className="space-y-4">
+            <SelectionToVocab source="speaking" sourceRefPrefix={`speaking:${resultId}`} className="space-y-4">
               {review.transcript.map((line) => (
                 <div key={line.id} className="rounded-2xl border border-gray-100 bg-background-light p-4">
                   <div className="flex items-start justify-between gap-4">
@@ -172,7 +173,7 @@ export default function SpeakingTranscriptPage() {
                   ) : null}
                 </div>
               ))}
-            </div>
+            </SelectionToVocab>
           </div>
 
           <div className="space-y-6">

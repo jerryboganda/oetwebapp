@@ -17,6 +17,7 @@ import {
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { OetStatementOfResultsCard } from '@/components/domain';
+import { MockVocabularyReview } from '@/components/domain/vocabulary';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { fetchMockReport } from '@/lib/api';
@@ -190,9 +191,17 @@ function MockReportContent() {
           </div>
         </MotionSection>
 
-        {/* 5. Study Plan CTA */}
+        {/* 5. Words to Review — surfaces OET vocabulary tied to the weakest criterion */}
+        <MockVocabularyReview
+          mockId={report.id}
+          weakSubtest={report.weakestCriterion.subtest}
+          weakCriterion={report.weakestCriterion.criterion}
+          weakDescription={report.weakestCriterion.description}
+        />
+
+        {/* 6. Study Plan CTA */}
         <MotionSection
-          delayIndex={4}
+          delayIndex={5}
           className="pt-4"
         >
           <div className="bg-navy rounded-[32px] p-8 text-center text-white relative overflow-hidden shadow-lg">

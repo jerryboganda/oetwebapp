@@ -66,6 +66,10 @@ public static partial class SeedData
             SeedVocabularyTerms(db);
             hasChanges = true;
         }
+        else if (await EnsureMissingOetVocabularyBankAsync(db, cancellationToken))
+        {
+            hasChanges = true;
+        }
 
         if (!await db.ForumCategories.AnyAsync(cancellationToken))
         {
@@ -1957,6 +1961,17 @@ public static partial class SeedData
             new VocabularyTerm { Id = "vt-024", Term = "consent", Definition = "Permission granted for medical treatment or procedure, especially informed consent.", ExampleSentence = "Written informed consent was obtained before the procedure.", ContextNotes = "Critical ethical and legal concept in OET healthcare scenarios.", ExamTypeCode = "oet", Category = "clinical_communication", Difficulty = "easy", SynonymsJson = """["agreement","permission","authorisation"]""", CollocationsJson = """["informed consent","written consent","consent form","capacity to consent","consent obtained"]""", RelatedTermsJson = """["capacity","autonomy","refusal"]""", Status = "active" },
             new VocabularyTerm { Id = "vt-025", Term = "idiopathic", Definition = "Relating to a disease or condition that arises spontaneously and for which no cause is known.", ExampleSentence = "The diagnosis was idiopathic pulmonary fibrosis.", ContextNotes = "Use when no identifiable cause has been determined despite investigation.", ExamTypeCode = "oet", Category = "medical", Difficulty = "hard", SynonymsJson = """["unknown cause","of unknown origin"]""", CollocationsJson = """["idiopathic disease","idiopathic pulmonary fibrosis","idiopathic hypertension"]""", RelatedTermsJson = """["aetiology","primary","secondary"]""", Status = "active" }
         );
+
+        // Extend with the full OET medical vocabulary bank while keeping the
+        // original canonical demo terms stable and avoiding duplicate terms.
+        var seededKeys = db.ChangeTracker
+            .Entries<VocabularyTerm>()
+            .Select(entry => VocabularySeedKey(entry.Entity.Term, entry.Entity.ExamTypeCode, entry.Entity.ProfessionId))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        db.VocabularyTerms.AddRange(
+            BuildOetVocabularyBank()
+                .Where(term => seededKeys.Add(VocabularySeedKey(term.Term, term.ExamTypeCode, term.ProfessionId))));
     }
 
     private static void SeedForumCategories(LearnerDbContext db)

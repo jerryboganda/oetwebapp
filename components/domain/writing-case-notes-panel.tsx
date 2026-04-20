@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import { SelectionToVocab } from '@/components/domain/vocabulary';
 
 interface WritingCaseNotesPanelProps {
   caseNotes: string;
@@ -10,12 +11,14 @@ interface WritingCaseNotesPanelProps {
   onChecklistChange?: (id: string, checked: boolean) => void;
   activeTab?: 'notes' | 'scratchpad' | 'checklist';
   onTabChange?: (tab: 'notes' | 'scratchpad' | 'checklist') => void;
+  /** Optional identifier used to tag saved terms with a source ref. */
+  taskId?: string;
   className?: string;
 }
 
 export function WritingCaseNotesPanel({
   caseNotes, scratchpad = '', onScratchpadChange,
-  checklist, onChecklistChange, activeTab = 'notes', onTabChange, className,
+  checklist, onChecklistChange, activeTab = 'notes', onTabChange, className, taskId,
 }: WritingCaseNotesPanelProps) {
   return (
     <div className={cn('flex flex-col h-full bg-surface border-r border-gray-200', className)}>
@@ -40,7 +43,12 @@ export function WritingCaseNotesPanel({
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-4 text-sm">
         {activeTab === 'notes' && (
-          <div className="prose prose-sm max-w-none text-navy whitespace-pre-wrap">{caseNotes}</div>
+          <SelectionToVocab
+            source="writing"
+            sourceRefPrefix={taskId ? `writing:${taskId}` : 'writing:case-notes'}
+          >
+            <div className="prose prose-sm max-w-none text-navy whitespace-pre-wrap">{caseNotes}</div>
+          </SelectionToVocab>
         )}
         {activeTab === 'scratchpad' && (
           <textarea

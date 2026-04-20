@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { SelectionToVocab } from '@/components/domain/vocabulary';
 import { analytics } from '@/lib/analytics';
 import { fetchListeningReview } from '@/lib/api';
 import type { ListeningReview } from '@/lib/mock-data';
@@ -84,9 +85,11 @@ export default function ListeningReviewPage() {
                   </div>
                   <p className="mt-4 text-sm text-muted">{question.explanation}</p>
                   {question.transcriptExcerpt ? (
-                    <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
-                      Transcript clue: {question.transcriptExcerpt}
-                    </div>
+                    <SelectionToVocab source="listening" sourceRefPrefix={`listening:${taskId}:${question.id}`}>
+                      <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+                        Transcript clue: {question.transcriptExcerpt}
+                      </div>
+                    </SelectionToVocab>
                   ) : null}
                   {question.distractorExplanation ? (
                     <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-900">

@@ -3,16 +3,21 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { MotionItem } from '@/components/ui/motion-primitives';
-import { BookOpen, Layers, HelpCircle, Plus, Trash2, History, Flame } from 'lucide-react';
+import { BookOpen, Layers, HelpCircle, Plus, Trash2, History, Flame, Sparkles } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
-import { fetchMyVocabulary, fetchVocabularyStats, removeFromMyVocabulary } from '@/lib/api';
+import {
+  fetchMyVocabulary,
+  fetchVocabularyStats,
+  fetchVocabularyDailySet,
+  removeFromMyVocabulary,
+} from '@/lib/api';
 import { analytics } from '@/lib/analytics';
-import type { LearnerVocabulary, VocabularyStats } from '@/lib/types/vocabulary';
+import type { LearnerVocabulary, VocabularyStats, VocabularyDailySet } from '@/lib/types/vocabulary';
 
 type MyVocabItem = Pick<LearnerVocabulary, 'termId' | 'term' | 'mastery' | 'dueAt'>;
 
@@ -26,6 +31,7 @@ const MASTERY_COLORS: Record<string, string> = {
 export default function VocabularyPage() {
   const [myList, setMyList] = useState<MyVocabItem[]>([]);
   const [stats, setStats] = useState<VocabularyStats | null>(null);
+  const [dailySet, setDailySet] = useState<VocabularyDailySet | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [removing, setRemoving] = useState<Set<string>>(new Set());
@@ -38,13 +44,20 @@ export default function VocabularyPage() {
   async function loadAll() {
     setLoading(true);
     try {
-      const [listR, statsR] = await Promise.allSettled([fetchMyVocabulary(), fetchVocabularyStats()]);
+      const [listR, statsR, dailyR] = await Promise.allSettled([
+        fetchMyVocabulary(),
+        fetchVocabularyStats(),
+        fetchVocabularyDailySet(10),
+      ]);
       if (listR.status === 'fulfilled') {
         const items = Array.isArray(listR.value) ? listR.value : ((listR.value as { items?: MyVocabItem[] })?.items ?? []);
         setMyList(items as MyVocabItem[]);
       }
       if (statsR.status === 'fulfilled') {
         setStats(statsR.value as VocabularyStats);
+      }
+      if (dailyR.status === 'fulfilled') {
+        setDailySet(dailyR.value as VocabularyDailySet);
       }
       if (listR.status === 'rejected') setError('Could not load your word bank.');
     } finally {
@@ -147,6 +160,33 @@ export default function VocabularyPage() {
             </Card>
           ))}
         </div>
+      )}
+
+      {/* Daily set CTA — surfaces due + new cards for today */}
+      {dailySet && dailySet.cards.length > 0 && (
+        <Card className="rounded-3xl border-primary/30 bg-gradient-to-br from-primary/5 to-sky-50 p-5 shadow-sm">
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div className="min-w-0">
+              <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase text-primary">
+                <Sparkles className="h-3.5 w-3.5" />
+                Today&apos;s set
+              </div>
+              <h3 className="text-lg font-bold text-navy">
+                {dailySet.cards.length} cards · {dailySet.dueCount} due · {dailySet.newCount} new
+              </h3>
+              <p className="text-sm text-muted">
+                A focused spaced-repetition session to keep your momentum.
+              </p>
+            </div>
+            <Link
+              href="/vocabulary/flashcards"
+              className="inline-flex items-center gap-2 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90"
+            >
+              <Layers className="h-4 w-4" />
+              Start today&apos;s set
+            </Link>
+          </div>
+        </Card>
       )}
 
       {/* My list */}

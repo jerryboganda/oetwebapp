@@ -322,6 +322,7 @@ export default function WritingPlayer() {
                       onChecklistChange={handleChecklistChange}
                       activeTab={activeTab}
                       onTabChange={setActiveTab}
+                      taskId={task.id}
                       className="h-full border-r-0"
                     />
                   </motion.div>
@@ -374,6 +375,7 @@ export default function WritingPlayer() {
                 onChecklistChange={handleChecklistChange}
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
+                taskId={task.id}
               />
             </motion.div>
             <motion.div

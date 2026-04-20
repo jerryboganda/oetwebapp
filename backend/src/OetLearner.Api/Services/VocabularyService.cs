@@ -13,7 +13,8 @@ namespace OetLearner.Api.Services;
 /// </summary>
 public class VocabularyService(
     LearnerDbContext db,
-    ISpacedRepetitionScheduler scheduler)
+    ISpacedRepetitionScheduler scheduler,
+    GamificationService? gamification = null)
 {
     private const int FreeListSizeCap = 500;
 
@@ -179,6 +180,7 @@ public class VocabularyService(
         };
         db.LearnerVocabularies.Add(lv);
         await db.SaveChangesAsync(ct);
+        await TryEvaluateAchievementsAsync(userId, "vocab_added", ct);
         return new MyVocabularyAddResponse(true, ToMyItem(lv, term));
     }
 
@@ -236,6 +238,9 @@ public class VocabularyService(
         lv.LastReviewedAt = DateTimeOffset.UtcNow;
 
         await db.SaveChangesAsync(ct);
+
+        if (lv.Mastery == "mastered")
+            await TryEvaluateAchievementsAsync(userId, "vocab_mastered", ct);
 
         return new FlashcardReviewResponse(
             Id: lv.Id,
@@ -598,6 +603,9 @@ public class VocabularyService(
 
         await db.SaveChangesAsync(ct);
 
+        if (newlyMastered.Count > 0)
+            await TryEvaluateAchievementsAsync(userId, "vocab_mastered", ct);
+
         // XP: 10 XP per correct answer + 25 XP completion bonus.
         var xp = result.CorrectCount * 10 + 25;
         var score = result.TermsQuizzed > 0
@@ -641,6 +649,24 @@ public class VocabularyService(
     }
 
     // ── Mapping helpers ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Best-effort achievement re-evaluation. Never fails the caller — if the
+    /// gamification service is unavailable or throws, the vocabulary action
+    /// is still considered successful.
+    /// </summary>
+    private async Task TryEvaluateAchievementsAsync(string userId, string trigger, CancellationToken ct)
+    {
+        if (gamification is null) return;
+        try
+        {
+            await gamification.CheckAndAwardAchievementsAsync(userId, trigger, ct);
+        }
+        catch
+        {
+            // Gamification must never break a vocabulary flow.
+        }
+    }
 
     private static VocabularyTermResponse Map(VocabularyTerm t) => new(
         Id: t.Id,

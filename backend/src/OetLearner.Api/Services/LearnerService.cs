@@ -3259,6 +3259,20 @@ public partial class LearnerService(
                 Section = "thisWeek",
                 ContentId = "lt-001",
                 ItemType = "drill"
+            },
+            new StudyPlanItem
+            {
+                Id = $"spi-{Guid.NewGuid():N}",
+                StudyPlanId = planId,
+                Title = "Vocabulary: Learn 10 new terms",
+                SubtestCode = "vocabulary",
+                DurationMinutes = 10,
+                Rationale = "Build your clinical lexicon with spaced-repetition flashcards and AI-gloss on unknown words.",
+                DueDate = today,
+                Status = StudyPlanItemStatus.NotStarted,
+                Section = "today",
+                ContentId = "vocabulary-daily-set",
+                ItemType = "vocabulary"
             }
         ];
     }
