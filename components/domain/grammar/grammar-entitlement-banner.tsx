@@ -27,23 +27,26 @@ export function GrammarEntitlementBanner({ entitlement, lessonId }: { entitlemen
       queueMicrotask(() => analytics.track('grammar_paywall_shown', { lessonId: lessonId ?? null, resetAt: entitlement.resetAt }));
     }
     return (
-      <Card className="border-amber-200 bg-amber-50 p-4 text-amber-900">
-        <div className="flex items-start gap-3">
-          <Lock className="mt-0.5 h-5 w-5 flex-none" />
+      <Card className="border-amber-200 bg-amber-50/70">
+        <div className="flex items-start gap-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-amber-100 text-amber-700">
+            <Lock className="h-5 w-5" />
+          </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-sm font-semibold">You&apos;ve reached your free grammar lessons for this week.</h2>
-            <p className="mt-1 text-sm">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-amber-700">Free tier limit reached</p>
+            <h2 className="mt-0.5 text-base font-bold text-navy">You&apos;ve reached your free grammar lessons for this week.</h2>
+            <p className="mt-1 text-sm leading-6 text-muted">
               {entitlement.reason}
-              {resetLabel ? <> Your allowance resets on <strong>{resetLabel}</strong>.</> : null}
+              {resetLabel ? <> Your allowance resets on <strong className="text-navy">{resetLabel}</strong>.</> : null}
             </p>
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-4 flex flex-wrap gap-2">
               <Link href="/billing" onClick={() => analytics.track('grammar_paywall_upgrade_clicked', { lessonId: lessonId ?? null })}>
-                <Button size="sm" className="inline-flex items-center gap-1">
+                <Button variant="primary" size="sm" className="inline-flex items-center gap-1.5">
                   <Sparkles className="h-3.5 w-3.5" /> Upgrade for unlimited
                 </Button>
               </Link>
               <Link href="/grammar">
-                <Button size="sm" variant="outline">Back to grammar home</Button>
+                <Button variant="outline" size="sm">Back to grammar home</Button>
               </Link>
             </div>
           </div>
@@ -54,11 +57,11 @@ export function GrammarEntitlementBanner({ entitlement, lessonId }: { entitlemen
 
   if (typeof entitlement.remaining === 'number' && entitlement.remaining <= 1) {
     return (
-      <Card className="border-primary/20 bg-primary/5 p-3 text-xs text-navy dark:text-white">
+      <Card className="border-primary/20 bg-primary/5 p-3 text-xs text-navy">
         <p>
           <strong>{entitlement.remaining}</strong> of {entitlement.limitPerWindow} free grammar lessons left this week.
           {' '}
-          <Link href="/billing" className="underline">Upgrade</Link> for unlimited practice.
+          <Link href="/billing" className="font-semibold text-primary underline-offset-2 hover:underline">Upgrade</Link> for unlimited practice.
         </p>
       </Card>
     );

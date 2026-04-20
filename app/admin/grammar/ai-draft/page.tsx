@@ -67,7 +67,7 @@ export default function GrammarAiDraftPage() {
         <Link href="/admin/grammar" className="text-muted hover:text-navy" aria-label="Back">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-navy dark:text-white">
+        <h1 className="flex items-center gap-2 text-2xl font-bold text-navy">
           <Wand2 className="h-5 w-5 text-primary" /> AI grammar draft
         </h1>
       </header>

@@ -112,11 +112,11 @@ export default function AdminGrammarTopicsPage() {
         <Link href="/admin/grammar" className="text-muted hover:text-navy" aria-label="Back">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <h1 className="text-2xl font-bold text-navy dark:text-white">Grammar Topics</h1>
+        <h1 className="text-2xl font-bold text-navy">Grammar Topics</h1>
       </header>
 
       <Card className="p-4">
-        <h2 className="mb-3 text-sm font-semibold text-navy dark:text-white">Create a new topic</h2>
+        <h2 className="mb-3 text-sm font-semibold text-navy">Create a new topic</h2>
         <div className="grid gap-3 sm:grid-cols-3">
           <Select
             value={newExam}
@@ -165,7 +165,7 @@ export default function AdminGrammarTopicsPage() {
                 <div className="flex items-start gap-2">
                   <span className="text-xl">{t.iconEmoji ?? '📘'}</span>
                   <div className="min-w-0 flex-1">
-                    <h3 className="truncate text-sm font-semibold text-navy dark:text-white">{t.name}</h3>
+                    <h3 className="truncate text-sm font-semibold text-navy">{t.name}</h3>
                     <p className="text-xs text-muted">{t.examTypeCode} · {t.slug} · {t.levelHint}</p>
                   </div>
                   <Badge className={t.status === 'published' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}>

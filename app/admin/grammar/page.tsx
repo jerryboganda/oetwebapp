@@ -101,7 +101,7 @@ export default function AdminGrammarDashboard() {
         <div>
           <div className="flex items-center gap-2">
             <Library className="h-6 w-6 text-primary" />
-            <h1 className="text-2xl font-bold text-navy dark:text-white">Grammar CMS</h1>
+            <h1 className="text-2xl font-bold text-navy">Grammar CMS</h1>
           </div>
           <p className="mt-1 text-sm text-muted">Manage grammar topics, authored lessons, and AI drafts.</p>
         </div>
@@ -180,7 +180,7 @@ export default function AdminGrammarDashboard() {
               <Card key={t.id} className="p-4">
                 <div className="flex items-center gap-2">
                   <span className="text-xl">{t.iconEmoji ?? '📘'}</span>
-                  <h3 className="text-sm font-semibold text-navy dark:text-white">{t.name}</h3>
+                  <h3 className="text-sm font-semibold text-navy">{t.name}</h3>
                   <Badge className="ml-auto text-[10px]">{t.status}</Badge>
                 </div>
                 {t.description ? <p className="mt-2 line-clamp-2 text-xs text-muted">{t.description}</p> : null}
@@ -222,7 +222,7 @@ export default function AdminGrammarDashboard() {
               <tbody>
                 {lessons.map((l) => (
                   <tr key={l.id} className="border-t border-border">
-                    <td className="p-3 font-medium text-navy dark:text-white">{l.title}</td>
+                    <td className="p-3 font-medium text-navy">{l.title}</td>
                     <td className="p-3 text-muted">{l.topicId ? (topicMap.get(l.topicId)?.name ?? '—') : '—'}</td>
                     <td className="p-3 text-muted">{l.level}</td>
                     <td className="p-3 text-muted">{l.estimatedMinutes}</td>

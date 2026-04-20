@@ -232,7 +232,7 @@ export function GrammarRecommendationStrip({
               <button
                 type="button"
                 aria-label="Dismiss recommendation"
-                className="absolute right-3 top-3 inline-flex h-7 w-7 items-center justify-center rounded-full bg-white/80 text-muted shadow-sm transition-colors hover:bg-white hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
+                className="absolute right-3 top-3 inline-flex h-7 w-7 items-center justify-center rounded-full border border-border bg-surface text-muted shadow-sm transition-colors hover:border-border-hover hover:text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();

@@ -161,7 +161,7 @@ export default function EditGrammarLessonPage() {
         <Link href="/admin/grammar" className="text-muted hover:text-navy" aria-label="Back">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <h1 className="flex-1 truncate text-2xl font-bold text-navy dark:text-white">Edit: {lesson.title}</h1>
+        <h1 className="flex-1 truncate text-2xl font-bold text-navy">Edit: {lesson.title}</h1>
         <Badge className={lesson.publishState === 'published' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}>
           {lesson.publishState} · v{lesson.version}
         </Badge>

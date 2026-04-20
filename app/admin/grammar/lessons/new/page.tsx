@@ -48,7 +48,7 @@ export default function NewGrammarLessonPage() {
         <Link href="/admin/grammar" className="text-muted hover:text-navy" aria-label="Back">
           <ArrowLeft className="h-5 w-5" />
         </Link>
-        <h1 className="text-2xl font-bold text-navy dark:text-white">New grammar lesson</h1>
+        <h1 className="text-2xl font-bold text-navy">New grammar lesson</h1>
       </header>
 
       <GrammarLessonEditor
