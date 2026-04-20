@@ -77,13 +77,18 @@ public sealed class PronunciationSchedulerService(LearnerDbContext db) : IPronun
         limit = Math.Clamp(limit, 1, 20);
         var now = DateTimeOffset.UtcNow;
 
-        // Phonemes that are due or not yet started
-        var dueCodes = await db.LearnerPronunciationProgress
-            .Where(p => p.UserId == userId && (p.NextDueAt == null || p.NextDueAt <= now))
+        var progress = await db.LearnerPronunciationProgress
+            .Where(p => p.UserId == userId)
+            .ToListAsync(ct);
+
+        // Phonemes that are due or not yet started. DateTimeOffset comparisons
+        // stay client-side so the local SQLite E2E database behaves like Npgsql.
+        var dueCodes = progress
+            .Where(p => p.NextDueAt is null || p.NextDueAt <= now)
             .OrderBy(p => p.AverageScore) // weakest first
             .Select(p => p.PhonemeCode)
             .Take(limit * 2)
-            .ToListAsync(ct);
+            .ToList();
 
         var drills = new List<PronunciationDrill>();
         // First, drills targeting weak phonemes
@@ -99,10 +104,9 @@ public sealed class PronunciationSchedulerService(LearnerDbContext db) : IPronun
         // Then, drills for phonemes never attempted (cold-start)
         if (drills.Count < limit)
         {
-            var practiced = await db.LearnerPronunciationProgress
-                .Where(p => p.UserId == userId)
+            var practiced = progress
                 .Select(p => p.PhonemeCode)
-                .ToListAsync(ct);
+                .ToList();
             var fresh = await db.PronunciationDrills
                 .Where(d => d.Status == "active" && !practiced.Contains(d.TargetPhoneme))
                 .OrderBy(d => d.Difficulty == "easy" ? 0 : d.Difficulty == "medium" ? 1 : 2)

@@ -19,6 +19,13 @@ for (const target of authStateTargets) {
     };
     const originState = rawState.origins.find((origin) => origin.origin.startsWith('http'));
     expect(originState, `Expected persisted origin storage for ${target.projectName}`).toBeTruthy();
+    expect(
+      rawState.cookies.some((cookie) => {
+        const maybeCookie = cookie as { name?: string };
+        return maybeCookie.name === 'oet_auth';
+      }),
+      `Expected persisted auth indicator cookie for ${target.projectName}`,
+    ).toBeTruthy();
     expect(originState?.localStorage.some((entry) => entry.name === 'oet.auth.session.local')).toBeTruthy();
     expect(
       rawState.origins.length,

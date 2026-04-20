@@ -447,8 +447,11 @@ builder.Services.AddHostedService<BackgroundJobProcessor>();
 
 // ── Phase 1 new services ──
 builder.Services.AddScoped<GamificationService>();
+builder.Services.AddSingleton<ISpacedRepetitionScheduler, Sm2Scheduler>();
 builder.Services.AddScoped<SpacedRepetitionService>();
 builder.Services.AddScoped<VocabularyService>();
+builder.Services.AddScoped<VocabularyDraftService>();
+builder.Services.AddScoped<VocabularyGlossService>();
 builder.Services.AddScoped<AdaptiveDifficultyService>();
 
 // ── Phase 2 new services ──
@@ -486,6 +489,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationS
     OetLearner.Api.Services.Pronunciation.PronunciationSchedulerService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationEntitlementService,
     OetLearner.Api.Services.Pronunciation.PronunciationEntitlementService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationAdminDraftService,
+    OetLearner.Api.Services.Pronunciation.PronunciationAdminDraftService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Pronunciation.PronunciationAudioRetentionWorker>();
 
 // OET rulebook engine + grounded AI gateway. These services are the single

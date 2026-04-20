@@ -1,91 +1,121 @@
 // ── Vocabulary Types ───────────────────────────────────────────────────
-// Derived from VocabularyEntities.cs and VocabularyService.cs return shapes
+// Source of truth: backend/src/OetLearner.Api/Contracts/VocabularyContracts.cs
+// Kept in sync with the typed DTO response shapes produced by VocabularyService.
 
 export interface VocabularyTerm {
   id: string;
   term: string;
-  word: string;             // Alias for term (backend returns both)
   definition: string;
   exampleSentence: string;
   contextNotes: string | null;
   examTypeCode: string;
   professionId: string | null;
-  category: 'medical' | 'academic' | 'general' | 'clinical_communication' | string;
-  difficulty: 'easy' | 'medium' | 'hard';
-  difficultyLevel: string;  // Alias for difficulty
-  pronunciation: string | null;
+  category: string;
+  difficulty: 'easy' | 'medium' | 'hard' | string;
+  ipaPronunciation: string | null;
   audioUrl: string | null;
+  audioMediaAssetId: string | null;
   imageUrl: string | null;
-  synonymsJson: string;
-  collocationsJson: string;
-  relatedTermsJson: string;
+  synonyms: string[];
+  collocations: string[];
+  relatedTerms: string[];
+  sourceProvenance: string | null;
+  status: 'active' | 'draft' | 'archived' | string;
+}
+
+export interface VocabularyTermSummary {
+  id: string;
+  term: string;
+  definition: string;
+  category: string;
+  difficulty: string;
+  ipaPronunciation: string | null;
+  audioUrl: string | null;
+  exampleSentence: string | null;
 }
 
 export interface LearnerVocabulary {
   id: string;
   termId: string;
   term: string;
-  word: string;
   definition: string;
   mastery: 'new' | 'learning' | 'reviewing' | 'mastered';
   easeFactor: number;
   intervalDays: number;
   reviewCount: number;
   correctCount: number;
-  nextReviewDate: string | null;   // ISO date string (DateOnly)
-  dueAt: string | null;           // Formatted date string
-  lastReviewedAt: string | null;  // ISO datetime
-  addedAt: string;                // ISO datetime
+  nextReviewDate: string | null;
+  dueAt: string | null;
+  lastReviewedAt: string | null;
+  addedAt: string;
+  sourceRef: string | null;
 }
 
 export interface VocabularyQuizResult {
   id: string;
+  format: string;
   termsQuizzed: number;
   correctCount: number;
-  score: number;                  // Percentage 0-100
+  score: number;                  // Percentage 0-100 (NOT an OET scaled score)
   durationSeconds: number;
-  completedAt: string;            // ISO datetime
+  xpAwarded: number;
+  completedAt: string;
+  newlyMasteredTermIds: string[];
 }
 
 export interface VocabularyQuizQuestion {
   termId: string;
   term: string;
-  word: string;
-  definition: string;
-  exampleSentence: string;
+  format: string;
+  prompt: string;
   options: string[];
-  correctIndex: number;
+  correctIndex: number;           // -1 for text-entry formats
+  correctAnswer: string;
+  exampleSentence: string | null;
+  audioUrl: string | null;
 }
 
 export interface VocabularyFlashcard {
   id: string;
   termId: string;
   term: string;
-  word: string;
   definition: string;
-  exampleSentence: string;
+  exampleSentence: string | null;
   contextNotes: string | null;
-  pronunciation: string | null;
+  ipaPronunciation: string | null;
   audioUrl: string | null;
-  synonymsJson: string;
+  synonyms: string[];
   mastery: string;
 }
 
 export interface VocabularyStats {
-  totalTerms: number;
+  totalInList: number;
   mastered: number;
-  learning: number;
   reviewing: number;
-  newTerms: number;
+  learning: number;
+  new: number;
   dueToday: number;
+  dueThisWeek: number;
   streakDays: number;
+  totalTermsInCatalog: number;
 }
 
-export interface DailyVocabSet {
-  date: string;               // ISO date string
+export interface VocabularyCategoryItem {
+  category: string;
+  termCount: number;
+}
+
+export interface VocabularyCategoriesResponse {
   examTypeCode: string;
-  terms: VocabularyTerm[];
-  quizAvailable: boolean;
+  professionId: string | null;
+  categories: VocabularyCategoryItem[];
+}
+
+export interface VocabularyDailySet {
+  date: string;
+  newCount: number;
+  dueCount: number;
+  cards: VocabularyFlashcard[];
 }
 
 export interface VocabularyTermsPage {
@@ -94,4 +124,24 @@ export interface VocabularyTermsPage {
   pageSize: number;
   terms: VocabularyTerm[];
   items: VocabularyTerm[];
+}
+
+export interface VocabularyLookupResult {
+  found: boolean;
+  term: VocabularyTerm | null;
+  suggestions: VocabularyTermSummary[];
+}
+
+export interface VocabularyGlossResponse {
+  term: string;
+  ipaPronunciation: string | null;
+  shortDefinition: string;
+  exampleSentence: string;
+  contextNotes: string | null;
+  synonyms: string[];
+  register: string;
+  appliedRuleIds: string[];
+  rulebookVersion: string;
+  matchedExistingTerm: boolean;
+  existingTermId: string | null;
 }

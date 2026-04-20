@@ -386,7 +386,17 @@ public record AdminPronunciationDrillCreateRequest(
     string? AudioUrl,
     string? ProfessionId,
     string? Difficulty,
-    string? Category);
+    string? Category,
+    string? Profession = null,
+    string? Focus = null,
+    string? PrimaryRuleId = null,
+    string? AudioModelAssetId = null,
+    string? ExampleWordsJson = null,
+    string? MinimalPairsJson = null,
+    string? SentencesJson = null,
+    string? TipsHtml = null,
+    string? Status = null,
+    int? OrderIndex = null);
 
 public record AdminPronunciationDrillUpdateRequest(
     string? Word,
@@ -395,7 +405,24 @@ public record AdminPronunciationDrillUpdateRequest(
     string? ProfessionId,
     string? Difficulty,
     string? Category,
-    string? Status);
+    string? Status,
+    string? Profession = null,
+    string? Focus = null,
+    string? PrimaryRuleId = null,
+    string? AudioModelAssetId = null,
+    string? ExampleWordsJson = null,
+    string? MinimalPairsJson = null,
+    string? SentencesJson = null,
+    string? TipsHtml = null,
+    int? OrderIndex = null);
+
+public record AdminPronunciationDrillAiDraftRequest(
+    string? Phoneme,
+    string? Focus,
+    string? Profession,
+    string? Difficulty,
+    string? Prompt,
+    string? PrimaryRuleId);
 
 // ── Notification Template Admin ──
 

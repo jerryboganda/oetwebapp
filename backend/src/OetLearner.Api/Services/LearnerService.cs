@@ -1684,10 +1684,12 @@ public partial class LearnerService(
             contentType = resolvedContentType
         });
 
-        var existingTranscriptionJob = await db.BackgroundJobs
+        var existingTranscriptionJobs = await db.BackgroundJobs
             .Where(x => x.AttemptId == attemptId && x.Type == JobType.SpeakingTranscription && x.State != AsyncState.Failed)
+            .ToListAsync(cancellationToken);
+        var existingTranscriptionJob = existingTranscriptionJobs
             .OrderByDescending(x => x.CreatedAt)
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefault();
         if (existingTranscriptionJob is null)
         {
             await QueueJobAsync(JobType.SpeakingTranscription, attemptId: attemptId, resourceId: attemptId, cancellationToken: cancellationToken);
@@ -1705,7 +1707,20 @@ public partial class LearnerService(
         if (attempt.State is AttemptState.Submitted or AttemptState.Evaluating or AttemptState.Completed)
         {
             var existing = await db.Evaluations.FirstOrDefaultAsync(x => x.AttemptId == attemptId, cancellationToken);
-            return new { attemptId, evaluationId = existing?.Id, state = existing is null ? "queued" : ToAsyncState(existing.State) };
+            if (existing is not null)
+            {
+                return new { attemptId, evaluationId = existing.Id, state = ToAsyncState(existing.State) };
+            }
+
+            if (attempt.AudioUploadState != UploadState.Uploaded)
+            {
+                throw ApiException.Validation(
+                    "speaking_audio_required",
+                    "Upload audio before submitting this speaking attempt.",
+                    [new ApiFieldError("audio", "required", "Complete the audio upload before submission.")]);
+            }
+
+            return await QueueSpeakingEvaluationAsync(attempt, cancellationToken);
         }
 
         if (attempt.AudioUploadState != UploadState.Uploaded)
@@ -1716,8 +1731,13 @@ public partial class LearnerService(
                 [new ApiFieldError("audio", "required", "Complete the audio upload before submission.")]);
         }
 
+        return await QueueSpeakingEvaluationAsync(attempt, cancellationToken);
+    }
+
+    private async Task<object> QueueSpeakingEvaluationAsync(Attempt attempt, CancellationToken cancellationToken)
+    {
         attempt.State = AttemptState.Evaluating;
-        attempt.SubmittedAt = DateTimeOffset.UtcNow;
+        attempt.SubmittedAt ??= DateTimeOffset.UtcNow;
         await LearnerWorkflowCoordinator.UpdateDiagnosticProgressAsync(db, attempt, AttemptState.Evaluating, cancellationToken);
         var evaluation = new Evaluation
         {
@@ -1749,8 +1769,10 @@ public partial class LearnerService(
     public async Task<object> GetSpeakingProcessingAsync(string userId, string attemptId, CancellationToken cancellationToken)
     {
         await GetAttemptOwnedByUserAsync(userId, attemptId, cancellationToken);
-        var evaluation = await db.Evaluations.Where(x => x.AttemptId == attemptId).OrderByDescending(x => x.LastTransitionAt).FirstOrDefaultAsync(cancellationToken);
-        var transcriptionJob = await db.BackgroundJobs.Where(x => x.AttemptId == attemptId && x.Type == JobType.SpeakingTranscription).OrderByDescending(x => x.LastTransitionAt).FirstOrDefaultAsync(cancellationToken);
+        var evaluations = await db.Evaluations.Where(x => x.AttemptId == attemptId).ToListAsync(cancellationToken);
+        var evaluation = evaluations.OrderByDescending(x => x.LastTransitionAt).FirstOrDefault();
+        var transcriptionJobs = await db.BackgroundJobs.Where(x => x.AttemptId == attemptId && x.Type == JobType.SpeakingTranscription).ToListAsync(cancellationToken);
+        var transcriptionJob = transcriptionJobs.OrderByDescending(x => x.LastTransitionAt).FirstOrDefault();
         return new
         {
             attemptId,
@@ -3012,17 +3034,21 @@ public partial class LearnerService(
         }
         else if (!string.IsNullOrWhiteSpace(request.StorageKey))
         {
-            upload = await db.UploadSessions
+            var uploadSessions = await db.UploadSessions
                 .Where(x => x.AttemptId == attemptId && x.StorageKey == request.StorageKey)
+                .ToListAsync(cancellationToken);
+            upload = uploadSessions
                 .OrderByDescending(x => x.ExpiresAt)
-                .FirstOrDefaultAsync(cancellationToken);
+                .FirstOrDefault();
         }
         else
         {
-            upload = await db.UploadSessions
+            var uploadSessions = await db.UploadSessions
                 .Where(x => x.AttemptId == attemptId)
+                .ToListAsync(cancellationToken);
+            upload = uploadSessions
                 .OrderByDescending(x => x.ExpiresAt)
-                .FirstOrDefaultAsync(cancellationToken);
+                .FirstOrDefault();
         }
 
         if (upload is null)
@@ -3479,14 +3505,16 @@ public partial class LearnerService(
         await EnsureLearnerMutationAllowedAsync(userId, cancellationToken);
         var context = request.Context ?? "practice";
         var mode = request.Mode ?? (subtest is "reading" or "listening" ? "exam" : "practice");
-        var existing = await db.Attempts
+        var existingAttempts = await db.Attempts
             .Where(x => x.UserId == userId
                         && x.ContentId == request.ContentId
                         && x.SubtestCode == subtest
                         && x.Context == context
                         && x.State == AttemptState.InProgress)
+            .ToListAsync(cancellationToken);
+        var existing = existingAttempts
             .OrderByDescending(x => x.StartedAt)
-            .FirstOrDefaultAsync(cancellationToken);
+            .FirstOrDefault();
         if (existing is not null)
         {
             return await GetAttemptAsync(existing.Id, cancellationToken);

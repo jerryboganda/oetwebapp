@@ -1,4 +1,5 @@
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
@@ -116,6 +117,25 @@ public sealed class WhisperPronunciationAsrProvider(
             PauseCount: Math.Max(0, CountPauses(heardWords)),
             AveragePauseDurationMs: 400);
 
+        // ── Step 3: Grounded AI phoneme-level refinement ─────────────────────
+        //
+        // Whisper does not expose native phoneme scores. Rather than fabricate
+        // them, we send the aligned reference/heard transcript through the
+        // grounded gateway with Kind=Pronunciation + Task=ScorePronunciationAttempt
+        // and parse the rule-cited phoneme scores from the reply. If the call
+        // fails or returns unusable data, we keep the single-phoneme summary
+        // above — never silently emit fake per-phoneme scores.
+        var refined = await TryRefineViaGroundedAiAsync(
+            request, transcript, refWords, heard, accuracy, fluency, completeness, prosody, overall, ct);
+        if (refined is not null)
+        {
+            return refined with
+            {
+                FluencyMarkers = markers,
+                ProviderResponseSummary = $"whisper+grounded-ai: transcript='{Truncate(transcript, 80)}', {matched}/{refLower.Count} words matched"
+            };
+        }
+
         return new AsrResult(
             AccuracyScore: accuracy,
             FluencyScore: fluency,
@@ -127,6 +147,181 @@ public sealed class WhisperPronunciationAsrProvider(
             FluencyMarkers: markers,
             ProviderName: "whisper",
             ProviderResponseSummary: $"whisper: transcript='{Truncate(transcript, 80)}', {matched}/{refLower.Count} words matched");
+    }
+
+    private async Task<AsrResult?> TryRefineViaGroundedAiAsync(
+        AsrRequest request,
+        string transcript,
+        IReadOnlyList<string> refWords,
+        IReadOnlyList<string> heardWords,
+        double accuracy,
+        double fluency,
+        double completeness,
+        double prosody,
+        double overall,
+        CancellationToken ct)
+    {
+        try
+        {
+            var profession = ParseProfession(request.RulebookProfession);
+            var prompt = aiGateway.BuildGroundedPrompt(new AiGroundingContext
+            {
+                Kind = RuleKind.Pronunciation,
+                Profession = profession,
+                Task = AiTaskMode.ScorePronunciationAttempt,
+            });
+
+            var user = new StringBuilder();
+            user.AppendLine($"Target phoneme: /{request.TargetPhoneme}/");
+            if (!string.IsNullOrWhiteSpace(request.TargetRuleId))
+                user.AppendLine($"Primary rule: {request.TargetRuleId}");
+            user.AppendLine();
+            user.AppendLine("Reference text:");
+            user.AppendLine(request.ReferenceText);
+            user.AppendLine();
+            user.AppendLine($"Heard transcript: {transcript}");
+            user.AppendLine($"Reference words: {string.Join(' ', refWords)}");
+            user.AppendLine($"Heard words: {string.Join(' ', heardWords)}");
+            user.AppendLine();
+            user.AppendLine("Whisper alignment (baseline — use these as a floor, not a ceiling):");
+            user.AppendLine($"accuracy={accuracy} fluency={fluency} completeness={completeness} prosody={prosody} overall={overall}");
+            user.AppendLine();
+            user.AppendLine("Cite pronunciation rule IDs (P01.1 etc.) for every finding. Do not invent rules.");
+
+            var result = await aiGateway.CompleteAsync(new AiGatewayRequest
+            {
+                Prompt = prompt,
+                UserInput = user.ToString(),
+                Model = "auto",
+                Temperature = 0.2,
+                MaxTokens = 900,
+                UserId = null,
+                FeatureCode = AiFeatureCodes.PronunciationScore,
+                PromptTemplateId = "pronunciation.whisper.score.v1",
+            }, ct);
+
+            var parsed = ParseScoredJson(result.Completion);
+            if (parsed is null) return null;
+            return parsed;
+        }
+        catch (PromptNotGroundedException)
+        {
+            // Propagate — this indicates a coding bug that must surface.
+            throw;
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Whisper grounded-AI phoneme inference failed — falling back to Whisper-only scoring.");
+            return null;
+        }
+    }
+
+    private static AsrResult? ParseScoredJson(string completion)
+    {
+        if (string.IsNullOrWhiteSpace(completion)) return null;
+        int start = completion.IndexOf('{');
+        int end = completion.LastIndexOf('}');
+        if (start < 0 || end < 0 || end <= start) return null;
+        var json = completion.Substring(start, end - start + 1);
+        try
+        {
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.ValueKind != JsonValueKind.Object) return null;
+
+            double Accu = D(root, "accuracyScore");
+            double Flu = D(root, "fluencyScore");
+            double Com = D(root, "completenessScore");
+            double Pro = D(root, "prosodyScore");
+            double Ove = D(root, "overallScore");
+            if (Ove <= 0.01 && (Accu + Flu + Com + Pro) > 0)
+                Ove = Math.Round((Accu + Flu + Com + Pro) / 4.0, 1);
+
+            var words = new List<WordScore>();
+            if (root.TryGetProperty("wordScores", out var wordsEl) && wordsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var w in wordsEl.EnumerateArray())
+                {
+                    if (w.ValueKind != JsonValueKind.Object) continue;
+                    var word = S(w, "word") ?? "";
+                    var score = D(w, "accuracyScore");
+                    var err = S(w, "errorType") ?? "None";
+                    if (!string.IsNullOrEmpty(word))
+                        words.Add(new WordScore(word, Math.Round(score, 1), err));
+                }
+            }
+
+            var phonemes = new List<PhonemeScore>();
+            if (root.TryGetProperty("problematicPhonemes", out var phEl) && phEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var p in phEl.EnumerateArray())
+                {
+                    if (p.ValueKind != JsonValueKind.Object) continue;
+                    var phoneme = S(p, "phoneme") ?? "";
+                    if (string.IsNullOrEmpty(phoneme)) continue;
+                    var ph = D(p, "score");
+                    var occ = I(p, "occurrences");
+                    var rule = S(p, "ruleId");
+                    phonemes.Add(new PhonemeScore(phoneme, Math.Round(ph, 1), Math.Max(1, occ), rule));
+                }
+            }
+
+            if (words.Count == 0 && phonemes.Count == 0) return null;
+
+            var speechRate = 140;
+            var pauses = 0;
+            var avgPause = 400;
+            if (root.TryGetProperty("fluencyMarkers", out var fmEl) && fmEl.ValueKind == JsonValueKind.Object)
+            {
+                speechRate = (int)Math.Max(0, D(fmEl, "speechRateWpm"));
+                if (speechRate == 0) speechRate = 140;
+                pauses = I(fmEl, "pauseCount");
+                avgPause = I(fmEl, "averagePauseDurationMs");
+                if (avgPause == 0) avgPause = 400;
+            }
+
+            return new AsrResult(
+                AccuracyScore: Math.Round(Accu, 1),
+                FluencyScore: Math.Round(Flu, 1),
+                CompletenessScore: Math.Round(Com, 1),
+                ProsodyScore: Math.Round(Pro, 1),
+                OverallScore: Math.Round(Ove, 1),
+                WordScores: words,
+                ProblematicPhonemes: phonemes,
+                FluencyMarkers: new FluencyMarkers(speechRate, pauses, avgPause),
+                ProviderName: "whisper",
+                ProviderResponseSummary: "whisper+grounded-ai (refined)");
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private static double D(JsonElement el, string name)
+    {
+        if (el.ValueKind != JsonValueKind.Object) return 0;
+        if (!el.TryGetProperty(name, out var v)) return 0;
+        return v.ValueKind == JsonValueKind.Number ? v.GetDouble() : 0;
+    }
+
+    private static int I(JsonElement el, string name) => (int)Math.Round(D(el, name));
+
+    private static string? S(JsonElement el, string name)
+        => el.ValueKind == JsonValueKind.Object && el.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.String
+            ? v.GetString()
+            : null;
+
+    private static ExamProfession ParseProfession(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw) || string.Equals(raw, "all", StringComparison.OrdinalIgnoreCase))
+            return ExamProfession.Medicine;
+        var norm = raw!.Replace("-", "_").ToLowerInvariant();
+        foreach (var v in Enum.GetValues<ExamProfession>())
+            if (string.Equals(v.ToString(), norm, StringComparison.OrdinalIgnoreCase)) return v;
+        if (norm.Replace("_", "") == "occupationaltherapy") return ExamProfession.OccupationalTherapy;
+        if (norm.Replace("_", "") == "speechpathology") return ExamProfession.SpeechPathology;
+        return ExamProfession.Medicine;
     }
 
     private static int CountPauses(List<(string word, double? start, double? end)> words)

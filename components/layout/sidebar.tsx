@@ -188,10 +188,26 @@ export function Sidebar({
       return;
     }
 
+    let cancelled = false;
+    let hydrationTimer: ReturnType<typeof setTimeout> | undefined;
+
     Promise.allSettled([fetchStreak(), fetchXP()]).then(([streakR, xpR]) => {
-      if (streakR.status === 'fulfilled') setStreak((streakR.value as { currentStreak: number }).currentStreak);
-      if (xpR.status === 'fulfilled') setLevel((xpR.value as { level: number }).level);
+      hydrationTimer = setTimeout(() => {
+        if (cancelled) {
+          return;
+        }
+
+        if (streakR.status === 'fulfilled') setStreak((streakR.value as { currentStreak: number }).currentStreak);
+        if (xpR.status === 'fulfilled') setLevel((xpR.value as { level: number }).level);
+      }, 0);
     });
+
+    return () => {
+      cancelled = true;
+      if (hydrationTimer) {
+        clearTimeout(hydrationTimer);
+      }
+    };
   }, [isLearnerWorkspace]);
 
   const handleSignOut = async () => {

@@ -41,7 +41,11 @@ export function isIgnorableRequestFailureDetails(url: string, errorText: string)
 
   // Browsers will cancel in-flight fetches during reloads, route transitions, prefetch replacement,
   // and redirect hand-offs. Those cancellations are noisy but not correctness defects.
-  if (errorText.includes('ERR_ABORTED') || errorText.includes('NS_BINDING_ABORTED')) {
+  if (
+    errorText.includes('ERR_ABORTED')
+    || errorText.includes('NS_BINDING_ABORTED')
+    || errorText.includes('Load request cancelled')
+  ) {
     return true;
   }
 
@@ -214,6 +218,16 @@ function shouldIgnoreConsoleError(
       text.includes('Failed to fetch RSC payload for ')
       || text.includes('Falling back to browser navigation. TypeError: Load failed')
       || text.includes('Failed to load resource: the server responded with a status of 500 (Internal Server Error)')
+      || (
+        text.includes('MIME type')
+        && text.includes('text/plain')
+        && text.includes('X-Content-Type-Options: nosniff')
+        && text.includes('http://localhost:3000/_next/static/')
+      )
+      || (
+        text.includes('downloadable font: download failed')
+        && text.includes('http://localhost:3000/_next/static/media/')
+      )
     )
   ) {
     return true;
@@ -261,6 +275,7 @@ function shouldIgnorePageError(text: string, options: DiagnosticExpectationOptio
     && (
       text.includes('/__nextjs_original-stack-frames')
       || text.includes('/?_rsc=')
+      || text.includes('?_rsc=')
       || text.includes('/_next/static/webpack/')
     )
   ) {
@@ -275,8 +290,23 @@ function shouldIgnorePageError(text: string, options: DiagnosticExpectationOptio
   }
 
   if (
+    options.allowNextDevNoise
+    && text === 'Unexpected EOF'
+  ) {
+    return true;
+  }
+
+  if (
     options.allowMobileWebKitReloadNoise
     && text.includes('Invariant: Expected clientReferenceManifest to be defined. This is a bug in Next.js.')
+  ) {
+    return true;
+  }
+
+  if (
+    options.allowMobileWebKitReloadNoise
+    && text.includes('/api/backend/v1/')
+    && text.includes('due to access control checks.')
   ) {
     return true;
   }

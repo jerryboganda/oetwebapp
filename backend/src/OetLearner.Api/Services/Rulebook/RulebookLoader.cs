@@ -1,4 +1,5 @@
 using System.Reflection;
+using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -83,10 +84,33 @@ public sealed class RulebookLoader : IRulebookLoader
         RuleKind.Speaking => "speaking",
         RuleKind.Grammar => "grammar",
         RuleKind.Pronunciation => "pronunciation",
+        RuleKind.Vocabulary => "vocabulary",
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null),
     };
 
-    private static string FolderOf(ExamProfession p) => p.ToString().ToLowerInvariant().Replace("_", "-");
+    private static string FolderOf(ExamProfession p) => ToKebabCase(p.ToString());
+
+    private static string ToKebabCase(string value)
+    {
+        var builder = new StringBuilder(value.Length + 4);
+        for (var i = 0; i < value.Length; i++)
+        {
+            var current = value[i];
+            if (i > 0 && char.IsUpper(current))
+            {
+                var previous = value[i - 1];
+                var nextIsLower = i + 1 < value.Length && char.IsLower(value[i + 1]);
+                if (char.IsLower(previous) || nextIsLower)
+                {
+                    builder.Append('-');
+                }
+            }
+
+            builder.Append(char.ToLowerInvariant(current));
+        }
+
+        return builder.ToString();
+    }
 
     private static Stream? OpenResource(string logicalName)
     {
@@ -121,7 +145,7 @@ public sealed class RulebookNotFoundException(RuleKind kind, ExamProfession prof
 // Types — mirror lib/rulebook/types.ts
 // ---------------------------------------------------------------------------
 
-public enum RuleKind { Writing, Speaking, Grammar, Pronunciation }
+public enum RuleKind { Writing, Speaking, Grammar, Pronunciation, Vocabulary }
 
 public enum ExamProfession
 {

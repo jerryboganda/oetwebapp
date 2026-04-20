@@ -47,6 +47,7 @@ public static class DatabaseBootstrapper
 
         await EnsureAdminSchemaCompatibilityAsync(db, cancellationToken);
         await EnsureExpertSchemaCompatibilityAsync(db, cancellationToken);
+        await EnsurePronunciationSchemaCompatibilityAsync(db, cancellationToken);
         await EnsureFreezePolicyAsync(db, cancellationToken);
 
         // Reference data (professions, subtests, criteria, content) is always seeded
@@ -170,6 +171,156 @@ public static class DatabaseBootstrapper
         await db.Database.ExecuteSqlRawAsync(
             $"""UPDATE {qualifiedTableName} SET "ChecklistItemsJson" = '[]' WHERE "ChecklistItemsJson" IS NULL OR "ChecklistItemsJson" = '';""",
             cancellationToken);
+    }
+
+    private static async Task EnsurePronunciationSchemaCompatibilityAsync(LearnerDbContext db, CancellationToken cancellationToken)
+    {
+        if (!db.Database.IsRelational())
+        {
+            return;
+        }
+
+        var providerName = db.Database.ProviderName ?? string.Empty;
+        if (!providerName.Contains("Sqlite", StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        await AddSqliteColumnIfMissingAsync(db, "PronunciationDrills", @"""Profession"" TEXT NOT NULL DEFAULT 'all'", cancellationToken);
+        await AddSqliteColumnIfMissingAsync(db, "PronunciationDrills", @"""Focus"" TEXT NOT NULL DEFAULT 'phoneme'", cancellationToken);
+        await AddSqliteColumnIfMissingAsync(db, "PronunciationDrills", @"""PrimaryRuleId"" TEXT NULL", cancellationToken);
+        await AddSqliteColumnIfMissingAsync(db, "PronunciationDrills", @"""AudioModelAssetId"" TEXT NULL", cancellationToken);
+        await AddSqliteColumnIfMissingAsync(db, "PronunciationDrills", @"""OrderIndex"" INTEGER NOT NULL DEFAULT 0", cancellationToken);
+        await AddSqliteColumnIfMissingAsync(db, "PronunciationDrills", @"""CreatedAt"" TEXT NOT NULL DEFAULT '0001-01-01T00:00:00.0000000+00:00'", cancellationToken);
+        await AddSqliteColumnIfMissingAsync(db, "PronunciationDrills", @"""UpdatedAt"" TEXT NOT NULL DEFAULT '0001-01-01T00:00:00.0000000+00:00'", cancellationToken);
+
+        await AddSqliteColumnIfMissingAsync(db, "PronunciationAssessments", @"""DrillId"" TEXT NULL", cancellationToken);
+        await AddSqliteColumnIfMissingAsync(db, "PronunciationAssessments", @"""ProjectedSpeakingScaled"" INTEGER NOT NULL DEFAULT 0", cancellationToken);
+        await AddSqliteColumnIfMissingAsync(db, "PronunciationAssessments", @"""ProjectedSpeakingGrade"" TEXT NOT NULL DEFAULT 'B'", cancellationToken);
+        await AddSqliteColumnIfMissingAsync(db, "PronunciationAssessments", @"""Provider"" TEXT NOT NULL DEFAULT 'mock'", cancellationToken);
+        await AddSqliteColumnIfMissingAsync(db, "PronunciationAssessments", @"""RulebookVersion"" TEXT NOT NULL DEFAULT '1.0.0'", cancellationToken);
+        await AddSqliteColumnIfMissingAsync(db, "PronunciationAssessments", @"""FindingsJson"" TEXT NOT NULL DEFAULT '[]'", cancellationToken);
+        await AddSqliteColumnIfMissingAsync(db, "PronunciationAssessments", @"""FeedbackJson"" TEXT NOT NULL DEFAULT '{}'", cancellationToken);
+
+        await AddSqliteColumnIfMissingAsync(db, "LearnerPronunciationProgress", @"""NextDueAt"" TEXT NULL", cancellationToken);
+        await AddSqliteColumnIfMissingAsync(db, "LearnerPronunciationProgress", @"""IntervalDays"" INTEGER NOT NULL DEFAULT 0", cancellationToken);
+        await AddSqliteColumnIfMissingAsync(db, "LearnerPronunciationProgress", @"""Ease"" REAL NOT NULL DEFAULT 2.5", cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "PronunciationAttempts" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_PronunciationAttempts" PRIMARY KEY,
+                "UserId" TEXT NOT NULL,
+                "DrillId" TEXT NOT NULL,
+                "AudioStorageKey" TEXT NULL,
+                "AudioSha256" TEXT NULL,
+                "AudioBytes" INTEGER NULL,
+                "AudioMimeType" TEXT NULL,
+                "AudioDurationMs" INTEGER NULL,
+                "Status" TEXT NOT NULL,
+                "AssessmentId" TEXT NULL,
+                "ErrorCode" TEXT NULL,
+                "ErrorMessage" TEXT NULL,
+                "Provider" TEXT NULL,
+                "CreatedAt" TEXT NOT NULL,
+                "CompletedAt" TEXT NULL,
+                "AudioReapAt" TEXT NULL
+            );
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            CREATE TABLE IF NOT EXISTS "LearnerPronunciationDiscriminationAttempts" (
+                "Id" TEXT NOT NULL CONSTRAINT "PK_LearnerPronunciationDiscriminationAttempts" PRIMARY KEY,
+                "UserId" TEXT NOT NULL,
+                "DrillId" TEXT NOT NULL,
+                "TargetPhoneme" TEXT NOT NULL,
+                "RoundsTotal" INTEGER NOT NULL,
+                "RoundsCorrect" INTEGER NOT NULL,
+                "CreatedAt" TEXT NOT NULL
+            );
+            """,
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """CREATE INDEX IF NOT EXISTS "IX_PronunciationAssessments_DrillId" ON "PronunciationAssessments" ("DrillId");""",
+            cancellationToken);
+        await db.Database.ExecuteSqlRawAsync(
+            """CREATE INDEX IF NOT EXISTS "IX_PronunciationAssessments_UserId_CreatedAt" ON "PronunciationAssessments" ("UserId", "CreatedAt");""",
+            cancellationToken);
+        await db.Database.ExecuteSqlRawAsync(
+            """CREATE INDEX IF NOT EXISTS "IX_LearnerPronunciationProgress_UserId_AverageScore" ON "LearnerPronunciationProgress" ("UserId", "AverageScore");""",
+            cancellationToken);
+        await db.Database.ExecuteSqlRawAsync(
+            """DROP INDEX IF EXISTS "IX_LearnerPronunciationProgress_UserId_PhonemeCode";""",
+            cancellationToken);
+        await db.Database.ExecuteSqlRawAsync(
+            """CREATE UNIQUE INDEX IF NOT EXISTS "IX_LearnerPronunciationProgress_UserId_PhonemeCode" ON "LearnerPronunciationProgress" ("UserId", "PhonemeCode");""",
+            cancellationToken);
+        await db.Database.ExecuteSqlRawAsync(
+            """CREATE INDEX IF NOT EXISTS "IX_PronunciationAttempts_UserId_CreatedAt" ON "PronunciationAttempts" ("UserId", "CreatedAt");""",
+            cancellationToken);
+        await db.Database.ExecuteSqlRawAsync(
+            """CREATE INDEX IF NOT EXISTS "IX_PronunciationAttempts_DrillId_CreatedAt" ON "PronunciationAttempts" ("DrillId", "CreatedAt");""",
+            cancellationToken);
+        await db.Database.ExecuteSqlRawAsync(
+            """CREATE INDEX IF NOT EXISTS "IX_PronunciationAttempts_UserId_DrillId_CreatedAt" ON "PronunciationAttempts" ("UserId", "DrillId", "CreatedAt");""",
+            cancellationToken);
+        await db.Database.ExecuteSqlRawAsync(
+            """CREATE INDEX IF NOT EXISTS "IX_PronunciationAttempts_Status" ON "PronunciationAttempts" ("Status");""",
+            cancellationToken);
+        await db.Database.ExecuteSqlRawAsync(
+            """CREATE INDEX IF NOT EXISTS "IX_LearnerPronunciationDiscriminationAttempts_UserId_CreatedAt" ON "LearnerPronunciationDiscriminationAttempts" ("UserId", "CreatedAt");""",
+            cancellationToken);
+
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE "PronunciationDrills"
+            SET
+                "Profession" = COALESCE(NULLIF("Profession", ''), 'all'),
+                "Focus" = COALESCE(NULLIF("Focus", ''), 'phoneme'),
+                "CreatedAt" = CASE WHEN "CreatedAt" IS NULL OR "CreatedAt" = '' THEN '0001-01-01T00:00:00.0000000+00:00' ELSE "CreatedAt" END,
+                "UpdatedAt" = CASE WHEN "UpdatedAt" IS NULL OR "UpdatedAt" = '' THEN '0001-01-01T00:00:00.0000000+00:00' ELSE "UpdatedAt" END;
+            """,
+            cancellationToken);
+        await db.Database.ExecuteSqlRawAsync(
+            """
+            UPDATE "PronunciationAssessments"
+            SET
+                "ProjectedSpeakingGrade" = COALESCE(NULLIF("ProjectedSpeakingGrade", ''), 'B'),
+                "Provider" = COALESCE(NULLIF("Provider", ''), 'mock'),
+                "RulebookVersion" = COALESCE(NULLIF("RulebookVersion", ''), '1.0.0'),
+                "FindingsJson" = COALESCE(NULLIF("FindingsJson", ''), '[]'),
+                "FeedbackJson" = COALESCE(NULLIF("FeedbackJson", ''), '{{}}');
+            """,
+            cancellationToken);
+        await db.Database.ExecuteSqlRawAsync(
+            """UPDATE "LearnerPronunciationProgress" SET "Ease" = 2.5 WHERE "Ease" IS NULL OR "Ease" <= 0;""",
+            cancellationToken);
+    }
+
+    private static async Task AddSqliteColumnIfMissingAsync(
+        LearnerDbContext db,
+        string tableName,
+        string columnDefinition,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var sql = $"ALTER TABLE {QuoteIdentifier(tableName)} ADD COLUMN {columnDefinition};";
+            // ExecuteSqlRawAsync still runs string.Format-style placeholder parsing.
+            // Escape braces in the FINAL SQL so JSON defaults like '{}' do not get
+            // misread as composite-format placeholders.
+            sql = sql
+                .Replace("{", "{{", StringComparison.Ordinal)
+                .Replace("}", "}}", StringComparison.Ordinal);
+            await db.Database.ExecuteSqlRawAsync(sql, cancellationToken);
+        }
+        catch (Exception ex) when (ex.Message.Contains("duplicate column name", StringComparison.OrdinalIgnoreCase))
+        {
+            // The compatibility column has already been added.
+        }
     }
 #pragma warning restore EF1002
 

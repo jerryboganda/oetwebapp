@@ -1,0 +1,49 @@
+{
+  "version": "1.0.0",
+  "kind": "vocabulary",
+  "profession": "dentistry",
+  "publishedAt": "2026-04-20T00:00:00Z",
+  "authoritySource": "Dr. Ahmed Hesham — OET Dentistry Vocabulary Rulebook v1",
+  "sections": [
+    { "id": "V01", "title": "Clinical Accuracy", "order": 1 },
+    { "id": "V02", "title": "Register & Professional Fit", "order": 2 },
+    { "id": "V03", "title": "Concision & Definition Quality", "order": 3 },
+    { "id": "V04", "title": "Context, Synonyms & Collocations", "order": 4 },
+    { "id": "V05", "title": "Pronunciation & Audio", "order": 5 },
+    { "id": "V06", "title": "Taxonomy & Categorisation", "order": 6 },
+    { "id": "V07", "title": "Example Sentences", "order": 7 },
+    { "id": "V08", "title": "Profession-Specific Bands", "order": 8 }
+  ],
+  "rules": [
+    { "id": "V01.1", "section": "V01", "severity": "critical", "title": "Definitions dentally accurate", "body": "Definitions align with current FDI / ADA usage. Universal tooth numbering accepted if noted.", "appliesTo": "all" },
+    { "id": "V01.2", "section": "V01", "severity": "critical", "title": "No brand names", "body": "Generic material and device names.", "appliesTo": "all" },
+    { "id": "V01.3", "section": "V01", "severity": "major", "title": "Abbreviations expanded", "body": "Every abbreviation term includes its expansion.", "appliesTo": "all" },
+
+    { "id": "V02.1", "section": "V02", "severity": "critical", "title": "Dental-clinical register", "body": "Entries must read as if in a dental referral / treatment note.", "appliesTo": "all" },
+    { "id": "V02.2", "section": "V02", "severity": "critical", "title": "No trademarked names", "body": "No product trademarks as primary term.", "appliesTo": "all" },
+    { "id": "V02.3", "section": "V02", "severity": "major", "title": "Professional phrasing", "body": "Avoid pejoratives; use patient-first.", "appliesTo": "all" },
+    { "id": "V02.4", "section": "V02", "severity": "minor", "title": "Conditions lowercase except eponymous", "body": "Lowercase diseases; capital for eponymous.", "appliesTo": "all" },
+
+    { "id": "V03.1", "section": "V03", "severity": "critical", "title": "Definition ≤ 25 words", "body": "Concise noun-phrase definitions.", "appliesTo": "all", "params": { "maxWords": 25 } },
+    { "id": "V03.2", "section": "V03", "severity": "major", "title": "No circular definitions", "body": "Do not repeat the term in the definition.", "appliesTo": "all" },
+
+    { "id": "V04.1", "section": "V04", "severity": "major", "title": "Example in dental context", "body": "Authentic dental clinical sentence. 8–30 words.", "appliesTo": "all", "params": { "minWords": 8, "maxWords": 30 } },
+    { "id": "V04.2", "section": "V04", "severity": "major", "title": "Synonyms genuine", "body": "English dental synonyms.", "appliesTo": "all" },
+    { "id": "V04.3", "section": "V04", "severity": "minor", "title": "Collocations 2–5", "body": "Real phrases.", "appliesTo": "all", "params": { "minCount": 2, "maxCount": 5 } },
+
+    { "id": "V05.1", "section": "V05", "severity": "major", "title": "IPA British RP", "body": "British RP IPA.", "appliesTo": "all" },
+    { "id": "V05.2", "section": "V05", "severity": "minor", "title": "Audio recommended", "body": "Audio for ≥3 syllables.", "appliesTo": "all" },
+
+    { "id": "V06.1", "section": "V06", "severity": "major", "title": "Canonical categories", "body": "One of: medical, anatomy, symptoms, procedures, pharmacology, conditions, clinical_communication, diagnostics, oral_health.", "appliesTo": "all", "params": { "allowed": ["medical", "anatomy", "symptoms", "procedures", "pharmacology", "conditions", "clinical_communication", "diagnostics", "oral_health"] } },
+    { "id": "V06.2", "section": "V06", "severity": "minor", "title": "Difficulty tiered", "body": "easy|medium|hard.", "appliesTo": "all", "params": { "allowed": ["easy", "medium", "hard"] } },
+
+    { "id": "V07.1", "section": "V07", "severity": "major", "title": "Example passes core grammar", "body": "No contractions; no 'the patient' label; Latin translated.", "appliesTo": "all" },
+    { "id": "V07.2", "section": "V07", "severity": "minor", "title": "No second-person", "body": "Third-person clinical narrative.", "appliesTo": "all" },
+
+    { "id": "V08.1", "section": "V08", "severity": "major", "title": "Balanced dentistry bands", "body": "Bank covers: oral anatomy, restorative, periodontics, endodontics, orthodontics, paediatric, prosthodontics, oral surgery.", "appliesTo": "all" }
+  ],
+  "tables": {
+    "allowedCategories": ["medical", "anatomy", "symptoms", "procedures", "pharmacology", "conditions", "clinical_communication", "diagnostics", "oral_health"],
+    "difficultyTiers": { "A2": "easy", "B1": "medium", "B2": "medium", "C1": "hard" }
+  }
+}

@@ -40,12 +40,14 @@ public sealed class AdminUploadCleanupWorker(
         var opts = scope.ServiceProvider.GetRequiredService<IOptions<StorageOptions>>().Value.ContentUpload;
 
         var now = DateTimeOffset.UtcNow;
-        var expired = await db.AdminUploadSessions
-            .Where(x => x.ExpiresAt <= now
-                && x.State != AdminUploadState.Completed
+        var candidates = await db.AdminUploadSessions
+            .Where(x => x.State != AdminUploadState.Completed
                 && x.State != AdminUploadState.Aborted
                 && x.State != AdminUploadState.Expired)
             .ToListAsync(ct);
+        var expired = candidates
+            .Where(x => x.ExpiresAt <= now)
+            .ToList();
 
         foreach (var s in expired)
         {

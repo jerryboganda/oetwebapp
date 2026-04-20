@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { MotionSection } from '@/components/ui/motion-primitives';
-import { Layers, CheckCircle2, RotateCcw, ArrowLeft } from 'lucide-react';
+import { Layers, CheckCircle2, RotateCcw, ArrowLeft, Volume2 } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
@@ -12,26 +12,17 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { fetchDueFlashcards, submitFlashcardReview } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
-
-type Flashcard = {
-  id: string;
-  termId: string;
-  word: string;
-  definition: string;
-  exampleSentence: string | null;
-  pronunciation: string | null;
-  mastery: string;
-};
+import type { VocabularyFlashcard } from '@/lib/types/vocabulary';
 
 const QUALITY_OPTIONS = [
-  { q: 0, label: 'Forgot', color: 'bg-red-500 hover:bg-red-600 text-white' },
-  { q: 2, label: 'Hard', color: 'bg-orange-500 hover:bg-orange-600 text-white' },
-  { q: 3, label: 'Good', color: 'bg-blue-500 hover:bg-blue-600 text-white' },
-  { q: 5, label: 'Easy', color: 'bg-green-500 hover:bg-green-600 text-white' },
+  { q: 0, key: '1', label: 'Forgot', color: 'bg-red-500 hover:bg-red-600 text-white' },
+  { q: 2, key: '2', label: 'Hard', color: 'bg-orange-500 hover:bg-orange-600 text-white' },
+  { q: 3, key: '3', label: 'Good', color: 'bg-blue-500 hover:bg-blue-600 text-white' },
+  { q: 5, key: '4', label: 'Easy', color: 'bg-green-500 hover:bg-green-600 text-white' },
 ];
 
 export default function FlashcardsPage() {
-  const [cards, setCards] = useState<Flashcard[]>([]);
+  const [cards, setCards] = useState<VocabularyFlashcard[]>([]);
   const [current, setCurrent] = useState(0);
   const [flipped, setFlipped] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -43,8 +34,8 @@ export default function FlashcardsPage() {
   useEffect(() => {
     analytics.track('flashcards_viewed');
     fetchDueFlashcards(20).then(data => {
-      const loadedCards = Array.isArray(data) ? data : (data as { cards?: Flashcard[] }).cards ?? [];
-      setCards(loadedCards as Flashcard[]);
+      const loadedCards = Array.isArray(data) ? data : (data as { cards?: VocabularyFlashcard[] }).cards ?? [];
+      setCards(loadedCards as VocabularyFlashcard[]);
       setLoading(false);
     }).catch(() => {
       setError('Could not load flashcards.');
@@ -59,6 +50,7 @@ export default function FlashcardsPage() {
     setSubmitting(true);
     try {
       await submitFlashcardReview(card.id, quality);
+      analytics.track('flashcard_rated', { quality, termId: card.termId });
       setStats(s => ({ reviewed: s.reviewed + 1, easy: s.easy + (quality >= 4 ? 1 : 0) }));
       if (current + 1 >= cards.length) {
         setDone(true);
@@ -73,6 +65,33 @@ export default function FlashcardsPage() {
     }
   }
 
+  function playAudio(url: string | null) {
+    if (!url) return;
+    try { void new Audio(url).play(); } catch {/* ignore */}
+  }
+
+  // Keyboard: Space=flip, 1-4=rate (after flip), Arrow=flip/next.
+  useEffect(() => {
+    function onKey(ev: KeyboardEvent) {
+      if (!card || done) return;
+      if (ev.key === ' ' || ev.key === 'Enter') {
+        ev.preventDefault();
+        if (!flipped) setFlipped(true);
+        return;
+      }
+      if (flipped) {
+        const n = parseInt(ev.key, 10);
+        if (n >= 1 && n <= 4) {
+          ev.preventDefault();
+          void handleRate(QUALITY_OPTIONS[n - 1].q);
+        }
+      }
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [card, flipped, done]);
+
   return (
     <LearnerDashboardShell>
       <div className="mb-6 flex items-center gap-3">
@@ -81,7 +100,7 @@ export default function FlashcardsPage() {
         </Link>
         <LearnerPageHero
           title="Flashcard Review"
-          description={`${cards.length} cards due for review`}
+          description={`${cards.length} cards due for review · Space to flip · 1–4 to rate`}
           icon={Layers}
         />
       </div>
@@ -136,13 +155,25 @@ export default function FlashcardsPage() {
               transition={{ duration: 0.2 }}
               className="mb-4 flex min-h-[220px] cursor-pointer select-none flex-col items-center justify-center rounded-2xl border border-gray-200 bg-surface p-8 text-center"
               onClick={() => !flipped && setFlipped(true)}
+              role="button"
+              tabIndex={0}
+              aria-live="polite"
+              aria-label={flipped ? `Definition: ${card.definition}` : `Word: ${card.term}. Press Space to reveal the definition.`}
             >
               {!flipped ? (
                 <>
                   <div className="mb-4 text-xs font-medium uppercase text-primary">Word</div>
-                  <div className="mb-2 text-3xl font-bold text-navy">{card.word}</div>
-                  {card.pronunciation && <div className="text-sm italic text-muted">{card.pronunciation}</div>}
-                  <div className="mt-6 text-xs text-muted">Tap to reveal definition</div>
+                  <div className="mb-2 text-3xl font-bold text-navy">{card.term}</div>
+                  {card.ipaPronunciation && <div className="text-sm italic text-muted">{card.ipaPronunciation}</div>}
+                  {card.audioUrl && (
+                    <button
+                      onClick={(e) => { e.stopPropagation(); playAudio(card.audioUrl); }}
+                      className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-primary/5 px-3 py-1.5 text-xs font-medium text-primary hover:bg-primary/10"
+                    >
+                      <Volume2 className="h-3.5 w-3.5" /> Play audio
+                    </button>
+                  )}
+                  <div className="mt-6 text-xs text-muted">Tap or press Space to reveal</div>
                 </>
               ) : (
                 <>
@@ -151,6 +182,13 @@ export default function FlashcardsPage() {
                   {card.exampleSentence && (
                     <div className="mt-2 w-full border-t border-gray-100 pt-3 text-sm italic text-muted">
                       &quot;{card.exampleSentence}&quot;
+                    </div>
+                  )}
+                  {card.synonyms?.length > 0 && (
+                    <div className="mt-3 flex flex-wrap justify-center gap-1">
+                      {card.synonyms.slice(0, 4).map((s, i) => (
+                        <span key={i} className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{s}</span>
+                      ))}
                     </div>
                   )}
                 </>
@@ -165,9 +203,12 @@ export default function FlashcardsPage() {
                   key={opt.q}
                   onClick={() => handleRate(opt.q)}
                   disabled={submitting}
-                  className={`rounded-xl py-3 text-sm font-medium transition-colors ${opt.color} disabled:opacity-50`}
+                  className={`relative rounded-xl py-3 text-sm font-medium transition-colors ${opt.color} disabled:opacity-50`}
+                  aria-keyshortcuts={opt.key}
+                  aria-label={`${opt.label} (key ${opt.key})`}
                 >
                   {opt.label}
+                  <span className="absolute top-1 right-2 text-xs opacity-70">{opt.key}</span>
                 </button>
               ))}
             </MotionSection>

@@ -33,6 +33,15 @@ vi.mock('@/lib/api', () => ({
   fetchUserProfile: mockFetchUserProfile,
   fetchDashboardHome: mockFetchDashboardHome,
   fetchEngagement: mockFetchEngagement,
+  fetchPronunciationProfile: vi.fn().mockResolvedValue({
+    overallScore: 0,
+    projectedSpeakingScaled: 0,
+    projectedSpeakingGrade: 'E',
+    projectedSpeakingPassed: false,
+    totalAssessments: 0,
+    weakPhonemes: [],
+  }),
+  fetchPronunciationDueDrills: vi.fn().mockResolvedValue([]),
 }));
 
 import DashboardPage from './page';

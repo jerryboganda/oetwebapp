@@ -908,7 +908,8 @@ public sealed class PrivateSpeakingService(
                 query = query.Where(b => b.Status == status);
         }
 
-        return await query.OrderByDescending(b => b.SessionStartUtc).ToListAsync(ct);
+        var bookings = await query.ToListAsync(ct);
+        return bookings.OrderByDescending(b => b.SessionStartUtc).ToList();
     }
 
     public async Task<PrivateSpeakingBooking?> GetBookingAsync(
@@ -936,7 +937,8 @@ public sealed class PrivateSpeakingService(
                 query = query.Where(b => b.Status == status);
         }
 
-        return await query.OrderByDescending(b => b.SessionStartUtc).ToListAsync(ct);
+        var bookings = await query.ToListAsync(ct);
+        return bookings.OrderByDescending(b => b.SessionStartUtc).ToList();
     }
 
     // ── Admin Queries ───────────────────────────────────────────────────
@@ -956,16 +958,23 @@ public sealed class PrivateSpeakingService(
             query = query.Where(b => b.LearnerUserId == learnerUserId);
         if (!string.IsNullOrEmpty(statusFilter) && Enum.TryParse<PrivateSpeakingBookingStatus>(statusFilter, true, out var status))
             query = query.Where(b => b.Status == status);
+        var bookings = await query.ToListAsync(ct);
         if (fromDate.HasValue)
-            query = query.Where(b => b.SessionStartUtc >= fromDate.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc));
+        {
+            var fromUtc = fromDate.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Utc);
+            bookings = bookings.Where(b => b.SessionStartUtc >= fromUtc).ToList();
+        }
         if (toDate.HasValue)
-            query = query.Where(b => b.SessionStartUtc <= toDate.Value.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc));
+        {
+            var toUtc = toDate.Value.ToDateTime(TimeOnly.MaxValue, DateTimeKind.Utc);
+            bookings = bookings.Where(b => b.SessionStartUtc <= toUtc).ToList();
+        }
 
-        return await query
+        return bookings
             .OrderByDescending(b => b.SessionStartUtc)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
-            .ToListAsync(ct);
+            .ToList();
     }
 
     public async Task<int> GetBookingCountAsync(

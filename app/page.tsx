@@ -30,6 +30,7 @@ import {
   WeakestLinkCard,
 } from '@/components/domain';
 import { AiUsageWidget } from '@/components/domain/AiUsageWidget';
+import { PronunciationDashboardTile } from '@/components/domain/pronunciation';
 import { AsyncStateWrapper } from '@/components/state';
 import { useDashboardHome } from '@/lib/hooks/use-dashboard-home';
 import type { SubTest } from '@/lib/mock-data';
@@ -336,6 +337,8 @@ export default function Dashboard() {
               ) : null}
 
               <AiUsageWidget />
+
+              <PronunciationDashboardTile />
 
               {engagement ? (
                 <Card>

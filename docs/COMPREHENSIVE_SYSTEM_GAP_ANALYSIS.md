@@ -293,7 +293,7 @@ These backend endpoints are implemented and registered but no frontend page or A
 | 18 | `/predictions` | ✅ Complete | ✅ | Score range visualization, confidence badges |
 | 19 | `/vocabulary` | ✅ Complete | ✅ | Stats cards, word list with mastery badges |
 | 20 | `/grammar` | ✅ Complete | ✅ | Filtered lesson grid with level accents |
-| 21 | `/pronunciation` | ✅ Complete | ✅ | Drill grid with difficulty badges, progress tracking |
+| 21 | `/pronunciation` | ✅ Complete | ✅ | Drill grid, spaced-repetition "Due today" ribbon, focus + difficulty filters, recording UX with waveform level meter, grounded AI feedback, projected Speaking band, minimal-pair listening game at `/pronunciation/discrimination/[drillId]`, admin CMS at `/admin/pronunciation`. Backed by `IPronunciationAsrProvider` (Azure / Whisper / Mock runtime-selectable). See `docs/PRONUNCIATION.md`. |
 | 22 | `/learning-paths` | ✅ Complete | ✅ | Progress bar, recommended items, per-subtest cards |
 | 23 | `/lessons` | ✅ Complete | ✅ | Video grid with thumbnails, duration badges |
 | 24 | `/leaderboard` | ✅ Complete | ✅ | Period/exam toggles, medal icons, opt-in system |

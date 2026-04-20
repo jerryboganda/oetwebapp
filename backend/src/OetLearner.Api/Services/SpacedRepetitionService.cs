@@ -5,7 +5,7 @@ using OetLearner.Api.Domain;
 namespace OetLearner.Api.Services;
 
 /// <summary>SM-2 spaced repetition algorithm for review item scheduling.</summary>
-public class SpacedRepetitionService(LearnerDbContext db)
+public class SpacedRepetitionService(LearnerDbContext db, ISpacedRepetitionScheduler scheduler)
 {
     public async Task<object> GetDueItemsAsync(string userId, int limit, CancellationToken ct)
     {
@@ -89,28 +89,19 @@ public class SpacedRepetitionService(LearnerDbContext db)
         return new { deleted = true };
     }
 
-    // ── SM-2 algorithm ────────────────────────────────────────────────────
+    // ── SM-2 algorithm (delegated to shared scheduler) ──────────────────
 
-    private static void ApplySm2(ReviewItem item, int quality)
+    private void ApplySm2(ReviewItem item, int quality)
     {
-        item.ReviewCount++;
+        var update = scheduler.Schedule(
+            new Sm2State(item.EaseFactor, item.IntervalDays, item.ReviewCount, item.ConsecutiveCorrect),
+            quality);
 
-        if (quality >= 3)
-        {
-            item.ConsecutiveCorrect++;
-            item.IntervalDays = item.ReviewCount == 1 ? 1
-                : item.ReviewCount == 2 ? 6
-                : (int)Math.Round(item.IntervalDays * item.EaseFactor);
-
-            item.EaseFactor = Math.Max(1.3, item.EaseFactor + 0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
-        }
-        else
-        {
-            item.ConsecutiveCorrect = 0;
-            item.IntervalDays = 1;
-        }
-
-        item.DueDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(item.IntervalDays);
+        item.EaseFactor = update.EaseFactor;
+        item.IntervalDays = update.IntervalDays;
+        item.ReviewCount = update.ReviewCount;
+        item.ConsecutiveCorrect = update.CorrectAnswer ? item.ConsecutiveCorrect + 1 : 0;
+        item.DueDate = update.NextReviewDate;
     }
 
     private static object MapItem(ReviewItem r) => new

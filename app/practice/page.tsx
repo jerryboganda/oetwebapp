@@ -35,6 +35,12 @@ const PRACTICE_MODES = [
     description: 'Role plays, handovers, and pronunciation drills.',
   },
   {
+    href: '/pronunciation',
+    icon: Mic,
+    title: 'Pronunciation Drills',
+    description: 'Record yourself, get phoneme-level feedback, and train weak sounds.',
+  },
+  {
     href: '/reading',
     icon: BookOpen,
     title: 'Reading Practice',

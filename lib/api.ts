@@ -1339,9 +1339,14 @@ export async function submitSpeakingRecording(
     }),
   });
   const submitted = await apiRequest<ApiRecord>(`/v1/speaking/attempts/${attempt.attemptId}/submit`, { method: 'POST' });
+  const evaluationId = typeof submitted.evaluationId === 'string' ? submitted.evaluationId : '';
+  if (!evaluationId) {
+    throw new Error('Speaking evaluation was not queued. Please try again.');
+  }
+
   cacheRemove(attemptCacheKey('speaking', taskId));
-  cacheSet(evaluationCacheKey('speaking', taskId), submitted.evaluationId);
-  return { uploadUrl: upload.uploadUrl, submissionId: submitted.evaluationId };
+  cacheSet(evaluationCacheKey('speaking', taskId), evaluationId);
+  return { uploadUrl: upload.uploadUrl, submissionId: evaluationId };
 }
 
 export async function fetchReadingTask(taskId: string): Promise<ReadingTask> {
@@ -3125,10 +3130,11 @@ export async function deleteReviewItem(itemId: string) {
 
 // ── Vocabulary ────────────────────────────────────────────────────────────────
 
-export async function fetchVocabularyTerms(params?: { examTypeCode?: string; category?: string; search?: string; page?: number; pageSize?: number }) {
+export async function fetchVocabularyTerms(params?: { examTypeCode?: string; category?: string; profession?: string; search?: string; page?: number; pageSize?: number }) {
   const p = new URLSearchParams();
   if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
   if (params?.category) p.set('category', params.category);
+  if (params?.profession) p.set('profession', params.profession);
   if (params?.search) p.set('search', params.search);
   if (params?.page) p.set('page', String(params.page));
   if (params?.pageSize) p.set('pageSize', String(params.pageSize));
@@ -3139,13 +3145,51 @@ export async function fetchVocabularyTerm(termId: string) {
   return apiRequest(`/v1/vocabulary/terms/${encodeURIComponent(termId)}`);
 }
 
+export async function lookupVocabularyTerm(query: string, examTypeCode = 'oet') {
+  const p = new URLSearchParams({ q: query, examTypeCode });
+  return apiRequest(`/v1/vocabulary/terms/lookup?${p}`);
+}
+
+export async function fetchVocabularyCategories(params?: { examTypeCode?: string; profession?: string }) {
+  const p = new URLSearchParams();
+  if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
+  if (params?.profession) p.set('profession', params.profession);
+  const qs = p.toString();
+  return apiRequest(`/v1/vocabulary/categories${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchVocabularyStats() {
+  return apiRequest('/v1/vocabulary/stats');
+}
+
+export async function fetchVocabularyDailySet(count = 10) {
+  return apiRequest(`/v1/vocabulary/daily-set?count=${count}`);
+}
+
+export async function fetchVocabularyQuizHistory(params?: { page?: number; pageSize?: number }) {
+  const p = new URLSearchParams();
+  p.set('page', String(params?.page ?? 1));
+  p.set('pageSize', String(params?.pageSize ?? 20));
+  return apiRequest(`/v1/vocabulary/quiz/history?${p}`);
+}
+
+export async function requestVocabularyGloss(payload: { word: string; context?: string; letterType?: string; profession?: string }) {
+  return apiRequest('/v1/vocabulary/gloss', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function fetchMyVocabulary(mastery?: string) {
   const p = mastery ? `?mastery=${mastery}` : '';
   return apiRequest(`/v1/vocabulary/my-list${p}`);
 }
 
-export async function addToMyVocabulary(termId: string) {
-  return apiRequest(`/v1/vocabulary/my-list/${encodeURIComponent(termId)}`, { method: 'POST' });
+export async function addToMyVocabulary(termId: string, opts?: { sourceRef?: string; context?: string }) {
+  return apiRequest(`/v1/vocabulary/my-list/${encodeURIComponent(termId)}`, {
+    method: 'POST',
+    body: JSON.stringify({ sourceRef: opts?.sourceRef, context: opts?.context }),
+  });
 }
 
 export async function removeFromMyVocabulary(termId: string) {
@@ -3327,8 +3371,8 @@ export async function submitFlashcardReview(lvId: string, quality: number) {
   });
 }
 
-export async function fetchVocabQuiz(count = 10) {
-  return apiRequest(`/v1/vocabulary/quiz?count=${count}`);
+export async function fetchVocabQuiz(count = 10, format: string = 'definition_match') {
+  return apiRequest(`/v1/vocabulary/quiz?count=${count}&format=${encodeURIComponent(format)}`);
 }
 
 // ── Admin: Content Hierarchy Management ──
@@ -3531,7 +3575,124 @@ export async function adminUpdateContentEligibility(contentId: string, eligibili
   });
 }
 
-export async function submitVocabQuiz(payload: { answers: Array<{ termId: string; correct: boolean; userAnswer?: string }>; durationSeconds: number }) {
+// ── Admin: Vocabulary Management ──────────────────────────────────────
+
+export async function fetchAdminVocabularyItems(params?: {
+  profession?: string; category?: string; status?: string; search?: string;
+  page?: number; pageSize?: number;
+}) {
+  const p = new URLSearchParams();
+  if (params?.profession) p.set('profession', params.profession);
+  if (params?.category) p.set('category', params.category);
+  if (params?.status) p.set('status', params.status);
+  if (params?.search) p.set('search', params.search);
+  if (params?.page) p.set('page', String(params.page));
+  if (params?.pageSize) p.set('pageSize', String(params.pageSize));
+  const qs = p.toString();
+  return apiRequest(`/v1/admin/vocabulary/items${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchAdminVocabularyItem(itemId: string) {
+  return apiRequest(`/v1/admin/vocabulary/items/${encodeURIComponent(itemId)}`);
+}
+
+export async function createAdminVocabularyItem(payload: Record<string, unknown>) {
+  return apiRequest('/v1/admin/vocabulary/items', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function updateAdminVocabularyItem(itemId: string, payload: Record<string, unknown>) {
+  return apiRequest(`/v1/admin/vocabulary/items/${encodeURIComponent(itemId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function deleteAdminVocabularyItem(itemId: string) {
+  return apiRequest(`/v1/admin/vocabulary/items/${encodeURIComponent(itemId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function fetchAdminVocabularyCategories(params?: { examTypeCode?: string; professionId?: string }) {
+  const p = new URLSearchParams();
+  if (params?.examTypeCode) p.set('examTypeCode', params.examTypeCode);
+  if (params?.professionId) p.set('professionId', params.professionId);
+  const qs = p.toString();
+  return apiRequest(`/v1/admin/vocabulary/categories${qs ? `?${qs}` : ''}`);
+}
+
+export async function previewAdminVocabularyImport(file: File) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetchWithTimeout(resolveApiUrl('/v1/admin/vocabulary/import/preview'), {
+    method: 'POST',
+    headers: await getHeaders('/v1/admin/vocabulary/import/preview', undefined, { json: false }),
+    body: formData,
+  }, 60_000);
+  if (!response.ok) {
+    let code = 'preview_failed';
+    let message = `Preview failed: ${response.status}`;
+    try {
+      const err = await response.json();
+      code = err.code ?? err.errorCode ?? code;
+      message = err.message ?? err.error ?? message;
+    } catch { /* ignore */ }
+    throw new ApiError(response.status, code, message, false);
+  }
+  return response.json();
+}
+
+export async function bulkImportAdminVocabulary(file: File, dryRun = false) {
+  const formData = new FormData();
+  formData.append('file', file);
+  const response = await fetchWithTimeout(resolveApiUrl(`/v1/admin/vocabulary/import?dryRun=${dryRun}`), {
+    method: 'POST',
+    headers: await getHeaders('/v1/admin/vocabulary/import', undefined, { json: false }),
+    body: formData,
+  }, 120_000);
+  if (!response.ok) {
+    let code = 'import_failed';
+    let message = `Import failed: ${response.status}`;
+    try {
+      const err = await response.json();
+      code = err.code ?? err.errorCode ?? code;
+      message = err.message ?? err.error ?? message;
+    } catch { /* ignore */ }
+    throw new ApiError(response.status, code, message, false);
+  }
+  return response.json();
+}
+
+export async function requestAdminVocabularyAiDraft(payload: {
+  count: number;
+  examTypeCode: string;
+  professionId?: string | null;
+  category: string;
+  difficulty?: string;
+  seedPrompt?: string;
+}) {
+  return apiRequest('/v1/admin/vocabulary/ai/draft', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function acceptAdminVocabularyAiDrafts(payload: {
+  examTypeCode: string;
+  professionId?: string | null;
+  sourceProvenance: string;
+  drafts: Array<Record<string, unknown>>;
+}) {
+  return apiRequest('/v1/admin/vocabulary/ai/draft/accept', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function submitVocabQuiz(payload: { answers: Array<{ termId: string; correct: boolean; userAnswer?: string }>; durationSeconds: number; format?: string }) {
   return apiRequest('/v1/vocabulary/quiz/submit', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -4776,10 +4937,83 @@ export async function adminArchiveStrategyGuide(guideId: string) {
 }
 
 // ── Pronunciation ─────────────────────────────────────────────────────────────
+// All pronunciation endpoints are protected by the backend's LearnerOnly policy
+// and the `pronunciation_analysis` feature flag. The recording+scoring flow:
+//   1. pronunciationInitAttempt(drillId) → { attemptId, uploadUrl, ... }
+//   2. pronunciationUploadAudio(drillId, attemptId, blob, durationMs)
+//   3. fetchPronunciationAssessment(assessmentId) for the result detail page.
 
-export async function fetchPronunciationDrills(difficulty?: string) {
-  const p = difficulty ? `?difficulty=${difficulty}` : '';
-  return apiRequest(`/v1/pronunciation/drills${p}`);
+export type PronunciationDrillSummary = {
+  id: string;
+  targetPhoneme: string;
+  label: string;
+  profession: string;
+  focus: string;
+  primaryRuleId: string | null;
+  exampleWordsJson: string;
+  minimalPairsJson: string;
+  sentencesJson: string;
+  difficulty: string;
+  audioModelUrl: string | null;
+  audioModelAssetId: string | null;
+  tipsHtml: string;
+};
+
+export type PronunciationProgressItem = {
+  phonemeCode: string;
+  averageScore: number;
+  attemptCount: number;
+  lastPracticedAt: string | null;
+  nextDueAt?: string | null;
+  intervalDays?: number;
+};
+
+export type PronunciationEntitlement = {
+  allowed: boolean;
+  tier: string;
+  remaining: number;
+  limitPerWindow: number;
+  windowDays: number;
+  resetAt: string | null;
+  reason: string;
+};
+
+export type PronunciationAssessmentDetail = {
+  id: string;
+  drillId: string | null;
+  attemptId: string | null;
+  accuracy: number;
+  fluency: number;
+  completeness: number;
+  prosody: number;
+  overall: number;
+  projectedSpeakingScaled: number;
+  projectedSpeakingGrade: string;
+  wordScoresJson: string;
+  problematicPhonemesJson: string;
+  fluencyMarkersJson: string;
+  findingsJson: string;
+  feedbackJson: string;
+  provider: string;
+  rulebookVersion: string;
+  createdAt: string;
+};
+
+export async function fetchPronunciationDrills(params?: {
+  profession?: string;
+  difficulty?: string;
+  focus?: string;
+}) {
+  const q = new URLSearchParams();
+  if (params?.profession) q.set('profession', params.profession);
+  if (params?.difficulty) q.set('difficulty', params.difficulty);
+  if (params?.focus) q.set('focus', params.focus);
+  const suffix = q.toString() ? `?${q.toString()}` : '';
+  return apiRequest(`/v1/pronunciation/drills${suffix}`);
+}
+
+export async function fetchPronunciationDueDrills(limit = 6) {
+  return apiRequest(`/v1/pronunciation/drills/due?limit=${limit}`);
 }
 
 export async function fetchPronunciationDrill(drillId: string) {
@@ -4788,6 +5022,143 @@ export async function fetchPronunciationDrill(drillId: string) {
 
 export async function fetchMyPronunciationProgress() {
   return apiRequest('/v1/pronunciation/my-progress');
+}
+
+export async function fetchPronunciationProfile() {
+  return apiRequest('/v1/pronunciation/profile');
+}
+
+export async function fetchPronunciationEntitlement() {
+  return apiRequest('/v1/pronunciation/entitlement');
+}
+
+/** Reserve an attempt id + upload slot. Returns entitlement info too. */
+export async function pronunciationInitAttempt(drillId: string) {
+  return apiRequest(`/v1/pronunciation/drills/${encodeURIComponent(drillId)}/attempt/init`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+/**
+ * Upload the recorded audio blob and synchronously receive the scored
+ * assessment. The request uses raw-body POST with the audio Content-Type set
+ * directly — no multipart wrapper needed. Bypasses the JSON-first apiRequest.
+ */
+export async function pronunciationUploadAudio(
+  drillId: string,
+  attemptId: string,
+  blob: Blob,
+  options?: { durationMs?: number; signal?: AbortSignal }
+) {
+  const path = `/v1/pronunciation/drills/${encodeURIComponent(drillId)}/attempt/${encodeURIComponent(attemptId)}/audio`;
+  const headers = new Headers(
+    await getHeaders(path, undefined, { json: false })
+  );
+  headers.set('Content-Type', blob.type || 'application/octet-stream');
+  if (typeof options?.durationMs === 'number') {
+    headers.set('X-Audio-Duration-Ms', String(Math.round(options.durationMs)));
+  }
+  const response = await fetchWithTimeout(resolveApiUrl(path), {
+    method: 'POST',
+    headers,
+    body: blob,
+    signal: options?.signal,
+  }, 120_000);
+  if (!response.ok) {
+    let message = `Upload failed: ${response.status}`;
+    let code = 'upload_failed';
+    try {
+      const err = await response.json();
+      message = err.message ?? err.title ?? message;
+      code = err.code ?? code;
+    } catch {
+      /* non-JSON error */
+    }
+    throw new ApiError(response.status, code, message, false);
+  }
+  return response.json();
+}
+
+export async function fetchPronunciationAssessment(assessmentId: string) {
+  return apiRequest(`/v1/pronunciation/assessment/${encodeURIComponent(assessmentId)}`);
+}
+
+export async function fetchPronunciationSpeakingLinked(limit = 20) {
+  return apiRequest(`/v1/pronunciation/speaking-linked?limit=${limit}`);
+}
+
+export async function submitPronunciationDiscrimination(
+  drillId: string,
+  roundsTotal: number,
+  roundsCorrect: number,
+) {
+  return apiRequest(
+    `/v1/pronunciation/drills/${encodeURIComponent(drillId)}/discrimination`,
+    {
+      method: 'POST',
+      body: JSON.stringify({ roundsTotal, roundsCorrect }),
+    }
+  );
+}
+
+// ── Admin: Pronunciation CMS ───────────────────────────────────────────────
+export async function fetchAdminPronunciationDrills(params?: {
+  profession?: string;
+  difficulty?: string;
+  status?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  const q = new URLSearchParams();
+  if (params?.profession) q.set('profession', params.profession);
+  if (params?.difficulty) q.set('difficulty', params.difficulty);
+  if (params?.status) q.set('status', params.status);
+  if (params?.search) q.set('search', params.search);
+  if (params?.page) q.set('page', String(params.page));
+  if (params?.pageSize) q.set('pageSize', String(params.pageSize));
+  const suffix = q.toString() ? `?${q.toString()}` : '';
+  return apiRequest(`/v1/admin/pronunciation/drills${suffix}`);
+}
+
+export async function fetchAdminPronunciationDrill(drillId: string) {
+  return apiRequest(`/v1/admin/pronunciation/drills/${encodeURIComponent(drillId)}`);
+}
+
+export async function createAdminPronunciationDrill(body: Record<string, unknown>) {
+  return apiRequest('/v1/admin/pronunciation/drills', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateAdminPronunciationDrill(drillId: string, body: Record<string, unknown>) {
+  return apiRequest(`/v1/admin/pronunciation/drills/${encodeURIComponent(drillId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function archiveAdminPronunciationDrill(drillId: string) {
+  return apiRequest(`/v1/admin/pronunciation/drills/${encodeURIComponent(drillId)}/archive`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+export async function adminPronunciationAiDraft(body: {
+  phoneme?: string;
+  focus?: string;
+  profession?: string;
+  difficulty?: string;
+  prompt?: string;
+  primaryRuleId?: string;
+}) {
+  return apiRequest('/v1/admin/pronunciation/drills/ai-draft', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
 }
 
 // ── Certificates ──────────────────────────────────────────────────────────────
@@ -4879,23 +5250,6 @@ export async function getConversationEvaluation(sessionId: string) {
 
 export async function getConversationHistory(page = 1, pageSize = 10) {
   return apiRequest(`/v1/conversations/history?page=${page}&pageSize=${pageSize}`);
-}
-
-// ── Pronunciation ───────────────────────────────────────────────────────
-
-export async function fetchPronunciationProfile() {
-  return apiRequest('/v1/pronunciation/profile');
-}
-
-export async function submitPronunciationAttempt(drillId: string, audioUrl?: string) {
-  return apiRequest(`/v1/pronunciation/drills/${encodeURIComponent(drillId)}/attempt`, {
-    method: 'POST',
-    body: JSON.stringify({ audioUrl }),
-  });
-}
-
-export async function fetchPronunciationAssessment(assessmentId: string) {
-  return apiRequest(`/v1/pronunciation/assessment/${encodeURIComponent(assessmentId)}`);
 }
 
 // ── Writing Coach ───────────────────────────────────────────────────────

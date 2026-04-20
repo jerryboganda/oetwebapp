@@ -482,6 +482,9 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
         if (ctx.Kind == RuleKind.Pronunciation)
             return (OetScoring.ScaledPassGradeB, "B");
 
+        if (ctx.Kind == RuleKind.Vocabulary)
+            return (0, "N/A"); // Vocabulary never projects to a scaled OET score.
+
         var t = OetScoring.GetWritingPassThreshold(ctx.CandidateCountry);
         if (t is null) return (OetScoring.ScaledPassGradeB, "B");
         return (t.Threshold, t.Grade);
@@ -542,6 +545,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
             RuleKind.Speaking => "**This call concerns SPEAKING** — apply the universal 350/500 pass mark regardless of country.",
             RuleKind.Grammar => "**This call concerns GRAMMAR authoring** — the scoring table is background context only. Do NOT produce a candidate score; you are producing teaching content grounded in the rulebook.",
             RuleKind.Pronunciation => "**This call concerns PRONUNCIATION** — overall 0-100 scores map to the universal Speaking 0-500 scale using the anchor table in /rulebooks/pronunciation/common/assessment-criteria.json (60=300, 70=350=pass, 80=400, 90=450, 100=500). Never produce a grade that contradicts the Speaking pass at 350.",
+            RuleKind.Vocabulary => "**This call concerns VOCABULARY authoring** — the scoring table is background context only. Do NOT produce a candidate scaled score. You are producing teaching content (terms, glosses) grounded in the vocabulary rulebook. Vocabulary quiz percentages (0–100) are pedagogical metrics and NEVER equivalent to an OET scaled score.",
             _ => ""
         });
         sb.AppendLine();
@@ -588,6 +592,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
             RuleKind.Speaking => "8. For speaking: respect the 13-stage consultation state machine and the Breaking Bad News 7-step protocol when analysing transcripts.",
             RuleKind.Grammar => "8. For grammar authoring: every exercise you emit must cite at least one grammar rule ID (e.g. \"G02.1\") in appliedRuleIds. If a concept falls outside the rulebook, omit it rather than invent.",
             RuleKind.Pronunciation => "8. For pronunciation: every finding MUST cite a rule ID from the pronunciation rulebook (e.g. \"P01.1\", \"P04.1\"). Never invent a phoneme or stress-pattern rule. If the input shows issues outside the rulebook, describe them as observations rather than scored findings.",
+            RuleKind.Vocabulary => "8. For vocabulary authoring: every term MUST cite at least one vocabulary rule ID (e.g. \"V02.1\") in appliedRuleIds. Definitions must be clinically accurate, concise (≤ 25 words), and written in formal healthcare register. Example sentences must mirror OET letter register. Never include brand names, trademarks, or colloquialisms. Never invent a rule ID.",
             _ => "8. For writing: respect the letter structure order (Address → Date → Salutation → Re: line → Body → Yours sincerely/faithfully → Doctor) and flag layout violations."
         });
         sb.AppendLine();
@@ -710,6 +715,46 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 sb.AppendLine("}");
                 sb.AppendLine("```");
                 break;
+            case AiTaskMode.GenerateVocabularyTerm:
+                sb.AppendLine("Return a SINGLE JSON object describing ONE OR MORE medical vocabulary terms. Each term MUST cite at least one vocabulary rule ID (e.g. \"V02.1\") in appliedRuleIds. Definitions ≤ 25 words, clinically accurate, healthcare-register. Example sentences mirror OET letter register.");
+                sb.AppendLine("```json");
+                sb.AppendLine("{");
+                sb.AppendLine("  \"terms\": [");
+                sb.AppendLine("    {");
+                sb.AppendLine("      \"term\": \"...\",");
+                sb.AppendLine("      \"ipaPronunciation\": \"/ˈ.../\",   // IPA string; optional but recommended");
+                sb.AppendLine("      \"definition\": \"... (≤ 25 words, clinical register)\",");
+                sb.AppendLine("      \"exampleSentence\": \"... (single sentence, OET-register)\",");
+                sb.AppendLine("      \"contextNotes\": \"... (optional)\",");
+                sb.AppendLine("      \"category\": \"medical|anatomy|symptoms|procedures|pharmacology|conditions|clinical_communication\",");
+                sb.AppendLine("      \"difficulty\": \"easy|medium|hard\",");
+                sb.AppendLine("      \"synonyms\": [\"...\"],");
+                sb.AppendLine("      \"collocations\": [\"...\"],");
+                sb.AppendLine("      \"relatedTerms\": [\"...\"],");
+                sb.AppendLine("      \"appliedRuleIds\": [\"V02.1\"]");
+                sb.AppendLine("    }");
+                sb.AppendLine("  ],");
+                sb.AppendLine("  \"selfCheckNotes\": \"... (optional)\"");
+                sb.AppendLine("}");
+                sb.AppendLine("```");
+                sb.AppendLine("Hard requirements: every term must have `term`, `definition`, `exampleSentence`, `category`, and at least one `appliedRuleIds` entry that exists in the rulebook above. No brand names. No colloquialisms.");
+                break;
+            case AiTaskMode.GenerateVocabularyGloss:
+                sb.AppendLine("Return a SINGLE JSON object giving a concise learner-facing gloss of the requested word in its medical context. Cite ≥1 rule ID.");
+                sb.AppendLine("```json");
+                sb.AppendLine("{");
+                sb.AppendLine("  \"term\": \"...\",");
+                sb.AppendLine("  \"ipaPronunciation\": \"/ˈ.../\",      // optional");
+                sb.AppendLine("  \"shortDefinition\": \"... (≤ 20 words)\",");
+                sb.AppendLine("  \"exampleSentence\": \"... (OET-register)\",");
+                sb.AppendLine("  \"contextNotes\": \"... (how the word is used in the supplied context, ≤ 40 words)\",");
+                sb.AppendLine("  \"synonyms\": [\"...\"],");
+                sb.AppendLine("  \"register\": \"formal|clinical|colloquial\",");
+                sb.AppendLine("  \"appliedRuleIds\": [\"V02.1\"]");
+                sb.AppendLine("}");
+                sb.AppendLine("```");
+                sb.AppendLine("If the word is not medically meaningful, set `shortDefinition` to the general English sense and note that in `contextNotes`. Never invent a rule ID.");
+                break;
             default:
                 sb.AppendLine("Plain text, concise, ≤ 200 words. Cite rule IDs in parentheses when invoking rules.");
                 break;
@@ -730,11 +775,19 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 AiTaskMode.GeneratePronunciationFeedback => "Task: produce learner-facing coaching text for a scored pronunciation attempt. Do not re-score. Every improvement must cite a P-rule ID.",
                 _ => "Task: respond according to the reply format above."
             },
+            RuleKind.Vocabulary => ctx.Task switch
+            {
+                AiTaskMode.GenerateVocabularyTerm => "Task: author one or more OET medical vocabulary terms grounded in the active vocabulary rulebook. Each term must have term, definition, exampleSentence, category, and ≥1 appliedRuleIds entry.",
+                AiTaskMode.GenerateVocabularyGloss => "Task: produce a concise, learner-facing gloss of a single word in its supplied medical context. Do not invent meanings. Do not re-score.",
+                _ => "Task: respond according to the reply format above."
+            },
             _ => "Task: respond according to the reply format above."
         };
         if (ctx.Kind == RuleKind.Grammar)
             return $"{baseText} Respond strictly in the reply format above.";
         if (ctx.Kind == RuleKind.Pronunciation)
+            return $"{baseText} Respond strictly in the reply format above.";
+        if (ctx.Kind == RuleKind.Vocabulary)
             return $"{baseText} Respond strictly in the reply format above.";
         return $"{baseText} Apply the {passMark}/500 (Grade {passGrade}) pass mark for this {ctx.Kind.ToString().ToLowerInvariant()} call. Respond strictly in the reply format above.";
     }
@@ -744,7 +797,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
 // Types
 // ---------------------------------------------------------------------------
 
-public enum AiTaskMode { Score, Coach, Correct, Summarise, GenerateFeedback, GenerateContent, GenerateGrammarLesson, ScorePronunciationAttempt, GeneratePronunciationDrill, GeneratePronunciationFeedback }
+public enum AiTaskMode { Score, Coach, Correct, Summarise, GenerateFeedback, GenerateContent, GenerateGrammarLesson, ScorePronunciationAttempt, GeneratePronunciationDrill, GeneratePronunciationFeedback, GenerateVocabularyTerm, GenerateVocabularyGloss }
 
 public sealed class AiGroundingContext
 {

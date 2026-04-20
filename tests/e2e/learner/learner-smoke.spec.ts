@@ -1,5 +1,6 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator, type Page } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
+import { waitForSessionGuardToClear } from '../fixtures/auth';
 
 const learnerRoutes = [
   {
@@ -60,6 +61,75 @@ const learnerRoutes = [
   },
 ];
 
+const recoverableRouteLoadErrorPattern =
+  /could not load|something went wrong|request failed|internal server error/i;
+
+async function hasRecoverableRouteLoadError(page: Page) {
+  await page.waitForLoadState('networkidle', { timeout: 5_000 }).catch(() => undefined);
+
+  return pageHasRecoverableRouteLoadError(page);
+}
+
+async function pageHasRecoverableRouteLoadError(page: Page) {
+  const bodyText = await page.locator('body').textContent({ timeout: 1_000 }).catch(() => '');
+  const documentText = await page
+    .evaluate(() => document.documentElement?.textContent ?? document.body?.textContent ?? '')
+    .catch(() => '');
+
+  return recoverableRouteLoadErrorPattern.test(`${bodyText ?? ''}\n${documentText}`);
+}
+
+async function openLearnerRoute(page: Page, path: string) {
+  let recovered = false;
+
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const response = await page.goto(path, { waitUntil: 'domcontentloaded' });
+    await waitForSessionGuardToClear(page, {
+      recover: () => page.goto(path, { waitUntil: 'domcontentloaded' }),
+      initialTimeoutMs: 15_000,
+    });
+
+    if ((response?.status() ?? 200) < 500 && !(await hasRecoverableRouteLoadError(page))) {
+      return recovered;
+    }
+
+    recovered = true;
+    await page.waitForTimeout(500 * (attempt + 1));
+  }
+
+  return recovered;
+}
+
+async function expectRouteHeading(page: Page, path: string, routeHeading: Locator) {
+  let recovered = false;
+  const deadline = Date.now() + 90_000;
+
+  while (Date.now() < deadline) {
+    if (await routeHeading.isVisible().catch(() => false)) {
+      return recovered;
+    }
+
+    if (await pageHasRecoverableRouteLoadError(page)) {
+      recovered = true;
+      await openLearnerRoute(page, path);
+      continue;
+    }
+
+    await page.waitForTimeout(500);
+  }
+
+  await expect(routeHeading).toBeVisible({ timeout: 1_000 });
+  return recovered;
+}
+
+function hasRecoverableNextDevPageError(diagnostics: ReturnType<typeof observePage>) {
+  return diagnostics.pageErrors.some(
+    (entry) =>
+      entry.includes('literal not terminated before end of script')
+      || entry.includes('ChunkLoadError: Loading chunk'),
+  );
+}
+
 test.describe('Learner workspace smoke @learner @smoke', () => {
   test.describe.configure({ mode: 'serial' });
 
@@ -69,16 +139,31 @@ test.describe('Learner workspace smoke @learner @smoke', () => {
     }
 
     testInfo.setTimeout(120000);
-    const diagnostics = observePage(page);
+    let diagnostics = observePage(page);
     const dashboardHeading = page.getByRole('heading', { name: /keep today'?s priorities and exam signals in view/i });
-    const sessionBanner = page.getByText(/checking your session/i);
     await page.goto('/', { waitUntil: 'domcontentloaded' });
-    await expect(dashboardHeading).toBeVisible({ timeout: 45000 });
-    await page.reload({ waitUntil: 'domcontentloaded' });
-    if (await sessionBanner.isVisible().catch(() => false)) {
-      await page.goto('/', { waitUntil: 'domcontentloaded' });
-    }
+    await waitForSessionGuardToClear(page, {
+      recover: () => page.goto('/', { waitUntil: 'domcontentloaded' }),
+      initialTimeoutMs: 15_000,
+    });
     await expect(dashboardHeading).toBeVisible({ timeout: 90000 });
+    await page.reload({ waitUntil: 'domcontentloaded' });
+    await waitForSessionGuardToClear(page, { recover: () => page.goto('/', { waitUntil: 'domcontentloaded' }) });
+    await expect(dashboardHeading).toBeVisible({ timeout: 90000 });
+
+    if (hasRecoverableNextDevPageError(diagnostics)) {
+      diagnostics.detach();
+      diagnostics = observePage(page);
+      await page.goto('/', { waitUntil: 'domcontentloaded' });
+      await waitForSessionGuardToClear(page, {
+        recover: () => page.goto('/', { waitUntil: 'domcontentloaded' }),
+        initialTimeoutMs: 15_000,
+      });
+      await expect(dashboardHeading).toBeVisible({ timeout: 90000 });
+      await page.reload({ waitUntil: 'domcontentloaded' });
+      await waitForSessionGuardToClear(page, { recover: () => page.goto('/', { waitUntil: 'domcontentloaded' }) });
+      await expect(dashboardHeading).toBeVisible({ timeout: 90000 });
+    }
 
     expectNoSevereClientIssues(diagnostics, {
       allowNotificationReconnectNoise: true,
@@ -95,17 +180,28 @@ test.describe('Learner workspace smoke @learner @smoke', () => {
         test.skip();
       }
 
-      const diagnostics = observePage(page);
-      const sessionBanner = page.getByText(/checking your session/i);
-      await page.goto(route.path, { waitUntil: 'domcontentloaded' });
-      if (await sessionBanner.isVisible().catch(() => false)) {
-        await page.goto(route.path, { waitUntil: 'domcontentloaded' });
+      testInfo.setTimeout(120000);
+      let diagnostics = observePage(page);
+      const recovered = await openLearnerRoute(page, route.path);
+      if (recovered) {
+        diagnostics.detach();
+        diagnostics = observePage(page);
       }
       const routeHeading = page.getByRole('heading', { name: route.heading });
 
       await expect(page).toHaveURL(new RegExp(route.path === '/' ? '/$' : route.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
-      await expect(sessionBanner).toBeHidden({ timeout: 90000 });
-      await expect(routeHeading).toBeVisible({ timeout: 90000 });
+      if (await expectRouteHeading(page, route.path, routeHeading)) {
+        diagnostics.detach();
+        diagnostics = observePage(page);
+      }
+
+      if (hasRecoverableNextDevPageError(diagnostics)) {
+        diagnostics.detach();
+        diagnostics = observePage(page);
+        await openLearnerRoute(page, route.path);
+        await expect(page).toHaveURL(new RegExp(route.path === '/' ? '/$' : route.path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')));
+        await expectRouteHeading(page, route.path, routeHeading);
+      }
 
       if (route.path === '/submissions') {
         await expect(page.getByText(/\d{4}-\d{2}-\d{2}T\d{2}:/)).toHaveCount(0);

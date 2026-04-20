@@ -44,6 +44,9 @@ export default function WritingPlayer() {
   const [mobileView, setMobileView] = useState<'notes' | 'editor'>('notes');
   const saveTimerRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const hasUnsavedChanges = useRef(false);
+  const latestContentRef = useRef('');
+  const isSubmittingRef = useRef(false);
+  const autosaveSequenceRef = useRef(0);
   const panelTransition: Transition = prefersReducedMotion
     ? { duration: 0.01 }
     : { type: 'spring', stiffness: 420, damping: 38 };
@@ -90,24 +93,47 @@ export default function WritingPlayer() {
   }, []);
 
   // Auto-save with 3s debounce
-  const triggerAutoSave = useCallback(() => {
+  const triggerAutoSave = useCallback((nextContent = latestContentRef.current) => {
     hasUnsavedChanges.current = true;
+
+    if (isSubmittingRef.current) {
+      return;
+    }
+
+    const saveSequence = autosaveSequenceRef.current + 1;
+    autosaveSequenceRef.current = saveSequence;
+
     setSaveStatus('saving');
     if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
     saveTimerRef.current = setTimeout(async () => {
+      if (isSubmittingRef.current || autosaveSequenceRef.current !== saveSequence) {
+        return;
+      }
+
       try {
-        await submitWritingDraft(taskId, content);
+        await submitWritingDraft(taskId, nextContent);
+        if (isSubmittingRef.current || autosaveSequenceRef.current !== saveSequence) {
+          return;
+        }
         setSaveStatus('saved');
         hasUnsavedChanges.current = false;
       } catch {
+        if (isSubmittingRef.current || autosaveSequenceRef.current !== saveSequence) {
+          return;
+        }
         setSaveStatus('failed');
+      } finally {
+        if (autosaveSequenceRef.current === saveSequence) {
+          saveTimerRef.current = undefined;
+        }
       }
     }, 3000);
-  }, [taskId, content]);
+  }, [taskId]);
 
   const handleContentChange = useCallback((val: string) => {
+    latestContentRef.current = val;
     setContent(val);
-    triggerAutoSave();
+    triggerAutoSave(val);
   }, [triggerAutoSave]);
 
   // Prevent accidental navigation
@@ -120,14 +146,37 @@ export default function WritingPlayer() {
   }, []);
 
   const handleSubmit = async () => {
+    if (submitting) return;
+
+    isSubmittingRef.current = true;
+    autosaveSequenceRef.current += 1;
+    if (saveTimerRef.current) {
+      clearTimeout(saveTimerRef.current);
+      saveTimerRef.current = undefined;
+    }
+
+    const submittedContent = latestContentRef.current;
+    const submittedWordCount = submittedContent.trim().split(/\s+/).filter(Boolean).length;
+
     setSubmitting(true);
+    setSaveStatus('saving');
     try {
-      const result = await submitWritingTask(taskId, content);
-      analytics.track('task_submitted', { taskId, subtest: 'writing', wordCount });
+      const result = await submitWritingTask(taskId, submittedContent);
+      analytics.track('task_submitted', { taskId, subtest: 'writing', wordCount: submittedWordCount });
+      hasUnsavedChanges.current = false;
+      setSaveStatus('saved');
       setTimerRunning(false);
-      router.push(`/writing/result?id=${result.id}`);
+      const resultUrl = `/writing/result?id=${encodeURIComponent(result.id)}`;
+      router.replace(resultUrl);
+      window.setTimeout(() => {
+        if (window.location.pathname !== '/writing/result') {
+          window.location.assign(resultUrl);
+        }
+      }, 500);
     } catch {
+      isSubmittingRef.current = false;
       setSubmitting(false);
+      setSaveStatus('failed');
     }
   };
 

@@ -186,31 +186,50 @@ public partial class AdminService
             v.ProfessionId,
             v.Category,
             v.Difficulty,
+            v.IpaPronunciation,
             v.AudioUrl,
+            v.AudioMediaAssetId,
             v.ImageUrl,
             v.SynonymsJson,
             v.CollocationsJson,
             v.RelatedTermsJson,
-            v.Status
+            v.SourceProvenance,
+            v.Status,
+            v.CreatedAt,
+            v.UpdatedAt
         };
     }
 
     public async Task<object> CreateVocabularyItemAsync(
-        string adminId, string adminName, AdminVocabularyItemCreateRequest request, CancellationToken ct)
+        string adminId, string adminName, AdminVocabularyItemCreateRequestV2 request, CancellationToken ct)
     {
         await using var tx = await BeginTransactionIfNeededAsync(ct);
+        ValidateVocabularyPayload(request.Term, request.Definition, request.ExampleSentence, request.Category,
+            request.Status, request.SourceProvenance, request.IpaPronunciation, request.AudioUrl);
+
         var id = $"VOC-{Guid.NewGuid():N}"[..12];
         var entity = new VocabularyTerm
         {
             Id = id,
-            Term = request.Term,
-            Definition = request.Definition,
+            Term = request.Term.Trim(),
+            Definition = request.Definition.Trim(),
+            ExampleSentence = request.ExampleSentence.Trim(),
+            ContextNotes = string.IsNullOrWhiteSpace(request.ContextNotes) ? null : request.ContextNotes.Trim(),
+            ExamTypeCode = string.IsNullOrWhiteSpace(request.ExamTypeCode) ? "oet" : request.ExamTypeCode,
             ProfessionId = request.ProfessionId,
-            Category = request.Category,
-            AudioUrl = request.Pronunciation,
-            ExampleSentence = request.ExampleSentence,
-            Difficulty = request.Difficulty ?? "intermediate",
-            Status = "active"
+            Category = request.Category.Trim(),
+            Difficulty = request.Difficulty ?? "medium",
+            IpaPronunciation = request.IpaPronunciation,
+            AudioUrl = request.AudioUrl,
+            AudioMediaAssetId = request.AudioMediaAssetId,
+            ImageUrl = request.ImageUrl,
+            SynonymsJson = JsonSupport.Serialize(request.Synonyms ?? Array.Empty<string>()),
+            CollocationsJson = JsonSupport.Serialize(request.Collocations ?? Array.Empty<string>()),
+            RelatedTermsJson = JsonSupport.Serialize(request.RelatedTerms ?? Array.Empty<string>()),
+            SourceProvenance = request.SourceProvenance,
+            Status = string.IsNullOrWhiteSpace(request.Status) ? "draft" : request.Status,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
         };
         db.VocabularyTerms.Add(entity);
         await db.SaveChangesAsync(ct);
@@ -221,24 +240,120 @@ public partial class AdminService
     }
 
     public async Task<object> UpdateVocabularyItemAsync(
-        string adminId, string adminName, string itemId, AdminVocabularyItemUpdateRequest request, CancellationToken ct)
+        string adminId, string adminName, string itemId, AdminVocabularyItemUpdateRequestV2 request, CancellationToken ct)
     {
         var entity = await db.VocabularyTerms.FirstOrDefaultAsync(x => x.Id == itemId, ct)
             ?? throw ApiException.NotFound("VOCABULARY_NOT_FOUND", $"Vocabulary item '{itemId}' not found.");
 
-        if (request.Term is not null) entity.Term = request.Term;
-        if (request.Definition is not null) entity.Definition = request.Definition;
+        if (request.Term is not null) entity.Term = request.Term.Trim();
+        if (request.Definition is not null) entity.Definition = request.Definition.Trim();
+        if (request.ExampleSentence is not null) entity.ExampleSentence = request.ExampleSentence.Trim();
+        if (request.ContextNotes is not null) entity.ContextNotes = request.ContextNotes.Trim();
+        if (request.ExamTypeCode is not null) entity.ExamTypeCode = request.ExamTypeCode;
         if (request.ProfessionId is not null) entity.ProfessionId = request.ProfessionId;
         if (request.Category is not null) entity.Category = request.Category;
-        if (request.Pronunciation is not null) entity.AudioUrl = request.Pronunciation;
-        if (request.ExampleSentence is not null) entity.ExampleSentence = request.ExampleSentence;
         if (request.Difficulty is not null) entity.Difficulty = request.Difficulty;
-        if (request.Status is not null) entity.Status = request.Status;
+        if (request.IpaPronunciation is not null) entity.IpaPronunciation = request.IpaPronunciation;
+        if (request.AudioUrl is not null) entity.AudioUrl = request.AudioUrl;
+        if (request.AudioMediaAssetId is not null) entity.AudioMediaAssetId = request.AudioMediaAssetId;
+        if (request.ImageUrl is not null) entity.ImageUrl = request.ImageUrl;
+        if (request.Synonyms is not null) entity.SynonymsJson = JsonSupport.Serialize(request.Synonyms);
+        if (request.Collocations is not null) entity.CollocationsJson = JsonSupport.Serialize(request.Collocations);
+        if (request.RelatedTerms is not null) entity.RelatedTermsJson = JsonSupport.Serialize(request.RelatedTerms);
+        if (request.SourceProvenance is not null) entity.SourceProvenance = request.SourceProvenance;
+
+        if (request.Status is not null)
+        {
+            if (request.Status == "active")
+            {
+                EnforceVocabularyPublishGate(entity);
+            }
+            entity.Status = request.Status;
+        }
+
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
 
         await db.SaveChangesAsync(ct);
         await LogAuditAsync(adminId, adminName, "Updated", "VocabularyTerm", itemId, $"Updated vocabulary item: {entity.Term}", ct);
 
         return new { id = itemId, entity.Status };
+    }
+
+    private static void ValidateVocabularyPayload(
+        string term, string definition, string example, string category,
+        string? status, string? sourceProvenance, string? ipa, string? audioUrl)
+    {
+        if (string.IsNullOrWhiteSpace(term))
+            throw ApiException.Validation("VOCAB_TERM_REQUIRED", "Term is required.");
+        if (string.IsNullOrWhiteSpace(definition))
+            throw ApiException.Validation("VOCAB_DEFINITION_REQUIRED", "Definition is required.");
+        if (string.IsNullOrWhiteSpace(example))
+            throw ApiException.Validation("VOCAB_EXAMPLE_REQUIRED", "Example sentence is required.");
+        if (string.IsNullOrWhiteSpace(category))
+            throw ApiException.Validation("VOCAB_CATEGORY_REQUIRED", "Category is required.");
+
+        if (status == "active")
+        {
+            EnforceVocabularyPublishGate(term, definition, example, category, sourceProvenance, ipa, audioUrl);
+        }
+    }
+
+    private static void EnforceVocabularyPublishGate(VocabularyTerm e)
+        => EnforceVocabularyPublishGate(e.Term, e.Definition, e.ExampleSentence, e.Category, e.SourceProvenance, e.IpaPronunciation, e.AudioUrl);
+
+    private static void EnforceVocabularyPublishGate(
+        string term, string definition, string example, string category,
+        string? sourceProvenance, string? ipa, string? audioUrl)
+    {
+        var missing = new List<ApiFieldError>();
+        if (string.IsNullOrWhiteSpace(term)) missing.Add(new ApiFieldError("term", "REQUIRED", "Term is required."));
+        if (string.IsNullOrWhiteSpace(definition)) missing.Add(new ApiFieldError("definition", "REQUIRED", "Definition is required."));
+        if (string.IsNullOrWhiteSpace(example)) missing.Add(new ApiFieldError("exampleSentence", "REQUIRED", "Example sentence is required."));
+        if (string.IsNullOrWhiteSpace(category)) missing.Add(new ApiFieldError("category", "REQUIRED", "Category is required."));
+        if (string.IsNullOrWhiteSpace(sourceProvenance)) missing.Add(new ApiFieldError("sourceProvenance", "REQUIRED", "Source provenance is required before publishing."));
+
+        var medicalCategories = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "medical", "anatomy", "pharmacology", "procedures", "symptoms", "conditions", "diagnostics"
+        };
+        if (!string.IsNullOrWhiteSpace(category) && medicalCategories.Contains(category)
+            && string.IsNullOrWhiteSpace(ipa) && string.IsNullOrWhiteSpace(audioUrl))
+        {
+            missing.Add(new ApiFieldError("pronunciation", "REQUIRED_EITHER",
+                "Medical categories require either ipaPronunciation or audioUrl before publishing."));
+        }
+
+        if (missing.Count > 0)
+            throw ApiException.Validation("VOCAB_PUBLISH_GATE",
+                "Cannot publish: vocabulary term is missing required fields.", missing);
+    }
+
+    public async Task<object> GetVocabularyCategoriesAdminAsync(
+        string? examTypeCode, string? professionId, CancellationToken ct)
+    {
+        var query = db.VocabularyTerms.AsQueryable();
+        if (!string.IsNullOrEmpty(examTypeCode)) query = query.Where(t => t.ExamTypeCode == examTypeCode);
+        if (!string.IsNullOrEmpty(professionId)) query = query.Where(t => t.ProfessionId == professionId);
+        var rows = await query
+            .GroupBy(t => new { t.Category, t.Status })
+            .Select(g => new { g.Key.Category, g.Key.Status, Count = g.Count() })
+            .ToListAsync(ct);
+
+        var groups = rows
+            .GroupBy(r => r.Category)
+            .Select(g => new
+            {
+                category = g.Key,
+                active = g.Where(x => x.Status == "active").Sum(x => x.Count),
+                draft = g.Where(x => x.Status == "draft").Sum(x => x.Count),
+                archived = g.Where(x => x.Status == "archived").Sum(x => x.Count),
+                total = g.Sum(x => x.Count)
+            })
+            .OrderByDescending(x => x.total)
+            .ThenBy(x => x.category)
+            .ToList();
+
+        return new { examTypeCode, professionId, categories = groups };
     }
 
     public async Task<object> DeleteVocabularyItemAsync(
@@ -247,84 +362,280 @@ public partial class AdminService
         var entity = await db.VocabularyTerms.FirstOrDefaultAsync(x => x.Id == itemId, ct)
             ?? throw ApiException.NotFound("VOCABULARY_NOT_FOUND", $"Vocabulary item '{itemId}' not found.");
 
+        // Soft delete preferred — learner vocab lists may reference this term.
+        var referenced = await db.LearnerVocabularies.AnyAsync(lv => lv.TermId == itemId, ct);
+        if (referenced)
+        {
+            entity.Status = "archived";
+            entity.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+            await LogAuditAsync(adminId, adminName, "Archived", "VocabularyTerm", itemId,
+                $"Archived vocabulary item (referenced by learners): {entity.Term}", ct);
+            return new { id = itemId, archived = true, deleted = false };
+        }
+
         db.VocabularyTerms.Remove(entity);
         await db.SaveChangesAsync(ct);
-        await LogAuditAsync(adminId, adminName, "Deleted", "VocabularyTerm", itemId, $"Deleted vocabulary item: {entity.Term}", ct);
+        await LogAuditAsync(adminId, adminName, "Deleted", "VocabularyTerm", itemId,
+            $"Deleted vocabulary item: {entity.Term}", ct);
 
-        return new { id = itemId, deleted = true };
+        return new { id = itemId, archived = false, deleted = true };
     }
 
-    public async Task<object> BulkImportVocabularyAsync(
-        string adminId, string adminName, IFormFile file, CancellationToken ct)
+    // ── CSV import (RFC-4180 aware) ─────────────────────────────────────
+
+    public async Task<AdminVocabularyImportPreviewResponse> PreviewVocabularyImportAsync(
+        IFormFile file, CancellationToken ct)
+    {
+        var rows = await ParseCsvAsync(file, ct);
+        var preview = new List<AdminVocabularyImportPreviewRow>(rows.Count);
+        var warnings = new List<string>();
+        var termsSeen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var valid = 0; var invalid = 0; var dups = 0;
+
+        foreach (var r in rows)
+        {
+            var (ok, err) = ValidateCsvRow(r);
+            var duplicate = r.Term is not null && !termsSeen.Add(r.Term.ToLowerInvariant());
+            if (duplicate) { dups++; err = "Duplicate row in this file."; ok = false; }
+            if (ok) valid++; else invalid++;
+            preview.Add(new AdminVocabularyImportPreviewRow(
+                LineNumber: r.LineNumber,
+                Valid: ok,
+                Term: r.Term,
+                Definition: r.Definition,
+                Category: r.Category,
+                Difficulty: r.Difficulty,
+                ProfessionId: r.ProfessionId,
+                ExampleSentence: r.ExampleSentence,
+                Error: err));
+        }
+
+        if (valid == 0 && rows.Count > 0) warnings.Add("No rows passed validation.");
+        if (dups > 0) warnings.Add($"{dups} duplicate rows detected in the file.");
+
+        return new AdminVocabularyImportPreviewResponse(
+            TotalRows: rows.Count,
+            ValidRows: valid,
+            InvalidRows: invalid,
+            DuplicateRows: dups,
+            Rows: preview,
+            Warnings: warnings);
+    }
+
+    public async Task<AdminVocabularyImportResponse> BulkImportVocabularyV2Async(
+        string adminId, string adminName, IFormFile file, bool dryRun, CancellationToken ct)
     {
         await using var tx = await BeginTransactionIfNeededAsync(ct);
-        using var reader = new StreamReader(file.OpenReadStream(), Encoding.UTF8);
+        var rows = await ParseCsvAsync(file, ct);
+
+        var imported = 0; var skipped = 0; var duplicates = 0; var failed = 0;
+        var errors = new List<string>();
+
+        foreach (var r in rows)
+        {
+            var (ok, err) = ValidateCsvRow(r);
+            if (!ok)
+            {
+                failed++;
+                if (errors.Count < 20) errors.Add($"Row {r.LineNumber}: {err}");
+                continue;
+            }
+
+            var existing = await db.VocabularyTerms.FirstOrDefaultAsync(
+                t => t.Term == r.Term && t.ExamTypeCode == (r.ExamTypeCode ?? "oet") && t.ProfessionId == r.ProfessionId, ct);
+            if (existing is not null)
+            {
+                duplicates++;
+                continue;
+            }
+
+            if (!dryRun)
+            {
+                var id = $"VOC-{Guid.NewGuid():N}"[..12];
+                db.VocabularyTerms.Add(new VocabularyTerm
+                {
+                    Id = id,
+                    Term = r.Term!.Trim(),
+                    Definition = r.Definition!.Trim(),
+                    ExampleSentence = string.IsNullOrWhiteSpace(r.ExampleSentence) ? string.Empty : r.ExampleSentence!.Trim(),
+                    ContextNotes = r.ContextNotes,
+                    ExamTypeCode = r.ExamTypeCode ?? "oet",
+                    ProfessionId = r.ProfessionId,
+                    Category = r.Category ?? "medical",
+                    Difficulty = r.Difficulty ?? "medium",
+                    IpaPronunciation = r.IpaPronunciation,
+                    AudioUrl = r.AudioUrl,
+                    SynonymsJson = string.IsNullOrWhiteSpace(r.SynonymsRaw) ? "[]" : JsonSupport.Serialize(SplitList(r.SynonymsRaw!)),
+                    CollocationsJson = "[]",
+                    RelatedTermsJson = "[]",
+                    SourceProvenance = string.IsNullOrWhiteSpace(r.SourceProvenance)
+                        ? $"CSV import by {adminName} on {DateTimeOffset.UtcNow:yyyy-MM-dd}"
+                        : r.SourceProvenance,
+                    Status = "draft",
+                    CreatedAt = DateTimeOffset.UtcNow,
+                    UpdatedAt = DateTimeOffset.UtcNow,
+                });
+            }
+            imported++;
+        }
+
+        skipped = duplicates + failed;
+        if (!dryRun)
+        {
+            await db.SaveChangesAsync(ct);
+            await LogAuditAsync(adminId, adminName, "Bulk Import", "VocabularyTerm", "bulk",
+                $"Imported {imported} vocabulary items, skipped {skipped} (dup={duplicates}, failed={failed}).", ct);
+            await CommitIfOwnedAsync(tx, ct);
+        }
+
+        return new AdminVocabularyImportResponse(imported, skipped, duplicates, failed, errors);
+    }
+
+    private static IReadOnlyList<string> SplitList(string raw)
+        => raw.Split(new[] { '|', ';' }, StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+
+    private sealed record CsvVocabRow(
+        int LineNumber,
+        string? Term,
+        string? Definition,
+        string? ExampleSentence,
+        string? Category,
+        string? Difficulty,
+        string? ProfessionId,
+        string? ExamTypeCode,
+        string? IpaPronunciation,
+        string? AudioUrl,
+        string? ContextNotes,
+        string? SynonymsRaw,
+        string? SourceProvenance);
+
+    private static (bool Ok, string? Error) ValidateCsvRow(CsvVocabRow r)
+    {
+        if (string.IsNullOrWhiteSpace(r.Term)) return (false, "Empty 'term'.");
+        if (string.IsNullOrWhiteSpace(r.Definition)) return (false, "Empty 'definition'.");
+        if (r.Term.Length > 128) return (false, "Term exceeds 128 characters.");
+        if (r.Definition.Length > 1024) return (false, "Definition exceeds 1024 characters.");
+        return (true, null);
+    }
+
+    private static async Task<List<CsvVocabRow>> ParseCsvAsync(IFormFile file, CancellationToken ct)
+    {
+        var rows = new List<CsvVocabRow>();
+        using var reader = new StreamReader(file.OpenReadStream(), Encoding.UTF8, leaveOpen: false);
         var headerLine = await reader.ReadLineAsync(ct);
         if (string.IsNullOrWhiteSpace(headerLine))
             throw ApiException.Validation("INVALID_CSV", "CSV file is empty or missing header row.");
 
-        var headers = headerLine.Split(',').Select(h => h.Trim().ToLowerInvariant()).ToArray();
-        int Col(string name) => Array.IndexOf(headers, name.ToLowerInvariant());
+        var headers = ParseVocabCsvLine(headerLine).Select(h => h.Trim().ToLowerInvariant()).ToArray();
+        int Col(params string[] names)
+        {
+            foreach (var n in names)
+            {
+                var idx = Array.IndexOf(headers, n.ToLowerInvariant());
+                if (idx >= 0) return idx;
+            }
+            return -1;
+        }
 
-        var termIdx = Col("term");
-        var defIdx = Col("definition");
-        if (termIdx < 0 || defIdx < 0)
+        var ti = Col("term"); var di = Col("definition");
+        if (ti < 0 || di < 0)
             throw ApiException.Validation("INVALID_CSV", "CSV must have 'Term' and 'Definition' columns.");
-
-        var exIdx = Col("examplesentence");
-        var catIdx = Col("category");
-        var diffIdx = Col("difficulty");
-        var profIdx = Col("professionid");
-
-        var imported = 0;
-        var skipped = 0;
-        var errors = new List<string>();
+        var ei = Col("examplesentence", "example");
+        var ci = Col("category");
+        var dfi = Col("difficulty");
+        var pi = Col("professionid", "profession");
+        var exi = Col("examtypecode", "examtype");
+        var ipi = Col("ipapronunciation", "ipa", "pronunciation");
+        var ai = Col("audiourl", "audio");
+        var cni = Col("contextnotes", "context");
+        var sy = Col("synonyms");
+        var sp = Col("sourceprovenance", "provenance");
 
         string? line;
         var lineNum = 1;
         while ((line = await reader.ReadLineAsync(ct)) is not null)
         {
             lineNum++;
-            if (string.IsNullOrWhiteSpace(line)) { skipped++; continue; }
+            if (string.IsNullOrWhiteSpace(line)) continue;
 
-            var cols = line.Split(',');
-            if (cols.Length <= termIdx || cols.Length <= defIdx)
-            {
-                errors.Add($"Row {lineNum}: insufficient columns");
-                skipped++;
-                continue;
-            }
+            var cols = ParseVocabCsvLine(line);
+            string? Get(int idx) => idx >= 0 && cols.Count > idx ? cols[idx].Trim() : null;
 
-            var term = cols[termIdx].Trim();
-            var definition = cols[defIdx].Trim();
-            if (string.IsNullOrWhiteSpace(term) || string.IsNullOrWhiteSpace(definition))
-            {
-                errors.Add($"Row {lineNum}: empty term or definition");
-                skipped++;
-                continue;
-            }
-
-            var id = $"VOC-{Guid.NewGuid():N}"[..12];
-            db.VocabularyTerms.Add(new VocabularyTerm
-            {
-                Id = id,
-                Term = term,
-                Definition = definition,
-                ExampleSentence = exIdx >= 0 && cols.Length > exIdx ? cols[exIdx].Trim() : null,
-                Category = catIdx >= 0 && cols.Length > catIdx ? cols[catIdx].Trim() : null,
-                Difficulty = diffIdx >= 0 && cols.Length > diffIdx ? cols[diffIdx].Trim() : "intermediate",
-                ProfessionId = profIdx >= 0 && cols.Length > profIdx ? cols[profIdx].Trim() : null,
-                Status = "active"
-            });
-            imported++;
+            rows.Add(new CsvVocabRow(
+                LineNumber: lineNum,
+                Term: Get(ti),
+                Definition: Get(di),
+                ExampleSentence: Get(ei),
+                Category: Get(ci),
+                Difficulty: Get(dfi),
+                ProfessionId: Get(pi),
+                ExamTypeCode: Get(exi),
+                IpaPronunciation: Get(ipi),
+                AudioUrl: Get(ai),
+                ContextNotes: Get(cni),
+                SynonymsRaw: Get(sy),
+                SourceProvenance: Get(sp)));
         }
+        return rows;
+    }
 
-        await db.SaveChangesAsync(ct);
-        await LogAuditAsync(adminId, adminName, "Bulk Import", "VocabularyTerm", "bulk",
-            $"Imported {imported} vocabulary items, skipped {skipped}", ct);
-        await CommitIfOwnedAsync(tx, ct);
+    /// <summary>RFC 4180 CSV line parser with quote escaping.</summary>
+    private static List<string> ParseVocabCsvLine(string line)
+    {
+        var result = new List<string>();
+        var sb = new StringBuilder();
+        var inQuotes = false;
+        for (var i = 0; i < line.Length; i++)
+        {
+            var c = line[i];
+            if (inQuotes)
+            {
+                if (c == '"')
+                {
+                    if (i + 1 < line.Length && line[i + 1] == '"')
+                    {
+                        sb.Append('"');
+                        i++;
+                    }
+                    else
+                    {
+                        inQuotes = false;
+                    }
+                }
+                else
+                {
+                    sb.Append(c);
+                }
+            }
+            else
+            {
+                if (c == '"') inQuotes = true;
+                else if (c == ',')
+                {
+                    result.Add(sb.ToString());
+                    sb.Clear();
+                }
+                else sb.Append(c);
+            }
+        }
+        result.Add(sb.ToString());
+        return result;
+    }
 
-        return new { imported, skipped, errors = errors.Take(20) };
+    public async Task<object> BulkImportVocabularyAsync(
+        string adminId, string adminName, IFormFile file, CancellationToken ct)
+    {
+        // Backward-compat thin wrapper — defaults to dryRun=false.
+        var res = await BulkImportVocabularyV2Async(adminId, adminName, file, dryRun: false, ct);
+        return new
+        {
+            imported = res.Imported,
+            skipped = res.Skipped,
+            duplicates = res.Duplicates,
+            failedRows = res.FailedRows,
+            errors = res.Errors.Take(20),
+        };
     }
 
     // ════════════════════════════════════════════
@@ -461,6 +772,8 @@ public partial class AdminService
     {
         var query = db.PronunciationDrills.AsQueryable();
 
+        if (!string.IsNullOrWhiteSpace(profession))
+            query = query.Where(d => d.Profession == profession);
         if (!string.IsNullOrWhiteSpace(difficulty))
             query = query.Where(d => d.Difficulty == difficulty);
         if (!string.IsNullOrWhiteSpace(status))
@@ -480,10 +793,18 @@ public partial class AdminService
             {
                 d.Id,
                 word = d.Label,
+                label = d.Label,
                 phoneticTranscription = d.TargetPhoneme,
+                targetPhoneme = d.TargetPhoneme,
+                d.Profession,
+                d.Focus,
+                d.PrimaryRuleId,
                 d.AudioModelUrl,
+                d.AudioModelAssetId,
                 d.Difficulty,
-                d.Status
+                d.Status,
+                d.OrderIndex,
+                d.UpdatedAt
             })
         };
     }
@@ -497,14 +818,24 @@ public partial class AdminService
         {
             d.Id,
             word = d.Label,
+            label = d.Label,
             phoneticTranscription = d.TargetPhoneme,
+            targetPhoneme = d.TargetPhoneme,
+            d.Profession,
+            d.Focus,
+            d.PrimaryRuleId,
             audioUrl = d.AudioModelUrl,
+            d.AudioModelUrl,
+            d.AudioModelAssetId,
             d.ExampleWordsJson,
             d.MinimalPairsJson,
             d.SentencesJson,
             d.TipsHtml,
             d.Difficulty,
-            d.Status
+            d.Status,
+            d.OrderIndex,
+            d.CreatedAt,
+            d.UpdatedAt
         };
     }
 
@@ -518,9 +849,20 @@ public partial class AdminService
             Id = id,
             Label = request.Word,
             TargetPhoneme = request.PhoneticTranscription ?? "",
+            Profession = string.IsNullOrWhiteSpace(request.Profession) ? "all" : request.Profession!,
+            Focus = string.IsNullOrWhiteSpace(request.Focus) ? "phoneme" : request.Focus!,
+            PrimaryRuleId = request.PrimaryRuleId,
             AudioModelUrl = request.AudioUrl,
-            Difficulty = request.Difficulty ?? "intermediate",
-            Status = "active"
+            AudioModelAssetId = request.AudioModelAssetId,
+            ExampleWordsJson = request.ExampleWordsJson ?? "[]",
+            MinimalPairsJson = request.MinimalPairsJson ?? "[]",
+            SentencesJson = request.SentencesJson ?? "[]",
+            TipsHtml = request.TipsHtml ?? "",
+            Difficulty = request.Difficulty ?? "medium",
+            Status = string.IsNullOrWhiteSpace(request.Status) ? "draft" : request.Status!,
+            OrderIndex = request.OrderIndex ?? 0,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
         };
         db.PronunciationDrills.Add(entity);
         await db.SaveChangesAsync(ct);
@@ -538,9 +880,35 @@ public partial class AdminService
 
         if (request.Word is not null) entity.Label = request.Word;
         if (request.PhoneticTranscription is not null) entity.TargetPhoneme = request.PhoneticTranscription;
+        if (request.Profession is not null) entity.Profession = request.Profession;
+        if (request.Focus is not null) entity.Focus = request.Focus;
+        if (request.PrimaryRuleId is not null) entity.PrimaryRuleId = request.PrimaryRuleId;
         if (request.AudioUrl is not null) entity.AudioModelUrl = request.AudioUrl;
+        if (request.AudioModelAssetId is not null) entity.AudioModelAssetId = request.AudioModelAssetId;
+        if (request.ExampleWordsJson is not null) entity.ExampleWordsJson = request.ExampleWordsJson;
+        if (request.MinimalPairsJson is not null) entity.MinimalPairsJson = request.MinimalPairsJson;
+        if (request.SentencesJson is not null) entity.SentencesJson = request.SentencesJson;
+        if (request.TipsHtml is not null) entity.TipsHtml = request.TipsHtml;
         if (request.Difficulty is not null) entity.Difficulty = request.Difficulty;
-        if (request.Status is not null) entity.Status = request.Status;
+        if (request.Status is not null)
+        {
+            if (request.Status == "active")
+            {
+                // Publish gate: require minimum content.
+                if (string.IsNullOrWhiteSpace(entity.TargetPhoneme)
+                    || string.IsNullOrWhiteSpace(entity.Label)
+                    || string.IsNullOrWhiteSpace(entity.TipsHtml)
+                    || JsonSupport.Deserialize(entity.ExampleWordsJson, new List<string>()).Count < 3
+                    || JsonSupport.Deserialize(entity.SentencesJson, new List<string>()).Count < 1)
+                {
+                    throw ApiException.Validation("DRILL_PUBLISH_GATE",
+                        "Cannot publish: drill requires phoneme, label, tips, at least 3 example words, and at least 1 sentence.");
+                }
+            }
+            entity.Status = request.Status;
+        }
+        if (request.OrderIndex.HasValue) entity.OrderIndex = request.OrderIndex.Value;
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
 
         await db.SaveChangesAsync(ct);
         await LogAuditAsync(adminId, adminName, "Updated", "PronunciationDrill", drillId, $"Updated pronunciation drill: {entity.Label}", ct);

@@ -58,6 +58,8 @@ const adminNavItems: NavItem[] = [
   { href: '/admin/media', label: 'Media Assets', icon: <ImageIcon className="w-5 h-5" />, matchPrefix: '/admin/media' },
   { href: '/admin/content-generation', label: 'Content Generation', icon: <Sparkles className="w-5 h-5" />, matchPrefix: '/admin/content-generation' },
   { href: '/admin/grammar', label: 'Grammar CMS', icon: <Library className="w-5 h-5" />, matchPrefix: '/admin/grammar' },
+  { href: '/admin/pronunciation', label: 'Pronunciation CMS', icon: <Mic className="w-5 h-5" />, matchPrefix: '/admin/pronunciation' },
+  { href: '/admin/content/vocabulary', label: 'Vocabulary CMS', icon: <Library className="w-5 h-5" />, matchPrefix: '/admin/content/vocabulary' },
   { href: '/admin/marketplace-review', label: 'Marketplace Review', icon: <Store className="w-5 h-5" />, matchPrefix: '/admin/marketplace-review' },
   { href: '/admin/freeze', label: 'Content Freeze', icon: <Snowflake className="w-5 h-5" />, matchPrefix: '/admin/freeze' },
   { href: '/admin/content-hierarchy', label: 'Content Hierarchy', icon: <GitBranch className="w-5 h-5" />, matchPrefix: '/admin/content-hierarchy' },
@@ -86,7 +88,7 @@ const adminMobileMenuSections: MobileMenuSection[] = [
   },
   {
     label: 'Content',
-    items: [adminNavItems[1], adminNavItems[13], adminNavItems[14], adminNavItems[15], adminNavItems[16], adminNavItems[19], adminNavItems[20], adminNavItems[29]],
+    items: [adminNavItems[1], adminNavItems[13], adminNavItems[14], adminNavItems[15], adminNavItems[16], adminNavItems[19], adminNavItems[20], adminNavItems[21], adminNavItems[30]],
   },
   {
     label: 'Governance',
@@ -99,6 +101,8 @@ const adminMobileMenuSections: MobileMenuSection[] = [
 ];
 
 function isContentWorkspace(pathname: string | null) {
+  if (!pathname) return false;
+  if (pathname.startsWith('/admin/content/vocabulary')) return false;
   return pathname === '/admin/content/new' || Boolean(pathname?.match(/^\/admin\/content\/[^/]+$/));
 }
 
@@ -113,6 +117,10 @@ function getAdminPageTitle(pathname: string | null) {
 
   if (pathname.startsWith('/admin/content/') && pathname.endsWith('/revisions')) {
     return 'Revision History';
+  }
+
+  if (pathname.startsWith('/admin/content/vocabulary')) {
+    return 'Vocabulary CMS';
   }
 
   if (pathname.startsWith('/admin/content')) {
@@ -177,6 +185,14 @@ function getAdminPageTitle(pathname: string | null) {
 
   if (pathname.startsWith('/admin/content-generation')) {
     return 'Content Generation';
+  }
+
+  if (pathname.startsWith('/admin/grammar')) {
+    return 'Grammar CMS';
+  }
+
+  if (pathname.startsWith('/admin/pronunciation')) {
+    return 'Pronunciation CMS';
   }
 
   if (pathname.startsWith('/admin/marketplace-review')) {

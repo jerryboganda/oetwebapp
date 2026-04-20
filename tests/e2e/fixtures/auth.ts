@@ -48,6 +48,30 @@ export const authStatePaths: Record<SeededRole, string> = {
   admin: authStatePathsByProject['chromium-admin'],
 };
 
+export async function waitForSessionGuardToClear(
+  page: Page,
+  options: {
+    recover?: () => Promise<unknown>;
+    initialTimeoutMs?: number;
+    timeoutMs?: number;
+  } = {},
+) {
+  const sessionBanner = page.getByText(/checking your session/i);
+
+  if (await sessionBanner.isVisible().catch(() => false)) {
+    const clearedWithoutRecovery = await sessionBanner
+      .waitFor({ state: 'hidden', timeout: options.initialTimeoutMs ?? 30_000 })
+      .then(() => true)
+      .catch(() => false);
+
+    if (!clearedWithoutRecovery) {
+      await (options.recover?.() ?? page.reload({ waitUntil: 'domcontentloaded' }));
+    }
+  }
+
+  await expect(sessionBanner).toBeHidden({ timeout: options.timeoutMs ?? 90_000 });
+}
+
 export async function signInThroughUi(page: Page, role: SeededRole) {
   const account = seededAccounts[role];
 

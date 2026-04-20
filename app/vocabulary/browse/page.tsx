@@ -2,20 +2,39 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { MotionItem } from '@/components/ui/motion-primitives';
-import { Search, Plus, CheckCircle2, BookOpen, ArrowLeft } from 'lucide-react';
+import { Search, Plus, CheckCircle2, BookOpen, ArrowLeft, Volume2 } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { fetchVocabularyTerms, addToMyVocabulary } from '@/lib/api';
+import {
+  fetchVocabularyTerms,
+  addToMyVocabulary,
+  fetchVocabularyCategories,
+} from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import type { VocabularyTerm, VocabularyCategoriesResponse } from '@/lib/types/vocabulary';
 
-type VocabTerm = { id: string; word: string; definition: string; category: string; difficultyLevel: string; exampleSentence: string | null; pronunciation: string | null };
+// Mobile offline cache — lazy, best-effort; skipped in SSR and when IndexedDB is unavailable.
+async function cacheVocabularyToIndexedDb(terms: unknown[]) {
+  if (typeof window === 'undefined') return;
+  if (typeof indexedDB === 'undefined') return;
+  try {
+    const mod: typeof import('@/lib/mobile/offline-sync') = await import(
+      /* webpackChunkName: "vocab-offline-cache" */
+      '@/lib/mobile/offline-sync'
+    );
+    await mod.cacheVocabularyTerms(terms);
+  } catch {/* offline cache is best-effort */}
+}
+
+type TermRow = Pick<VocabularyTerm, 'id' | 'term' | 'definition' | 'category' | 'difficulty' | 'exampleSentence' | 'ipaPronunciation' | 'audioUrl'>;
 
 export default function BrowseVocabularyPage() {
-  const [terms, setTerms] = useState<VocabTerm[]>([]);
+  const [terms, setTerms] = useState<TermRow[]>([]);
+  const [categories, setCategories] = useState<Array<{ category: string; termCount: number }>>([]);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState('');
   const [page, setPage] = useState(1);
@@ -31,10 +50,18 @@ export default function BrowseVocabularyPage() {
     setLoading(true);
     setError(null);
     try {
-      const data = await fetchVocabularyTerms({ examTypeCode: 'oet', category: category || undefined, search: search || undefined, page, pageSize }) as { total?: number; terms?: VocabTerm[]; items?: VocabTerm[] } | VocabTerm[];
+      const data = await fetchVocabularyTerms({
+        examTypeCode: 'oet',
+        category: category || undefined,
+        search: search || undefined,
+        page,
+        pageSize,
+      }) as { total?: number; terms?: TermRow[]; items?: TermRow[] } | TermRow[];
       const normalizedTerms = Array.isArray(data) ? data : (data.terms ?? data.items ?? []);
-      setTerms(normalizedTerms as VocabTerm[]);
+      setTerms(normalizedTerms as TermRow[]);
       setTotal(Array.isArray(data) ? normalizedTerms.length : data.total ?? normalizedTerms.length);
+      // Fire-and-forget: cache these terms for offline use.
+      void cacheVocabularyToIndexedDb(normalizedTerms);
     } catch {
       setError('Could not load vocabulary terms.');
     } finally {
@@ -44,6 +71,13 @@ export default function BrowseVocabularyPage() {
 
   useEffect(() => {
     analytics.track('vocab_browse_viewed');
+    // Load categories once on mount.
+    fetchVocabularyCategories({ examTypeCode: 'oet' })
+      .then((data) => {
+        const d = data as VocabularyCategoriesResponse;
+        setCategories(d.categories ?? []);
+      })
+      .catch(() => {/* non-fatal */});
   }, []);
 
   useEffect(() => {
@@ -57,13 +91,23 @@ export default function BrowseVocabularyPage() {
     if (adding.has(termId) || added.has(termId)) return;
     setAdding(prev => new Set(prev).add(termId));
     try {
-      await addToMyVocabulary(termId);
+      await addToMyVocabulary(termId, { sourceRef: 'browse' });
+      analytics.track('vocab_added', { termId, source: 'browse' });
       setAdded(prev => new Set(prev).add(termId));
-    } catch {
-      setError('Could not add term.');
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Could not add term.';
+      setError(message);
     } finally {
       setAdding(prev => { const s = new Set(prev); s.delete(termId); return s; });
     }
+  }
+
+  function playAudio(url: string | null) {
+    if (!url) return;
+    try {
+      const a = new Audio(url);
+      void a.play();
+    } catch {/* ignore */}
   }
 
   const totalPages = Math.ceil(total / pageSize);
@@ -101,17 +145,14 @@ export default function BrowseVocabularyPage() {
           <select
             value={category}
             onChange={e => { setCategory(e.target.value); setPage(1); }}
-            className="rounded-xl border border-gray-200 bg-background-light px-3 py-2.5 text-sm text-navy"
+            className="rounded-xl border border-gray-200 bg-background-light px-3 py-2.5 text-sm text-navy capitalize"
           >
-            <option value="">All Categories</option>
-            <option value="symptoms">Symptoms</option>
-            <option value="anatomy">Anatomy</option>
-            <option value="pharmacology">Pharmacology</option>
-            <option value="procedures">Procedures</option>
-            <option value="conditions">Conditions</option>
-            <option value="respiratory">Respiratory</option>
-            <option value="cardiovascular">Cardiovascular</option>
-            <option value="neurology">Neurology</option>
+            <option value="">All Categories ({total})</option>
+            {categories.map(c => (
+              <option key={c.category} value={c.category}>
+                {c.category.replace(/_/g, ' ')} ({c.termCount})
+              </option>
+            ))}
           </select>
         </div>
       </Card>
@@ -132,10 +173,31 @@ export default function BrowseVocabularyPage() {
                 className="flex gap-4 rounded-2xl border border-gray-200 bg-surface p-4"
               >
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2 mb-1">
-                    <span className="font-bold text-navy">{term.word}</span>
-                    {term.pronunciation && <span className="text-xs italic text-muted">{term.pronunciation}</span>}
-                    <span className="rounded-full bg-background-light px-2 py-0.5 text-xs capitalize text-muted">{term.category}</span>
+                  <div className="mb-1 flex flex-wrap items-center gap-2">
+                    <Link
+                      href={`/vocabulary/terms/${encodeURIComponent(term.id)}`}
+                      className="font-bold text-navy hover:underline"
+                    >
+                      {term.term}
+                    </Link>
+                    {term.ipaPronunciation && (
+                      <span className="text-xs italic text-muted">{term.ipaPronunciation}</span>
+                    )}
+                    {term.audioUrl && (
+                      <button
+                        onClick={() => playAudio(term.audioUrl)}
+                        className="inline-flex items-center rounded-full p-1 text-muted transition-colors hover:bg-background-light hover:text-primary"
+                        aria-label={`Play pronunciation of ${term.term}`}
+                      >
+                        <Volume2 className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                    <span className="rounded-full bg-background-light px-2 py-0.5 text-xs capitalize text-muted">
+                      {term.category.replace(/_/g, ' ')}
+                    </span>
+                    <span className="rounded-full bg-background-light px-2 py-0.5 text-xs capitalize text-muted">
+                      {term.difficulty}
+                    </span>
                   </div>
                   <p className="text-sm text-muted">{term.definition}</p>
                   {term.exampleSentence && <p className="mt-1 text-xs italic text-muted">&quot;{term.exampleSentence}&quot;</p>}
@@ -145,6 +207,7 @@ export default function BrowseVocabularyPage() {
                   disabled={adding.has(term.id) || added.has(term.id)}
                   className={`flex-shrink-0 rounded-lg p-2 transition-colors ${added.has(term.id) ? 'bg-green-50 text-green-500' : 'text-muted hover:bg-background-light hover:text-primary'}`}
                   title="Add to my list"
+                  aria-label={added.has(term.id) ? `${term.term} added to your list` : `Add ${term.term} to your list`}
                 >
                   {added.has(term.id) ? <CheckCircle2 className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
                 </button>

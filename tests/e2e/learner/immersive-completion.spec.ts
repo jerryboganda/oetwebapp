@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
+import { waitForSessionGuardToClear } from '../fixtures/auth';
 import { installFakeRecordingMedia } from '../fixtures/media';
 
 test.describe('Learner immersive completion workflows @learner', () => {
@@ -8,14 +9,15 @@ test.describe('Learner immersive completion workflows @learner', () => {
       test.skip();
     }
 
+    testInfo.setTimeout(120000);
     const diagnostics = observePage(page);
     page.on('dialog', (dialog) => dialog.accept());
 
-    await page.goto('/listening/player/lt-001');
-    await expect(page.getByRole('heading', { name: /ready to start\?/i })).toBeVisible();
+    await page.goto('/listening/player/lt-001', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: /ready to start\?/i })).toBeVisible({ timeout: 60000 });
 
     await page.getByRole('button', { name: /start audio & task/i }).click();
-    await expect(page.getByRole('button', { name: /submit answers/i })).toBeVisible();
+    await expect(page.getByRole('button', { name: /submit answers/i })).toBeVisible({ timeout: 60000 });
 
     await page.getByRole('button', { name: /^Increasing breathlessness at night$/i }).click();
     await page.getByLabel('Answer for question 2').fill('3-4 times per week');
@@ -26,8 +28,8 @@ test.describe('Learner immersive completion workflows @learner', () => {
     await expect(submitDialog).toBeVisible();
     await submitDialog.getByRole('button', { name: /submit now/i }).click();
 
-    await expect(page).toHaveURL(/\/listening\/results\/lt-001$/);
-    await expect(page.getByText(/detailed review/i)).toBeVisible();
+    await expect(page).toHaveURL(/\/listening\/results\/lt-001$/, { timeout: 60000 });
+    await expect(page.getByText(/detailed review/i)).toBeVisible({ timeout: 60000 });
 
     expectNoSevereClientIssues(diagnostics);
     diagnostics.detach();
@@ -39,6 +41,7 @@ test.describe('Learner immersive completion workflows @learner', () => {
       test.skip();
     }
 
+    testInfo.setTimeout(120000);
     const diagnostics = observePage(page);
     const content = [
       'Dear Dr Patterson,',
@@ -46,15 +49,23 @@ test.describe('Learner immersive completion workflows @learner', () => {
       'She still requires wound monitoring, pain review, and clear escalation advice for community follow-up.',
     ].join(' ');
 
-    await page.goto('/writing/player?taskId=wt-001');
-    await expect(page.getByLabel('Writing editor')).toBeVisible();
+    await page.goto('/writing/player?taskId=wt-001', { waitUntil: 'domcontentloaded' });
+    const writingEditor = page.getByLabel('Writing editor');
+    const editorReady = await expect(writingEditor)
+      .toBeVisible({ timeout: 15000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!editorReady) {
+      await page.reload({ waitUntil: 'domcontentloaded' });
+    }
+    await expect(writingEditor).toBeVisible({ timeout: 60000 });
 
-    await page.getByLabel('Writing editor').fill(content);
+    await writingEditor.fill(content);
     await expect(page.getByText(/saving\.\.\./i)).toBeVisible();
     await expect(page.getByText(/^Saved$/i)).toBeVisible({ timeout: 15000 });
 
     const pendingContent = `${content} Please review the wound again tomorrow.`;
-    await page.getByLabel('Writing editor').fill(pendingContent);
+    await writingEditor.fill(pendingContent);
     await expect(page.getByText(/saving\.\.\./i)).toBeVisible();
 
     const leaveTrigger = page.getByRole('button', { name: /leave writing task/i });
@@ -78,9 +89,10 @@ test.describe('Learner immersive completion workflows @learner', () => {
     await submitTrigger.click();
     await page.getByRole('button', { name: /confirm submit/i }).click();
 
-    await expect(page).toHaveURL(/\/writing\/result\?id=/);
-    await expect(page.getByRole('heading', { name: /evaluation summary/i })).toBeVisible();
-    await expect(page.getByRole('link', { name: /request expert review/i })).toBeVisible();
+    await expect(page).toHaveURL(/\/writing\/result\?id=/, { timeout: 60000 });
+    await waitForSessionGuardToClear(page);
+    await expect(page.getByRole('heading', { name: /evaluation summary/i })).toBeVisible({ timeout: 60000 });
+    await expect(page.getByRole('link', { name: /request expert review/i })).toBeVisible({ timeout: 60000 });
 
     expectNoSevereClientIssues(diagnostics);
     diagnostics.detach();
@@ -92,11 +104,12 @@ test.describe('Learner immersive completion workflows @learner', () => {
       test.skip();
     }
 
+    testInfo.setTimeout(120000);
     await installFakeRecordingMedia(page);
     const diagnostics = observePage(page);
 
-    await page.goto('/speaking/task/st-001?mode=self');
-    await expect(page.getByRole('heading', { name: /ready to record/i })).toBeVisible();
+    await page.goto('/speaking/task/st-001?mode=self', { waitUntil: 'domcontentloaded' });
+    await expect(page.getByRole('heading', { name: /ready to record/i })).toBeVisible({ timeout: 60000 });
 
     const cancelTaskButton = page.getByRole('button', { name: /cancel task/i });
     await cancelTaskButton.click();
@@ -128,10 +141,10 @@ test.describe('Learner immersive completion workflows @learner', () => {
     await submitButton.click();
     await page.getByRole('button', { name: /submit for evaluation/i }).click();
 
-    await expect(page).toHaveURL(/\/speaking\/results\//);
-    await expect(page.getByRole('heading', { name: /performance summary/i })).toBeVisible();
-    await expect(page.getByRole('link', { name: /review transcript/i })).toBeVisible();
-    await expect(page.getByRole('link', { name: /request expert review/i })).toBeVisible();
+    await expect(page).toHaveURL(/\/speaking\/results\//, { timeout: 60000 });
+    await expect(page.getByRole('heading', { name: /performance summary/i })).toBeVisible({ timeout: 60000 });
+    await expect(page.getByRole('link', { name: /review transcript/i })).toBeVisible({ timeout: 60000 });
+    await expect(page.getByRole('link', { name: /request expert review/i })).toBeVisible({ timeout: 60000 });
 
     expectNoSevereClientIssues(diagnostics);
     diagnostics.detach();

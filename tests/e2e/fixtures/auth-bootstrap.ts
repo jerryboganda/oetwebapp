@@ -11,6 +11,7 @@ const defaultAppOrigin = new URL(process.env.PLAYWRIGHT_BASE_URL ?? 'http://loca
 const localSessionKey = 'oet.auth.session.local';
 const sessionSessionKey = 'oet.auth.session.session';
 const mfaChallengeKey = 'oet.auth.challenge.mfa';
+const authIndicatorCookieName = 'oet_auth';
 const desktopComposeFilePath = join(process.cwd(), 'docker-compose.desktop.yml');
 const execFileAsync = promisify(execFile);
 let dockerPrivilegedAuthResetPromise: Promise<void> | null = null;
@@ -315,6 +316,59 @@ async function waitForHealth(url: string, timeoutMs = 120_000) {
   throw new Error(`Timed out waiting for Docker-backed auth baseline health at ${url}.`);
 }
 
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function isTransientApiRequestError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  return /\b(ECONNRESET|ECONNREFUSED|EPIPE|ETIMEDOUT)\b|socket hang up|fetch failed/i.test(message);
+}
+
+async function waitForApiReadiness(apiBaseURL?: string, timeoutMs = 20_000) {
+  const readyUrl = `${resolveApiBaseURL(apiBaseURL)}/health/ready`;
+  const startTime = Date.now();
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const response = await fetch(readyUrl);
+      if (response.ok) {
+        return;
+      }
+    } catch {
+      // The API can briefly close sockets while restarting in local smoke runs.
+    }
+
+    await sleep(500);
+  }
+}
+
+async function postJsonWithRetry(
+  request: APIRequestContext,
+  path: string,
+  options: Parameters<APIRequestContext['post']>[1],
+  apiBaseURL?: string,
+) {
+  const url = `${resolveApiBaseURL(apiBaseURL)}${path}`;
+  let lastError: unknown = null;
+
+  for (let attempt = 1; attempt <= 3; attempt += 1) {
+    try {
+      return await request.post(url, options);
+    } catch (error) {
+      lastError = error;
+      if (!isTransientApiRequestError(error) || attempt === 3) {
+        throw error;
+      }
+
+      await waitForApiReadiness(apiBaseURL);
+      await sleep(500 * attempt);
+    }
+  }
+
+  throw lastError ?? new Error(`Failed to POST ${url}.`);
+}
+
 async function resetDockerBackedPrivilegedAuthState(
   role: Extract<SeededRole, 'expert' | 'admin'>,
   apiBaseURL?: string,
@@ -347,36 +401,36 @@ async function resetDockerBackedPrivilegedAuthState(
 
 async function signInRaw(request: APIRequestContext, role: SeededRole, apiBaseURL?: string) {
   const account = seededAccounts[role];
-  return request.post(`${resolveApiBaseURL(apiBaseURL)}/v1/auth/sign-in`, {
+  return postJsonWithRetry(request, '/v1/auth/sign-in', {
     headers: { 'Content-Type': 'application/json' },
     data: {
       email: account.email,
       password: account.password,
       rememberMe: true,
     },
-  });
+  }, apiBaseURL);
 }
 
 async function beginAuthenticatorSetup(request: APIRequestContext, accessToken: string, apiBaseURL?: string) {
-  const response = await request.post(`${resolveApiBaseURL(apiBaseURL)}/v1/auth/mfa/authenticator/begin`, {
+  const response = await postJsonWithRetry(request, '/v1/auth/mfa/authenticator/begin', {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     data: {},
-  });
+  }, apiBaseURL);
 
   return expectJsonOk<AuthenticatorSetupResponse>(response, 'Expected authenticator setup bootstrap to succeed.');
 }
 
 async function confirmAuthenticatorSetup(request: APIRequestContext, accessToken: string, code: string, apiBaseURL?: string) {
-  const response = await request.post(`${resolveApiBaseURL(apiBaseURL)}/v1/auth/mfa/authenticator/confirm`, {
+  const response = await postJsonWithRetry(request, '/v1/auth/mfa/authenticator/confirm', {
     headers: {
       Authorization: `Bearer ${accessToken}`,
       'Content-Type': 'application/json',
     },
     data: { code },
-  });
+  }, apiBaseURL);
 
   return expectJsonOk<CurrentUser>(response, 'Expected authenticator confirmation to succeed.');
 }
@@ -412,7 +466,7 @@ async function completeMfaChallenge(
   apiBaseURL?: string,
 ) {
   const account = seededAccounts[role];
-  const response = await request.post(`${resolveApiBaseURL(apiBaseURL)}/v1/auth/mfa/challenge`, {
+  const response = await postJsonWithRetry(request, '/v1/auth/mfa/challenge', {
     headers: { 'Content-Type': 'application/json' },
     data: {
       email: account.email,
@@ -420,7 +474,7 @@ async function completeMfaChallenge(
       challengeToken,
       recoveryCode: null,
     },
-  });
+  }, apiBaseURL);
 
   return expectJsonOk<AuthSessionResponse>(response, `Expected MFA challenge completion to succeed for ${role}.`);
 }
@@ -616,9 +670,26 @@ export async function hydrateSessionStorage(page: Page, session: AuthSessionResp
   );
 }
 
+function buildAuthIndicatorCookie(session: AuthSessionResponse) {
+  const appOrigin = new URL(defaultAppOrigin);
+  const refreshExpiresAt = Date.parse(session.refreshTokenExpiresAt);
+  const fallbackExpiresAt = Math.floor(Date.now() / 1000) + 60 * 60 * 24 * 30;
+
+  return {
+    name: authIndicatorCookieName,
+    value: '1',
+    domain: appOrigin.hostname,
+    path: '/',
+    expires: Number.isNaN(refreshExpiresAt) ? fallbackExpiresAt : Math.floor(refreshExpiresAt / 1000),
+    httpOnly: false,
+    secure: appOrigin.protocol === 'https:',
+    sameSite: 'Lax' as const,
+  };
+}
+
 function buildStorageState(session: AuthSessionResponse) {
   return {
-    cookies: [],
+    cookies: [buildAuthIndicatorCookie(session)],
     origins: [
       {
         origin: defaultAppOrigin,

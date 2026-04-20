@@ -83,17 +83,20 @@ public sealed class PronunciationEntitlementService(
         }
 
         var windowStart = now - TimeSpan.FromDays(windowDays);
-        var attemptsInWindow = await db.PronunciationAttempts
-            .Where(a => a.UserId == userId && a.CreatedAt >= windowStart
-                        && a.Status != "refused")
-            .CountAsync(ct);
+        var attemptsInWindowRows = await db.PronunciationAttempts
+            .Where(a => a.UserId == userId)
+            .ToListAsync(ct);
+
+        attemptsInWindowRows = attemptsInWindowRows
+            .Where(a => a.CreatedAt >= windowStart)
+            .ToList();
+        var attemptsInWindow = attemptsInWindowRows.Count(a => a.Status != "refused");
 
         var remaining = Math.Max(0, opts.FreeTierWeeklyAttemptLimit - attemptsInWindow);
-        var earliest = await db.PronunciationAttempts
-            .Where(a => a.UserId == userId && a.CreatedAt >= windowStart)
+        var earliest = attemptsInWindowRows
             .OrderBy(a => a.CreatedAt)
             .Select(a => (DateTimeOffset?)a.CreatedAt)
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefault();
         var resetAt = earliest.HasValue ? earliest.Value + TimeSpan.FromDays(windowDays) : (DateTimeOffset?)null;
 
         if (remaining <= 0)

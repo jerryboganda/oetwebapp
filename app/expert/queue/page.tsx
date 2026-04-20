@@ -25,6 +25,11 @@ type AsyncStatus = 'loading' | 'error' | 'empty' | 'success';
 
 const FILTER_KEYS = ['type', 'profession', 'priority', 'status', 'confidence', 'assignment', 'overdue'] as const;
 const PAGE_SIZE = 25;
+const FLASH_STORAGE_KEY = 'expertReviewQueueFlash';
+const FLASH_MESSAGES: Record<string, { variant: 'success'; message: string }> = {
+  'review-submitted': { variant: 'success', message: 'Review submitted successfully.' },
+  'rework-submitted': { variant: 'success', message: 'Rework request submitted.' },
+};
 
 function toLabel(value: string) {
   return value.replace(/_/g, ' ').replace(/\b\w/g, (match) => match.toUpperCase());
@@ -78,6 +83,33 @@ export default function ReviewQueuePage() {
     setSearchQuery(searchParams?.get('search') ?? '');
     setPage(Math.max(1, Number(searchParams?.get('page') ?? '1')));
   }, [searchParams]);
+
+  useEffect(() => {
+    const queryFlash = searchParams?.get('flash');
+    let flash = queryFlash;
+    if (!flash) {
+      flash = window.sessionStorage.getItem(FLASH_STORAGE_KEY);
+      if (flash) {
+        window.sessionStorage.removeItem(FLASH_STORAGE_KEY);
+      }
+    }
+
+    if (!flash) {
+      return;
+    }
+
+    const message = FLASH_MESSAGES[flash];
+    if (message) {
+      setToast(message);
+    }
+
+    if (queryFlash && searchParams) {
+      const params = new URLSearchParams(searchParams.toString());
+      params.delete('flash');
+      const query = params.toString();
+      router.replace(query ? `${pathname}?${query}` : pathname, { scroll: false });
+    }
+  }, [pathname, router, searchParams]);
 
   const updateUrl = useCallback((nextFilters: Record<string, string[]>, nextSearch: string, nextPage: number) => {
     const params = new URLSearchParams();

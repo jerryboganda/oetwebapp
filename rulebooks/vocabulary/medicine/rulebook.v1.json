@@ -1,0 +1,63 @@
+{
+  "version": "1.0.0",
+  "kind": "vocabulary",
+  "profession": "medicine",
+  "publishedAt": "2026-04-20T00:00:00Z",
+  "authoritySource": "Dr. Ahmed Hesham — OET Medical Vocabulary Rulebook for Healthcare Professionals v1",
+  "sections": [
+    { "id": "V01", "title": "Clinical Accuracy", "order": 1 },
+    { "id": "V02", "title": "Register & Professional Fit", "order": 2 },
+    { "id": "V03", "title": "Concision & Definition Quality", "order": 3 },
+    { "id": "V04", "title": "Context, Synonyms & Collocations", "order": 4 },
+    { "id": "V05", "title": "Pronunciation & Audio", "order": 5 },
+    { "id": "V06", "title": "Taxonomy & Categorisation", "order": 6 },
+    { "id": "V07", "title": "Example Sentences", "order": 7 },
+    { "id": "V08", "title": "Profession-Specific Bands", "order": 8 }
+  ],
+  "rules": [
+    { "id": "V01.1", "section": "V01", "severity": "critical", "title": "Definitions medically accurate", "body": "Definitions must reflect current medical usage (ICD-11 / current MeSH / national guidelines). Outdated terminology (e.g. 'senile dementia', 'mongolism') is forbidden.", "appliesTo": "all", "examples": { "good": ["Atelectasis — partial or complete collapse of a lung or a section (lobe) of the lung."], "bad": ["Senile dementia — confusion in old age."] } },
+    { "id": "V01.2", "section": "V01", "severity": "critical", "title": "No brand names as primary term", "body": "Primary terms MUST use generic names (INN) not brand names. Brand names may appear as synonyms with the ® stripped.", "appliesTo": "all", "examples": { "good": ["paracetamol"], "bad": ["Panadol"] } },
+    { "id": "V01.3", "section": "V01", "severity": "major", "title": "Abbreviations expanded", "body": "Every abbreviation term must include its expansion. e.g. 'ECG — electrocardiogram, a recording of the heart's electrical activity.'", "appliesTo": "all" },
+
+    { "id": "V02.1", "section": "V02", "severity": "critical", "title": "Healthcare register", "body": "Entries must read as if appearing in an OET referral/discharge letter. No colloquialisms ('tummy ache', 'yucky'), no slang, no lay abbreviations.", "appliesTo": "all" },
+    { "id": "V02.2", "section": "V02", "severity": "critical", "title": "No trademarked names", "body": "Never use trademarked product or device names as the primary term.", "appliesTo": "all" },
+    { "id": "V02.3", "section": "V02", "severity": "major", "title": "Formal, non-judgemental", "body": "Avoid pejorative terms ('drunkard', 'addict', 'non-compliant'). Use 'patient with alcohol use disorder', 'patient with opioid dependence', 'patient reported difficulty adhering'.", "appliesTo": "all", "forbiddenPatterns": ["\\b(drunkard|addict|noncompliant|non-compliant)\\b"] },
+    { "id": "V02.4", "section": "V02", "severity": "minor", "title": "Conditions lowercase except eponymous", "body": "Diseases are lowercase ('hypertension'); eponymous diseases preserve the capital ('Parkinson's disease', 'Crohn's disease').", "appliesTo": "all" },
+
+    { "id": "V03.1", "section": "V03", "severity": "critical", "title": "Definition ≤ 25 words", "body": "Definitions must be concise: target 12–20 words, hard cap 25 words. Use noun phrases where possible.", "appliesTo": "all", "params": { "maxWords": 25 } },
+    { "id": "V03.2", "section": "V03", "severity": "major", "title": "No circular definitions", "body": "A definition must not repeat the term it is defining. 'Analgesia — the use of analgesics' is forbidden.", "appliesTo": "all" },
+
+    { "id": "V04.1", "section": "V04", "severity": "major", "title": "Example sentence uses the term in context", "body": "The example sentence must use the term in a natural clinical sentence (OET letter register). Minimum 8 words, maximum 30 words.", "appliesTo": "all", "params": { "minWords": 8, "maxWords": 30 } },
+    { "id": "V04.2", "section": "V04", "severity": "major", "title": "Synonyms genuine, not translations", "body": "Listed synonyms must be true English synonyms used in UK/AU/NZ clinical practice. No translations into other languages; no false synonyms.", "appliesTo": "all" },
+    { "id": "V04.3", "section": "V04", "severity": "minor", "title": "Collocations 2–5 entries, realistic", "body": "Collocations should reflect authentic clinical phrases ('administer medication', 'elevate the head of the bed').", "appliesTo": "all", "params": { "minCount": 2, "maxCount": 5 } },
+
+    { "id": "V05.1", "section": "V05", "severity": "major", "title": "IPA in British Received Pronunciation", "body": "When IPA is provided, use British RP conventions; mark primary stress with ˈ and secondary stress with ˌ.", "appliesTo": "all" },
+    { "id": "V05.2", "section": "V05", "severity": "minor", "title": "Audio recommended for polysyllabic or Latin-root terms", "body": "Terms with ≥3 syllables or Greek/Latin roots benefit from audio pronunciation.", "appliesTo": "all" },
+
+    { "id": "V06.1", "section": "V06", "severity": "major", "title": "Canonical categories only", "body": "Category must be one of: medical, anatomy, symptoms, procedures, pharmacology, conditions, clinical_communication, diagnostics.", "appliesTo": "all", "params": { "allowed": ["medical", "anatomy", "symptoms", "procedures", "pharmacology", "conditions", "clinical_communication", "diagnostics"] } },
+    { "id": "V06.2", "section": "V06", "severity": "minor", "title": "Difficulty tiered A2/B1/B2/C1 or easy/medium/hard", "body": "Difficulty must be one of the documented tiers. Map A2→easy, B1→medium, B2→medium, C1→hard.", "appliesTo": "all", "params": { "allowed": ["easy", "medium", "hard"] } },
+
+    { "id": "V07.1", "section": "V07", "severity": "major", "title": "Example sentence passes core OET grammar rules", "body": "Example sentences must not violate G07.1 (no contractions), G07.2 (no 'the patient' as running label), G12.1 (translate Latin abbreviations).", "appliesTo": "all" },
+    { "id": "V07.2", "section": "V07", "severity": "minor", "title": "No second-person in examples", "body": "Examples are third-person clinical narrative. Avoid 'you' unless directly quoting patient education dialogue.", "appliesTo": "all" },
+
+    { "id": "V08.1", "section": "V08", "severity": "major", "title": "Medicine terms span core sub-specialties", "body": "A balanced medicine bank includes general-practice, internal-medicine, surgery, paediatrics, obstetrics, and psychiatry bands. Avoid over-representing any one sub-specialty.", "appliesTo": "all" }
+  ],
+  "tables": {
+    "allowedCategories": [
+      "medical",
+      "anatomy",
+      "symptoms",
+      "procedures",
+      "pharmacology",
+      "conditions",
+      "clinical_communication",
+      "diagnostics"
+    ],
+    "difficultyTiers": {
+      "A2": "easy",
+      "B1": "medium",
+      "B2": "medium",
+      "C1": "hard"
+    }
+  }
+}

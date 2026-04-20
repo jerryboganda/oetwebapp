@@ -21,6 +21,7 @@ import { Modal } from '@/components/ui/modal';
 import { Timer } from '@/components/ui/timer';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { SelectionToVocab } from '@/components/domain/vocabulary';
 import { fetchReadingTask, submitReadingAnswers } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { getMotionPresenceMode, getSurfaceMotion, prefersReducedMotion } from '@/lib/motion';
@@ -200,7 +201,7 @@ function ReadingPlayerContent() {
               description="Keep the passage visually calm so the learner can focus on extraction and navigation."
               className="mb-5"
             />
-            <div className="min-h-0 space-y-12 overflow-y-auto pr-1">
+            <SelectionToVocab source="reading" sourceRefPrefix={`reading:${task.id}`} className="min-h-0 space-y-12 overflow-y-auto pr-1">
               {task.texts.map((text) => (
                 <article key={text.id} className="prose prose-gray max-w-none">
                   <h2 className="mb-6 border-b border-border pb-4 text-xl font-black text-navy">{text.title}</h2>
@@ -209,7 +210,7 @@ function ReadingPlayerContent() {
                   </div>
                 </article>
               ))}
-            </div>
+            </SelectionToVocab>
           </div>
 
           <div className="flex min-h-0 flex-col rounded-3xl border border-border bg-background-light shadow-sm">

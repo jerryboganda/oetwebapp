@@ -3,17 +3,18 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
 import { MotionItem } from '@/components/ui/motion-primitives';
-import { BookOpen, Layers, HelpCircle, Plus } from 'lucide-react';
+import { BookOpen, Layers, HelpCircle, Plus, Trash2, History, Flame } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
-import { fetchMyVocabulary, fetchDueFlashcards } from '@/lib/api';
+import { fetchMyVocabulary, fetchVocabularyStats, removeFromMyVocabulary } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import type { LearnerVocabulary, VocabularyStats } from '@/lib/types/vocabulary';
 
-type MyVocabItem = { termId: string; word: string; mastery: string; dueAt: string | null };
+type MyVocabItem = Pick<LearnerVocabulary, 'termId' | 'term' | 'mastery' | 'dueAt'>;
 
 const MASTERY_COLORS: Record<string, string> = {
   new: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
@@ -24,42 +25,69 @@ const MASTERY_COLORS: Record<string, string> = {
 
 export default function VocabularyPage() {
   const [myList, setMyList] = useState<MyVocabItem[]>([]);
-  const [dueCount, setDueCount] = useState(0);
+  const [stats, setStats] = useState<VocabularyStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [removing, setRemoving] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     analytics.track('vocabulary_home_viewed');
-    Promise.allSettled([fetchMyVocabulary(), fetchDueFlashcards(100)]).then(([listR, dueR]) => {
-      if (listR.status === 'fulfilled') {
-        const items = Array.isArray(listR.value) ? listR.value : (listR.value?.items ?? []);
-        setMyList(items as MyVocabItem[]);
-      }
-      if (dueR.status === 'fulfilled') {
-        const dueItems = Array.isArray(dueR.value) ? dueR.value : (dueR.value?.cards ?? dueR.value?.items ?? []);
-        setDueCount(dueItems.length);
-      }
-      if (listR.status === 'rejected') setError('Could not load vocabulary list.');
-      setLoading(false);
-    });
+    void loadAll();
   }, []);
 
-  const stats = {
-    total: myList.length,
-    mastered: myList.filter(i => i.mastery === 'mastered').length,
-    learning: myList.filter(i => i.mastery === 'learning' || i.mastery === 'reviewing').length,
-    new: myList.filter(i => i.mastery === 'new').length,
+  async function loadAll() {
+    setLoading(true);
+    try {
+      const [listR, statsR] = await Promise.allSettled([fetchMyVocabulary(), fetchVocabularyStats()]);
+      if (listR.status === 'fulfilled') {
+        const items = Array.isArray(listR.value) ? listR.value : ((listR.value as { items?: MyVocabItem[] })?.items ?? []);
+        setMyList(items as MyVocabItem[]);
+      }
+      if (statsR.status === 'fulfilled') {
+        setStats(statsR.value as VocabularyStats);
+      }
+      if (listR.status === 'rejected') setError('Could not load your word bank.');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function handleRemove(termId: string) {
+    if (removing.has(termId)) return;
+    setRemoving(prev => new Set(prev).add(termId));
+    try {
+      await removeFromMyVocabulary(termId);
+      analytics.track('vocab_removed', { termId });
+      setMyList(prev => prev.filter(i => i.termId !== termId));
+      // Refresh stats in the background; keep optimistic UI.
+      void fetchVocabularyStats().then(s => setStats(s as VocabularyStats)).catch(() => {});
+    } catch {
+      setError('Failed to remove term.');
+    } finally {
+      setRemoving(prev => { const s = new Set(prev); s.delete(termId); return s; });
+    }
+  }
+
+  const displayStats = {
+    total: stats?.totalInList ?? myList.length,
+    mastered: stats?.mastered ?? 0,
+    learning: (stats?.learning ?? 0) + (stats?.reviewing ?? 0),
+    new: stats?.new ?? 0,
+    dueToday: stats?.dueToday ?? 0,
+    streakDays: stats?.streakDays ?? 0,
   };
 
   const quickLinks = [
-    { href: '/vocabulary/flashcards', label: 'Flashcard Review', icon: <Layers className="w-6 h-6" />, badge: dueCount > 0 ? `${dueCount} due` : null, color: 'bg-indigo-100 dark:bg-indigo-900/40 border-indigo-300 dark:border-indigo-700 text-indigo-900 dark:text-indigo-200' },
+    { href: '/vocabulary/flashcards', label: 'Flashcard Review', icon: <Layers className="w-6 h-6" />, badge: displayStats.dueToday > 0 ? `${displayStats.dueToday} due` : null, color: 'bg-indigo-100 dark:bg-indigo-900/40 border-indigo-300 dark:border-indigo-700 text-indigo-900 dark:text-indigo-200' },
     { href: '/vocabulary/quiz', label: 'Vocabulary Quiz', icon: <HelpCircle className="w-6 h-6" />, badge: null, color: 'bg-emerald-100 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200' },
     { href: '/vocabulary/browse', label: 'Browse Terms', icon: <BookOpen className="w-6 h-6" />, badge: null, color: 'bg-sky-100 dark:bg-sky-900/40 border-sky-300 dark:border-sky-700 text-sky-900 dark:text-sky-200' },
+    { href: '/vocabulary/quiz/history', label: 'Quiz History', icon: <History className="w-6 h-6" />, badge: null, color: 'bg-violet-100 dark:bg-violet-900/40 border-violet-300 dark:border-violet-700 text-violet-900 dark:text-violet-200' },
   ];
 
   const heroHighlights = [
-    { icon: BookOpen, label: 'List size', value: `${myList.length}` },
-    { icon: Layers, label: 'Due cards', value: `${dueCount}` },
+    { icon: BookOpen, label: 'List size', value: `${displayStats.total}` },
+    { icon: Layers, label: 'Due today', value: `${displayStats.dueToday}` },
+    { icon: Flame, label: 'Streak', value: `${displayStats.streakDays}d` },
     { icon: HelpCircle, label: 'Mode', value: 'Spaced repetition' },
   ];
 
@@ -80,10 +108,10 @@ export default function VocabularyPage() {
       <LearnerSurfaceSectionHeader
         eyebrow="Quick access"
         title="Jump into a vocabulary mode"
-        description="The quick links should look like part of the dashboard, not a separate card system."
+        description="Flashcards, quiz, browse, and history — all in one place."
         className="mb-4"
       />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {quickLinks.map(link => (
           <Link key={link.href} href={link.href}>
             <motion.div
@@ -101,17 +129,17 @@ export default function VocabularyPage() {
       </div>
 
       {/* Stats */}
-      {loading ? (
+      {loading && !stats ? (
         <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
           {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-3xl" />)}
         </div>
       ) : (
         <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
           {[
-            { label: 'Total Words', value: stats.total, color: 'text-gray-800 dark:text-white' },
-            { label: 'Mastered', value: stats.mastered, color: 'text-green-600 dark:text-green-400' },
-            { label: 'Learning', value: stats.learning, color: 'text-blue-600 dark:text-blue-400' },
-            { label: 'New', value: stats.new, color: 'text-gray-500' },
+            { label: 'Total Words', value: displayStats.total, color: 'text-gray-800 dark:text-white' },
+            { label: 'Mastered', value: displayStats.mastered, color: 'text-green-600 dark:text-green-400' },
+            { label: 'Learning', value: displayStats.learning, color: 'text-blue-600 dark:text-blue-400' },
+            { label: 'New', value: displayStats.new, color: 'text-gray-500' },
           ].map(s => (
             <Card key={s.label} className="rounded-3xl p-4 text-center shadow-sm">
               <div className={`text-3xl font-bold ${s.color}`}>{s.value}</div>
@@ -125,7 +153,7 @@ export default function VocabularyPage() {
       <LearnerSurfaceSectionHeader
         eyebrow="Word bank"
         title="My Word List"
-        description="Your saved terms should feel like a curated dashboard list, not a raw database dump."
+        description="Saved terms with their current mastery tier. Remove any you no longer want to track."
       />
       {loading ? (
         <div className="space-y-2">
@@ -145,12 +173,23 @@ export default function VocabularyPage() {
             <MotionItem
               key={item.termId}
               delayIndex={i}
-              className="flex items-center gap-3 border-b border-border px-4 py-3 last:border-0"
+              className="group flex items-center gap-3 border-b border-border px-4 py-3 last:border-0"
             >
-              <div className="flex-1 text-sm font-medium text-navy">{item.word}</div>
+              <Link href={`/vocabulary/terms/${encodeURIComponent(item.termId)}`} className="flex-1 text-sm font-medium text-navy hover:underline">
+                {item.term}
+              </Link>
               <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${MASTERY_COLORS[item.mastery] ?? ''}`}>
                 {item.mastery}
               </span>
+              <button
+                onClick={() => handleRemove(item.termId)}
+                disabled={removing.has(item.termId)}
+                className="rounded-lg p-1.5 text-muted opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 focus:opacity-100"
+                aria-label={`Remove ${item.term} from my word list`}
+                title="Remove from my list"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
             </MotionItem>
           ))}
           {myList.length > 20 && (

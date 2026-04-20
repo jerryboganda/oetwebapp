@@ -41,10 +41,13 @@ public sealed class PronunciationAudioRetentionWorker(
         var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
 
         var now = DateTimeOffset.UtcNow;
-        var dueAttempts = await db.PronunciationAttempts
-            .Where(a => a.AudioStorageKey != null && a.AudioReapAt != null && a.AudioReapAt <= now)
-            .Take(200)
+        var candidates = await db.PronunciationAttempts
+            .Where(a => a.AudioStorageKey != null && a.AudioReapAt != null)
             .ToListAsync(ct);
+        var dueAttempts = candidates
+            .Where(a => a.AudioReapAt <= now)
+            .Take(200)
+            .ToList();
 
         int deleted = 0;
         foreach (var attempt in dueAttempts)

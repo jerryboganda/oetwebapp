@@ -22,6 +22,18 @@ function formatTime(seconds: number) {
   return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }
 
+function handleAudioPlaybackError(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  if (
+    error instanceof DOMException && error.name === 'AbortError'
+    || message.includes('play() request was interrupted')
+  ) {
+    return;
+  }
+
+  console.error(error);
+}
+
 function PlayerContent() {
   const params = useParams();
   const router = useRouter();
@@ -58,7 +70,7 @@ function PlayerContent() {
     if (isExam && hasStarted) return;
     if (audioRef.current) {
       if (isPlaying) audioRef.current.pause();
-      else audioRef.current.play().catch(console.error);
+      else audioRef.current.play().catch(handleAudioPlaybackError);
     }
   };
 
@@ -74,7 +86,7 @@ function PlayerContent() {
   const startTask = () => {
     if (!task?.audioAvailable) return;
     setHasStarted(true);
-    if (audioRef.current) audioRef.current.play().catch(console.error);
+    if (audioRef.current) audioRef.current.play().catch(handleAudioPlaybackError);
   };
 
   const handleAnswerChange = (questionId: string, answer: string) => {

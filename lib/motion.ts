@@ -73,8 +73,8 @@ const motionRuntimeProfiles: Record<AppRuntimeKind, MotionRuntimeProfile> = {
   },
 };
 
-function getMotionRuntimeProfile() {
-  return motionRuntimeProfiles[getAppRuntimeKind()];
+function getMotionRuntimeProfile(runtimeKind?: AppRuntimeKind) {
+  return motionRuntimeProfiles[runtimeKind ?? getAppRuntimeKind()];
 }
 
 function scaleHiddenScale(value: number, profile: MotionRuntimeProfile) {
@@ -218,26 +218,34 @@ export function getMotionPresenceMode(reducedMotion: boolean) {
   return reducedMotion ? 'sync' : 'wait';
 }
 
-export function getMotionDelay(index: number, reducedMotion: boolean, baseDelay = 0) {
+export function getMotionDelay(index: number, reducedMotion: boolean, baseDelay = 0, runtimeKind?: AppRuntimeKind) {
   if (reducedMotion) {
     return baseDelay;
   }
 
-  const profile = getMotionRuntimeProfile();
+  const profile = getMotionRuntimeProfile(runtimeKind);
 
   return baseDelay + Math.min(index * profile.staggerStep, profile.staggerCap);
 }
 
-export function getSurfaceTransition(surface: MotionSurface, reducedMotion = false): Transition {
-  const profile = getMotionRuntimeProfile();
+export function getSurfaceTransition(
+  surface: MotionSurface,
+  reducedMotion = false,
+  runtimeKind?: AppRuntimeKind,
+): Transition {
+  const profile = getMotionRuntimeProfile(runtimeKind);
   const transition = reducedMotion ? motionSurfaceSpecs[surface].reducedTransition : motionSurfaceSpecs[surface].transition;
 
   return tuneTransition(transition, profile);
 }
 
-export function getSurfaceVariants(surface: MotionSurface, reducedMotion = false): Variants {
+export function getSurfaceVariants(
+  surface: MotionSurface,
+  reducedMotion = false,
+  runtimeKind?: AppRuntimeKind,
+): Variants {
   const spec = motionSurfaceSpecs[surface];
-  const profile = getMotionRuntimeProfile();
+  const profile = getMotionRuntimeProfile(runtimeKind);
 
   return {
     hidden: reducedMotion ? { opacity: 0 } : tuneVariant(spec.hidden, profile),
@@ -246,13 +254,13 @@ export function getSurfaceVariants(surface: MotionSurface, reducedMotion = false
   };
 }
 
-export function getSurfaceMotion(surface: MotionSurface, reducedMotion = false) {
+export function getSurfaceMotion(surface: MotionSurface, reducedMotion = false, runtimeKind?: AppRuntimeKind) {
   return {
     initial: 'hidden' as const,
     animate: 'visible' as const,
     exit: 'exit' as const,
-    variants: getSurfaceVariants(surface, reducedMotion),
-    transition: getSurfaceTransition(surface, reducedMotion),
+    variants: getSurfaceVariants(surface, reducedMotion, runtimeKind),
+    transition: getSurfaceTransition(surface, reducedMotion, runtimeKind),
   };
 }
 

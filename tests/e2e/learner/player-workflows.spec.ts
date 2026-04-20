@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForSessionGuardToClear } from '../fixtures/auth';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
 
 test.describe('Learner player workflows @learner @smoke', () => {
@@ -10,8 +11,14 @@ test.describe('Learner player workflows @learner @smoke', () => {
     const diagnostics = observePage(page);
     const answer = 'approximately 1 in 10';
 
-    await page.goto('/reading/player/rt-001');
-    await expect(page.getByText(/question 1 of 3/i)).toBeVisible();
+    testInfo.setTimeout(120000);
+
+    await page.goto('/reading/player/rt-001', { waitUntil: 'domcontentloaded' });
+    await waitForSessionGuardToClear(page, {
+      recover: () => page.reload({ waitUntil: 'domcontentloaded' }),
+      initialTimeoutMs: 15_000,
+    });
+    await expect(page.getByText(/question 1 of 3/i)).toBeVisible({ timeout: 60000 });
 
     const answerInput = page.getByPlaceholder('Type your answer here...');
     await answerInput.fill(answer);

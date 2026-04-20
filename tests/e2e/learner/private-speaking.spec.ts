@@ -1,5 +1,6 @@
 import { expect, test } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
+import { waitForSessionGuardToClear } from '../fixtures/auth';
 
 test.describe('Private Speaking Sessions — Learner @learner @private-speaking', () => {
   test('learner private-speaking page renders the hero and session booking UI', async ({ page }, testInfo) => {
@@ -8,14 +9,11 @@ test.describe('Private Speaking Sessions — Learner @learner @private-speaking'
     }
 
     const diagnostics = observePage(page);
-    const sessionBanner = page.getByText(/checking your session/i);
 
     await page.goto('/private-speaking', { waitUntil: 'domcontentloaded' });
-    if (await sessionBanner.isVisible().catch(() => false)) {
-      await page.goto('/private-speaking', { waitUntil: 'domcontentloaded' });
-    }
-
-    await expect(sessionBanner).toBeHidden({ timeout: 90000 });
+    await waitForSessionGuardToClear(page, {
+      recover: () => page.goto('/private-speaking', { waitUntil: 'domcontentloaded' }),
+    });
 
     const heroHeading = page.getByRole('heading', { name: /private speaking sessions/i });
     await expect(heroHeading).toBeVisible({ timeout: 45000 });
@@ -34,14 +32,11 @@ test.describe('Private Speaking Sessions — Learner @learner @private-speaking'
     }
 
     const diagnostics = observePage(page);
-    const sessionBanner = page.getByText(/checking your session/i);
 
     await page.goto('/private-speaking', { waitUntil: 'domcontentloaded' });
-    if (await sessionBanner.isVisible().catch(() => false)) {
-      await page.goto('/private-speaking', { waitUntil: 'domcontentloaded' });
-    }
-
-    await expect(sessionBanner).toBeHidden({ timeout: 90000 });
+    await waitForSessionGuardToClear(page, {
+      recover: () => page.goto('/private-speaking', { waitUntil: 'domcontentloaded' }),
+    });
 
     // The page should either render tutor cards or an appropriate message
     const heroHeading = page.getByRole('heading', { name: /private speaking sessions/i });

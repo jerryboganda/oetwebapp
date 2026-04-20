@@ -14,14 +14,29 @@ import {
   prefersReducedMotion,
   type MotionSurface,
 } from '@/lib/motion';
+import { type AppRuntimeKind } from '@/lib/runtime-signals';
 import { cn } from '@/lib/utils';
-import { type ReactNode } from 'react';
+import { useSyncExternalStore, type ReactNode } from 'react';
 
 type MotionRevealProps = HTMLMotionProps<'div'> & {
   surface?: Exclude<MotionSurface, 'skeleton'>;
   delayIndex?: number;
   delay?: number;
 };
+
+const subscribeToHydrationSnapshot = () => () => undefined;
+const getHydratedSnapshot = () => true;
+const getServerHydrationSnapshot = () => false;
+
+function useInitialMotionRuntimeKind(): AppRuntimeKind | undefined {
+  const hasHydrated = useSyncExternalStore(
+    subscribeToHydrationSnapshot,
+    getHydratedSnapshot,
+    getServerHydrationSnapshot,
+  );
+
+  return hasHydrated ? undefined : 'web';
+}
 
 function MotionReveal({
   surface = 'section',
@@ -33,10 +48,11 @@ function MotionReveal({
   ...props
 }: MotionRevealProps) {
   const reducedMotion = prefersReducedMotion(useReducedMotion());
-  const motionProps = getSurfaceMotion(surface, reducedMotion);
+  const runtimeKind = useInitialMotionRuntimeKind();
+  const motionProps = getSurfaceMotion(surface, reducedMotion, runtimeKind);
   const baseTransition = {
-    ...getSurfaceTransition(surface, reducedMotion),
-    delay: getMotionDelay(delayIndex, reducedMotion, delay),
+    ...getSurfaceTransition(surface, reducedMotion, runtimeKind),
+    delay: getMotionDelay(delayIndex, reducedMotion, delay, runtimeKind),
   };
 
   return (

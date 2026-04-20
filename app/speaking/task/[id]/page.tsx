@@ -51,6 +51,8 @@ function LiveSpeakingTaskContent() {
   const [showNotes, setShowNotes] = useState(false);
   const [showStopConfirm, setShowStopConfirm] = useState(false);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
   const [audioLevels, setAudioLevels] = useState<number[]>([10, 10, 10, 10, 10]);
 
   // --- Refs ---
@@ -70,6 +72,7 @@ function LiveSpeakingTaskContent() {
   const stopTriggerRef = useRef<HTMLButtonElement | null>(null);
   const submitTriggerRef = useRef<HTMLButtonElement | null>(null);
   const restoreFocusRef = useRef<HTMLElement | null>(null);
+  const resultNavigationTimerRef = useRef<number | null>(null);
   const isNativeRecorder = Capacitor.isNativePlatform();
 
   // --- Timer ---
@@ -203,6 +206,9 @@ function LiveSpeakingTaskContent() {
 
   useEffect(() => {
     return () => {
+      if (resultNavigationTimerRef.current !== null) {
+        window.clearTimeout(resultNavigationTimerRef.current);
+      }
       cleanupAudio();
     };
   }, [cleanupAudio]);
@@ -253,6 +259,8 @@ function LiveSpeakingTaskContent() {
 
   // --- Local Recording Controls (Self/Exam Mode) ---
   const handleStartRecording = async () => {
+    setSubmitError(null);
+
     if (recordingState === 'paused' && (isNativeRecorder || mediaRecorderRef.current)) {
       if (isNativeRecorder) {
         await SpeakingRecorder.resume();
@@ -318,7 +326,10 @@ function LiveSpeakingTaskContent() {
 
   // --- Handlers ---
   const handleStop = () => setShowStopConfirm(true);
-  const handleSubmit = () => setShowSubmitConfirm(true);
+  const handleSubmit = () => {
+    setSubmitError(null);
+    setShowSubmitConfirm(true);
+  };
 
   const confirmStop = () => {
     setRecordingState('finished');
@@ -327,8 +338,13 @@ function LiveSpeakingTaskContent() {
   };
 
   const confirmSubmit = async () => {
+    if (isSubmitting) return;
+
+    setIsSubmitting(true);
+    setSubmitError(null);
     setRecordingState('finished');
     analytics.track('task_submitted', { taskId: id, subtest: 'speaking', mode });
+
     try {
       const recording = await stopRecorderAsync();
       cleanupAudio(false);
@@ -337,10 +353,25 @@ function LiveSpeakingTaskContent() {
       }
 
       const { submissionId } = await submitSpeakingRecording(id, recording);
-      router.push(`/speaking/results/${submissionId}`);
-    } catch {
+      const resultUrl = `/speaking/results/${submissionId}`;
+      setShowSubmitConfirm(false);
+      router.replace(resultUrl);
+      resultNavigationTimerRef.current = window.setTimeout(() => {
+        if (!window.location.pathname.startsWith('/speaking/results/')) {
+          window.location.assign(resultUrl);
+        }
+      }, 1500);
+    } catch (error) {
+      console.error('Speaking submission failed:', error);
       cleanupAudio(false);
-      router.push(`/speaking/results/${id}`);
+      setShowSubmitConfirm(false);
+      setSubmitError(
+        error instanceof Error
+          ? error.message
+          : 'Could not submit your recording. Please try again.'
+      );
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -582,12 +613,17 @@ function LiveSpeakingTaskContent() {
             <Button
               size="lg"
               onClick={handleSubmit}
-              disabled={recordingState === 'idle'}
+              disabled={recordingState === 'idle' || isSubmitting}
               className="px-12 py-4 bg-white text-black hover:bg-gray-200 rounded-2xl font-black text-lg shadow-[0_0_30px_rgba(255,255,255,0.1)]"
               ref={submitTriggerRef}
             >
-              Submit Recording
+              {isSubmitting ? 'Submitting...' : 'Submit Recording'}
             </Button>
+            {submitError && (
+              <p role="alert" className="max-w-sm text-center text-xs font-bold leading-relaxed text-red-300">
+                {submitError}
+              </p>
+            )}
             <p className="text-[10px] text-white/20 font-bold uppercase tracking-[0.3em]">OET Speaking Simulation</p>
           </div>
 
@@ -662,10 +698,10 @@ function LiveSpeakingTaskContent() {
                 Are you ready to submit your recording for evaluation? You won&apos;t be able to make changes after this.
               </p>
               <div className="flex flex-col gap-3">
-                <Button ref={submitPrimaryActionRef} fullWidth onClick={confirmSubmit} className="py-4 rounded-2xl font-black">
-                  Submit for Evaluation
+                <Button ref={submitPrimaryActionRef} fullWidth onClick={confirmSubmit} disabled={isSubmitting} className="py-4 rounded-2xl font-black">
+                  {isSubmitting ? 'Submitting...' : 'Submit for Evaluation'}
                 </Button>
-                <Button variant="ghost" fullWidth onClick={() => setShowSubmitConfirm(false)} className="py-4 rounded-2xl text-white bg-white/5 hover:bg-white/10">
+                <Button variant="ghost" fullWidth onClick={() => setShowSubmitConfirm(false)} disabled={isSubmitting} className="py-4 rounded-2xl text-white bg-white/5 hover:bg-white/10">
                   Not Yet, Keep Going
                 </Button>
               </div>

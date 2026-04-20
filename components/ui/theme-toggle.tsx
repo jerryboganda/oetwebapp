@@ -1,18 +1,15 @@
 'use client';
 
 import { useTheme } from 'next-themes';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export function ThemeToggle({ className = '' }: { className?: string }) {
   const { resolvedTheme, setTheme } = useTheme();
-  const mountRef = useRef(false);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (!mountRef.current) {
-      mountRef.current = true;
-      queueMicrotask(() => setMounted(true));
-    }
+    const timer = window.setTimeout(() => setMounted(true), 0);
+    return () => window.clearTimeout(timer);
   }, []);
 
   if (!mounted) {

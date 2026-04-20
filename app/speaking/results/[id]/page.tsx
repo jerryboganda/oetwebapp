@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'motion/react';
 import {
-  CheckCircle2, AlertCircle, TrendingUp, Zap, Target, Loader2, FileText, Mic, UserCheck, ChevronRight,
+  CheckCircle2, AlertCircle, TrendingUp, Zap, Target, Loader2, FileText, Mic, UserCheck, ChevronRight, Headphones,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -14,15 +14,29 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionSection } from '@/components/ui/motion-primitives';
-import { fetchSpeakingResult } from '@/lib/api';
+import { fetchPronunciationSpeakingLinked, fetchSpeakingResult } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { SpeakingResult } from '@/lib/mock-data';
+
+type PronunciationLinkedAssessment = {
+  id: string;
+  attemptId: string | null;
+  accuracy: number;
+  fluency: number;
+  completeness: number;
+  prosody: number;
+  overall: number;
+  projectedSpeakingScaled: number;
+  projectedSpeakingGrade: string;
+  createdAt: string;
+};
 
 export default function SpeakingResultSummary() {
   const params = useParams();
   const id = params?.id as string;
   const [analysing, setAnalysing] = useState(true);
   const [result, setResult] = useState<SpeakingResult | null>(null);
+  const [pronunciationInsight, setPronunciationInsight] = useState<PronunciationLinkedAssessment | null>(null);
   const [error, setError] = useState(false);
 
   useEffect(() => {
@@ -34,6 +48,17 @@ export default function SpeakingResultSummary() {
         if (cancelled) return;
         if (response.evalStatus === 'completed') {
           setResult(response);
+          void fetchPronunciationSpeakingLinked(10)
+            .then((items) => {
+              if (cancelled) return;
+              const linked = (items as PronunciationLinkedAssessment[]).find((item) => item.attemptId === id)
+                ?? (items as PronunciationLinkedAssessment[])[0]
+                ?? null;
+              setPronunciationInsight(linked);
+            })
+            .catch(() => {
+              if (!cancelled) setPronunciationInsight(null);
+            });
           analytics.track('evaluation_viewed', { resultId: id, subtest: 'speaking' });
           setAnalysing(false);
           return;
@@ -213,9 +238,53 @@ export default function SpeakingResultSummary() {
           </MotionSection>
         </div>
 
+        {pronunciationInsight ? (
+          <MotionSection delayIndex={3}>
+            <Card className="p-8 h-full">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center">
+                  <Headphones className="w-5 h-5 text-rose-600" />
+                </div>
+                <h2 className="text-lg font-black text-navy">Pronunciation Insight</h2>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-4 text-center">
+                {[
+                  ['Accuracy', pronunciationInsight.accuracy],
+                  ['Fluency', pronunciationInsight.fluency],
+                  ['Complete', pronunciationInsight.completeness],
+                  ['Prosody', pronunciationInsight.prosody],
+                  ['Overall', pronunciationInsight.overall],
+                ].map(([label, value]) => (
+                  <div key={label as string} className="rounded-2xl border border-border p-3">
+                    <div className="text-[11px] uppercase tracking-[0.15em] text-muted">{label}</div>
+                    <div className="mt-1 font-mono text-xl font-semibold text-navy">{Math.round(value as number)}</div>
+                  </div>
+                ))}
+              </div>
+              <p className="text-sm text-muted leading-relaxed">
+                Advisory pronunciation projection from your latest linked speaking review:{' '}
+                <strong className="text-navy">{pronunciationInsight.projectedSpeakingScaled}/500 · Grade {pronunciationInsight.projectedSpeakingGrade}</strong>.
+                Use the targeted drill workflow to improve weak sounds, word stress, and intonation.
+              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Link href="/pronunciation">
+                  <Button variant="outline">
+                    <Mic className="w-4 h-4" /> Open Pronunciation Drills
+                  </Button>
+                </Link>
+                <Link href={`/pronunciation?focus=phoneme`}>
+                  <Button variant="ghost">
+                    Practice weak phonemes
+                  </Button>
+                </Link>
+              </div>
+            </Card>
+          </MotionSection>
+        ) : null}
+
         {result.nextDrill && (
           <MotionSection
-            delayIndex={3}
+            delayIndex={4}
             className="bg-navy rounded-3xl p-8 text-white flex flex-col md:flex-row items-center justify-between gap-8"
           >
             <div className="flex items-center gap-6">

@@ -215,6 +215,7 @@ public static class AiFeatureCodes
     public const string AdminContentGeneration = "admin.content_generation";
     public const string AdminGrammarDraft = "admin.grammar_draft";
     public const string AdminPronunciationDraft = "admin.pronunciation_draft";
+    public const string AdminVocabularyDraft = "admin.vocabulary_draft";
 
     // Catch-all for calls that pre-date feature classification. Tolerated only
     // during the Slice 1 rollout; future slices will validate against this set.

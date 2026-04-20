@@ -31,38 +31,8 @@ async function check(url, expectation, options = {}) {
 }
 
 async function readResponseSnippet(response) {
-  const reader = response.body?.getReader();
-  if (!reader) {
-    return response.text();
-  }
-
-  const decoder = new TextDecoder();
-  const chunks = [];
-  let totalLength = 0;
-
-  try {
-    while (totalLength < 64_000) {
-      const { done, value } = await reader.read();
-      if (done) {
-        break;
-      }
-
-      if (!value?.length) {
-        continue;
-      }
-
-      chunks.push(decoder.decode(value, { stream: true }));
-      totalLength += value.length;
-
-      if (chunks.join('').length >= 32_000) {
-        break;
-      }
-    }
-  } finally {
-    await reader.cancel().catch(() => {});
-  }
-
-  return chunks.join('');
+  const text = await response.text();
+  return text.slice(0, 32_000);
 }
 
 try {

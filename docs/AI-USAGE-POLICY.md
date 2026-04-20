@@ -109,10 +109,13 @@ Every feature the gateway serves is classified. Defaults:
 | `writing.coach.explain` | ❌ | ✅ | ✅ | Why-is-this-wrong explanations |
 | `conversation.reply` | ❌ | ✅ | ✅ | Practice conversation |
 | `pronunciation.tip` | ❌ | ✅ | ✅ | Pronunciation feedback |
+| `pronunciation.score` | ✅ | ❌ | ✅ | Pronunciation attempt scoring / phoneme analysis |
+| `pronunciation.feedback` | ❌ | ❌ | ✅ | Grounded learner-facing pronunciation coaching |
 | `summarise.passage` | ❌ | ✅ | ✅ | Study-notes summarisation |
 | `vocabulary.gloss` | ❌ | ✅ | ✅ | Word gloss |
 | `admin.content_generation` | ❌ | ❌ | ✅ | Admin tooling, platform only |
 | `admin.grammar_draft` | ❌ | ❌ | ✅ | Grammar lesson drafting (grounded), platform only |
+| `admin.pronunciation_draft` | ❌ | ❌ | ✅ | Pronunciation drill drafting (grounded), platform only |
 
 Admin can toggle the BYOK column per feature. `AllowByokOnScoringFeatures`
 global switch gates the scoring-critical rows.

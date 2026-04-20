@@ -108,6 +108,7 @@ const smokeRuns = [
         'tests/e2e/learner/immersive-completion.spec.ts',
       ],
       projects: ['chromium-learner'],
+      workers: 1,
     }),
   },
   {
@@ -165,7 +166,6 @@ const smokeRuns = [
     args: playwrightArgs({
       files: ['tests/e2e/shared/role-guards.spec.ts'],
       projects: ['chromium-learner'],
-      grep: 'learner session',
     }),
   },
   {
@@ -173,7 +173,6 @@ const smokeRuns = [
     args: playwrightArgs({
       files: ['tests/e2e/shared/role-guards.spec.ts'],
       projects: ['chromium-expert'],
-      grep: 'expert session',
     }),
   },
   {
@@ -181,7 +180,6 @@ const smokeRuns = [
     args: playwrightArgs({
       files: ['tests/e2e/shared/role-guards.spec.ts'],
       projects: ['chromium-admin'],
-      grep: 'admin session',
     }),
   },
 ];

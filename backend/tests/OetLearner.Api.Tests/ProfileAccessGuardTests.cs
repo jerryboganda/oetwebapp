@@ -77,7 +77,39 @@ public class ProfileAccessGuardTests
         var storageOptions = Options.Create(new StorageOptions { LocalRootPath = storageRoot });
         var mediaStorage = new MediaStorageService(new TestHostEnvironment(storageRoot), storageOptions);
 
-        return new ExpertService(db, NullLogger<ExpertService>.Instance, mediaStorage, platformLinks, null!, new PronunciationService(db));
+        return new ExpertService(db, NullLogger<ExpertService>.Instance, mediaStorage, platformLinks, null!, CreatePronunciationService(db, storageRoot));
+    }
+
+    private static PronunciationService CreatePronunciationService(LearnerDbContext db, string storageRoot)
+    {
+        var storageOpts = Options.Create(new StorageOptions { LocalRootPath = storageRoot });
+        var fileStorage = new OetLearner.Api.Services.Content.LocalFileStorage(
+            new TestHostEnvironment(storageRoot), storageOpts);
+        var pronOpts = Options.Create(new OetLearner.Api.Configuration.PronunciationOptions { Provider = "mock" });
+        var mockProvider = new OetLearner.Api.Services.Pronunciation.MockPronunciationAsrProvider();
+        var selector = new OetLearner.Api.Services.Pronunciation.PronunciationAsrProviderSelector(
+            new OetLearner.Api.Services.Pronunciation.IPronunciationAsrProvider[] { mockProvider },
+            pronOpts,
+            NullLogger<OetLearner.Api.Services.Pronunciation.PronunciationAsrProviderSelector>.Instance);
+        var nullFeedback = new StubPronunciationFeedbackService();
+        var scheduler = new OetLearner.Api.Services.Pronunciation.PronunciationSchedulerService(db);
+        var entitlement = new OetLearner.Api.Services.Pronunciation.PronunciationEntitlementService(db, pronOpts);
+        return new PronunciationService(db, selector, nullFeedback, scheduler, entitlement, fileStorage, pronOpts,
+            NullLogger<PronunciationService>.Instance);
+    }
+
+    private sealed class StubPronunciationFeedbackService : OetLearner.Api.Services.Pronunciation.IPronunciationFeedbackService
+    {
+        public Task<OetLearner.Api.Services.Pronunciation.PronunciationFeedback> GenerateAsync(
+            OetLearner.Api.Domain.PronunciationAssessment assessment,
+            OetLearner.Api.Domain.PronunciationDrill drill,
+            string? userId,
+            string profession,
+            CancellationToken ct) =>
+            Task.FromResult(new OetLearner.Api.Services.Pronunciation.PronunciationFeedback(
+                "", Array.Empty<string>(),
+                Array.Empty<OetLearner.Api.Services.Pronunciation.PronunciationImprovement>(),
+                Array.Empty<string>(), null));
     }
 
     private static PaymentGatewayService CreatePaymentGatewayService(IOptions<BillingOptions> billingOptions)

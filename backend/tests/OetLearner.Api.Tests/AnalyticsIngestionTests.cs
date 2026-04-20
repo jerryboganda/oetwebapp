@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -58,5 +59,42 @@ public class AnalyticsIngestionTests : IClassFixture<TestWebApplicationFactory>
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task AnalyticsEvents_IgnoreEmptyBodies()
+    {
+        await using var beforeScope = _factory.Services.CreateAsyncScope();
+        var beforeDb = beforeScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var beforeCount = await beforeDb.AnalyticsEvents.CountAsync(x => x.UserId == "analytics-user-001");
+
+        var response = await _client.PostAsync("/v1/analytics/events", content: null);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        await using var afterScope = _factory.Services.CreateAsyncScope();
+        var afterDb = afterScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var afterCount = await afterDb.AnalyticsEvents.CountAsync(x => x.UserId == "analytics-user-001");
+
+        Assert.Equal(beforeCount, afterCount);
+    }
+
+    [Fact]
+    public async Task AnalyticsEvents_IgnoreMalformedBodies()
+    {
+        await using var beforeScope = _factory.Services.CreateAsyncScope();
+        var beforeDb = beforeScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var beforeCount = await beforeDb.AnalyticsEvents.CountAsync(x => x.UserId == "analytics-user-001");
+
+        using var content = new StringContent("{", Encoding.UTF8, "application/json");
+        var response = await _client.PostAsync("/v1/analytics/events", content);
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+
+        await using var afterScope = _factory.Services.CreateAsyncScope();
+        var afterDb = afterScope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var afterCount = await afterDb.AnalyticsEvents.CountAsync(x => x.UserId == "analytics-user-001");
+
+        Assert.Equal(beforeCount, afterCount);
     }
 }

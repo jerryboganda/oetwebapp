@@ -49,9 +49,12 @@ public class PronunciationService(
 
         var assessments = await db.PronunciationAssessments
             .Where(a => a.UserId == userId)
+            .ToListAsync(ct);
+
+        assessments = assessments
             .OrderByDescending(a => a.CreatedAt)
             .Take(10)
-            .ToListAsync(ct);
+            .ToList();
 
         var overallScore = assessments.Count > 0
             ? Math.Round(assessments.Average(a => a.OverallScore), 1)
@@ -106,10 +109,11 @@ public class PronunciationService(
     {
         var progress = await db.LearnerPronunciationProgress
             .Where(p => p.UserId == userId && p.PhonemeCode != "_speech_overall")
-            .OrderByDescending(p => p.LastPracticedAt)
             .ToListAsync(ct);
 
-        return progress.Select(p => new
+        return progress
+            .OrderByDescending(p => p.LastPracticedAt)
+            .Select(p => new
         {
             phonemeCode = p.PhonemeCode,
             averageScore = Math.Round(p.AverageScore, 1),
@@ -510,11 +514,12 @@ public class PronunciationService(
         limit = Math.Clamp(limit, 1, 50);
         var list = await db.PronunciationAssessments
             .Where(a => a.UserId == userId && a.AttemptId != null && a.Provider == "speaking-review")
-            .OrderByDescending(a => a.CreatedAt)
-            .Take(limit)
             .ToListAsync(ct);
 
-        return list.Select(a => new
+        return list
+            .OrderByDescending(a => a.CreatedAt)
+            .Take(limit)
+            .Select(a => new
         {
             id = a.Id,
             attemptId = a.AttemptId,

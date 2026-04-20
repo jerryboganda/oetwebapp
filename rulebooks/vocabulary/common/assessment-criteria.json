@@ -1,0 +1,48 @@
+{
+  "version": "1.0.0",
+  "kind": "vocabulary",
+  "authoritySource": "Dr. Ahmed Hesham — OET Vocabulary assessment criteria for healthcare English",
+  "criteria": [
+    {
+      "id": "clinical_accuracy",
+      "title": "Clinical Accuracy",
+      "description": "Definitions must be medically correct and reflect current clinical usage. No outdated terminology.",
+      "maxBand": 5,
+      "linkedRuleIds": ["V01.1", "V01.2", "V01.3"]
+    },
+    {
+      "id": "register_fit",
+      "title": "Register & Professional Fit",
+      "description": "Entries must be appropriate for OET register: formal, healthcare-specific, non-colloquial, no trademarks.",
+      "maxBand": 5,
+      "linkedRuleIds": ["V02.1", "V02.2", "V02.3", "V02.4"]
+    },
+    {
+      "id": "concision",
+      "title": "Concision",
+      "description": "Definitions ≤ 25 words; example sentences a single focused sentence in OET letter register.",
+      "maxBand": 5,
+      "linkedRuleIds": ["V03.1", "V03.2"]
+    },
+    {
+      "id": "context_richness",
+      "title": "Context Richness",
+      "description": "Example sentences show the term in an authentic clinical context; synonyms/collocations genuine and common.",
+      "maxBand": 5,
+      "linkedRuleIds": ["V04.1", "V04.2", "V04.3"]
+    },
+    {
+      "id": "pronunciation_and_audio",
+      "title": "Pronunciation & Audio",
+      "description": "IPA pronunciation (where applicable) follows British Received Pronunciation conventions; audio is clear, non-accented, 8–16 kHz mono Opus or MP3.",
+      "maxBand": 5,
+      "linkedRuleIds": ["V05.1", "V05.2"]
+    }
+  ],
+  "providers": {
+    "medicine": "Medicine — covers general practice, internal medicine, surgery, paediatrics, obstetrics & gynaecology terms.",
+    "nursing": "Nursing — covers clinical nursing procedures, handover language, documentation, and patient education terms.",
+    "dentistry": "Dentistry — covers oral anatomy, restorative procedures, periodontics, paediatric dentistry, and orthodontics.",
+    "pharmacy": "Pharmacy — covers dosage forms, dispensing language, pharmacokinetic/pharmacodynamic vocabulary, and counselling phrases."
+  }
+}

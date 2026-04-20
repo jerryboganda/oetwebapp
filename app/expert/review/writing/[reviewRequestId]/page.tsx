@@ -302,6 +302,11 @@ export default function WritingReviewWorkspace() {
       clearReviewDraft(reviewRequestId);
       setIsDirty(false);
       setToast({ variant: 'success', message: 'Review submitted successfully.' });
+      try {
+        window.sessionStorage.setItem('expertReviewQueueFlash', 'review-submitted');
+      } catch {
+        // The local toast above still confirms completion if storage is unavailable.
+      }
       window.setTimeout(() => router.push('/expert/queue'), 800);
     } catch (error) {
       setToast({ variant: 'error', message: isApiError(error) ? error.userMessage : 'Failed to submit review. Please try again.' });
@@ -328,6 +333,11 @@ export default function WritingReviewWorkspace() {
       setShowReworkPrompt(false);
       setReworkReason('');
       setIsDirty(false);
+      try {
+        window.sessionStorage.setItem('expertReviewQueueFlash', 'rework-submitted');
+      } catch {
+        // The local toast above still confirms completion if storage is unavailable.
+      }
       window.setTimeout(() => router.push('/expert/queue'), 800);
     } catch (error) {
       setToast({ variant: 'error', message: isApiError(error) ? error.userMessage : 'Failed to submit rework request.' });

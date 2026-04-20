@@ -1488,7 +1488,7 @@ public static partial class SeedData
             // ── Phase 2 new feature flags ──
             new FeatureFlag { Id = "flg-011", Name = "AI Conversation Practice", Key = "ai_conversation", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable AI roleplay conversation partner for speaking practice.", Owner = "Platform Team", CreatedAt = now, UpdatedAt = now },
             new FeatureFlag { Id = "flg-012", Name = "AI Writing Coach", Key = "ai_writing_coach", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable real-time AI writing suggestions in the writing editor.", Owner = "Platform Team", CreatedAt = now, UpdatedAt = now },
-            new FeatureFlag { Id = "flg-013", Name = "Pronunciation Analysis", Key = "pronunciation_analysis", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable phoneme-level pronunciation analysis and drills.", Owner = "Platform Team", CreatedAt = now, UpdatedAt = now },
+            new FeatureFlag { Id = "flg-013", Name = "Pronunciation Analysis", Key = "pronunciation_analysis", FlagType = FeatureFlagType.Release, Enabled = true, RolloutPercentage = 100, Description = "Phoneme-level pronunciation analysis, drills, recording UX, and ASR scoring.", Owner = "Platform Team", CreatedAt = now, UpdatedAt = now },
             new FeatureFlag { Id = "flg-014", Name = "Performance Prediction", Key = "performance_prediction", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable predicted score forecasting based on practice history.", Owner = "Product", CreatedAt = now, UpdatedAt = now },
             // ── Phase 3 new feature flags ──
             new FeatureFlag { Id = "flg-015", Name = "Grammar Lessons", Key = "grammar_lessons", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable structured grammar lesson modules.", Owner = "Content Team", CreatedAt = now, UpdatedAt = now },
@@ -1976,98 +1976,309 @@ public static partial class SeedData
 
     private static void SeedPronunciationDrills(LearnerDbContext db)
     {
-        db.PronunciationDrills.AddRange(
-            new PronunciationDrill
-            {
-                Id = "pd-001", TargetPhoneme = "θ", Label = "th (voiceless) — as in 'think'",
-                ExampleWordsJson = """["think","therapy","three","breath","tooth","both","method","author"]""",
-                MinimalPairsJson = """[{"a":"think","b":"sink"},{"a":"three","b":"free"},{"a":"bath","b":"bass"},{"a":"thin","b":"tin"}]""",
-                SentencesJson = """["The therapist recommended three therapeutic exercises.","Breathe through your mouth during the assessment.","The pathologist confirmed the diagnosis on Thursday."]""",
-                TipsHtml = "<p>Place the tip of your tongue lightly between your upper and lower front teeth. Blow air through gently — do <strong>not</strong> voice this sound.</p>",
-                Difficulty = "medium", Status = "active"
-            },
-            new PronunciationDrill
-            {
-                Id = "pd-002", TargetPhoneme = "ð", Label = "th (voiced) — as in 'this'",
-                ExampleWordsJson = """["this","the","that","breathe","soothe","other","mother","whether"]""",
-                MinimalPairsJson = """[{"a":"this","b":"miss"},{"a":"then","b":"den"},{"a":"breathe","b":"breed"},{"a":"they","b":"day"}]""",
-                SentencesJson = """["Breathe in deeply through the nose.","The other doctor confirmed the diagnosis.","Although the patient denied symptoms, further investigation was warranted."]""",
-                TipsHtml = "<p>Same tongue position as voiceless th, but <strong>add voice</strong> by vibrating your vocal cords. You should feel vibration in your throat.</p>",
-                Difficulty = "medium", Status = "active"
-            },
-            new PronunciationDrill
-            {
-                Id = "pd-003", TargetPhoneme = "v", Label = "v — as in 'vital'",
-                ExampleWordsJson = """["vital","valve","intravenous","invasive","vomit","vast","fever","verbal"]""",
-                MinimalPairsJson = """[{"a":"very","b":"berry"},{"a":"van","b":"ban"},{"a":"vest","b":"best"},{"a":"vein","b":"bane"}]""",
-                SentencesJson = """["Vital signs were stable on arrival.","The vascular surgeon reviewed the patient.","Intravenous fluids were administered at a very slow rate."]""",
-                TipsHtml = "<p>Lightly bite your lower lip with your upper teeth, then push air through while vibrating your vocal cords. Avoid closing the lips completely.</p>",
-                Difficulty = "easy", Status = "active"
-            },
-            new PronunciationDrill
-            {
-                Id = "pd-004", TargetPhoneme = "w", Label = "w — as in 'wound'",
-                ExampleWordsJson = """["wound","ward","weight","swallow","withdraw","weakness","well-being","away"]""",
-                MinimalPairsJson = """[{"a":"wet","b":"vet"},{"a":"wine","b":"vine"},{"a":"west","b":"vest"},{"a":"while","b":"vile"}]""",
-                SentencesJson = """["The wound was well-healed at the two-week review.","The patient's weight had reduced significantly.","Withdrawal of treatment was discussed with the family."]""",
-                TipsHtml = "<p>Round your lips tightly into a small circle, then open them quickly while pushing air out and voicing. Do not use your teeth.</p>",
-                Difficulty = "easy", Status = "active"
-            },
-            new PronunciationDrill
-            {
-                Id = "pd-005", TargetPhoneme = "ɪ", Label = "Short i — as in 'symptom'",
-                ExampleWordsJson = """["symptom","physical","clinic","insulin","infusion","intravenous","inhibitor","risk"]""",
-                MinimalPairsJson = """[{"a":"bit","b":"beat"},{"a":"sit","b":"seat"},{"a":"ship","b":"sheep"},{"a":"fill","b":"feel"}]""",
-                SentencesJson = """["The clinical symptoms included intermittent nausea.","Physical examination findings were significant.","The patient was given insulin via infusion."]""",
-                TipsHtml = "<p>This is a short, relaxed vowel. The tongue is high and forward, but <strong>more relaxed</strong> than the long 'ee' (iː) sound. Keep it brief.</p>",
-                Difficulty = "easy", Status = "active"
-            },
-            new PronunciationDrill
-            {
-                Id = "pd-006", TargetPhoneme = "æ", Label = "Short a (trap vowel) — as in 'catheter'",
-                ExampleWordsJson = """["catheter","analgesia","abdominal","fracture","clamp","traction","anaphylaxis","anaemia"]""",
-                MinimalPairsJson = """[{"a":"bad","b":"bed"},{"a":"band","b":"bend"},{"a":"can","b":"ken"},{"a":"mass","b":"mess"}]""",
-                SentencesJson = """["A nasogastric catheter was inserted.","The abdominal examination was unremarkable.","Anaphylaxis protocol was activated immediately."]""",
-                TipsHtml = "<p>Open your jaw wide, spread your lips, and position your tongue low and forward. This is the 'flat' a sound — do not let it sound like 'eh'.</p>",
-                Difficulty = "medium", Status = "active"
-            },
-            new PronunciationDrill
-            {
-                Id = "pd-007", TargetPhoneme = "ɜː", Label = "er vowel — as in 'nurse'",
-                ExampleWordsJson = """["nurse","word","alert","observed","referred","further","concerns","determinant"]""",
-                MinimalPairsJson = """[{"a":"word","b":"ward"},{"a":"nurse","b":"Norse"},{"a":"bird","b":"bad"},{"a":"hurt","b":"heart"}]""",
-                SentencesJson = """["The nurse observed the patient throughout the turn.","Further assessment was required.","The patient was referred for urgent evaluation."]""",
-                TipsHtml = "<p>This is a mid-central vowel. Your tongue should be in the middle of your mouth, relaxed. In Australian and British English, this vowel is <strong>non-rhotic</strong> — do not pronounce the 'r'.</p>",
-                Difficulty = "medium", Status = "active"
-            },
-            new PronunciationDrill
-            {
-                Id = "pd-008", TargetPhoneme = "stress", Label = "Word Stress in Medical Terms",
-                ExampleWordsJson = """["hyPERtension","DIAgnosis","preSCRIPtion","MEDication","aNAEsthesia","surGEry","theraPEUtic","physiOLogy"]""",
-                MinimalPairsJson = "[]",
-                SentencesJson = """["The patient's hypertension was managed with medication.","The diagnosis was confirmed following further investigation.","A therapeutic approach was outlined for the family."]""",
-                TipsHtml = "<p>In English, the stressed syllable is louder, longer, and higher pitched. Medical terms often stress the second-to-last syllable (penultimate stress). Practise by clapping the rhythm of each word.</p>",
-                Difficulty = "hard", Status = "active"
-            },
-            new PronunciationDrill
-            {
-                Id = "pd-009", TargetPhoneme = "r", Label = "Non-rhotic r — post-vocalic r in Australian/British English",
-                ExampleWordsJson = """["care","refer","disorder","further","monitor","procedure","doctor","fever"]""",
-                MinimalPairsJson = """[{"a":"car (AU)","b":"car (US)"},{"a":"nurse (AU)","b":"nurse (US)"}]""",
-                SentencesJson = """["The doctor ordered further investigations.","Post-operative monitoring continued throughout the day.","The procedure was performed under general anaesthesia."]""",
-                TipsHtml = "<p>In Australian and British English, the 'r' after a vowel is <strong>not pronounced</strong> unless the next word begins with a vowel. This is called non-rhotic pronunciation. Do not curl your tongue for a word-final 'r'.</p>",
-                Difficulty = "hard", Status = "active"
-            },
-            new PronunciationDrill
-            {
-                Id = "pd-010", TargetPhoneme = "intonation", Label = "Rising vs. Falling Intonation in Clinical Questioning",
-                ExampleWordsJson = "[]",
-                MinimalPairsJson = "[]",
-                SentencesJson = """["Are you experiencing any chest pain? (rising)","Tell me where the pain is located. (falling)","Have you taken your medication today? (rising)","I'd like to check your blood pressure now. (falling)"]""",
-                TipsHtml = "<p>In OET Speaking, use <strong>rising intonation</strong> for yes/no questions and <strong>falling intonation</strong> for statements and wh-questions. Appropriate intonation signals empathy and clinical authority.</p>",
-                Difficulty = "medium", Status = "active"
-            }
-        );
+        // ─────────────────────────────────────────────────────────────────────
+        // 60+ pronunciation drills across 4 pillars × 7 professions where
+        // meaningful. Every drill ships with:
+        //   - A `PrimaryRuleId` referencing /rulebooks/pronunciation/<profession>/rulebook.v1.json
+        //   - Profession tag ("all" for phoneme drills, "medicine"/"nursing"/… for targeted ones)
+        //   - Focus category: phoneme | cluster | stress | intonation | prosody
+        //   - Difficulty: easy | medium | hard
+        // The content-team can edit freely in /admin/pronunciation; the seed
+        // exists so fresh databases have ~60 publishable drills from day one.
+        // ─────────────────────────────────────────────────────────────────────
+        var drills = new List<PronunciationDrill>();
+
+        PronunciationDrill D(string id, string phoneme, string label, string profession, string focus,
+            string primaryRuleId, string difficulty, string exampleWords, string minimalPairs,
+            string sentences, string tipsHtml, int order = 0) => new()
+        {
+            Id = id,
+            TargetPhoneme = phoneme,
+            Label = label,
+            Profession = profession,
+            Focus = focus,
+            PrimaryRuleId = primaryRuleId,
+            Difficulty = difficulty,
+            ExampleWordsJson = exampleWords,
+            MinimalPairsJson = minimalPairs,
+            SentencesJson = sentences,
+            TipsHtml = tipsHtml,
+            Status = "active",
+            OrderIndex = order,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        };
+
+        // ── Phoneme pack (20 drills) ─────────────────────────────────────────
+        drills.Add(D("pd-001", "θ", "th (voiceless) — as in 'think'", "all", "phoneme", "P01.1", "medium",
+            """["think","therapy","three","breath","tooth","both","method","author","thyroid","pathology"]""",
+            """[{"a":"think","b":"sink"},{"a":"three","b":"free"},{"a":"bath","b":"bass"},{"a":"thin","b":"tin"}]""",
+            """["The therapist recommended three therapeutic exercises.","Breathe through your mouth during the assessment.","The pathologist confirmed the diagnosis on Thursday."]""",
+            "<p>Place the tip of your tongue lightly between your upper and lower front teeth. Blow air through gently — do <strong>not</strong> voice this sound.</p>", 1));
+
+        drills.Add(D("pd-002", "ð", "th (voiced) — as in 'this'", "all", "phoneme", "P01.2", "medium",
+            """["this","the","that","breathe","soothe","other","mother","whether","smoothly","rhythm"]""",
+            """[{"a":"this","b":"miss"},{"a":"then","b":"den"},{"a":"breathe","b":"breed"},{"a":"they","b":"day"}]""",
+            """["Breathe in deeply through the nose.","The other doctor confirmed the diagnosis.","Although the patient denied symptoms, further investigation was warranted."]""",
+            "<p>Same tongue position as voiceless th, but <strong>add voice</strong> by vibrating your vocal cords. You should feel vibration in your throat.</p>", 2));
+
+        drills.Add(D("pd-003", "v", "v — as in 'vital'", "all", "phoneme", "P01.3", "easy",
+            """["vital","valve","intravenous","invasive","vomit","vast","fever","verbal","evaluate","previous"]""",
+            """[{"a":"vein","b":"wane"},{"a":"vine","b":"wine"},{"a":"vest","b":"west"},{"a":"very","b":"berry"}]""",
+            """["Vital signs were stable on arrival.","The vascular surgeon reviewed the patient.","Intravenous fluids were administered at a very slow rate."]""",
+            "<p>Lightly bite your lower lip with your upper teeth, then push air through while vibrating your vocal cords. Avoid closing the lips completely.</p>", 3));
+
+        drills.Add(D("pd-004", "w", "w — as in 'wound'", "all", "phoneme", "P01.4", "easy",
+            """["wound","ward","weight","swallow","withdraw","weakness","well-being","away","warm","worry"]""",
+            """[{"a":"wet","b":"vet"},{"a":"wine","b":"vine"},{"a":"west","b":"vest"},{"a":"while","b":"vile"}]""",
+            """["The wound was well-healed at the two-week review.","The patient's weight had reduced significantly.","Withdrawal of treatment was discussed with the family."]""",
+            "<p>Round your lips tightly into a small circle, then open them quickly while pushing air out and voicing. Do not use your teeth.</p>", 4));
+
+        drills.Add(D("pd-005", "ɪ", "Short i — as in 'symptom'", "all", "phoneme", "P02.1", "easy",
+            """["symptom","physical","clinic","insulin","infusion","intravenous","inhibitor","risk","limit","rigid"]""",
+            """[{"a":"bit","b":"beat"},{"a":"sit","b":"seat"},{"a":"ship","b":"sheep"},{"a":"fill","b":"feel"}]""",
+            """["The clinical symptoms included intermittent nausea.","Physical examination findings were significant.","The patient was given insulin via infusion."]""",
+            "<p>This is a short, relaxed vowel. The tongue is high and forward, but <strong>more relaxed</strong> than the long 'ee' (iː) sound. Keep it brief.</p>", 5));
+
+        drills.Add(D("pd-006", "æ", "Short a (trap vowel) — as in 'catheter'", "all", "phoneme", "P02.3", "medium",
+            """["catheter","analgesia","abdominal","fracture","clamp","traction","anaphylaxis","anaemia","allergy","cannula"]""",
+            """[{"a":"bad","b":"bed"},{"a":"band","b":"bend"},{"a":"can","b":"ken"},{"a":"mass","b":"mess"}]""",
+            """["A nasogastric catheter was inserted.","The abdominal examination was unremarkable.","Anaphylaxis protocol was activated immediately."]""",
+            "<p>Open your jaw wide, spread your lips, and position your tongue low and forward. This is the 'flat' a sound — do not let it sound like 'eh'.</p>", 6));
+
+        drills.Add(D("pd-007", "ɜː", "er vowel — as in 'nurse'", "all", "phoneme", "P02.4", "medium",
+            """["nurse","word","alert","observed","referred","further","concerns","determinant","burn","worse"]""",
+            """[{"a":"word","b":"ward"},{"a":"nurse","b":"Norse"},{"a":"hurt","b":"heart"},{"a":"stern","b":"stain"}]""",
+            """["The nurse observed the patient throughout the turn.","Further assessment was required.","The patient was referred for urgent evaluation."]""",
+            "<p>This is a mid-central vowel. Your tongue should be in the middle of your mouth, relaxed. In Australian and British English, this vowel is <strong>non-rhotic</strong> — do not pronounce the 'r'.</p>", 7));
+
+        drills.Add(D("pd-011", "iː", "Long ee — as in 'fever'", "all", "phoneme", "P02.2", "easy",
+            """["fever","severe","anaemia","paediatric","seizure","relieve","need","meet","clean","see"]""",
+            """[{"a":"fever","b":"favour"},{"a":"need","b":"nod"},{"a":"seat","b":"sit"}]""",
+            """["A low-grade fever persisted for three days.","The paediatric team was consulted immediately.","Her symptoms were relieved with simple analgesia."]""",
+            "<p>A long, tense high-front vowel. Smile slightly; keep the tongue high and forward. Hold the sound longer than the short /ɪ/.</p>", 11));
+
+        drills.Add(D("pd-012", "ʌ", "strut vowel — as in 'blood'", "all", "phoneme", "P02.5", "medium",
+            """["blood","gut","lung","onset","suffer","numb","cough","tough","mother","under"]""",
+            """[{"a":"cut","b":"cat"},{"a":"luck","b":"lock"}]""",
+            """["The sudden onset of chest pain required urgent assessment.","She was suffering from chronic gut discomfort.","A tough course of antibiotics was prescribed."]""",
+            "<p>Open the jaw moderately, tongue central and low. A short, relaxed sound — not the 'o' of 'hot'.</p>", 12));
+
+        drills.Add(D("pd-013", "ə", "schwa — reduced vowel in long words", "all", "phoneme", "P02.6", "medium",
+            """["doctor","hospital","patient","surgeon","medicine","cardiac","therapy","suffer","alert","signal"]""",
+            "[]",
+            """["The doctor reassured the patient before the procedure.","Each hospital follows its own admission protocol.","A cardiac monitor was attached on arrival."]""",
+            "<p>The most common English vowel. Occurs in <strong>unstressed</strong> syllables — relax the mouth and produce a short neutral 'uh'. Failing to reduce unstressed vowels makes speech sound unnatural.</p>", 13));
+
+        drills.Add(D("pd-014", "r vs l", "r and l contrast", "all", "phoneme", "P01.5", "hard",
+            """["rash","lesion","right","light","rate","late","rashes","lateral","referred","reported"]""",
+            """[{"a":"rash","b":"lash"},{"a":"rate","b":"late"},{"a":"right","b":"light"},{"a":"fresh","b":"flesh"}]""",
+            """["A widespread rash was observed on the lateral aspect of the arm.","She reported the light-headedness began last night.","He was referred to the right-sided specialist clinic."]""",
+            "<p><strong>/r/</strong>: tongue tip curls toward the roof of the mouth but never taps. <strong>/l/</strong>: tongue tip touches the ridge behind the upper teeth and stays there.</p>", 14));
+
+        drills.Add(D("pd-015", "p/t/k", "Aspirated voiceless stops", "all", "phoneme", "P01.6", "medium",
+            """["penicillin","paracetamol","potassium","tramadol","ketamine","cannula","tablet","tumour","patient","tense"]""",
+            "[]",
+            """["Paracetamol was prescribed for the pain.","The patient reported a painful tense abdomen.","A small tumour was identified on imaging."]""",
+            "<p>In word-initial positions, English /p/ /t/ /k/ are <strong>aspirated</strong> — a small puff of air follows. Hold a tissue near your mouth; it should flutter on 'pin' but not on 'spin'.</p>", 15));
+
+        drills.Add(D("pd-016", "ŋ", "ng — as in 'lung'", "all", "phoneme", "P01.8", "easy",
+            """["lung","ringing","swelling","breathing","bleeding","coughing","tingling","rounding"]""",
+            """[{"a":"sing","b":"sin"},{"a":"ring","b":"rim"}]""",
+            """["Shortness of breath on lung examination was noted.","The patient reported ongoing swelling of the ankle.","Coughing worsened at night."]""",
+            "<p>Back of the tongue touches the soft palate; air passes through the nose. Do NOT add a separate 'g' at the end.</p>", 16));
+
+        drills.Add(D("pd-017", "ʊ vs uː", "FOOT vs GOOSE", "all", "phoneme", "P02.7", "medium",
+            """["full","fool","good","food","look","soup","book","root","put","cool"]""",
+            """[{"a":"full","b":"fool"},{"a":"pull","b":"pool"},{"a":"good","b":"gooed"}]""",
+            """["A full course of treatment was completed.","The patient refused food post-operatively.","Please look at the dosing schedule closely."]""",
+            "<p>/ʊ/ is short and relaxed ('good'); /uː/ is long and tense ('food'). Do not merge them.</p>", 17));
+
+        drills.Add(D("pd-018", "ʧ", "ch — as in 'chest'", "all", "phoneme", "P01.6", "easy",
+            """["chest","cheek","choke","chart","reach","inch","nature","picture"]""",
+            """[{"a":"chest","b":"jest"},{"a":"cheap","b":"jeep"}]""",
+            """["Chest pain radiated to the left arm.","A chart review showed recent abnormal results.","Please reach for the emergency button if needed."]""",
+            "<p>Voiceless affricate: begin with a /t/ closure, then release into /ʃ/. Lips slightly rounded.</p>", 18));
+
+        drills.Add(D("pd-019", "ʒ", "zh — as in 'measure'", "all", "phoneme", "P01.2", "hard",
+            """["measure","pleasure","vision","decision","casual","usual","treasure"]""",
+            "[]",
+            """["Careful measurement of the wound was recorded.","The final decision rested with the consultant.","Usual treatment was ineffective in this case."]""",
+            "<p>Voiced counterpart of /ʃ/ (as in 'shoe'). Lips slightly protrude; tongue raised to roof of mouth, with voicing.</p>", 19));
+
+        drills.Add(D("pd-020", "ʃ", "sh — as in 'shot'", "all", "phoneme", "P01.6", "easy",
+            """["shot","should","sharp","shock","tissue","pressure","infection","session"]""",
+            """[{"a":"shot","b":"sot"},{"a":"sheep","b":"seep"}]""",
+            """["A tetanus shot was administered.","A sharp pain occurred with deep inspiration.","The pressure ulcer required daily dressing."]""",
+            "<p>Voiceless fricative: lips slightly rounded, tongue raised behind the alveolar ridge. No voicing.</p>", 20));
+
+        // Final consonants
+        drills.Add(D("pd-021", "final-consonants", "Word-final consonants — must not drop", "all", "phoneme", "P01.7", "hard",
+            """["heart","chest","breath","arrest","discharge","admit","referred","patient","prompt","impact"]""",
+            """[{"a":"heart","b":"hear"},{"a":"chest","b":"ches"}]""",
+            """["The patient was admitted for chest pain.","An arrest team was activated promptly.","The discharge summary was sent to the GP."]""",
+            "<p>Final /t/ /d/ /s/ /z/ /k/ carry meaning in medical English. Finish every word fully.</p>", 21));
+
+        // ── Consonant clusters (6 drills) ───────────────────────────────────
+        drills.Add(D("pd-030", "spr/str/spl/skr", "3-consonant initial clusters", "all", "cluster", "P03.1", "hard",
+            """["stroke","strain","spleen","splint","splash","stress","screen","script","strict","street"]""",
+            "[]",
+            """["An acute stroke was diagnosed on imaging.","The patient's spleen was enlarged.","A strict low-salt diet was advised."]""",
+            "<p>Do not insert a vowel between the consonants. 'stroke' is one syllable, NOT 'su-tro-ke'. Practise slowly, then at speed.</p>", 30));
+
+        drills.Add(D("pd-031", "kt/pt/kst", "Word-final consonant clusters", "all", "cluster", "P03.2", "medium",
+            """["infect","impact","script","concept","prompt","text","context","fact","exact","act"]""",
+            "[]",
+            """["A prompt referral was made.","The clinical context was carefully considered.","An infection control plan was enacted."]""",
+            "<p>Release every final consonant. Many learners drop the last stop — an infected vs an infect matters clinically.</p>", 31));
+
+        drills.Add(D("pd-032", "nt/nd/ns", "Nasal + stop clusters in past tense", "all", "cluster", "P03.3", "medium",
+            """["examined","assessed","consulted","scanned","referred","admitted","discharged","prescribed"]""",
+            "[]",
+            """["The patient was examined and promptly admitted.","A CT was performed and the results were discussed.","The GP was consulted before discharge."]""",
+            "<p>Past-tense /-d/ only adds a syllable when the stem ends in /t/ or /d/ ('admitted'). Otherwise it's a single cluster: 'examined' = /ɪɡˈzæmɪnd/, NOT /ɪɡˈzæmɪnɪd/.</p>", 32));
+
+        drills.Add(D("pd-033", "dr/tr", "dr/tr clusters in clinical words", "all", "cluster", "P03.1", "easy",
+            """["drip","drug","drop","dressing","trauma","trial","tract","trolley"]""",
+            "[]",
+            """["A saline drip was started.","The trauma team was paged immediately.","The urinary tract was clear on imaging."]""",
+            "<p>Start /d/ or /t/ with the tongue already near the roof of the mouth, then glide into /r/. No pause between consonants.</p>", 33));
+
+        drills.Add(D("pd-034", "sk/sp/st", "s-stop clusters", "all", "cluster", "P03.1", "easy",
+            """["scan","scope","stent","step","stop","spasm","sputum","stable"]""",
+            "[]",
+            """["A CT scan was requested.","The stent was placed under sedation.","Stable observations were maintained overnight."]""",
+            "<p>Start with /s/ friction, move smoothly into the stop. Do not add a vowel before /s/.</p>", 34));
+
+        drills.Add(D("pd-035", "ks/kts", "-tics / -tics clusters", "medicine", "cluster", "P03.2", "hard",
+            """["optics","antibiotics","paediatrics","genetics","dynamics","statistics"]""",
+            "[]",
+            """["Antibiotics were empirically prescribed.","Paediatrics was consulted for the child's fever.","Genetics review was arranged."]""",
+            "<p>Suffix -tics is /tɪks/ — a full syllable. Stress falls on the syllable before: antiBIOtics, paediATRics.</p>", 35));
+
+        // ── Word stress pack (15 drills) ────────────────────────────────────
+        drills.Add(D("pd-040", "stress", "Penultimate stress: -tion / -sion / -cian", "all", "stress", "P04.2", "medium",
+            """["examiNAtion","interVENtion","phySIcian","conDItion","inFECtion","operAtion","susPIcion","preSCRIPtion","progresSION","conSULtaTION"]""",
+            "[]",
+            """["A thorough physical examination was performed.","The intervention was tolerated well.","The condition resolved after treatment."]""",
+            "<p>Words ending -tion, -sion, -cian, -cious stress the syllable <strong>immediately before</strong> the suffix. Say the stressed syllable louder, longer, and higher.</p>", 40));
+
+        drills.Add(D("pd-041", "stress", "Antepenultimate stress: -ology / -ography", "all", "stress", "P04.1", "hard",
+            """["paTHOLogy","carDIology","raDIology","neuROLogy","epidemiOLogy","gastroenterOLogy"]""",
+            "[]",
+            """["Pathology was consulted for specimen analysis.","Cardiology review was arranged.","Neurology performed the full workup."]""",
+            "<p>Words ending -ology, -ologist, -ography stress the syllable <strong>three from the end</strong>. pathOLogy, NOT patholOgy.</p>", 41));
+
+        drills.Add(D("pd-042", "stress", "Penultimate stress: -ic / -ical / -ity", "all", "stress", "P04.3", "medium",
+            """["spe-CI-fic","cli-NI-cal","se-VE-ri-ty","mor-BI-di-ty","mor-TA-li-ty","a-CU-i-ty","CHRO-nic"]""",
+            "[]",
+            """["The specific cause remained unclear.","Clinical findings supported the diagnosis.","Severity was graded using a validated tool."]""",
+            "<p>Suffixes -ic / -ical / -ity pull stress onto the syllable just before them: speCIfic, cliNIcal, seVErity.</p>", 42));
+
+        drills.Add(D("pd-043", "stress", "Drug-name stress — common generics", "pharmacy", "stress", "P04.4", "hard",
+            """["PA-racetamol","I-buprofen","MOR-phine","IN-sulin","TRA-madol","WAR-farin","MET-formin","a-MO-xi-ci-llin"]""",
+            "[]",
+            """["Paracetamol and ibuprofen were prescribed for pain relief.","Morphine was titrated to effect.","Warfarin was adjusted according to the INR."]""",
+            "<p>Most generic drug names stress the first syllable. Amoxicillin is an exception — stress falls on -CIL-.</p>", 43));
+
+        drills.Add(D("pd-044", "stress", "Medical Latin stress — -itis / -osis", "all", "stress", "P08.1", "medium",
+            """["arthri-TIS","bronchi-TIS","tendini-TIS","cirrho-SIS","psycho-SIS","stenos-IS","dermati-TIS"]""",
+            "[]",
+            """["Rheumatoid arthritis flared following the infection.","Acute bronchitis was diagnosed.","Liver cirrhosis had progressed despite therapy."]""",
+            "<p>Conditions ending -itis or -osis stress that suffix. The pattern carries from Latin/Greek roots.</p>", 44));
+
+        drills.Add(D("pd-045", "stress", "Noun/verb stress shift", "all", "stress", "P04.5", "medium",
+            """["REcord/reCORD","INcrease/inCREASE","DIScharge/disCHARGE","CONduct/conDUCT","SUBject/subJECT","OBject/obJECT"]""",
+            "[]",
+            """["The patient's record was updated.","Please record the findings in the notes.","She was discharged on the third day."]""",
+            "<p>Two-syllable words function as noun (stress first) or verb (stress second). 'The DIScharge was unremarkable' vs 'She was disCHARGED yesterday'.</p>", 45));
+
+        // Nursing-specific
+        drills.Add(D("pd-046", "stress", "Nursing handover vocabulary stress", "nursing", "stress", "P04.1", "medium",
+            """["meDIcation","observAtion","adMINistrAtion","PREscription","docuMENtATION","ID-n-ti-fi-CA-tion"]""",
+            "[]",
+            """["The medication round was completed on time.","Frequent observation was maintained overnight.","Documentation was updated in the progress notes."]""",
+            "<p>Polysyllabic nursing vocabulary needs clear primary + secondary stress. Mark the strong beats when practising.</p>", 46));
+
+        // ── Intonation pack (10 drills) ─────────────────────────────────────
+        drills.Add(D("pd-050", "intonation", "Rising intonation — yes/no questions", "all", "intonation", "P06.1", "medium",
+            "[]", "[]",
+            """["Are you experiencing any chest pain?","Have you taken your medication today?","Do you have any allergies?","Would you like me to explain the procedure?"]""",
+            "<p>Yes/no questions rise on the final stressed syllable. Rising intonation signals you are waiting for an answer.</p>", 50));
+
+        drills.Add(D("pd-051", "intonation", "Falling intonation — wh-questions", "all", "intonation", "P06.2", "medium",
+            "[]", "[]",
+            """["What brings you in today?","Where is the pain located?","How long have you felt unwell?","When did the symptoms start?"]""",
+            "<p>Wh-questions take a decisive fall on the final stressed content word.</p>", 51));
+
+        drills.Add(D("pd-052", "intonation", "Falling intonation — clinical instructions", "all", "intonation", "P06.3", "medium",
+            "[]", "[]",
+            """["You should take this twice a day.","We will admit you for observation.","Please avoid alcohol while on this medication.","I recommend we proceed with the investigation."]""",
+            "<p>Clinical instructions require falling intonation to convey authority. Rising makes you sound tentative.</p>", 52));
+
+        drills.Add(D("pd-053", "intonation", "Reassurance — rise then fall", "all", "intonation", "P06.4", "hard",
+            "[]", "[]",
+            """["This is going to be completely fine.","You are in safe hands.","We will take good care of you.","There's no need to worry about this result."]""",
+            "<p>Reassuring a patient uses a gentle rise-then-fall. Monotone reassurance sounds insincere.</p>", 53));
+
+        drills.Add(D("pd-054", "intonation", "Listing intonation — rise until last", "all", "intonation", "P06.5", "medium",
+            "[]", "[]",
+            """["We will order an ECG, a chest X-ray, and blood tests.","Common side effects include nausea, dizziness, and fatigue.","The pain is sharp, constant, and radiates to the back."]""",
+            "<p>Each item rises; the last falls. Signals 'I am completing a list'.</p>", 54));
+
+        // ── Prosody / rhythm ────────────────────────────────────────────────
+        drills.Add(D("pd-060", "prosody", "Stressed content, reduced function words", "all", "prosody", "P05.1", "hard",
+            "[]", "[]",
+            """["She has been referred to the specialist.","I'd like to check your blood pressure now.","The results of the tests are back.","We can arrange a follow-up next week."]""",
+            "<p>Content words (nouns, main verbs) are long and loud. Function words (is, the, to, for, of) reduce to schwa. Avoid machine-like word-by-word delivery.</p>", 60));
+
+        drills.Add(D("pd-061", "prosody", "Pausing at clause boundaries", "all", "prosody", "P05.2", "medium",
+            "[]", "[]",
+            """["After reviewing the results, | we have decided to adjust your medication.","If the symptoms persist, | please return to the clinic.","As you know, | your blood pressure has been elevated."]""",
+            "<p>Pause at commas and clause boundaries — not mid-clause. Pauses aid intelligibility; mid-clause hesitation harms fluency scoring.</p>", 61));
+
+        drills.Add(D("pd-062", "prosody", "Linking — final consonant to next vowel", "all", "prosody", "P07.1", "medium",
+            "[]", "[]",
+            """["Take_it three times_a day.","I'd_like to check_on the wound.","Not_at_all — please continue_as_instructed."]""",
+            "<p>Link a word-final consonant directly into the next word's initial vowel. Never chop words apart.</p>", 62));
+
+        // ── Profession-specific drills ─────────────────────────────────────
+        drills.Add(D("pd-070", "medication", "Medication names — pharmacy pack", "pharmacy", "stress", "P04.4", "hard",
+            """["amoxiCILlin","PARAcetamol","proPRAnolol","saBUtamol","IBuprofen","CEFtriaxone","OMEprazole","diAZepam"]""",
+            "[]",
+            """["Amoxicillin 500 mg three times daily was prescribed.","Paracetamol is considered first-line for simple analgesia.","Propranolol may be considered for long-term control."]""",
+            "<p>Generic drug names carry idiosyncratic stress. Practise the stress pattern of each drug you dispense every day.</p>", 70));
+
+        drills.Add(D("pd-071", "handover", "Nursing handover rhythm", "nursing", "prosody", "P05.2", "hard",
+            "[]", "[]",
+            """["Situation: | 67-year-old male, | day two post-op.","Background: | elective cholecystectomy, | no complications overnight.","Assessment: | vitals stable, | pain well-controlled on regular paracetamol.","Recommendation: | continue current plan, | mobilise as tolerated."]""",
+            "<p>SBAR handover benefits from measured pace, clear pauses, and stress on the key clinical content. Do not rush.</p>", 71));
+
+        drills.Add(D("pd-072", "dental", "Dental terminology", "dentistry", "phoneme", "P08.1", "medium",
+            """["cavity","filling","crown","extraction","anaesthetic","periodontal","molar","gingivitis"]""",
+            "[]",
+            """["A cavity was identified on the upper left molar.","Anaesthetic was administered before the extraction.","Gingivitis management was discussed."]""",
+            "<p>Dental words are often of Latin origin — watch for the stress patterns of -itis and -ontal endings.</p>", 72));
+
+        drills.Add(D("pd-073", "physio", "Physiotherapy terminology", "physiotherapy", "phoneme", "P01.3", "medium",
+            """["mobility","strain","sprain","rehabilitation","flexion","extension","physiotherapy","gait"]""",
+            "[]",
+            """["Mobility was assessed using a validated tool.","A programme of rehabilitation was commenced.","Gait analysis revealed mild left-sided weakness."]""",
+            "<p>Physiotherapy vocabulary leans heavily on Latin anatomical roots. Take care to pronounce the 'th' in 'physiotherapy' correctly.</p>", 73));
+
+        drills.Add(D("pd-074", "speech", "Speech pathology terminology", "speech-pathology", "phoneme", "P01.1", "hard",
+            """["articulation","dysphagia","aphasia","phonology","larynx","voicing","pitch","resonance"]""",
+            "[]",
+            """["Articulation therapy targeted fricative consonants.","Dysphagia was assessed using a modified barium swallow.","Phonological awareness was the focus of week-two sessions."]""",
+            "<p>Many speech-pathology terms contain the very sounds the learner is practising — be especially careful with /θ/, /ʃ/, /dʒ/.</p>", 74));
+
+        drills.Add(D("pd-075", "ot", "Occupational therapy terminology", "occupational-therapy", "phoneme", "P01.1", "medium",
+            """["function","dexterity","assistive","adaptation","grading","cognition","sensory","activities"]""",
+            "[]",
+            """["Fine motor dexterity was below age-matched norms.","Assistive equipment was trialled in the home.","Activities of daily living were graded in complexity."]""",
+            "<p>Watch the schwa reduction in unstressed syllables: 'funcTION' = /ˈfʌŋkʃən/, not /ˈfʌŋkʃɒn/.</p>", 75));
+
+        db.PronunciationDrills.AddRange(drills);
     }
 
     private static string ResolveStoragePath(IWebHostEnvironment environment, StorageOptions options, string storageKey)

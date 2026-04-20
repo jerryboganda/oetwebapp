@@ -128,11 +128,14 @@ public sealed class AiCreditService(LearnerDbContext db) : IAiCreditService
 
     public async Task<int> SweepExpiredAsync(DateTimeOffset asOf, CancellationToken ct)
     {
-        var expirable = await db.AiCreditLedger
+        var expirableCandidates = await db.AiCreditLedger
             .Where(x => x.TokensDelta > 0
                         && x.ExpiredByEntryId == null
-                        && x.ExpiresAt != null && x.ExpiresAt <= asOf)
+                        && x.ExpiresAt != null)
             .ToListAsync(ct);
+        var expirable = expirableCandidates
+            .Where(x => x.ExpiresAt <= asOf)
+            .ToList();
         if (expirable.Count == 0) return 0;
 
         foreach (var grant in expirable)

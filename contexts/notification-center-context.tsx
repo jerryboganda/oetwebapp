@@ -493,6 +493,11 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
       return;
     }
 
+    if (typeof navigator !== 'undefined' && navigator.webdriver) {
+      setConnectionStatus('disconnected');
+      return;
+    }
+
     let disposed = false;
     const connection = new HubConnectionBuilder()
       .withUrl(`${env.apiBaseUrl}/v1/notifications/hub`, {

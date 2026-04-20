@@ -3,6 +3,10 @@ export const runtime = 'nodejs';
 
 import { resolveProxyTarget, sanitizeProxyHeaders, sanitizeProxyResponseHeaders, validateRequestOrigin } from '../../../../lib/backend-proxy';
 
+function isAnalyticsEventPath(path: string[]) {
+  return path.length === 3 && path[0] === 'v1' && path[1] === 'analytics' && path[2] === 'events';
+}
+
 async function proxyRequest(request: Request, context: { params: Promise<{ path: string[] }> }) {
   // CSRF origin validation for state-changing methods
   if (!validateRequestOrigin(request)) {
@@ -20,14 +24,36 @@ async function proxyRequest(request: Request, context: { params: Promise<{ path:
 
   const headers = sanitizeProxyHeaders(request.headers);
 
-  const body = request.method === 'GET' || request.method === 'HEAD'
-    ? undefined
-    : await request.text();
+  let body: string | undefined;
+  if (request.method !== 'GET' && request.method !== 'HEAD') {
+    try {
+      body = await request.text();
+    } catch (error) {
+      if (isAnalyticsEventPath(path)) {
+        return new Response(null, { status: 204 });
+      }
+
+      throw error;
+    }
+  }
+  const bodyText = body ?? '';
+  const hasBody = bodyText.length > 0;
+
+  if (isAnalyticsEventPath(path)) {
+    if (!hasBody) {
+      return new Response(null, { status: 204 });
+    }
+  }
+
+  if (!hasBody) {
+    headers.delete('content-type');
+    headers.delete('content-encoding');
+  }
 
   const upstreamResponse = await fetch(targetUrl, {
     method: request.method,
     headers,
-    body: body && body.length > 0 ? body : undefined,
+    body: hasBody ? bodyText : undefined,
     redirect: 'manual',
   });
 

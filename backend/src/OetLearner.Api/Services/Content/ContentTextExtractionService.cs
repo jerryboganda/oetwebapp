@@ -123,12 +123,14 @@ public sealed class ContentTextExtractionWorker(
         var svc = scope.ServiceProvider.GetRequiredService<IContentTextExtractionService>();
 
         // Pick the oldest 20 non-archived papers — cheap bounded batch.
-        var paperIds = await db.ContentPapers.AsNoTracking()
+        var papers = await db.ContentPapers.AsNoTracking()
             .Where(p => p.Status != ContentStatus.Archived)
-            .OrderBy(p => p.UpdatedAt)
-            .Select(p => p.Id)
-            .Take(20)
             .ToListAsync(ct);
+        var paperIds = papers
+            .OrderBy(p => p.UpdatedAt)
+            .Take(20)
+            .Select(p => p.Id)
+            .ToList();
 
         int total = 0;
         foreach (var id in paperIds)

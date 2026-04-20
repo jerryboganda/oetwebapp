@@ -139,7 +139,7 @@ This audit reverse-engineered the entire OET Prep ecosystem across three deliver
 | Vocabulary Trainer | ✅ | ✅ | ✅ | — | — |
 | Grammar Lessons | ✅ | ✅ | ✅ | — | — |
 | AI Writing Coach | ✅ | ✅ | ✅ | — | — |
-| Pronunciation Drills | ✅ | ✅ | ⚠️ | Mobile mic quality | 🟡 Medium |
+| Pronunciation Drills | ✅ | ✅ | ✅ | Native mic via Capacitor Voice Recorder (iOS + Android) / Electron mic permission. Real ASR pipeline (Azure/Whisper/Mock) + grounded AI feedback + spaced repetition. | ✅ Shipped |
 | Conversation Practice | ✅ | ✅ | ✅ | — | — |
 | **Learner — Progress** |
 | Dashboard | ✅ | ✅ | ✅ | — | — |
@@ -262,7 +262,7 @@ This matrix maps every **end-user feature** to its corresponding **admin managem
 | **Grammar Lessons** | ❌ | ✅ | ❌ | ❌ | Read-only for admin | 🟠 High |
 | **Vocabulary Items** | ❌ | ❌ | ❌ | ❌ | No admin management at all | 🟠 High |
 | **Conversation Templates** | ❌ | ❌ | ❌ | ❌ | No admin management at all | 🟠 High |
-| **Pronunciation Drills** | ❌ | ❌ | ❌ | ❌ | No admin management at all | 🟡 Medium |
+| **Pronunciation Drills** | ✅ | ✅ | ✅ | ✅ | Full admin CMS + AI drafting at `/admin/pronunciation` (Create/Read/Update/Archive). Publish gate enforced server-side. | ✅ Shipped |
 | **Community Forum** | ❌ | ✅ (moderation) | ✅ (moderate) | ✅ (remove) | No admin thread creation | 🟡 Medium |
 | **Notification Templates** | ❌ | ⚠️ | ❌ | ❌ | No template management | 🟠 High |
 | **Study Plan Templates** | ❌ | ❌ | ❌ | ❌ | Auto-generated only | 🟡 Medium |
@@ -588,7 +588,7 @@ These frontend pages reference API calls to endpoints that **do not exist** in t
 | L12 | No camera for profile/documents | Capacitor | Feature | 🟠 High |
 | L13 | OAuth callback may fail on native | Electron + Capacitor | Auth | 🟡 Medium |
 | L14 | No forced update backend endpoint | Capacitor | Lifecycle | 🟡 Medium |
-| L15 | Pronunciation drill mic quality varies | Capacitor | Feature | 🟡 Medium |
+| L15 | Pronunciation drill mic quality varies | Capacitor | Feature | ✅ Resolved — `lib/mobile/pronunciation-recorder.ts` routes native capture through `@capacitor-community/voice-recorder` when on device; web uses Web Audio + MediaRecorder with level meter. Retention + scoring shared across runtimes. |
 | L16 | Score calculator endpoint missing | All (backend) | API | 🟡 Medium |
 | L17 | Study plan not real-time updated | All | Real-time | 🟡 Medium |
 

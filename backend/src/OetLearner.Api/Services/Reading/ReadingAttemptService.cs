@@ -255,11 +255,13 @@ public sealed class ReadingAttemptService(
 
         var now = DateTimeOffset.UtcNow;
         var inactivityCutoff = now.AddMinutes(-policy.AutoExpireAfterMinutes);
-        var stale = await db.ReadingAttempts
-            .Where(a => a.Status == ReadingAttemptStatus.InProgress
-                && (a.DeadlineAt <= now || a.LastActivityAt <= inactivityCutoff))
-            .Take(500)
+        var candidates = await db.ReadingAttempts
+            .Where(a => a.Status == ReadingAttemptStatus.InProgress)
             .ToListAsync(ct);
+        var stale = candidates
+            .Where(a => a.DeadlineAt <= now || a.LastActivityAt <= inactivityCutoff)
+            .Take(500)
+            .ToList();
         if (stale.Count == 0) return 0;
 
         foreach (var a in stale)

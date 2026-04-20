@@ -17,6 +17,47 @@ const displayFont = Fraunces({
   display: 'swap',
 });
 
+const metaScriptSrc =
+  process.env.NODE_ENV === 'production'
+    ? "script-src 'self' 'unsafe-inline'"
+    : "script-src 'self' 'unsafe-inline' 'unsafe-eval'";
+
+function getOrigin(value: string | undefined, fallback: string): string {
+  try {
+    return new URL(value ?? fallback).origin;
+  } catch {
+    return new URL(fallback).origin;
+  }
+}
+
+function expandLoopbackOrigins(origin: string): string[] {
+  try {
+    const url = new URL(origin);
+    if (url.hostname !== '127.0.0.1' && url.hostname !== 'localhost') {
+      return [url.origin];
+    }
+
+    const normalizedPort = url.port ? `:${url.port}` : '';
+    return [
+      `${url.protocol}//127.0.0.1${normalizedPort}`,
+      `${url.protocol}//localhost${normalizedPort}`,
+    ];
+  } catch {
+    return [origin];
+  }
+}
+
+const defaultApiOrigin = process.env.API_PROXY_TARGET_URL ?? 'http://127.0.0.1:5198';
+const apiOrigin = getOrigin(process.env.NEXT_PUBLIC_API_BASE_URL, defaultApiOrigin);
+const apiOrigins = Array.from(new Set(expandLoopbackOrigins(apiOrigin)));
+const apiWebSocketOrigins = apiOrigins.map((origin) =>
+  origin.startsWith('https://')
+    ? `wss://${origin.slice('https://'.length)}`
+    : origin.startsWith('http://')
+      ? `ws://${origin.slice('http://'.length)}`
+      : origin
+);
+
 export const metadata: Metadata = {
   title: 'OET Prep — Learner Platform',
   description: 'Prepare for the Occupational English Test with personalised practice, AI feedback, and expert review.',
@@ -56,7 +97,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         */}
         <meta
           httpEquiv="Content-Security-Policy"
-          content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://*.oetwithdrhesham.co.uk wss://*.oetwithdrhesham.co.uk https://generativelanguage.googleapis.com; media-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self';"
+          content={`default-src 'self'; ${metaScriptSrc}; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' blob: ${apiOrigins.join(' ')} ${apiWebSocketOrigins.join(' ')} https://*.oetwithdrhesham.co.uk wss://*.oetwithdrhesham.co.uk https://*.googleapis.com; media-src 'self' blob: ${apiOrigins.join(' ')}; worker-src 'self' blob:; object-src 'none'; base-uri 'self'; form-action 'self';`}
         />
       </head>
       <body className="font-sans antialiased min-h-[var(--app-viewport-height,100dvh)] bg-background-light text-navy overflow-x-hidden selection:bg-primary/15 selection:text-navy" suppressHydrationWarning>

@@ -670,11 +670,11 @@ public static class AdminEndpoints
             => Results.Ok(await service.GetVocabularyItemDetailAsync(itemId, ct)))
             .RequireAuthorization("AdminContentRead");
 
-        admin.MapPost("/vocabulary/items", async (HttpContext http, AdminVocabularyItemCreateRequest request, AdminService service, CancellationToken ct)
+        admin.MapPost("/vocabulary/items", async (HttpContext http, AdminVocabularyItemCreateRequestV2 request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.CreateVocabularyItemAsync(http.AdminId(), http.AdminName(), request, ct)))
             .RequireRateLimiting("PerUserWrite").RequireAuthorization("AdminContentWrite");
 
-        admin.MapPut("/vocabulary/items/{itemId}", async (string itemId, HttpContext http, AdminVocabularyItemUpdateRequest request, AdminService service, CancellationToken ct)
+        admin.MapPut("/vocabulary/items/{itemId}", async (string itemId, HttpContext http, AdminVocabularyItemUpdateRequestV2 request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.UpdateVocabularyItemAsync(http.AdminId(), http.AdminName(), itemId, request, ct)))
             .RequireRateLimiting("PerUserWrite").RequireAuthorization("AdminContentWrite");
 
@@ -682,9 +682,41 @@ public static class AdminEndpoints
             => Results.Ok(await service.DeleteVocabularyItemAsync(http.AdminId(), http.AdminName(), itemId, ct)))
             .RequireRateLimiting("PerUserWrite").RequireAuthorization("AdminContentWrite");
 
-        admin.MapPost("/vocabulary/import", async (HttpContext http, IFormFile file, AdminService service, CancellationToken ct)
-            => Results.Ok(await service.BulkImportVocabularyAsync(http.AdminId(), http.AdminName(), file, ct)))
+        admin.MapGet("/vocabulary/categories", async (AdminService service, CancellationToken ct,
+            string? examTypeCode, string? professionId)
+            => Results.Ok(await service.GetVocabularyCategoriesAdminAsync(examTypeCode, professionId, ct)))
+            .RequireAuthorization("AdminContentRead");
+
+        admin.MapPost("/vocabulary/import/preview", async (HttpContext http, IFormFile file, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.PreviewVocabularyImportAsync(file, ct)))
+            .RequireRateLimiting("PerUserWrite").DisableAntiforgery().RequireAuthorization("AdminContentRead");
+
+        admin.MapPost("/vocabulary/import", async (HttpContext http, IFormFile file, AdminService service, CancellationToken ct, [FromQuery] bool? dryRun)
+            => Results.Ok(await service.BulkImportVocabularyV2Async(http.AdminId(), http.AdminName(), file, dryRun ?? false, ct)))
             .RequireRateLimiting("PerUserWrite").DisableAntiforgery().RequireAuthorization("AdminContentWrite");
+
+        admin.MapPost("/vocabulary/ai/draft", async (HttpContext http, AdminVocabularyAiDraftRequest request,
+            VocabularyDraftService draftSvc, CancellationToken ct) =>
+        {
+            try
+            {
+                var result = await draftSvc.GenerateAsync(request, http.AdminId(), http.AdminName(), null, ct);
+                return Results.Ok(result);
+            }
+            catch (OetLearner.Api.Services.AiManagement.AiQuotaDeniedException qex)
+            {
+                return Results.Json(new { errorCode = qex.ErrorCode, error = qex.Message }, statusCode: 429);
+            }
+        })
+            .RequireRateLimiting("PerUserWrite").RequireAuthorization("AdminContentWrite");
+
+        admin.MapPost("/vocabulary/ai/draft/accept", async (HttpContext http, AdminVocabularyAiDraftAcceptRequest request,
+            VocabularyDraftService draftSvc, CancellationToken ct) =>
+        {
+            var created = await draftSvc.AcceptAsync(request, http.AdminId(), http.AdminName(), ct);
+            return Results.Ok(new { createdIds = created, count = created.Count });
+        })
+            .RequireRateLimiting("PerUserWrite").RequireAuthorization("AdminContentWrite");
 
         // ── Conversation Template Admin CRUD ────────────────
 
@@ -730,6 +762,17 @@ public static class AdminEndpoints
 
         admin.MapPost("/pronunciation/drills/{drillId}/archive", async (string drillId, HttpContext http, AdminService service, CancellationToken ct)
             => Results.Ok(await service.ArchivePronunciationDrillAsync(http.AdminId(), http.AdminName(), drillId, ct)))
+            .RequireRateLimiting("PerUserWrite").RequireAuthorization("AdminContentWrite");
+
+        // AI-assisted draft of a pronunciation drill. Routes through the
+        // grounded gateway (Kind=Pronunciation, Task=GeneratePronunciationDrill,
+        // FeatureCode=admin.pronunciation_draft). Platform-only by policy.
+        admin.MapPost("/pronunciation/drills/ai-draft", async (
+            HttpContext http,
+            AdminPronunciationDrillAiDraftRequest request,
+            OetLearner.Api.Services.Pronunciation.IPronunciationAdminDraftService draftService,
+            CancellationToken ct)
+            => Results.Ok(await draftService.GenerateDraftAsync(request, http.AdminId(), ct)))
             .RequireRateLimiting("PerUserWrite").RequireAuthorization("AdminContentWrite");
 
         // ── Notification Template Admin CRUD ────────────────
