@@ -449,6 +449,7 @@ builder.Services.AddHostedService<BackgroundJobProcessor>();
 builder.Services.AddScoped<GamificationService>();
 builder.Services.AddSingleton<ISpacedRepetitionScheduler, Sm2Scheduler>();
 builder.Services.AddScoped<SpacedRepetitionService>();
+builder.Services.AddScoped<IReviewItemSeeder, ReviewItemSeeder>();
 builder.Services.AddScoped<VocabularyService>();
 builder.Services.AddScoped<VocabularyDraftService>();
 builder.Services.AddScoped<VocabularyGlossService>();

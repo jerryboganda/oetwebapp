@@ -8,7 +8,7 @@ using OetLearner.Api.Domain;
 
 namespace OetLearner.Api.Services;
 
-public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, MediaStorageService mediaStorage, PlatformLinkService platformLinks, NotificationService notifications, PronunciationService pronunciationService)
+public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, MediaStorageService mediaStorage, PlatformLinkService platformLinks, NotificationService notifications, PronunciationService pronunciationService, IReviewItemSeeder reviewSeeder)
 {
     private static readonly string[] WritingCriteria = ["purpose", "content", "conciseness", "genre", "organization", "language"];
     private static readonly string[] SpeakingCriteria = ["intelligibility", "fluency", "appropriateness", "grammar", "clinicalCommunication"];
@@ -1450,6 +1450,89 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
 
         // ── Escalation auto-trigger: compare AI vs human scores ──
         await TryCreateEscalationAsync(context, reviewerId, request.Scores, ct);
+
+        // ── Review Module: seed ReviewItems for each criterion comment (severity ≥ medium) ──
+        await SeedExpertReviewIssuesAsync(context, request, ct);
+    }
+
+    private async Task SeedExpertReviewIssuesAsync(TrackedWriteContext context, ExpertReviewSubmitRequest request, CancellationToken ct)
+    {
+        try
+        {
+            var comments = request.CriterionComments;
+            if (comments is null || comments.Count == 0) return;
+
+            var subtest = context.ReviewRequest.SubtestCode?.ToLowerInvariant();
+            if (subtest != "writing" && subtest != "speaking") return;
+
+            foreach (var entry in comments)
+            {
+                var criterionCode = entry.Key;
+                var comment = entry.Value;
+                if (string.IsNullOrWhiteSpace(comment)) continue;
+
+                // Heuristic: expert criterion comments that include a "must"/"needs"/"improve"
+                // style verb count as medium severity; purely positive comments are skipped.
+                var severity = ClassifyExpertCommentSeverity(comment);
+                if (severity is null) continue;
+
+                var feedbackItemId = $"{criterionCode}-expert";
+                if (subtest == "writing")
+                {
+                    await reviewSeeder.SeedWritingIssueAsync(
+                        userId: context.Attempt.UserId,
+                        examTypeCode: context.Attempt.ExamTypeCode,
+                        evaluationId: context.ReviewRequest.Id,
+                        feedbackItemId: feedbackItemId,
+                        criterionCode: criterionCode,
+                        message: comment!,
+                        severity: severity,
+                        suggestedFix: null,
+                        anchorSnippet: null,
+                        ct: ct);
+                }
+                else
+                {
+                    await reviewSeeder.SeedSpeakingIssueAsync(
+                        userId: context.Attempt.UserId,
+                        examTypeCode: context.Attempt.ExamTypeCode,
+                        evaluationId: context.ReviewRequest.Id,
+                        feedbackItemId: feedbackItemId,
+                        criterionCode: criterionCode,
+                        message: comment!,
+                        severity: severity,
+                        suggestedFix: null,
+                        transcriptLineId: null,
+                        drillPrompt: null,
+                        ct: ct);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Non-critical: failed to seed expert review items for {ReviewRequestId}", context.ReviewRequest.Id);
+        }
+    }
+
+    private static string? ClassifyExpertCommentSeverity(string? comment)
+    {
+        if (string.IsNullOrWhiteSpace(comment)) return null;
+        var normalised = comment.ToLowerInvariant();
+
+        // High-severity markers
+        if (normalised.Contains("critical") || normalised.Contains("major") || normalised.Contains("urgent") || normalised.Contains("failed to")) return "high";
+
+        // Medium-severity markers (actionable improvement language)
+        string[] mediumMarkers =
+        [
+            "improve", "needs", "should", "must", "work on", "focus on", "avoid",
+            "incorrect", "unclear", "missing", "revise", "reduce", "trim",
+            "ensure", "be more", "try to", "requires", "consider"
+        ];
+        if (mediumMarkers.Any(m => normalised.Contains(m))) return "medium";
+
+        // Purely positive / low severity — skip for retention.
+        return null;
     }
 
     /// <summary>

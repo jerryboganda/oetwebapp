@@ -63,8 +63,9 @@ public class ProfileAccessGuardTests
         var mediaStorage = new MediaStorageService(new TestHostEnvironment(storageRoot), storageOptions);
         var paymentGateways = CreatePaymentGatewayService(billingOptions);
         var walletService = new WalletService(db, paymentGateways, platformLinks);
+        var reviewSeeder = new ReviewItemSeeder(db, NullLogger<ReviewItemSeeder>.Instance);
 
-        return new LearnerService(db, mediaStorage, platformLinks, null!, walletService, paymentGateways);
+        return new LearnerService(db, mediaStorage, platformLinks, null!, walletService, paymentGateways, reviewSeeder);
     }
 
     private static ExpertService CreateExpertService(LearnerDbContext db)
@@ -76,8 +77,9 @@ public class ProfileAccessGuardTests
         var storageRoot = Path.Combine(Path.GetTempPath(), $"oet-profile-guards-{Guid.NewGuid():N}");
         var storageOptions = Options.Create(new StorageOptions { LocalRootPath = storageRoot });
         var mediaStorage = new MediaStorageService(new TestHostEnvironment(storageRoot), storageOptions);
+        var reviewSeeder = new ReviewItemSeeder(db, NullLogger<ReviewItemSeeder>.Instance);
 
-        return new ExpertService(db, NullLogger<ExpertService>.Instance, mediaStorage, platformLinks, null!, CreatePronunciationService(db, storageRoot));
+        return new ExpertService(db, NullLogger<ExpertService>.Instance, mediaStorage, platformLinks, null!, CreatePronunciationService(db, storageRoot), reviewSeeder);
     }
 
     private static PronunciationService CreatePronunciationService(LearnerDbContext db, string storageRoot)
@@ -94,7 +96,8 @@ public class ProfileAccessGuardTests
         var nullFeedback = new StubPronunciationFeedbackService();
         var scheduler = new OetLearner.Api.Services.Pronunciation.PronunciationSchedulerService(db);
         var entitlement = new OetLearner.Api.Services.Pronunciation.PronunciationEntitlementService(db, pronOpts);
-        return new PronunciationService(db, selector, nullFeedback, scheduler, entitlement, fileStorage, pronOpts,
+        var reviewSeeder = new ReviewItemSeeder(db, NullLogger<ReviewItemSeeder>.Instance);
+        return new PronunciationService(db, selector, nullFeedback, scheduler, entitlement, fileStorage, reviewSeeder, pronOpts,
             NullLogger<PronunciationService>.Instance);
     }
 

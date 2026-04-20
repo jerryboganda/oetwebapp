@@ -104,7 +104,7 @@ public sealed class GrammarPublishGateService(
             : 0;
 
         var reviewItems = await db.Set<ReviewItem>()
-            .Where(r => r.SourceType == "grammar_error" && r.SourceId != null && r.SourceId.StartsWith(lessonId + ":"))
+            .Where(r => r.SourceType == ReviewSourceTypes.GrammarError && r.SourceId != null && r.SourceId.StartsWith(lessonId + ":"))
             .CountAsync(ct);
 
         return new GrammarLessonStats(

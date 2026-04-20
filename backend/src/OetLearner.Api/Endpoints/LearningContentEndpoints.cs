@@ -136,6 +136,7 @@ public static class LearningContentEndpoints
             LearnerDbContext db,
             GamificationService gamification,
             OetLearner.Api.Services.Grammar.IGrammarEntitlementService entitlement,
+            OetLearner.Api.Services.IReviewItemSeeder reviewSeeder,
             CancellationToken ct) =>
         {
             var lesson = await db.GrammarLessons.FirstOrDefaultAsync(x => x.Id == lessonId, ct);
@@ -180,7 +181,7 @@ public static class LearningContentEndpoints
                 progress.StartedAt = DateTimeOffset.UtcNow;
             }
 
-            var graded = await GrammarLessonEndpointHelpers.GradeGrammarAttemptAsync(lesson, req.AnswersJson, db, http.UserId(), ct);
+            var graded = await GrammarLessonEndpointHelpers.GradeGrammarAttemptAsync(lesson, req.AnswersJson, db, http.UserId(), reviewSeeder, ct);
             var xpAwarded = wasCompleted ? 0 : graded.XpAwarded;
 
             progress.Status = "completed";
@@ -461,6 +462,7 @@ internal static async Task<GrammarAttemptGrade> GradeGrammarAttemptAsync(
     string answersJson,
     LearnerDbContext db,
     string userId,
+    OetLearner.Api.Services.IReviewItemSeeder reviewSeeder,
     CancellationToken ct)
 {
     var document = ParseGrammarLessonDocument(lesson);
@@ -493,32 +495,21 @@ internal static async Task<GrammarAttemptGrade> GradeGrammarAttemptAsync(
 
         incorrectCount++;
 
-        if (!await db.ReviewItems.AnyAsync(r => r.UserId == userId && r.SourceType == "grammar_error" && r.SourceId == $"{lesson.Id}:{exerciseId}", ct))
+        // Route through IReviewItemSeeder — MISSION CRITICAL per docs/REVIEW-MODULE.md §11.
+        var seedResult = await reviewSeeder.SeedGrammarErrorAsync(
+            userId: userId,
+            examTypeCode: lesson.ExamTypeCode,
+            lessonId: lesson.Id,
+            exerciseId: exerciseId,
+            title: string.IsNullOrWhiteSpace(lesson.Title) ? "Grammar exercise" : lesson.Title,
+            questionText: exercise.PromptMarkdown ?? string.Empty,
+            correctAnswer: FormatGrammarExerciseAnswer(exercise),
+            explanation: exercise.ExplanationMarkdown ?? string.Empty,
+            exerciseType: NormalizeGrammarExerciseType(exercise.Type),
+            ct: ct);
+
+        if (seedResult.Created)
         {
-            db.ReviewItems.Add(new ReviewItem
-            {
-                Id = $"ri-{Guid.NewGuid():N}",
-                UserId = userId,
-                ExamTypeCode = lesson.ExamTypeCode,
-                SourceType = "grammar_error",
-                SourceId = $"{lesson.Id}:{exerciseId}",
-                SubtestCode = "grammar",
-                CriterionCode = NormalizeGrammarExerciseType(exercise.Type),
-                QuestionJson = JsonSupport.Serialize(new
-                {
-                    text = exercise.PromptMarkdown ?? string.Empty,
-                    lessonId = lesson.Id,
-                    exerciseId
-                }),
-                AnswerJson = JsonSupport.Serialize(new
-                {
-                    text = FormatGrammarExerciseAnswer(exercise),
-                    explanation = exercise.ExplanationMarkdown ?? string.Empty
-                }),
-                DueDate = DateOnly.FromDateTime(DateTime.UtcNow),
-                CreatedAt = DateTimeOffset.UtcNow,
-                Status = "active"
-            });
             reviewItemsCreated++;
             result = result with { ReviewItemCreated = true };
             gradedExercises[^1] = result;

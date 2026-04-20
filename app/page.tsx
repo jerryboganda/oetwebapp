@@ -1,11 +1,13 @@
 'use client';
 
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { motion, useReducedMotion } from 'motion/react';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import {
   ArrowRight,
   BookOpen,
+  Brain,
   Calendar,
   CheckCircle2,
   FilePenLine,
@@ -33,6 +35,8 @@ import { AiUsageWidget } from '@/components/domain/AiUsageWidget';
 import { PronunciationDashboardTile } from '@/components/domain/pronunciation';
 import { AsyncStateWrapper } from '@/components/state';
 import { useDashboardHome } from '@/lib/hooks/use-dashboard-home';
+import { fetchReviewSummary } from '@/lib/api';
+import type { ReviewSummary } from '@/lib/types/review';
 import type { SubTest } from '@/lib/mock-data';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 
@@ -56,6 +60,21 @@ export default function Dashboard() {
   const { data, error, reload, status } = useDashboardHome();
   const { home, profile, readiness, tasks, engagement } = data;
   const freeze = home?.freeze?.currentFreeze ?? null;
+  const [reviewSummary, setReviewSummary] = useState<ReviewSummary | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchReviewSummary()
+      .then((summary) => {
+        if (!cancelled) setReviewSummary(summary as ReviewSummary);
+      })
+      .catch(() => {
+        /* non-fatal — dashboard still renders without review badge */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const todayTasks = tasks.filter((task) => task.section === 'today');
   const upcomingTasks = tasks.filter((task) => task.section === 'thisWeek');
@@ -123,6 +142,29 @@ export default function Dashboard() {
       label: 'View Study Plan',
       href: '/study-plan',
       variant: 'outline',
+    },
+  };
+
+  const reviewDueToday = reviewSummary?.dueToday ?? 0;
+  const reviewTotal = reviewSummary?.total ?? 0;
+  const reviewCard: LearnerSurfaceCardModel = {
+    kind: 'task',
+    sourceType: 'frontend_insight',
+    accent: 'purple',
+    eyebrow: "Today's Review",
+    eyebrowIcon: Brain,
+    title: reviewDueToday > 0 ? `${reviewDueToday} item${reviewDueToday === 1 ? '' : 's'} due for review` : 'Spaced repetition is up to date',
+    description:
+      reviewDueToday > 0
+        ? 'Every mistake you make across writing, speaking, reading, listening, grammar, pronunciation, vocabulary, and mocks becomes a review card. Keep the forgetting curve under control.'
+        : 'Nothing is due right now. Your retention queue refills automatically as you practise.',
+    metaItems: [
+      { icon: Brain, label: `${reviewTotal} total items` },
+      { icon: CheckCircle2, label: `${reviewSummary?.mastered ?? 0} mastered` },
+    ],
+    primaryAction: {
+      label: reviewDueToday > 0 ? 'Start Review' : 'Open Review',
+      href: reviewDueToday > 0 ? '/review?session=start' : '/review',
     },
   };
 
@@ -197,6 +239,9 @@ export default function Dashboard() {
             ) : null}
             <MotionItem delayIndex={1}>
               <LearnerSurfaceCard card={nextMockCard} />
+            </MotionItem>
+            <MotionItem delayIndex={2}>
+              <LearnerSurfaceCard card={reviewCard} />
             </MotionItem>
           </div>
 

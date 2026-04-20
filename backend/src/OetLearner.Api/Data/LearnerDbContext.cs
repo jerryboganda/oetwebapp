@@ -82,6 +82,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
 
     // Spaced repetition entities
     public DbSet<ReviewItem> ReviewItems => Set<ReviewItem>();
+    public DbSet<ReviewItemTransition> ReviewItemTransitions => Set<ReviewItemTransition>();
 
     // Vocabulary entities
     public DbSet<VocabularyTerm> VocabularyTerms => Set<VocabularyTerm>();
@@ -393,6 +394,9 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         // Spaced repetition indexes
         modelBuilder.Entity<ReviewItem>().HasIndex(x => new { x.UserId, x.DueDate, x.Status });
         modelBuilder.Entity<ReviewItem>().HasIndex(x => new { x.UserId, x.ExamTypeCode, x.Status });
+        modelBuilder.Entity<ReviewItem>().HasIndex(x => new { x.UserId, x.SourceType, x.SourceId }).IsUnique();
+        modelBuilder.Entity<ReviewItemTransition>().HasIndex(x => new { x.ReviewItemId, x.AppliedAt });
+        modelBuilder.Entity<ReviewItemTransition>().HasIndex(x => new { x.UserId, x.AppliedAt });
 
         // Vocabulary indexes
         modelBuilder.Entity<VocabularyTerm>().HasIndex(x => new { x.ExamTypeCode, x.Status, x.Category });

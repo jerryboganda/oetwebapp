@@ -46,6 +46,7 @@ public sealed record ReadingAnswerResult(
 public sealed class ReadingGradingService(
     LearnerDbContext db,
     IReadingPolicyService policyService,
+    IReviewItemSeeder reviewSeeder,
     ILogger<ReadingGradingService> logger) : IReadingGradingService
 {
     public async Task<ReadingGradingResult> GradeAttemptAsync(string attemptId, CancellationToken ct)
@@ -62,10 +63,11 @@ public sealed class ReadingGradingService(
         }
 
         // Load all questions for the paper (single round-trip)
-        var partIds = await db.ReadingParts
+        var parts = await db.ReadingParts
             .Where(p => p.PaperId == attempt.PaperId)
-            .Select(p => p.Id)
             .ToListAsync(ct);
+        var partIds = parts.Select(p => p.Id).ToList();
+        var partCodeById = parts.ToDictionary(p => p.Id, p => p.PartCode.ToString());
         var questions = await db.ReadingQuestions
             .Where(q => partIds.Contains(q.ReadingPartId))
             .ToListAsync(ct);
@@ -93,6 +95,31 @@ public sealed class ReadingGradingService(
             raw += pts;
             if (isCorrect) correctCount++; else incorrectCount++;
             details.Add(new(q.Id, q.QuestionType.ToString(), isCorrect, pts, q.Points));
+
+            // Seed a ReviewItem for each miss — MISSION CRITICAL per docs/REVIEW-MODULE.md.
+            if (!isCorrect)
+            {
+                try
+                {
+                    var partCode = partCodeById.TryGetValue(q.ReadingPartId, out var pc) ? pc : null;
+                    await reviewSeeder.SeedReadingMissAsync(
+                        userId: attempt.UserId,
+                        examTypeCode: "oet",
+                        paperId: attempt.PaperId,
+                        questionId: q.Id,
+                        title: TruncateForTitle(q.Stem),
+                        questionText: q.Stem,
+                        correctAnswer: SafeReadCorrectAnswer(q.CorrectAnswerJson),
+                        explanation: q.ExplanationMarkdown ?? string.Empty,
+                        partCode: partCode,
+                        ct: ct);
+                }
+                catch (Exception ex)
+                {
+                    // Never let seeding break grading.
+                    logger.LogWarning(ex, "Reading review seed failed for question {QuestionId}.", q.Id);
+                }
+            }
         }
 
         attempt.RawScore = raw;
@@ -311,5 +338,30 @@ public sealed class ReadingGradingService(
             attempt.ScaledScore ?? OetScoring.OetRawToScaled(raw),
             OetScoring.OetGradeLetterFromScaled(attempt.ScaledScore ?? OetScoring.OetRawToScaled(raw)),
             correct, wrong, unans, details);
+    }
+
+    private static string TruncateForTitle(string stem)
+    {
+        if (string.IsNullOrWhiteSpace(stem)) return "Reading question";
+        var s = stem.Trim();
+        return s.Length <= 120 ? s : s[..120] + "…";
+    }
+
+    private static string SafeReadCorrectAnswer(string json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return string.Empty;
+        try
+        {
+            var root = JsonDocument.Parse(json).RootElement;
+            return root.ValueKind switch
+            {
+                JsonValueKind.String => root.GetString() ?? string.Empty,
+                JsonValueKind.Array => string.Join(", ", root.EnumerateArray()
+                    .Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() : e.GetRawText())
+                    .Where(v => !string.IsNullOrWhiteSpace(v))),
+                _ => root.GetRawText(),
+            };
+        }
+        catch (JsonException) { return json; }
     }
 }

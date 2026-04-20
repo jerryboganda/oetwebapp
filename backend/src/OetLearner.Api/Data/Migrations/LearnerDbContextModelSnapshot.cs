@@ -5296,8 +5296,15 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<int>("IntervalDays")
                         .HasColumnType("integer");
 
+                    b.Property<int?>("LastQuality")
+                        .HasColumnType("integer");
+
                     b.Property<DateTimeOffset?>("LastReviewedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PromptKind")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
 
                     b.Property<string>("QuestionJson")
                         .IsRequired()
@@ -5306,9 +5313,12 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<int>("ReviewCount")
                         .HasColumnType("integer");
 
+                    b.Property<string>("RichContentJson")
+                        .HasColumnType("text");
+
                     b.Property<string>("SourceId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
 
                     b.Property<string>("SourceType")
                         .IsRequired()
@@ -5325,6 +5335,17 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<DateTimeOffset?>("SuspendedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("SuspendedReason")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<string>("Title")
+                        .HasMaxLength(180)
+                        .HasColumnType("character varying(180)");
+
                     b.Property<string>("UserId")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -5336,7 +5357,67 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId", "ExamTypeCode", "Status");
 
+                    b.HasIndex("UserId", "SourceType", "SourceId")
+                        .IsUnique();
+
                     b.ToTable("ReviewItems", (string)null);
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.ReviewItemTransition", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int>("AppliedQuality")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("AppliedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<double>("PrevEaseFactor")
+                        .HasColumnType("double precision");
+
+                    b.Property<int>("PrevIntervalDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PrevReviewCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("PrevConsecutiveCorrect")
+                        .HasColumnType("integer");
+
+                    b.Property<DateOnly>("PrevDueDate")
+                        .HasColumnType("date");
+
+                    b.Property<DateTimeOffset?>("PrevLastReviewedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int?>("PrevLastQuality")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("PrevStatus")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<string>("ReviewItemId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("UserId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ReviewItemId", "AppliedAt");
+
+                    b.HasIndex("UserId", "AppliedAt");
+
+                    b.ToTable("ReviewItemTransitions", (string)null);
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ReviewEscalation", b =>

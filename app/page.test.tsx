@@ -33,6 +33,14 @@ vi.mock('@/lib/api', () => ({
   fetchUserProfile: mockFetchUserProfile,
   fetchDashboardHome: mockFetchDashboardHome,
   fetchEngagement: mockFetchEngagement,
+  fetchReviewSummary: vi.fn().mockResolvedValue({
+    total: 0,
+    due: 0,
+    dueToday: 0,
+    mastered: 0,
+    upcoming: 0,
+    suspended: 0,
+  }),
   fetchPronunciationProfile: vi.fn().mockResolvedValue({
     overallScore: 0,
     projectedSpeakingScaled: 0,

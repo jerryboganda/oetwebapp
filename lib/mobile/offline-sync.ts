@@ -386,3 +386,17 @@ export async function clearOfflineData(): Promise<void> {
     request.onerror = () => reject(request.error);
   });
 }
+
+// ── Review queue replay ─────────────────────────────────────────
+// Spaced-repetition ratings made while offline are stashed in the same
+// OfflineAttempt store with subtest="review". On reconnect the higher-level
+// sync engine passes the attempt to the app-specific syncFn which issues the
+// `submitReview(itemId, quality)` call.
+
+export async function queueOfflineReviewRating(
+  reviewItemId: string,
+  quality: number,
+): Promise<string> {
+  return queueOfflineAttempt('review', reviewItemId, { reviewItemId, quality });
+}
+

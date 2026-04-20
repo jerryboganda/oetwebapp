@@ -14,7 +14,8 @@ public partial class LearnerService(
     PlatformLinkService platformLinks,
     NotificationService notifications,
     WalletService walletService,
-    PaymentGatewayService paymentGateways)
+    PaymentGatewayService paymentGateways,
+    IReviewItemSeeder reviewSeeder)
 {
     public async Task<object> GetMeAsync(string userId, CancellationToken cancellationToken)
     {
@@ -3673,7 +3674,84 @@ public partial class LearnerService(
         await LearnerWorkflowCoordinator.UpdateDiagnosticProgressAsync(db, attempt, AttemptState.Completed, cancellationToken);
         await LearnerWorkflowCoordinator.QueueStudyPlanRegenerationAsync(db, attempt.UserId, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
+
+        // Seed review items for each wrong answer (reading / listening) — MISSION CRITICAL.
+        await SeedObjectiveMissesAsync(userId, attempt, subtest, cancellationToken);
+
         return new { attemptId = attempt.Id, evaluationId = evaluation.Id, state = "completed" };
+    }
+
+    private async Task SeedObjectiveMissesAsync(string userId, Attempt attempt, string subtest, CancellationToken cancellationToken)
+    {
+        if (subtest != "reading" && subtest != "listening") return;
+
+        try
+        {
+            var content = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == attempt.ContentId, cancellationToken);
+            if (content is null) return;
+
+            var detail = JsonSupport.Deserialize<Dictionary<string, object?>>(content.DetailJson, new Dictionary<string, object?>());
+            var questions = detail.TryGetValue("questions", out var questionsValue)
+                ? JsonSupport.Deserialize<List<Dictionary<string, object?>>>(JsonSupport.Serialize(questionsValue), [])
+                : [];
+            var answers = JsonSupport.Deserialize<Dictionary<string, string?>>(attempt.AnswersJson, new Dictionary<string, string?>());
+
+            foreach (var question in questions)
+            {
+                var questionId = question.GetValueOrDefault("id")?.ToString();
+                if (string.IsNullOrWhiteSpace(questionId)) continue;
+
+                var correctAnswer = question.GetValueOrDefault("correctAnswer")?.ToString();
+                if (string.IsNullOrWhiteSpace(correctAnswer)) continue;
+
+                var learnerAnswer = answers.GetValueOrDefault(questionId);
+                if (MatchesObjectiveAnswer(learnerAnswer, correctAnswer)) continue;
+
+                var questionText = question.GetValueOrDefault("text")?.ToString() ?? string.Empty;
+                var explanation = question.GetValueOrDefault("explanation")?.ToString() ?? string.Empty;
+                var transcript = question.GetValueOrDefault("transcriptExcerpt")?.ToString();
+                var title = TruncateQuestionTitle(questionText);
+
+                if (subtest == "reading")
+                {
+                    await reviewSeeder.SeedReadingMissAsync(
+                        userId: userId,
+                        examTypeCode: "oet",
+                        paperId: content.Id,
+                        questionId: questionId!,
+                        title: title,
+                        questionText: questionText,
+                        correctAnswer: correctAnswer!,
+                        explanation: explanation,
+                        partCode: null,
+                        ct: cancellationToken);
+                }
+                else // listening
+                {
+                    await reviewSeeder.SeedListeningMissAsync(
+                        userId: userId,
+                        examTypeCode: "oet",
+                        attemptId: attempt.Id,
+                        questionId: questionId!,
+                        title: title,
+                        questionText: questionText,
+                        correctAnswer: correctAnswer!,
+                        transcriptSnippet: transcript,
+                        ct: cancellationToken);
+                }
+            }
+        }
+        catch
+        {
+            // Never block grading on retention bookkeeping.
+        }
+    }
+
+    private static string TruncateQuestionTitle(string stem)
+    {
+        if (string.IsNullOrWhiteSpace(stem)) return "Practice question";
+        var s = stem.Trim();
+        return s.Length <= 120 ? s : s[..120] + "…";
     }
 
     private async Task<object> GetObjectiveEvaluationAsync(string userId, string evaluationId, CancellationToken cancellationToken)

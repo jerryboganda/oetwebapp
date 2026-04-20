@@ -34,6 +34,7 @@ public class PronunciationService(
     IPronunciationSchedulerService scheduler,
     IPronunciationEntitlementService entitlement,
     IFileStorage storage,
+    IReviewItemSeeder reviewSeeder,
     IOptions<PronunciationOptions> options,
     ILogger<PronunciationService> logger)
 {
@@ -407,6 +408,30 @@ public class PronunciationService(
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Scheduler update failed (non-fatal)");
+        }
+
+        // ── Seed ReviewItems for each low-score phoneme ──────────────────
+        try
+        {
+            var threshold = 70.0; // anchor: 70/100 ≡ 350/500 band per OetScoring
+            foreach (var phoneme in asrResult.ProblematicPhonemes.Where(p => p.Score < threshold))
+            {
+                await reviewSeeder.SeedPronunciationFindingAsync(
+                    userId: userId,
+                    examTypeCode: "oet",
+                    attemptId: attempt.Id,
+                    phonemeKey: phoneme.Phoneme,
+                    title: $"Pronunciation: /{phoneme.Phoneme}/ — {Math.Round(phoneme.Score, 0)}/100",
+                    phoneme: phoneme.Phoneme,
+                    ruleId: phoneme.RuleId ?? drill.PrimaryRuleId ?? "P01.1",
+                    tip: null,
+                    score: phoneme.Score,
+                    ct: ct);
+            }
+        }
+        catch (Exception ex)
+        {
+            logger.LogWarning(ex, "Non-critical: pronunciation review seed failed for attempt {AttemptId}", attempt.Id);
         }
 
         return BuildAssessmentDto(assessment);

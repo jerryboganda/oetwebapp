@@ -106,22 +106,23 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
     private static async Task ExecuteJobAsync(IServiceProvider services, LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)
     {
         var notifications = services.GetRequiredService<NotificationService>();
+        var reviewSeeder = services.GetRequiredService<IReviewItemSeeder>();
         switch (job.Type)
         {
             case JobType.WritingEvaluation:
-                await CompleteWritingEvaluationAsync(db, notifications, job, cancellationToken);
+                await CompleteWritingEvaluationAsync(db, notifications, reviewSeeder, job, cancellationToken);
                 break;
             case JobType.SpeakingTranscription:
                 await CompleteSpeakingTranscriptionAsync(db, job, cancellationToken);
                 break;
             case JobType.SpeakingEvaluation:
-                await CompleteSpeakingEvaluationAsync(db, notifications, job, cancellationToken);
+                await CompleteSpeakingEvaluationAsync(db, notifications, reviewSeeder, job, cancellationToken);
                 break;
             case JobType.StudyPlanRegeneration:
                 await CompleteStudyPlanRegenerationAsync(db, notifications, job, cancellationToken);
                 break;
             case JobType.MockReportGeneration:
-                await CompleteMockReportGenerationAsync(db, notifications, job, cancellationToken);
+                await CompleteMockReportGenerationAsync(db, notifications, reviewSeeder, job, cancellationToken);
                 break;
             case JobType.ReviewCompletion:
                 await CompleteReviewRequestAsync(db, notifications, job, cancellationToken);
@@ -336,7 +337,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         }
     }
 
-    private static async Task CompleteWritingEvaluationAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
+    private static async Task CompleteWritingEvaluationAsync(LearnerDbContext db, NotificationService notifications, IReviewItemSeeder reviewSeeder, BackgroundJobItem job, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(job.AttemptId)) return;
 
@@ -424,6 +425,8 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 ["message"] = "Your readiness snapshot was recalculated after the latest writing evaluation."
             },
             cancellationToken);
+
+        await SeedEvaluationIssuesAsync(reviewSeeder, attempt.UserId, evaluation, "writing", cancellationToken);
     }
 
     private static async Task CompleteSpeakingTranscriptionAsync(LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)
@@ -437,7 +440,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         });
     }
 
-    private static async Task CompleteSpeakingEvaluationAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
+    private static async Task CompleteSpeakingEvaluationAsync(LearnerDbContext db, NotificationService notifications, IReviewItemSeeder reviewSeeder, BackgroundJobItem job, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(job.AttemptId)) return;
 
@@ -523,6 +526,8 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 ["message"] = "Your readiness snapshot was recalculated after the latest speaking evaluation."
             },
             cancellationToken);
+
+        await SeedEvaluationIssuesAsync(reviewSeeder, attempt.UserId, evaluation, "speaking", cancellationToken);
     }
 
     private static async Task CompleteStudyPlanRegenerationAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
@@ -554,7 +559,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             cancellationToken);
     }
 
-    private static async Task CompleteMockReportGenerationAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
+    private static async Task CompleteMockReportGenerationAsync(LearnerDbContext db, NotificationService notifications, IReviewItemSeeder reviewSeeder, BackgroundJobItem job, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(job.ResourceId)) return;
         var mockAttempt = await db.MockAttempts.FirstAsync(x => x.Id == job.ResourceId, cancellationToken);
@@ -608,6 +613,8 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 ["mockAttemptId"] = mockAttempt.Id
             },
             cancellationToken);
+
+        await SeedMockMissesAsync(db, reviewSeeder, mockAttempt, reportId, cancellationToken);
     }
 
     private static async Task CompleteReviewRequestAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
@@ -767,5 +774,121 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         // Pronunciation analysis is handled inline in PronunciationService.SubmitDrillAttemptAsync
         // This handler exists for future production integration with Azure Speech SDK async processing
         return Task.CompletedTask;
+    }
+
+    // ── Retention helpers (MISSION CRITICAL — docs/REVIEW-MODULE.md) ────────────────────────
+
+    private static async Task SeedEvaluationIssuesAsync(IReviewItemSeeder reviewSeeder, string userId, Evaluation evaluation, string subtest, CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(evaluation.FeedbackItemsJson)) return;
+
+        List<Dictionary<string, object?>> items;
+        try
+        {
+            items = JsonSupport.Deserialize<List<Dictionary<string, object?>>>(evaluation.FeedbackItemsJson, []);
+        }
+        catch
+        {
+            return;
+        }
+
+        foreach (var item in items)
+        {
+            var feedbackItemId = item.GetValueOrDefault("feedbackItemId")?.ToString();
+            if (string.IsNullOrWhiteSpace(feedbackItemId)) continue;
+
+            var criterionCode = item.GetValueOrDefault("criterionCode")?.ToString() ?? "general";
+            var message = item.GetValueOrDefault("message")?.ToString() ?? string.Empty;
+            var severity = item.GetValueOrDefault("severity")?.ToString();
+            var suggestedFix = item.GetValueOrDefault("suggestedFix")?.ToString();
+            string? anchorSnippet = null;
+            string? transcriptLineId = null;
+
+            if (item.TryGetValue("anchor", out var anchorObj) && anchorObj is not null)
+            {
+                try
+                {
+                    var anchorDict = JsonSupport.Deserialize<Dictionary<string, object?>>(JsonSupport.Serialize(anchorObj), []);
+                    anchorSnippet = anchorDict.GetValueOrDefault("snippet")?.ToString();
+                    transcriptLineId = anchorDict.GetValueOrDefault("lineId")?.ToString();
+                }
+                catch { /* best effort */ }
+            }
+
+            try
+            {
+                if (subtest == "writing")
+                {
+                    await reviewSeeder.SeedWritingIssueAsync(
+                        userId: userId,
+                        examTypeCode: "oet",
+                        evaluationId: evaluation.Id,
+                        feedbackItemId: feedbackItemId!,
+                        criterionCode: criterionCode,
+                        message: message,
+                        severity: severity,
+                        suggestedFix: suggestedFix,
+                        anchorSnippet: anchorSnippet,
+                        ct: cancellationToken);
+                }
+                else if (subtest == "speaking")
+                {
+                    await reviewSeeder.SeedSpeakingIssueAsync(
+                        userId: userId,
+                        examTypeCode: "oet",
+                        evaluationId: evaluation.Id,
+                        feedbackItemId: feedbackItemId!,
+                        criterionCode: criterionCode,
+                        message: message,
+                        severity: severity,
+                        suggestedFix: suggestedFix,
+                        transcriptLineId: transcriptLineId,
+                        drillPrompt: null,
+                        ct: cancellationToken);
+                }
+            }
+            catch
+            {
+                // Never block evaluation completion on retention bookkeeping.
+            }
+        }
+    }
+
+    private static async Task SeedMockMissesAsync(LearnerDbContext db, IReviewItemSeeder reviewSeeder, MockAttempt mockAttempt, string reportId, CancellationToken cancellationToken)
+    {
+        // Mock misses are derived from the weakestCriterion + per-subtest raw
+        // scores of the generated report. The goal is to give the learner at
+        // least one actionable review card per weak sub-test.
+        try
+        {
+            var report = await db.MockReports.FirstOrDefaultAsync(r => r.Id == reportId, cancellationToken);
+            if (report is null) return;
+
+            var payload = JsonSupport.Deserialize<Dictionary<string, object?>>(report.PayloadJson, []);
+            var weakest = payload.GetValueOrDefault("weakestCriterion");
+            if (weakest is null) return;
+
+            var weakestDict = JsonSupport.Deserialize<Dictionary<string, object?>>(JsonSupport.Serialize(weakest), []);
+            var subtest = weakestDict.GetValueOrDefault("subtest")?.ToString() ?? "writing";
+            var criterion = weakestDict.GetValueOrDefault("criterion")?.ToString() ?? "general";
+            var description = weakestDict.GetValueOrDefault("description")?.ToString() ?? string.Empty;
+
+            await reviewSeeder.SeedMockMissAsync(
+                userId: mockAttempt.UserId,
+                examTypeCode: mockAttempt.ExamTypeCode,
+                mockReportId: reportId,
+                sectionCode: criterion.ToLowerInvariant(),
+                questionId: "weakest-criterion",
+                subtestCode: subtest.ToLowerInvariant(),
+                title: $"Mock weak area: {subtest} — {criterion}",
+                questionText: description,
+                correctAnswer: "See mock report for recommended practice.",
+                explanation: description,
+                ct: cancellationToken);
+        }
+        catch
+        {
+            // Best-effort — never block report generation.
+        }
     }
 }

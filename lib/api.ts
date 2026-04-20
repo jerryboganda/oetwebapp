@@ -3098,8 +3098,16 @@ export async function fetchReviewSummary() {
   return apiRequest('/v1/review/summary');
 }
 
-export async function fetchDueReviewItems(limit = 20) {
-  return apiRequest(`/v1/review/due?limit=${limit}`);
+export async function fetchDueReviewItems(
+  limit = 20,
+  options?: { source?: string; subtest?: string; includeVocabulary?: boolean }
+) {
+  const params = new URLSearchParams();
+  params.set('limit', String(limit));
+  if (options?.source) params.set('source', options.source);
+  if (options?.subtest) params.set('subtest', options.subtest);
+  if (options?.includeVocabulary === false) params.set('includeVocabulary', 'false');
+  return apiRequest(`/v1/review/due?${params.toString()}`);
 }
 
 export async function createReviewItem(payload: {
@@ -3124,8 +3132,48 @@ export async function submitReview(itemId: string, quality: number) {
   });
 }
 
+export async function suspendReviewItem(itemId: string, reason?: string) {
+  return apiRequest(`/v1/review/items/${encodeURIComponent(itemId)}/suspend`, {
+    method: 'POST',
+    body: JSON.stringify({ reason: reason ?? null }),
+  });
+}
+
+export async function resumeReviewItem(itemId: string) {
+  return apiRequest(`/v1/review/items/${encodeURIComponent(itemId)}/resume`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
+export async function undoLastReview(itemId: string) {
+  return apiRequest(`/v1/review/items/${encodeURIComponent(itemId)}/undo`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
 export async function deleteReviewItem(itemId: string) {
   return apiRequest(`/v1/review/items/${encodeURIComponent(itemId)}`, { method: 'DELETE' });
+}
+
+export async function fetchReviewRetention(days = 30) {
+  return apiRequest(`/v1/review/retention?days=${encodeURIComponent(String(days))}`);
+}
+
+export async function fetchReviewHeatmap() {
+  return apiRequest('/v1/review/heatmap');
+}
+
+export async function fetchReviewConfig() {
+  return apiRequest('/v1/review/config');
+}
+
+export async function updateReviewConfig(config: { newCardsPerDay: number; reviewsPerDay: number }) {
+  return apiRequest('/v1/review/config', {
+    method: 'PUT',
+    body: JSON.stringify(config),
+  });
 }
 
 // ── Vocabulary ────────────────────────────────────────────────────────────────

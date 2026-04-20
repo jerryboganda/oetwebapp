@@ -1,222 +1,365 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Brain, CheckCircle2, RotateCcw, ChevronRight } from 'lucide-react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useSearchParams } from 'next/navigation';
+import { Brain, CheckCircle2, Clock, PlayCircle, RotateCcw, Sparkles } from 'lucide-react';
+
 import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import {
+  LearnerPageHero,
+  LearnerSurfaceCard,
+  LearnerSurfaceSectionHeader,
+} from '@/components/domain';
+import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
+import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { MotionSection, MotionItem, MotionPage } from '@/components/ui/motion-primitives';
-import { fetchReviewSummary, fetchDueReviewItems, submitReview } from '@/lib/api';
+import { MotionItem } from '@/components/ui/motion-primitives';
+import {
+  RetentionTrendCard,
+  ReviewHeatmapCard,
+  ReviewEmptyState,
+  ReviewSessionModal,
+  UpcomingReviewRail,
+  type SessionSummary,
+} from '@/components/domain/review';
+import {
+  fetchDueReviewItems,
+  fetchReviewHeatmap,
+  fetchReviewRetention,
+  fetchReviewSummary,
+} from '@/lib/api';
 import { analytics } from '@/lib/analytics';
-import { Card } from '@/components/ui/card';
+import type {
+  ReviewHeatmapResponse,
+  ReviewItem,
+  ReviewRetentionResponse,
+  ReviewSummary,
+} from '@/lib/types/review';
 
-type ReviewSummary = { due: number; total: number; dueToday: number; mastered: number; upcoming?: number };
-type ReviewItem = {
-  id: string;
-  examTypeCode: string;
-  subtestCode: string | null;
-  questionJson: string;
-  answerJson: string;
-  easeFactor: number;
-  intervalDays: number;
-  reviewCount: number;
+type LoadState = 'loading' | 'ready' | 'error';
+
+interface PageData {
+  summary: ReviewSummary | null;
+  items: ReviewItem[];
+  retention: ReviewRetentionResponse | null;
+  heatmap: ReviewHeatmapResponse | null;
+}
+
+const EMPTY_DATA: PageData = {
+  summary: null,
+  items: [],
+  retention: null,
+  heatmap: null,
 };
 
-const QUALITY_LABELS = ['Again', 'Hard', 'Okay', 'Good', 'Easy', 'Perfect'];
-const QUALITY_COLORS = [
-  'bg-red-500 hover:bg-red-600',
-  'bg-orange-500 hover:bg-orange-600',
-  'bg-yellow-500 hover:bg-yellow-600',
-  'bg-lime-500 hover:bg-lime-600',
-  'bg-green-500 hover:bg-green-600',
-  'bg-emerald-600 hover:bg-emerald-700',
-];
+function normaliseItems(payload: unknown): ReviewItem[] {
+  if (Array.isArray(payload)) return payload as ReviewItem[];
+  if (payload && typeof payload === 'object' && 'items' in payload) {
+    const items = (payload as { items?: unknown }).items;
+    if (Array.isArray(items)) return items as ReviewItem[];
+  }
+  return [];
+}
 
 export default function ReviewPage() {
-  const [summary, setSummary] = useState<ReviewSummary | null>(null);
-  const [items, setItems] = useState<ReviewItem[]>([]);
-  const [current, setCurrent] = useState(0);
-  const [revealed, setRevealed] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const [submitting, setSubmitting] = useState(false);
-  const [done, setDone] = useState(false);
+  const searchParams = useSearchParams();
+  const autoStart = searchParams?.get('session') === 'start';
+
+  const [data, setData] = useState<PageData>(EMPTY_DATA);
+  const [status, setStatus] = useState<LoadState>('loading');
   const [error, setError] = useState<string | null>(null);
-  const [sessionStats, setSessionStats] = useState({ reviewed: 0, correct: 0 });
-  const [started, setStarted] = useState(false);
-  const heroHighlights = [
-    { icon: Brain, label: 'Due today', value: `${summary?.dueToday ?? 0}` },
-    { icon: CheckCircle2, label: 'Mastered', value: `${summary?.mastered ?? 0}` },
-    { icon: RotateCcw, label: 'Mode', value: 'Spaced review' },
-  ];
+  const [sessionOpen, setSessionOpen] = useState(false);
+  const [lastSessionSummary, setLastSessionSummary] = useState<SessionSummary | null>(null);
+
+  const loadAll = useCallback(async () => {
+    setStatus('loading');
+    setError(null);
+    try {
+      const [summaryR, itemsR, retentionR, heatmapR] = await Promise.allSettled([
+        fetchReviewSummary(),
+        fetchDueReviewItems(20, { includeVocabulary: true }),
+        fetchReviewRetention(30),
+        fetchReviewHeatmap(),
+      ]);
+
+      const summary = summaryR.status === 'fulfilled' ? (summaryR.value as ReviewSummary) : null;
+      const items = itemsR.status === 'fulfilled' ? normaliseItems(itemsR.value) : [];
+      const retention =
+        retentionR.status === 'fulfilled' ? (retentionR.value as ReviewRetentionResponse) : null;
+      const heatmap =
+        heatmapR.status === 'fulfilled' ? (heatmapR.value as ReviewHeatmapResponse) : null;
+
+      setData({ summary, items, retention, heatmap });
+
+      if (summaryR.status === 'rejected' && itemsR.status === 'rejected') {
+        setError('Could not load your review queue. Please try again.');
+        setStatus('error');
+      } else {
+        setStatus('ready');
+      }
+    } catch (err) {
+      console.error('Review load failed', err);
+      setError('Could not load your review queue. Please try again.');
+      setStatus('error');
+    }
+  }, []);
 
   useEffect(() => {
     analytics.track('review_page_viewed');
-    Promise.allSettled([fetchReviewSummary(), fetchDueReviewItems(20)]).then(([summaryR, itemsR]) => {
-      if (summaryR.status === 'fulfilled') setSummary(summaryR.value as ReviewSummary);
-      if (itemsR.status === 'fulfilled') {
-        const loadedItems = Array.isArray(itemsR.value) ? itemsR.value : (itemsR.value?.items ?? []);
-        setItems(loadedItems as ReviewItem[]);
-      }
-      if (summaryR.status === 'rejected' && itemsR.status === 'rejected') setError('Could not load review items.');
-      setLoading(false);
-    });
-  }, []);
+    // Defer first load out of render-phase to avoid synchronous cascading setState.
+    const timer = setTimeout(() => {
+      void loadAll();
+    }, 0);
+    return () => clearTimeout(timer);
+  }, [loadAll]);
 
-  const currentItem = items[current];
-
-  async function handleRate(quality: number) {
-    if (!currentItem || submitting) return;
-    setSubmitting(true);
-    try {
-      await submitReview(currentItem.id, quality);
-      setSessionStats(s => ({ reviewed: s.reviewed + 1, correct: s.correct + (quality >= 3 ? 1 : 0) }));
-      if (current + 1 >= items.length) {
-        setDone(true);
-      } else {
-        setCurrent(c => c + 1);
-        setRevealed(false);
-      }
-    } catch {
-      setError('Failed to submit review.');
-    } finally {
-      setSubmitting(false);
+  useEffect(() => {
+    if (autoStart && status === 'ready' && data.items.length > 0 && !sessionOpen) {
+      // Schedule the open on the next tick so we never mutate state within
+      // the same render cycle the effect was scheduled in.
+      const timer = setTimeout(() => setSessionOpen(true), 0);
+      return () => clearTimeout(timer);
     }
-  }
+    return undefined;
+  }, [autoStart, status, data.items.length, sessionOpen]);
 
-  if (loading) {
-    return (
-      <LearnerDashboardShell>
-        <div className="space-y-6">
-        <LearnerPageHero eyebrow="Learn" title="Spaced Repetition Review" description="Review your weak areas with smart scheduling." icon={Brain} highlights={heroHighlights} />
-        <div className="space-y-4">
-          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-3xl" />)}
-        </div>
-        </div>
-      </LearnerDashboardShell>
-    );
-  }
+  const handleSessionComplete = useCallback(
+    (summary: SessionSummary) => {
+      setLastSessionSummary(summary);
+      // Silently refresh counters after the session finishes.
+      void loadAll();
+    },
+    [loadAll],
+  );
+
+  const heroHighlights = useMemo(
+    () => [
+      {
+        icon: Brain,
+        label: 'Due today',
+        value: String(data.summary?.dueToday ?? 0),
+      },
+      {
+        icon: CheckCircle2,
+        label: 'Mastered',
+        value: String(data.summary?.mastered ?? 0),
+      },
+      {
+        icon: RotateCcw,
+        label: 'Mode',
+        value: 'Spaced review',
+      },
+    ],
+    [data.summary],
+  );
+
+  const dueCount = data.summary?.due ?? data.items.length ?? 0;
+  const totalItems = data.summary?.total ?? 0;
+  const hasQueue = data.items.length > 0;
+  const hasAnyItems = totalItems > 0;
+
+  const startCard: LearnerSurfaceCardModel = useMemo(
+    () => ({
+      kind: 'task',
+      sourceType: 'frontend_insight',
+      accent: 'primary',
+      eyebrow: hasQueue ? 'Recommended Next' : 'Queue empty',
+      eyebrowIcon: Sparkles,
+      title: hasQueue ? "Today's review session" : "You're caught up for today",
+      description: hasQueue
+        ? 'Work through a focused session of spaced repetition items. Ratings update the schedule instantly so your weak areas come back at the right time.'
+        : 'Nothing is due right now. Complete a practice task or save vocabulary to keep your retention queue moving.',
+      metaItems: [
+        { icon: Clock, label: `${dueCount} due` },
+        { icon: Brain, label: `${data.summary?.mastered ?? 0} mastered` },
+      ],
+      primaryAction: hasQueue
+        ? {
+            label: `Start review (${dueCount})`,
+            onClick: () => setSessionOpen(true),
+            variant: 'primary',
+          }
+        : {
+            label: 'View practice modules',
+            href: '/study-plan',
+            variant: 'outline',
+          },
+    }),
+    [hasQueue, dueCount, data.summary?.mastered],
+  );
+
+  const heatmapCard: LearnerSurfaceCardModel = useMemo(
+    () => ({
+      kind: 'evidence',
+      sourceType: 'backend_summary',
+      accent: 'navy',
+      eyebrow: 'Coverage',
+      eyebrowIcon: PlayCircle,
+      title: 'Where your reviews are coming from',
+      description:
+        'The engine seeds cards automatically across writing, speaking, reading, listening, grammar, pronunciation, vocabulary, and mocks. This card summarises the split.',
+      metaItems: [
+        { icon: Brain, label: `${totalItems} total items` },
+        { icon: Clock, label: `${data.summary?.upcoming ?? 0} upcoming 7d` },
+      ],
+      secondaryAction: {
+        label: 'Open study plan',
+        href: '/study-plan',
+        variant: 'outline',
+      },
+    }),
+    [totalItems, data.summary?.upcoming],
+  );
 
   return (
-    <LearnerDashboardShell>
+    <LearnerDashboardShell pageTitle="Review">
       <div className="space-y-6">
-      <LearnerPageHero
-        eyebrow="Learn"
-        title="Spaced Repetition Review"
-        description="Review your weak areas with smart scheduling."
-        icon={Brain}
-        highlights={heroHighlights}
-      />
+        <LearnerPageHero
+          eyebrow="Learn"
+          title="Spaced Repetition Review"
+          description="Every mistake you make across the platform becomes a review card. Rate them here and the engine schedules the next session."
+          icon={Brain}
+          highlights={heroHighlights}
+        />
 
-      {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
+        {error ? (
+          <InlineAlert variant="warning">{error}</InlineAlert>
+        ) : null}
 
-      {/* Summary cards */}
-      {!started && (
-        <div>
-          <LearnerSurfaceSectionHeader eyebrow="Session overview" title="Review at a glance" description="The overview should feel like the dashboard summary row." className="mb-4" />
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4 mb-8">
-          {[
-            { label: 'Due Today', value: summary?.dueToday ?? 0, color: 'text-red-600 dark:text-red-400' },
-            { label: 'Total Due', value: summary?.due ?? 0, color: 'text-orange-600 dark:text-orange-400' },
-            { label: 'Total Items', value: summary?.total ?? 0, color: 'text-blue-600 dark:text-blue-400' },
-            { label: 'Mastered', value: summary?.mastered ?? 0, color: 'text-green-600 dark:text-green-400' },
-          ].map(stat => (
-            <Card key={stat.label} className="rounded-3xl p-4 text-center shadow-sm">
-              <div className={`text-3xl font-bold ${stat.color}`}>{stat.value}</div>
-              <div className="mt-1 text-sm text-muted">{stat.label}</div>
-            </Card>
-          ))}
+        {lastSessionSummary ? (
+          <InlineAlert variant="info">
+            Last session: {lastSessionSummary.reviewed} reviewed · {lastSessionSummary.correct} correct
+            {lastSessionSummary.masteredJustNow > 0
+              ? ` · +${lastSessionSummary.masteredJustNow} mastered`
+              : null}
+          </InlineAlert>
+        ) : null}
+
+        {/* Two-card hero grid — mirrors app/page.tsx rhythm */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
+          <MotionItem delayIndex={0}>
+            <LearnerSurfaceCard card={startCard} />
+          </MotionItem>
+          <MotionItem delayIndex={1}>
+            <LearnerSurfaceCard card={heatmapCard} />
+          </MotionItem>
         </div>
-        </div>
-      )}
 
-      {!started && !done && (
-        <div className="flex justify-center">
-          <button
-            onClick={() => setStarted(true)}
-            disabled={items.length === 0}
-            className="inline-flex items-center gap-2 rounded-2xl bg-primary px-8 py-3 font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
-          >
-            Start Review ({items.length} items) <ChevronRight className="w-5 h-5" />
-          </button>
-        </div>
-      )}
+        {status === 'loading' && !data.summary ? (
+          <SummarySkeleton />
+        ) : (
+          <SummaryStats summary={data.summary} />
+        )}
 
-      {started && !done && currentItem && (
-        <div className="mx-auto max-w-3xl">
-          <LearnerSurfaceSectionHeader eyebrow="Active session" title="Review one item at a time" description="The active card should feel like a focused surface within the same dashboard system." className="mb-4" />
-          {/* Progress */}
-          <div className="mb-4 flex items-center justify-between text-sm text-muted">
-            <span>{current + 1} / {items.length}</span>
-            <span>{sessionStats.correct} correct so far</span>
+        {/* Retention + upcoming rail row */}
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
+          <div className="lg:col-span-8">
+            <RetentionTrendCard data={data.retention} loading={status === 'loading'} />
           </div>
-          <div className="mb-6 h-2 w-full rounded-full bg-background-light">
-            <div
-              className="h-2 rounded-full bg-primary transition-all"
-              style={{ width: `${Math.min(100, ((current + 1) / items.length) * 100)}%` }}
+          <div className="lg:col-span-4">
+            <UpcomingReviewRail items={data.items} loading={status === 'loading'} />
+          </div>
+        </div>
+
+        {/* Empty / heatmap */}
+        {status === 'ready' && !hasAnyItems ? (
+          <ReviewEmptyState />
+        ) : (
+          <div>
+            <LearnerSurfaceSectionHeader
+              eyebrow="Session overview"
+              title="Weak area heatmap"
+              description="The count of active review cards grouped by source. Focus first where the due count is highest."
+              className="mb-4"
             />
+            <ReviewHeatmapCard data={data.heatmap} loading={status === 'loading'} />
           </div>
+        )}
 
-          <AnimatePresence mode="wait">
-            <motion.div
-              key={currentItem.id}
-              initial={{ opacity: 0, x: 30 }}
-              animate={{ opacity: 1, x: 0 }}
-              exit={{ opacity: 0, x: -30 }}
-              className="mb-6 rounded-3xl border border-border bg-surface p-6 shadow-sm"
+        {/* Queue ready CTA - redundant secondary entry for small screens */}
+        {hasQueue ? (
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-3xl border border-border bg-surface px-5 py-4 shadow-sm">
+            <div>
+              <p className="text-sm font-semibold text-navy">Ready when you are</p>
+              <p className="text-xs text-muted">
+                {dueCount} card{dueCount === 1 ? '' : 's'} due · estimated {Math.max(1, Math.round(dueCount * 0.5))} minutes
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSessionOpen(true)}
+              className="inline-flex items-center gap-2 rounded-2xl bg-primary px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-primary/90"
             >
-              <div className="mb-3 text-xs font-medium uppercase text-primary">{currentItem.examTypeCode} · {currentItem.subtestCode || 'General'}</div>
-              <div className="mb-4 text-lg font-medium text-navy">
-                {(() => { try { const q = JSON.parse(currentItem.questionJson); return q.text ?? currentItem.questionJson; } catch { return currentItem.questionJson; } })()}
-              </div>
-
-              {!revealed ? (
-                <button
-                  onClick={() => setRevealed(true)}
-                  className="w-full rounded-2xl border-2 border-dashed border-border py-3 font-medium text-muted transition-colors hover:border-primary hover:text-primary"
-                >
-                  Tap to reveal answer
-                </button>
-              ) : (
-                <MotionItem>
-                  <div className="mb-5 rounded-2xl border border-border bg-background-light p-4 text-navy/80">
-                    {(() => { try { const a = JSON.parse(currentItem.answerJson); return a.text ?? currentItem.answerJson; } catch { return currentItem.answerJson; } })()}
-                  </div>
-                  <div className="mb-3 text-center text-sm text-muted">How well did you recall this?</div>
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-                    {QUALITY_LABELS.map((label, q) => (
-                      <button
-                        key={q}
-                        onClick={() => handleRate(q)}
-                        disabled={submitting}
-                        className={`py-2 rounded-lg text-white text-sm font-medium transition-colors ${QUALITY_COLORS[q]} disabled:opacity-50`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                </MotionItem>
-              )}
-            </motion.div>
-          </AnimatePresence>
-        </div>
-      )}
-
-      {done && (
-        <MotionPage className="mx-auto max-w-md py-12 text-center">
-          <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
-          <h2 className="mb-2 text-2xl font-bold text-navy">Session Complete</h2>
-          <p className="mb-6 text-muted">{sessionStats.reviewed} items reviewed · {sessionStats.correct} correct ({sessionStats.reviewed > 0 ? Math.round((sessionStats.correct / sessionStats.reviewed) * 100) : 0}%)</p>
-          <button
-            onClick={() => { setStarted(false); setDone(false); setCurrent(0); setRevealed(false); setSessionStats({ reviewed: 0, correct: 0 }); }}
-            className="mx-auto inline-flex items-center gap-2 rounded-2xl bg-primary px-6 py-2.5 font-medium text-white hover:bg-primary-dark"
-          >
-            <RotateCcw className="w-4 h-4" /> Review Again
-          </button>
-        </MotionPage>
-      )}
+              Start review
+              <PlayCircle className="h-4 w-4" />
+            </button>
+          </div>
+        ) : null}
       </div>
+
+      <ReviewSessionModal
+        open={sessionOpen}
+        items={data.items}
+        onClose={() => setSessionOpen(false)}
+        onSessionComplete={handleSessionComplete}
+      />
     </LearnerDashboardShell>
+  );
+}
+
+function SummaryStats({ summary }: { summary: ReviewSummary | null }) {
+  const stats = [
+    {
+      label: 'Due Today',
+      value: summary?.dueToday ?? 0,
+      tone: 'text-danger',
+    },
+    {
+      label: 'Total Due',
+      value: summary?.due ?? 0,
+      tone: 'text-warning',
+    },
+    {
+      label: 'Total Items',
+      value: summary?.total ?? 0,
+      tone: 'text-info',
+    },
+    {
+      label: 'Mastered',
+      value: summary?.mastered ?? 0,
+      tone: 'text-success',
+    },
+  ];
+  return (
+    <div>
+      <LearnerSurfaceSectionHeader
+        eyebrow="Session overview"
+        title="Review at a glance"
+        description="A quick read of your retention queue, aligned with the dashboard summary row."
+        className="mb-4"
+      />
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        {stats.map((stat) => (
+          <Card key={stat.label} className="rounded-3xl p-4 text-center shadow-sm">
+            <div className={`text-3xl font-bold ${stat.tone}`}>{stat.value}</div>
+            <div className="mt-1 text-sm text-muted">{stat.label}</div>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function SummarySkeleton() {
+  return (
+    <div>
+      <Skeleton className="mb-4 h-12 w-64 rounded-xl" />
+      <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <Skeleton key={i} className="h-24 rounded-3xl" />
+        ))}
+      </div>
+    </div>
   );
 }

@@ -32,7 +32,8 @@ public class ReadingAuthoringTests
         var cache = new MemoryCache(new MemoryCacheOptions());
         var structure = new ReadingStructureService(db);
         var policy = new ReadingPolicyService(db, cache);
-        var grader = new ReadingGradingService(db, policy, NullLogger<ReadingGradingService>.Instance);
+        var seeder = new ReviewItemSeeder(db, NullLogger<ReviewItemSeeder>.Instance);
+        var grader = new ReadingGradingService(db, policy, seeder, NullLogger<ReadingGradingService>.Instance);
         var attempt = new ReadingAttemptService(db, policy, grader, NullLogger<ReadingAttemptService>.Instance);
         return (db, structure, policy, grader, attempt);
     }
