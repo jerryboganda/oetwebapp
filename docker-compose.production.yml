@@ -69,6 +69,14 @@ services:
       Proxy__EnforceHttps: true
       Cors__AllowedOriginsCsv: ${CORS_ALLOWED_ORIGINS}
       Features__EnableSwagger: ${ENABLE_SWAGGER:-false}
+      # AI — DigitalOcean Serverless Inference + Anthropic Claude Opus 4.7
+      AI__ProviderId: ${AI__ProviderId:-digitalocean-serverless}
+      AI__BaseUrl: ${AI__BaseUrl:-https://inference.do-ai.run/v1}
+      AI__ApiKey: ${AI__ApiKey:-}
+      AI__DefaultModel: ${AI__DefaultModel:-anthropic-claude-opus-4.7}
+      AI__ReasoningEffort: ${AI__ReasoningEffort:-high}
+      AI__DefaultMaxTokens: ${AI__DefaultMaxTokens:-4096}
+      AI__DefaultTemperature: ${AI__DefaultTemperature:-0.2}
     volumes:
       - oet_learner_storage:/var/opt/oet-learner/storage
     expose:
