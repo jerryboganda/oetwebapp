@@ -94,6 +94,8 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     // AI features entities
     public DbSet<ConversationSession> ConversationSessions => Set<ConversationSession>();
     public DbSet<ConversationTurn> ConversationTurns => Set<ConversationTurn>();
+    public DbSet<ConversationEvaluation> ConversationEvaluations => Set<ConversationEvaluation>();
+    public DbSet<ConversationTurnAnnotation> ConversationTurnAnnotations => Set<ConversationTurnAnnotation>();
     public DbSet<WritingCoachSession> WritingCoachSessions => Set<WritingCoachSession>();
     public DbSet<WritingCoachSuggestion> WritingCoachSuggestions => Set<WritingCoachSuggestion>();
     public DbSet<PronunciationAssessment> PronunciationAssessments => Set<PronunciationAssessment>();
@@ -407,7 +409,15 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
 
         // Conversation indexes
         modelBuilder.Entity<ConversationSession>().HasIndex(x => new { x.UserId, x.State });
+        modelBuilder.Entity<ConversationSession>().HasIndex(x => new { x.UserId, x.CreatedAt });
+        modelBuilder.Entity<ConversationSession>().HasIndex(x => x.TemplateId);
         modelBuilder.Entity<ConversationTurn>().HasIndex(x => new { x.SessionId, x.TurnNumber });
+        modelBuilder.Entity<ConversationEvaluation>().HasIndex(x => x.SessionId).IsUnique();
+        modelBuilder.Entity<ConversationEvaluation>().HasIndex(x => new { x.UserId, x.CreatedAt });
+        modelBuilder.Entity<ConversationTurnAnnotation>().HasIndex(x => new { x.SessionId, x.TurnNumber });
+        modelBuilder.Entity<ConversationTurnAnnotation>().HasIndex(x => x.EvaluationId);
+        modelBuilder.Entity<ConversationTemplate>().HasIndex(x => new { x.Status, x.TaskTypeCode, x.ProfessionId });
+        modelBuilder.Entity<ConversationTemplate>().HasIndex(x => new { x.Status, x.Difficulty });
 
         // Writing coach indexes
         modelBuilder.Entity<WritingCoachSession>().HasIndex(x => x.AttemptId);

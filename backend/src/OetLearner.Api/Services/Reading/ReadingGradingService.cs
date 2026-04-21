@@ -73,7 +73,7 @@ public sealed class ReadingGradingService(
         var questionById = questions.ToDictionary(q => q.Id);
         var answersByQuestionId = attempt.Answers.ToDictionary(a => a.ReadingQuestionId);
 
-        var policy = await policyService.ResolveForUserAsync(attempt.UserId, ct);
+        var policy = await ResolvePolicyForAttemptAsync(attempt, ct);
         var details = new List<ReadingAnswerResult>(questions.Count);
 
         int raw = 0, correctCount = 0, incorrectCount = 0, unanswered = 0;
@@ -229,6 +229,18 @@ public sealed class ReadingGradingService(
         if (a is null || b is null) return false;
         var na = Normalise(a, normalisation);
         var nb = Normalise(b, normalisation);
+
+        if (string.Equals(normalisation, "fuzzy_levenshtein_1", StringComparison.OrdinalIgnoreCase))
+        {
+            if (!caseSensitive)
+            {
+                na = na.ToUpperInvariant();
+                nb = nb.ToUpperInvariant();
+            }
+
+            return LevenshteinDistanceAtMostOne(na, nb);
+        }
+
         return caseSensitive
             ? string.Equals(na, nb, StringComparison.Ordinal)
             : string.Equals(na, nb, StringComparison.OrdinalIgnoreCase);
@@ -238,9 +250,48 @@ public sealed class ReadingGradingService(
     {
         "exact" => s,
         "trim_only" => s.Trim(),
-        "fuzzy_levenshtein_1" => CollapseWhitespace(s.Trim()), // distance computed by caller if enabled; default same as trim_collapse
+        "fuzzy_levenshtein_1" => CollapseWhitespace(s.Trim()),
         _ /* trim_collapse_case_insensitive */ => CollapseWhitespace(s.Trim()),
     };
+
+    private static bool LevenshteinDistanceAtMostOne(string a, string b)
+    {
+        if (string.Equals(a, b, StringComparison.Ordinal)) return true;
+        if (Math.Abs(a.Length - b.Length) > 1) return false;
+
+        var edits = 0;
+        var i = 0;
+        var j = 0;
+        while (i < a.Length && j < b.Length)
+        {
+            if (a[i] == b[j])
+            {
+                i++;
+                j++;
+                continue;
+            }
+
+            edits++;
+            if (edits > 1) return false;
+
+            if (a.Length == b.Length)
+            {
+                i++;
+                j++;
+            }
+            else if (a.Length > b.Length)
+            {
+                i++;
+            }
+            else
+            {
+                j++;
+            }
+        }
+
+        if (i < a.Length || j < b.Length) edits++;
+        return edits <= 1;
+    }
 
     private static string CollapseWhitespace(string s)
     {
@@ -311,5 +362,26 @@ public sealed class ReadingGradingService(
             attempt.ScaledScore ?? OetScoring.OetRawToScaled(raw),
             OetScoring.OetGradeLetterFromScaled(attempt.ScaledScore ?? OetScoring.OetRawToScaled(raw)),
             correct, wrong, unans, details);
+    }
+
+    private async Task<ReadingResolvedPolicy> ResolvePolicyForAttemptAsync(ReadingAttempt attempt, CancellationToken ct)
+    {
+        try
+        {
+            var snapshot = JsonSerializer.Deserialize<ReadingResolvedPolicy>(attempt.PolicySnapshotJson);
+            if (snapshot is not null
+                && !string.IsNullOrWhiteSpace(snapshot.PartATimerStrictness)
+                && !string.IsNullOrWhiteSpace(snapshot.ShortAnswerNormalisation)
+                && !string.IsNullOrWhiteSpace(snapshot.UnknownTypeFallbackPolicy))
+            {
+                return snapshot;
+            }
+        }
+        catch (JsonException)
+        {
+            // Older or malformed attempts fall back to the current resolver.
+        }
+
+        return await policyService.ResolveForUserAsync(attempt.UserId, ct);
     }
 }

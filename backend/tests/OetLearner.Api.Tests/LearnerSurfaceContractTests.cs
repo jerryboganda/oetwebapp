@@ -1,4 +1,6 @@
+using System.Net.Http.Json;
 using System.Text.Json;
+using OetLearner.Api.Services;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
@@ -51,18 +53,65 @@ public class LearnerSurfaceContractTests : IClassFixture<TestWebApplicationFacto
         var readingResponse = await _client.GetAsync("/v1/reading/home");
         readingResponse.EnsureSuccessStatusCode();
         using var readingJson = JsonDocument.Parse(await readingResponse.Content.ReadAsStringAsync());
-        Assert.True(readingJson.RootElement.TryGetProperty("entryPoints", out _));
-        Assert.True(readingJson.RootElement.TryGetProperty("speedDrills", out _));
-        Assert.True(readingJson.RootElement.TryGetProperty("accuracyDrills", out _));
-        Assert.True(readingJson.RootElement.TryGetProperty("mockSets", out _));
+        Assert.True(readingJson.RootElement.TryGetProperty("papers", out _));
+        Assert.True(readingJson.RootElement.TryGetProperty("activeAttempts", out _));
+        Assert.True(readingJson.RootElement.TryGetProperty("recentResults", out _));
+        Assert.True(readingJson.RootElement.TryGetProperty("policy", out _));
 
         var listeningResponse = await _client.GetAsync("/v1/listening/home");
         listeningResponse.EnsureSuccessStatusCode();
         using var listeningJson = JsonDocument.Parse(await listeningResponse.Content.ReadAsStringAsync());
+        Assert.True(listeningJson.RootElement.TryGetProperty("papers", out _));
+        Assert.True(listeningJson.RootElement.TryGetProperty("activeAttempts", out _));
+        Assert.True(listeningJson.RootElement.TryGetProperty("recentResults", out _));
+        Assert.True(listeningJson.RootElement.TryGetProperty("emptyStates", out _));
         Assert.True(listeningJson.RootElement.TryGetProperty("partCollections", out _));
         Assert.True(listeningJson.RootElement.TryGetProperty("transcriptBackedReview", out _));
         Assert.True(listeningJson.RootElement.TryGetProperty("distractorDrills", out _));
         Assert.True(listeningJson.RootElement.TryGetProperty("accessPolicyHints", out _));
+    }
+
+    [Fact]
+    public async Task ListeningPaperSession_HidesAnswerKeyBeforeSubmit()
+    {
+        var response = await _client.GetAsync("/v1/listening-papers/papers/lt-001/session?mode=practice");
+        response.EnsureSuccessStatusCode();
+
+        var payload = await response.Content.ReadAsStringAsync();
+        using var json = JsonDocument.Parse(payload);
+
+        Assert.True(json.RootElement.TryGetProperty("questions", out var questions));
+        Assert.NotEqual(0, questions.GetArrayLength());
+        Assert.DoesNotContain("correctAnswer", payload, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("acceptedAnswers", payload, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("transcriptExcerpt", payload, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public async Task ListeningPaperAttempt_SubmitsCanonicalScoreAndPolicySafeReview()
+    {
+        var start = await _client.PostAsJsonAsync("/v1/listening-papers/papers/lt-001/attempts", new { mode = "practice" });
+        start.EnsureSuccessStatusCode();
+        using var startJson = JsonDocument.Parse(await start.Content.ReadAsStringAsync());
+        var attemptId = startJson.RootElement.GetProperty("attemptId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(attemptId));
+
+        await SaveListeningAnswerAsync(attemptId!, "lq-1", "Increasing breathlessness at night");
+        await SaveListeningAnswerAsync(attemptId!, "lq-2", "3-4 times per week");
+        await SaveListeningAnswerAsync(attemptId!, "lq-3", "Combination inhaler");
+
+        var submit = await _client.PostAsync($"/v1/listening-papers/attempts/{attemptId}/submit", null);
+        submit.EnsureSuccessStatusCode();
+        using var review = JsonDocument.Parse(await submit.Content.ReadAsStringAsync());
+
+        Assert.Equal(3, review.RootElement.GetProperty("rawScore").GetInt32());
+        Assert.Equal(42, review.RootElement.GetProperty("maxRawScore").GetInt32());
+        Assert.Equal(OetScoring.OetRawToScaled(3), review.RootElement.GetProperty("scaledScore").GetInt32());
+        Assert.False(review.RootElement.GetProperty("passed").GetBoolean());
+        Assert.True(review.RootElement.TryGetProperty("itemReview", out var items));
+        Assert.Equal(3, items.GetArrayLength());
+        Assert.True(review.RootElement.TryGetProperty("transcriptAccess", out var access));
+        Assert.Equal("partial", access.GetProperty("state").GetString());
     }
 
     [Fact]
@@ -163,5 +212,13 @@ public class LearnerSurfaceContractTests : IClassFixture<TestWebApplicationFacto
         client.DefaultRequestHeaders.Add("X-Debug-Email", $"{userId}@example.test");
         client.DefaultRequestHeaders.Add("X-Debug-Name", userId);
         return client;
+    }
+
+    private async Task SaveListeningAnswerAsync(string attemptId, string questionId, string answer)
+    {
+        var response = await _client.PutAsJsonAsync(
+            $"/v1/listening-papers/attempts/{attemptId}/answers/{questionId}",
+            new { userAnswer = answer });
+        response.EnsureSuccessStatusCode();
     }
 }

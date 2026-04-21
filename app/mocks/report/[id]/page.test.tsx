@@ -1,6 +1,8 @@
 import { screen } from '@testing-library/react';
-const { mockFetchMockReport, mockTrack } = vi.hoisted(() => ({
+const { mockAddToMyVocabulary, mockFetchMockReport, mockFetchVocabularyTerms, mockTrack } = vi.hoisted(() => ({
+  mockAddToMyVocabulary: vi.fn(),
   mockFetchMockReport: vi.fn(),
+  mockFetchVocabularyTerms: vi.fn(),
   mockTrack: vi.fn(),
 }));
 
@@ -22,7 +24,9 @@ vi.mock('@/lib/analytics', () => ({
 }));
 
 vi.mock('@/lib/api', () => ({
+  addToMyVocabulary: mockAddToMyVocabulary,
   fetchMockReport: mockFetchMockReport,
+  fetchVocabularyTerms: mockFetchVocabularyTerms,
 }));
 
 import MockReportPage from './page';
@@ -52,6 +56,8 @@ describe('Mock report page', () => {
         description: 'More work is needed on exact detail extraction under time pressure.',
       },
     });
+    mockFetchVocabularyTerms.mockResolvedValue([]);
+    mockAddToMyVocabulary.mockResolvedValue({});
   });
 
   it('renders through the shared learner dashboard shell without a second page-root width wrapper', async () => {

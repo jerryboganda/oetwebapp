@@ -60,6 +60,7 @@ const adminNavItems: NavItem[] = [
   { href: '/admin/grammar', label: 'Grammar CMS', icon: <Library className="w-5 h-5" />, matchPrefix: '/admin/grammar' },
   { href: '/admin/pronunciation', label: 'Pronunciation CMS', icon: <Mic className="w-5 h-5" />, matchPrefix: '/admin/pronunciation' },
   { href: '/admin/content/vocabulary', label: 'Vocabulary CMS', icon: <Library className="w-5 h-5" />, matchPrefix: '/admin/content/vocabulary' },
+  { href: '/admin/content/conversation', label: 'Conversation CMS', icon: <MessageSquareText className="w-5 h-5" />, matchPrefix: '/admin/content/conversation' },
   { href: '/admin/marketplace-review', label: 'Marketplace Review', icon: <Store className="w-5 h-5" />, matchPrefix: '/admin/marketplace-review' },
   { href: '/admin/freeze', label: 'Content Freeze', icon: <Snowflake className="w-5 h-5" />, matchPrefix: '/admin/freeze' },
   { href: '/admin/content-hierarchy', label: 'Content Hierarchy', icon: <GitBranch className="w-5 h-5" />, matchPrefix: '/admin/content-hierarchy' },
@@ -103,6 +104,7 @@ const adminMobileMenuSections: MobileMenuSection[] = [
 function isContentWorkspace(pathname: string | null) {
   if (!pathname) return false;
   if (pathname.startsWith('/admin/content/vocabulary')) return false;
+  if (pathname.startsWith('/admin/content/conversation')) return false;
   return pathname === '/admin/content/new' || Boolean(pathname?.match(/^\/admin\/content\/[^/]+$/));
 }
 
@@ -121,6 +123,10 @@ function getAdminPageTitle(pathname: string | null) {
 
   if (pathname.startsWith('/admin/content/vocabulary')) {
     return 'Vocabulary CMS';
+  }
+
+  if (pathname.startsWith('/admin/content/conversation')) {
+    return 'Conversation CMS';
   }
 
   if (pathname.startsWith('/admin/content')) {

@@ -1,7 +1,12 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
+using OetLearner.Api.Data;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Listening;
+using OetLearner.Api.Services.Reading;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -100,7 +105,12 @@ public static class LearnerEndpoints
         speaking.MapPost("/device-checks", (DeviceCheckRequest request, LearnerService service) => Results.Ok(service.SaveDeviceCheck(request)));
 
         var reading = v1.MapGroup("/reading");
-        reading.MapGet("/home", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReadingHomeAsync(ct)));
+        reading.MapGet("/home", async (
+            HttpContext http,
+            LearnerDbContext db,
+            IReadingPolicyService policy,
+            CancellationToken ct) =>
+            Results.Ok(await GetStructuredReadingHomeAsync(http.UserId(), db, policy, ct)));
         reading.MapGet("/tasks/{contentId}", async (string contentId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReadingTaskAsync(contentId, ct)));
         reading.MapPost("/attempts", async (HttpContext http, CreateAttemptRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateReadingAttemptAsync(http.UserId(), request, ct)));
         reading.MapGet("/attempts/{attemptId}", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReadingAttemptAsync(http.UserId(), attemptId, ct)));
@@ -110,7 +120,7 @@ public static class LearnerEndpoints
         reading.MapGet("/evaluations/{evaluationId}", async (HttpContext http, string evaluationId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReadingEvaluationAsync(http.UserId(), evaluationId, ct)));
 
         var listening = v1.MapGroup("/listening");
-        listening.MapGet("/home", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetListeningHomeAsync(ct)));
+        listening.MapGet("/home", async (HttpContext http, ListeningLearnerService service, CancellationToken ct) => Results.Ok(await service.GetHomeAsync(http.UserId(), ct)));
         listening.MapGet("/tasks/{contentId}", async (string contentId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetListeningTaskAsync(contentId, ct)));
         listening.MapPost("/attempts", async (HttpContext http, CreateAttemptRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateListeningAttemptAsync(http.UserId(), request, ct)));
         listening.MapGet("/attempts/{attemptId}", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetListeningAttemptAsync(http.UserId(), attemptId, ct)));
@@ -356,6 +366,173 @@ public static class LearnerEndpoints
     private static string UserId(this HttpContext httpContext)
         => httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
            ?? throw new InvalidOperationException("Authenticated user id is required.");
+
+    private static async Task<object> GetStructuredReadingHomeAsync(
+        string userId,
+        LearnerDbContext db,
+        IReadingPolicyService policyService,
+        CancellationToken ct)
+    {
+        var policy = await policyService.ResolveForUserAsync(userId, ct);
+        var publishedReadingPapers = await db.ContentPapers.AsNoTracking()
+            .Where(p => p.Status == ContentStatus.Published
+                && p.SubtestCode.ToLower() == "reading")
+            .OrderByDescending(p => p.Priority)
+            .ThenByDescending(p => p.PublishedAt)
+            .ThenBy(p => p.Title)
+            .ToListAsync(ct);
+
+        var readyPapers = new List<ContentPaper>();
+        var structureService = new ReadingStructureService(db);
+        foreach (var paper in publishedReadingPapers)
+        {
+            var validation = await structureService.ValidatePaperAsync(paper.Id, ct);
+            if (validation.IsPublishReady) readyPapers.Add(paper);
+        }
+
+        var paperIds = readyPapers.Select(p => p.Id).ToList();
+        var parts = await db.ReadingParts.AsNoTracking()
+            .Where(p => paperIds.Contains(p.PaperId))
+            .Include(p => p.Questions)
+            .ToListAsync(ct);
+        var partsByPaper = parts.GroupBy(p => p.PaperId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var attempts = await db.ReadingAttempts.AsNoTracking()
+            .Include(a => a.Answers)
+            .Where(a => a.UserId == userId && paperIds.Contains(a.PaperId))
+            .OrderByDescending(a => a.LastActivityAt)
+            .ToListAsync(ct);
+        var attemptsByPaper = attempts.GroupBy(a => a.PaperId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var paperTitles = readyPapers.ToDictionary(p => p.Id, p => p.Title);
+        var activeAttempts = attempts
+            .Where(a => a.Status == ReadingAttemptStatus.InProgress)
+            .Take(3)
+            .Select(a =>
+            {
+                var snapshot = ResolveReadingPolicySnapshot(a.PolicySnapshotJson, policy);
+                var totalQuestions = partsByPaper.TryGetValue(a.PaperId, out var paperParts)
+                    ? paperParts.Sum(p => p.Questions.Count)
+                    : 0;
+                return new
+                {
+                    attemptId = a.Id,
+                    paperId = a.PaperId,
+                    paperTitle = paperTitles.GetValueOrDefault(a.PaperId, "Reading paper"),
+                    status = a.Status.ToString(),
+                    a.StartedAt,
+                    a.DeadlineAt,
+                    partADeadlineAt = a.StartedAt.AddMinutes(snapshot.PartATimerMinutes),
+                    partBCDeadlineAt = a.StartedAt.AddMinutes(snapshot.PartATimerMinutes + snapshot.PartBCTimerMinutes),
+                    answeredCount = a.Answers.Count,
+                    totalQuestions,
+                    canResume = a.DeadlineAt is null || a.DeadlineAt >= DateTimeOffset.UtcNow || snapshot.AllowResumeAfterExpiry,
+                    route = $"/reading/paper/{a.PaperId}?attemptId={a.Id}",
+                };
+            })
+            .ToList();
+
+        var recentResults = attempts
+            .Where(a => a.Status == ReadingAttemptStatus.Submitted)
+            .OrderByDescending(a => a.SubmittedAt)
+            .Take(5)
+            .Select(a => new
+            {
+                attemptId = a.Id,
+                paperId = a.PaperId,
+                paperTitle = paperTitles.GetValueOrDefault(a.PaperId, "Reading paper"),
+                rawScore = a.RawScore ?? 0,
+                maxRawScore = a.MaxRawScore,
+                scaledScore = a.ScaledScore ?? OetScoring.OetRawToScaled(a.RawScore ?? 0),
+                gradeLetter = OetScoring.OetGradeLetterFromScaled(
+                    a.ScaledScore ?? OetScoring.OetRawToScaled(a.RawScore ?? 0)),
+                a.SubmittedAt,
+                route = $"/reading/paper/{a.PaperId}/results?attemptId={a.Id}",
+            })
+            .ToList();
+
+        var papers = readyPapers.Select(p =>
+        {
+            partsByPaper.TryGetValue(p.Id, out var paperParts);
+            paperParts ??= new List<ReadingPart>();
+            var lastAttempt = attemptsByPaper.TryGetValue(p.Id, out var paperAttempts)
+                ? paperAttempts.OrderByDescending(a => a.LastActivityAt).FirstOrDefault()
+                : null;
+            return new
+            {
+                id = p.Id,
+                p.Title,
+                p.Slug,
+                p.Difficulty,
+                p.EstimatedDurationMinutes,
+                p.PublishedAt,
+                route = $"/reading/paper/{p.Id}",
+                partACount = CountPartQuestions(paperParts, ReadingPartCode.A),
+                partBCount = CountPartQuestions(paperParts, ReadingPartCode.B),
+                partCCount = CountPartQuestions(paperParts, ReadingPartCode.C),
+                totalPoints = paperParts.Sum(part => part.Questions.Sum(q => q.Points)),
+                partATimerMinutes = policy.PartATimerMinutes,
+                partBCTimerMinutes = policy.PartBCTimerMinutes,
+                lastAttempt = lastAttempt is null ? null : new
+                {
+                    attemptId = lastAttempt.Id,
+                    status = lastAttempt.Status.ToString(),
+                    lastAttempt.StartedAt,
+                    lastAttempt.SubmittedAt,
+                    rawScore = lastAttempt.RawScore,
+                    scaledScore = lastAttempt.ScaledScore,
+                    route = lastAttempt.Status == ReadingAttemptStatus.Submitted
+                        ? $"/reading/paper/{p.Id}/results?attemptId={lastAttempt.Id}"
+                        : $"/reading/paper/{p.Id}?attemptId={lastAttempt.Id}",
+                },
+            };
+        }).ToList();
+
+        return new
+        {
+            intro = "Build Reading accuracy with full structured OET papers before validating it in mocks.",
+            papers,
+            activeAttempts,
+            recentResults,
+            policy = new
+            {
+                policy.PartATimerMinutes,
+                policy.PartBCTimerMinutes,
+                policy.AllowPausingAttempt,
+                policy.AllowResumeAfterExpiry,
+                policy.ShowCorrectAnswerOnReview,
+                policy.ShowExplanationsAfterSubmit,
+            },
+            safeDrills = Array.Empty<object>(),
+        };
+    }
+
+    private static int CountPartQuestions(IReadOnlyCollection<ReadingPart> parts, ReadingPartCode code)
+        => parts.FirstOrDefault(part => part.PartCode == code)?.Questions.Count ?? 0;
+
+    private static ReadingResolvedPolicy ResolveReadingPolicySnapshot(
+        string json,
+        ReadingResolvedPolicy fallback)
+    {
+        try
+        {
+            var snapshot = System.Text.Json.JsonSerializer.Deserialize<ReadingResolvedPolicy>(json);
+            if (snapshot is not null
+                && !string.IsNullOrWhiteSpace(snapshot.PartATimerStrictness)
+                && !string.IsNullOrWhiteSpace(snapshot.ShortAnswerNormalisation))
+            {
+                return snapshot;
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            // Use the current policy summary for legacy attempts with no usable snapshot.
+        }
+
+        return fallback;
+    }
 }
 
 public record PeerReviewSubmitRequest(string AttemptId, string SubtestCode);

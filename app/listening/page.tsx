@@ -1,43 +1,80 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { MotionItem } from '@/components/ui/motion-primitives';
-import { ArrowRight, Clock, FileText, Headphones, Sparkles, Target, Volume2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { ArrowRight, CheckCircle2, Clock, FileText, Headphones, History, Sparkles, Target, Volume2 } from 'lucide-react';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
-import { fetchListeningHome, fetchMockReports } from '@/lib/api';
+import { fetchMockReports } from '@/lib/api';
+import { getListeningHome, type ListeningHomeDto, type ListeningHomePaperDto, type ListeningHomeTaskDto } from '@/lib/listening-api';
 import type { MockReport } from '@/lib/mock-data';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 
-interface ListeningHomeTask {
-  contentId: string;
-  title: string;
-  estimatedDurationMinutes: number;
-  difficulty: string;
-  scenarioType?: string;
+function titleCase(value: string | null | undefined) {
+  if (!value) return 'Standard';
+  return value.replace(/[_-]/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
+function paperMeta(paper: ListeningHomePaperDto) {
+  const missing = [
+    !paper.assetReadiness.audio && 'audio',
+    !paper.assetReadiness.questionPaper && 'question paper',
+    !paper.assetReadiness.answerKey && 'answer key',
+    !paper.assetReadiness.audioScript && 'audio script',
+  ].filter(Boolean);
+
+  if (missing.length > 0) return `Missing ${missing.join(', ')}`;
+  if (!paper.objectiveReady) return 'Question map pending';
+  return `${paper.questionCount || 42} authored items`;
+}
+
+function taskToCard(task: ListeningHomeTaskDto, index: number) {
+  const card: LearnerSurfaceCardModel = {
+    kind: 'task',
+    sourceType: 'backend_task',
+    accent: 'indigo',
+    eyebrow: task.scenarioType ? titleCase(task.scenarioType) : 'Demo Listening Task',
+    eyebrowIcon: Volume2,
+    title: task.title,
+    description: 'Use the compatibility task while published Listening papers are being prepared.',
+    metaItems: [
+      { icon: Clock, label: `${task.estimatedDurationMinutes} mins` },
+      { label: titleCase(task.difficulty) },
+      { label: `${task.questionCount} items` },
+    ],
+    primaryAction: {
+      label: 'Start Task',
+      href: `/listening/player/${task.contentId}?mode=practice`,
+    },
+    secondaryAction: {
+      label: 'Exam Mode',
+      href: `/listening/player/${task.contentId}?mode=exam`,
+      variant: 'outline',
+    },
+  };
+
+  return (
+    <MotionItem key={task.contentId} delayIndex={index}>
+      <LearnerSurfaceCard card={card} />
+    </MotionItem>
+  );
 }
 
 export default function ListeningHome() {
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const [home, setHome] = useState<Record<string, any> | null>(null);
-  const [tasks, setTasks] = useState<ListeningHomeTask[]>([]);
+  const [home, setHome] = useState<ListeningHomeDto | null>(null);
   const [mockReports, setMockReports] = useState<MockReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (authLoading) {
-      // Auth state not yet known — keep showing skeletons without fetching.
-      return;
-    }
+    if (authLoading) return;
     if (!isAuthenticated) {
-      // Middleware should have redirected, but defend against stale renders:
-      // stop showing a skeleton forever and let the surface render empty.
       setLoading(false);
       return;
     }
@@ -49,19 +86,16 @@ export default function ListeningHome() {
       try {
         setLoading(true);
         setError(null);
-        const [listeningHome, reports] = await Promise.all([fetchListeningHome(), fetchMockReports()]);
+        const [listeningHome, reports] = await Promise.all([getListeningHome(), fetchMockReports()]);
         if (cancelled) return;
         setHome(listeningHome);
-        setTasks((listeningHome.featuredTasks ?? []) as ListeningHomeTask[]);
         setMockReports(reports);
       } catch (err) {
         if (!cancelled) {
           setError(err instanceof Error ? err.message : 'Failed to load listening practice.');
         }
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     })();
 
@@ -70,45 +104,67 @@ export default function ListeningHome() {
     };
   }, [authLoading, isAuthenticated]);
 
-  const mockRoute = home?.mockSets?.[0]?.route ?? '/mocks';
-  const transcriptRoute = home?.transcriptBackedReview?.route ?? '/listening';
-  const drillRoute = home?.distractorDrills?.[0]?.route ?? '/listening';
+  const papers = home?.papers ?? [];
+  const tasks = home?.featuredTasks ?? [];
+  const activeAttempts = home?.activeAttempts ?? [];
+  const recentResults = home?.recentResults ?? [];
+  const drills = home?.drillGroups?.length ? home.drillGroups : home?.distractorDrills ?? [];
+  const firstDrill = drills[0];
+  const transcriptRoute = home?.transcriptBackedReview?.route ?? null;
+  const hasPractice = papers.length + tasks.length > 0;
 
-  const distractorCard: LearnerSurfaceCardModel = {
-    kind: 'insight',
-    sourceType: 'frontend_insight',
-    accent: 'rose',
-    eyebrow: 'Distractor Focus',
-    eyebrowIcon: Target,
-    title: 'Build more reliable listening discrimination',
-    description: 'Train yourself to capture exact changes in plan, frequencies, and clinical detail instead of approximate impressions.',
-    metaItems: [
-      { icon: Headphones, label: 'Consultation audio' },
-      { icon: Clock, label: 'Post-attempt review' },
-    ],
-  };
+  const heroHighlights = useMemo(() => [
+    {
+      icon: Volume2,
+      label: 'Published papers',
+      value: loading ? 'Loading...' : papers.length ? `${papers.length} ready` : tasks.length ? 'Demo fallback' : 'None yet',
+    },
+    {
+      icon: History,
+      label: 'Resume',
+      value: activeAttempts.length ? `${activeAttempts.length} active` : 'No active attempt',
+    },
+    {
+      icon: FileText,
+      label: 'Transcript review',
+      value: transcriptRoute ? 'Latest result ready' : 'Available after submit',
+    },
+  ], [activeAttempts.length, loading, papers.length, tasks.length, transcriptRoute]);
 
   const transcriptCard: LearnerSurfaceCardModel = {
     kind: 'navigation',
     sourceType: 'backend_summary',
     accent: 'amber',
-    eyebrow: 'Recommended Next Step',
-    eyebrowIcon: Sparkles,
-    title: home?.transcriptBackedReview?.title ?? 'Review transcript-backed evidence',
-    description: home?.accessPolicyHints?.rationale ?? 'Use transcript-backed review after an attempt so you can diagnose distractor patterns with real evidence instead of replaying blindly.',
+    eyebrow: 'Transcript Policy',
+    eyebrowIcon: FileText,
+    title: transcriptRoute ? 'Open transcript-backed review' : 'Transcript review unlocks after an attempt',
+    description: home?.accessPolicyHints?.rationale ?? 'Review transcript evidence only after you have committed to an answer.',
     metaItems: [
-      { icon: Clock, label: 'Timed flow' },
-      { icon: FileText, label: 'Report included' },
+      { icon: CheckCircle2, label: home?.accessPolicyHints?.state === 'available' ? 'Available' : 'Post-attempt' },
+      { icon: Target, label: home?.accessPolicyHints?.policy?.replace(/_/g, ' ') ?? 'per item policy' },
     ],
-    primaryAction: {
-      label: 'Open Transcript Review',
-      href: transcriptRoute,
-    },
+    primaryAction: transcriptRoute
+      ? { label: 'Open Review', href: transcriptRoute }
+      : { label: 'Start Listening', href: hasPractice ? (papers[0]?.route ?? `/listening/player/${tasks[0]?.contentId}`) : '/listening' },
     secondaryAction: {
       label: 'Open Mock Center',
-      href: mockRoute,
+      href: '/mocks',
       variant: 'outline',
     },
+  };
+
+  const drillCard: LearnerSurfaceCardModel = {
+    kind: 'insight',
+    sourceType: 'backend_summary',
+    accent: 'rose',
+    eyebrow: 'Focused Drill',
+    eyebrowIcon: Target,
+    title: firstDrill?.title ?? 'Build more reliable listening discrimination',
+    description: firstDrill?.description ?? 'Train exact frequencies, plan changes, and clinical details before using another full mock.',
+    metaItems: [
+      { icon: Headphones, label: firstDrill ? firstDrill.focusLabel : 'Consultation audio' },
+      { icon: Clock, label: firstDrill ? `${firstDrill.estimatedMinutes} mins` : 'Post-attempt review' },
+    ],
   };
 
   return (
@@ -120,119 +176,213 @@ export default function ListeningHome() {
           accent="indigo"
           title="Train listening accuracy before you test it under pressure"
           description={home?.intro ?? 'Use this workspace to tighten detail capture, review distractors with evidence, and move into transcript-backed follow-up when it helps.'}
-          highlights={[
-            { icon: Volume2, label: 'Featured tasks', value: loading ? 'Loading...' : tasks.length ? `${tasks.length} ready now` : 'None yet' },
-            { icon: Target, label: 'Drill paths', value: `${home?.distractorDrills?.length ?? 0} available` },
-            { icon: FileText, label: 'Transcript review', value: home?.transcriptBackedReview ? 'Available after attempts' : 'Open after a task' },
-          ]}
+          highlights={heroHighlights}
         />
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        <section>
-          <LearnerSurfaceSectionHeader
-            eyebrow="Practice Tasks"
-            title="Open a listening task with a clear outcome"
-            description="Each card tells you what you are practising, how long it should take, and what type of audio scenario you are entering."
-            className="mb-5"
-          />
-
-          {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {[1, 2].map((i) => <Skeleton key={i} className="h-56 rounded-[24px]" />)}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {tasks.map((task, index) => {
-                const taskCard: LearnerSurfaceCardModel = {
-                  kind: 'task',
-                  sourceType: 'backend_task',
-                  accent: 'indigo',
-                  eyebrow: task.scenarioType ? task.scenarioType.replace(/_/g, ' ') : 'Listening Task',
-                  eyebrowIcon: Volume2,
-                  title: task.title,
-                  description: 'Use this task to practise exact detail capture before switching into mock or transcript-backed review.',
-                  metaItems: [
-                    { icon: Clock, label: `${task.estimatedDurationMinutes} mins` },
-                    { label: task.difficulty },
-                  ],
-                  primaryAction: {
-                    label: 'Start Task',
-                    href: `/listening/player/${task.contentId}`,
-                  },
-                };
-
-                return (
-                  <MotionItem
-                    key={task.contentId}
-                    delayIndex={index}
-                  >
-                    <LearnerSurfaceCard card={taskCard} />
-                  </MotionItem>
-                );
-              })}
-            </div>
-          )}
-        </section>
-
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <LearnerSurfaceCard card={distractorCard}>
-            <ul className="space-y-3 text-sm text-navy/80">
-              <li>Listen for exact frequencies, not approximate impressions.</li>
-              <li>Separate the patient&apos;s concern from the clinician&apos;s recommendation.</li>
-              <li>Use transcript-backed review after errors instead of replaying blindly.</li>
-            </ul>
-            <div className="mt-6">
-              <Link href={drillRoute} className="inline-flex items-center gap-2 text-sm font-bold text-primary hover:underline">
-                Open distractor drill <ArrowRight className="h-4 w-4" />
-              </Link>
-            </div>
-          </LearnerSurfaceCard>
-
-          <LearnerSurfaceCard card={transcriptCard} />
-        </section>
-
-        <section>
-          <LearnerSurfaceSectionHeader
-            eyebrow="Recent Mock Reports"
-            title="Track listening impact inside full mocks"
-            description="These reports help you see whether distractor control is improving when listening sits inside the full exam load."
-            action={<Link href="/mocks" className="text-sm font-bold text-primary hover:underline">Open Mock Center</Link>}
-            className="mb-5"
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {mockReports.slice(0, 2).map((report, index) => {
-              const reportCard: LearnerSurfaceCardModel = {
-                kind: 'evidence',
-                sourceType: 'backend_summary',
-                accent: 'slate',
-                eyebrow: 'Mock Evidence',
-                eyebrowIcon: FileText,
-                title: report.title,
-                description: report.summary,
-                metaItems: [
-                  { label: report.date },
-                  { label: report.overallScore },
-                ],
-                primaryAction: {
-                  label: 'View Report',
-                  href: `/mocks/report/${report.id}`,
-                  variant: 'outline',
-                },
-              };
-
-              return (
-                <MotionItem
-                  key={report.id}
-                  delayIndex={index}
-                >
-                  <LearnerSurfaceCard card={reportCard} />
-                </MotionItem>
-              );
-            })}
+        {loading ? (
+          <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+            {[1, 2, 3, 4].map((item) => <Skeleton key={item} className="h-56 rounded-[24px]" />)}
           </div>
-        </section>
+        ) : (
+          <>
+            <section>
+              <LearnerSurfaceSectionHeader
+                eyebrow="Resume"
+                title="Continue without losing your saved answers"
+                description="Listening attempts autosave on the server so audio reloads and page refreshes do not wipe learner work."
+                className="mb-5"
+              />
+              {activeAttempts.length > 0 ? (
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  {activeAttempts.map((attempt, index) => {
+                    const card: LearnerSurfaceCardModel = {
+                      kind: 'task',
+                      sourceType: 'backend_task',
+                      accent: 'indigo',
+                      eyebrow: `${attempt.mode === 'exam' ? 'Exam' : 'Practice'} Mode`,
+                      eyebrowIcon: History,
+                      title: attempt.paperTitle,
+                      description: 'Resume from the latest server-saved answer state.',
+                      metaItems: [
+                        { icon: CheckCircle2, label: `${attempt.answeredCount} saved answers` },
+                        { icon: Clock, label: attempt.lastClientSyncAt ? 'Recently saved' : 'Started' },
+                      ],
+                      primaryAction: { label: 'Resume Attempt', href: attempt.route },
+                    };
+                    return (
+                      <MotionItem key={attempt.attemptId} delayIndex={index}>
+                        <LearnerSurfaceCard card={card} />
+                      </MotionItem>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-[24px] border border-dashed border-gray-200 bg-surface/80 p-6 text-sm text-muted">
+                  {home?.emptyStates.activeAttempts}
+                </div>
+              )}
+            </section>
+
+            <section>
+              <LearnerSurfaceSectionHeader
+                eyebrow="Practice Papers"
+                title="Open a listening task with a clear outcome"
+                description="Published papers use server-side attempts, controlled transcript reveal, and OET raw-to-scaled scoring."
+                className="mb-5"
+              />
+
+              {papers.length > 0 ? (
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  {papers.map((paper, index) => {
+                    const card: LearnerSurfaceCardModel = {
+                      kind: 'task',
+                      sourceType: 'backend_task',
+                      accent: paper.objectiveReady ? 'indigo' : 'amber',
+                      eyebrow: paper.objectiveReady ? 'Published Paper' : 'Assets Ready',
+                      eyebrowIcon: Volume2,
+                      title: paper.title,
+                      description: paper.objectiveReady
+                        ? 'Start a server-authoritative Listening attempt with autosave and post-submit review.'
+                        : 'Media is published, but graded practice waits for the structured question map.',
+                      metaItems: [
+                        { icon: Clock, label: `${paper.estimatedDurationMinutes} mins` },
+                        { label: titleCase(paper.difficulty) },
+                        { label: paperMeta(paper) },
+                      ],
+                      primaryAction: {
+                        label: paper.objectiveReady ? 'Start Practice' : 'Open Paper',
+                        href: `${paper.route}?mode=practice`,
+                      },
+                      secondaryAction: paper.objectiveReady
+                        ? { label: 'Exam Mode', href: `${paper.route}?mode=exam`, variant: 'outline' }
+                        : undefined,
+                    };
+                    return (
+                      <MotionItem key={paper.id} delayIndex={index}>
+                        <LearnerSurfaceCard card={card} />
+                      </MotionItem>
+                    );
+                  })}
+                </div>
+              ) : tasks.length > 0 ? (
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  {tasks.map(taskToCard)}
+                </div>
+              ) : (
+                <div className="rounded-[24px] border border-dashed border-gray-200 bg-surface/80 p-6 text-sm text-muted">
+                  {home?.emptyStates.papers}
+                </div>
+              )}
+            </section>
+
+            <section className="grid grid-cols-1 gap-8 lg:grid-cols-2">
+              <LearnerSurfaceCard card={drillCard}>
+                <ul className="space-y-3 text-sm text-navy/80">
+                  {(firstDrill?.highlights ?? [
+                    'Listen for exact frequencies, not approximate impressions.',
+                    "Separate the patient's concern from the clinician's recommendation.",
+                    'Use transcript-backed review after errors instead of replaying blindly.',
+                  ]).map((highlight) => (
+                    <li key={highlight}>{highlight}</li>
+                  ))}
+                </ul>
+                <div className="mt-6">
+                  <Link href={firstDrill?.launchRoute ?? '/listening'} className="inline-flex items-center gap-2 text-sm font-bold text-primary hover:underline">
+                    Open focused drill <ArrowRight className="h-4 w-4" />
+                  </Link>
+                </div>
+              </LearnerSurfaceCard>
+
+              <LearnerSurfaceCard card={transcriptCard} />
+            </section>
+
+            <section>
+              <LearnerSurfaceSectionHeader
+                eyebrow="Recent Results"
+                title="Track Listening against OET score rules"
+                description="Results use raw /42, scaled /500, and Grade from the canonical scoring helper."
+                className="mb-5"
+              />
+              {recentResults.length > 0 ? (
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  {recentResults.map((result, index) => {
+                    const card: LearnerSurfaceCardModel = {
+                      kind: 'evidence',
+                      sourceType: 'backend_summary',
+                      accent: result.passed ? 'emerald' : 'rose',
+                      eyebrow: result.passed ? 'Grade B Threshold Met' : 'Below Grade B Threshold',
+                      eyebrowIcon: FileText,
+                      title: result.paperTitle,
+                      description: result.scoreDisplay,
+                      metaItems: [
+                        { label: `${result.rawScore}/${result.maxRawScore} raw` },
+                        { label: `${result.scaledScore}/500` },
+                        { label: `Grade ${result.grade}` },
+                      ],
+                      primaryAction: { label: 'View Result', href: result.route, variant: 'outline' },
+                    };
+                    return (
+                      <MotionItem key={result.attemptId} delayIndex={index}>
+                        <LearnerSurfaceCard card={card} />
+                      </MotionItem>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-[24px] border border-dashed border-gray-200 bg-surface/80 p-6 text-sm text-muted">
+                  {home?.emptyStates.recentResults}
+                </div>
+              )}
+            </section>
+
+            <section>
+              <LearnerSurfaceSectionHeader
+                eyebrow="Recent Mock Reports"
+                title="Track listening impact inside full mocks"
+                description="These reports help you see whether distractor control is improving when listening sits inside the full exam load."
+                action={<Link href="/mocks" className="text-sm font-bold text-primary hover:underline">Open Mock Center</Link>}
+                className="mb-5"
+              />
+
+              {mockReports.length > 0 ? (
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  {mockReports.slice(0, 2).map((report, index) => {
+                    const reportCard: LearnerSurfaceCardModel = {
+                      kind: 'evidence',
+                      sourceType: 'backend_summary',
+                      accent: 'slate',
+                      eyebrow: 'Mock Evidence',
+                      eyebrowIcon: FileText,
+                      title: report.title,
+                      description: report.summary,
+                      metaItems: [
+                        { label: report.date },
+                        { label: report.overallScore },
+                      ],
+                      primaryAction: {
+                        label: 'View Report',
+                        href: `/mocks/report/${report.id}`,
+                        variant: 'outline',
+                      },
+                    };
+
+                    return (
+                      <MotionItem key={report.id} delayIndex={index}>
+                        <LearnerSurfaceCard card={reportCard} />
+                      </MotionItem>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="rounded-[24px] border border-dashed border-gray-200 bg-surface/80 p-6 text-sm text-muted">
+                  Complete a mock to see Listening transfer evidence here.
+                </div>
+              )}
+            </section>
+          </>
+        )}
       </div>
     </LearnerDashboardShell>
   );

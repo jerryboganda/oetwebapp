@@ -274,6 +274,46 @@ public class ReadingAuthoringTests
         await db.DisposeAsync();
     }
 
+    [Fact]
+    public async Task Fuzzy_levenshtein_1_accepts_single_edit_short_answer()
+    {
+        var (db, structure, policy, grader, _) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        var partA = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.A);
+        var q = await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+            null, partA.Id, null, 1, 1, ReadingQuestionType.ShortAnswer,
+            "Which drug was used?", "[]", "\"aspirin\"", null, false, null, null), "admin", default);
+        var snapshot = (await policy.ResolveForUserAsync("u1", default)) with
+        {
+            ShortAnswerNormalisation = "fuzzy_levenshtein_1",
+            ShortAnswerAcceptSynonyms = false,
+        };
+
+        db.ReadingAttempts.Add(new ReadingAttempt
+        {
+            Id = "fuzzy-a1", UserId = "u1", PaperId = "p1",
+            StartedAt = DateTimeOffset.UtcNow,
+            LastActivityAt = DateTimeOffset.UtcNow,
+            Status = ReadingAttemptStatus.InProgress,
+            MaxRawScore = 42,
+            PolicySnapshotJson = JsonSerializer.Serialize(snapshot),
+        });
+        db.ReadingAnswers.Add(new ReadingAnswer
+        {
+            Id = "fuzzy-ans1",
+            ReadingAttemptId = "fuzzy-a1",
+            ReadingQuestionId = q.Id,
+            UserAnswerJson = "\"asprin\"",
+            AnsweredAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var result = await grader.GradeAttemptAsync("fuzzy-a1", default);
+        Assert.Equal(1, result.RawScore);
+        await db.DisposeAsync();
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Attempt lifecycle
     // ════════════════════════════════════════════════════════════════════
@@ -289,6 +329,42 @@ public class ReadingAuthoringTests
         await attemptSvc.StartAsync("u1", "p1", default);
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             attemptSvc.StartAsync("u1", "p1", default));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Start_blocks_incomplete_structure_even_when_published()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+
+        var ex = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
+            attemptSvc.StartAsync("u1", "p1", default));
+        Assert.Equal("reading_structure_invalid", ex.Code);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task PartA_hard_lock_rejects_late_answer()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
+        attempt.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-16);
+        attempt.DeadlineAt = DateTimeOffset.UtcNow.AddMinutes(45);
+        await db.SaveChangesAsync();
+        var partAQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .FirstAsync(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.A);
+
+        var ex = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
+            attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partAQuestion.Id, partAQuestion.CorrectAnswerJson, default));
+        Assert.Equal("part_a_locked", ex.Code);
         await db.DisposeAsync();
     }
 
@@ -365,6 +441,36 @@ public class ReadingAuthoringTests
         Assert.NotNull(snap);
         Assert.Equal(15, snap!.PartATimerMinutes);
         Assert.Equal(45, snap.PartBCTimerMinutes);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Grading_uses_policy_snapshot_not_live_policy()
+    {
+        var (db, structure, policy, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var firstQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .FirstAsync(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.A);
+        firstQuestion.AcceptedSynonymsJson = "[\"synonym answer\"]";
+        await db.SaveChangesAsync();
+
+        var global = await policy.GetGlobalAsync(default);
+        global.ShortAnswerAcceptSynonyms = false;
+        await policy.UpsertGlobalAsync(global, "admin", default);
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+
+        global.ShortAnswerAcceptSynonyms = true;
+        await policy.UpsertGlobalAsync(global, "admin", default);
+
+        await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, firstQuestion.Id, "\"synonym answer\"", default);
+        var result = await attemptSvc.SubmitAsync("u1", started.AttemptId, default);
+
+        Assert.Equal(0, result.RawScore);
+        Assert.False(result.Answers.Single(a => a.QuestionId == firstQuestion.Id).IsCorrect);
         await db.DisposeAsync();
     }
 

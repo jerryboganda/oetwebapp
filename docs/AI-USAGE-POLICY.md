@@ -107,7 +107,9 @@ Every feature the gateway serves is classified. Defaults:
 | `mock.full_grade` | ✅ | ❌ | ✅ | Full mock exam grading |
 | `writing.coach.suggest` | ❌ | ✅ | ✅ | Inline suggestions |
 | `writing.coach.explain` | ❌ | ✅ | ✅ | Why-is-this-wrong explanations |
-| `conversation.reply` | ❌ | ✅ | ✅ | Practice conversation |
+| `conversation.opening` | ❌ | ✅ | ✅ | AI partner's first in-role utterance |
+| `conversation.reply` | ❌ | ✅ | ✅ | AI partner's in-role replies mid-session |
+| `conversation.evaluation` | ✅ | ❌ | ✅ | Post-session scoring + rubric (scoring-critical) |
 | `pronunciation.tip` | ❌ | ✅ | ✅ | Pronunciation feedback |
 | `pronunciation.score` | ✅ | ❌ | ✅ | Pronunciation attempt scoring / phoneme analysis |
 | `pronunciation.feedback` | ❌ | ❌ | ✅ | Grounded learner-facing pronunciation coaching |
@@ -116,6 +118,7 @@ Every feature the gateway serves is classified. Defaults:
 | `admin.content_generation` | ❌ | ❌ | ✅ | Admin tooling, platform only |
 | `admin.grammar_draft` | ❌ | ❌ | ✅ | Grammar lesson drafting (grounded), platform only |
 | `admin.pronunciation_draft` | ❌ | ❌ | ✅ | Pronunciation drill drafting (grounded), platform only |
+| `admin.conversation_draft` | ❌ | ❌ | ✅ | Conversation scenario drafting (grounded), platform only |
 
 Admin can toggle the BYOK column per feature. `AllowByokOnScoringFeatures`
 global switch gates the scoring-critical rows.

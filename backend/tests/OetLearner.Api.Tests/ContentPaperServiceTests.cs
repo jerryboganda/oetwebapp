@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Content;
+using OetLearner.Api.Services.Reading;
 
 namespace OetLearner.Api.Tests;
 
@@ -34,6 +35,63 @@ public class ContentPaperServiceTests
         });
         await db.SaveChangesAsync();
         return id;
+    }
+
+    private static async Task AttachRequiredReadingAssetsAsync(
+        LearnerDbContext db,
+        ContentPaperService svc,
+        string paperId)
+    {
+        await AddMediaAsync(db, "reading-question-paper");
+        await AddMediaAsync(db, "reading-answer-key");
+        await svc.AttachAssetAsync(paperId, new ContentPaperAssetAttach(
+            PaperAssetRole.QuestionPaper, "reading-question-paper", null, null, 0, true),
+            "admin-1", default);
+        await svc.AttachAssetAsync(paperId, new ContentPaperAssetAttach(
+            PaperAssetRole.AnswerKey, "reading-answer-key", null, null, 1, true),
+            "admin-1", default);
+    }
+
+    private static async Task FullyAuthorReadingPaperAsync(
+        LearnerDbContext db,
+        ReadingStructureService structure,
+        string paperId)
+    {
+        var parts = await db.ReadingParts.Where(p => p.PaperId == paperId).ToListAsync();
+        var partA = parts.First(p => p.PartCode == ReadingPartCode.A);
+        var partB = parts.First(p => p.PartCode == ReadingPartCode.B);
+        var partC = parts.First(p => p.PartCode == ReadingPartCode.C);
+
+        var textA = await structure.UpsertTextAsync(new ReadingTextUpsert(
+            null, partA.Id, 1, "Part A text", "NHS", "<p>Part A</p>", 80, null), "admin-1", default);
+        var textB = await structure.UpsertTextAsync(new ReadingTextUpsert(
+            null, partB.Id, 1, "Part B text", "BMJ", "<p>Part B</p>", 80, null), "admin-1", default);
+        var textC = await structure.UpsertTextAsync(new ReadingTextUpsert(
+            null, partC.Id, 1, "Part C text", "Lancet", "<p>Part C</p>", 320, null), "admin-1", default);
+
+        for (var i = 1; i <= 20; i++)
+        {
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partA.Id, textA.Id, i, 1, ReadingQuestionType.ShortAnswer,
+                $"Part A question {i}", "[]", $"\"answer-{i}\"", null, false, null, "detail"),
+                "admin-1", default);
+        }
+
+        for (var i = 1; i <= 6; i++)
+        {
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partB.Id, textB.Id, i, 1, ReadingQuestionType.MultipleChoice3,
+                $"Part B question {i}", "[\"A\",\"B\",\"C\"]", "\"A\"", null, false, null, "purpose"),
+                "admin-1", default);
+        }
+
+        for (var i = 1; i <= 16; i++)
+        {
+            await structure.UpsertQuestionAsync(new ReadingQuestionUpsert(
+                null, partC.Id, textC.Id, i, 1, ReadingQuestionType.MultipleChoice4,
+                $"Part C question {i}", "[\"A\",\"B\",\"C\",\"D\"]", "\"B\"", null, false, null, "inference"),
+                "admin-1", default);
+        }
     }
 
     [Fact]
@@ -77,6 +135,7 @@ public class ContentPaperServiceTests
         Assert.Contains(PaperAssetRole.Audio, svc.RequiredRolesFor("listening"));
         Assert.Contains(PaperAssetRole.QuestionPaper, svc.RequiredRolesFor("listening"));
         Assert.Contains(PaperAssetRole.AnswerKey, svc.RequiredRolesFor("listening"));
+        Assert.Contains(PaperAssetRole.AudioScript, svc.RequiredRolesFor("listening"));
         Assert.Contains(PaperAssetRole.CaseNotes, svc.RequiredRolesFor("writing"));
         Assert.Contains(PaperAssetRole.RoleCard, svc.RequiredRolesFor("speaking"));
         await db.DisposeAsync();
@@ -132,6 +191,41 @@ public class ContentPaperServiceTests
         var reload = await db.ContentPapers.FirstAsync(x => x.Id == p.Id);
         Assert.Equal(ContentStatus.Published, reload.Status);
         Assert.NotNull(reload.PublishedAt);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Publish_fails_when_reading_structure_is_not_ready()
+    {
+        var (db, svc) = Build();
+        var paper = await svc.CreateAsync(new ContentPaperCreate(
+            "reading", "Reading 1", null, null, true, null, 60, null, null, 0, null,
+            DefaultSourceProvenance), "admin-1", default);
+        await AttachRequiredReadingAssetsAsync(db, svc, paper.Id);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.PublishAsync(paper.Id, "admin-1", default));
+        Assert.Contains("Reading structure", ex.Message);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Publish_succeeds_when_reading_structure_is_ready()
+    {
+        var (db, svc) = Build();
+        var paper = await svc.CreateAsync(new ContentPaperCreate(
+            "reading", "Reading 2", null, null, true, null, 60, null, null, 0, null,
+            DefaultSourceProvenance), "admin-1", default);
+        await AttachRequiredReadingAssetsAsync(db, svc, paper.Id);
+
+        var structure = new ReadingStructureService(db);
+        await structure.EnsureCanonicalPartsAsync(paper.Id, default);
+        await FullyAuthorReadingPaperAsync(db, structure, paper.Id);
+
+        await svc.PublishAsync(paper.Id, "admin-1", default);
+
+        var reload = await db.ContentPapers.FirstAsync(x => x.Id == paper.Id);
+        Assert.Equal(ContentStatus.Published, reload.Status);
         await db.DisposeAsync();
     }
 
