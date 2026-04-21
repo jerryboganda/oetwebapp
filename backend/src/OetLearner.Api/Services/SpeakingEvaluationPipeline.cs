@@ -83,10 +83,9 @@ public sealed class SpeakingEvaluationPipeline(
             {
                 Prompt = prompt,
                 UserInput = BuildEvaluationUserInput(content, attempt, transcript, findings),
-                Provider = "mock",
-                Model = "mock",
-                Temperature = 0.2,
-                MaxTokens = 1200,
+                Model = "anthropic-claude-opus-4.7",
+                Temperature = 0.1,
+                MaxTokens = 4096,
                 FeatureCode = AiFeatureCodes.SpeakingGrade,
                 UserId = attempt.UserId,
                 PromptTemplateId = "speaking.score.v1",

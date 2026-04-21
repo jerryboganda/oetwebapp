@@ -1,3 +1,4 @@
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using OetLearner.Api.Configuration;
@@ -64,6 +65,98 @@ public static class DatabaseBootstrapper
                 await SeedData.EnsureDemoOperationalStateAsync(db, cancellationToken);
             }
             await SeedData.EnsureDemoMediaAsync(db, environment, storageOptions, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Copy the AI provider configuration from environment variables
+    /// (<c>AI__ApiKey</c>, <c>AI__BaseUrl</c>, <c>AI__DefaultModel</c>,
+    /// <c>AI__ProviderId</c>) into the <c>AiProviders</c> row so the
+    /// registry-backed provider resolves the key at runtime. Encrypts the
+    /// key with the Data Protection key ring before persistence.
+    ///
+    /// Idempotent: runs on every boot, updates only when the plain-text
+    /// env value actually differs from what the stored ciphertext decrypts
+    /// to. Call sites outside bootstrap should never touch these rows.
+    /// </summary>
+    public static async Task SynchroniseAiProviderFromEnvAsync(
+        LearnerDbContext db,
+        IDataProtectionProvider dpProvider,
+        AiProviderOptions options,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(options.ApiKey)) return;
+        var code = string.IsNullOrWhiteSpace(options.ProviderId)
+            ? "digitalocean-serverless" : options.ProviderId.Trim().ToLowerInvariant();
+
+        var row = await db.AiProviders.FirstOrDefaultAsync(p => p.Code == code, cancellationToken);
+        var protector = dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
+        var encrypted = protector.Protect(options.ApiKey);
+        var model = string.IsNullOrWhiteSpace(options.DefaultModel)
+            ? "anthropic-claude-opus-4.7" : options.DefaultModel;
+        var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl)
+            ? "https://inference.do-ai.run/v1" : options.BaseUrl;
+
+        var hint = options.ApiKey.Length > 10
+            ? options.ApiKey[..4] + "..." + options.ApiKey[^4..]
+            : "(short)";
+
+        var now = DateTimeOffset.UtcNow;
+        if (row is null)
+        {
+            db.AiProviders.Add(new AiProvider
+            {
+                Id = Guid.NewGuid().ToString("N"),
+                Code = code,
+                Name = "DigitalOcean Serverless Inference (Claude Opus 4.7)",
+                Dialect = AiProviderDialect.OpenAiCompatible,
+                BaseUrl = baseUrl,
+                EncryptedApiKey = encrypted,
+                ApiKeyHint = hint,
+                DefaultModel = model,
+                PricePer1kPromptTokens = 0.015m,
+                PricePer1kCompletionTokens = 0.075m,
+                RetryCount = 2,
+                CircuitBreakerThreshold = 5,
+                CircuitBreakerWindowSeconds = 30,
+                FailoverPriority = 100,
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+            await db.SaveChangesAsync(cancellationToken);
+            return;
+        }
+
+        // Existing row: update the volatile fields if they drift.
+        var changed = false;
+        string? decrypted = null;
+        if (!string.IsNullOrEmpty(row.EncryptedApiKey))
+        {
+            try { decrypted = protector.Unprotect(row.EncryptedApiKey); }
+            catch { decrypted = null; }
+        }
+        if (!string.Equals(decrypted, options.ApiKey, StringComparison.Ordinal))
+        {
+            row.EncryptedApiKey = encrypted;
+            row.ApiKeyHint = hint;
+            changed = true;
+        }
+        if (!string.Equals(row.BaseUrl, baseUrl, StringComparison.OrdinalIgnoreCase))
+        {
+            row.BaseUrl = baseUrl;
+            changed = true;
+        }
+        if (!string.Equals(row.DefaultModel, model, StringComparison.OrdinalIgnoreCase))
+        {
+            row.DefaultModel = model;
+            changed = true;
+        }
+        if (!row.IsActive) { row.IsActive = true; changed = true; }
+        if (changed)
+        {
+            row.UpdatedAt = now;
+            await db.SaveChangesAsync(cancellationToken);
         }
     }
 

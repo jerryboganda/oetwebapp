@@ -1512,8 +1512,8 @@ public static partial class SeedData
         );
 
         db.AIConfigVersions.AddRange(
-            new AIConfigVersion { Id = "aic-001", Model = "gpt-4o", Provider = "OpenAI", TaskType = "writing", Status = AIConfigStatus.Active, Accuracy = 94.2, ConfidenceThreshold = 0.85, RoutingRule = "default", PromptLabel = "Writing Eval v3.2", CreatedBy = "Admin", CreatedAt = now.AddDays(-30) },
-            new AIConfigVersion { Id = "aic-002", Model = "gpt-4o", Provider = "OpenAI", TaskType = "speaking", Status = AIConfigStatus.Active, Accuracy = 91.8, ConfidenceThreshold = 0.80, RoutingRule = "default", PromptLabel = "Speaking Eval v2.1", CreatedBy = "Admin", CreatedAt = now.AddDays(-25) },
+            new AIConfigVersion { Id = "aic-001", Model = "anthropic-claude-opus-4.7", Provider = "DigitalOcean Serverless (Anthropic)", TaskType = "writing", Status = AIConfigStatus.Active, Accuracy = 94.2, ConfidenceThreshold = 0.85, RoutingRule = "default", PromptLabel = "Writing Eval v3.2", CreatedBy = "Admin", CreatedAt = now.AddDays(-30) },
+            new AIConfigVersion { Id = "aic-002", Model = "anthropic-claude-opus-4.7", Provider = "DigitalOcean Serverless (Anthropic)", TaskType = "speaking", Status = AIConfigStatus.Active, Accuracy = 91.8, ConfidenceThreshold = 0.80, RoutingRule = "default", PromptLabel = "Speaking Eval v2.1", CreatedBy = "Admin", CreatedAt = now.AddDays(-25) },
             new AIConfigVersion { Id = "aic-003", Model = "claude-3.5-sonnet", Provider = "Anthropic", TaskType = "writing", Status = AIConfigStatus.Testing, Accuracy = 95.1, ConfidenceThreshold = 0.88, RoutingRule = "experiment:claude_writing", ExperimentFlag = "claude_writing_test", PromptLabel = "Writing Eval v4.0-beta", CreatedBy = "Admin", CreatedAt = now.AddDays(-7) },
             new AIConfigVersion { Id = "aic-004", Model = "gpt-3.5-turbo", Provider = "OpenAI", TaskType = "reading", Status = AIConfigStatus.Deprecated, Accuracy = 88.5, ConfidenceThreshold = 0.75, RoutingRule = "legacy", PromptLabel = "Reading Eval v1.0", CreatedBy = "Admin", CreatedAt = now.AddDays(-120) }
         );
@@ -3341,23 +3341,23 @@ public static partial class SeedData
 
     private static void SeedAiProviderStub(LearnerDbContext db)
     {
-        // Stub only: no API key. Admins must edit this row via the UI to
-        // supply the encrypted platform API key (or register a different
-        // provider). Seeding the stub means the system boots pointing at a
-        // named provider row instead of "undefined".
+        // Production default: DigitalOcean Serverless Inference with
+        // Anthropic Claude Opus 4.7 (high reasoning effort). The API key is
+        // supplied via AI__ApiKey env var and synchronised into this row at
+        // boot (DatabaseBootstrapper) — never committed to source.
         var now = DateTimeOffset.UtcNow;
         db.AiProviders.Add(new AiProvider
         {
             Id = Guid.NewGuid().ToString("N"),
             Code = "digitalocean-serverless",
-            Name = "DigitalOcean Serverless Inference",
+            Name = "DigitalOcean Serverless Inference (Claude Opus 4.7)",
             Dialect = AiProviderDialect.OpenAiCompatible,
             BaseUrl = "https://inference.do-ai.run/v1",
-            EncryptedApiKey = string.Empty,  // must be set via admin UI
-            ApiKeyHint = "(not set)",
-            DefaultModel = "gpt-4o",
-            PricePer1kPromptTokens = 0.0025m,
-            PricePer1kCompletionTokens = 0.010m,
+            EncryptedApiKey = string.Empty,  // synchronised from AI__ApiKey at boot
+            ApiKeyHint = "(synchronised from AI__ApiKey env var at boot)",
+            DefaultModel = "anthropic-claude-opus-4.7",
+            PricePer1kPromptTokens = 0.0150m,     // Claude Opus 4.x input rate
+            PricePer1kCompletionTokens = 0.0750m, // Claude Opus 4.x output rate
             RetryCount = 2,
             CircuitBreakerThreshold = 5,
             CircuitBreakerWindowSeconds = 30,

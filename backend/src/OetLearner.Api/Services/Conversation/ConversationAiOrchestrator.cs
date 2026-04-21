@@ -75,10 +75,9 @@ public sealed class ConversationAiOrchestrator(
             AuthAccountId = ctx.AuthAccountId,
             TenantId = ctx.TenantId,
             FeatureCode = featureCode,
-            Provider = string.IsNullOrWhiteSpace(_options.ReplyModel) ? "mock" : "",
-            Model = string.IsNullOrWhiteSpace(_options.ReplyModel) ? "mock" : _options.ReplyModel,
+            Model = string.IsNullOrWhiteSpace(_options.ReplyModel) ? "anthropic-claude-opus-4.7" : _options.ReplyModel,
             Temperature = _options.ReplyTemperature,
-            MaxTokens = 300,
+            MaxTokens = 600,
             PromptTemplateId = task.ToString(),
         }, ct);
 
@@ -112,10 +111,9 @@ public sealed class ConversationAiOrchestrator(
             AuthAccountId = ctx.AuthAccountId,
             TenantId = ctx.TenantId,
             FeatureCode = AiFeatureCodes.ConversationEvaluation,
-            Provider = string.IsNullOrWhiteSpace(_options.EvaluationModel) ? "mock" : "",
-            Model = string.IsNullOrWhiteSpace(_options.EvaluationModel) ? "mock" : _options.EvaluationModel,
+            Model = string.IsNullOrWhiteSpace(_options.EvaluationModel) ? "anthropic-claude-opus-4.7" : _options.EvaluationModel,
             Temperature = _options.EvaluationTemperature,
-            MaxTokens = 1200,
+            MaxTokens = 4096,
             PromptTemplateId = "EvaluateConversation",
         }, ct);
 

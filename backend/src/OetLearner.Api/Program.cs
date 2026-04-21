@@ -556,9 +556,14 @@ builder.Services.AddHttpClient("AiOpenAiCompatible", client =>
 });
 builder.Services.AddSingleton<OetLearner.Api.Services.Rulebook.IAiModelProvider,
     OetLearner.Api.Services.Rulebook.MockAiProvider>();
-// Legacy config-only OpenAiCompatibleProvider is retained in-code for tests
-// but no longer registered in DI — the registry-backed provider supersedes
-// it. Admins configure the real provider via /admin/ai-usage → Providers.
+// Config-based OpenAI-compatible provider reads AI__* env vars directly.
+// Production deployments populate these from .env.production and the same
+// key is mirrored into the AiProviders row at boot (see DatabaseBootstrapper).
+// The gateway prefers the first non-mock provider registered — this one
+// precedes the registry-backed provider so env-var config works even before
+// the DB row is populated on first boot.
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
+    OetLearner.Api.Services.Rulebook.OpenAiCompatibleProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiUsageRecorder,
     OetLearner.Api.Services.Rulebook.AiUsageRecorder>();
 builder.Services.AddMemoryCache();
@@ -891,6 +896,15 @@ await using (var scope = app.Services.CreateAsyncScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
     await DatabaseBootstrapper.InitializeAsync(db, app.Environment, bootstrapOptions, storageOptions);
+
+    // Sync AI provider key from env (AI__ApiKey, AI__BaseUrl, AI__DefaultModel)
+    // into the AiProviders row so the registry-backed provider resolves it at
+    // runtime. Encrypts with Data Protection. Idempotent.
+    var dp = scope.ServiceProvider.GetRequiredService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>();
+    var aiOpts = scope.ServiceProvider
+        .GetRequiredService<Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.AiProviderOptions>>()
+        .Value;
+    await DatabaseBootstrapper.SynchroniseAiProviderFromEnvAsync(db, dp, aiOpts);
 }
 
 app.Run();

@@ -109,18 +109,36 @@ public sealed class RegistryBackedProvider(
         client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
-        var payload = new
-        {
-            model = request.Model,
-            messages = new object[]
+        var model = request.Model;
+        var maxTokens = request.MaxTokens ?? 4096;
+        var sendReasoning = IsReasoningCapable(model);
+
+        object payload = sendReasoning
+            ? new
             {
-                new { role = "system", content = request.SystemPrompt },
-                new { role = "user", content = request.UserPrompt },
-            },
-            temperature = request.Temperature,
-            max_tokens = request.MaxTokens,
-            stream = false,
-        };
+                model,
+                messages = new object[]
+                {
+                    new { role = "system", content = request.SystemPrompt },
+                    new { role = "user", content = request.UserPrompt },
+                },
+                temperature = request.Temperature,
+                max_tokens = maxTokens,
+                reasoning_effort = "high",
+                stream = false,
+            }
+            : new
+            {
+                model,
+                messages = new object[]
+                {
+                    new { role = "system", content = request.SystemPrompt },
+                    new { role = "user", content = request.UserPrompt },
+                },
+                temperature = request.Temperature,
+                max_tokens = maxTokens,
+                stream = false,
+            };
 
         using var response = await client.PostAsync(
             "chat/completions",
@@ -143,6 +161,19 @@ public sealed class RegistryBackedProvider(
             : null;
 
         return new AiProviderCompletion { Text = text, Usage = usage };
+    }
+
+    private static bool IsReasoningCapable(string model)
+    {
+        if (string.IsNullOrWhiteSpace(model)) return false;
+        var m = model.ToLowerInvariant();
+        if (m.Contains("claude-opus") || m.Contains("claude-4") || m.Contains("claude-5")) return true;
+        if (m.Contains("opus-4")) return true;
+        if (m.Contains("openai-o1") || m.Contains("openai-o3") || m.Contains("openai-o4")) return true;
+        if (m.StartsWith("o1") || m.StartsWith("o3") || m.StartsWith("o4")) return true;
+        if (m.Contains("gpt-5")) return true;
+        if (m.Contains("thinking")) return true;
+        return false;
     }
 }
 

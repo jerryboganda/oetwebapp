@@ -38,18 +38,37 @@ public sealed class OpenAiCompatibleProvider(
         client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
         client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", apiKey);
 
-        var payload = new
-        {
-            model = string.IsNullOrWhiteSpace(request.Model) ? _options.DefaultModel : request.Model,
-            messages = new object[]
+        var model = string.IsNullOrWhiteSpace(request.Model) ? _options.DefaultModel : request.Model;
+        var maxTokens = request.MaxTokens ?? _options.DefaultMaxTokens;
+        var reasoningEffort = (_options.ReasoningEffort ?? "high").Trim().ToLowerInvariant();
+        var sendReasoning = IsReasoningCapable(model) && !string.IsNullOrWhiteSpace(reasoningEffort);
+
+        object payload = sendReasoning
+            ? new
             {
-                new { role = "system", content = request.SystemPrompt },
-                new { role = "user", content = request.UserPrompt },
-            },
-            temperature = request.Temperature,
-            max_tokens = request.MaxTokens,
-            stream = false,
-        };
+                model,
+                messages = new object[]
+                {
+                    new { role = "system", content = request.SystemPrompt },
+                    new { role = "user", content = request.UserPrompt },
+                },
+                temperature = request.Temperature,
+                max_tokens = maxTokens,
+                reasoning_effort = reasoningEffort,
+                stream = false,
+            }
+            : new
+            {
+                model,
+                messages = new object[]
+                {
+                    new { role = "system", content = request.SystemPrompt },
+                    new { role = "user", content = request.UserPrompt },
+                },
+                temperature = request.Temperature,
+                max_tokens = maxTokens,
+                stream = false,
+            };
 
         using var response = await client.PostAsync(
             "chat/completions",
@@ -102,5 +121,24 @@ public sealed class OpenAiCompatibleProvider(
         }
 
         return content.ToString();
+    }
+
+    /// <summary>
+    /// Returns true for models that accept the <c>reasoning_effort</c>
+    /// parameter (Anthropic Claude 4+ extended thinking and OpenAI o-series).
+    /// Unknown models fall through as false so we don't send an unsupported
+    /// parameter that would 400.
+    /// </summary>
+    private static bool IsReasoningCapable(string model)
+    {
+        if (string.IsNullOrWhiteSpace(model)) return false;
+        var m = model.ToLowerInvariant();
+        if (m.Contains("claude-opus") || m.Contains("claude-4") || m.Contains("claude-5")) return true;
+        if (m.Contains("opus-4")) return true;
+        if (m.Contains("openai-o1") || m.Contains("openai-o3") || m.Contains("openai-o4")) return true;
+        if (m.StartsWith("o1") || m.StartsWith("o3") || m.StartsWith("o4")) return true;
+        if (m.Contains("gpt-5")) return true;
+        if (m.Contains("thinking")) return true;
+        return false;
     }
 }
