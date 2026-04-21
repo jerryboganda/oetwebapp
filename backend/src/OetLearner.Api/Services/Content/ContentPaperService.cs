@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Reading;
 
 namespace OetLearner.Api.Services.Content;
 
@@ -222,6 +223,20 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
         if (missing.Count > 0)
             throw new InvalidOperationException(
                 $"Missing required primary asset(s) for {paper.SubtestCode}: {string.Join(", ", missing)}.");
+
+        if (string.Equals(paper.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
+        {
+            var readingValidation = await new ReadingStructureService(db).ValidatePaperAsync(paper.Id, ct);
+            if (!readingValidation.IsPublishReady)
+            {
+                var blockers = readingValidation.Issues
+                    .Where(i => string.Equals(i.Severity, "error", StringComparison.OrdinalIgnoreCase))
+                    .Select(i => $"{i.Code}: {i.Message}")
+                    .ToList();
+                throw new InvalidOperationException(
+                    $"Reading structure is not publish-ready: {string.Join("; ", blockers)}");
+            }
+        }
 
         var now = DateTimeOffset.UtcNow;
         paper.Status = ContentStatus.Published;

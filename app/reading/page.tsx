@@ -1,40 +1,84 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { motion } from 'motion/react';
-import { ArrowRight, BookOpen, Clock, FileText, Lightbulb, Target, TrendingUp } from 'lucide-react';
+import {
+  BookOpen,
+  CheckCircle2,
+  Clock,
+  FileText,
+  ListChecks,
+  PlayCircle,
+  Target,
+  TrendingUp,
+} from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
-import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
-import { fetchMockReports, fetchReadingHome } from '@/lib/api';
-import type { MockReport } from '@/lib/mock-data';
+import {
+  getReadingHome,
+  type ReadingHomeAttemptDto,
+  type ReadingHomeDto,
+  type ReadingHomePaperDto,
+  type ReadingHomeResultDto,
+} from '@/lib/reading-authoring-api';
+import { formatListeningReadingDisplay, isListeningReadingPassByRaw } from '@/lib/scoring';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 
-interface ReadingHomeTask {
-  contentId: string;
-  title: string;
-  difficulty: string;
-  estimatedDurationMinutes: number;
-  scenarioType?: string;
-}
+const partGuides: LearnerSurfaceCardModel[] = [
+  {
+    kind: 'insight',
+    sourceType: 'frontend_insight',
+    accent: 'amber',
+    eyebrow: 'Part A',
+    eyebrowIcon: Clock,
+    title: 'Lock exact details first',
+    description: 'Use the opening window for rapid extraction across the short texts before moving into the longer timer block.',
+    metaItems: [
+      { icon: Target, label: '20 items' },
+      { icon: Clock, label: 'Strict timer' },
+    ],
+  },
+  {
+    kind: 'insight',
+    sourceType: 'frontend_insight',
+    accent: 'blue',
+    eyebrow: 'Part B',
+    eyebrowIcon: FileText,
+    title: 'Read workplace purpose',
+    description: 'Track the intent of short workplace notices and choose the option supported by the exact wording.',
+    metaItems: [
+      { icon: Target, label: '6 items' },
+      { icon: ListChecks, label: '3 options' },
+    ],
+  },
+  {
+    kind: 'insight',
+    sourceType: 'frontend_insight',
+    accent: 'indigo',
+    eyebrow: 'Part C',
+    eyebrowIcon: TrendingUp,
+    title: 'Control inference choices',
+    description: 'Separate stated evidence from tempting distractors while holding the main argument of each passage.',
+    metaItems: [
+      { icon: Target, label: '16 items' },
+      { icon: ListChecks, label: '4 options' },
+    ],
+  },
+];
 
 export default function ReadingHome() {
   const { isAuthenticated, loading: authLoading } = useAuth();
-  const [home, setHome] = useState<Record<string, any> | null>(null);
-  const [tasks, setTasks] = useState<ReadingHomeTask[]>([]);
-  const [mockReports, setMockReports] = useState<MockReport[]>([]);
+  const [home, setHome] = useState<ReadingHomeDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (authLoading) {
-      return;
-    }
+    if (authLoading) return;
     if (!isAuthenticated) {
       setLoading(false);
       return;
@@ -47,19 +91,12 @@ export default function ReadingHome() {
       try {
         setLoading(true);
         setError(null);
-        const [readingHome, reports] = await Promise.all([fetchReadingHome(), fetchMockReports()]);
-        if (cancelled) return;
-        setHome(readingHome);
-        setTasks((readingHome.featuredTasks ?? []) as ReadingHomeTask[]);
-        setMockReports(reports);
+        const readingHome = await getReadingHome();
+        if (!cancelled) setHome(readingHome);
       } catch (err) {
-        if (!cancelled) {
-          setError(err instanceof Error ? err.message : 'Failed to load reading practice.');
-        }
+        if (!cancelled) setError(readErrorMessage(err, 'Failed to load Reading papers.'));
       } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
+        if (!cancelled) setLoading(false);
       }
     })();
 
@@ -68,39 +105,25 @@ export default function ReadingHome() {
     };
   }, [authLoading, isAuthenticated]);
 
-  const mockRoute = home?.mockSets?.[0]?.route ?? '/mocks';
-
-  const strategyCard: LearnerSurfaceCardModel = {
-    kind: 'insight',
-    sourceType: 'frontend_insight',
-    accent: 'amber',
-    eyebrow: 'Strategy Focus',
-    eyebrowIcon: Lightbulb,
-    title: 'Build reliable detail extraction',
-    description: 'Use one focused reading block to improve exact scanning, then validate the gain under timed mock pressure.',
-    metaItems: [
-      { icon: Target, label: 'Inference control' },
-      { icon: Clock, label: 'Timed reading' },
-    ],
-  };
-
-  const nextStepCard: LearnerSurfaceCardModel = {
-    kind: 'navigation',
-    sourceType: 'backend_summary',
-    accent: 'indigo',
-    eyebrow: 'Recommended Next Step',
-    eyebrowIcon: TrendingUp,
-    title: 'Move from practice to timed evidence',
-    description: 'After one focused reading task, enter mock setup to confirm whether your detail extraction holds up under exam pressure.',
-    metaItems: [
-      { icon: Clock, label: 'Timed flow' },
-      { icon: FileText, label: 'Report included' },
-    ],
-    primaryAction: {
-      label: 'Enter Mock Setup',
-      href: mockRoute,
+  const activeAttempt = home?.activeAttempts[0] ?? null;
+  const latestResult = home?.recentResults[0] ?? null;
+  const heroHighlights = useMemo(() => ([
+    {
+      icon: Target,
+      label: 'Ready papers',
+      value: loading ? 'Loading...' : `${home?.papers.length ?? 0} structured`,
     },
-  };
+    {
+      icon: PlayCircle,
+      label: 'Active attempt',
+      value: activeAttempt ? `${activeAttempt.answeredCount}/${activeAttempt.totalQuestions} answered` : 'None open',
+    },
+    {
+      icon: TrendingUp,
+      label: 'Latest score',
+      value: latestResult ? `${latestResult.rawScore}/42 | ${latestResult.scaledScore}/500` : 'No result yet',
+    },
+  ]), [activeAttempt, home?.papers.length, latestResult, loading]);
 
   return (
     <LearnerDashboardShell pageTitle="Reading">
@@ -110,120 +133,214 @@ export default function ReadingHome() {
           icon={BookOpen}
           accent="blue"
           title="Build reading accuracy before you validate it in mocks"
-          description={home?.intro ?? 'Use this workspace to sharpen detail extraction, keep timing visible, and check whether gains hold up in mock conditions.'}
-          highlights={[
-            { icon: Target, label: 'Featured tasks', value: loading ? 'Loading...' : tasks.length ? `${tasks.length} ready now` : 'None yet' },
-            { icon: FileText, label: 'Mock reports', value: mockReports.length ? `${mockReports.length} available` : 'No reports yet' },
-            { icon: TrendingUp, label: 'Mock routes', value: home?.mockSets?.length ? `${home.mockSets.length} ready` : 'Mock setup ready' },
-          ]}
+          description={home?.intro ?? 'Use structured OET Reading papers with the same Part A and Part B/C timing rhythm learners meet in the exam.'}
+          highlights={heroHighlights}
         />
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
-        <section>
-          <LearnerSurfaceSectionHeader
-            eyebrow="Practice Tasks"
-            title="Reading practice tasks"
-            description="Each task shows the focus area, estimated time, and a direct start action."
-            className="mb-5"
-          />
+        {loading ? <ReadingHomeSkeleton /> : (
+          <>
+            {activeAttempt ? <ActiveAttemptSection attempt={activeAttempt} /> : null}
 
-          {loading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {[1, 2].map((i) => <Skeleton key={i} className="h-56 rounded-[24px]" />)}
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-              {tasks.map((task, index) => {
-                const practiceCard: LearnerSurfaceCardModel = {
-                  kind: 'task',
-                  sourceType: 'backend_task',
-                  accent: 'blue',
-                  eyebrow: task.scenarioType ? task.scenarioType.replace(/_/g, ' ') : 'Reading Task',
-                  eyebrowIcon: Target,
-                  title: task.title,
-                  description: 'Open this task to practise fast detail extraction and clinically accurate answer selection.',
-                  metaItems: [
-                    { icon: Clock, label: `${task.estimatedDurationMinutes} mins` },
-                    { label: task.difficulty },
-                  ],
-                  primaryAction: {
-                    label: 'Start Task',
-                    href: `/reading/player/${task.contentId}`,
-                  },
-                };
+            <section>
+              <LearnerSurfaceSectionHeader
+                eyebrow="Structured Papers"
+                title="Ready Reading papers"
+                description="Each paper follows the canonical 20/6/16 item structure and opens in the timed Reading player."
+                className="mb-5"
+              />
 
-                return (
-                  <motion.div
-                    key={task.contentId}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.08 }}
-                  >
-                    <LearnerSurfaceCard card={practiceCard} />
-                  </motion.div>
-                );
-              })}
-            </div>
-          )}
-        </section>
+              {home?.papers.length ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {home.papers.map((paper, index) => (
+                    <motion.div
+                      key={paper.id}
+                      initial={{ opacity: 0, y: 16 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: index * 0.06 }}
+                    >
+                      <LearnerSurfaceCard card={paperCard(paper, home.activeAttempts)}>
+                        <div className="grid grid-cols-3 gap-2 text-center text-xs font-semibold text-muted">
+                          <span className="rounded-lg bg-background-light px-2 py-2">A {paper.partACount}</span>
+                          <span className="rounded-lg bg-background-light px-2 py-2">B {paper.partBCount}</span>
+                          <span className="rounded-lg bg-background-light px-2 py-2">C {paper.partCCount}</span>
+                        </div>
+                      </LearnerSurfaceCard>
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  title="No structured Reading papers are ready yet"
+                  description="Published papers will appear here after the authoring structure passes the Reading publish gate."
+                />
+              )}
+            </section>
 
-        <section className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          <LearnerSurfaceCard card={strategyCard}>
-            <ul className="space-y-3 text-sm text-navy/80">
-              <li>Prioritise exact detail extraction before making inference choices.</li>
-              <li>Underline numbers, ranges, and named concepts while reading Part C.</li>
-              <li>Review wrong answers immediately to identify distractor patterns.</li>
-            </ul>
-          </LearnerSurfaceCard>
+            <section>
+              <LearnerSurfaceSectionHeader
+                eyebrow="Part Guidance"
+                title="Keep the exam rhythm visible"
+                description={`Part A is ${home?.policy.partATimerMinutes ?? 15} minutes, followed by ${home?.policy.partBCTimerMinutes ?? 45} shared minutes for Parts B and C.`}
+                className="mb-5"
+              />
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {partGuides.map((card) => <LearnerSurfaceCard key={card.title} card={card} />)}
+              </div>
+            </section>
 
-          <LearnerSurfaceCard card={nextStepCard} />
-        </section>
+            <section>
+              <LearnerSurfaceSectionHeader
+                eyebrow="Recent Results"
+                title="Reading evidence"
+                description="Standalone Reading attempts show raw score, scaled score, grade, and the review route."
+                action={<Link href="/mocks" className="text-sm font-bold text-primary hover:underline">Open Mock Center</Link>}
+                className="mb-5"
+              />
 
-        <section>
-          <LearnerSurfaceSectionHeader
-            eyebrow="Recent Mock Reports"
-            title="Use mock evidence to validate progress"
-            description="Full-mock feedback shows whether reading gains are transferring under cross-subtest pressure."
-            action={<Link href="/mocks" className="text-sm font-bold text-primary hover:underline">Open Mock Center</Link>}
-            className="mb-5"
-          />
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            {mockReports.slice(0, 2).map((report, index) => {
-              const reportCard: LearnerSurfaceCardModel = {
-                kind: 'evidence',
-                sourceType: 'backend_summary',
-                accent: 'slate',
-                eyebrow: 'Mock Evidence',
-                eyebrowIcon: FileText,
-                title: report.title,
-                description: report.summary,
-                metaItems: [
-                  { label: report.date },
-                  { label: report.overallScore },
-                ],
-                primaryAction: {
-                  label: 'View Report',
-                  href: `/mocks/report/${report.id}`,
-                  variant: 'outline',
-                },
-              };
-
-              return (
-                <motion.div
-                  key={report.id}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ delay: 0.15 + index * 0.08 }}
-                >
-                  <LearnerSurfaceCard card={reportCard} />
-                </motion.div>
-              );
-            })}
-          </div>
-        </section>
+              {home?.recentResults.length ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  {home.recentResults.map((result, index) => (
+                    <motion.div
+                      key={result.attemptId}
+                      initial={{ opacity: 0, y: 16 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ delay: 0.12 + index * 0.06 }}
+                    >
+                      <LearnerSurfaceCard card={resultCard(result)} />
+                    </motion.div>
+                  ))}
+                </div>
+              ) : (
+                <EmptyState
+                  title="No Reading results yet"
+                  description="Complete a structured Reading paper to unlock item review and error clusters."
+                />
+              )}
+            </section>
+          </>
+        )}
       </main>
     </LearnerDashboardShell>
   );
+}
+
+function ActiveAttemptSection({ attempt }: { attempt: ReadingHomeAttemptDto }) {
+  const card: LearnerSurfaceCardModel = {
+    kind: 'status',
+    sourceType: 'backend_summary',
+    accent: 'emerald',
+    eyebrow: 'Resume',
+    eyebrowIcon: PlayCircle,
+    title: attempt.paperTitle,
+    description: 'An in-progress Reading attempt is open. Resume it before the timer window closes.',
+    metaItems: [
+      { icon: ListChecks, label: `${attempt.answeredCount}/${attempt.totalQuestions} answered` },
+      { icon: Clock, label: attempt.deadlineAt ? `Ends ${formatTime(attempt.deadlineAt)}` : 'Timer active' },
+    ],
+    primaryAction: {
+      label: 'Resume attempt',
+      href: attempt.route,
+    },
+    statusLabel: attempt.canResume ? 'In progress' : 'Expired',
+  };
+
+  return (
+    <section>
+      <LearnerSurfaceSectionHeader
+        eyebrow="Continue"
+        title="Active Reading attempt"
+        description="Resume your saved work from the structured player."
+        className="mb-5"
+      />
+      <LearnerSurfaceCard card={card} />
+    </section>
+  );
+}
+
+function paperCard(paper: ReadingHomePaperDto, attempts: ReadingHomeAttemptDto[]): LearnerSurfaceCardModel {
+  const active = attempts.find((attempt) => attempt.paperId === paper.id && attempt.canResume);
+  const lastSubmitted = paper.lastAttempt?.status === 'Submitted' ? paper.lastAttempt : null;
+  return {
+    kind: 'task',
+    sourceType: 'backend_task',
+    accent: 'blue',
+    eyebrow: paper.difficulty || 'Reading Paper',
+    eyebrowIcon: BookOpen,
+    title: paper.title,
+    description: `Full structured Reading paper with ${paper.totalPoints} points and timed Part A/B/C flow.`,
+    metaItems: [
+      { icon: Clock, label: `${paper.partATimerMinutes + paper.partBCTimerMinutes} mins` },
+      { icon: ListChecks, label: `${paper.partACount + paper.partBCount + paper.partCCount} questions` },
+    ],
+    primaryAction: {
+      label: active ? 'Resume paper' : 'Start paper',
+      href: active?.route ?? paper.route,
+    },
+    secondaryAction: lastSubmitted ? {
+      label: 'Review latest result',
+      href: lastSubmitted.route,
+      variant: 'outline',
+    } : undefined,
+    statusLabel: active ? 'In progress' : undefined,
+  };
+}
+
+function resultCard(result: ReadingHomeResultDto): LearnerSurfaceCardModel {
+  const passed = isListeningReadingPassByRaw(result.rawScore);
+  return {
+    kind: 'evidence',
+    sourceType: 'backend_summary',
+    accent: passed ? 'emerald' : 'amber',
+    eyebrow: passed ? 'Pass Evidence' : 'Review Focus',
+    eyebrowIcon: passed ? CheckCircle2 : Target,
+    title: result.paperTitle,
+    description: formatListeningReadingDisplay(result.rawScore),
+    metaItems: [
+      { icon: FileText, label: `Grade ${result.gradeLetter}` },
+      { icon: Clock, label: result.submittedAt ? formatDate(result.submittedAt) : 'Submitted' },
+    ],
+    primaryAction: {
+      label: 'Open review',
+      href: result.route,
+      variant: 'outline',
+    },
+    statusLabel: passed ? 'Passed' : 'Needs work',
+  };
+}
+
+function EmptyState({ title, description }: { title: string; description: string }) {
+  return (
+    <div className="rounded-[20px] border border-dashed border-border bg-surface px-5 py-8 text-center">
+      <p className="text-base font-bold text-navy">{title}</p>
+      <p className="mt-2 text-sm text-muted">{description}</p>
+    </div>
+  );
+}
+
+function ReadingHomeSkeleton() {
+  return (
+    <div className="space-y-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        {[1, 2].map((item) => <Skeleton key={item} className="h-56 rounded-[24px]" />)}
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {[1, 2, 3].map((item) => <Skeleton key={item} className="h-48 rounded-[24px]" />)}
+      </div>
+    </div>
+  );
+}
+
+function readErrorMessage(err: unknown, fallback: string): string {
+  const detail = (err as { detail?: { message?: string; error?: string } })?.detail;
+  return detail?.message ?? detail?.error ?? (err instanceof Error ? err.message : fallback);
+}
+
+function formatDate(value: string): string {
+  return new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }).format(new Date(value));
+}
+
+function formatTime(value: string): string {
+  return new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit' }).format(new Date(value));
 }

@@ -3606,6 +3606,10 @@ public partial class LearnerService(
         var item = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == contentId && x.SubtestCode == subtest, cancellationToken)
                    ?? throw ApiException.NotFound("content_not_found", $"{ToDisplaySubtest(subtest)} task not found.");
         var detail = JsonSupport.Deserialize<Dictionary<string, object?>>(item.DetailJson, new Dictionary<string, object?>());
+        if (string.Equals(subtest, "reading", StringComparison.OrdinalIgnoreCase))
+        {
+            detail = RedactLegacyReadingTask(detail);
+        }
         return Merge(new Dictionary<string, object?>
         {
             ["contentId"] = item.Id,
@@ -4343,6 +4347,49 @@ public partial class LearnerService(
         }
 
         return baseValues;
+    }
+
+    private static Dictionary<string, object?> RedactLegacyReadingTask(Dictionary<string, object?> detail)
+    {
+        var safe = new Dictionary<string, object?>(detail, StringComparer.OrdinalIgnoreCase);
+        safe.Remove("correctAnswer");
+        safe.Remove("explanation");
+        safe.Remove("acceptedSynonyms");
+
+        if (safe.TryGetValue("questions", out var questions))
+        {
+            safe["questions"] = RedactLegacyReadingQuestions(questions);
+        }
+
+        return safe;
+    }
+
+    private static object? RedactLegacyReadingQuestions(object? questions)
+    {
+        if (questions is JsonElement element && element.ValueKind == JsonValueKind.Array)
+        {
+            return element.EnumerateArray().Select(RedactLegacyReadingQuestion).ToList();
+        }
+
+        return questions;
+    }
+
+    private static Dictionary<string, object?> RedactLegacyReadingQuestion(JsonElement question)
+    {
+        var safe = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var property in question.EnumerateObject())
+        {
+            if (property.NameEquals("correctAnswer")
+                || property.NameEquals("explanation")
+                || property.NameEquals("acceptedSynonyms"))
+            {
+                continue;
+            }
+
+            safe[property.Name] = property.Value.Clone();
+        }
+
+        return safe;
     }
 
     private static string ToApiState(AttemptState state) => state switch

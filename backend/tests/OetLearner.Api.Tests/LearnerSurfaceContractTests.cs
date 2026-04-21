@@ -51,10 +51,10 @@ public class LearnerSurfaceContractTests : IClassFixture<TestWebApplicationFacto
         var readingResponse = await _client.GetAsync("/v1/reading/home");
         readingResponse.EnsureSuccessStatusCode();
         using var readingJson = JsonDocument.Parse(await readingResponse.Content.ReadAsStringAsync());
-        Assert.True(readingJson.RootElement.TryGetProperty("entryPoints", out _));
-        Assert.True(readingJson.RootElement.TryGetProperty("speedDrills", out _));
-        Assert.True(readingJson.RootElement.TryGetProperty("accuracyDrills", out _));
-        Assert.True(readingJson.RootElement.TryGetProperty("mockSets", out _));
+        Assert.True(readingJson.RootElement.TryGetProperty("papers", out _));
+        Assert.True(readingJson.RootElement.TryGetProperty("activeAttempts", out _));
+        Assert.True(readingJson.RootElement.TryGetProperty("recentResults", out _));
+        Assert.True(readingJson.RootElement.TryGetProperty("policy", out _));
 
         var listeningResponse = await _client.GetAsync("/v1/listening/home");
         listeningResponse.EnsureSuccessStatusCode();

@@ -85,12 +85,17 @@ export interface ReadingAttemptStarted {
   attemptId: string;
   startedAt: string;
   deadlineAt: string;
+  partADeadlineAt: string;
+  partBCDeadlineAt: string;
+  answeredCount: number;
+  canResume: boolean;
   paperTitle: string;
   partATimerMinutes: number;
   partBCTimerMinutes: number;
 }
 
 export interface ReadingAttemptGraded {
+  attemptId?: string;
   rawScore: number;
   maxRawScore: number;
   scaledScore: number;
@@ -105,6 +110,75 @@ export interface ReadingAttemptGraded {
     pointsEarned: number;
     maxPoints: number;
   }>;
+  reviewRoute?: string | null;
+}
+
+export interface ReadingHomePaperDto {
+  id: string;
+  title: string;
+  slug: string;
+  difficulty: string;
+  estimatedDurationMinutes: number;
+  publishedAt: string | null;
+  route: string;
+  partACount: number;
+  partBCount: number;
+  partCCount: number;
+  totalPoints: number;
+  partATimerMinutes: number;
+  partBCTimerMinutes: number;
+  lastAttempt: {
+    attemptId: string;
+    status: ReadingAttemptStatus;
+    startedAt: string;
+    submittedAt: string | null;
+    rawScore: number | null;
+    scaledScore: number | null;
+    route: string;
+  } | null;
+}
+
+export interface ReadingHomeAttemptDto {
+  attemptId: string;
+  paperId: string;
+  paperTitle: string;
+  status: ReadingAttemptStatus;
+  startedAt: string;
+  deadlineAt: string | null;
+  partADeadlineAt: string;
+  partBCDeadlineAt: string;
+  answeredCount: number;
+  totalQuestions: number;
+  canResume: boolean;
+  route: string;
+}
+
+export interface ReadingHomeResultDto {
+  attemptId: string;
+  paperId: string;
+  paperTitle: string;
+  rawScore: number;
+  maxRawScore: number;
+  scaledScore: number;
+  gradeLetter: string;
+  submittedAt: string | null;
+  route: string;
+}
+
+export interface ReadingHomeDto {
+  intro: string;
+  papers: ReadingHomePaperDto[];
+  activeAttempts: ReadingHomeAttemptDto[];
+  recentResults: ReadingHomeResultDto[];
+  policy: {
+    partATimerMinutes: number;
+    partBCTimerMinutes: number;
+    allowPausingAttempt: boolean;
+    allowResumeAfterExpiry: boolean;
+    showCorrectAnswerOnReview: boolean;
+    showExplanationsAfterSubmit: boolean;
+  };
+  safeDrills: unknown[];
 }
 
 export interface ReadingLearnerStructureDto {
@@ -177,6 +251,47 @@ export interface ReadingPolicyDto {
   rowVersion: number;
   updatedAt: string;
   updatedByAdminId: string | null;
+}
+
+export interface ReadingAttemptReviewDto {
+  attempt: {
+    id: string;
+    paperId: string;
+    status: ReadingAttemptStatus;
+    startedAt: string;
+    submittedAt: string | null;
+    rawScore: number | null;
+    maxRawScore: number;
+    scaledScore: number | null;
+    gradeLetter: string;
+    partADeadlineAt: string;
+    partBCDeadlineAt: string;
+  };
+  paper: { id: string; title: string; slug: string; subtestCode: string };
+  policy: {
+    showCorrectAnswerOnReview: boolean;
+    showExplanationsAfterSubmit: boolean;
+    showExplanationsOnlyIfWrong: boolean;
+  };
+  items: Array<{
+    questionId: string;
+    partCode: ReadingPartCode;
+    displayOrder: number;
+    questionType: ReadingQuestionType;
+    stem: string;
+    skillTag: string | null;
+    userAnswer: unknown;
+    isCorrect: boolean;
+    pointsEarned: number;
+    maxPoints: number;
+    correctAnswer: unknown | null;
+    explanationMarkdown: string | null;
+  }>;
+  clusters: Array<{
+    label: string;
+    incorrectCount: number;
+    questionIds: string[];
+  }>;
 }
 
 // ── HTTP helper ─────────────────────────────────────────────────────────
@@ -268,6 +383,8 @@ export const updateReadingPolicy = (body: ReadingPolicyDto) =>
 
 // ── Learner ─────────────────────────────────────────────────────────────
 
+export const getReadingHome = () => api<ReadingHomeDto>('/v1/reading/home');
+
 export const getReadingStructureLearner = (paperId: string) =>
   api<ReadingLearnerStructureDto>(`/v1/reading-papers/papers/${paperId}/structure`);
 
@@ -287,9 +404,14 @@ export const getReadingAttempt = (attemptId: string) =>
     id: string; paperId: string; status: ReadingAttemptStatus;
     startedAt: string; deadlineAt: string | null; submittedAt: string | null;
     rawScore: number | null; scaledScore: number | null; maxRawScore: number;
+    partADeadlineAt: string; partBCDeadlineAt: string;
+    answeredCount: number; totalQuestions: number; canResume: boolean;
     answers: Array<{
       readingQuestionId: string; userAnswerJson: string;
       isCorrect: boolean | null; pointsEarned: number; answeredAt: string;
     }>;
     showExplanations: boolean;
   }>(`/v1/reading-papers/attempts/${attemptId}`);
+
+export const getReadingAttemptReview = (attemptId: string) =>
+  api<ReadingAttemptReviewDto>(`/v1/reading-papers/attempts/${attemptId}/review`);
