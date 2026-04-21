@@ -102,7 +102,7 @@ public static class LearnerEndpoints
             var file = await service.GetSpeakingEvaluationAudioAsync(http.UserId(), evaluationId, ct);
             return Results.File(file.Stream, file.ContentType, enableRangeProcessing: true);
         });
-        speaking.MapPost("/device-checks", (DeviceCheckRequest request, LearnerService service) => Results.Ok(service.SaveDeviceCheck(request)));
+        speaking.MapPost("/device-checks", async (HttpContext http, DeviceCheckRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.SaveDeviceCheckAsync(http.UserId(), request, ct)));
 
         var reading = v1.MapGroup("/reading");
         reading.MapGet("/home", async (

@@ -211,7 +211,7 @@ export interface SpeakingResult {
   improvements: string[];
   evalStatus: EvalStatus;
   submittedAt: string;
-  nextDrill?: { title: string; description: string; id: string };
+  nextDrill?: { title: string; description: string; id: string; route?: string };
 }
 
 export interface PhrasingSegment {

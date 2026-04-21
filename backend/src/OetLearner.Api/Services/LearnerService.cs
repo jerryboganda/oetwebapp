@@ -1503,6 +1503,7 @@ public partial class LearnerService(
         var evaluationLookup = evaluationByAttempt
             .GroupBy(x => x.AttemptId)
             .ToDictionary(group => group.Key, group => group.First());
+        var phrasingRoute = latestEvaluation is null ? "/speaking/selection" : $"/speaking/phrasing/{latestEvaluation.Id}";
         return new
         {
             recommendedRolePlay = tasks.FirstOrDefault(),
@@ -1515,7 +1516,7 @@ public partial class LearnerService(
                     title = "Pronunciation drills",
                     items = new[]
                     {
-                        new { id = "sp-drill-1", title = "Stress important treatment words", route = "/speaking/review/sa-001" }
+                        new { id = "sp-drill-1", title = "Stress important treatment words", route = "/pronunciation" }
                     }
                 },
                 new
@@ -1524,7 +1525,7 @@ public partial class LearnerService(
                     title = "Empathy and clarification drills",
                     items = new[]
                     {
-                        new { id = "sp-drill-2", title = "Clarify concerns without losing structure", route = "/speaking/tasks" }
+                        new { id = "sp-drill-2", title = "Clarify concerns without losing structure", route = phrasingRoute }
                     }
                 }
             },
@@ -1536,13 +1537,20 @@ public partial class LearnerService(
                     attemptId = attempt.Id,
                     state = ToApiState(attempt.State),
                     scoreEstimate = evaluation?.ScoreRange,
-                    route = evaluation?.Id is null ? $"/speaking/attempt/{attempt.Id}" : $"/speaking/result/{evaluation.Id}"
+                    route = evaluation?.Id is null ? "/speaking/selection" : $"/speaking/results/{evaluation.Id}"
                 };
             }),
             reviewCredits = new
             {
                 available = wallet.CreditBalance,
-                route = "/reviews"
+                route = "/reviews",
+                billingRoute = "/billing"
+            },
+            supportEntries = new[]
+            {
+                new { id = "pronunciation", title = "Pronunciation drills", description = "Target individual sounds and stress patterns before the next role play.", route = "/pronunciation" },
+                new { id = "conversation", title = "AI Conversation Practice", description = "Use the server-authoritative conversation module for interactive AI patient practice.", route = "/conversation" },
+                new { id = "private-speaking", title = "Private Speaking Sessions", description = "Book human-led speaking support when you need live coaching.", route = "/private-speaking" }
             },
             featuredTasks = tasks.Take(3),
             latestEvaluation = latestEvaluation is null ? null : await GetSpeakingEvaluationSummaryAsync(userId, latestEvaluation.Id, cancellationToken),
@@ -1564,12 +1572,18 @@ public partial class LearnerService(
         return Merge(new Dictionary<string, object?>
         {
             ["contentId"] = item.Id,
+            ["contentType"] = item.ContentType,
+            ["subtest"] = item.SubtestCode,
             ["title"] = item.Title,
             ["professionId"] = item.ProfessionId,
             ["difficulty"] = item.Difficulty,
             ["estimatedDurationMinutes"] = item.EstimatedDurationMinutes,
+            ["criteriaFocus"] = JsonSupport.Deserialize<List<string>>(item.CriteriaFocusJson, []),
             ["scenarioType"] = item.ScenarioType,
-            ["modeSupport"] = JsonSupport.Deserialize<List<string>>(item.ModeSupportJson, [])
+            ["modeSupport"] = JsonSupport.Deserialize<List<string>>(item.ModeSupportJson, []),
+            ["publishedRevisionId"] = item.PublishedRevisionId,
+            ["status"] = ToContentStatus(item.Status),
+            ["caseNotes"] = item.CaseNotes
         }, detail);
     }
 
@@ -1810,7 +1824,13 @@ public partial class LearnerService(
             strengths = JsonSupport.Deserialize<List<string>>(evaluation.StrengthsJson, []),
             issues = JsonSupport.Deserialize<List<string>>(evaluation.IssuesJson, []),
             generatedAt = evaluation.GeneratedAt,
-            nextDrill = new { id = "fluency-drill-001", title = "Fluency: Transition Phrases", description = "Practise moving between handover sections without fillers." },
+            nextDrill = new
+            {
+                id = evaluation.Id,
+                title = "Phrasing and transcript drill",
+                description = "Review the transcript markers and practise stronger alternatives from this attempt.",
+                route = $"/speaking/phrasing/{evaluation.Id}"
+            },
             modelExplanationSafe = evaluation.ModelExplanationSafe,
             learnerDisclaimer = evaluation.LearnerDisclaimer,
             isOfficialScore = false,
@@ -1852,14 +1872,39 @@ public partial class LearnerService(
         return mediaStorage.OpenRead(attempt.AudioObjectKey, contentType);
     }
 
-    public object SaveDeviceCheck(DeviceCheckRequest request) => new
+    public async Task<object> SaveDeviceCheckAsync(string userId, DeviceCheckRequest request, CancellationToken cancellationToken)
     {
-        state = request.MicrophoneGranted && request.NetworkStable ? "passed" : "attention_required",
-        microphoneGranted = request.MicrophoneGranted,
-        networkStable = request.NetworkStable,
-        deviceType = request.DeviceType ?? "unknown",
-        checkedAt = DateTimeOffset.UtcNow
-    };
+        await EnsureUserAsync(userId, cancellationToken);
+        var checkedAt = DateTimeOffset.UtcNow;
+        var state = request.MicrophoneGranted && request.NetworkStable && request.NoiseAcceptable.GetValueOrDefault(true)
+            ? "passed"
+            : "attention_required";
+        var deviceCheckId = $"dc-{Guid.NewGuid():N}";
+        var payload = new
+        {
+            deviceCheckId,
+            taskId = string.IsNullOrWhiteSpace(request.TaskId) ? null : request.TaskId,
+            microphoneGranted = request.MicrophoneGranted,
+            networkStable = request.NetworkStable,
+            noiseLevel = request.NoiseLevel,
+            noiseAcceptable = request.NoiseAcceptable,
+            deviceType = request.DeviceType ?? "unknown",
+            state,
+            checkedAt
+        };
+
+        db.AnalyticsEvents.Add(new AnalyticsEventRecord
+        {
+            Id = $"evt-{Guid.NewGuid():N}",
+            UserId = userId,
+            EventName = "speaking_device_check",
+            PayloadJson = JsonSupport.Serialize(payload),
+            OccurredAt = checkedAt
+        });
+        await db.SaveChangesAsync(cancellationToken);
+
+        return payload;
+    }
 
     public async Task<object> GetReadingHomeAsync(CancellationToken cancellationToken)
     {

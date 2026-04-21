@@ -422,6 +422,7 @@ builder.Services.AddAuthorization(options =>
 });
 
 builder.Services.AddScoped<LearnerService>();
+builder.Services.AddScoped<ISpeakingEvaluationPipeline, SpeakingEvaluationPipeline>();
 builder.Services.AddScoped<ExpertService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<SponsorService>();

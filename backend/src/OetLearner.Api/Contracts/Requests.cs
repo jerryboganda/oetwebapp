@@ -46,7 +46,13 @@ public record UploadCompleteRequest(
 
 public record AnswersUpdateRequest(Dictionary<string, string?> Answers);
 
-public record DeviceCheckRequest(bool MicrophoneGranted, bool NetworkStable, string? DeviceType);
+public record DeviceCheckRequest(
+    bool MicrophoneGranted,
+    bool NetworkStable,
+    string? DeviceType,
+    string? TaskId = null,
+    double? NoiseLevel = null,
+    bool? NoiseAcceptable = null);
 
 public record ReviewRequestCreateRequest(
     string AttemptId,

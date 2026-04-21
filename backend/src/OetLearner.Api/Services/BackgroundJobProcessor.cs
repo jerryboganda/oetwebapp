@@ -112,10 +112,13 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 await CompleteWritingEvaluationAsync(db, notifications, job, cancellationToken);
                 break;
             case JobType.SpeakingTranscription:
-                await CompleteSpeakingTranscriptionAsync(db, job, cancellationToken);
+                await services.GetRequiredService<ISpeakingEvaluationPipeline>()
+                    .CompleteTranscriptionAsync(job, cancellationToken);
                 break;
             case JobType.SpeakingEvaluation:
-                await CompleteSpeakingEvaluationAsync(db, notifications, job, cancellationToken);
+                await services.GetRequiredService<ISpeakingEvaluationPipeline>()
+                    .CompleteEvaluationAsync(job, cancellationToken);
+                await CompleteSpeakingEvaluationSideEffectsAsync(db, notifications, job, cancellationToken);
                 break;
             case JobType.StudyPlanRegeneration:
                 await CompleteStudyPlanRegenerationAsync(db, notifications, job, cancellationToken);
@@ -426,66 +429,12 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             cancellationToken);
     }
 
-    private static async Task CompleteSpeakingTranscriptionAsync(LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)
-    {
-        if (string.IsNullOrWhiteSpace(job.AttemptId)) return;
-        var attempt = await db.Attempts.FirstAsync(x => x.Id == job.AttemptId, cancellationToken);
-        attempt.TranscriptJson = JsonSupport.Serialize(new object[]
-        {
-            new { id = "t1", speaker = "candidate", text = "Good morning, I'm handing over the care of Mr James Wheeler.", startTime = 0, endTime = 6, markers = (object[]?)null },
-            new { id = "t2", speaker = "candidate", text = "Um, he mobilised with physiotherapy this afternoon and tolerated fifteen minutes out of bed.", startTime = 7, endTime = 15, markers = new[] { new { id = "tm1", type = "fluency", startTime = 7, endTime = 8, text = "Um", suggestion = "Reduce filler words for a more confident clinical opening." } } }
-        });
-    }
-
-    private static async Task CompleteSpeakingEvaluationAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
+    private static async Task CompleteSpeakingEvaluationSideEffectsAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(job.AttemptId)) return;
 
         var attempt = await db.Attempts.FirstAsync(x => x.Id == job.AttemptId, cancellationToken);
         var evaluation = await db.Evaluations.FirstAsync(x => x.AttemptId == attempt.Id, cancellationToken);
-
-        evaluation.State = AsyncState.Completed;
-        evaluation.ScoreRange = "330-360";
-        evaluation.ConfidenceBand = ConfidenceBand.Medium;
-        evaluation.StrengthsJson = JsonSupport.Serialize(new[]
-        {
-            "Your handover remains logically structured.",
-            "Clinical terminology is generally appropriate for the task."
-        });
-        evaluation.IssuesJson = JsonSupport.Serialize(new[]
-        {
-            "Remove filler words at the start of key sections.",
-            "Increase confidence when stating management plans."
-        });
-        evaluation.CriterionScoresJson = JsonSupport.Serialize(new[]
-        {
-            new { criterionCode = "intelligibility", scoreRange = "4-5/6", confidenceBand = "high", explanation = "Speech is understandable and clear overall." },
-            new { criterionCode = "fluency", scoreRange = "3-4/6", confidenceBand = "medium", explanation = "Hesitation markers still appear in transitions." },
-            new { criterionCode = "appropriateness", scoreRange = "4/6", confidenceBand = "medium", explanation = "Professional tone is mostly maintained." },
-            new { criterionCode = "grammar_expression", scoreRange = "4/6", confidenceBand = "medium", explanation = "Expression is accurate with room for richer phrasing." }
-        });
-        evaluation.FeedbackItemsJson = JsonSupport.Serialize(new[]
-        {
-            new { feedbackItemId = $"{evaluation.Id}-1", criterionCode = "fluency", type = "transcript_marker", anchor = new { lineId = "t2", startTime = 7, endTime = 8 }, message = "Start directly rather than using a filler before the update.", severity = "medium", suggestedFix = "Lead with the key patient status update." }
-        });
-        evaluation.GeneratedAt = DateTimeOffset.UtcNow;
-        evaluation.ModelExplanationSafe = "This learner-safe estimate uses transcript markers and speaking quality signals rather than any official OET scoring system.";
-        evaluation.LearnerDisclaimer = "Training estimate only. Confidence can change with audio quality and task complexity.";
-        evaluation.StatusReasonCode = "completed";
-        evaluation.StatusMessage = "Speaking evaluation completed.";
-        evaluation.RetryAfterMs = null;
-        evaluation.LastTransitionAt = DateTimeOffset.UtcNow;
-
-        attempt.State = AttemptState.Completed;
-        attempt.CompletedAt = DateTimeOffset.UtcNow;
-        attempt.AnalysisJson = JsonSupport.Serialize(new
-        {
-            phrasing = new[]
-            {
-                new { id = "phr-1", originalPhrase = "Um, he mobilised", issueExplanation = "Filler words weaken fluency.", strongerAlternative = "He mobilised", drillPrompt = "Repeat the update starting directly with the patient action." }
-            },
-            waveformPeaks = new[] { 5, 11, 8, 15, 7, 10 }
-        });
 
         db.AnalyticsEvents.Add(new AnalyticsEventRecord
         {

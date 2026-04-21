@@ -10,7 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { fetchSpeakingHome, fetchSubmissions } from '@/lib/api';
+import { fetchSpeakingHome, fetchSubmissions, type SpeakingHome } from '@/lib/api';
 import type { Submission } from '@/lib/mock-data';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { createLearnerMetaLabel, type LearnerSurfaceCardModel } from '@/lib/learner-surface';
@@ -24,7 +24,7 @@ const evidenceDateFormatter = new Intl.DateTimeFormat('en-US', {
 const primaryLinkClasses = 'pressable inline-flex items-center justify-center gap-2 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-primary/90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2';
 
 export default function SpeakingHome() {
-  const [home, setHome] = useState<Record<string, any> | null>(null);
+  const [home, setHome] = useState<SpeakingHome | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -74,8 +74,9 @@ export default function SpeakingHome() {
   }
 
   const recommended = home?.recommendedRolePlay;
-  const featuredTasks = (home?.featuredTasks ?? []) as Array<Record<string, any>>;
-  const drillGroups = (home?.drillGroups ?? []) as Array<Record<string, any>>;
+  const featuredTasks = home?.featuredTasks ?? [];
+  const drillGroups = home?.drillGroups ?? [];
+  const supportEntries = home?.supportEntries ?? [];
   const credits = home?.reviewCredits?.available ?? 0;
   const recommendedId = recommended?.id ?? recommended?.contentId;
   const scenarioTasks = featuredTasks
@@ -84,19 +85,11 @@ export default function SpeakingHome() {
   const evidenceItems = submissions.slice(0, 3);
   const primaryDrillRoute = drillGroups[0]?.items?.[0]?.route ?? '/speaking/selection';
   const recommendedRoleLabel = createLearnerMetaLabel(
-    typeof recommended?.profession === 'string'
-      ? recommended.profession
-      : typeof recommended?.scenarioType === 'string'
-        ? recommended.scenarioType
-        : undefined,
+    recommended?.profession ?? recommended?.scenarioType,
     'Clinical role play',
   );
   const recommendedDurationLabel = createLearnerMetaLabel(
-    typeof recommended?.duration === 'string'
-      ? recommended.duration
-      : typeof recommended?.estimatedDurationMinutes === 'number'
-        ? `${recommended.estimatedDurationMinutes} mins`
-        : undefined,
+    recommended?.duration,
     '20 mins',
   );
 
@@ -107,14 +100,14 @@ export default function SpeakingHome() {
     eyebrow: 'Recommended Next',
     eyebrowIcon: Star,
     title: recommended.title,
-    description: `Start with the role play that best matches ${recommended.criteriaFocus ?? 'your current speaking priorities'}, then use the result to decide whether drills or review matter next.`,
+    description: `Start with the role play that best matches ${recommended.criteriaFocus || 'your current speaking priorities'}, then use the result to decide whether drills or review matter next.`,
     metaItems: [
       { label: recommendedRoleLabel },
       { icon: Clock, label: recommendedDurationLabel },
     ],
     primaryAction: {
       label: 'Start Role Play',
-      href: `/speaking/check?taskId=${recommended.id ?? recommended.contentId}`,
+      href: `/speaking/check?taskId=${recommended.id}`,
     },
   } satisfies LearnerSurfaceCardModel) : null;
 
@@ -165,7 +158,7 @@ export default function SpeakingHome() {
             <MotionSection delayIndex={1}>
               <LearnerSurfaceCard card={drillFocusCard}>
                 <div className="space-y-2.5">
-                  {(home?.commonIssuesToImprove ?? ['Build smoother openings for role plays.', 'Keep the professional tone consistent.']).slice(0, 3).map((issue: string) => (
+                  {(home?.commonIssuesToImprove ?? ['Build smoother openings for role plays.', 'Keep the professional tone consistent.']).slice(0, 3).map((issue) => (
                     <div key={issue} className="rounded-xl border border-amber-100 bg-amber-50/60 px-3 py-2 text-sm text-navy/80">
                       {issue}
                     </div>
@@ -195,27 +188,10 @@ export default function SpeakingHome() {
               ) : (
                 <div className="flex flex-col gap-3">
                   {scenarioTasks.map((task, index) => {
-                    const taskId = task.id ?? task.contentId;
-                    const durationLabel = createLearnerMetaLabel(
-                      typeof task.duration === 'string'
-                        ? task.duration
-                        : typeof task.estimatedDurationMinutes === 'number'
-                          ? `${task.estimatedDurationMinutes} mins`
-                          : undefined,
-                      '20 mins',
-                    );
-                    const scenarioLabel = createLearnerMetaLabel(
-                      typeof task.scenarioType === 'string'
-                        ? task.scenarioType
-                        : typeof task.profession === 'string'
-                          ? task.profession
-                          : undefined,
-                      'Speaking scenario',
-                    );
-                    const focusLabel = createLearnerMetaLabel(
-                      typeof task.criteriaFocus === 'string' ? task.criteriaFocus : undefined,
-                      'speaking control',
-                    );
+                    const taskId = task.id;
+                    const durationLabel = createLearnerMetaLabel(task.duration, '20 mins');
+                    const scenarioLabel = createLearnerMetaLabel(task.scenarioType || task.profession, 'Speaking scenario');
+                    const focusLabel = createLearnerMetaLabel(task.criteriaFocus, 'speaking control');
 
                     return (
                       <MotionItem

@@ -119,6 +119,44 @@ import type {
 const API_BASE_URL = env.apiBaseUrl;
 type ApiRecord = Record<string, any>;
 
+export interface SpeakingHomeAction {
+  id: string;
+  title: string;
+  description?: string;
+  route: string;
+}
+
+export interface SpeakingHomeDrillGroup {
+  id: string;
+  title: string;
+  items: SpeakingHomeAction[];
+}
+
+export interface SpeakingHomeAttempt {
+  attemptId: string;
+  state: string;
+  scoreEstimate?: string | null;
+  route: string;
+}
+
+export interface SpeakingHomeReviewCredits {
+  available: number;
+  route: string;
+  billingRoute?: string;
+}
+
+export interface SpeakingHome {
+  recommendedRolePlay?: SpeakingTask | null;
+  commonIssuesToImprove: string[];
+  drillGroups: SpeakingHomeDrillGroup[];
+  pastAttempts: SpeakingHomeAttempt[];
+  reviewCredits: SpeakingHomeReviewCredits;
+  supportEntries: SpeakingHomeAction[];
+  featuredTasks: SpeakingTask[];
+  latestEvaluation?: ApiRecord | null;
+  tips: string[];
+}
+
 export interface LearnerFeatureFlag {
   key: string;
   enabled: boolean;
@@ -981,9 +1019,51 @@ export async function fetchWritingHome(): Promise<ApiRecord> {
   return normalizeRouteValues(data);
 }
 
-export async function fetchSpeakingHome(): Promise<ApiRecord> {
+export async function fetchSpeakingHome(): Promise<SpeakingHome> {
   const data = await apiRequest<ApiRecord>('/v1/speaking/home');
-  return normalizeRouteValues(data);
+  const normalized = normalizeRouteValues(data) as ApiRecord;
+  return {
+    recommendedRolePlay: normalized.recommendedRolePlay ? mapSpeakingTask(normalized.recommendedRolePlay) : null,
+    commonIssuesToImprove: Array.isArray(normalized.commonIssuesToImprove) ? normalized.commonIssuesToImprove : [],
+    drillGroups: Array.isArray(normalized.drillGroups)
+      ? normalized.drillGroups.map((group: ApiRecord) => ({
+        id: String(group.id ?? group.title ?? 'drill-group'),
+        title: String(group.title ?? 'Speaking drill group'),
+        items: Array.isArray(group.items)
+          ? group.items.map((item: ApiRecord) => ({
+            id: String(item.id ?? item.route ?? item.title ?? 'drill'),
+            title: String(item.title ?? 'Open drill'),
+            description: item.description,
+            route: String(item.route ?? '/speaking/selection'),
+          }))
+          : [],
+      }))
+      : [],
+    pastAttempts: Array.isArray(normalized.pastAttempts)
+      ? normalized.pastAttempts.map((attempt: ApiRecord) => ({
+        attemptId: String(attempt.attemptId ?? ''),
+        state: String(attempt.state ?? 'unknown'),
+        scoreEstimate: attempt.scoreEstimate ?? null,
+        route: String(attempt.route ?? '/speaking/selection'),
+      }))
+      : [],
+    reviewCredits: {
+      available: Number(normalized.reviewCredits?.available ?? 0),
+      route: String(normalized.reviewCredits?.route ?? '/reviews'),
+      billingRoute: normalized.reviewCredits?.billingRoute,
+    },
+    supportEntries: Array.isArray(normalized.supportEntries)
+      ? normalized.supportEntries.map((entry: ApiRecord) => ({
+        id: String(entry.id ?? entry.route ?? entry.title ?? 'support-entry'),
+        title: String(entry.title ?? 'Speaking support'),
+        description: entry.description,
+        route: String(entry.route ?? '/speaking/selection'),
+      }))
+      : [],
+    featuredTasks: Array.isArray(normalized.featuredTasks) ? normalized.featuredTasks.map(mapSpeakingTask) : [],
+    latestEvaluation: normalized.latestEvaluation ?? null,
+    tips: Array.isArray(normalized.tips) ? normalized.tips : [],
+  };
 }
 
 export async function fetchMocksHome(): Promise<ApiRecord> {
@@ -991,7 +1071,14 @@ export async function fetchMocksHome(): Promise<ApiRecord> {
   return normalizeRouteValues(data);
 }
 
-export async function postSpeakingDeviceCheck(payload: { microphoneGranted: boolean; networkStable: boolean; deviceType?: string; }): Promise<ApiRecord> {
+export async function postSpeakingDeviceCheck(payload: {
+  microphoneGranted: boolean;
+  networkStable: boolean;
+  deviceType?: string;
+  taskId?: string;
+  noiseLevel?: number;
+  noiseAcceptable?: boolean;
+}): Promise<ApiRecord> {
   return apiRequest<ApiRecord>('/v1/speaking/device-checks', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -1323,7 +1410,7 @@ export async function submitSpeakingRecording(
   recording: Blob,
   durationSeconds = 120,
 ): Promise<{ uploadUrl: string; submissionId: string }> {
-  const attempt = await ensureAttempt('speaking', taskId, 'ai');
+  const attempt = await ensureAttempt('speaking', taskId, 'self');
   const upload = await apiRequest<ApiRecord>(`/v1/speaking/attempts/${attempt.attemptId}/audio/upload-session`, { method: 'POST' });
   await uploadBinary(upload.uploadUrl, recording);
   await apiRequest(`/v1/speaking/attempts/${attempt.attemptId}/audio/complete`, {
@@ -2050,8 +2137,9 @@ export async function fetchTurnaroundOptions(): Promise<TurnaroundOption[]> {
   }));
 }
 
-export async function fetchFocusAreas(): Promise<FocusArea[]> {
-  const criteria = await apiRequest<ApiRecord[]>('/v1/reference/criteria');
+export async function fetchFocusAreas(subtest?: string): Promise<FocusArea[]> {
+  const query = subtest ? `?subtest=${encodeURIComponent(subtest)}` : '';
+  const criteria = await apiRequest<ApiRecord[]>(`/v1/reference/criteria${query}`);
   const unique = new Map<string, FocusArea>();
   for (const criterion of criteria) {
     unique.set(criterion.code, {
