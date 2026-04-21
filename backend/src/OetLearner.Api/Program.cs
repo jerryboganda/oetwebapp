@@ -565,6 +565,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingGradingServic
     OetLearner.Api.Services.Reading.ReadingGradingService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingAttemptService,
     OetLearner.Api.Services.Reading.ReadingAttemptService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningLearnerService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Reading.ReadingAttemptExpireWorker>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Content.AdminUploadCleanupWorker>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiGatewayService,
@@ -801,6 +802,7 @@ app.MapContentPapersAdminEndpoints();
 app.MapContentPapersLearnerEndpoints();
 app.MapReadingAuthoringAdminEndpoints();
 app.MapReadingLearnerEndpoints();
+app.MapListeningLearnerEndpoints();
 app.MapReadingPolicyAdminEndpoints();
 app.MapContentHierarchyEndpoints();
 

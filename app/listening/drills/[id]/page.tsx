@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, Headphones, Target } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
@@ -9,25 +9,31 @@ import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
-import { fetchListeningDrill } from '@/lib/api';
-import type { ListeningDrill } from '@/lib/mock-data';
+import { getListeningDrill, type ListeningDrillDto } from '@/lib/listening-api';
+
+function firstParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
 
 export default function ListeningDrillPage() {
-  const params = useParams<{ id: string }>();
+  const params = useParams<{ id?: string | string[] }>();
+  const searchParams = useSearchParams();
   const router = useRouter();
-  const drillId = params?.id;
-  const [drill, setDrill] = useState<ListeningDrill | null>(null);
+  const drillId = firstParam(params?.id);
+  const paperId = searchParams?.get('paperId') ?? undefined;
+  const attemptId = searchParams?.get('attemptId') ?? undefined;
+  const [drill, setDrill] = useState<ListeningDrillDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!drillId) return;
     analytics.track('content_view', { page: 'listening-drill', drillId });
-    fetchListeningDrill(drillId)
+    getListeningDrill(drillId, { paperId, attemptId })
       .then(setDrill)
       .catch((err) => setError(err instanceof Error ? err.message : 'Could not load this listening drill.'))
       .finally(() => setLoading(false));
-  }, [drillId]);
+  }, [attemptId, drillId, paperId]);
 
   return (
     <LearnerDashboardShell pageTitle="Listening Drill" subtitle="Focused error-type practice for listening accuracy." backHref="/listening">
@@ -47,11 +53,11 @@ export default function ListeningDrillPage() {
               icon={Headphones}
               accent="indigo"
               title={drill.title}
-              description="Use this drill to isolate one listening error pattern before you return to a full task or transcript review."
+              description={drill.description}
               highlights={[
                 { icon: Target, label: 'Focus', value: drill.focusLabel },
                 { icon: Headphones, label: 'Duration', value: `${drill.estimatedMinutes} minutes` },
-                { icon: Target, label: 'Review handoff', value: 'Transcript route ready' },
+                { icon: Target, label: 'Review handoff', value: drill.reviewRoute === '/listening' ? 'After submit' : 'Transcript route ready' },
               ]}
             />
 

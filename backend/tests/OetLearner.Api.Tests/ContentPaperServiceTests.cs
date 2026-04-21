@@ -135,6 +135,7 @@ public class ContentPaperServiceTests
         Assert.Contains(PaperAssetRole.Audio, svc.RequiredRolesFor("listening"));
         Assert.Contains(PaperAssetRole.QuestionPaper, svc.RequiredRolesFor("listening"));
         Assert.Contains(PaperAssetRole.AnswerKey, svc.RequiredRolesFor("listening"));
+        Assert.Contains(PaperAssetRole.AudioScript, svc.RequiredRolesFor("listening"));
         Assert.Contains(PaperAssetRole.CaseNotes, svc.RequiredRolesFor("writing"));
         Assert.Contains(PaperAssetRole.RoleCard, svc.RequiredRolesFor("speaking"));
         await db.DisposeAsync();

@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react';
-const { mockFetchListeningHome, mockFetchMockReports, mockTrack, mockUseAuth } = vi.hoisted(() => ({
-  mockFetchListeningHome: vi.fn(),
+const { mockGetListeningHome, mockFetchMockReports, mockTrack, mockUseAuth } = vi.hoisted(() => ({
+  mockGetListeningHome: vi.fn(),
   mockFetchMockReports: vi.fn(),
   mockTrack: vi.fn(),
   mockUseAuth: vi.fn(),
@@ -25,8 +25,11 @@ vi.mock('@/lib/analytics', () => ({
 }));
 
 vi.mock('@/lib/api', () => ({
-  fetchListeningHome: mockFetchListeningHome,
   fetchMockReports: mockFetchMockReports,
+}));
+
+vi.mock('@/lib/listening-api', () => ({
+  getListeningHome: mockGetListeningHome,
 }));
 
 import ListeningHome from './page';
@@ -38,13 +41,36 @@ describe('Listening page', () => {
       isAuthenticated: true,
       loading: false,
     });
-    mockFetchListeningHome.mockResolvedValue({
+    mockGetListeningHome.mockResolvedValue({
       intro: 'Use this workspace to tighten detail capture.',
-      featuredTasks: [{ contentId: 'lt-001', title: 'Consultation: Asthma Management Review', estimatedDurationMinutes: 25, difficulty: 'medium', scenarioType: 'Consultation' }],
-      mockSets: [{ route: '/mocks/setup' }],
-      transcriptBackedReview: { title: 'Review transcript evidence', route: '/listening/transcript' },
-      distractorDrills: [{ route: '/listening/distractor-1' }],
-      accessPolicyHints: { rationale: 'Use transcript-backed review after an attempt.' },
+      papers: [{
+        id: 'lp-001',
+        title: 'OET Listening Practice Paper 1',
+        slug: 'oet-listening-practice-paper-1',
+        difficulty: 'medium',
+        estimatedDurationMinutes: 42,
+        publishedAt: '2026-04-01T00:00:00Z',
+        route: '/listening/player/lp-001',
+        sourceKind: 'content_paper',
+        objectiveReady: true,
+        questionCount: 42,
+        assetReadiness: { audio: true, questionPaper: true, answerKey: true, audioScript: true },
+        lastAttempt: null,
+      }],
+      featuredTasks: [{ id: 'lt-001', contentId: 'lt-001', title: 'Consultation: Asthma Management Review', estimatedDurationMinutes: 25, difficulty: 'medium', scenarioType: 'Consultation', route: '/listening/player/lt-001', sourceKind: 'legacy_content_item', objectiveReady: true, questionCount: 3 }],
+      activeAttempts: [{ attemptId: 'attempt-1', paperId: 'lp-001', paperTitle: 'OET Listening Practice Paper 1', status: 'in_progress', mode: 'practice', startedAt: '2026-04-01T00:00:00Z', lastClientSyncAt: '2026-04-01T00:02:00Z', answeredCount: 12, route: '/listening/player/lp-001?attemptId=attempt-1' }],
+      recentResults: [{ attemptId: 'attempt-0', paperId: 'lp-001', paperTitle: 'OET Listening Practice Paper 1', rawScore: 31, maxRawScore: 42, scaledScore: 360, grade: 'B', passed: true, submittedAt: '2026-04-01T00:30:00Z', scoreDisplay: '31 / 42 raw • 360 / 500 scaled • Grade B', route: '/listening/results/attempt-0' }],
+      partCollections: [],
+      mockSets: [{ id: 'mock-listening', title: 'Listening mock center', route: '/mocks/setup', mode: 'practice', strictTimer: false }],
+      transcriptBackedReview: { title: 'Review transcript evidence', route: '/listening/review/attempt-0', availableAfterAttempt: true, latestAttemptId: 'attempt-0', latestScoreDisplay: '31 / 42 raw • 360 / 500 scaled • Grade B' },
+      distractorDrills: [{ drillId: 'listening-drill-distractor_confusion', title: 'Distractor Control Drill', focusLabel: 'Plan changes', description: 'Separate first suggestion from final plan.', errorType: 'distractor_confusion', estimatedMinutes: 12, highlights: ['Track corrected instructions.'], launchRoute: '/listening/player/lp-001?drill=listening-drill-distractor_confusion', reviewRoute: '/listening/review/attempt-0' }],
+      drillGroups: [],
+      accessPolicyHints: { policy: 'per_item_post_attempt', state: 'available', rationale: 'Use transcript-backed review after an attempt.', availableAfterAttempt: true },
+      emptyStates: {
+        papers: null,
+        activeAttempts: 'No active Listening attempt yet.',
+        recentResults: 'Submit a Listening attempt to see canonical OET results.',
+      },
     });
     mockFetchMockReports.mockResolvedValue([{ id: 'mock-1', title: 'Listening Mock', summary: 'Improving.', date: '2026-03-29', overallScore: '72%' }]);
   });
@@ -63,6 +89,8 @@ describe('Listening page', () => {
 
   it('displays featured listening tasks from the API', async () => {
     render(<ListeningHome />);
-    expect(await screen.findByText('Consultation: Asthma Management Review')).toBeInTheDocument();
+    expect((await screen.findAllByText('OET Listening Practice Paper 1')).length).toBeGreaterThan(0);
+    expect(screen.getByText(/31 \/ 42 raw/)).toBeInTheDocument();
+    expect(screen.getByText('Resume Attempt')).toBeInTheDocument();
   });
 });

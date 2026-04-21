@@ -1464,46 +1464,44 @@ export async function fetchListeningResult(taskId: string): Promise<ListeningRes
     apiRequest<ApiRecord>(`/v1/listening/evaluations/${evaluationId}`),
     apiRequest<ApiRecord>(`/v1/listening/tasks/${taskId}`),
   ]);
-  const attempt = await apiRequest<ApiRecord>(`/v1/listening/attempts/${evaluation.attemptId}`);
-  const answers = attempt.answers ?? {};
 
-  const questions = (task.questions ?? []).map((question: ApiRecord, index: number) => {
-    const userAnswer = answers[question.id] ?? '';
-    const isCorrect = String(userAnswer).trim().toLowerCase() === String(question.correctAnswer).trim().toLowerCase();
-    const itemReview = (evaluation.itemReview ?? []).find((item: ApiRecord) => item.questionId === question.id);
-    const transcript = itemReview?.transcript ?? null;
+  const questions = (evaluation.itemReview ?? []).map((itemReview: ApiRecord, index: number) => {
+    const transcript = itemReview.transcript ?? null;
+    const isCorrect = Boolean(itemReview.isCorrect);
     return {
       id: `lrq-${index + 1}`,
-      number: question.number,
-      text: question.text,
-      userAnswer,
-      correctAnswer: question.correctAnswer,
+      number: itemReview.number ?? index + 1,
+      text: itemReview.prompt ?? itemReview.text ?? `Question ${index + 1}`,
+      userAnswer: itemReview.learnerAnswer ?? '',
+      correctAnswer: itemReview.correctAnswer ?? '',
       isCorrect,
-      explanation: itemReview?.explanation ?? question.explanation ?? (isCorrect ? 'Correct.' : 'Review the transcript clue and distractor pattern.'),
+      explanation: itemReview.explanation ?? (isCorrect ? 'Correct.' : 'Review the transcript clue and distractor pattern.'),
       allowTranscriptReveal: Boolean(transcript?.allowed),
-      transcriptExcerpt: transcript?.excerpt ?? question.transcriptExcerpt ?? undefined,
-      distractorExplanation: transcript?.distractorExplanation ?? question.distractorExplanation ?? undefined,
+      transcriptExcerpt: transcript?.excerpt ?? undefined,
+      distractorExplanation: transcript?.distractorExplanation ?? itemReview.distractorExplanation ?? undefined,
     };
   });
 
   const recommendedNextDrill = evaluation.recommendedNextDrill ?? {};
+  const rawScore = Number(evaluation.rawScore ?? questions.filter((question: ListeningResult['questions'][number]) => question.isCorrect).length);
+  const maxRawScore = Number(evaluation.maxRawScore ?? 42);
 
   return {
     id: taskId,
     title: task.title,
-    score: questions.filter((question: ListeningResult['questions'][number]) => question.isCorrect).length,
-    total: questions.length,
+    score: rawScore,
+    total: maxRawScore,
     questions,
     recommendedDrill: {
-      id: recommendedNextDrill.id ?? 'listening-drill-detail_capture',
+      id: recommendedNextDrill.drillId ?? recommendedNextDrill.id ?? 'listening-drill-detail_capture',
       title: recommendedNextDrill.title ?? 'Exact Detail Capture Drill',
-      description: recommendedNextDrill.rationale ?? 'Practise the listening error type that appeared most often in this result.',
+      description: recommendedNextDrill.description ?? recommendedNextDrill.rationale ?? 'Practise the listening error type that appeared most often in this result.',
     },
   };
 }
 
 export async function fetchListeningDrill(drillId: string): Promise<ListeningDrill> {
-  const drill = normalizeRouteValues(await apiRequest<ApiRecord>(`/v1/listening/drills/${drillId}`));
+  const drill = normalizeRouteValues(await apiRequest<ApiRecord>(`/v1/listening-papers/drills/${drillId}`));
   return {
     id: drill.drillId,
     title: drill.title,
@@ -1530,9 +1528,9 @@ export async function fetchListeningReview(taskId: string): Promise<ListeningRev
     transcriptPolicy: evaluation.transcriptAccess?.policy ?? 'per_item_post_attempt',
     recommendedDrill: evaluation.recommendedNextDrill
       ? {
-          id: evaluation.recommendedNextDrill.id,
+          id: evaluation.recommendedNextDrill.drillId ?? evaluation.recommendedNextDrill.id,
           title: evaluation.recommendedNextDrill.title,
-          description: evaluation.recommendedNextDrill.rationale ?? 'Continue with the recommended drill.',
+          description: evaluation.recommendedNextDrill.description ?? evaluation.recommendedNextDrill.rationale ?? 'Continue with the recommended drill.',
         }
       : undefined,
     questions: (evaluation.itemReview ?? []).map((item: ApiRecord, index: number) => ({

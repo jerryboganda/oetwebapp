@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Quote, Target } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, FileLock2, Quote, Target, XCircle } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
@@ -10,28 +10,37 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { SelectionToVocab } from '@/components/domain/vocabulary';
 import { analytics } from '@/lib/analytics';
-import { fetchListeningReview } from '@/lib/api';
-import type { ListeningReview } from '@/lib/mock-data';
+import { getListeningReview, type ListeningReviewDto } from '@/lib/listening-api';
+
+function firstParam(value: string | string[] | undefined) {
+  return Array.isArray(value) ? value[0] : value;
+}
+
+function transcriptStateCopy(state: ListeningReviewDto['transcriptAccess']['state']) {
+  if (state === 'available') return 'Transcript excerpts are available for all reviewed questions.';
+  if (state === 'partial') return 'Transcript excerpts are available only for authored items that allow evidence reveal.';
+  return 'Transcript excerpts are restricted for this result. The answer review remains available after submit.';
+}
 
 export default function ListeningReviewPage() {
-  const params = useParams<{ id: string }>();
+  const params = useParams<{ id?: string | string[] }>();
   const router = useRouter();
-  const taskId = params?.id;
-  const [review, setReview] = useState<ListeningReview | null>(null);
+  const attemptId = firstParam(params?.id);
+  const [review, setReview] = useState<ListeningReviewDto | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!taskId) return;
-    analytics.track('content_view', { page: 'listening-review', taskId });
-    fetchListeningReview(taskId)
+    if (!attemptId) return;
+    analytics.track('content_view', { page: 'listening-review', attemptId });
+    getListeningReview(attemptId)
       .then(setReview)
       .catch((err) => setError(err instanceof Error ? err.message : 'Could not load transcript-backed review.'))
       .finally(() => setLoading(false));
-  }, [taskId]);
+  }, [attemptId]);
 
   return (
-    <LearnerDashboardShell pageTitle="Listening Review" subtitle="Transcript-backed evidence for listening mistakes and distractors." backHref="/listening">
+    <LearnerDashboardShell pageTitle="Listening Review" subtitle={review?.paper.title ?? 'Transcript-backed evidence for listening mistakes and distractors.'} backHref="/listening">
       <div className="space-y-8">
         <Button variant="ghost" className="gap-2" onClick={() => router.push('/listening')}>
           <ArrowLeft className="h-4 w-4" />
@@ -48,11 +57,11 @@ export default function ListeningReviewPage() {
               icon={Quote}
               accent="indigo"
               title="Use transcript clues to see why the answer changed"
-              description="Review the evidence behind each listening error before you move into the next drill."
+              description={transcriptStateCopy(review.transcriptAccess.state)}
               highlights={[
-                { icon: Quote, label: 'Policy', value: review.transcriptPolicy.replace(/_/g, ' ') },
-                { icon: Target, label: 'Questions', value: `${review.questions.length} reviewed` },
-                { icon: Target, label: 'Next drill', value: review.recommendedDrill ? 'Recommended' : 'Not assigned' },
+                { icon: Quote, label: 'Policy', value: review.transcriptAccess.policy.replace(/_/g, ' ') },
+                { icon: Target, label: 'Questions', value: `${review.itemReview.length} reviewed` },
+                { icon: Target, label: 'Next drill', value: review.recommendedNextDrill ? 'Recommended' : 'Not assigned' },
               ]}
             />
 
@@ -63,16 +72,34 @@ export default function ListeningReviewPage() {
                 description="Listening transcripts should stay evidence-based and only reveal the snippets that the learner is allowed to revisit after the attempt."
                 className="mb-4"
               />
-              <div className="rounded-2xl border border-gray-100 bg-background-light p-4 text-sm text-muted">
-                Policy: {review.transcriptPolicy.replace(/_/g, ' ')}
+              <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
+                <div className="rounded-2xl border border-gray-100 bg-background-light p-4 text-sm text-muted">
+                  <span className="font-bold text-navy">Policy:</span> {review.transcriptAccess.policy.replace(/_/g, ' ')}
+                  <br />
+                  {review.transcriptAccess.reason}
+                </div>
+                <div className="rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm font-bold capitalize text-violet-800">
+                  {review.transcriptAccess.state}
+                </div>
               </div>
             </section>
 
             <section className="space-y-4">
-              {review.questions.map((question) => (
-                <div key={question.id} className="rounded-[24px] border border-gray-200 bg-surface p-5 shadow-sm">
-                  <p className="text-xs font-black uppercase tracking-widest text-muted">Question {question.number}</p>
-                  <h2 className="mt-2 text-lg font-bold text-navy">{question.text}</h2>
+              {review.itemReview.map((question) => (
+                <div key={question.questionId} className="rounded-[24px] border border-gray-200 bg-surface p-5 shadow-sm">
+                  <div className="flex items-start gap-3">
+                    {question.isCorrect ? (
+                      <CheckCircle2 className="mt-1 h-5 w-5 shrink-0 text-emerald-500" />
+                    ) : (
+                      <XCircle className="mt-1 h-5 w-5 shrink-0 text-rose-500" />
+                    )}
+                    <div>
+                      <p className="text-xs font-black uppercase tracking-widest text-muted">
+                        Part {question.partCode} / Question {question.number}
+                      </p>
+                      <h2 className="mt-2 text-lg font-bold text-navy">{question.prompt}</h2>
+                    </div>
+                  </div>
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
                     <div className="rounded-2xl border border-gray-100 bg-background-light p-4">
                       <p className="text-xs font-black uppercase tracking-widest text-muted">Your answer</p>
@@ -84,13 +111,18 @@ export default function ListeningReviewPage() {
                     </div>
                   </div>
                   <p className="mt-4 text-sm text-muted">{question.explanation}</p>
-                  {question.transcriptExcerpt ? (
-                    <SelectionToVocab source="listening" sourceRefPrefix={`listening:${taskId}:${question.id}`}>
+                  {question.transcript?.allowed && question.transcript.excerpt ? (
+                    <SelectionToVocab source="listening" sourceRefPrefix={`listening:${attemptId}:${question.questionId}`}>
                       <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
-                        Transcript clue: {question.transcriptExcerpt}
+                        Transcript clue: {question.transcript.excerpt}
                       </div>
                     </SelectionToVocab>
-                  ) : null}
+                  ) : (
+                    <div className="mt-4 flex items-start gap-3 rounded-2xl border border-gray-100 bg-background-light p-4 text-sm text-muted">
+                      <FileLock2 className="mt-0.5 h-4 w-4 shrink-0" />
+                      Transcript excerpt restricted for this item.
+                    </div>
+                  )}
                   {question.distractorExplanation ? (
                     <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-900">
                       Distractor explanation: {question.distractorExplanation}
@@ -100,7 +132,7 @@ export default function ListeningReviewPage() {
               ))}
             </section>
 
-            {review.recommendedDrill ? (
+            {review.recommendedNextDrill ? (
               <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
                 <LearnerSurfaceSectionHeader
                   eyebrow="Next Drill"
@@ -110,10 +142,10 @@ export default function ListeningReviewPage() {
                 />
                 <div className="flex flex-col gap-4 rounded-2xl border border-gray-100 bg-background-light p-4 md:flex-row md:items-center md:justify-between">
                   <div>
-                    <p className="font-bold text-navy">{review.recommendedDrill.title}</p>
-                    <p className="mt-1 text-sm text-muted">{review.recommendedDrill.description}</p>
+                    <p className="font-bold text-navy">{review.recommendedNextDrill.title}</p>
+                    <p className="mt-1 text-sm text-muted">{review.recommendedNextDrill.description}</p>
                   </div>
-                  <Button onClick={() => router.push(`/listening/drills/${review.recommendedDrill!.id}`)}>
+                  <Button onClick={() => router.push(review.recommendedNextDrill.launchRoute)}>
                     <Target className="h-4 w-4" />
                     Open recommended drill
                   </Button>

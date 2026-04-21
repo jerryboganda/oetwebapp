@@ -3610,6 +3610,10 @@ public partial class LearnerService(
         {
             detail = RedactLegacyReadingTask(detail);
         }
+        else if (string.Equals(subtest, "listening", StringComparison.OrdinalIgnoreCase))
+        {
+            detail = RedactLegacyListeningTask(detail);
+        }
         return Merge(new Dictionary<string, object?>
         {
             ["contentId"] = item.Id,
@@ -3651,20 +3655,68 @@ public partial class LearnerService(
         attempt.State = AttemptState.Completed;
         attempt.SubmittedAt = DateTimeOffset.UtcNow;
         attempt.CompletedAt = DateTimeOffset.UtcNow;
+        var content = await db.ContentItems.FirstOrDefaultAsync(x => x.Id == attempt.ContentId && x.SubtestCode == subtest, cancellationToken)
+            ?? throw ApiException.NotFound("content_not_found", $"{ToDisplaySubtest(subtest)} task not found.");
+        var questions = ObjectiveQuestionsForContent(content);
+        var answers = JsonSupport.Deserialize<Dictionary<string, string?>>(attempt.AnswersJson, new Dictionary<string, string?>());
+        var rawScore = ObjectiveRawScore(questions, answers);
+        var score = OetScoring.GradeListeningReading(subtest, rawScore);
+        var scoreDisplay = $"{score.RawCorrect} / {score.RawMax} \u2022 {score.ScaledScore} / 500 \u2022 Grade {score.Grade}";
+        var incorrectItems = questions
+            .Where(question =>
+            {
+                var questionId = question.GetValueOrDefault("id")?.ToString() ?? string.Empty;
+                return !MatchesObjectiveAnswer(answers.GetValueOrDefault(questionId), question.GetValueOrDefault("correctAnswer")?.ToString());
+            })
+            .ToList();
 
         var evaluation = new Evaluation
         {
-            Id = $"{subtest[..1]}e-{DateTimeOffset.UtcNow.ToUnixTimeSeconds()}",
+            Id = $"{subtest[..1]}e-{Guid.NewGuid():N}",
             AttemptId = attempt.Id,
             SubtestCode = subtest,
             State = AsyncState.Completed,
-            ScoreRange = subtest == "reading" ? "67%" : "66%",
-            GradeRange = "C+",
+            ScoreRange = scoreDisplay,
+            GradeRange = $"Grade {score.Grade}",
             ConfidenceBand = ConfidenceBand.High,
-            StrengthsJson = JsonSupport.Serialize(new[] { "You captured the main idea correctly.", "Your answer flow remained controlled under time pressure." }),
-            IssuesJson = JsonSupport.Serialize(new[] { "One exact-detail distractor still caused an error." }),
-            CriterionScoresJson = JsonSupport.Serialize(new[] { new { criterionCode = "detail_capture", scoreRange = "2/3", confidenceBand = "high", explanation = "Most exact details were captured correctly." } }),
-            FeedbackItemsJson = JsonSupport.Serialize(new[] { new { feedbackItemId = $"{attempt.Id}-objective-1", criterionCode = "detail_capture", type = "answer_feedback", anchor = new { questionId = "2" }, message = "Focus on exact quantities, not inferred frequency.", severity = "medium", suggestedFix = "Underline number and range language." } }),
+            StrengthsJson = JsonSupport.Serialize(score.Passed
+                ? new[] { $"Your {ToDisplaySubtest(subtest)} raw score is at or above the OET Grade B practice threshold.", "Your answer flow remained controlled under time pressure." }
+                : new[] { $"You completed the {ToDisplaySubtest(subtest)} attempt and now have item-level evidence to review." }),
+            IssuesJson = JsonSupport.Serialize(incorrectItems
+                .Take(3)
+                .Select(question => question.GetValueOrDefault("distractorExplanation")?.ToString()
+                    ?? question.GetValueOrDefault("explanation")?.ToString()
+                    ?? "Review exact detail evidence before your next attempt.")
+                .DefaultIfEmpty("Keep using evidence-backed review to maintain objective accuracy.")),
+            CriterionScoresJson = JsonSupport.Serialize(new[]
+            {
+                new
+                {
+                    criterionCode = $"{subtest}_accuracy",
+                    rawScore = score.RawCorrect,
+                    maxRawScore = score.RawMax,
+                    scaledScore = score.ScaledScore,
+                    grade = score.Grade,
+                    passed = score.Passed,
+                    scoreDisplay,
+                    confidenceBand = "high",
+                    explanation = "Objective score graded from the authored answer key."
+                }
+            }),
+            FeedbackItemsJson = JsonSupport.Serialize(incorrectItems.Select(question =>
+            {
+                var questionId = question.GetValueOrDefault("id")?.ToString() ?? string.Empty;
+                return new
+                {
+                    feedbackItemId = $"{attempt.Id}-{questionId}",
+                    criterionCode = ObjectiveErrorType(subtest, question),
+                    type = "answer_feedback",
+                    anchor = new { questionId },
+                    message = question.GetValueOrDefault("explanation")?.ToString() ?? "Review the source evidence for this answer.",
+                    severity = "medium",
+                    suggestedFix = question.GetValueOrDefault("distractorExplanation")?.ToString() ?? "Repeat a short focused drill for this error type."
+                };
+            })),
             GeneratedAt = DateTimeOffset.UtcNow,
             ModelExplanationSafe = "This objective result is based on answer accuracy only.",
             LearnerDisclaimer = "Practice estimate only.",
@@ -3694,6 +3746,9 @@ public partial class LearnerService(
         var itemReview = questions
             .Select(question => ObjectiveItemReviewDto(content.SubtestCode, question, answers))
             .ToList();
+        var rawScore = ObjectiveRawScore(questions, answers);
+        var score = OetScoring.GradeListeningReading(content.SubtestCode, rawScore);
+        var scoreDisplay = $"{score.RawCorrect} / {score.RawMax} \u2022 {score.ScaledScore} / 500 \u2022 Grade {score.Grade}";
         var errorClusters = ObjectiveErrorClusters(content.SubtestCode, itemReview);
         return new
         {
@@ -3702,8 +3757,13 @@ public partial class LearnerService(
             taskId = content.Id,
             title = content.Title,
             subtest = content.SubtestCode,
-            score = evaluation.ScoreRange,
-            gradeRange = evaluation.GradeRange,
+            score = scoreDisplay,
+            rawScore = score.RawCorrect,
+            maxRawScore = score.RawMax,
+            scaledScore = score.ScaledScore,
+            grade = score.Grade,
+            passed = score.Passed,
+            gradeRange = $"Grade {score.Grade}",
             state = ToAsyncState(evaluation.State),
             strengths = JsonSupport.Deserialize<List<string>>(evaluation.StrengthsJson, []),
             issues = JsonSupport.Deserialize<List<string>>(evaluation.IssuesJson, []),
@@ -4392,6 +4452,53 @@ public partial class LearnerService(
         return safe;
     }
 
+    private static Dictionary<string, object?> RedactLegacyListeningTask(Dictionary<string, object?> detail)
+    {
+        var safe = new Dictionary<string, object?>(detail, StringComparer.OrdinalIgnoreCase);
+        safe.Remove("correctAnswer");
+        safe.Remove("explanation");
+        safe.Remove("acceptedSynonyms");
+        safe.Remove("transcriptExcerpt");
+        safe.Remove("distractorExplanation");
+
+        if (safe.TryGetValue("questions", out var questions))
+        {
+            safe["questions"] = RedactLegacyListeningQuestions(questions);
+        }
+
+        return safe;
+    }
+
+    private static object? RedactLegacyListeningQuestions(object? questions)
+    {
+        if (questions is JsonElement element && element.ValueKind == JsonValueKind.Array)
+        {
+            return element.EnumerateArray().Select(RedactLegacyListeningQuestion).ToList();
+        }
+
+        return questions;
+    }
+
+    private static Dictionary<string, object?> RedactLegacyListeningQuestion(JsonElement question)
+    {
+        var safe = new Dictionary<string, object?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var property in question.EnumerateObject())
+        {
+            if (property.NameEquals("correctAnswer")
+                || property.NameEquals("explanation")
+                || property.NameEquals("acceptedSynonyms")
+                || property.NameEquals("transcriptExcerpt")
+                || property.NameEquals("distractorExplanation"))
+            {
+                continue;
+            }
+
+            safe[property.Name] = property.Value.Clone();
+        }
+
+        return safe;
+    }
+
     private static string ToApiState(AttemptState state) => state switch
     {
         AttemptState.NotStarted => "not_started",
@@ -5024,6 +5131,26 @@ public partial class LearnerService(
                 }
                 : null
         };
+    }
+
+    private static List<Dictionary<string, object?>> ObjectiveQuestionsForContent(ContentItem content)
+    {
+        var detail = JsonSupport.Deserialize<Dictionary<string, object?>>(content.DetailJson, new Dictionary<string, object?>());
+        return detail.TryGetValue("questions", out var questionsValue)
+            ? JsonSupport.Deserialize<List<Dictionary<string, object?>>>(JsonSupport.Serialize(questionsValue), [])
+            : [];
+    }
+
+    private static int ObjectiveRawScore(IEnumerable<Dictionary<string, object?>> questions, Dictionary<string, string?> answers)
+    {
+        var raw = questions.Count(question =>
+        {
+            var questionId = question.GetValueOrDefault("id")?.ToString() ?? string.Empty;
+            var correctAnswer = question.GetValueOrDefault("correctAnswer")?.ToString();
+            return MatchesObjectiveAnswer(answers.GetValueOrDefault(questionId), correctAnswer);
+        });
+
+        return Math.Clamp(raw, 0, OetScoring.ListeningReadingRawMax);
     }
 
     private static IEnumerable<object> ObjectiveErrorClusters(string subtest, IEnumerable<object> itemReview)

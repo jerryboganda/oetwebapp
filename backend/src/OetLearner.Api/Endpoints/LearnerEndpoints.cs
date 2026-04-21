@@ -5,6 +5,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Listening;
 using OetLearner.Api.Services.Reading;
 
 namespace OetLearner.Api.Endpoints;
@@ -119,7 +120,7 @@ public static class LearnerEndpoints
         reading.MapGet("/evaluations/{evaluationId}", async (HttpContext http, string evaluationId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReadingEvaluationAsync(http.UserId(), evaluationId, ct)));
 
         var listening = v1.MapGroup("/listening");
-        listening.MapGet("/home", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetListeningHomeAsync(ct)));
+        listening.MapGet("/home", async (HttpContext http, ListeningLearnerService service, CancellationToken ct) => Results.Ok(await service.GetHomeAsync(http.UserId(), ct)));
         listening.MapGet("/tasks/{contentId}", async (string contentId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetListeningTaskAsync(contentId, ct)));
         listening.MapPost("/attempts", async (HttpContext http, CreateAttemptRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateListeningAttemptAsync(http.UserId(), request, ct)));
         listening.MapGet("/attempts/{attemptId}", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetListeningAttemptAsync(http.UserId(), attemptId, ct)));

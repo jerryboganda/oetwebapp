@@ -81,7 +81,7 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
     /// this in sync with §2 of <c>docs/CONTENT-UPLOAD-PLAN.md</c>.</summary>
     private static readonly Dictionary<string, HashSet<PaperAssetRole>> RequiredRoles = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["listening"] = new() { PaperAssetRole.Audio, PaperAssetRole.QuestionPaper, PaperAssetRole.AnswerKey },
+        ["listening"] = new() { PaperAssetRole.Audio, PaperAssetRole.QuestionPaper, PaperAssetRole.AudioScript, PaperAssetRole.AnswerKey },
         ["reading"]   = new() { PaperAssetRole.QuestionPaper, PaperAssetRole.AnswerKey },
         ["writing"]   = new() { PaperAssetRole.CaseNotes },
         ["speaking"]  = new() { PaperAssetRole.RoleCard },
