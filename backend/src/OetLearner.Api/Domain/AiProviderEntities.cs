@@ -51,6 +51,14 @@ public class AiProvider
     [MaxLength(128)]
     public string DefaultModel { get; set; } = "";
 
+    /// <summary>
+    /// Reasoning effort hint sent to reasoning-capable models
+    /// (Claude 4+, OpenAI o-series, GPT-5). Values: <c>low</c>, <c>medium</c>,
+    /// <c>high</c>. Null = fall back to <c>AiProviderOptions.ReasoningEffort</c>.
+    /// </summary>
+    [MaxLength(16)]
+    public string? ReasoningEffort { get; set; }
+
     /// <summary>Comma-separated allow-list of permitted models. Empty = all.</summary>
     [MaxLength(1024)]
     public string AllowedModelsCsv { get; set; } = string.Empty;

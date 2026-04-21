@@ -350,6 +350,7 @@ export interface ListeningReview {
 export interface MockConfig {
   id: string;
   title: string;
+  bundleId?: string;
   type: 'full' | 'sub';
   subType?: SubTest;
   mode: 'practice' | 'exam';
@@ -357,15 +358,30 @@ export interface MockConfig {
   strictTimer: boolean;
   includeReview: boolean;
   reviewSelection: 'none' | 'writing' | 'speaking' | 'writing_and_speaking' | 'current_subtest';
+  targetCountry?: string | null;
 }
 
 export interface MockSessionSection {
   id: string;
+  sectionAttemptId?: string;
+  bundleSectionId?: string;
   title: string;
+  subtest?: string;
   state: string;
   reviewAvailable: boolean;
   reviewSelected: boolean;
   launchRoute: string;
+  contentPaperId?: string;
+  contentPaperTitle?: string;
+  timeLimitMinutes?: number;
+  startedAt?: string | null;
+  deadlineAt?: string | null;
+  submittedAt?: string | null;
+  completedAt?: string | null;
+  rawScore?: number | null;
+  rawScoreMax?: number | null;
+  scaledScore?: number | null;
+  grade?: string | null;
 }
 
 export interface MockSession {
@@ -376,6 +392,17 @@ export interface MockSession {
   resumeRoute: string;
   reportRoute?: string | null;
   reportId?: string | null;
+  reviewReservation?: {
+    id: string;
+    state: string;
+    selection: MockConfig['reviewSelection'];
+    reservedCredits: number;
+    consumedCredits: number;
+    releasedCredits: number;
+    pendingCredits: number;
+    reservedAt: string;
+    expiresAt: string;
+  } | null;
 }
 
 export interface SubTestScore {
@@ -385,17 +412,57 @@ export interface SubTestScore {
   rawScore: string;
   color: string;
   bg: string;
+  scaledScore?: number | null;
+  grade?: string | null;
+  state?: string;
+  reviewRequestId?: string | null;
+  reviewState?: string | null;
 }
 
 export interface MockReport {
   id: string;
+  reportId?: string;
+  state?: string;
   title: string;
   date: string;
   overallScore: string;
+  overallGrade?: string | null;
   summary: string;
   subTests: SubTestScore[];
   weakestCriterion: { subtest: string; criterion: string; description: string };
   priorComparison: { exists: boolean; priorMockName: string; overallTrend: 'up' | 'down' | 'flat'; details: string };
+  reviewSummary?: { queued: number; inReview: number; completed: number; pending: number };
+}
+
+export interface MockBundleOptionSection {
+  id: string;
+  subtest: string;
+  title: string;
+  timeLimitMinutes: number;
+  reviewEligible: boolean;
+  contentPaperId: string;
+}
+
+export interface MockBundleOption {
+  id: string;
+  bundleId: string;
+  title: string;
+  mockType: 'full' | 'sub';
+  subtest?: string | null;
+  professionId?: string | null;
+  appliesToAllProfessions: boolean;
+  estimatedDurationMinutes: number;
+  sections: MockBundleOptionSection[];
+}
+
+export interface MockOptions {
+  mockTypes: { id: 'full' | 'sub'; label: string; description: string }[];
+  subTypes: { id: string; label: string }[];
+  modes: { id: 'exam' | 'practice'; label: string }[];
+  professions: { id: string; label: string }[];
+  reviewSelections: { id: MockConfig['reviewSelection']; label: string; cost: number }[];
+  wallet: { availableCredits: number };
+  availableBundles: MockBundleOption[];
 }
 
 // ═══════════════════ PROGRESS & READINESS TYPES ═══════════════════

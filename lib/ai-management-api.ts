@@ -123,6 +123,7 @@ export interface AiProviderRow {
   baseUrl: string;
   apiKeyHint: string;
   defaultModel: string;
+  reasoningEffort?: string | null;
   allowedModelsCsv: string;
   pricePer1kPromptTokens: number;
   pricePer1kCompletionTokens: number;

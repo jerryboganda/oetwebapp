@@ -1,28 +1,28 @@
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
+
 using OetLearner.Api.Configuration;
 
 namespace OetLearner.Api.Services.Conversation.Tts;
 
 public sealed class ElevenLabsConversationTtsProvider(
     IHttpClientFactory httpClientFactory,
-    IOptions<ConversationOptions> options,
+    IConversationOptionsProvider optionsProvider,
     ILogger<ElevenLabsConversationTtsProvider> logger) : IConversationTtsProvider
 {
-    private readonly ConversationOptions _options = options.Value;
+    private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
 
     public string Name => "elevenlabs";
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(_options.ElevenLabsApiKey);
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(ReadOptions().ElevenLabsApiKey);
 
     public async Task<ConversationTtsResult> SynthesizeAsync(ConversationTtsRequest request, CancellationToken ct)
     {
         if (!IsConfigured) throw new InvalidOperationException("ElevenLabs not configured.");
 
         var client = httpClientFactory.CreateClient("ConversationElevenLabsClient");
-        var voice = string.IsNullOrWhiteSpace(request.Voice) ? _options.ElevenLabsDefaultVoiceId : request.Voice;
-        var model = string.IsNullOrWhiteSpace(_options.ElevenLabsModel) ? "eleven_multilingual_v2" : _options.ElevenLabsModel;
+        var voice = string.IsNullOrWhiteSpace(request.Voice) ? ReadOptions().ElevenLabsDefaultVoiceId : request.Voice;
+        var model = string.IsNullOrWhiteSpace(ReadOptions().ElevenLabsModel) ? "eleven_multilingual_v2" : ReadOptions().ElevenLabsModel;
         var url = $"https://api.elevenlabs.io/v1/text-to-speech/{Uri.EscapeDataString(voice)}";
 
         var payload = JsonSerializer.Serialize(new
@@ -33,7 +33,7 @@ public sealed class ElevenLabsConversationTtsProvider(
         });
 
         using var req = new HttpRequestMessage(HttpMethod.Post, url);
-        req.Headers.Add("xi-api-key", _options.ElevenLabsApiKey);
+        req.Headers.Add("xi-api-key", ReadOptions().ElevenLabsApiKey);
         req.Headers.Add("Accept", "audio/mpeg");
         req.Content = new StringContent(payload, Encoding.UTF8, "application/json");
 

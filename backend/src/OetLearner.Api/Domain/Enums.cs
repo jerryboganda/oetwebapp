@@ -33,6 +33,15 @@ public enum ReviewRequestState
     Cancelled
 }
 
+public enum MockReviewReservationState
+{
+    Reserved,
+    PartiallyConsumed,
+    Consumed,
+    Released,
+    Expired
+}
+
 public enum StudyPlanItemStatus
 {
     NotStarted,

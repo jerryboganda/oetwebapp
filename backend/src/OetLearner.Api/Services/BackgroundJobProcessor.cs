@@ -507,34 +507,121 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
     {
         if (string.IsNullOrWhiteSpace(job.ResourceId)) return;
         var mockAttempt = await db.MockAttempts.FirstAsync(x => x.Id == job.ResourceId, cancellationToken);
-        var reportId = $"mock-report-{Guid.NewGuid():N}";
-
-        db.MockReports.Add(new MockReport
+        var report = await db.MockReports.FirstOrDefaultAsync(x => x.MockAttemptId == mockAttempt.Id, cancellationToken);
+        if (report is null)
         {
-            Id = reportId,
-            MockAttemptId = mockAttempt.Id,
-            State = AsyncState.Completed,
-            GeneratedAt = DateTimeOffset.UtcNow,
-            PayloadJson = JsonSupport.Serialize(new
+            report = new MockReport
             {
-                id = reportId,
-                title = "Generated OET Mock Report",
-                date = DateTime.UtcNow.ToString("yyyy-MM-dd"),
-                overallScore = "345",
-                summary = "The latest mock shows steady improvement, with Writing still trailing the receptive sub-tests.",
-                subTests = new[]
+                Id = $"mock-report-{Guid.NewGuid():N}",
+                MockAttemptId = mockAttempt.Id
+            };
+            db.MockReports.Add(report);
+        }
+
+        var sections = await db.MockSectionAttempts.AsNoTracking()
+            .Where(x => x.MockAttemptId == mockAttempt.Id)
+            .Join(db.MockBundleSections.AsNoTracking().Include(x => x.ContentPaper),
+                sectionAttempt => sectionAttempt.MockBundleSectionId,
+                bundleSection => bundleSection.Id,
+                (sectionAttempt, bundleSection) => new { sectionAttempt, bundleSection })
+            .OrderBy(x => x.bundleSection.SectionOrder)
+            .ToListAsync(cancellationToken);
+
+        var reviewAttemptIds = sections
+            .Select(x => x.sectionAttempt.ContentAttemptId)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Cast<string>()
+            .ToList();
+        List<ReviewRequest> reviewRequests = reviewAttemptIds.Count == 0
+            ? []
+            : await db.ReviewRequests.AsNoTracking()
+                .Where(x => reviewAttemptIds.Contains(x.AttemptId))
+                .ToListAsync(cancellationToken);
+
+        var subTests = sections.Select(row =>
+        {
+            var section = row.sectionAttempt;
+            var subtest = section.SubtestCode;
+            var scaled = ResolveMockScaledScore(section);
+            var review = reviewRequests.FirstOrDefault(x => x.AttemptId == section.ContentAttemptId);
+            var state = section.State == AttemptState.Completed
+                ? review is null ? "completed" : ReviewStateForReport(review.State)
+                : "not_completed";
+            return new
+            {
+                id = $"g-{subtest[0]}",
+                name = ToDisplaySubtest(subtest),
+                score = scaled?.ToString() ?? (state is "queued" or "in_review" ? "Pending review" : "Pending"),
+                rawScore = FormatMockRawScore(section),
+                scaledScore = scaled,
+                grade = scaled is null ? null : OetScoring.OetGradeLetterFromScaled(scaled.Value),
+                state,
+                contentPaperTitle = row.bundleSection.ContentPaper?.Title,
+                reviewRequestId = review?.Id,
+                reviewState = review is null ? null : ReviewStateForReport(review.State)
+            };
+        }).ToList();
+
+        var availableScores = subTests
+            .Where(x => x.scaledScore.HasValue)
+            .Select(x => x.scaledScore!.Value)
+            .ToList();
+        var overall = availableScores.Count == 0
+            ? (int?)null
+            : (int)Math.Round(availableScores.Average(), MidpointRounding.AwayFromZero);
+        var weakest = subTests
+            .Where(x => x.scaledScore.HasValue)
+            .OrderBy(x => x.scaledScore)
+            .FirstOrDefault();
+
+        var previousReports = await db.MockReports.AsNoTracking()
+            .Join(db.MockAttempts.AsNoTracking().Where(x => x.UserId == mockAttempt.UserId && x.Id != mockAttempt.Id),
+                report => report.MockAttemptId,
+                attempt => attempt.Id,
+                (report, attempt) => report)
+            .Where(x => x.State == AsyncState.Completed && x.GeneratedAt != null)
+            .OrderByDescending(x => x.GeneratedAt)
+            .Take(1)
+            .ToListAsync(cancellationToken);
+        var priorOverall = previousReports
+            .Select(x => TryReadOverallScore(x.PayloadJson))
+            .FirstOrDefault(x => x.HasValue);
+
+        report.State = AsyncState.Completed;
+        report.GeneratedAt = DateTimeOffset.UtcNow;
+        report.PayloadJson = JsonSupport.Serialize(new
+        {
+            id = report.Id,
+            reportId = report.Id,
+            mockAttemptId = mockAttempt.Id,
+            title = mockAttempt.MockType == "sub" ? $"{ToDisplaySubtest(mockAttempt.SubtestCode ?? "mock")} Mock Report" : "Generated OET Mock Report",
+            date = DateTime.UtcNow.ToString("yyyy-MM-dd"),
+            overallScore = overall?.ToString() ?? "Pending",
+            overallGrade = overall is null ? null : OetScoring.OetGradeLetterFromScaled(overall.Value),
+            summary = BuildMockReportSummary(overall, subTests.Count(x => x.state is "queued" or "in_review")),
+            subTests,
+            weakestCriterion = weakest is null
+                ? new { subtest = "Pending", criterion = "Awaiting evidence", description = "Complete scored sections or wait for expert-reviewed productive sections." }
+                : new { subtest = weakest.name, criterion = "Lowest scaled sub-test", description = $"Prioritise {weakest.name} next; current scaled score is {weakest.scaledScore}/500." },
+            reviewSummary = new
+            {
+                queued = reviewRequests.Count(x => x.State == ReviewRequestState.Queued),
+                inReview = reviewRequests.Count(x => x.State == ReviewRequestState.InReview),
+                completed = reviewRequests.Count(x => x.State == ReviewRequestState.Completed),
+                pending = reviewRequests.Count(x => x.State is ReviewRequestState.Queued or ReviewRequestState.InReview or ReviewRequestState.AwaitingPayment)
+            },
+            priorComparison = priorOverall.HasValue && overall.HasValue
+                ? new
                 {
-                    new { id = "g-r", name = "Reading", score = "375", rawScore = "39/42" },
-                    new { id = "g-l", name = "Listening", score = "355", rawScore = "36/42" },
-                    new { id = "g-w", name = "Writing", score = "330", rawScore = "26/36" },
-                    new { id = "g-s", name = "Speaking", score = "340", rawScore = "N/A" }
-                },
-                weakestCriterion = new { subtest = "Writing", criterion = "Conciseness & Clarity", description = "Continue pruning lower-priority detail for the reader." },
-                priorComparison = new { exists = true, priorMockName = "Full OET Mock Test #1", overallTrend = "up", details = "Overall score increased by 5 points since the previous mock." }
-            })
+                    exists = true,
+                    priorMockName = "Previous mock",
+                    overallTrend = overall.Value > priorOverall.Value ? "up" : overall.Value < priorOverall.Value ? "down" : "flat",
+                    details = $"Overall score changed by {overall.Value - priorOverall.Value:+#;-#;0} points since the previous mock."
+                }
+                : new { exists = false, priorMockName = string.Empty, overallTrend = "flat", details = "No earlier generated mock report is available for comparison." }
         });
 
-        mockAttempt.ReportId = reportId;
+        mockAttempt.ReportId = report.Id;
         mockAttempt.State = AttemptState.Completed;
         mockAttempt.CompletedAt = DateTimeOffset.UtcNow;
         db.AnalyticsEvents.Add(new AnalyticsEventRecord
@@ -542,7 +629,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             Id = $"evt-{Guid.NewGuid():N}",
             UserId = mockAttempt.UserId,
             EventName = "mock_completed",
-            PayloadJson = JsonSupport.Serialize(new { mockAttemptId = mockAttempt.Id, reportId }),
+            PayloadJson = JsonSupport.Serialize(new { mockAttemptId = mockAttempt.Id, reportId = report.Id, overallScore = overall }),
             OccurredAt = DateTimeOffset.UtcNow
         });
 
@@ -551,13 +638,76 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
             mockAttempt.UserId,
             "mock_attempt",
             mockAttempt.Id,
-            reportId,
+            report.Id,
             new Dictionary<string, object?>
             {
                 ["mockAttemptId"] = mockAttempt.Id
             },
             cancellationToken);
     }
+
+    private static int? ResolveMockScaledScore(MockSectionAttempt section)
+    {
+        if (section.ScaledScore.HasValue) return section.ScaledScore.Value;
+        if (section.SubtestCode is "reading" or "listening" && section.RawScore.HasValue)
+        {
+            return OetScoring.OetRawToScaled(section.RawScore.Value);
+        }
+
+        return null;
+    }
+
+    private static string FormatMockRawScore(MockSectionAttempt section)
+    {
+        if (section.RawScore.HasValue && section.RawScoreMax.HasValue)
+        {
+            return $"{section.RawScore}/{section.RawScoreMax}";
+        }
+
+        if (section.RawScore.HasValue && (section.SubtestCode is "reading" or "listening"))
+        {
+            return $"{section.RawScore}/42";
+        }
+
+        return "N/A";
+    }
+
+    private static string ReviewStateForReport(ReviewRequestState state) => state switch
+    {
+        ReviewRequestState.Queued => "queued",
+        ReviewRequestState.InReview => "in_review",
+        ReviewRequestState.Completed => "completed",
+        ReviewRequestState.Failed => "failed",
+        ReviewRequestState.Cancelled => "cancelled",
+        ReviewRequestState.AwaitingPayment => "awaiting_payment",
+        _ => state.ToString().ToLowerInvariant()
+    };
+
+    private static int? TryReadOverallScore(string payloadJson)
+    {
+        var payload = JsonSupport.Deserialize<Dictionary<string, object?>>(payloadJson, new Dictionary<string, object?>());
+        if (!payload.TryGetValue("overallScore", out var value) || value is null)
+        {
+            return null;
+        }
+
+        return int.TryParse(value.ToString(), out var parsed) ? parsed : null;
+    }
+
+    private static string BuildMockReportSummary(int? overall, int pendingReviews)
+    {
+        if (pendingReviews > 0)
+        {
+            return $"The report is generated from available section evidence with {pendingReviews} expert-reviewed section(s) still pending.";
+        }
+
+        return overall.HasValue
+            ? $"The advisory overall mock score is {overall}/500, calculated as the rounded mean of available sub-test scaled scores."
+            : "The report is waiting for scored section evidence before calculating an advisory overall score.";
+    }
+
+    private static string ToDisplaySubtest(string subtest)
+        => string.IsNullOrWhiteSpace(subtest) ? "Mock" : char.ToUpperInvariant(subtest[0]) + subtest[1..];
 
     private static async Task CompleteReviewRequestAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
     {

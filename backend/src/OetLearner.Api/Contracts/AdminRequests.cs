@@ -460,3 +460,49 @@ public record AdminFreeTierConfigUpdateRequest(
     int MaxListeningAttempts,
     int TrialDurationDays,
     bool ShowUpgradePrompts);
+
+// -- Conversation Runtime Settings Admin --
+
+public record AdminConversationSettingsRequest(
+    bool? Enabled,
+    string? AsrProvider,
+    string? TtsProvider,
+    string? AzureSpeechKey,
+    string? AzureSpeechRegion,
+    string? AzureLocale,
+    string? AzureTtsDefaultVoice,
+    string? WhisperBaseUrl,
+    string? WhisperApiKey,
+    string? WhisperModel,
+    string? DeepgramApiKey,
+    string? DeepgramModel,
+    string? DeepgramLanguage,
+    string? ElevenLabsApiKey,
+    string? ElevenLabsDefaultVoiceId,
+    string? ElevenLabsModel,
+    string? CosyVoiceBaseUrl,
+    string? CosyVoiceApiKey,
+    string? CosyVoiceDefaultVoice,
+    string? ChatTtsBaseUrl,
+    string? ChatTtsApiKey,
+    string? ChatTtsDefaultVoice,
+    string? GptSoVitsBaseUrl,
+    string? GptSoVitsApiKey,
+    string? GptSoVitsDefaultVoice,
+    long? MaxAudioBytes,
+    int? AudioRetentionDays,
+    int? PrepDurationSeconds,
+    int? MaxSessionDurationSeconds,
+    int? MaxTurnDurationSeconds,
+    string[]? EnabledTaskTypes,
+    int? FreeTierSessionsLimit,
+    int? FreeTierWindowDays,
+    string? ReplyModel,
+    string? EvaluationModel,
+    double? ReplyTemperature,
+    double? EvaluationTemperature);
+
+public record AdminConversationTtsPreviewRequest(
+    string? Text,
+    string? Voice,
+    string? Locale);

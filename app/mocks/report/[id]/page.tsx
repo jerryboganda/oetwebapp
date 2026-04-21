@@ -48,7 +48,8 @@ function scoreColor(score: string) {
     : (trimmed.toUpperCase().replace(/^GRADE\s*/, '').split(/\s|,/)[0] ?? '');
   if (grade === 'A' || grade === 'B') return 'text-green-600';
   if (grade === 'C+' || grade === 'C') return 'text-amber-500';
-  return 'text-rose-600';
+  if (grade === 'D' || grade === 'E') return 'text-rose-600';
+  return 'text-muted';
 }
 
 function MockReportContent() {
@@ -159,6 +160,11 @@ function MockReportContent() {
                     <div>
                       <h3 className="text-base font-bold text-navy">{test.name}</h3>
                       <p className="text-xs text-muted">Raw: {test.rawScore}</p>
+                      {test.reviewState ? (
+                        <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-amber-700">
+                          Review {test.reviewState.replace(/_/g, ' ')}
+                        </p>
+                      ) : null}
                     </div>
                   </div>
                   <span className={`text-2xl font-black ${scoreColor(test.score)}`}>{test.score}</span>

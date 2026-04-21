@@ -1,6 +1,9 @@
 import { screen } from '@testing-library/react';
-const { mockFetchMockSession, mockSubmitMockSession, mockTrack, mockPush } = vi.hoisted(() => ({
+import userEvent from '@testing-library/user-event';
+const { mockCompleteMockSection, mockFetchMockSession, mockStartMockSection, mockSubmitMockSession, mockTrack, mockPush } = vi.hoisted(() => ({
+  mockCompleteMockSection: vi.fn(),
   mockFetchMockSession: vi.fn(),
+  mockStartMockSection: vi.fn(),
   mockSubmitMockSession: vi.fn(),
   mockTrack: vi.fn(),
   mockPush: vi.fn(),
@@ -28,7 +31,9 @@ vi.mock('@/lib/analytics', () => ({
 }));
 
 vi.mock('@/lib/api', () => ({
+  completeMockSection: mockCompleteMockSection,
   fetchMockSession: mockFetchMockSession,
+  startMockSection: mockStartMockSection,
   submitMockSession: mockSubmitMockSession,
 }));
 
@@ -49,14 +54,29 @@ describe('Mock player page', () => {
       },
       sectionStates: [
         {
-          id: 'reading',
-          title: 'Reading',
+          id: 'section-reading',
+          title: 'Reading section',
+          subtest: 'reading',
           state: 'ready',
+          launchRoute: '/reading/paper/paper-reading?mockAttemptId=mock-1&mockSectionId=section-reading',
+          contentPaperId: 'paper-reading',
+          contentPaperTitle: 'Published Reading Mock',
+          timeLimitMinutes: 60,
           reviewSelected: false,
         },
       ],
       reportRoute: '/mocks/report/mock-1',
     });
+    mockStartMockSection.mockResolvedValue({
+      id: 'section-reading',
+      title: 'Reading section',
+      subtest: 'reading',
+      state: 'in_progress',
+      launchRoute: '/reading/paper/paper-reading?mockAttemptId=mock-1&mockSectionId=section-reading',
+      timeLimitMinutes: 60,
+      reviewSelected: false,
+    });
+    mockCompleteMockSection.mockResolvedValue({});
     mockSubmitMockSession.mockResolvedValue({});
   });
 
@@ -68,5 +88,19 @@ describe('Mock player page', () => {
 
     expect(await screen.findByText('Full OET Mock Test')).toBeInTheDocument();
     expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
+  });
+
+  it('launches sections through the backend-provided route', async () => {
+    const user = userEvent.setup();
+    renderWithRouter(<MockPlayerPage />, {
+      params: { id: 'mock-1' },
+      router: { push: mockPush },
+    });
+
+    const launchButton = await screen.findByRole('button', { name: /launch section workspace/i });
+    await user.click(launchButton);
+
+    expect(mockStartMockSection).toHaveBeenCalledWith('mock-1', 'section-reading');
+    expect(mockPush).toHaveBeenCalledWith('/reading/paper/paper-reading?mockAttemptId=mock-1&mockSectionId=section-reading');
   });
 });

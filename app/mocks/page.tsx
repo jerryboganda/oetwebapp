@@ -26,21 +26,6 @@ import { fetchMocksHome } from '@/lib/api';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 
-const fallbackSubTestMocks = [
-  { id: 'read-mock', title: 'Reading Mocks', icon: FileText, count: 12, color: 'text-blue-600', bg: 'bg-blue-100', href: '/mocks/setup?subtest=reading' },
-  { id: 'list-mock', title: 'Listening Mocks', icon: Headphones, count: 10, color: 'text-indigo-600', bg: 'bg-indigo-100', href: '/mocks/setup?subtest=listening' },
-  { id: 'speak-mock', title: 'Speaking Mocks', icon: Mic, count: 8, color: 'text-purple-600', bg: 'bg-purple-100', href: '/mocks/setup?subtest=speaking' },
-  { id: 'write-mock', title: 'Writing Mocks', icon: PenTool, count: 15, color: 'text-rose-600', bg: 'bg-rose-100', href: '/mocks/setup?subtest=writing' },
-];
-
-const fallbackFullMocks = [
-  { id: 'fm-1', title: 'Full Mock Test 1', status: 'completed', score: 'A/B/B/B', date: 'Oct 12, 2023' },
-  { id: 'fm-2', title: 'Full Mock Test 2', status: 'completed', score: 'B/B/B/B', date: 'Nov 05, 2023' },
-  { id: 'fm-3', title: 'Full Mock Test 3', status: 'available', duration: '3h 15m' },
-  { id: 'fm-4', title: 'Full Mock Test 4', status: 'available', duration: '3h 15m', isRecommended: true },
-  { id: 'fm-5', title: 'Full Mock Test 5', status: 'locked', reason: 'Complete Mock 4 first' },
-];
-
 export default function MockCenter() {
   const [home, setHome] = useState<Record<string, any> | null>(null);
   const [loading, setLoading] = useState(true);
@@ -57,18 +42,18 @@ export default function MockCenter() {
   const reports = (home?.reports ?? []) as MockReport[];
   const recommended = home?.recommendedNextMock;
   const availableCredits = home?.purchasedMockReviews?.availableCredits ?? 0;
-  const fullMocks = home?.collections?.fullMocks?.length ? home.collections.fullMocks : fallbackFullMocks;
+  const fullMocks = home?.collections?.fullMocks ?? [];
   const subTestMocks = home?.collections?.subTestMocks?.length
     ? home.collections.subTestMocks.map((mock: Record<string, any>) => ({
         id: mock.id,
         title: mock.title,
         icon: mock.subtest === 'writing' ? PenTool : mock.subtest === 'speaking' ? Mic : mock.subtest === 'listening' ? Headphones : FileText,
-        count: 'Ready',
+        count: mock.sectionCount ?? 1,
         color: mock.subtest === 'writing' ? 'text-rose-600' : mock.subtest === 'speaking' ? 'text-purple-600' : mock.subtest === 'listening' ? 'text-indigo-600' : 'text-blue-600',
         bg: mock.subtest === 'writing' ? 'bg-rose-100' : mock.subtest === 'speaking' ? 'bg-purple-100' : mock.subtest === 'listening' ? 'bg-indigo-100' : 'bg-blue-100',
         href: mock.route ?? '/mocks/setup',
       }))
-    : fallbackSubTestMocks;
+    : [];
 
   const recommendedCard: LearnerSurfaceCardModel = {
     kind: 'navigation',
@@ -127,6 +112,11 @@ export default function MockCenter() {
                     description="Each entry explains whether you are entering a sub-test path or a full mock route."
                     className="mb-4"
                   />
+                  {subTestMocks.length === 0 ? (
+                    <div className="rounded-[24px] border border-gray-200 bg-surface p-6 text-sm text-muted">
+                      No published sub-test mock bundles are available yet.
+                    </div>
+                  ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     {subTestMocks.map((mock: Record<string, any>, idx: number) => (
                       <MotionItem
@@ -139,13 +129,14 @@ export default function MockCenter() {
                           </div>
                           <div className="flex-1">
                             <h3 className="text-base font-bold text-navy">{mock.title}</h3>
-                            <p className="text-sm text-muted">{mock.count} available</p>
+                            <p className="text-sm text-muted">{mock.count} section{mock.count === 1 ? '' : 's'} available</p>
                           </div>
                           <ArrowRight className="w-5 h-5 text-gray-300 group-hover:text-navy transition-colors" />
                         </Link>
                       </MotionItem>
                     ))}
                   </div>
+                  )}
                 </section>
 
                 <section>
@@ -155,16 +146,25 @@ export default function MockCenter() {
                     description="Learners should see what is completed, what is available next, and what is still locked."
                     className="mb-4"
                   />
+                  {fullMocks.length === 0 ? (
+                    <div className="rounded-[24px] border border-gray-200 bg-surface p-6 text-sm text-muted">
+                      No full mock bundles are published yet. Once an admin publishes a bundle, it will appear here with its real section order.
+                    </div>
+                  ) : (
                   <div className="bg-surface rounded-[24px] border border-gray-200 overflow-hidden shadow-sm">
                     <div className="divide-y divide-gray-100">
                       {fullMocks.map((mock: Record<string, any>, idx: number) => (
                         <MotionItem
                           key={mock.id}
                           delayIndex={idx}
-                          className={`p-5 flex items-center justify-between gap-4 transition-colors ${
-                            mock.status === 'locked' ? 'bg-gray-50 opacity-75' : 'hover:bg-gray-50 cursor-pointer'
-                          }`}
                         >
+                          <Link
+                            href={mock.status === 'locked' ? '/mocks' : mock.route ?? '/mocks/setup'}
+                            aria-disabled={mock.status === 'locked'}
+                            className={`p-5 flex items-center justify-between gap-4 transition-colors ${
+                              mock.status === 'locked' ? 'bg-gray-50 opacity-75 pointer-events-none' : 'hover:bg-gray-50'
+                            }`}
+                          >
                           <div className="flex items-center gap-4">
                             <div className="shrink-0">
                               {mock.status === 'completed' ? (
@@ -202,10 +202,12 @@ export default function MockCenter() {
                           {mock.status !== 'locked' ? (
                             <ArrowRight className="w-5 h-5 text-gray-300 hidden sm:block" />
                           ) : null}
+                          </Link>
                         </MotionItem>
                       ))}
                     </div>
                   </div>
+                  )}
                 </section>
               </div>
 

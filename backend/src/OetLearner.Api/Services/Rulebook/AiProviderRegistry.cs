@@ -62,48 +62,46 @@ public sealed class AiProviderRegistry(LearnerDbContext db, IDataProtectionProvi
 /// </summary>
 public sealed class RegistryBackedProvider(
     IHttpClientFactory httpClientFactory,
-    IAiProviderRegistry registry) : IAiModelProvider
+    IAiProviderRegistry registry,
+    Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.AiProviderOptions> options) : IAiModelProvider
 {
     public string Name => "registry";
 
     public async Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
     {
-        // When the caller did not supply a provider-specific override, we
-        // default to whatever the global policy names. The gateway hands us
-        // that resolution via BaseUrlOverride / ApiKeyOverride already —
-        // but if neither is provided we also need a sensible default.
-        var (baseUrl, apiKey) = await ResolveCredentialsAsync(request, ct);
-
-        // Dialect dispatch. Only two paths today; adding a new dialect =
-        // one switch-arm + one method.
-        // For now we default to OpenAI-compatible; Anthropic takes a
-        // different request/response shape handled separately.
-        return await CallOpenAiCompatibleAsync(baseUrl, apiKey, request, ct);
+        var (baseUrl, apiKey, reasoningEffort) = await ResolveCredentialsAsync(request, ct);
+        return await CallOpenAiCompatibleAsync(baseUrl, apiKey, reasoningEffort, request, ct);
     }
 
-    private async Task<(string baseUrl, string apiKey)> ResolveCredentialsAsync(AiProviderRequest request, CancellationToken ct)
+    private async Task<(string baseUrl, string apiKey, string? reasoningEffort)> ResolveCredentialsAsync(AiProviderRequest request, CancellationToken ct)
     {
         var baseUrl = request.BaseUrlOverride;
         var apiKey = request.ApiKeyOverride;
-        if (!string.IsNullOrWhiteSpace(baseUrl) && !string.IsNullOrWhiteSpace(apiKey))
-            return (baseUrl, apiKey);
+        string? reasoningEffort = null;
 
-        // No BYOK override — fall back to the registry row matching the
-        // model's implicit provider. Without extra hints we pick the first
-        // active provider, which is what Slice 2's global policy says to do.
         var providers = await registry.ListActiveAsync(ct);
         var first = providers.FirstOrDefault();
+        if (first is not null)
+        {
+            // Per-provider ReasoningEffort overrides env default when set.
+            if (!string.IsNullOrWhiteSpace(first.ReasoningEffort))
+                reasoningEffort = first.ReasoningEffort!.Trim().ToLowerInvariant();
+        }
+
+        if (!string.IsNullOrWhiteSpace(baseUrl) && !string.IsNullOrWhiteSpace(apiKey))
+            return (baseUrl, apiKey, reasoningEffort ?? options.Value.ReasoningEffort);
+
         if (first is null)
             throw new InvalidOperationException("No active AI provider registered.");
 
         baseUrl ??= first.BaseUrl;
         apiKey ??= await registry.GetPlatformKeyAsync(first.Code, ct)
             ?? throw new InvalidOperationException($"Platform API key missing for provider {first.Code}.");
-        return (baseUrl, apiKey);
+        return (baseUrl, apiKey, reasoningEffort ?? options.Value.ReasoningEffort);
     }
 
     private async Task<AiProviderCompletion> CallOpenAiCompatibleAsync(
-        string baseUrl, string apiKey, AiProviderRequest request, CancellationToken ct)
+        string baseUrl, string apiKey, string? reasoningEffort, AiProviderRequest request, CancellationToken ct)
     {
         var client = httpClientFactory.CreateClient("AiRegistryClient");
         client.BaseAddress = new Uri(baseUrl.TrimEnd('/') + "/");
@@ -111,6 +109,7 @@ public sealed class RegistryBackedProvider(
 
         var model = request.Model;
         var maxTokens = request.MaxTokens ?? 4096;
+        var effort = string.IsNullOrWhiteSpace(reasoningEffort) ? "high" : reasoningEffort!.ToLowerInvariant();
         var sendReasoning = IsReasoningCapable(model);
 
         object payload = sendReasoning
@@ -124,7 +123,7 @@ public sealed class RegistryBackedProvider(
                 },
                 temperature = request.Temperature,
                 max_tokens = maxTokens,
-                reasoning_effort = "high",
+                reasoning_effort = effort,
                 stream = false,
             }
             : new

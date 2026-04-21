@@ -376,7 +376,7 @@ public static class AiUsageAdminEndpoints
                 .Select(p => new
                 {
                     p.Id, p.Code, p.Name, p.Dialect, p.BaseUrl, p.ApiKeyHint,
-                    p.DefaultModel, p.AllowedModelsCsv,
+                    p.DefaultModel, p.ReasoningEffort, p.AllowedModelsCsv,
                     p.PricePer1kPromptTokens, p.PricePer1kCompletionTokens,
                     p.RetryCount, p.CircuitBreakerThreshold, p.CircuitBreakerWindowSeconds,
                     p.FailoverPriority, p.IsActive,
@@ -412,6 +412,7 @@ public static class AiUsageAdminEndpoints
                 EncryptedApiKey = protector.Protect(dto.ApiKey),
                 ApiKeyHint = $"…{dto.ApiKey[^4..]}",
                 DefaultModel = dto.DefaultModel ?? string.Empty,
+                ReasoningEffort = string.IsNullOrWhiteSpace(dto.ReasoningEffort) ? null : dto.ReasoningEffort!.Trim().ToLowerInvariant(),
                 AllowedModelsCsv = dto.AllowedModelsCsv ?? string.Empty,
                 PricePer1kPromptTokens = dto.PricePer1kPromptTokens,
                 PricePer1kCompletionTokens = dto.PricePer1kCompletionTokens,
@@ -450,6 +451,10 @@ public static class AiUsageAdminEndpoints
                 row.ApiKeyHint = $"…{dto.ApiKey[^4..]}";
             }
             row.DefaultModel = dto.DefaultModel ?? row.DefaultModel;
+            if (dto.ReasoningEffort is not null)
+            {
+                row.ReasoningEffort = string.IsNullOrWhiteSpace(dto.ReasoningEffort) ? null : dto.ReasoningEffort.Trim().ToLowerInvariant();
+            }
             row.AllowedModelsCsv = dto.AllowedModelsCsv ?? row.AllowedModelsCsv;
             row.PricePer1kPromptTokens = dto.PricePer1kPromptTokens;
             row.PricePer1kCompletionTokens = dto.PricePer1kCompletionTokens;
@@ -675,6 +680,7 @@ public sealed record AiProviderUpsertDto(
     string BaseUrl,
     string? ApiKey,
     string? DefaultModel,
+    string? ReasoningEffort,
     string? AllowedModelsCsv,
     decimal PricePer1kPromptTokens,
     decimal PricePer1kCompletionTokens,

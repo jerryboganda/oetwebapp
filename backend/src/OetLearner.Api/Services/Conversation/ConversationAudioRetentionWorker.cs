@@ -1,7 +1,5 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Services.Content;
 
@@ -9,7 +7,6 @@ namespace OetLearner.Api.Services.Conversation;
 
 public sealed class ConversationAudioRetentionWorker(
     IServiceScopeFactory scopeFactory,
-    IOptions<ConversationOptions> options,
     ILogger<ConversationAudioRetentionWorker> logger) : BackgroundService
 {
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -28,8 +25,10 @@ public sealed class ConversationAudioRetentionWorker(
         await using var scope = scopeFactory.CreateAsyncScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         var storage = scope.ServiceProvider.GetRequiredService<IFileStorage>();
+        var optionsProvider = scope.ServiceProvider.GetRequiredService<IConversationOptionsProvider>();
+        var options = await optionsProvider.GetAsync(ct);
 
-        var retentionDays = Math.Max(1, options.Value.AudioRetentionDays);
+        var retentionDays = Math.Max(1, options.AudioRetentionDays);
         var cutoff = DateTimeOffset.UtcNow - TimeSpan.FromDays(retentionDays);
 
         var dueTurns = await db.ConversationTurns

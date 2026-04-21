@@ -1,24 +1,21 @@
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using OetLearner.Api.Configuration;
 
 namespace OetLearner.Api.Services.Conversation.Asr;
 
 public interface IConversationAsrProviderSelector
 {
-    IConversationAsrProvider Select();
+    Task<IConversationAsrProvider> SelectAsync(CancellationToken ct = default);
 }
 
 public sealed class ConversationAsrProviderSelector(
     IEnumerable<IConversationAsrProvider> providers,
-    IOptions<ConversationOptions> options,
+    IConversationOptionsProvider optionsProvider,
     ILogger<ConversationAsrProviderSelector> logger) : IConversationAsrProviderSelector
 {
-    private readonly ConversationOptions _options = options.Value;
-
-    public IConversationAsrProvider Select()
+    public async Task<IConversationAsrProvider> SelectAsync(CancellationToken ct = default)
     {
-        var requested = (_options.AsrProvider ?? "auto").Trim().ToLowerInvariant();
+        var options = await optionsProvider.GetAsync(ct);
+        var requested = (options.AsrProvider ?? "auto").Trim().ToLowerInvariant();
         var all = providers.ToList();
         IConversationAsrProvider? Find(string name) =>
             all.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));

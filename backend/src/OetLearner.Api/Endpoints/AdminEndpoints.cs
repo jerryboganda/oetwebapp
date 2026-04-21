@@ -745,8 +745,228 @@ public static class AdminEndpoints
             => Results.Ok(await service.PublishConversationTemplateAsync(http.AdminId(), http.AdminName(), templateId, ct)))
             .RequireRateLimiting("PerUserWrite").RequireAuthorization("AdminContentWrite");
 
-        admin.MapGet("/conversation/settings", (Microsoft.Extensions.Options.IOptions<OetLearner.Api.Configuration.ConversationOptions> opts)
-            => Results.Ok(opts.Value))
+        admin.MapGet("/conversation/settings", async (
+                OetLearner.Api.Services.Conversation.IConversationOptionsProvider provider,
+                CancellationToken ct) =>
+            {
+                var merged = await provider.GetAsync(ct);
+                // Mask secret material — admins should re-enter to change.
+                return Results.Ok(new
+                {
+                    merged.Enabled,
+                    merged.AsrProvider,
+                    merged.TtsProvider,
+                    merged.AzureSpeechRegion,
+                    merged.AzureLocale,
+                    merged.AzureTtsDefaultVoice,
+                    merged.WhisperBaseUrl,
+                    merged.WhisperModel,
+                    merged.DeepgramModel,
+                    merged.DeepgramLanguage,
+                    merged.ElevenLabsDefaultVoiceId,
+                    merged.ElevenLabsModel,
+                    merged.CosyVoiceBaseUrl,
+                    merged.CosyVoiceDefaultVoice,
+                    merged.ChatTtsBaseUrl,
+                    merged.ChatTtsDefaultVoice,
+                    merged.GptSoVitsBaseUrl,
+                    merged.GptSoVitsDefaultVoice,
+                    merged.MaxAudioBytes,
+                    merged.AllowedMimeTypes,
+                    merged.AudioRetentionDays,
+                    merged.PrepDurationSeconds,
+                    merged.MaxSessionDurationSeconds,
+                    merged.MaxTurnDurationSeconds,
+                    merged.EnabledTaskTypes,
+                    merged.FreeTierSessionsLimit,
+                    merged.FreeTierWindowDays,
+                    merged.ReplyModel,
+                    merged.EvaluationModel,
+                    merged.ReplyTemperature,
+                    merged.EvaluationTemperature,
+                    // secret hints only
+                    AzureSpeechKeyPresent = !string.IsNullOrEmpty(merged.AzureSpeechKey),
+                    WhisperApiKeyPresent = !string.IsNullOrEmpty(merged.WhisperApiKey),
+                    DeepgramApiKeyPresent = !string.IsNullOrEmpty(merged.DeepgramApiKey),
+                    ElevenLabsApiKeyPresent = !string.IsNullOrEmpty(merged.ElevenLabsApiKey),
+                    CosyVoiceApiKeyPresent = !string.IsNullOrEmpty(merged.CosyVoiceApiKey),
+                    ChatTtsApiKeyPresent = !string.IsNullOrEmpty(merged.ChatTtsApiKey),
+                    GptSoVitsApiKeyPresent = !string.IsNullOrEmpty(merged.GptSoVitsApiKey),
+                });
+            })
+            .RequireAuthorization("AdminContentRead");
+
+        admin.MapPut("/conversation/settings", async (
+                HttpContext http,
+                OetLearner.Api.Contracts.AdminConversationSettingsRequest request,
+                OetLearner.Api.Data.LearnerDbContext db,
+                OetLearner.Api.Services.Conversation.IConversationOptionsProvider provider,
+                CancellationToken ct) =>
+            {
+                var row = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
+                    .FirstOrDefaultAsync(db.ConversationSettings.Where(r => r.Id == "default"), ct);
+                var now = DateTimeOffset.UtcNow;
+                if (row is null)
+                {
+                    row = new OetLearner.Api.Domain.ConversationSettingsRow { Id = "default", UpdatedAt = now };
+                    db.ConversationSettings.Add(row);
+                }
+
+                // Scalar overrides — null in request = leave stored value untouched.
+                if (request.Enabled.HasValue) row.Enabled = request.Enabled;
+                if (request.AsrProvider is not null) row.AsrProvider = request.AsrProvider;
+                if (request.TtsProvider is not null) row.TtsProvider = request.TtsProvider;
+                if (request.AzureSpeechRegion is not null) row.AzureSpeechRegion = request.AzureSpeechRegion;
+                if (request.AzureLocale is not null) row.AzureLocale = request.AzureLocale;
+                if (request.AzureTtsDefaultVoice is not null) row.AzureTtsDefaultVoice = request.AzureTtsDefaultVoice;
+                if (request.WhisperBaseUrl is not null) row.WhisperBaseUrl = request.WhisperBaseUrl;
+                if (request.WhisperModel is not null) row.WhisperModel = request.WhisperModel;
+                if (request.DeepgramModel is not null) row.DeepgramModel = request.DeepgramModel;
+                if (request.DeepgramLanguage is not null) row.DeepgramLanguage = request.DeepgramLanguage;
+                if (request.ElevenLabsDefaultVoiceId is not null) row.ElevenLabsDefaultVoiceId = request.ElevenLabsDefaultVoiceId;
+                if (request.ElevenLabsModel is not null) row.ElevenLabsModel = request.ElevenLabsModel;
+                if (request.CosyVoiceBaseUrl is not null) row.CosyVoiceBaseUrl = request.CosyVoiceBaseUrl;
+                if (request.CosyVoiceDefaultVoice is not null) row.CosyVoiceDefaultVoice = request.CosyVoiceDefaultVoice;
+                if (request.ChatTtsBaseUrl is not null) row.ChatTtsBaseUrl = request.ChatTtsBaseUrl;
+                if (request.ChatTtsDefaultVoice is not null) row.ChatTtsDefaultVoice = request.ChatTtsDefaultVoice;
+                if (request.GptSoVitsBaseUrl is not null) row.GptSoVitsBaseUrl = request.GptSoVitsBaseUrl;
+                if (request.GptSoVitsDefaultVoice is not null) row.GptSoVitsDefaultVoice = request.GptSoVitsDefaultVoice;
+                if (request.MaxAudioBytes.HasValue) row.MaxAudioBytes = request.MaxAudioBytes;
+                if (request.AudioRetentionDays.HasValue) row.AudioRetentionDays = request.AudioRetentionDays;
+                if (request.PrepDurationSeconds.HasValue) row.PrepDurationSeconds = request.PrepDurationSeconds;
+                if (request.MaxSessionDurationSeconds.HasValue) row.MaxSessionDurationSeconds = request.MaxSessionDurationSeconds;
+                if (request.MaxTurnDurationSeconds.HasValue) row.MaxTurnDurationSeconds = request.MaxTurnDurationSeconds;
+                if (request.EnabledTaskTypes is not null) row.EnabledTaskTypesCsv = string.Join(",", request.EnabledTaskTypes);
+                if (request.FreeTierSessionsLimit.HasValue) row.FreeTierSessionsLimit = request.FreeTierSessionsLimit;
+                if (request.FreeTierWindowDays.HasValue) row.FreeTierWindowDays = request.FreeTierWindowDays;
+                if (request.ReplyModel is not null) row.ReplyModel = request.ReplyModel;
+                if (request.EvaluationModel is not null) row.EvaluationModel = request.EvaluationModel;
+                if (request.ReplyTemperature.HasValue) row.ReplyTemperature = request.ReplyTemperature;
+                if (request.EvaluationTemperature.HasValue) row.EvaluationTemperature = request.EvaluationTemperature;
+
+                // Secrets — encrypt on the way in. Empty string = clear; null = leave.
+                var optsProvider = (OetLearner.Api.Services.Conversation.ConversationOptionsProvider)provider;
+                if (request.AzureSpeechKey is not null) row.AzureSpeechKeyEncrypted = request.AzureSpeechKey.Length == 0 ? null : optsProvider.Protect(request.AzureSpeechKey);
+                if (request.WhisperApiKey is not null) row.WhisperApiKeyEncrypted = request.WhisperApiKey.Length == 0 ? null : optsProvider.Protect(request.WhisperApiKey);
+                if (request.DeepgramApiKey is not null) row.DeepgramApiKeyEncrypted = request.DeepgramApiKey.Length == 0 ? null : optsProvider.Protect(request.DeepgramApiKey);
+                if (request.ElevenLabsApiKey is not null) row.ElevenLabsApiKeyEncrypted = request.ElevenLabsApiKey.Length == 0 ? null : optsProvider.Protect(request.ElevenLabsApiKey);
+                if (request.CosyVoiceApiKey is not null) row.CosyVoiceApiKeyEncrypted = request.CosyVoiceApiKey.Length == 0 ? null : optsProvider.Protect(request.CosyVoiceApiKey);
+                if (request.ChatTtsApiKey is not null) row.ChatTtsApiKeyEncrypted = request.ChatTtsApiKey.Length == 0 ? null : optsProvider.Protect(request.ChatTtsApiKey);
+                if (request.GptSoVitsApiKey is not null) row.GptSoVitsApiKeyEncrypted = request.GptSoVitsApiKey.Length == 0 ? null : optsProvider.Protect(request.GptSoVitsApiKey);
+
+                row.UpdatedAt = now;
+                row.UpdatedByUserId = http.AdminId();
+                row.UpdatedByUserName = http.AdminName();
+                await db.SaveChangesAsync(ct);
+                provider.Invalidate();
+
+                return Results.Ok(new { ok = true, updatedAt = now });
+            })
+            .RequireRateLimiting("PerUserWrite")
+            .RequireAuthorization("AdminContentWrite");
+
+        // Admin sessions / evaluations operational viewer
+        admin.MapGet("/conversation/sessions", async (
+                OetLearner.Api.Data.LearnerDbContext db,
+                string? userId, string? state, string? taskTypeCode, int? page, int? pageSize,
+                CancellationToken ct) =>
+            {
+                var p = page is null or < 1 ? 1 : page.Value;
+                var ps = pageSize is null or < 1 or > 100 ? 25 : pageSize.Value;
+                var q = db.ConversationSessions.AsQueryable();
+                if (!string.IsNullOrWhiteSpace(userId)) q = q.Where(s => s.UserId == userId);
+                if (!string.IsNullOrWhiteSpace(state)) q = q.Where(s => s.State == state);
+                if (!string.IsNullOrWhiteSpace(taskTypeCode)) q = q.Where(s => s.TaskTypeCode == taskTypeCode);
+                var total = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.CountAsync(q, ct);
+                var items = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
+                    q.OrderByDescending(s => s.CreatedAt).Skip((p - 1) * ps).Take(ps), ct);
+                return Results.Ok(new { total, page = p, pageSize = ps, items = items.Select(s => new
+                {
+                    s.Id, s.UserId, s.TaskTypeCode, s.Profession, s.State, s.TurnCount, s.DurationSeconds,
+                    s.TemplateId, s.LastErrorCode, s.CreatedAt, s.StartedAt, s.CompletedAt,
+                }) });
+            })
+            .RequireAuthorization("AdminContentRead");
+
+        admin.MapGet("/conversation/sessions/{sessionId}", async (
+                string sessionId,
+                OetLearner.Api.Data.LearnerDbContext db,
+                CancellationToken ct) =>
+            {
+                var session = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
+                    .FirstOrDefaultAsync(db.ConversationSessions.AsQueryable(), s => s.Id == sessionId, ct);
+                if (session is null) return Results.NotFound();
+                var turns = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
+                    db.ConversationTurns.Where(t => t.SessionId == sessionId).OrderBy(t => t.TurnNumber), ct);
+                var evaluation = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
+                    .FirstOrDefaultAsync(db.ConversationEvaluations.AsQueryable(), e => e.SessionId == sessionId, ct);
+                var annotations = evaluation is null
+                    ? new List<OetLearner.Api.Domain.ConversationTurnAnnotation>()
+                    : await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
+                        db.ConversationTurnAnnotations.Where(a => a.EvaluationId == evaluation.Id).OrderBy(a => a.TurnNumber), ct);
+                return Results.Ok(new
+                {
+                    session = new
+                    {
+                        session.Id, session.UserId, session.TaskTypeCode, session.Profession, session.State,
+                        session.TurnCount, session.DurationSeconds, session.TemplateId, session.LastErrorCode,
+                        session.CreatedAt, session.StartedAt, session.CompletedAt, session.ScenarioJson,
+                    },
+                    turns = turns.Select(t => new
+                    {
+                        t.TurnNumber, t.Role, t.Content, t.AudioUrl, t.DurationMs,
+                        t.TimestampMs, t.ConfidenceScore, t.AiFeatureCode, t.CreatedAt,
+                    }),
+                    evaluation = evaluation is null ? null : new
+                    {
+                        evaluation.Id, evaluation.OverallScaled, evaluation.OverallGrade, evaluation.Passed,
+                        evaluation.CriteriaJson, evaluation.StrengthsJson, evaluation.ImprovementsJson,
+                        evaluation.SuggestedPracticeJson, evaluation.AppliedRuleIdsJson,
+                        evaluation.RulebookVersion, evaluation.Advisory, evaluation.CreatedAt,
+                    },
+                    annotations = annotations.Select(a => new
+                    {
+                        a.TurnNumber, a.Type, a.Category, a.RuleId, a.Evidence, a.Suggestion, a.CreatedAt,
+                    }),
+                });
+            })
+            .RequireAuthorization("AdminContentRead");
+
+        admin.MapGet("/conversation/evaluations.csv", async (
+                OetLearner.Api.Data.LearnerDbContext db,
+                CancellationToken ct) =>
+            {
+                var evals = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
+                    db.ConversationEvaluations.OrderByDescending(e => e.CreatedAt).Take(10000), ct);
+                var csv = new System.Text.StringBuilder();
+                csv.AppendLine("Id,SessionId,UserId,OverallScaled,OverallGrade,Passed,RulebookVersion,CreatedAt");
+                foreach (var e in evals)
+                    csv.AppendLine($"{e.Id},{e.SessionId},{e.UserId},{e.OverallScaled},{e.OverallGrade},{e.Passed},{e.RulebookVersion},{e.CreatedAt:O}");
+                return Results.File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", "conversation-evaluations.csv");
+            })
+            .RequireAuthorization("AdminContentRead");
+
+        // TTS voice preview — posts sample text to the currently-configured TTS
+        // and returns the audio bytes so admins can hear the configured voice.
+        admin.MapPost("/conversation/tts-preview", async (
+                OetLearner.Api.Contracts.AdminConversationTtsPreviewRequest request,
+                OetLearner.Api.Services.Conversation.Tts.IConversationTtsProviderSelector selector,
+                CancellationToken ct) =>
+            {
+                var provider = await selector.TrySelectAsync(ct);
+                if (provider is null) return Results.BadRequest(new { error = "tts_disabled" });
+                var text = string.IsNullOrWhiteSpace(request.Text)
+                    ? "Good morning. Thank you for coming in today. How can I help you?"
+                    : request.Text;
+                var voice = request.Voice ?? "";
+                var locale = string.IsNullOrWhiteSpace(request.Locale) ? "en-GB" : request.Locale;
+                var result = await provider.SynthesizeAsync(
+                    new OetLearner.Api.Services.Conversation.Tts.ConversationTtsRequest(text, voice, locale),
+                    ct);
+                if (result.Audio.Length == 0) return Results.NoContent();
+                return Results.File(result.Audio, result.MimeType, "tts-preview.mp3");
+            })
+            .RequireRateLimiting("PerUserWrite")
             .RequireAuthorization("AdminContentRead");
 
         // ── Pronunciation Drill Admin CRUD ──────────────────

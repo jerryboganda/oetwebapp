@@ -103,9 +103,17 @@ export default function AdminConversationTemplatesPage() {
             description="Manage role-play and handover scenarios used by the learner AI Conversation module."
             icon={MessageSquare}
             actions={
-              <Button variant="primary" onClick={() => router.push('/admin/content/conversation/new')}>
-                <Plus className="mr-1 h-4 w-4" /> New Scenario
-              </Button>
+              <div className="flex items-center gap-2">
+                <Button variant="secondary" onClick={() => router.push('/admin/content/conversation/settings')}>
+                  Settings
+                </Button>
+                <Button variant="secondary" onClick={() => router.push('/admin/content/conversation/sessions')}>
+                  Sessions
+                </Button>
+                <Button variant="primary" onClick={() => router.push('/admin/content/conversation/new')}>
+                  <Plus className="mr-1 h-4 w-4" /> New Scenario
+                </Button>
+              </div>
             }
           />
 

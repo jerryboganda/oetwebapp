@@ -728,6 +728,27 @@ public class MockAttempt
     [MaxLength(64)]
     public string UserId { get; set; } = default!;
 
+    [MaxLength(64)]
+    public string? MockBundleId { get; set; }
+
+    [MaxLength(16)]
+    public string MockType { get; set; } = "full";
+
+    [MaxLength(32)]
+    public string? SubtestCode { get; set; }
+
+    [MaxLength(32)]
+    public string Mode { get; set; } = "exam";
+
+    [MaxLength(32)]
+    public string Profession { get; set; } = "medicine";
+
+    [MaxLength(32)]
+    public string ReviewSelection { get; set; } = "none";
+
+    public bool StrictTimer { get; set; } = true;
+    public int ReservedReviewCredits { get; set; }
+
     public string ConfigJson { get; set; } = "{}";
     public AttemptState State { get; set; }
     public DateTimeOffset StartedAt { get; set; }
@@ -740,6 +761,9 @@ public class MockAttempt
 
     [MaxLength(16)]
     public string ExamTypeCode { get; set; } = "oet";
+
+    public MockBundle? MockBundle { get; set; }
+    public ICollection<MockSectionAttempt> SectionAttempts { get; set; } = new List<MockSectionAttempt>();
 }
 
 public class MockReport

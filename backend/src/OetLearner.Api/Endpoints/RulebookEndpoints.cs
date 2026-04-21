@@ -41,6 +41,14 @@ public static class RulebookEndpoints
             catch (RulebookNotFoundException) { return Results.NotFound(new { error = "Rulebook not registered." }); }
         });
 
+        group.MapGet("/conversation/{profession}", (string profession, IRulebookLoader loader) =>
+        {
+            if (!Enum.TryParse<ExamProfession>(profession, ignoreCase: true, out var p))
+                return Results.BadRequest(new { error = $"Unknown profession '{profession}'." });
+            try { return Results.Ok(loader.Load(RuleKind.Conversation, p)); }
+            catch (RulebookNotFoundException) { return Results.NotFound(new { error = "Rulebook not registered." }); }
+        });
+
         group.MapGet("/writing/{profession}/rule/{ruleId}",
             (string profession, string ruleId, IRulebookLoader loader) =>
             {

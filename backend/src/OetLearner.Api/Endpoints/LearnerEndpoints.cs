@@ -130,12 +130,15 @@ public static class LearnerEndpoints
         listening.MapGet("/evaluations/{evaluationId}", async (HttpContext http, string evaluationId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetListeningEvaluationAsync(http.UserId(), evaluationId, ct)));
         listening.MapGet("/drills/{drillId}", async (string drillId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetListeningDrillAsync(drillId, ct)));
 
-        v1.MapGet("/mocks", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetMocksAsync(http.UserId(), ct)));
-        v1.MapGet("/mocks/options", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetMockOptionsAsync(ct)));
-        v1.MapPost("/mock-attempts", async (HttpContext http, MockAttemptCreateRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateMockAttemptAsync(http.UserId(), request, ct)));
-        v1.MapGet("/mock-attempts/{mockAttemptId}", async (HttpContext http, string mockAttemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetMockAttemptAsync(http.UserId(), mockAttemptId, ct)));
-        v1.MapPost("/mock-attempts/{mockAttemptId}/submit", async (HttpContext http, string mockAttemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.SubmitMockAttemptAsync(http.UserId(), mockAttemptId, ct)));
-        v1.MapGet("/mock-reports/{reportId}", async (HttpContext http, string reportId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetMockReportAsync(http.UserId(), reportId, ct)));
+        v1.MapGet("/mocks", async (HttpContext http, MockService service, CancellationToken ct) => Results.Ok(await service.GetMocksAsync(http.UserId(), ct)));
+        v1.MapGet("/mocks/options", async (HttpContext http, MockService service, CancellationToken ct) => Results.Ok(await service.GetMockOptionsAsync(http.UserId(), ct)));
+        v1.MapPost("/mock-attempts", async (HttpContext http, MockAttemptCreateRequest request, MockService service, CancellationToken ct) => Results.Ok(await service.CreateMockAttemptAsync(http.UserId(), request, ct)));
+        v1.MapGet("/mock-attempts/{mockAttemptId}", async (HttpContext http, string mockAttemptId, MockService service, CancellationToken ct) => Results.Ok(await service.GetMockAttemptAsync(http.UserId(), mockAttemptId, ct)));
+        v1.MapPost("/mock-attempts/{mockAttemptId}/sections/{sectionId}/start", async (HttpContext http, string mockAttemptId, string sectionId, MockSectionStartRequest request, MockService service, CancellationToken ct) => Results.Ok(await service.StartMockSectionAsync(http.UserId(), mockAttemptId, sectionId, request, ct)));
+        v1.MapPost("/mock-attempts/{mockAttemptId}/sections/{sectionId}/complete", async (HttpContext http, string mockAttemptId, string sectionId, MockSectionCompleteRequest request, MockService service, CancellationToken ct) => Results.Ok(await service.CompleteMockSectionAsync(http.UserId(), mockAttemptId, sectionId, request, ct)));
+        v1.MapPost("/mock-attempts/{mockAttemptId}/submit", async (HttpContext http, string mockAttemptId, MockService service, CancellationToken ct) => Results.Ok(await service.SubmitMockAttemptAsync(http.UserId(), mockAttemptId, ct)));
+        v1.MapPost("/mock-attempts/{mockAttemptId}/cancel", async (HttpContext http, string mockAttemptId, MockService service, CancellationToken ct) => Results.Ok(await service.CancelMockAttemptAsync(http.UserId(), mockAttemptId, ct)));
+        v1.MapGet("/mock-reports/{reportId}", async (HttpContext http, string reportId, MockService service, CancellationToken ct) => Results.Ok(await service.GetMockReportAsync(http.UserId(), reportId, ct)));
 
         var reviews = v1.MapGroup("/reviews");
         reviews.MapGet("/", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReviewsAsync(http.UserId(), ct)));

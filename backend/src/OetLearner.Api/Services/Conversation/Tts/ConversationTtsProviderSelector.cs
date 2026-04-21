@@ -1,28 +1,29 @@
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using OetLearner.Api.Configuration;
 
 namespace OetLearner.Api.Services.Conversation.Tts;
 
 public interface IConversationTtsProviderSelector
 {
-    IConversationTtsProvider? TrySelect();
-    bool TtsDisabled { get; }
+    Task<IConversationTtsProvider?> TrySelectAsync(CancellationToken ct = default);
+    Task<bool> IsTtsDisabledAsync(CancellationToken ct = default);
 }
 
 public sealed class ConversationTtsProviderSelector(
     IEnumerable<IConversationTtsProvider> providers,
-    IOptions<ConversationOptions> options,
+    IConversationOptionsProvider optionsProvider,
     ILogger<ConversationTtsProviderSelector> logger) : IConversationTtsProviderSelector
 {
-    private readonly ConversationOptions _options = options.Value;
-
-    public bool TtsDisabled => string.Equals(_options.TtsProvider, "off", StringComparison.OrdinalIgnoreCase);
-
-    public IConversationTtsProvider? TrySelect()
+    public async Task<bool> IsTtsDisabledAsync(CancellationToken ct = default)
     {
-        if (TtsDisabled) return null;
-        var requested = (_options.TtsProvider ?? "auto").Trim().ToLowerInvariant();
+        var o = await optionsProvider.GetAsync(ct);
+        return string.Equals(o.TtsProvider, "off", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public async Task<IConversationTtsProvider?> TrySelectAsync(CancellationToken ct = default)
+    {
+        var options = await optionsProvider.GetAsync(ct);
+        if (string.Equals(options.TtsProvider, "off", StringComparison.OrdinalIgnoreCase)) return null;
+        var requested = (options.TtsProvider ?? "auto").Trim().ToLowerInvariant();
         var all = providers.ToList();
         IConversationTtsProvider? Find(string name) =>
             all.FirstOrDefault(p => string.Equals(p.Name, name, StringComparison.OrdinalIgnoreCase));

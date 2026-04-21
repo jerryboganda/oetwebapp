@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Rulebook;
@@ -38,10 +37,10 @@ public sealed record ConversationAiEvaluation(
 
 public sealed class ConversationAiOrchestrator(
     IAiGatewayService gateway,
-    IOptions<ConversationOptions> options,
+    IConversationOptionsProvider optionsProvider,
     ILogger<ConversationAiOrchestrator> logger) : IConversationAiOrchestrator
 {
-    private readonly ConversationOptions _options = options.Value;
+    private Task<ConversationOptions> OptionsAsync(CancellationToken ct) => optionsProvider.GetAsync(ct);
 
     public Task<ConversationAiReply> GenerateOpeningAsync(ConversationAiContext ctx, CancellationToken ct)
         => GenerateReplyInternalAsync(ctx, AiTaskMode.GenerateConversationOpening, AiFeatureCodes.ConversationOpening, ct);
@@ -75,8 +74,8 @@ public sealed class ConversationAiOrchestrator(
             AuthAccountId = ctx.AuthAccountId,
             TenantId = ctx.TenantId,
             FeatureCode = featureCode,
-            Model = string.IsNullOrWhiteSpace(_options.ReplyModel) ? "anthropic-claude-opus-4.7" : _options.ReplyModel,
-            Temperature = _options.ReplyTemperature,
+            Model = string.IsNullOrWhiteSpace((await OptionsAsync(ct)).ReplyModel) ? "anthropic-claude-opus-4.7" : (await OptionsAsync(ct)).ReplyModel,
+            Temperature = (await OptionsAsync(ct)).ReplyTemperature,
             MaxTokens = 600,
             PromptTemplateId = task.ToString(),
         }, ct);
@@ -111,8 +110,8 @@ public sealed class ConversationAiOrchestrator(
             AuthAccountId = ctx.AuthAccountId,
             TenantId = ctx.TenantId,
             FeatureCode = AiFeatureCodes.ConversationEvaluation,
-            Model = string.IsNullOrWhiteSpace(_options.EvaluationModel) ? "anthropic-claude-opus-4.7" : _options.EvaluationModel,
-            Temperature = _options.EvaluationTemperature,
+            Model = string.IsNullOrWhiteSpace((await OptionsAsync(ct)).EvaluationModel) ? "anthropic-claude-opus-4.7" : (await OptionsAsync(ct)).EvaluationModel,
+            Temperature = (await OptionsAsync(ct)).EvaluationTemperature,
             MaxTokens = 4096,
             PromptTemplateId = "EvaluateConversation",
         }, ct);

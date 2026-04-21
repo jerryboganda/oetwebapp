@@ -1,55 +1,71 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
+import type { ElementType } from 'react';
 import {
+  Award,
+  Check,
+  Clock,
   FileText,
   Headphones,
+  Info,
+  Layers,
   Mic,
   PenTool,
-  Layers,
-  Clock,
-  Award,
   ShieldCheck,
   Stethoscope,
-  Info,
-  Check
 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Button } from '@/components/ui/button';
-import { MotionCollapse, MotionSection, MotionPresence } from '@/components/ui/motion-primitives';
-import { createMockSession } from '@/lib/api';
+import { InlineAlert } from '@/components/ui/alert';
+import { Skeleton } from '@/components/ui/skeleton';
+import { MotionCollapse, MotionPresence, MotionSection } from '@/components/ui/motion-primitives';
+import { createMockSession, fetchMockOptions } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import type { MockBundleOption, MockConfig, MockOptions } from '@/lib/mock-data';
 
-type ReviewSelection = 'none' | 'writing' | 'speaking' | 'writing_and_speaking' | 'current_subtest';
+type ReviewSelection = MockConfig['reviewSelection'];
 type MockType = 'full' | 'sub';
 type MockSubType = 'reading' | 'listening' | 'writing' | 'speaking';
 
-const PROFESSIONS = [
-  'Medicine', 'Nursing', 'Pharmacy', 'Dentistry', 'Dietetics',
-  'Optometry', 'Physiotherapy', 'Podiatry', 'Radiography',
-  'Speech Pathology', 'Veterinary Science'
-];
+const SUBTEST_META: Record<MockSubType, { label: string; icon: ElementType; active: string }> = {
+  listening: { label: 'Listening', icon: Headphones, active: 'border-indigo-500 bg-indigo-50 text-indigo-700' },
+  reading: { label: 'Reading', icon: FileText, active: 'border-blue-500 bg-blue-50 text-blue-700' },
+  writing: { label: 'Writing', icon: PenTool, active: 'border-rose-500 bg-rose-50 text-rose-700' },
+  speaking: { label: 'Speaking', icon: Mic, active: 'border-purple-500 bg-purple-50 text-purple-700' },
+};
+
+function isSubtest(value: string | null): value is MockSubType {
+  return value === 'reading' || value === 'listening' || value === 'writing' || value === 'speaking';
+}
+
+function reviewCost(selection: ReviewSelection) {
+  if (selection === 'writing_and_speaking') return 2;
+  if (selection === 'writing' || selection === 'speaking' || selection === 'current_subtest') return 1;
+  return 0;
+}
 
 function buildReviewOptions(mockType: MockType, subType: MockSubType) {
   if (mockType === 'full') {
     return [
-      { id: 'none' as const, label: 'No Review', description: 'Run the mock without productive-skill review add-ons.' },
-      { id: 'writing' as const, label: 'Writing Only', description: 'Attach expert review to the Writing section only.' },
-      { id: 'speaking' as const, label: 'Speaking Only', description: 'Attach expert review to the Speaking section only.' },
-      { id: 'writing_and_speaking' as const, label: 'Writing + Speaking', description: 'Add review to both productive skills in the full mock.' },
+      { id: 'none' as const, label: 'No Review', description: 'Run the mock without productive-skill review add-ons.', cost: 0 },
+      { id: 'writing' as const, label: 'Writing Only', description: 'Reserve one credit for Writing expert review.', cost: 1 },
+      { id: 'speaking' as const, label: 'Speaking Only', description: 'Reserve one credit for Speaking expert review.', cost: 1 },
+      { id: 'writing_and_speaking' as const, label: 'Writing + Speaking', description: 'Reserve two credits for both productive sections.', cost: 2 },
     ];
   }
 
   if (subType === 'writing' || subType === 'speaking') {
     return [
-      { id: 'none' as const, label: 'No Review', description: 'Keep this sub-test mock AI-evaluated only.' },
-      { id: 'current_subtest' as const, label: 'Review Current Sub-test', description: 'Use one review credit on this productive-skill mock.' },
+      { id: 'none' as const, label: 'No Review', description: 'Keep this sub-test mock platform-evaluated only.', cost: 0 },
+      { id: 'current_subtest' as const, label: 'Review Current Sub-test', description: 'Reserve one credit for this productive-skill mock.', cost: 1 },
     ];
   }
 
   return [
-    { id: 'none' as const, label: 'No Review', description: 'Expert review is not offered for Reading or Listening mocks.' },
+    { id: 'none' as const, label: 'No Review', description: 'Expert review is not offered for Reading or Listening mocks.', cost: 0 },
   ];
 }
 
@@ -57,38 +73,95 @@ function normalizeReviewSelection(mockType: MockType, subType: MockSubType, sele
   return buildReviewOptions(mockType, subType).some((option) => option.id === selection) ? selection : 'none';
 }
 
+function bundleMatches(bundle: MockBundleOption, mockType: MockType, subType: MockSubType, profession: string) {
+  if (bundle.mockType !== mockType) return false;
+  if (mockType === 'sub' && bundle.subtest !== subType) return false;
+  if (bundle.appliesToAllProfessions || !bundle.professionId) return true;
+  return bundle.professionId === profession;
+}
+
 export default function MockSetup() {
   const router = useRouter();
+  const searchParams = useSearchParams();
 
+  const [options, setOptions] = useState<MockOptions | null>(null);
+  const [loading, setLoading] = useState(true);
   const [mockType, setMockType] = useState<MockType>('full');
   const [subType, setSubType] = useState<MockSubType>('reading');
   const [mode, setMode] = useState<'practice' | 'exam'>('exam');
-  const [profession, setProfession] = useState('Medicine');
+  const [profession, setProfession] = useState('medicine');
   const [strictTimer, setStrictTimer] = useState(true);
   const [reviewSelection, setReviewSelection] = useState<ReviewSelection>('none');
+  const [selectedBundleId, setSelectedBundleId] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchMockOptions()
+      .then((result) => {
+        if (cancelled) return;
+        setOptions(result);
+        const queryBundleId = searchParams?.get('bundleId');
+        const querySubtest = searchParams?.get('subtest');
+        const queryType = searchParams?.get('type');
+        const bundle = queryBundleId ? result.availableBundles.find((item) => item.bundleId === queryBundleId || item.id === queryBundleId) : null;
+        if (bundle) {
+          setSelectedBundleId(bundle.bundleId);
+          setMockType(bundle.mockType);
+          const bundleSubtest = bundle.subtest ?? null;
+          if (isSubtest(bundleSubtest)) setSubType(bundleSubtest);
+        } else if (isSubtest(querySubtest)) {
+          setMockType('sub');
+          setSubType(querySubtest);
+        } else if (queryType === 'sub' || queryType === 'full') {
+          setMockType(queryType);
+        }
+        const firstProfession = result.professions[0]?.id;
+        if (firstProfession) setProfession(firstProfession);
+      })
+      .catch(() => setStartError('Failed to load mock setup options.'))
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [searchParams]);
+
   const reviewOptions = useMemo(() => buildReviewOptions(mockType, subType), [mockType, subType]);
   const selectedReviewSelection = normalizeReviewSelection(mockType, subType, reviewSelection);
+  const availableCredits = options?.wallet.availableCredits ?? 0;
+  const selectedReviewCost = reviewCost(selectedReviewSelection);
+  const insufficientCredits = selectedReviewCost > availableCredits;
+
+  const availableBundles = useMemo(() => {
+    return (options?.availableBundles ?? []).filter((bundle) => bundleMatches(bundle, mockType, subType, profession));
+  }, [mockType, options?.availableBundles, profession, subType]);
+
+  const selectedBundle = availableBundles.find((bundle) => bundle.bundleId === selectedBundleId)
+    ?? availableBundles[0]
+    ?? null;
 
   const handleModeChange = (newMode: 'practice' | 'exam') => {
     setMode(newMode);
     if (newMode === 'exam') setStrictTimer(true);
   };
 
-  const showProfession = mockType === 'full' || (mockType === 'sub' && (subType === 'writing' || subType === 'speaking'));
-
   const handleMockTypeChange = (nextType: MockType) => {
     setMockType(nextType);
+    setSelectedBundleId(null);
     setReviewSelection((current) => normalizeReviewSelection(nextType, subType, current));
   };
 
   const handleSubTypeChange = (nextSubType: MockSubType) => {
     setSubType(nextSubType);
+    setSelectedBundleId(null);
     setReviewSelection((current) => normalizeReviewSelection(mockType, nextSubType, current));
   };
 
   const handleStart = async () => {
+    if (!selectedBundle || insufficientCredits) return;
     setStarting(true);
     setStartError(null);
     try {
@@ -99,207 +172,286 @@ export default function MockSetup() {
         profession,
         strictTimer,
         reviewSelection: selectedReviewSelection,
+        bundleId: selectedBundle.bundleId,
       });
-      analytics.track('mock_started', { mockType, mode, reviewSelection: selectedReviewSelection });
+      analytics.track('mock_started', { mockType, mode, reviewSelection: selectedReviewSelection, bundleId: selectedBundle.bundleId });
       router.push(`/mocks/player/${result.sessionId}`);
-    } catch {
-      setStartError('Failed to start mock session. Please try again.');
+    } catch (err) {
+      setStartError(err instanceof Error ? err.message : 'Failed to start mock session. Please try again.');
       setStarting(false);
     }
   };
 
+  const showProfession = mockType === 'full' || subType === 'writing' || subType === 'speaking';
+
   return (
     <LearnerDashboardShell pageTitle="Configure Mock" subtitle="Set up your practice environment" backHref="/mocks">
       <div className="space-y-8 pb-24">
+        <LearnerPageHero
+          eyebrow="Mock Setup"
+          icon={Layers}
+          accent="navy"
+          title="Start from a published mock bundle"
+          description="Choose the authored bundle, exam mode, timing, and productive-skill review reservation before entering the section workspace."
+          highlights={[
+            { icon: Award, label: 'Credits', value: `${availableCredits} available` },
+            { icon: Layers, label: 'Bundles', value: `${options?.availableBundles.length ?? 0} published` },
+            { icon: Clock, label: 'Timer', value: strictTimer ? 'Strict' : 'Flexible' },
+          ]}
+        />
 
-        {/* 1. Mock Type Selection */}
-        <section className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm">
-          <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-6">1. Select Mock Type</h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
-            {[
-              { id: 'full', icon: Layers, label: 'Full Mock', desc: 'All 4 sub-tests in sequence. ~3 hours.' },
-              { id: 'sub', icon: FileText, label: 'Single Sub-test', desc: 'Focus on one specific skill area.' }
-            ].map(({ id, icon: Icon, label, desc }) => (
-              <button
-                key={id}
-                onClick={() => handleMockTypeChange(id as MockType)}
-                className={`p-5 rounded-2xl border-2 text-left transition-all ${
-                  mockType === id ? 'border-primary bg-primary/5 ring-4 ring-primary/10' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
-                }`}
-              >
-                <div className="flex items-center justify-between mb-3">
-                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${mockType === id ? 'bg-primary text-white' : 'bg-gray-100 text-muted'}`}>
-                    <Icon className="w-5 h-5" />
-                  </div>
-                  {mockType === id && <Check className="w-5 h-5 text-primary" />}
-                </div>
-                <h3 className={`text-lg font-bold ${mockType === id ? 'text-primary' : 'text-navy'}`}>{label}</h3>
-                <p className="text-sm text-muted mt-1">{desc}</p>
-              </button>
-            ))}
+        {loading ? (
+          <div className="space-y-4">
+            <Skeleton className="h-48 rounded-[28px]" />
+            <Skeleton className="h-48 rounded-[28px]" />
           </div>
-          <MotionCollapse open={mockType === 'sub'}>
-                <div className="pt-2">
-                  <h3 className="text-xs font-bold text-navy uppercase tracking-widest mb-3">Which Sub-test?</h3>
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                    {[
-                      { id: 'reading', label: 'Reading', icon: FileText },
-                      { id: 'listening', label: 'Listening', icon: Headphones },
-                      { id: 'writing', label: 'Writing', icon: PenTool },
-                      { id: 'speaking', label: 'Speaking', icon: Mic },
-                    ].map((st) => (
-                      <button
-                        key={st.id}
-                        onClick={() => handleSubTypeChange(st.id as MockSubType)}
-                        className={`py-3 px-4 rounded-xl border flex flex-col items-center gap-2 transition-colors ${
-                          subType === st.id ? 'bg-primary text-white border-primary' : 'bg-surface text-muted border-gray-200 hover:bg-gray-50'
-                        }`}
-                      >
-                        <st.icon className="w-5 h-5" />
-                        <span className="text-sm font-bold">{st.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-          </MotionCollapse>
-        </section>
+        ) : null}
 
-        {/* 2. Profession (Conditional) */}
-        <MotionPresence>
-          {showProfession && (
-            <MotionSection className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm">
-              <div className="flex items-center gap-3 mb-6">
-                <div className="w-8 h-8 rounded-full bg-indigo-100 flex items-center justify-center shrink-0">
-                  <Stethoscope className="w-4 h-4 text-indigo-600" />
-                </div>
-                <h2 className="text-sm font-black text-muted uppercase tracking-widest">2. Profession</h2>
-              </div>
-              <p className="text-sm text-muted mb-4">Writing and Speaking tasks are profession-specific. Select your profession to get the correct materials.</p>
-              <select
-                value={profession}
-                onChange={(e) => setProfession(e.target.value)}
-                className="w-full sm:w-1/2 bg-gray-50 border border-gray-200 text-navy text-sm rounded-xl focus:ring-primary focus:border-primary block p-3 font-medium"
-              >
-                {PROFESSIONS.map(p => <option key={p} value={p}>{p}</option>)}
-              </select>
-            </MotionSection>
-          )}
-        </MotionPresence>
+        {!loading && startError ? <InlineAlert variant="error">{startError}</InlineAlert> : null}
 
-        {/* 3. Mode & Timer */}
-        <section className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm">
-          <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-6">
-            {showProfession ? '3.' : '2.'} Environment
-          </h2>
-          <div className="space-y-8">
-            <div>
-              <h3 className="text-xs font-bold text-navy uppercase tracking-widest mb-3">Testing Mode</h3>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        {!loading ? (
+          <>
+            <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm sm:p-8">
+              <LearnerSurfaceSectionHeader
+                eyebrow="1. Mock Type"
+                title="Choose full simulation or focused sub-test"
+                description="Sub-test links from the mock center preselect the correct route here."
+                className="mb-4"
+              />
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {[
-                  { id: 'exam', icon: ShieldCheck, label: 'Exam Mode', desc: 'Strict timing, no pausing, simulates real test conditions.', color: 'rose' },
-                  { id: 'practice', icon: Award, label: 'Practice Mode', desc: 'Flexible timing, ability to pause and review answers.', color: 'blue' }
-                ].map(({ id, icon: Icon, label, desc, color }) => (
+                  { id: 'full' as const, icon: Layers, label: 'Full Mock', desc: 'Listening, Reading, Writing, Speaking in OET order.' },
+                  { id: 'sub' as const, icon: FileText, label: 'Single Sub-test', desc: 'One published section for targeted evidence.' },
+                ].map(({ id, icon: Icon, label, desc }) => (
                   <button
                     key={id}
-                    onClick={() => handleModeChange(id as 'practice' | 'exam')}
-                    className={`p-4 rounded-xl border-2 text-left transition-all flex items-start gap-3 ${
-                      mode === id ? `border-${color}-500 bg-${color}-50` : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                    type="button"
+                    onClick={() => handleMockTypeChange(id)}
+                    className={`rounded-2xl border-2 p-5 text-left transition-all ${
+                      mockType === id ? 'border-primary bg-primary/5 ring-4 ring-primary/10' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
                     }`}
                   >
-                    <Icon className={`w-5 h-5 shrink-0 mt-0.5 ${mode === id ? `text-${color}-500` : 'text-muted'}`} />
-                    <div>
-                      <h4 className={`text-sm font-bold ${mode === id ? `text-${color}-700` : 'text-navy'}`}>{label}</h4>
-                      <p className="text-xs text-muted mt-1">{desc}</p>
+                    <div className="mb-3 flex items-center justify-between">
+                      <span className={`flex h-10 w-10 items-center justify-center rounded-full ${mockType === id ? 'bg-primary text-white' : 'bg-gray-100 text-muted'}`}>
+                        <Icon className="h-5 w-5" />
+                      </span>
+                      {mockType === id ? <Check className="h-5 w-5 text-primary" /> : null}
                     </div>
+                    <h3 className={`text-lg font-bold ${mockType === id ? 'text-primary' : 'text-navy'}`}>{label}</h3>
+                    <p className="mt-1 text-sm text-muted">{desc}</p>
                   </button>
                 ))}
               </div>
-            </div>
-            <div className="flex items-center justify-between pt-6 border-t border-gray-100">
-              <div className="pr-4">
-                <h3 className="text-sm font-bold text-navy flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-muted" /> Strict Timer
-                </h3>
-                <p className="text-xs text-muted mt-1">Enforce time limits for each section. Auto-submits when time is up.</p>
-                {mode === 'exam' && (
-                  <p className="text-[10px] font-black text-rose-500 uppercase tracking-widest mt-2 flex items-center gap-1">
-                    <Info className="w-3 h-3" /> Required in Exam Mode
-                  </p>
-                )}
-              </div>
-              <button
-                onClick={() => mode !== 'exam' && setStrictTimer(!strictTimer)}
-                disabled={mode === 'exam'}
-                className={`relative inline-flex h-8 w-13 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-                  strictTimer ? 'bg-primary' : 'bg-gray-200'
-                } ${mode === 'exam' ? 'opacity-50 cursor-not-allowed' : ''}`}
-                role="switch"
-                aria-checked={strictTimer}
-              >
-                <span className="sr-only">Use strict timer</span>
-                <span
-                  aria-hidden="true"
-                  className={`pointer-events-none inline-block h-6 w-6 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                    strictTimer ? 'translate-x-5' : 'translate-x-0'
-                  }`}
-                />
-              </button>
-            </div>
-          </div>
-        </section>
+              <MotionCollapse open={mockType === 'sub'}>
+                <div className="pt-5">
+                  <p className="mb-3 text-xs font-black uppercase tracking-widest text-muted">Which sub-test?</p>
+                  <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                    {(Object.keys(SUBTEST_META) as MockSubType[]).map((id) => {
+                      const meta = SUBTEST_META[id];
+                      const Icon = meta.icon;
+                      return (
+                        <button
+                          key={id}
+                          type="button"
+                          onClick={() => handleSubTypeChange(id)}
+                          className={`rounded-xl border px-4 py-3 transition-colors ${subType === id ? meta.active : 'border-gray-200 bg-white text-muted hover:bg-gray-50'}`}
+                        >
+                          <Icon className="mx-auto mb-2 h-5 w-5" />
+                          <span className="text-sm font-bold">{meta.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </MotionCollapse>
+            </section>
 
-        {/* 4. Expert Review Add-on */}
-        <section className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm">
-          <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-6">
-            {showProfession ? '4.' : '3.'} Add-ons
-          </h2>
-          <div className="space-y-4">
-            <div className="pr-4">
-              <h3 className="text-sm font-bold text-navy">Productive-skill review selection</h3>
-              <p className="text-xs text-muted mt-1">Review add-ons apply only to Writing and Speaking because those are the OET productive skills that benefit from human review.</p>
-            </div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              {reviewOptions.map((option) => (
+            <MotionPresence>
+              {showProfession ? (
+                <MotionSection className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm sm:p-8">
+                  <LearnerSurfaceSectionHeader
+                    eyebrow="2. Profession"
+                    title="Match profession-scoped content"
+                    description="Full mocks can include profession-specific productive sections, while Listening and Reading can remain shared."
+                    icon={Stethoscope}
+                    className="mb-4"
+                  />
+                  <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {(options?.professions ?? []).map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => {
+                          setProfession(item.id);
+                          setSelectedBundleId(null);
+                        }}
+                        className={`rounded-xl border px-4 py-3 text-left text-sm font-bold transition-colors ${
+                          profession === item.id ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 bg-white text-navy hover:bg-gray-50'
+                        }`}
+                      >
+                        {item.label}
+                      </button>
+                    ))}
+                  </div>
+                </MotionSection>
+              ) : null}
+            </MotionPresence>
+
+            <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm sm:p-8">
+              <LearnerSurfaceSectionHeader
+                eyebrow={showProfession ? '3. Bundle' : '2. Bundle'}
+                title="Pick the authored mock route"
+                description="Every card below is backed by an admin-published mock bundle and uses section launch routes from the API."
+                className="mb-4"
+              />
+              {availableBundles.length === 0 ? (
+                <InlineAlert variant="info">
+                  No published bundle matches this selection yet. Ask an admin to publish one from Content Mock Bundles.
+                </InlineAlert>
+              ) : (
+                <div className="grid gap-4 lg:grid-cols-2">
+                  {availableBundles.map((bundle) => (
+                    <button
+                      key={bundle.bundleId}
+                      type="button"
+                      onClick={() => setSelectedBundleId(bundle.bundleId)}
+                      className={`rounded-2xl border p-5 text-left transition-colors ${
+                        selectedBundle?.bundleId === bundle.bundleId ? 'border-primary bg-primary/5' : 'border-gray-200 bg-white hover:border-gray-300'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <p className="text-base font-black text-navy">{bundle.title}</p>
+                          <p className="mt-1 text-sm text-muted">
+                            {bundle.sections.length} section{bundle.sections.length === 1 ? '' : 's'} / {bundle.estimatedDurationMinutes} min
+                          </p>
+                        </div>
+                        {selectedBundle?.bundleId === bundle.bundleId ? <Check className="h-5 w-5 text-primary" /> : null}
+                      </div>
+                      <div className="mt-4 flex flex-wrap gap-2">
+                        {bundle.sections.map((section) => (
+                          <span key={section.id} className="rounded-md bg-background-light px-2 py-1 text-[11px] font-black uppercase tracking-widest text-muted">
+                            {section.subtest} / {section.timeLimitMinutes}m
+                          </span>
+                        ))}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </section>
+
+            <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm sm:p-8">
+              <LearnerSurfaceSectionHeader
+                eyebrow={showProfession ? '4. Environment' : '3. Environment'}
+                title="Set timing and exam behavior"
+                description="Exam mode keeps strict timers enabled; practice mode can relax timing when needed."
+                className="mb-4"
+              />
+              <div className="grid gap-4 sm:grid-cols-2">
                 <button
-                  key={option.id}
-                  onClick={() => setReviewSelection(option.id)}
-                  className={`rounded-2xl border p-4 text-left transition-colors ${
-                    selectedReviewSelection === option.id
-                      ? 'border-amber-400 bg-amber-50'
-                      : 'border-gray-200 bg-white hover:border-gray-300'
-                  }`}
+                  type="button"
+                  onClick={() => handleModeChange('exam')}
+                  className={`rounded-2xl border-2 p-4 text-left transition-colors ${mode === 'exam' ? 'border-rose-500 bg-rose-50' : 'border-gray-200 hover:bg-gray-50'}`}
                 >
-                  <p className="text-sm font-bold text-navy">{option.label}</p>
-                  <p className="mt-2 text-xs leading-5 text-muted">{option.description}</p>
+                  <ShieldCheck className={`mb-3 h-5 w-5 ${mode === 'exam' ? 'text-rose-500' : 'text-muted'}`} />
+                  <p className="text-sm font-bold text-navy">Exam Mode</p>
+                  <p className="mt-1 text-xs text-muted">Strict timing and full simulation behavior.</p>
                 </button>
-              ))}
-            </div>
-            {selectedReviewSelection !== 'none' ? (
-              <div className="inline-flex items-center gap-1.5 rounded-md bg-amber-100 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-amber-800">
-                Uses review credits on productive skills only
+                <button
+                  type="button"
+                  onClick={() => handleModeChange('practice')}
+                  className={`rounded-2xl border-2 p-4 text-left transition-colors ${mode === 'practice' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                >
+                  <Award className={`mb-3 h-5 w-5 ${mode === 'practice' ? 'text-blue-500' : 'text-muted'}`} />
+                  <p className="text-sm font-bold text-navy">Practice Mode</p>
+                  <p className="mt-1 text-xs text-muted">Flexible timing for targeted practice.</p>
+                </button>
               </div>
-            ) : null}
-          </div>
-        </section>
+              <div className="mt-6 flex items-center justify-between border-t border-gray-100 pt-6">
+                <div className="pr-4">
+                  <p className="flex items-center gap-2 text-sm font-bold text-navy"><Clock className="h-4 w-4 text-muted" /> Strict Timer</p>
+                  <p className="mt-1 text-xs text-muted">Auto-enforce each section limit from the authored bundle.</p>
+                  {mode === 'exam' ? (
+                    <p className="mt-2 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-rose-500">
+                      <Info className="h-3 w-3" /> Required in exam mode
+                    </p>
+                  ) : null}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => mode !== 'exam' && setStrictTimer(!strictTimer)}
+                  disabled={mode === 'exam'}
+                  className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full transition-colors ${strictTimer ? 'bg-primary' : 'bg-gray-200'} ${mode === 'exam' ? 'cursor-not-allowed opacity-50' : ''}`}
+                  role="switch"
+                  aria-checked={strictTimer}
+                >
+                  <span className="sr-only">Use strict timer</span>
+                  <span className={`inline-block h-6 w-6 rounded-full bg-white shadow transition-transform ${strictTimer ? 'translate-x-7' : 'translate-x-1'}`} />
+                </button>
+              </div>
+            </section>
 
-        {/* Start Button */}
-        {startError && (
-          <div className="bg-red-50 border border-red-200 rounded-2xl p-4 text-sm text-red-700 text-center">{startError}</div>
-        )}
-        <div className="pt-4 pb-8">
-          <Button
-            onClick={handleStart}
-            disabled={starting}
-            size="lg"
-            className="w-full bg-navy text-white hover:bg-navy/90 text-lg py-5 font-black gap-2"
-          >
-            {starting ? 'Starting...' : 'Start Mock Test'}
-          </Button>
-          <p className="text-center text-xs text-muted mt-4">
-            Make sure you are in a quiet environment before starting.
-          </p>
-        </div>
+            <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm sm:p-8">
+              <LearnerSurfaceSectionHeader
+                eyebrow={showProfession ? '5. Review Credits' : '4. Review Credits'}
+                title="Reserve expert review at mock start"
+                description="Credits are reserved immediately, consumed when eligible Writing/Speaking evidence is submitted, and released if the attempt is cancelled."
+                className="mb-4"
+              />
+              <div className="mb-4 inline-flex rounded-md bg-amber-100 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-amber-800">
+                {availableCredits} credits available
+              </div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {reviewOptions.map((option) => {
+                  const disabled = option.cost > availableCredits;
+                  return (
+                    <button
+                      key={option.id}
+                      type="button"
+                      disabled={disabled}
+                      onClick={() => setReviewSelection(option.id)}
+                      className={`rounded-2xl border p-4 text-left transition-colors ${
+                        selectedReviewSelection === option.id
+                          ? 'border-amber-400 bg-amber-50'
+                          : disabled
+                            ? 'cursor-not-allowed border-gray-200 bg-gray-50 opacity-60'
+                            : 'border-gray-200 bg-white hover:border-gray-300'
+                      }`}
+                    >
+                      <p className="text-sm font-bold text-navy">{option.label}</p>
+                      <p className="mt-2 text-xs leading-5 text-muted">{option.description}</p>
+                      <p className="mt-3 text-[11px] font-black uppercase tracking-widest text-muted">
+                        {option.cost} credit{option.cost === 1 ? '' : 's'}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+              {insufficientCredits ? (
+                <div className="mt-4">
+                  <InlineAlert variant="warning">This review selection needs more credits before the mock can start.</InlineAlert>
+                </div>
+              ) : null}
+            </section>
 
+            {startError ? <InlineAlert variant="error">{startError}</InlineAlert> : null}
+
+            <div className="sticky bottom-4 z-10 rounded-2xl border border-gray-200 bg-surface/95 p-3 shadow-lg backdrop-blur">
+              <Button
+                onClick={handleStart}
+                disabled={starting || !selectedBundle || insufficientCredits}
+                size="lg"
+                className="w-full gap-2 py-5 text-base font-black"
+              >
+                {starting ? 'Starting...' : 'Start Mock Test'}
+              </Button>
+              <p className="mt-3 text-center text-xs text-muted">
+                {selectedBundle ? `${selectedBundle.title} / ${selectedBundle.estimatedDurationMinutes} minutes` : 'Select a published bundle to continue.'}
+              </p>
+            </div>
+          </>
+        ) : null}
       </div>
     </LearnerDashboardShell>
   );

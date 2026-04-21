@@ -422,6 +422,7 @@ builder.Services.AddAuthorization(options =>
 });
 
 builder.Services.AddScoped<LearnerService>();
+builder.Services.AddScoped<MockService>();
 builder.Services.AddScoped<ISpeakingEvaluationPipeline, SpeakingEvaluationPipeline>();
 builder.Services.AddScoped<ExpertService>();
 builder.Services.AddScoped<AdminService>();
@@ -501,6 +502,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversatio
 
 builder.Services.AddScoped<OetLearner.Api.Services.Conversation.IConversationAudioService,
     OetLearner.Api.Services.Conversation.ConversationAudioService>();
+builder.Services.AddSingleton<OetLearner.Api.Services.Conversation.IConversationOptionsProvider,
+    OetLearner.Api.Services.Conversation.ConversationOptionsProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Conversation.IConversationEntitlementService,
     OetLearner.Api.Services.Conversation.ConversationEntitlementService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Conversation.IConversationAiOrchestrator,
@@ -850,6 +853,7 @@ app.MapAdminEndpoints();
 app.MapAiUsageAdminEndpoints();
 app.MapAiMeEndpoints();
 app.MapContentPapersAdminEndpoints();
+app.MapMockAdminEndpoints();
 app.MapContentPapersLearnerEndpoints();
 app.MapReadingAuthoringAdminEndpoints();
 app.MapReadingLearnerEndpoints();

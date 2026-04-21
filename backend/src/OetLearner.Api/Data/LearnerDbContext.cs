@@ -30,6 +30,10 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<DiagnosticSubtestStatus> DiagnosticSubtests => Set<DiagnosticSubtestStatus>();
     public DbSet<MockAttempt> MockAttempts => Set<MockAttempt>();
     public DbSet<MockReport> MockReports => Set<MockReport>();
+    public DbSet<MockBundle> MockBundles => Set<MockBundle>();
+    public DbSet<MockBundleSection> MockBundleSections => Set<MockBundleSection>();
+    public DbSet<MockSectionAttempt> MockSectionAttempts => Set<MockSectionAttempt>();
+    public DbSet<MockReviewReservation> MockReviewReservations => Set<MockReviewReservation>();
     public DbSet<AnalyticsEventRecord> AnalyticsEvents => Set<AnalyticsEventRecord>();
     public DbSet<IdempotencyRecord> IdempotencyRecords => Set<IdempotencyRecord>();
     public DbSet<ApplicationUserAccount> ApplicationUserAccounts => Set<ApplicationUserAccount>();
@@ -96,6 +100,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<ConversationTurn> ConversationTurns => Set<ConversationTurn>();
     public DbSet<ConversationEvaluation> ConversationEvaluations => Set<ConversationEvaluation>();
     public DbSet<ConversationTurnAnnotation> ConversationTurnAnnotations => Set<ConversationTurnAnnotation>();
+    public DbSet<ConversationSettingsRow> ConversationSettings => Set<ConversationSettingsRow>();
     public DbSet<WritingCoachSession> WritingCoachSessions => Set<WritingCoachSession>();
     public DbSet<WritingCoachSuggestion> WritingCoachSuggestions => Set<WritingCoachSuggestion>();
     public DbSet<PronunciationAssessment> PronunciationAssessments => Set<PronunciationAssessment>();
@@ -287,6 +292,37 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<ReadinessSnapshot>().HasIndex(x => x.UserId);
         modelBuilder.Entity<DiagnosticSession>().HasIndex(x => new { x.UserId, x.State });
         modelBuilder.Entity<MockAttempt>().HasIndex(x => x.UserId);
+        modelBuilder.Entity<MockAttempt>().HasIndex(x => new { x.UserId, x.State });
+        modelBuilder.Entity<MockAttempt>()
+            .HasOne(x => x.MockBundle)
+            .WithMany()
+            .HasForeignKey(x => x.MockBundleId)
+            .OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<MockBundleSection>()
+            .HasOne(x => x.MockBundle)
+            .WithMany(x => x.Sections)
+            .HasForeignKey(x => x.MockBundleId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<MockBundleSection>()
+            .HasOne(x => x.ContentPaper)
+            .WithMany()
+            .HasForeignKey(x => x.ContentPaperId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<MockSectionAttempt>()
+            .HasOne(x => x.MockAttempt)
+            .WithMany(x => x.SectionAttempts)
+            .HasForeignKey(x => x.MockAttemptId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<MockSectionAttempt>()
+            .HasOne(x => x.MockBundleSection)
+            .WithMany()
+            .HasForeignKey(x => x.MockBundleSectionId)
+            .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<MockReviewReservation>()
+            .HasOne(x => x.MockAttempt)
+            .WithOne()
+            .HasForeignKey<MockReviewReservation>(x => x.MockAttemptId)
+            .OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<UploadSession>().HasIndex(x => x.AttemptId);
 
         // Expert indexes

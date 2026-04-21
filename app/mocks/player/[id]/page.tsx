@@ -2,30 +2,15 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, CheckCircle2, Clock, FileText, Loader2, PlayCircle } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Clock, FileText, PlayCircle } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
-import { fetchMockSession, submitMockSession } from '@/lib/api';
+import { completeMockSection, fetchMockSession, startMockSection, submitMockSession } from '@/lib/api';
 import type { MockSession } from '@/lib/mock-data';
-
-function liveSectionRoute(session: MockSession, sectionId: string): string {
-  switch (sectionId) {
-    case 'reading':
-      return `/reading/task/rt-001?mode=${session.config.mode}`;
-    case 'listening':
-      return `/listening/player/lt-001?mode=${session.config.mode}`;
-    case 'writing':
-      return `/writing/player?taskId=wt-001`;
-    case 'speaking':
-      return `/speaking/check?taskId=st-001`;
-    default:
-      return '/mocks';
-  }
-}
 
 export default function MockPlayerPage() {
   const params = useParams<{ id: string }>();
@@ -37,6 +22,8 @@ export default function MockPlayerPage() {
   const [session, setSession] = useState<MockSession | null>(null);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [launchingSectionId, setLaunchingSectionId] = useState<string | null>(null);
+  const [completingSectionId, setCompletingSectionId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
@@ -71,6 +58,46 @@ export default function MockPlayerPage() {
     }
   };
 
+  const refreshSession = async () => {
+    if (!session) return null;
+    const refreshed = await fetchMockSession(session.sessionId);
+    setSession(refreshed);
+    return refreshed;
+  };
+
+  const handleLaunchSection = async () => {
+    if (!session || !selectedSection) return;
+    setLaunchingSectionId(selectedSection.id);
+    setError(null);
+    try {
+      const started = await startMockSection(session.sessionId, selectedSection.id);
+      await refreshSession();
+      router.push(started.launchRoute);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not start this section.');
+    } finally {
+      setLaunchingSectionId(null);
+    }
+  };
+
+  const handleCompleteSection = async () => {
+    if (!session || !selectedSection) return;
+    setCompletingSectionId(selectedSection.id);
+    setError(null);
+    setSuccess(null);
+    try {
+      await completeMockSection(session.sessionId, selectedSection.id, {
+        evidence: { source: 'mock_player_confirmation', completedAt: new Date().toISOString() },
+      });
+      await refreshSession();
+      setSuccess(`${selectedSection.title} recorded as completed.`);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not complete this section.');
+    } finally {
+      setCompletingSectionId(null);
+    }
+  };
+
   return (
     <LearnerDashboardShell pageTitle="Mock Orchestrator" subtitle="Run, resume, and submit the learner mock from one real route." backHref="/mocks">
       <div className="space-y-8">
@@ -95,13 +122,22 @@ export default function MockPlayerPage() {
               icon={FileText}
               accent="navy"
               title={session.config.title}
-              description="This route honors the learner’s mock configuration, keeps review selection explicit, and prevents setup choices from being ignored."
+              description="This route honors the learner's mock configuration, keeps review selection explicit, and prevents setup choices from being ignored."
               highlights={[
                 { icon: FileText, label: 'Profession', value: session.config.profession },
                 { icon: Clock, label: 'Mode', value: session.config.mode === 'exam' ? 'Exam simulation' : 'Practice simulation' },
                 { icon: CheckCircle2, label: 'Review', value: session.config.reviewSelection.replace(/_/g, ' ') },
               ]}
             />
+
+            {session.reviewReservation ? (
+              <section className="rounded-[24px] border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+                <p className="text-[11px] font-black uppercase tracking-widest">Review reservation</p>
+                <p className="mt-1">
+                  {session.reviewReservation.pendingCredits} pending / {session.reviewReservation.consumedCredits} consumed / state {session.reviewReservation.state.replace(/_/g, ' ')}
+                </p>
+              </section>
+            ) : null}
 
             <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
               <div className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
@@ -126,11 +162,11 @@ export default function MockPlayerPage() {
                       <div>
                         <p className="text-sm font-bold text-navy">{section.title}</p>
                         <p className="mt-1 text-xs text-muted">
-                          State: {section.state} · Review {section.reviewSelected ? 'attached' : 'not attached'}
+                          State: {section.state.replace(/_/g, ' ')} / {section.timeLimitMinutes ?? 'Timed'} min / Review {section.reviewSelected ? 'attached' : 'not attached'}
                         </p>
                       </div>
                       <span className="rounded-full bg-background-light px-3 py-1 text-xs font-black uppercase tracking-widest text-muted">
-                        {section.id}
+                        {section.subtest ?? section.id}
                       </span>
                     </button>
                   ))}
@@ -150,12 +186,21 @@ export default function MockPlayerPage() {
                     <div className="rounded-2xl border border-gray-100 bg-background-light p-4 text-sm text-muted">
                       <p>Strict timer: {session.config.strictTimer ? 'Enabled' : 'Flexible'}</p>
                       <p className="mt-1">Review attached: {selectedSection.reviewSelected ? 'Yes' : 'No'}</p>
+                      <p className="mt-1">Content: {selectedSection.contentPaperTitle ?? selectedSection.contentPaperId ?? 'Published section'}</p>
+                      <p className="mt-1 break-all">Launch path: <span className="font-mono text-[11px]">{selectedSection.launchRoute}</span></p>
                     </div>
 
-                    <Button fullWidth onClick={() => router.push(liveSectionRoute(session, selectedSection.id))}>
+                    <Button fullWidth onClick={handleLaunchSection} loading={launchingSectionId === selectedSection.id}>
                       <PlayCircle className="h-4 w-4" />
                       Launch section workspace
                     </Button>
+
+                    {selectedSection.state !== 'completed' ? (
+                      <Button variant="secondary" fullWidth onClick={handleCompleteSection} loading={completingSectionId === selectedSection.id}>
+                        <CheckCircle2 className="h-4 w-4" />
+                        Record section completion
+                      </Button>
+                    ) : null}
 
                     <Button variant="outline" fullWidth onClick={handleSubmit} loading={submitting}>
                       Submit mock for report generation

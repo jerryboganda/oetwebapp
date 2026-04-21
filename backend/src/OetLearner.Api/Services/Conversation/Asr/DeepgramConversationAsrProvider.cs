@@ -1,30 +1,30 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
+
 using OetLearner.Api.Configuration;
 
 namespace OetLearner.Api.Services.Conversation.Asr;
 
 public sealed class DeepgramConversationAsrProvider(
     IHttpClientFactory httpClientFactory,
-    IOptions<ConversationOptions> options,
+    IConversationOptionsProvider optionsProvider,
     ILogger<DeepgramConversationAsrProvider> logger) : IConversationAsrProvider
 {
-    private readonly ConversationOptions _options = options.Value;
+    private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
 
     public string Name => "deepgram";
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(_options.DeepgramApiKey);
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(ReadOptions().DeepgramApiKey);
 
     public async Task<ConversationAsrResult> TranscribeAsync(ConversationAsrRequest request, CancellationToken ct)
     {
         if (!IsConfigured) throw new InvalidOperationException("Deepgram not configured.");
 
         var client = httpClientFactory.CreateClient("ConversationDeepgramClient");
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Token", _options.DeepgramApiKey);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Token", ReadOptions().DeepgramApiKey);
 
-        var lang = string.IsNullOrWhiteSpace(_options.DeepgramLanguage) ? request.Locale : _options.DeepgramLanguage;
-        var model = string.IsNullOrWhiteSpace(_options.DeepgramModel) ? "nova-2" : _options.DeepgramModel;
+        var lang = string.IsNullOrWhiteSpace(ReadOptions().DeepgramLanguage) ? request.Locale : ReadOptions().DeepgramLanguage;
+        var model = string.IsNullOrWhiteSpace(ReadOptions().DeepgramModel) ? "nova-2" : ReadOptions().DeepgramModel;
         var url = $"https://api.deepgram.com/v1/listen?model={Uri.EscapeDataString(model)}&language={Uri.EscapeDataString(lang)}&smart_format=true&punctuate=true";
 
         var content = new StreamContent(request.Audio);

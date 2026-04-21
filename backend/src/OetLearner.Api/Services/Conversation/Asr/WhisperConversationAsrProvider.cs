@@ -1,36 +1,36 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
+
 using OetLearner.Api.Configuration;
 
 namespace OetLearner.Api.Services.Conversation.Asr;
 
 public sealed class WhisperConversationAsrProvider(
     IHttpClientFactory httpClientFactory,
-    IOptions<ConversationOptions> options,
+    IConversationOptionsProvider optionsProvider,
     ILogger<WhisperConversationAsrProvider> logger) : IConversationAsrProvider
 {
-    private readonly ConversationOptions _options = options.Value;
+    private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
 
     public string Name => "whisper";
     public bool IsConfigured =>
-        !string.IsNullOrWhiteSpace(_options.WhisperApiKey) &&
-        !string.IsNullOrWhiteSpace(_options.WhisperBaseUrl);
+        !string.IsNullOrWhiteSpace(ReadOptions().WhisperApiKey) &&
+        !string.IsNullOrWhiteSpace(ReadOptions().WhisperBaseUrl);
 
     public async Task<ConversationAsrResult> TranscribeAsync(ConversationAsrRequest request, CancellationToken ct)
     {
         if (!IsConfigured) throw new InvalidOperationException("Whisper provider is not configured.");
 
         var client = httpClientFactory.CreateClient("ConversationWhisperClient");
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _options.WhisperApiKey);
-        var url = $"{_options.WhisperBaseUrl.TrimEnd('/')}/audio/transcriptions";
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ReadOptions().WhisperApiKey);
+        var url = $"{ReadOptions().WhisperBaseUrl.TrimEnd('/')}/audio/transcriptions";
 
         using var form = new MultipartFormDataContent();
         var audioContent = new StreamContent(request.Audio);
         audioContent.Headers.ContentType = new MediaTypeHeaderValue(request.AudioMimeType);
         form.Add(audioContent, "file", GuessFileName(request.AudioMimeType));
-        form.Add(new StringContent(_options.WhisperModel), "model");
+        form.Add(new StringContent(ReadOptions().WhisperModel), "model");
         var lang = (request.Locale ?? "en-GB").Length >= 2 ? request.Locale.Substring(0, 2) : "en";
         form.Add(new StringContent(lang), "language");
         form.Add(new StringContent("verbose_json"), "response_format");

@@ -2,33 +2,33 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
+
 using OetLearner.Api.Configuration;
 
 namespace OetLearner.Api.Services.Conversation.Tts;
 
 public sealed class CosyVoiceConversationTtsProvider(
     IHttpClientFactory httpClientFactory,
-    IOptions<ConversationOptions> options,
+    IConversationOptionsProvider optionsProvider,
     ILogger<CosyVoiceConversationTtsProvider> logger) : IConversationTtsProvider
 {
-    private readonly ConversationOptions _options = options.Value;
+    private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
     public string Name => "cosyvoice";
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(_options.CosyVoiceBaseUrl);
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(ReadOptions().CosyVoiceBaseUrl);
 
     public async Task<ConversationTtsResult> SynthesizeAsync(ConversationTtsRequest request, CancellationToken ct)
     {
         if (!IsConfigured) throw new InvalidOperationException("CosyVoice not configured.");
 
         var client = httpClientFactory.CreateClient("ConversationCosyVoiceClient");
-        if (!string.IsNullOrWhiteSpace(_options.CosyVoiceApiKey))
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _options.CosyVoiceApiKey);
+        if (!string.IsNullOrWhiteSpace(ReadOptions().CosyVoiceApiKey))
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ReadOptions().CosyVoiceApiKey);
 
-        var url = $"{_options.CosyVoiceBaseUrl.TrimEnd('/')}/tts";
+        var url = $"{ReadOptions().CosyVoiceBaseUrl.TrimEnd('/')}/tts";
         var payload = JsonSerializer.Serialize(new
         {
             text = request.Text,
-            voice = string.IsNullOrWhiteSpace(request.Voice) ? _options.CosyVoiceDefaultVoice : request.Voice,
+            voice = string.IsNullOrWhiteSpace(request.Voice) ? ReadOptions().CosyVoiceDefaultVoice : request.Voice,
             language = request.Locale, rate = request.Rate ?? 1.0, pitch = request.Pitch ?? 0.0, format = "mp3",
         });
         using var req = new HttpRequestMessage(HttpMethod.Post, url)
@@ -51,26 +51,26 @@ public sealed class CosyVoiceConversationTtsProvider(
 
 public sealed class ChatTtsConversationTtsProvider(
     IHttpClientFactory httpClientFactory,
-    IOptions<ConversationOptions> options,
+    IConversationOptionsProvider optionsProvider,
     ILogger<ChatTtsConversationTtsProvider> logger) : IConversationTtsProvider
 {
-    private readonly ConversationOptions _options = options.Value;
+    private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
     public string Name => "chattts";
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(_options.ChatTtsBaseUrl);
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(ReadOptions().ChatTtsBaseUrl);
 
     public async Task<ConversationTtsResult> SynthesizeAsync(ConversationTtsRequest request, CancellationToken ct)
     {
         if (!IsConfigured) throw new InvalidOperationException("ChatTTS not configured.");
 
         var client = httpClientFactory.CreateClient("ConversationChatTtsClient");
-        if (!string.IsNullOrWhiteSpace(_options.ChatTtsApiKey))
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _options.ChatTtsApiKey);
+        if (!string.IsNullOrWhiteSpace(ReadOptions().ChatTtsApiKey))
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ReadOptions().ChatTtsApiKey);
 
-        var url = $"{_options.ChatTtsBaseUrl.TrimEnd('/')}/tts";
+        var url = $"{ReadOptions().ChatTtsBaseUrl.TrimEnd('/')}/tts";
         var payload = JsonSerializer.Serialize(new
         {
             text = request.Text,
-            voice = string.IsNullOrWhiteSpace(request.Voice) ? _options.ChatTtsDefaultVoice : request.Voice,
+            voice = string.IsNullOrWhiteSpace(request.Voice) ? ReadOptions().ChatTtsDefaultVoice : request.Voice,
             language = request.Locale, format = "mp3",
         });
         using var req = new HttpRequestMessage(HttpMethod.Post, url)
@@ -93,26 +93,26 @@ public sealed class ChatTtsConversationTtsProvider(
 
 public sealed class GptSoVitsConversationTtsProvider(
     IHttpClientFactory httpClientFactory,
-    IOptions<ConversationOptions> options,
+    IConversationOptionsProvider optionsProvider,
     ILogger<GptSoVitsConversationTtsProvider> logger) : IConversationTtsProvider
 {
-    private readonly ConversationOptions _options = options.Value;
+    private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
     public string Name => "gptsovits";
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(_options.GptSoVitsBaseUrl);
+    public bool IsConfigured => !string.IsNullOrWhiteSpace(ReadOptions().GptSoVitsBaseUrl);
 
     public async Task<ConversationTtsResult> SynthesizeAsync(ConversationTtsRequest request, CancellationToken ct)
     {
         if (!IsConfigured) throw new InvalidOperationException("GPT-SoVITS not configured.");
 
         var client = httpClientFactory.CreateClient("ConversationGptSoVitsClient");
-        if (!string.IsNullOrWhiteSpace(_options.GptSoVitsApiKey))
-            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", _options.GptSoVitsApiKey);
+        if (!string.IsNullOrWhiteSpace(ReadOptions().GptSoVitsApiKey))
+            client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ReadOptions().GptSoVitsApiKey);
 
-        var url = $"{_options.GptSoVitsBaseUrl.TrimEnd('/')}/tts";
+        var url = $"{ReadOptions().GptSoVitsBaseUrl.TrimEnd('/')}/tts";
         var payload = JsonSerializer.Serialize(new
         {
             text = request.Text,
-            voice = string.IsNullOrWhiteSpace(request.Voice) ? _options.GptSoVitsDefaultVoice : request.Voice,
+            voice = string.IsNullOrWhiteSpace(request.Voice) ? ReadOptions().GptSoVitsDefaultVoice : request.Voice,
             language = request.Locale, format = "mp3",
         });
         using var req = new HttpRequestMessage(HttpMethod.Post, url)

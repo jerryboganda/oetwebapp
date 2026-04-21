@@ -482,6 +482,14 @@ function ProvidersPanel({ onToast }: { onToast: (t: ToastState) => void }) {
             <Input label="Base URL" value={editing.baseUrl} onChange={(e) => setEditing({ ...editing, baseUrl: e.target.value })} />
             <Input label={creating ? 'API key' : 'API key (leave blank to keep)'} type="password" value={editing.apiKey ?? ''} onChange={(e) => setEditing({ ...editing, apiKey: e.target.value })} />
             <Input label="Default model" value={editing.defaultModel} onChange={(e) => setEditing({ ...editing, defaultModel: e.target.value })} />
+            <Select label="Reasoning effort" value={editing.reasoningEffort ?? ''}
+              onChange={(e) => setEditing({ ...editing, reasoningEffort: e.target.value || null })}
+              options={[
+                { value: '', label: 'Inherit AI__ReasoningEffort env default' },
+                { value: 'low', label: 'low' },
+                { value: 'medium', label: 'medium' },
+                { value: 'high', label: 'high' },
+              ]} />
             <Input label="Price / 1k prompt tokens (USD)" type="number" step="0.0001" value={editing.pricePer1kPromptTokens} onChange={(e) => setEditing({ ...editing, pricePer1kPromptTokens: Number(e.target.value) })} />
             <Input label="Price / 1k completion tokens (USD)" type="number" step="0.0001" value={editing.pricePer1kCompletionTokens} onChange={(e) => setEditing({ ...editing, pricePer1kCompletionTokens: Number(e.target.value) })} />
             <Input label="Retry count" type="number" value={editing.retryCount} onChange={(e) => setEditing({ ...editing, retryCount: Number(e.target.value) })} />

@@ -1,33 +1,36 @@
 using System.Net.Http.Headers;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using OetLearner.Api.Configuration;
 
 namespace OetLearner.Api.Services.Conversation.Asr;
 
 public sealed class AzureConversationAsrProvider(
     IHttpClientFactory httpClientFactory,
-    IOptions<ConversationOptions> options,
+    IConversationOptionsProvider optionsProvider,
     ILogger<AzureConversationAsrProvider> logger) : IConversationAsrProvider
 {
-    private readonly ConversationOptions _options = options.Value;
-
     public string Name => "azure";
-    public bool IsConfigured =>
-        !string.IsNullOrWhiteSpace(_options.AzureSpeechKey) &&
-        !string.IsNullOrWhiteSpace(_options.AzureSpeechRegion);
+    public bool IsConfigured
+    {
+        get
+        {
+            var o = optionsProvider.GetAsync().GetAwaiter().GetResult();
+            return !string.IsNullOrWhiteSpace(o.AzureSpeechKey) && !string.IsNullOrWhiteSpace(o.AzureSpeechRegion);
+        }
+    }
 
     public async Task<ConversationAsrResult> TranscribeAsync(ConversationAsrRequest request, CancellationToken ct)
     {
-        if (!IsConfigured) throw new InvalidOperationException("Azure Speech not configured.");
+        var options = await optionsProvider.GetAsync(ct);
+        if (string.IsNullOrWhiteSpace(options.AzureSpeechKey) || string.IsNullOrWhiteSpace(options.AzureSpeechRegion))
+            throw new InvalidOperationException("Azure Speech not configured.");
 
         var client = httpClientFactory.CreateClient("ConversationAzureClient");
-        var locale = request.Locale ?? _options.AzureLocale ?? "en-GB";
-        var url = $"https://{_options.AzureSpeechRegion}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language={Uri.EscapeDataString(locale)}&format=detailed";
+        var locale = request.Locale ?? options.AzureLocale ?? "en-GB";
+        var url = $"https://{options.AzureSpeechRegion}.stt.speech.microsoft.com/speech/recognition/conversation/cognitiveservices/v1?language={Uri.EscapeDataString(locale)}&format=detailed";
 
         using var req = new HttpRequestMessage(HttpMethod.Post, url);
-        req.Headers.Add("Ocp-Apim-Subscription-Key", _options.AzureSpeechKey);
+        req.Headers.Add("Ocp-Apim-Subscription-Key", options.AzureSpeechKey);
         req.Headers.Add("Accept", "application/json");
         var content = new StreamContent(request.Audio);
         content.Headers.ContentType = MediaTypeHeaderValue.Parse(MapContentType(request.AudioMimeType));

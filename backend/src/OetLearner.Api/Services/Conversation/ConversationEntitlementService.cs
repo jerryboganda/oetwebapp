@@ -1,6 +1,4 @@
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
-using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 
@@ -17,11 +15,11 @@ public sealed record ConversationEntitlement(
 
 public sealed class ConversationEntitlementService(
     LearnerDbContext db,
-    IOptions<ConversationOptions> options) : IConversationEntitlementService
+    IConversationOptionsProvider optionsProvider) : IConversationEntitlementService
 {
     public async Task<ConversationEntitlement> CheckAsync(string? userId, CancellationToken ct)
     {
-        var opts = options.Value;
+        var opts = await optionsProvider.GetAsync(ct);
         var windowDays = opts.FreeTierWindowDays <= 0 ? 7 : opts.FreeTierWindowDays;
 
         if (!opts.Enabled)

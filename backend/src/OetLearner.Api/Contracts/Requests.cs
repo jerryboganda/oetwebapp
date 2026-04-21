@@ -1,3 +1,5 @@
+using OetLearner.Api.Domain;
+
 namespace OetLearner.Api.Contracts;
 
 public record PatchGoalsRequest(
@@ -84,7 +86,49 @@ public record MockAttemptCreateRequest(
     string Profession,
     bool IncludeReview,
     bool StrictTimer,
-    string? ReviewSelection = null);
+    string? ReviewSelection = null,
+    string? BundleId = null,
+    string? TargetCountry = null);
+
+public record MockSectionStartRequest(Dictionary<string, object?>? ClientState = null);
+
+public record MockSectionCompleteRequest(
+    string? ContentAttemptId,
+    int? RawScore,
+    int? RawScoreMax,
+    int? ScaledScore,
+    string? Grade,
+    Dictionary<string, object?>? Evidence,
+    string? ReviewTurnaroundOption = null);
+
+public record AdminMockBundleCreateRequest(
+    string Title,
+    string MockType,
+    string? SubtestCode,
+    string? ProfessionId,
+    bool AppliesToAllProfessions,
+    string? SourceProvenance,
+    int? Priority,
+    string? TagsCsv);
+
+public record AdminMockBundleUpdateRequest(
+    string? Title,
+    string? MockType,
+    string? SubtestCode,
+    string? ProfessionId,
+    bool? AppliesToAllProfessions,
+    string? SourceProvenance,
+    int? Priority,
+    string? TagsCsv,
+    ContentStatus? Status);
+
+public record AdminMockBundleSectionRequest(
+    string ContentPaperId,
+    int? SectionOrder,
+    int? TimeLimitMinutes,
+    bool? ReviewEligible);
+
+public record AdminMockBundleReorderRequest(IReadOnlyList<string> SectionIds);
 
 public record RevisionSubmitRequest(string Content, string? IdempotencyKey);
 

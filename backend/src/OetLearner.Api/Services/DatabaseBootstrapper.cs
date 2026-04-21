@@ -114,6 +114,7 @@ public static class DatabaseBootstrapper
                 EncryptedApiKey = encrypted,
                 ApiKeyHint = hint,
                 DefaultModel = model,
+                ReasoningEffort = string.IsNullOrWhiteSpace(options.ReasoningEffort) ? null : options.ReasoningEffort.Trim().ToLowerInvariant(),
                 PricePer1kPromptTokens = 0.015m,
                 PricePer1kCompletionTokens = 0.075m,
                 RetryCount = 2,
@@ -150,6 +151,16 @@ public static class DatabaseBootstrapper
         if (!string.Equals(row.DefaultModel, model, StringComparison.OrdinalIgnoreCase))
         {
             row.DefaultModel = model;
+            changed = true;
+        }
+        var desiredEffort = string.IsNullOrWhiteSpace(options.ReasoningEffort)
+            ? null : options.ReasoningEffort.Trim().ToLowerInvariant();
+        if (row.ReasoningEffort is null && desiredEffort is not null)
+        {
+            // Seed the per-provider column from env on first encounter so
+            // admins inherit the configured default. Explicit admin edits
+            // (including explicitly empty = "inherit") take priority afterwards.
+            row.ReasoningEffort = desiredEffort;
             changed = true;
         }
         if (!row.IsActive) { row.IsActive = true; changed = true; }

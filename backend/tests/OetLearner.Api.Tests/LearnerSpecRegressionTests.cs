@@ -2,6 +2,10 @@ using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using OetLearner.Api.Data;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
@@ -50,10 +54,13 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
     [Fact]
     public async Task MockAttemptCreation_PersistsReviewSelectionAndLaunchRoutes()
     {
-        using var client = await CreateClientForUserAsync("mock-route-user");
+        const string userId = "mock-route-user";
+        using var client = await CreateClientForUserAsync(userId);
+        var bundleId = await SeedPublishedFullMockBundleAsync(userId, walletCredits: 2);
 
         var response = await client.PostAsJsonAsync("/v1/mock-attempts", new
         {
+            bundleId,
             mockType = "full",
             subType = (string?)null,
             mode = "exam",
@@ -62,16 +69,30 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
             strictTimer = true,
             reviewSelection = "writing_and_speaking"
         });
-        response.EnsureSuccessStatusCode();
+        var responseBody = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, responseBody);
 
-        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        using var json = JsonDocument.Parse(responseBody);
         Assert.Equal("writing_and_speaking", json.RootElement.GetProperty("config").GetProperty("reviewSelection").GetString());
+        Assert.Equal(bundleId, json.RootElement.GetProperty("config").GetProperty("bundleId").GetString());
+        Assert.True(json.RootElement.TryGetProperty("reviewReservation", out var reservation));
+        Assert.Equal(2, reservation.GetProperty("reservedCredits").GetInt32());
+        Assert.Equal(2, reservation.GetProperty("pendingCredits").GetInt32());
+
         var sectionStates = json.RootElement.GetProperty("sectionStates");
         Assert.Equal(4, sectionStates.GetArrayLength());
-        Assert.All(sectionStates.EnumerateArray().ToArray(), section =>
+        var sections = sectionStates.EnumerateArray().ToArray();
+        Assert.Equal(new[] { "listening", "reading", "writing", "speaking" }, sections.Select(section => section.GetProperty("subtest").GetString()).ToArray());
+        Assert.Contains("/listening/player/mock-listening-regression", sections[0].GetProperty("launchRoute").GetString());
+        Assert.Contains("/reading/paper/mock-reading-regression", sections[1].GetProperty("launchRoute").GetString());
+        Assert.Contains("/writing/player?taskId=mock-writing-regression", sections[2].GetProperty("launchRoute").GetString());
+        Assert.Contains("/speaking/task/mock-speaking-regression", sections[3].GetProperty("launchRoute").GetString());
+        Assert.All(sections, section =>
         {
-            Assert.True(section.TryGetProperty("launchRoute", out var launchRoute));
-            Assert.Contains("/mocks/player/", launchRoute.GetString());
+            var launchRoute = section.GetProperty("launchRoute").GetString();
+            Assert.DoesNotContain("/mocks/player/", launchRoute);
+            Assert.Contains("mockAttemptId=", launchRoute);
+            Assert.Contains("mockSectionId=", launchRoute);
         });
     }
 
@@ -293,6 +314,94 @@ public class LearnerSpecRegressionTests : IClassFixture<TestWebApplicationFactor
         client.DefaultRequestHeaders.Add("X-Debug-Email", $"{userId}@example.test");
         client.DefaultRequestHeaders.Add("X-Debug-Name", userId);
         return client;
+    }
+
+    private async Task<string> SeedPublishedFullMockBundleAsync(string userId, int walletCredits)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        var now = DateTimeOffset.UtcNow;
+        const string provenance = "Regression test content supplied by platform owner for internal practice use.";
+        var papers = new[]
+        {
+            ("mock-listening-regression", "listening", "Listening Regression Paper", 42, false),
+            ("mock-reading-regression", "reading", "Reading Regression Paper", 60, false),
+            ("mock-writing-regression", "writing", "Writing Regression Paper", 45, true),
+            ("mock-speaking-regression", "speaking", "Speaking Regression Paper", 20, true)
+        };
+
+        foreach (var (paperId, subtest, title, duration, professionScoped) in papers)
+        {
+            if (await db.ContentPapers.AnyAsync(x => x.Id == paperId))
+            {
+                continue;
+            }
+
+            db.ContentPapers.Add(new ContentPaper
+            {
+                Id = paperId,
+                SubtestCode = subtest,
+                Title = title,
+                Slug = paperId,
+                ProfessionId = professionScoped ? "medicine" : null,
+                AppliesToAllProfessions = !professionScoped,
+                Difficulty = "standard",
+                EstimatedDurationMinutes = duration,
+                Status = ContentStatus.Published,
+                SourceProvenance = provenance,
+                CreatedByAdminId = "test-admin",
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now
+            });
+        }
+
+        const string bundleId = "mock-bundle-regression-full";
+        if (!await db.MockBundles.AnyAsync(x => x.Id == bundleId))
+        {
+            db.MockBundles.Add(new MockBundle
+            {
+                Id = bundleId,
+                Title = "Regression Full Mock",
+                Slug = "regression-full-mock",
+                MockType = "full",
+                AppliesToAllProfessions = true,
+                Status = ContentStatus.Published,
+                EstimatedDurationMinutes = 167,
+                SourceProvenance = provenance,
+                CreatedByAdminId = "test-admin",
+                UpdatedByAdminId = "test-admin",
+                CreatedAt = now,
+                UpdatedAt = now,
+                PublishedAt = now
+            });
+
+            for (var index = 0; index < papers.Length; index++)
+            {
+                var (paperId, subtest, _, duration, reviewEligible) = papers[index];
+                db.MockBundleSections.Add(new MockBundleSection
+                {
+                    Id = $"mock-bundle-section-regression-{subtest}",
+                    MockBundleId = bundleId,
+                    SectionOrder = index + 1,
+                    SubtestCode = subtest,
+                    ContentPaperId = paperId,
+                    TimeLimitMinutes = duration,
+                    ReviewEligible = reviewEligible,
+                    IsRequired = true,
+                    CreatedAt = now
+                });
+            }
+        }
+
+        var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId);
+        wallet.CreditBalance = walletCredits;
+        wallet.LastUpdatedAt = now;
+
+        await db.SaveChangesAsync();
+        return bundleId;
     }
 
     private static async Task<string> CreateWritingAttemptAsync(HttpClient client, string context)

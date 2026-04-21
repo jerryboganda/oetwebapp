@@ -67,8 +67,8 @@ public class ConversationHub(
             var turnNumber = session.TurnCount;
 
             string? audioUrl = null;
-            var tts = ttsSelector.TrySelect();
-            if (tts is not null && !ttsSelector.TtsDisabled)
+            var tts = await ttsSelector.TrySelectAsync(Context.ConnectionAborted);
+            if (tts is not null)
             {
                 try
                 {
@@ -175,7 +175,7 @@ public class ConversationHub(
         try
         {
             using var ms = new MemoryStream(audioBytes);
-            var provider = asrSelector.Select();
+            var provider = await asrSelector.SelectAsync(Context.ConnectionAborted);
             asr = await provider.TranscribeAsync(new ConversationAsrRequest(
                 ms, audioMime, "en-GB", audioBytes.LongLength), Context.ConnectionAborted);
         }
@@ -236,8 +236,8 @@ public class ConversationHub(
         var aiTurnNumber = session.TurnCount;
 
         string? aiAudioUrl = null;
-        var tts = ttsSelector.TrySelect();
-        if (tts is not null && !ttsSelector.TtsDisabled)
+        var tts = await ttsSelector.TrySelectAsync(Context.ConnectionAborted);
+            if (tts is not null)
         {
             try
             {

@@ -1,7 +1,5 @@
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
-using OetLearner.Api.Configuration;
 using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services.Conversation;
@@ -18,11 +16,10 @@ public sealed record ConversationAudioRef(string Key, string Url, string MimeTyp
 
 public sealed class ConversationAudioService(
     IFileStorage storage,
-    IOptions<ConversationOptions> options,
+    IConversationOptionsProvider optionsProvider,
     ILogger<ConversationAudioService> logger) : IConversationAudioService
 {
     private const string Root = "conversation/audio";
-    private readonly ConversationOptions _options = options.Value;
 
     public async Task<ConversationAudioRef> WriteAsync(byte[] audio, string mimeType, CancellationToken ct)
     {
@@ -32,6 +29,7 @@ public sealed class ConversationAudioService(
 
     public async Task<ConversationAudioRef> WriteAsync(Stream audio, string mimeType, CancellationToken ct)
     {
+        var options = await optionsProvider.GetAsync(ct);
         using var buffer = new MemoryStream();
         var buf = new byte[8192];
         long total = 0;
@@ -40,8 +38,8 @@ public sealed class ConversationAudioService(
             var read = await audio.ReadAsync(buf, ct);
             if (read == 0) break;
             total += read;
-            if (total > _options.MaxAudioBytes)
-                throw new InvalidOperationException($"Audio exceeds MaxAudioBytes ({_options.MaxAudioBytes}).");
+            if (total > options.MaxAudioBytes)
+                throw new InvalidOperationException($"Audio exceeds MaxAudioBytes ({options.MaxAudioBytes}).");
             await buffer.WriteAsync(buf.AsMemory(0, read), ct);
         }
         buffer.Position = 0;

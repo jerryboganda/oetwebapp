@@ -1,29 +1,29 @@
 using System.Text;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Options;
+
 using OetLearner.Api.Configuration;
 
 namespace OetLearner.Api.Services.Conversation.Tts;
 
 public sealed class AzureConversationTtsProvider(
     IHttpClientFactory httpClientFactory,
-    IOptions<ConversationOptions> options,
+    IConversationOptionsProvider optionsProvider,
     ILogger<AzureConversationTtsProvider> logger) : IConversationTtsProvider
 {
-    private readonly ConversationOptions _options = options.Value;
+    private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
 
     public string Name => "azure";
     public bool IsConfigured =>
-        !string.IsNullOrWhiteSpace(_options.AzureSpeechKey) &&
-        !string.IsNullOrWhiteSpace(_options.AzureSpeechRegion);
+        !string.IsNullOrWhiteSpace(ReadOptions().AzureSpeechKey) &&
+        !string.IsNullOrWhiteSpace(ReadOptions().AzureSpeechRegion);
 
     public async Task<ConversationTtsResult> SynthesizeAsync(ConversationTtsRequest request, CancellationToken ct)
     {
         if (!IsConfigured) throw new InvalidOperationException("Azure TTS not configured.");
 
         var client = httpClientFactory.CreateClient("ConversationAzureTtsClient");
-        var url = $"https://{_options.AzureSpeechRegion}.tts.speech.microsoft.com/cognitiveservices/v1";
-        var voice = string.IsNullOrWhiteSpace(request.Voice) ? _options.AzureTtsDefaultVoice : request.Voice;
+        var url = $"https://{ReadOptions().AzureSpeechRegion}.tts.speech.microsoft.com/cognitiveservices/v1";
+        var voice = string.IsNullOrWhiteSpace(request.Voice) ? ReadOptions().AzureTtsDefaultVoice : request.Voice;
         var locale = request.Locale ?? "en-GB";
 
         var ssml = new StringBuilder();
@@ -36,7 +36,7 @@ public sealed class AzureConversationTtsProvider(
         ssml.Append("</prosody></voice></speak>");
 
         using var req = new HttpRequestMessage(HttpMethod.Post, url);
-        req.Headers.Add("Ocp-Apim-Subscription-Key", _options.AzureSpeechKey);
+        req.Headers.Add("Ocp-Apim-Subscription-Key", ReadOptions().AzureSpeechKey);
         req.Headers.Add("X-Microsoft-OutputFormat", "audio-24khz-96kbitrate-mono-mp3");
         req.Headers.Add("User-Agent", "OetLearner-Conversation");
         req.Content = new StringContent(ssml.ToString(), Encoding.UTF8, "application/ssml+xml");
