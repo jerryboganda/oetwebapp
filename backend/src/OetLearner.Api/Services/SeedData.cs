@@ -3268,6 +3268,8 @@ public static partial class SeedData
                 OveragePolicy = AiOveragePolicy.Deny,
                 AllowedFeaturesCsv = string.Join(",",
                     AiFeatureCodes.ConversationReply,
+                    AiFeatureCodes.ConversationOpening,
+                    AiFeatureCodes.ConversationEvaluation,
                     AiFeatureCodes.VocabularyGloss,
                     AiFeatureCodes.SummarisePassage),
                 IsActive = true, DisplayOrder = 10,

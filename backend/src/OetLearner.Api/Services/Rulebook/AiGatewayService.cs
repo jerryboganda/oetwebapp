@@ -1018,7 +1018,41 @@ public sealed class MockAiProvider : IAiModelProvider
 
     public Task<AiProviderCompletion> CompleteAsync(AiProviderRequest request, CancellationToken ct)
     {
-        var text = "{\"findings\":[],\"advisory\":\"mock AI provider — no external model call was made\"}";
+        // Route by system-prompt content to return a shape that roughly
+        // matches whatever task was requested. Keeps downstream parsers
+        // (conversation orchestrator, grammar draft service, etc.) happy
+        // when a production deployment is running on the mock provider
+        // (no platform AI key configured yet).
+        var prompt = request.SystemPrompt ?? "";
+        string text;
+        if (prompt.Contains("EvaluateConversation", StringComparison.OrdinalIgnoreCase)
+            || prompt.Contains("4-criterion", StringComparison.Ordinal)
+            || prompt.Contains("score06", StringComparison.Ordinal))
+        {
+            text = "{\"criteria\":[" +
+                "{\"id\":\"intelligibility\",\"score06\":4.5,\"evidence\":\"mock — configure a real AI provider for substantive evidence\",\"quotes\":[]}," +
+                "{\"id\":\"fluency\",\"score06\":4.0,\"evidence\":\"mock\",\"quotes\":[]}," +
+                "{\"id\":\"appropriateness\",\"score06\":4.5,\"evidence\":\"mock\",\"quotes\":[]}," +
+                "{\"id\":\"grammar_expression\",\"score06\":4.0,\"evidence\":\"mock\",\"quotes\":[]}]," +
+                "\"turnAnnotations\":[]," +
+                "\"strengths\":[\"Session completed — mock provider returned a placeholder rubric\"]," +
+                "\"improvements\":[\"Configure a real AI provider (OpenAI / Anthropic / DO Serverless) for meaningful evaluation\"]," +
+                "\"suggestedPractice\":[\"Re-attempt the scenario with speech input\"]," +
+                "\"appliedRuleIds\":[]," +
+                "\"advisory\":\"AI-generated — mock provider, advisory only.\"}";
+        }
+        else if (prompt.Contains("GenerateConversationOpening", StringComparison.OrdinalIgnoreCase))
+        {
+            text = "{\"text\":\"Good morning, Doctor. Thank you for seeing me today.\",\"emotionHint\":\"neutral\",\"appliedRuleIds\":[]}";
+        }
+        else if (prompt.Contains("GenerateConversationReply", StringComparison.OrdinalIgnoreCase))
+        {
+            text = "{\"text\":\"Thank you for explaining that. Could you tell me a bit more about the next steps?\",\"emotionHint\":\"neutral\",\"shouldEnd\":false,\"appliedRuleIds\":[]}";
+        }
+        else
+        {
+            text = "{\"findings\":[],\"advisory\":\"mock AI provider — no external model call was made\"}";
+        }
         return Task.FromResult(new AiProviderCompletion { Text = text, Usage = new AiUsage() });
     }
 }
