@@ -284,6 +284,7 @@ public static class AiUsageAdminEndpoints
             row.KillSwitchEnabled = dto.KillSwitchEnabled;
             row.KillSwitchScope = dto.KillSwitchScope;
             row.KillSwitchReason = dto.KillSwitchReason;
+            row.DisabledFeaturesCsv = NormaliseCsv(dto.DisabledFeaturesCsv);
             row.MonthlyBudgetUsd = dto.MonthlyBudgetUsd;
             row.SoftWarnPct = Math.Clamp(dto.SoftWarnPct, 0, 100);
             row.HardKillPct = Math.Clamp(dto.HardKillPct, 0, 150);
@@ -627,6 +628,19 @@ public static class AiUsageAdminEndpoints
         });
         await db.SaveChangesAsync(ct);
     }
+
+    /// <summary>Trims, lower-cases and de-duplicates a CSV feature list so the
+    /// stored value is canonical. Empty / null → empty string.</summary>
+    private static string NormaliseCsv(string? csv)
+    {
+        if (string.IsNullOrWhiteSpace(csv)) return string.Empty;
+        var parts = csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(p => p.ToLowerInvariant())
+            .Where(p => p.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+        return string.Join(',', parts);
+    }
 }
 
 public sealed record AiQuotaPlanUpsertDto(
@@ -652,6 +666,7 @@ public sealed record AiGlobalPolicyUpsertDto(
     bool KillSwitchEnabled,
     AiKillSwitchScope KillSwitchScope,
     string? KillSwitchReason,
+    string? DisabledFeaturesCsv,
     decimal MonthlyBudgetUsd,
     int SoftWarnPct,
     int HardKillPct,

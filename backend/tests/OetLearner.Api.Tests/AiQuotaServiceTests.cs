@@ -18,7 +18,8 @@ public class AiQuotaServiceTests
         string planCode = "pro",
         string allowedFeatures = "",
         AiOveragePolicy overage = AiOveragePolicy.Deny,
-        bool disableUser = false)
+        bool disableUser = false,
+        string disabledFeaturesCsv = "")
     {
         var options = new DbContextOptionsBuilder<LearnerDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
@@ -31,6 +32,7 @@ public class AiQuotaServiceTests
             Id = "global",
             KillSwitchEnabled = killSwitch,
             KillSwitchScope = scope,
+            DisabledFeaturesCsv = disabledFeaturesCsv,
             MonthlyBudgetUsd = 0,
             UpdatedAt = DateTimeOffset.UtcNow,
         });
@@ -119,6 +121,51 @@ public class AiQuotaServiceTests
         var decision = await quota.TryReserveAsync("user-001", AiFeatureCodes.WritingGrade, AiKeySource.Byok, default);
         Assert.False(decision.Allowed);
         Assert.Equal("kill_switch", decision.ErrorCode);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task DisabledFeatures_RefusesPlatformCall_BeforeQuota()
+    {
+        // Per-feature kill list is evaluated before the global kill-switch
+        // or quota so admins can isolate a single broken feature.
+        var (db, quota) = Build(disabledFeaturesCsv: "conversation.evaluation,writing.grade");
+        var decision = await quota.TryReserveAsync("user-001", AiFeatureCodes.WritingGrade, AiKeySource.Platform, default);
+        Assert.False(decision.Allowed);
+        Assert.Equal("feature_disabled", decision.ErrorCode);
+        Assert.Contains("writing.grade", decision.PolicyTrace);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task DisabledFeatures_RefusesEvenByok()
+    {
+        // The per-feature disable intentionally blocks BYOK too because the
+        // reason to disable a feature (e.g. rulebook regression) is not
+        // something a user's own key can fix.
+        var (db, quota) = Build(disabledFeaturesCsv: "writing.grade");
+        var decision = await quota.TryReserveAsync("user-001", AiFeatureCodes.WritingGrade, AiKeySource.Byok, default);
+        Assert.False(decision.Allowed);
+        Assert.Equal("feature_disabled", decision.ErrorCode);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task DisabledFeatures_IsCaseInsensitiveAndTrimmed()
+    {
+        var (db, quota) = Build(disabledFeaturesCsv: " Writing.Grade , Other.Feature ");
+        var decision = await quota.TryReserveAsync("user-001", AiFeatureCodes.WritingGrade, AiKeySource.Platform, default);
+        Assert.False(decision.Allowed);
+        Assert.Equal("feature_disabled", decision.ErrorCode);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task DisabledFeatures_AllowsUnrelatedFeatures()
+    {
+        var (db, quota) = Build(disabledFeaturesCsv: "conversation.evaluation");
+        var decision = await quota.TryReserveAsync("user-001", AiFeatureCodes.WritingGrade, AiKeySource.Platform, default);
+        Assert.True(decision.Allowed);
         await db.DisposeAsync();
     }
 

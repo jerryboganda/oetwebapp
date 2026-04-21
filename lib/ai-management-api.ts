@@ -99,6 +99,12 @@ export interface AiGlobalPolicy {
   killSwitchEnabled: boolean;
   killSwitchScope: AiKillSwitchScope;
   killSwitchReason: string | null;
+  /**
+   * CSV of specific feature codes to disable without flipping the global
+   * kill-switch (e.g. `conversation.evaluation,speaking.grade`). Empty → no
+   * per-feature disable.
+   */
+  disabledFeaturesCsv: string;
   monthlyBudgetUsd: number;
   softWarnPct: number;
   hardKillPct: number;
@@ -321,6 +327,40 @@ export const grantUserCredits = (userId: string, body: {
 
 export const sweepExpiredCredits = () =>
   aiApi<{ expired: number }>('/v1/admin/ai/credits/sweep-expired', { method: 'POST' });
+
+// ═════════════════════════════════════════════════════════════════════════
+// Admin — per-user AI quota / policy overrides
+// ═════════════════════════════════════════════════════════════════════════
+
+export interface AiUserQuotaOverride {
+  userId: string;
+  monthlyTokenCapOverride: number | null;
+  dailyTokenCapOverride: number | null;
+  forcePlanCode: string | null;
+  aiDisabled: boolean;
+  reason: string | null;
+  expiresAt: string | null;
+  grantedByAdminId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const fetchAiUserOverride = (userId: string) =>
+  aiApi<AiUserQuotaOverride | null>(`/v1/admin/ai/users/${userId}/override`);
+
+export const upsertAiUserOverride = (userId: string, body: {
+  monthlyTokenCapOverride?: number | null;
+  dailyTokenCapOverride?: number | null;
+  forcePlanCode?: string | null;
+  aiDisabled?: boolean;
+  reason?: string | null;
+  expiresAt?: string | null;
+}) => aiApi<AiUserQuotaOverride>(`/v1/admin/ai/users/${userId}/override`, {
+  method: 'PUT', body: JSON.stringify(body),
+});
+
+export const removeAiUserOverride = (userId: string) =>
+  aiApi<void>(`/v1/admin/ai/users/${userId}/override`, { method: 'DELETE' });
 
 // ═════════════════════════════════════════════════════════════════════════
 // Learner — credentials, preferences, usage snapshot, credits

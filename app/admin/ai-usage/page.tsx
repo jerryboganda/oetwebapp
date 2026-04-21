@@ -244,6 +244,20 @@ function BudgetPanel({ onToast }: { onToast: (t: ToastState) => void }) {
             </p>
           </AdminRoutePanel>
 
+          <AdminRoutePanel title="Per-feature kill list">
+            <p className="text-sm text-muted mb-2">
+              Comma-separated list of AI feature codes to disable without flipping the global kill-switch.
+              Calls to a disabled feature are refused with <code className="font-mono">feature_disabled</code> before any quota / BYOK check.
+              Example: <code className="font-mono">conversation.evaluation,speaking.grade</code>.
+            </p>
+            <Input
+              label="Disabled feature codes (CSV)"
+              value={policy.disabledFeaturesCsv ?? ''}
+              onChange={(e) => setPolicy({ ...policy, disabledFeaturesCsv: e.target.value })}
+              placeholder="e.g. conversation.evaluation,speaking.grade"
+            />
+          </AdminRoutePanel>
+
           <AdminRoutePanel title="BYOK policy">
             <div className="space-y-2">
               <label className="flex items-center gap-2">
@@ -258,6 +272,24 @@ function BudgetPanel({ onToast }: { onToast: (t: ToastState) => void }) {
               </label>
               <Input label="Default platform provider code" value={policy.defaultPlatformProviderId}
                 onChange={(e) => setPolicy({ ...policy, defaultPlatformProviderId: e.target.value })} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+                <Input
+                  type="number"
+                  label="BYOK error cooldown (hours)"
+                  value={policy.byokErrorCooldownHours}
+                  onChange={(e) => setPolicy({ ...policy, byokErrorCooldownHours: Number(e.target.value) })}
+                />
+                <Input
+                  type="number"
+                  label="BYOK transient retry count (0–5)"
+                  value={policy.byokTransientRetryCount}
+                  onChange={(e) => setPolicy({ ...policy, byokTransientRetryCount: Number(e.target.value) })}
+                />
+              </div>
+              <p className="text-xs text-muted">
+                After {policy.byokErrorCooldownHours || 0}h of auth errors on a user&apos;s BYOK key, the gateway falls back to the platform key.
+                Transient (5xx / timeout) failures retry up to {policy.byokTransientRetryCount || 0}× before giving up.
+              </p>
             </div>
           </AdminRoutePanel>
 

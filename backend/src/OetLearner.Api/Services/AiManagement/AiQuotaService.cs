@@ -96,6 +96,24 @@ public sealed class AiQuotaService(LearnerDbContext db, IMemoryCache cache, ILog
     {
         var global = await GetGlobalPolicyAsync(ct);
 
+        // ── Per-feature kill list ───────────────────────────────────────────
+        // Admins can disable specific feature codes without tripping the full
+        // kill-switch. Evaluated FIRST so a disabled feature refuses before we
+        // ever touch quota, plans or BYOK paths. Applies uniformly to BYOK
+        // and platform keys because some features (e.g. scoring-critical) must
+        // be turned off wholesale when a rulebook regression is detected.
+        if (!string.IsNullOrWhiteSpace(global.DisabledFeaturesCsv)
+            && IsFeatureCodeInCsv(global.DisabledFeaturesCsv, featureCode))
+        {
+            return new AiQuotaDecision(
+                Allowed: false,
+                ErrorCode: "feature_disabled",
+                ErrorMessage: "This AI feature is temporarily disabled by an administrator.",
+                PolicyTrace: $"feature_disabled.{featureCode}",
+                GlobalPolicy: global, Plan: null, Override: null,
+                TokensUsedThisPeriod: 0, TokensCapThisPeriod: 0);
+        }
+
         // ── Global kill-switch ───────────────────────────────────────────────
         if (global.KillSwitchEnabled)
         {
@@ -423,6 +441,13 @@ public sealed class AiQuotaService(LearnerDbContext db, IMemoryCache cache, ILog
         if (string.IsNullOrWhiteSpace(plan.AllowedFeaturesCsv)) return true;
         var allowed = plan.AllowedFeaturesCsv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
         return allowed.Any(a => string.Equals(a, featureCode, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private static bool IsFeatureCodeInCsv(string csv, string featureCode)
+    {
+        if (string.IsNullOrWhiteSpace(csv)) return false;
+        var parts = csv.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        return parts.Any(p => string.Equals(p, featureCode, StringComparison.OrdinalIgnoreCase));
     }
 
     private static AiQuotaDecision ApplyOveragePolicy(

@@ -1,9 +1,10 @@
 import { render, screen } from '@testing-library/react';
 
-const { mockGetReadingHome, mockTrack, mockUseAuth } = vi.hoisted(() => ({
+const { mockGetReadingHome, mockTrack, mockUseAuth, mockFetchMockReports } = vi.hoisted(() => ({
   mockGetReadingHome: vi.fn(),
   mockTrack: vi.fn(),
   mockUseAuth: vi.fn(),
+  mockFetchMockReports: vi.fn(),
 }));
 
 vi.mock('next/link', () => ({
@@ -30,6 +31,10 @@ vi.mock('@/lib/reading-authoring-api', () => ({
   getReadingHome: mockGetReadingHome,
 }));
 
+vi.mock('@/lib/api', () => ({
+  fetchMockReports: mockFetchMockReports,
+}));
+
 import ReadingPage from './page';
 
 describe('Reading page', () => {
@@ -39,6 +44,7 @@ describe('Reading page', () => {
       isAuthenticated: true,
       loading: false,
     });
+    mockFetchMockReports.mockResolvedValue([]);
     mockGetReadingHome.mockResolvedValue({
       intro: 'Reading practice uses full structured papers.',
       papers: [

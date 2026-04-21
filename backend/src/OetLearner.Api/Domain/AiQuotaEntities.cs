@@ -205,6 +205,16 @@ public class AiGlobalPolicy
     [MaxLength(256)]
     public string? KillSwitchReason { get; set; }
 
+    /// <summary>
+    /// CSV list of specific feature codes to disable (e.g.
+    /// <c>conversation.evaluation,speaking.grade</c>). Empty = no per-feature
+    /// disable. Calls whose feature code appears here are refused with
+    /// <c>feature_disabled</c> before any quota / BYOK check, regardless of
+    /// the global kill-switch state.
+    /// </summary>
+    [MaxLength(1024)]
+    public string DisabledFeaturesCsv { get; set; } = string.Empty;
+
     public decimal MonthlyBudgetUsd { get; set; }
     public int SoftWarnPct { get; set; } = 80;
     public int HardKillPct { get; set; } = 100;
