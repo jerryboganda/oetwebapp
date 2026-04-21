@@ -5,7 +5,7 @@ import { Capacitor } from '@capacitor/core';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   Mic, Volume2, Play, Square, AlertTriangle, CheckCircle2,
-  ChevronRight, Info, RefreshCw, BarChart3,
+  ChevronRight, RefreshCw, BarChart3,
 } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -116,7 +116,14 @@ function MicEnvironmentCheckContent() {
         setNoiseLevel(0);
         setIsNoisy(false);
         analytics.track('task_started', { subtest: 'speaking', phase: 'mic_permission_granted' });
-        void postSpeakingDeviceCheck({ microphoneGranted: true, networkStable: navigator.onLine, deviceType: 'native' });
+        void postSpeakingDeviceCheck({
+          microphoneGranted: true,
+          networkStable: navigator.onLine,
+          deviceType: 'native',
+          taskId,
+          noiseLevel: 0,
+          noiseAcceptable: true,
+        });
         return;
       }
 
@@ -125,12 +132,26 @@ function MicEnvironmentCheckContent() {
       setPermissionStatus('success');
       analytics.track('task_started', { subtest: 'speaking', phase: 'mic_permission_granted' });
       startNoiseMonitoring(stream);
-      void postSpeakingDeviceCheck({ microphoneGranted: true, networkStable: navigator.onLine, deviceType: 'web' });
+      void postSpeakingDeviceCheck({
+        microphoneGranted: true,
+        networkStable: navigator.onLine,
+        deviceType: 'web',
+        taskId,
+        noiseLevel,
+        noiseAcceptable: !isNoisy,
+      });
     } catch (err) {
       console.error('Mic permission denied:', err);
       setPermissionStatus('error');
       analytics.track('task_started', { subtest: 'speaking', phase: 'mic_permission_denied' });
-      void postSpeakingDeviceCheck({ microphoneGranted: false, networkStable: navigator.onLine, deviceType: 'web' });
+      void postSpeakingDeviceCheck({
+        microphoneGranted: false,
+        networkStable: navigator.onLine,
+        deviceType: isNativePlatform ? 'native' : 'web',
+        taskId,
+        noiseLevel,
+        noiseAcceptable: !isNoisy,
+      });
     }
   };
 
@@ -264,8 +285,15 @@ function MicEnvironmentCheckContent() {
   const handleContinue = () => {
     if (allChecksPassed) {
       analytics.track('task_started', { subtest: 'speaking', phase: 'mic_check_passed', taskId });
-      void postSpeakingDeviceCheck({ microphoneGranted: true, networkStable: navigator.onLine, deviceType: isNativePlatform ? 'native' : 'web' });
-      router.push(`/speaking/task/${taskId}?mode=self`);
+      void postSpeakingDeviceCheck({
+        microphoneGranted: true,
+        networkStable: navigator.onLine,
+        deviceType: isNativePlatform ? 'native' : 'web',
+        taskId,
+        noiseLevel,
+        noiseAcceptable: !isNoisy,
+      });
+      router.push(`/speaking/roleplay/${taskId}`);
     }
   };
 

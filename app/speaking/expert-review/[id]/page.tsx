@@ -37,7 +37,7 @@ function ExpertReviewRequestContent() {
   const [isSuccess, setIsSuccess] = useState(false);
 
   useEffect(() => {
-    Promise.all([fetchFocusAreas(), fetchTurnaroundOptions(), fetchBilling()])
+    Promise.all([fetchFocusAreas('speaking'), fetchTurnaroundOptions(), fetchBilling()])
       .then(([areas, options, billing]) => {
         setFocusAreas(areas);
         setTurnaroundOptions(options);

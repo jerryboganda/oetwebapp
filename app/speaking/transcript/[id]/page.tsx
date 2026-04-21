@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { Headphones, Quote, RefreshCw, Volume2 } from 'lucide-react';
-import { AppShell } from '@/components/layout/app-shell';
+import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -102,27 +102,27 @@ export default function SpeakingTranscriptPage() {
 
   if (loading) {
     return (
-      <AppShell pageTitle="Transcript Review" distractionFree>
+      <LearnerDashboardShell pageTitle="Transcript Review">
         <div className="grid gap-6 p-6 lg:grid-cols-[1.1fr_0.9fr]">
           <Skeleton className="h-[70vh] rounded-[24px]" />
           <Skeleton className="h-[70vh] rounded-[24px]" />
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
   if (!review) {
     return (
-      <AppShell pageTitle="Transcript Review" backHref="/speaking">
+      <LearnerDashboardShell pageTitle="Transcript Review" backHref="/speaking">
         <div className="mx-auto max-w-3xl px-4 py-8">
           <InlineAlert variant="error">{error ?? 'Transcript review is unavailable.'}</InlineAlert>
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
   return (
-    <AppShell pageTitle={review.title} subtitle="Transcript-backed speaking evidence with real audio-derived review data." distractionFree>
+    <LearnerDashboardShell pageTitle={review.title} subtitle="Transcript-backed speaking evidence with real audio-derived review data.">
       <div className="mx-auto max-w-6xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
@@ -268,6 +268,6 @@ export default function SpeakingTranscriptPage() {
           </div>
         </section>
       </div>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }

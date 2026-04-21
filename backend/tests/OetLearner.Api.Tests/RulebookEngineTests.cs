@@ -29,6 +29,15 @@ public class RulebookLoaderTests
     }
 
     [Fact]
+    public void Loads_Speaking_Nursing_Rulebook_ForSeededRolePlay()
+    {
+        var book = _loader.Load(RuleKind.Speaking, ExamProfession.Nursing);
+        Assert.Equal(RuleKind.Speaking, book.Kind);
+        Assert.Equal(ExamProfession.Nursing, book.Profession);
+        Assert.Contains(book.Rules, rule => rule.Id == "RULE_56" && rule.AppliesTo.HasValue);
+    }
+
+    [Fact]
     public void Throws_For_Unregistered_Profession()
     {
         Assert.Throws<RulebookNotFoundException>(() =>
