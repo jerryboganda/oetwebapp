@@ -6,6 +6,9 @@ COPY backend/src/OetLearner.Api/OetLearner.Api.csproj backend/src/OetLearner.Api
 RUN --mount=type=cache,target=/root/.nuget/packages dotnet restore backend/src/OetLearner.Api/OetLearner.Api.csproj
 
 COPY backend/src/OetLearner.Api/ backend/src/OetLearner.Api/
+# Rulebooks embed as resources via ..\..\..\rulebooks\**\*.json — must be present
+# in the Docker build context at the repo-root path the .csproj expects.
+COPY rulebooks/ rulebooks/
 RUN --mount=type=cache,target=/root/.nuget/packages dotnet publish backend/src/OetLearner.Api/OetLearner.Api.csproj -c Release -o /app/publish /p:UseAppHost=false
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final

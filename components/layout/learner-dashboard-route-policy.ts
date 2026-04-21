@@ -28,8 +28,11 @@ export const INCLUDED_LEARNER_DASHBOARD_PAGE_PATHS = [
   'app/speaking/page.tsx',
   'app/speaking/check/page.tsx',
   'app/speaking/expert-review/[id]/page.tsx',
+  'app/speaking/phrasing/[id]/page.tsx',
   'app/speaking/results/[id]/page.tsx',
+  'app/speaking/roleplay/[id]/page.tsx',
   'app/speaking/selection/page.tsx',
+  'app/speaking/transcript/[id]/page.tsx',
   'app/writing/page.tsx',
   'app/writing/expert-request/page.tsx',
   'app/writing/library/page.tsx',
@@ -48,9 +51,6 @@ export const EXCLUDED_IMMERSIVE_LEARNER_PAGE_PATHS = [
   'app/writing/player/page.tsx',
   'app/writing/feedback/page.tsx',
   'app/speaking/task/[id]/page.tsx',
-  'app/speaking/roleplay/[id]/page.tsx',
-  'app/speaking/transcript/[id]/page.tsx',
-  'app/speaking/phrasing/[id]/page.tsx',
 ] as const;
 
 export const LEARNER_DASHBOARD_REEXPORT_PAGE_PATHS = [

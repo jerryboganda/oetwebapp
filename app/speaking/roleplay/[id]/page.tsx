@@ -2,23 +2,23 @@
 
 import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { motion } from 'motion/react';
+import Link from 'next/link';
 import {
-  FileText, Edit3, Play, Info, Mic, User, ShieldCheck,
+  FileText, Edit3, Play, MessageCircle, User, ShieldCheck,
 } from 'lucide-react';
-import { AppShell } from '@/components/layout/app-shell';
+import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { SpeakingRoleCard } from '@/components/domain/speaking-role-card';
 import { Timer } from '@/components/ui/timer';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { Textarea } from '@/components/ui/form-controls';
 import { fetchRoleCard } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { RoleCard } from '@/lib/mock-data';
 
-type TaskMode = 'ai' | 'self' | 'exam';
+type TaskMode = 'self' | 'exam';
 
 export default function RoleCardPreview() {
   const params = useParams();
@@ -45,25 +45,25 @@ export default function RoleCardPreview() {
 
   if (loading) {
     return (
-      <AppShell pageTitle="Role Card">
-        <div className="px-4 sm:px-6 lg:px-8 grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-8">
+      <LearnerDashboardShell pageTitle="Role Card">
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 lg:gap-8">
           <Skeleton className="h-[280px] rounded-xl sm:h-[340px] lg:h-96" />
           <Skeleton className="h-[280px] rounded-xl sm:h-[340px] lg:h-96" />
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
   if (!card) {
     return (
-      <AppShell pageTitle="Role Card">
-        <div className="px-4 sm:px-6 lg:px-8"><InlineAlert variant="error">Role card not found for this task.</InlineAlert></div>
-      </AppShell>
+      <LearnerDashboardShell pageTitle="Role Card">
+        <InlineAlert variant="error">Role card not found for this task.</InlineAlert>
+      </LearnerDashboardShell>
     );
   }
 
   return (
-    <AppShell
+    <LearnerDashboardShell
       pageTitle={card.title}
       navActions={
         <Timer
@@ -76,13 +76,28 @@ export default function RoleCardPreview() {
         />
       }
     >
-      <div className="px-4 sm:px-6 lg:px-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Left: Role Card */}
+      <div className="space-y-6">
+        <LearnerPageHero
+          eyebrow="Role Card Preview"
+          icon={FileText}
+          accent="purple"
+          title={card.title}
+          description="Use the preparation window to read the card, plan your opening, and choose a practice mode before the recorder starts."
+          highlights={[
+            { icon: User, label: 'Role', value: card.profession },
+            { icon: ShieldCheck, label: 'Prep timer', value: prepRunning ? 'Running' : 'Finished' },
+            { icon: FileText, label: 'Setting', value: card.setting },
+          ]}
+        />
+
+        <div className="grid grid-cols-1 gap-8 lg:grid-cols-2">
         <section className="flex flex-col">
-          <div className="flex items-center gap-2 mb-4">
-            <FileText className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-bold text-muted uppercase tracking-widest">Candidate Role Card</h2>
-          </div>
+          <LearnerSurfaceSectionHeader
+            eyebrow="Candidate Role Card"
+            title="Read the scenario before the timer starts"
+            description="Keep the patient, setting, and task bullets visible so your opening sounds organised."
+            className="mb-4"
+          />
 
           <Card className="flex-1 p-6 space-y-6">
             <div className="border-b border-gray-100 pb-4">
@@ -114,15 +129,15 @@ export default function RoleCardPreview() {
           </Card>
         </section>
 
-        {/* Right: Prep Tools */}
         <section className="flex flex-col">
-          <div className="flex items-center gap-2 mb-4">
-            <Edit3 className="w-4 h-4 text-primary" />
-            <h2 className="text-sm font-bold text-muted uppercase tracking-widest">Preparation</h2>
-          </div>
+          <LearnerSurfaceSectionHeader
+            eyebrow="Preparation"
+            title="Plan, then enter the recorder"
+            description="Self-practice records for transcript review; simulation keeps the stricter exam rhythm."
+            className="mb-4"
+          />
 
           <div className="flex-1 flex flex-col gap-6">
-            {/* Notes */}
             <Card className="flex-1 flex flex-col overflow-hidden">
               <div className="bg-gray-50 px-4 py-2 border-b border-gray-100 flex items-center justify-between">
                 <span className="text-xs font-bold text-muted uppercase">Scratchpad</span>
@@ -136,11 +151,10 @@ export default function RoleCardPreview() {
               />
             </Card>
 
-            {/* Mode + Start */}
             <Card className="p-6 space-y-6">
               <div className="space-y-3">
                 <h4 className="text-xs font-bold text-muted uppercase tracking-widest">Practice Mode</h4>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {([
                     { id: 'self', label: 'Guided Self-Practice', icon: User, color: 'text-purple-600', bg: 'bg-purple-50' },
                     { id: 'exam', label: 'Simulation', icon: ShieldCheck, color: 'text-amber-600', bg: 'bg-amber-50' },
@@ -173,9 +187,27 @@ export default function RoleCardPreview() {
                 <Play className="w-5 h-5 fill-current" /> Start Speaking Task
               </Button>
             </Card>
+
+            <Card className="border-primary/15 bg-primary/5 p-5">
+              <div className="flex items-start gap-3">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-primary">
+                  <MessageCircle className="h-5 w-5" />
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-navy">Need an AI patient?</p>
+                  <p className="mt-1 text-sm leading-relaxed text-muted">
+                    Interactive AI practice is handled by the dedicated conversation module so it stays server-authoritative.
+                  </p>
+                  <Link href="/conversation" className="mt-3 inline-flex text-sm font-bold text-primary hover:underline">
+                    Open AI Conversation Practice
+                  </Link>
+                </div>
+              </div>
+            </Card>
           </div>
         </section>
+        </div>
       </div>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }

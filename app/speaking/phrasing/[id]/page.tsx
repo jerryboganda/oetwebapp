@@ -7,7 +7,7 @@ import {
   ChevronLeft, ChevronRight, Mic, Play, RotateCcw,
   AlertCircle, Zap, MessageSquare, Loader2, Volume2,
 } from 'lucide-react';
-import { AppShell } from '@/components/layout/app-shell';
+import { LearnerDashboardShell } from '@/components/layout';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -75,26 +75,26 @@ function BetterPhrasingContent() {
 
   if (loading) {
     return (
-      <AppShell pageTitle="Better Phrasing" distractionFree>
+      <LearnerDashboardShell pageTitle="Better Phrasing">
         <div className="max-w-3xl mx-auto p-6 space-y-6">
           <Skeleton className="h-48 rounded-xl" />
           <Skeleton className="h-64 rounded-xl" />
           <Skeleton className="h-32 rounded-xl" />
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
   if (error || segments.length === 0) {
     return (
-      <AppShell pageTitle="Better Phrasing">
+      <LearnerDashboardShell pageTitle="Better Phrasing">
         <InlineAlert variant="error">Could not load phrasing data. Please try again.</InlineAlert>
-      </AppShell>
+      </LearnerDashboardShell>
     );
   }
 
   return (
-    <AppShell
+    <LearnerDashboardShell
       pageTitle="Better Phrasing"
       navActions={
         <div className="flex items-center gap-3">
@@ -110,7 +110,6 @@ function BetterPhrasingContent() {
           </div>
         </div>
       }
-      distractionFree
     >
       <main className="flex-1 p-6 overflow-y-auto">
         <div className="max-w-3xl mx-auto space-y-6">
@@ -225,18 +224,18 @@ function BetterPhrasingContent() {
           </Button>
         </div>
       </footer>
-    </AppShell>
+    </LearnerDashboardShell>
   );
 }
 
 export default function BetterPhrasingView() {
   return (
     <Suspense fallback={
-      <AppShell pageTitle="Better Phrasing" distractionFree>
+      <LearnerDashboardShell pageTitle="Better Phrasing">
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
-      </AppShell>
+      </LearnerDashboardShell>
     }>
       <BetterPhrasingContent />
     </Suspense>

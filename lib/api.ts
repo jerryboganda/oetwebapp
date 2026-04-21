@@ -155,6 +155,12 @@ export interface SpeakingHome {
   featuredTasks: SpeakingTask[];
   latestEvaluation?: ApiRecord | null;
   tips: string[];
+  dashboardRoute?: string;
+  historyRoute?: string;
+  writingLibraryRoute?: string;
+  writingTaskRoute?: string;
+  readingTaskRoute?: string;
+  listeningTaskRoute?: string;
 }
 
 export interface LearnerFeatureFlag {
@@ -1063,6 +1069,12 @@ export async function fetchSpeakingHome(): Promise<SpeakingHome> {
     featuredTasks: Array.isArray(normalized.featuredTasks) ? normalized.featuredTasks.map(mapSpeakingTask) : [],
     latestEvaluation: normalized.latestEvaluation ?? null,
     tips: Array.isArray(normalized.tips) ? normalized.tips : [],
+    dashboardRoute: normalized.dashboardRoute,
+    historyRoute: normalized.historyRoute,
+    writingLibraryRoute: normalized.writingLibraryRoute,
+    writingTaskRoute: normalized.writingTaskRoute,
+    readingTaskRoute: normalized.readingTaskRoute,
+    listeningTaskRoute: normalized.listeningTaskRoute,
   };
 }
 

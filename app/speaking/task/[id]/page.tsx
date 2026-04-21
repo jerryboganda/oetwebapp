@@ -9,17 +9,16 @@ import {
   FileText, Edit3, ChevronUp, ChevronDown,
   Wifi, WifiOff, User, ShieldCheck, Loader2, Play, Pause,
 } from 'lucide-react';
+import { AppShell } from '@/components/layout/app-shell';
 import { Button } from '@/components/ui/button';
-import { Modal } from '@/components/ui/modal';
 import { Timer } from '@/components/ui/timer';
-import { Skeleton } from '@/components/ui/skeleton';
 import { fetchRoleCard, submitSpeakingRecording } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import { SpeakingRecorder, base64ToBlob } from '@/lib/mobile/speaking-recorder';
 import type { RoleCard } from '@/lib/mock-data';
 
 // --- Types ---
-type TaskMode = 'ai' | 'self' | 'exam';
+type TaskMode = 'self' | 'exam';
 type ConnectionStatus = 'connecting' | 'connected' | 'disconnected' | 'error';
 type RecordingState = 'idle' | 'recording' | 'paused' | 'finished';
 
@@ -28,9 +27,8 @@ function LiveSpeakingTaskContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const id = params?.id as string;
-  const requestedMode = (searchParams?.get('mode') as TaskMode) || 'self';
-  const aiUnavailable = requestedMode === 'ai';
-  const mode: Exclude<TaskMode, 'ai'> = requestedMode === 'ai' ? 'self' : requestedMode;
+  const requestedMode = searchParams?.get('mode');
+  const mode: TaskMode = requestedMode === 'exam' ? 'exam' : 'self';
 
   // --- Card State ---
   const [card, setCard] = useState<RoleCard | null>(null);
@@ -54,11 +52,14 @@ function LiveSpeakingTaskContent() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [audioLevels, setAudioLevels] = useState<number[]>([10, 10, 10, 10, 10]);
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
   // --- Refs ---
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const audioChunksRef = useRef<Blob[]>([]);
   const nativePulseRef = useRef<number | null>(null);
+  const recordingStartedAtRef = useRef<number | null>(null);
+  const accumulatedRecordingMsRef = useRef(0);
 
   const audioContextRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
@@ -82,6 +83,35 @@ function LiveSpeakingTaskContent() {
 
   const buildRecordingBlob = () =>
     new Blob(audioChunksRef.current, { type: mediaRecorderRef.current?.mimeType || 'audio/webm' });
+
+  const getRecordedDurationSeconds = useCallback(() => {
+    const liveMs = recordingStartedAtRef.current === null ? 0 : Date.now() - recordingStartedAtRef.current;
+    return Math.max(1, Math.round((accumulatedRecordingMsRef.current + liveMs) / 1000));
+  }, []);
+
+  const startDurationClock = useCallback((reset = false) => {
+    if (reset) {
+      accumulatedRecordingMsRef.current = 0;
+      setElapsedSeconds(0);
+    }
+    recordingStartedAtRef.current = Date.now();
+  }, []);
+
+  const pauseDurationClock = useCallback(() => {
+    if (recordingStartedAtRef.current !== null) {
+      accumulatedRecordingMsRef.current += Date.now() - recordingStartedAtRef.current;
+      recordingStartedAtRef.current = null;
+      setElapsedSeconds(Math.max(0, Math.round(accumulatedRecordingMsRef.current / 1000)));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (recordingState !== 'recording') return undefined;
+    const timer = window.setInterval(() => {
+      setElapsedSeconds(getRecordedDurationSeconds());
+    }, 500);
+    return () => window.clearInterval(timer);
+  }, [getRecordedDurationSeconds, recordingState]);
 
   const stopNativeVisualizerPulse = useCallback(() => {
     if (nativePulseRef.current !== null) {
@@ -273,6 +303,7 @@ function LiveSpeakingTaskContent() {
 
         recorder.resume();
       }
+      startDurationClock();
       setRecordingState('recording');
       return;
     }
@@ -283,6 +314,7 @@ function LiveSpeakingTaskContent() {
         mediaRecorderRef.current = null;
         audioChunksRef.current = [];
         startNativeVisualizerPulse();
+        startDurationClock(true);
         setRecordingState('recording');
         return;
       }
@@ -299,6 +331,7 @@ function LiveSpeakingTaskContent() {
       };
 
       mediaRecorderRef.current.start(100); // Collect data every 100ms
+      startDurationClock(true);
       setRecordingState('recording');
 
       const audioContext = new AudioContext();
@@ -314,12 +347,14 @@ function LiveSpeakingTaskContent() {
     if (isNativeRecorder) {
       void SpeakingRecorder.pause().catch(() => undefined);
       stopNativeVisualizerPulse();
+      pauseDurationClock();
       setRecordingState('paused');
       return;
     }
 
     if (mediaRecorderRef.current && mediaRecorderRef.current.state === 'recording') {
       mediaRecorderRef.current.pause();
+      pauseDurationClock();
       setRecordingState('paused');
     }
   };
@@ -332,6 +367,7 @@ function LiveSpeakingTaskContent() {
   };
 
   const confirmStop = () => {
+    pauseDurationClock();
     setRecordingState('finished');
     cleanupAudio();
     router.push('/speaking/selection');
@@ -340,10 +376,12 @@ function LiveSpeakingTaskContent() {
   const confirmSubmit = async () => {
     if (isSubmitting) return;
 
+    const durationSeconds = getRecordedDurationSeconds();
+    pauseDurationClock();
     setIsSubmitting(true);
     setSubmitError(null);
     setRecordingState('finished');
-    analytics.track('task_submitted', { taskId: id, subtest: 'speaking', mode });
+    analytics.track('task_submitted', { taskId: id, subtest: 'speaking', mode, durationSeconds });
 
     try {
       const recording = await stopRecorderAsync();
@@ -352,7 +390,7 @@ function LiveSpeakingTaskContent() {
         throw new Error('No speaking audio was captured.');
       }
 
-      const { submissionId } = await submitSpeakingRecording(id, recording);
+      const { submissionId } = await submitSpeakingRecording(id, recording, durationSeconds);
       const resultUrl = `/speaking/results/${submissionId}`;
       setShowSubmitConfirm(false);
       router.replace(resultUrl);
@@ -377,26 +415,29 @@ function LiveSpeakingTaskContent() {
 
   if (cardLoading) {
     return (
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
-      </div>
+      <AppShell pageTitle="Speaking Task" workspaceRole="learner" className="px-3 sm:px-4 lg:px-6">
+        <div className="flex min-h-[420px] items-center justify-center rounded-3xl border border-gray-200/80 bg-surface shadow-sm">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        </div>
+      </AppShell>
     );
   }
 
   return (
-    <div className="min-h-screen bg-[#0a0a0a] text-white flex flex-col font-sans overflow-hidden">
+    <AppShell pageTitle={card?.title ?? 'Speaking Task'} workspaceRole="learner" className="px-3 sm:px-4 lg:px-6">
+    <div className="mx-auto flex min-h-[calc(100vh-7rem)] w-full max-w-[1280px] flex-col overflow-hidden rounded-[24px] border border-gray-200/80 bg-surface text-navy shadow-sm">
       {/* Top Bar */}
-      <header className="bg-black/40 backdrop-blur-md border-b border-white/10 px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-3 z-20">
+      <header className="z-20 flex items-center justify-between gap-3 border-b border-gray-200/80 bg-white/85 px-4 py-3 backdrop-blur-md sm:px-6 sm:py-4">
         <div className="flex items-center gap-3 min-w-0 overflow-hidden">
           <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${
-            mode === 'self' ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' :
-            'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+            mode === 'self' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
+            'bg-amber-50 text-amber-700 border border-amber-100'
           }`}>
             {mode === 'self' ? <User className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3" />}
-            {aiUnavailable ? 'Guided Self Practice' : mode === 'self' ? 'Self Practice' : 'Exam Simulation'}
+            {mode === 'self' ? 'Self Practice' : 'Exam Simulation'}
           </div>
-          <div className="h-4 w-px bg-white/10 hidden sm:block" />
-          <div className="hidden sm:flex items-center gap-2 text-white/60">
+          <div className="hidden h-4 w-px bg-gray-200 sm:block" />
+          <div className="hidden sm:flex items-center gap-2 text-muted">
             {connectionStatus === 'connected' ? <Wifi className="w-4 h-4 text-green-500" /> : 
              connectionStatus === 'connecting' ? <Loader2 className="w-4 h-4 animate-spin text-blue-500" /> :
              <WifiOff className="w-4 h-4 text-red-500" />}
@@ -408,22 +449,14 @@ function LiveSpeakingTaskContent() {
 
         <div className="flex items-center gap-6">
           <div className="flex flex-col items-end">
-            <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">Elapsed Time</span>
+            <span className="text-[10px] font-black text-muted uppercase tracking-widest">Elapsed Time</span>
             <Timer mode="elapsed" running={recordingState === 'recording'} size="lg" />
           </div>
         </div>
       </header>
 
       {/* Main Content Area */}
-      <main className="flex-1 relative flex flex-col items-center justify-center p-6">
-        
-        {/* Background Atmosphere */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
-          <div className={`absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] rounded-full blur-[120px] transition-all duration-1000 ${
-            recordingState === 'recording' ? 'bg-red-500/10' : 
-            recordingState === 'paused' ? 'bg-amber-500/10' : 'bg-gray-500/5'
-          }`} />
-        </div>
+      <main className="relative flex flex-1 flex-col items-center justify-center bg-background-light p-6">
 
         {/* Visualizer / AI State */}
         <div className="relative z-10 mb-24 flex flex-col items-center gap-12">
@@ -432,13 +465,13 @@ function LiveSpeakingTaskContent() {
               animate={recordingState === 'recording' ? { scale: [1, 1.05, 1] } : {}}
               transition={{ repeat: Infinity, duration: 2 }}
               className={`w-48 h-48 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${
-                recordingState === 'recording' ? 'border-red-500 shadow-[0_0_40px_rgba(239,68,68,0.2)]' : 
-                recordingState === 'paused' ? 'border-amber-500 shadow-[0_0_40px_rgba(245,158,11,0.2)]' : 'border-white/10'
+                recordingState === 'recording' ? 'border-red-300 bg-red-50 shadow-[0_0_40px_rgba(239,68,68,0.14)]' :
+                recordingState === 'paused' ? 'border-amber-300 bg-amber-50 shadow-[0_0_40px_rgba(245,158,11,0.14)]' : 'border-gray-200 bg-white'
               }`}
             >
               <div className={`w-40 h-40 rounded-full flex items-center justify-center transition-all ${
-                recordingState === 'recording' ? 'bg-red-500/10' : 
-                recordingState === 'paused' ? 'bg-amber-500/10' : 'bg-white/5'
+                recordingState === 'recording' ? 'bg-red-100/70' :
+                recordingState === 'paused' ? 'bg-amber-100/70' : 'bg-gray-50'
               }`}>
                 {recordingState === 'recording' ? (
                   <div className="flex items-center gap-1 h-10 items-end">
@@ -454,7 +487,7 @@ function LiveSpeakingTaskContent() {
                 ) : recordingState === 'paused' ? (
                   <Pause className="w-12 h-12 text-amber-500" />
                 ) : (
-                  <Mic className="w-12 h-12 text-white/20" />
+                  <Mic className="w-12 h-12 text-muted" />
                 )}
               </div>
             </motion.div>
@@ -482,16 +515,15 @@ function LiveSpeakingTaskContent() {
           </div>
 
           <div className="text-center max-w-md">
-            <h2 className="text-xl font-bold mb-2">
+            <h2 className="text-xl font-bold mb-2 text-navy">
               {recordingState === 'idle' ? "Ready to record" :
                recordingState === 'paused' ? "Recording paused" :
                "Recording your response..."}
             </h2>
-            <p className="text-sm text-white/40 leading-relaxed">
-              {aiUnavailable
-                ? 'Live AI patient mode is not available in this build yet, so this session is running as guided self-practice with recording and transcript review.'
-                : 'Complete the tasks on your role card. Your recording will be saved for review.'}
+            <p className="text-sm text-muted leading-relaxed">
+              Complete the tasks on your role card. Your recording will be saved for transcript review and speaking feedback.
             </p>
+            <p className="mt-2 text-xs font-bold uppercase tracking-widest text-muted">Captured duration: {elapsedSeconds}s</p>
           </div>
           
           {/* Manual Recording Controls */}
@@ -515,10 +547,10 @@ function LiveSpeakingTaskContent() {
             ) : recordingState === 'recording' ? (
               <button
                 onClick={handlePauseRecording}
-                className="w-16 h-16 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-all"
+                className="w-16 h-16 rounded-full border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center transition-all shadow-sm"
                 aria-label="Pause recording"
               >
-                <Pause className="w-6 h-6 text-white" />
+                <Pause className="w-6 h-6 text-navy" />
               </button>
             ) : null}
           </div>
@@ -529,7 +561,7 @@ function LiveSpeakingTaskContent() {
           <button 
             onClick={() => setShowRoleCard(!showRoleCard)}
             className={`px-5 py-3 min-h-[44px] rounded-full text-xs font-bold flex items-center gap-2 transition-all ${
-              showRoleCard ? 'bg-white text-black' : 'bg-white/10 text-white hover:bg-white/20'
+              showRoleCard ? 'bg-primary text-white shadow-sm' : 'border border-gray-200 bg-white text-navy shadow-sm hover:bg-gray-50'
             }`}
           >
             <FileText className="w-4 h-4" /> Role Card {showRoleCard ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
@@ -537,7 +569,7 @@ function LiveSpeakingTaskContent() {
           <button 
             onClick={() => setShowNotes(!showNotes)}
             className={`px-5 py-3 min-h-[44px] rounded-full text-xs font-bold flex items-center gap-2 transition-all ${
-              showNotes ? 'bg-white text-black' : 'bg-white/10 text-white hover:bg-white/20'
+              showNotes ? 'bg-primary text-white shadow-sm' : 'border border-gray-200 bg-white text-navy shadow-sm hover:bg-gray-50'
             }`}
           >
             <Edit3 className="w-4 h-4" /> Notes {showNotes ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
@@ -551,21 +583,21 @@ function LiveSpeakingTaskContent() {
               initial={{ opacity: 0, y: 100 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 100 }}
-              className="absolute bottom-48 left-6 right-6 max-w-2xl mx-auto bg-zinc-900 border border-white/10 rounded-3xl p-6 shadow-2xl z-30 max-h-[50vh] overflow-y-auto"
+              className="absolute bottom-48 left-6 right-6 max-w-2xl mx-auto bg-surface border border-gray-200 rounded-3xl p-6 shadow-2xl z-30 max-h-[50vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-black uppercase tracking-widest text-white/40">Role Card Reference</h3>
-                <button onClick={() => setShowRoleCard(false)} className="p-2.5 -m-1 rounded-lg text-white/40 hover:text-white hover:bg-white/10"><Square className="w-4 h-4 rotate-45" /></button>
+                <h3 className="text-sm font-black uppercase tracking-widest text-muted">Role Card Reference</h3>
+                <button onClick={() => setShowRoleCard(false)} className="p-2.5 -m-1 rounded-lg text-muted hover:text-navy hover:bg-gray-100"><Square className="w-4 h-4 rotate-45" /></button>
               </div>
               <div className="space-y-4">
                 <div>
-                  <h4 className="text-lg font-bold text-white mb-1">{card?.title}</h4>
-                  <p className="text-xs text-white/60 uppercase font-bold tracking-wider">{card?.profession} • {card?.setting}</p>
+                  <h4 className="text-lg font-bold text-navy mb-1">{card?.title}</h4>
+                  <p className="text-xs text-muted uppercase font-bold tracking-wider">{card?.profession} - {card?.setting}</p>
                 </div>
-                <p className="text-sm text-white/80 leading-relaxed">{card?.brief}</p>
+                <p className="text-sm text-navy/80 leading-relaxed">{card?.brief}</p>
                 <ul className="space-y-2">
                   {card?.tasks.map((t, i) => (
-                    <li key={i} className="text-sm text-white/60 flex gap-3">
+                    <li key={i} className="text-sm text-muted flex gap-3">
                       <span className="text-primary font-bold">{i+1}.</span> {t}
                     </li>
                   ))}
@@ -579,15 +611,15 @@ function LiveSpeakingTaskContent() {
               initial={{ opacity: 0, y: 100 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 100 }}
-              className="absolute bottom-48 left-6 right-6 max-w-2xl mx-auto bg-zinc-900 border border-white/10 rounded-3xl p-6 shadow-2xl z-30 h-[40vh] flex flex-col"
+              className="absolute bottom-48 left-6 right-6 max-w-2xl mx-auto bg-surface border border-gray-200 rounded-3xl p-6 shadow-2xl z-30 h-[40vh] flex flex-col"
             >
               <div className="flex items-center justify-between mb-4">
-                <h3 className="text-sm font-black uppercase tracking-widest text-white/40">Your Notes</h3>
-                <button onClick={() => setShowNotes(false)} className="p-2.5 -m-1 rounded-lg text-white/40 hover:text-white hover:bg-white/10"><Square className="w-4 h-4 rotate-45" /></button>
+                <h3 className="text-sm font-black uppercase tracking-widest text-muted">Your Notes</h3>
+                <button onClick={() => setShowNotes(false)} className="p-2.5 -m-1 rounded-lg text-muted hover:text-navy hover:bg-gray-100"><Square className="w-4 h-4 rotate-45" /></button>
               </div>
               <textarea 
                 placeholder="Type your notes here..."
-                className="flex-1 bg-transparent border-none resize-none focus:outline-none text-sm text-white/80 leading-relaxed"
+                className="flex-1 resize-none rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm leading-relaxed text-navy focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </motion.div>
           )}
@@ -595,7 +627,7 @@ function LiveSpeakingTaskContent() {
       </main>
 
       {/* Bottom Controls */}
-      <footer className="bg-black/60 backdrop-blur-xl border-t border-white/10 px-8 py-8 pb-[calc(2rem+env(safe-area-inset-bottom))] z-40">
+      <footer className="z-40 border-t border-gray-200/80 bg-white/90 px-8 py-8 pb-[calc(2rem+env(safe-area-inset-bottom))] backdrop-blur-xl">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <button 
             onClick={handleStop}
@@ -603,10 +635,10 @@ function LiveSpeakingTaskContent() {
             className="flex flex-col items-center gap-2 group"
             aria-label="Cancel task"
           >
-            <div className="w-14 h-14 rounded-full border border-white/10 flex items-center justify-center group-hover:bg-white/5 transition-all">
-              <RotateCcw className="w-6 h-6 text-white/40 group-hover:text-white" />
+            <div className="w-14 h-14 rounded-full border border-gray-200 bg-white flex items-center justify-center group-hover:bg-gray-50 transition-all">
+              <RotateCcw className="w-6 h-6 text-muted group-hover:text-navy" />
             </div>
-            <span className="text-[10px] font-black uppercase tracking-widest text-white/40 group-hover:text-white">Cancel Task</span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-muted group-hover:text-navy">Cancel Task</span>
           </button>
 
           <div className="flex flex-col items-center gap-4">
@@ -614,17 +646,17 @@ function LiveSpeakingTaskContent() {
               size="lg"
               onClick={handleSubmit}
               disabled={recordingState === 'idle' || isSubmitting}
-              className="px-12 py-4 bg-white text-black hover:bg-gray-200 rounded-2xl font-black text-lg shadow-[0_0_30px_rgba(255,255,255,0.1)]"
+              className="px-12 py-4 rounded-2xl font-black text-lg"
               ref={submitTriggerRef}
             >
               {isSubmitting ? 'Submitting...' : 'Submit Recording'}
             </Button>
             {submitError && (
-              <p role="alert" className="max-w-sm text-center text-xs font-bold leading-relaxed text-red-300">
+              <p role="alert" className="max-w-sm text-center text-xs font-bold leading-relaxed text-red-600">
                 {submitError}
               </p>
             )}
-            <p className="text-[10px] text-white/20 font-bold uppercase tracking-[0.3em]">OET Speaking Simulation</p>
+            <p className="text-[10px] text-muted font-bold uppercase tracking-[0.3em]">OET Speaking Simulation</p>
           </div>
 
           <div className="w-14 h-14" /> {/* Spacer for balance */}
@@ -650,20 +682,20 @@ function LiveSpeakingTaskContent() {
               role="dialog"
               aria-modal="true"
               aria-labelledby="speaking-stop-dialog-title"
-              className="relative bg-zinc-900 border border-white/10 rounded-[32px] p-8 max-w-md w-full shadow-2xl"
+              className="relative bg-surface border border-gray-200 rounded-[24px] p-8 max-w-md w-full shadow-2xl"
             >
               <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mb-6">
                 <AlertCircle className="w-8 h-8 text-red-500" />
               </div>
               <h3 id="speaking-stop-dialog-title" className="text-2xl font-black mb-2">Stop Practice?</h3>
-              <p className="text-white/60 text-sm leading-relaxed mb-8">
+              <p className="text-muted text-sm leading-relaxed mb-8">
                 Your current recording will be discarded. You will need to start the task again from the beginning.
               </p>
               <div className="flex flex-col gap-3">
                 <Button ref={stopPrimaryActionRef} variant="destructive" fullWidth onClick={confirmStop} className="py-4 rounded-2xl font-black">
                   Yes, Discard and Exit
                 </Button>
-                <Button variant="ghost" fullWidth onClick={() => setShowStopConfirm(false)} className="py-4 rounded-2xl text-white bg-white/5 hover:bg-white/10">
+                <Button variant="outline" fullWidth onClick={() => setShowStopConfirm(false)} className="py-4 rounded-2xl">
                   Continue Practice
                 </Button>
               </div>
@@ -688,20 +720,20 @@ function LiveSpeakingTaskContent() {
               role="dialog"
               aria-modal="true"
               aria-labelledby="speaking-submit-dialog-title"
-              className="relative bg-zinc-900 border border-white/10 rounded-[32px] p-8 max-w-md w-full shadow-2xl"
+              className="relative bg-surface border border-gray-200 rounded-[24px] p-8 max-w-md w-full shadow-2xl"
             >
               <div className="w-16 h-16 bg-green-500/10 rounded-2xl flex items-center justify-center mb-6">
                 <CheckCircle2 className="w-8 h-8 text-green-500" />
               </div>
               <h3 id="speaking-submit-dialog-title" className="text-2xl font-black mb-2">Finish Task?</h3>
-              <p className="text-white/60 text-sm leading-relaxed mb-8">
+              <p className="text-muted text-sm leading-relaxed mb-8">
                 Are you ready to submit your recording for evaluation? You won&apos;t be able to make changes after this.
               </p>
               <div className="flex flex-col gap-3">
                 <Button ref={submitPrimaryActionRef} fullWidth onClick={confirmSubmit} disabled={isSubmitting} className="py-4 rounded-2xl font-black">
                   {isSubmitting ? 'Submitting...' : 'Submit for Evaluation'}
                 </Button>
-                <Button variant="ghost" fullWidth onClick={() => setShowSubmitConfirm(false)} disabled={isSubmitting} className="py-4 rounded-2xl text-white bg-white/5 hover:bg-white/10">
+                <Button variant="outline" fullWidth onClick={() => setShowSubmitConfirm(false)} disabled={isSubmitting} className="py-4 rounded-2xl">
                   Not Yet, Keep Going
                 </Button>
               </div>
@@ -710,15 +742,18 @@ function LiveSpeakingTaskContent() {
         )}
       </AnimatePresence>
     </div>
+    </AppShell>
   );
 }
 
 export default function LiveSpeakingTask() {
   return (
     <Suspense fallback={
-      <div className="min-h-screen bg-[#0a0a0a] flex items-center justify-center">
-        <Loader2 className="w-8 h-8 text-primary animate-spin" />
-      </div>
+      <AppShell pageTitle="Speaking Task" workspaceRole="learner" className="px-3 sm:px-4 lg:px-6">
+        <div className="flex min-h-[420px] items-center justify-center rounded-3xl border border-gray-200/80 bg-surface shadow-sm">
+          <Loader2 className="w-8 h-8 text-primary animate-spin" />
+        </div>
+      </AppShell>
     }>
       <LiveSpeakingTaskContent />
     </Suspense>

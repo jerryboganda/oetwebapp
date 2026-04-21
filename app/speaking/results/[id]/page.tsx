@@ -297,7 +297,7 @@ export default function SpeakingResultSummary() {
                 <p className="text-sm text-white/60 max-w-sm">{result.nextDrill.description}</p>
               </div>
             </div>
-            <Link href={`/speaking/phrasing/${result.nextDrill.id}`}>
+            <Link href={result.nextDrill.route ?? `/speaking/phrasing/${result.nextDrill.id}`}>
               <Button className="bg-primary text-white px-8 py-4 rounded-2xl font-black whitespace-nowrap">
                 Start Drill <ChevronRight className="w-5 h-5" />
               </Button>

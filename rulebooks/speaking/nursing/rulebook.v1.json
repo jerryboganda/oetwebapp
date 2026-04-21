@@ -1,0 +1,189 @@
+{
+  "version": "1.0.0",
+  "kind": "speaking",
+  "profession": "nursing",
+  "publishedAt": "2026-04-21T00:00:00Z",
+  "authoritySource": "Dr. Ahmed Hesham - OET Speaking Nursing Rulebook (AI Training Edition)",
+  "sections": [
+    { "id": "01", "title": "OET Speaking Format and Scoring Anchor", "order": 1 },
+    { "id": "02", "title": "Patient-Centred Nursing Communication", "order": 2 },
+    { "id": "03", "title": "Role-Play Structure and Handover Safety", "order": 3 },
+    { "id": "04", "title": "Risk Language, Lifestyle Advice, and Follow-Up", "order": 4 }
+  ],
+  "rules": [
+    {
+      "id": "RULE_04",
+      "section": "01",
+      "severity": "info",
+      "title": "Speaking pass anchor",
+      "body": "Speaking practice is interpreted against the OET Grade B anchor: approximately 350 on the 500-point OET scale. Learner feedback is advisory and not an official OET result.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "RULE_06",
+      "section": "02",
+      "severity": "critical",
+      "title": "Use plain English with patients and carers",
+      "body": "Avoid unexplained clinical jargon, abbreviations, and ward shorthand when speaking to patients or carers. In clinician-to-clinician handover, expand safety-critical abbreviations the first time they appear.",
+      "appliesTo": "all",
+      "checkId": "speaking_jargon_detector"
+    },
+    {
+      "id": "RULE_13",
+      "section": "03",
+      "severity": "major",
+      "title": "Professional opening and role clarity",
+      "body": "Open with a calm greeting, identify yourself as the nurse, confirm the listener or patient context, and explain the purpose of the conversation before giving details.",
+      "appliesTo": "all",
+      "turnStage": "greeting",
+      "exemplarPhrases": [
+        "Hello, my name is Nurse Smith. I will be looking after you today.",
+        "Hello, I am handing over Mr Wheeler before the next shift begins."
+      ]
+    },
+    {
+      "id": "RULE_15",
+      "section": "02",
+      "severity": "critical",
+      "title": "Empathy before instruction",
+      "body": "When a patient or carer expresses worry, pain, embarrassment, or reluctance, acknowledge the feeling before giving instructions or advice.",
+      "appliesTo": "all",
+      "turnStage": "empathy",
+      "checkId": "speaking_stage_coverage",
+      "exemplarPhrases": [
+        "I am sorry you have been uncomfortable.",
+        "That sounds worrying, and I can understand why you would feel concerned."
+      ]
+    },
+    {
+      "id": "RULE_18",
+      "section": "02",
+      "severity": "critical",
+      "title": "Check understanding",
+      "body": "After explaining care instructions, medication, mobility advice, or risk precautions, check that the listener has understood and invite questions.",
+      "appliesTo": "all",
+      "turnStage": "feedback",
+      "exemplarPhrases": [
+        "Does that make sense so far?",
+        "Would you like me to go over any part again?"
+      ]
+    },
+    {
+      "id": "RULE_20",
+      "section": "03",
+      "severity": "critical",
+      "title": "Summarise the key plan",
+      "body": "Before closing, give a short summary of the current condition, immediate safety priorities, and next actions.",
+      "appliesTo": "all",
+      "turnStage": "recap",
+      "checkId": "speaking_stage_coverage",
+      "exemplarPhrases": [
+        "To recap, the main priorities are pain control, safe mobility, and monitoring for any new symptoms."
+      ]
+    },
+    {
+      "id": "RULE_21",
+      "section": "03",
+      "severity": "critical",
+      "title": "Close with support and escalation",
+      "body": "Close warmly and make the next contact or escalation point clear. Patients should know who to call; clinicians should know what still needs action.",
+      "appliesTo": "all",
+      "turnStage": "closure",
+      "checkId": "speaking_stage_coverage",
+      "exemplarPhrases": [
+        "Please press the call bell if you are worried or your pain changes.",
+        "Please let me know if you need any more detail before you take over."
+      ]
+    },
+    {
+      "id": "RULE_22",
+      "section": "02",
+      "severity": "critical",
+      "title": "Keep the interaction two-way",
+      "body": "Do not turn the role play into a long monologue. Pause, invite response, and adapt to the listener's concerns.",
+      "appliesTo": "all",
+      "checkId": "speaking_monologue_detector",
+      "params": { "maxConsecutiveCandidateWords": 120 }
+    },
+    {
+      "id": "RULE_23",
+      "section": "04",
+      "severity": "critical",
+      "title": "Ask sensitive questions respectfully",
+      "body": "Handle weight, hygiene, continence, smoking, alcohol, adherence, and mobility limitations with tact. Avoid blunt or judgmental wording.",
+      "appliesTo": "all",
+      "checkId": "speaking_weight_sensitivity",
+      "forbiddenPatterns": ["\\bwhat is your weight\\b", "\\bhow much do you weigh\\b"],
+      "exemplarPhrases": [
+        "Would you mind if I ask a few questions about your usual mobility and general health?"
+      ]
+    },
+    {
+      "id": "RULE_27",
+      "section": "04",
+      "severity": "critical",
+      "title": "Smoking advice starts with cessation",
+      "body": "When smoking is clinically relevant, begin with clear advice to stop smoking before negotiating reduction or alternatives.",
+      "appliesTo": "all",
+      "checkId": "speaking_smoking_ladder_order"
+    },
+    {
+      "id": "RULE_32",
+      "section": "04",
+      "severity": "critical",
+      "title": "Do not over-diagnose from one reading",
+      "body": "Do not diagnose hypertension, diabetes, or another long-term condition from a single observation or screening result. Explain the finding and the need for follow-up.",
+      "appliesTo": "all",
+      "checkId": "speaking_no_overdiagnosis",
+      "forbiddenPatterns": ["\\byou have hypertension\\b", "\\byou are hypertensive\\b", "\\byou have diabetes\\b"]
+    },
+    {
+      "id": "RULE_56",
+      "section": "03",
+      "severity": "major",
+      "title": "Nursing handover uses situation, background, assessment, and recommendation",
+      "body": "For a nursing handover task, organise the message around the current situation, relevant background, present assessment, risks, and clear recommendations or outstanding tasks.",
+      "appliesTo": ["handover"],
+      "exemplarPhrases": [
+        "The current situation is...",
+        "The outstanding tasks for the next shift are..."
+      ]
+    },
+    {
+      "id": "RULE_57",
+      "section": "03",
+      "severity": "major",
+      "title": "Escalate red flags clearly",
+      "body": "Mention safety-critical changes such as uncontrolled pain, fever, bleeding, shortness of breath, confusion, falls risk, reduced urine output, or worsening mobility without burying them in minor details.",
+      "appliesTo": ["handover", "post_op", "discharge_advice"]
+    }
+  ],
+  "tables": {
+    "cardTypes": ["handover", "post_op", "discharge_advice", "medication_advice", "lifestyle_advice", "first_visit_routine", "follow_up"],
+    "laymanGlossary": [
+      { "medical": "DVT", "plain": "blood clot in the leg", "example": "We are preventing blood clots in the legs." },
+      { "medical": "PRN", "plain": "only when needed", "example": "This pain medicine is available when needed." },
+      { "medical": "BP", "plain": "blood pressure", "example": "We will keep checking your blood pressure." },
+      { "medical": "nil by mouth", "plain": "not eating or drinking for now", "example": "Please do not eat or drink until the doctor confirms it is safe." },
+      { "medical": "mobilise", "plain": "get up and walk safely", "example": "We will help you get up and walk safely." },
+      { "medical": "catheter", "plain": "tube to drain urine", "example": "The tube helps drain urine from your bladder." }
+    ],
+    "forbiddenJargonTokens": ["DVT", "PRN", "BP", "nil by mouth", "mobilise", "catheter", "hypertension", "hypoglycaemia", "hyperglycaemia", "ECG", "IV", "IM"]
+  },
+  "stateMachines": {
+    "consultationStages": [
+      { "stage": 1, "name": "greeting", "what": "Greet, identify your nursing role, and set the purpose.", "example": "Hello, I am Nurse Smith." },
+      { "stage": 2, "name": "listening", "what": "Invite concerns and listen without interrupting.", "example": "Tell me what is worrying you most." },
+      { "stage": 3, "name": "empathy", "what": "Acknowledge discomfort or concern.", "example": "I am sorry you have been in pain." },
+      { "stage": 4, "name": "information", "what": "Explain the current situation in plain English.", "example": "Your recovery is progressing, and we are watching your pain and mobility." },
+      { "stage": 5, "name": "safety_plan", "what": "Explain red flags and escalation.", "example": "Please call us straight away if you feel short of breath." },
+      { "stage": 6, "name": "recap", "what": "Summarise the main plan.", "example": "To recap..." },
+      { "stage": 7, "name": "closure", "what": "Close warmly with next contact or outstanding tasks.", "example": "Please press the call bell if you need help." }
+    ],
+    "smokingLadder": [
+      { "step": 1, "name": "cessation", "what": "Recommend stopping smoking completely." },
+      { "step": 2, "name": "support", "what": "Offer cessation support or nicotine replacement if appropriate." },
+      { "step": 3, "name": "reduction", "what": "Discuss reduction only after cessation advice has been given." }
+    ]
+  }
+}

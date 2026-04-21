@@ -78,9 +78,9 @@ export default function SpeakingHome() {
   const drillGroups = home?.drillGroups ?? [];
   const supportEntries = home?.supportEntries ?? [];
   const credits = home?.reviewCredits?.available ?? 0;
-  const recommendedId = recommended?.id ?? recommended?.contentId;
+  const recommendedId = recommended?.id;
   const scenarioTasks = featuredTasks
-    .filter((task) => (task.id ?? task.contentId) !== recommendedId)
+    .filter((task) => task.id !== recommendedId)
     .slice(0, 3);
   const evidenceItems = submissions.slice(0, 3);
   const primaryDrillRoute = drillGroups[0]?.items?.[0]?.route ?? '/speaking/selection';
@@ -275,6 +275,29 @@ export default function SpeakingHome() {
                 })}
               </div>
             </section>
+
+            {supportEntries.length > 0 ? (
+              <section>
+                <LearnerSurfaceSectionHeader
+                  eyebrow="Support Paths"
+                  title="Use the right speaking support for the job"
+                  description="Interactive AI practice, pronunciation work, and private speaking support live in their dedicated platform modules."
+                  className="mb-4"
+                />
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+                  {supportEntries.map((entry) => (
+                    <Link
+                      key={entry.id}
+                      href={entry.route}
+                      className="rounded-2xl border border-gray-200/80 bg-surface p-4 shadow-sm transition-all duration-200 hover:border-primary/30 hover:bg-primary/5"
+                    >
+                      <p className="text-sm font-bold text-navy">{entry.title}</p>
+                      <p className="mt-2 text-xs leading-relaxed text-muted">{entry.description}</p>
+                    </Link>
+                  ))}
+                </div>
+              </section>
+            ) : null}
           </div>
 
           <div className="space-y-5 lg:col-span-4">
