@@ -1,13 +1,6 @@
-// ── Conversation Types ─────────────────────────────────────────────────
-// Derived from ConversationEntities.cs field shapes
-
 export type ConversationState =
-  | 'preparing'
-  | 'active'
-  | 'completed'
-  | 'abandoned'
-  | 'evaluating'
-  | 'evaluated';
+  | 'preparing' | 'active' | 'completed' | 'abandoned'
+  | 'evaluating' | 'evaluated' | 'failed';
 
 export type ConversationTurnRole = 'learner' | 'ai' | 'system';
 
@@ -15,9 +8,11 @@ export interface ConversationSession {
   id: string;
   userId: string;
   contentId: string | null;
+  templateId: string | null;
   examTypeCode: string;
   subtestCode: string;
   taskTypeCode: string;
+  profession: string;
   scenarioJson: string;
   state: ConversationState;
   turnCount: number;
@@ -29,100 +24,128 @@ export interface ConversationSession {
   completedAt: string | null;
 }
 
-export interface ConversationTurn {
+export interface ConversationPatientVoice {
+  gender?: 'male' | 'female' | 'neutral';
+  age?: number;
+  accent?: string;
+  tone?: string;
+  voiceId?: string;
+}
+
+export interface ConversationScenario {
+  templateId?: string;
+  title: string;
+  taskTypeCode?: string;
+  profession?: string;
+  difficulty?: string;
+  setting?: string;
+  patientRole?: string;
+  clinicianRole?: string;
+  context?: string;
+  expectedOutcomes?: string | null;
+  objectives?: string[];
+  expectedRedFlags?: string[];
+  keyVocabulary?: string[];
+  patientVoice?: ConversationPatientVoice;
+  timeLimit?: number;
+  timeLimitSeconds?: number;
+}
+
+export interface ConversationEvaluationCriterion {
   id: string;
-  sessionId: string;
+  score06: number;
+  maxScore: number;
+  evidence: string;
+  quotes?: string[];
+}
+
+export interface ConversationEvaluationTurn {
   turnNumber: number;
   role: ConversationTurnRole;
   content: string;
   audioUrl: string | null;
   durationMs: number;
-  timestampMs: number;
-  confidenceScore: number | null;
-  analysisJson: string;
+  confidence: number | null;
 }
 
-export interface ConversationScenario {
-  title: string;
-  setting: string;
-  patientRole: string;
-  clinicianRole: string;
-  context: string;
-  objectives: string[];
-  timeLimit: number;           // seconds
-}
-
-export interface ConversationEvaluation {
-  sessionId: string;
-  overallScore: number;
-  overallGrade: string;
-  criterionScores: ConversationCriterionScore[];
-  turnAnnotations: ConversationTurnAnnotation[];
-  strengths: string[];
-  improvements: string[];
-  suggestions: string[];
-  evaluatedAt: string;
-}
-
-export interface ConversationCriterionScore {
-  criterionCode: string;
-  criterionName: string;
-  score: number;
-  maxScore: number;
-  explanation: string;
-  confidenceBand: 'low' | 'medium' | 'high';
-}
-
-export interface ConversationTurnAnnotation {
+export interface ConversationEvaluationAnnotation {
+  id: string;
   turnNumber: number;
-  role: ConversationTurnRole;
-  annotations: Array<{
-    type: 'strength' | 'improvement' | 'error';
-    text: string;
-    suggestion: string | null;
-  }>;
+  type: 'strength' | 'error' | 'improvement';
+  category?: string;
+  ruleId?: string | null;
+  evidence: string;
+  suggestion: string | null;
 }
 
-export interface ConversationHistory {
-  items: ConversationSessionSummary[];
-  total: number;
-  page: number;
-  pageSize: number;
+export interface ConversationEvaluationResponse {
+  sessionId: string;
+  state: ConversationState;
+  ready: boolean;
+  message?: string;
+  scaledScore?: number;
+  scaledMax?: number;
+  passScaled?: number;
+  passed?: boolean;
+  overallGrade?: string;
+  criteria?: ConversationEvaluationCriterion[];
+  turnAnnotations?: ConversationEvaluationAnnotation[];
+  turns?: ConversationEvaluationTurn[];
+  strengths?: string[];
+  improvements?: string[];
+  suggestedPractice?: string[];
+  appliedRuleIds?: string[];
+  rulebookVersion?: string;
+  advisory?: string;
+  turnCount?: number;
+  durationSeconds?: number;
+  evaluatedAt?: string;
 }
 
-export interface ConversationSessionSummary {
+export interface ConversationHistoryItem {
   id: string;
   taskTypeCode: string;
   examTypeCode: string;
+  profession?: string;
   state: ConversationState;
   turnCount: number;
   durationSeconds: number;
-  overallScore: number | null;
+  scaledScore: number | null;
+  overallGrade: string | null;
+  passed: boolean | null;
   createdAt: string;
   completedAt: string | null;
 }
 
-export interface ConversationCreateRequest {
-  contentId?: string;
-  examFamilyCode: string;
-  taskTypeCode: string;
+export interface ConversationTaskTypeDescriptor {
+  code: string;
+  label: string;
+  description: string;
 }
 
-// ── SignalR Hub Events ─────────────────────────────────────────────────
-
-export interface ConversationHubEvents {
-  /** Server → Client: transcript of learner audio */
-  ReceiveTranscript: (turnNumber: number, text: string, confidence: number) => void;
-  /** Server → Client: AI response text */
-  ReceiveAIResponse: (turnNumber: number, text: string) => void;
-  /** Server → Client: session state change */
-  SessionStateChanged: (state: ConversationState) => void;
-  /** Server → Client: error during processing */
-  ConversationError: (code: string, message: string) => void;
+export interface ConversationTaskTypeCatalog {
+  taskTypes: ConversationTaskTypeDescriptor[];
+  prepDurationSeconds: number;
+  maxSessionDurationSeconds: number;
+  maxTurnDurationSeconds: number;
 }
 
-export interface ConversationHubMethods {
-  StartSession: (sessionId: string) => Promise<void>;
-  SendAudio: (sessionId: string, audioBase64: string) => Promise<void>;
-  EndSession: (sessionId: string) => Promise<void>;
+export interface ConversationEntitlement {
+  allowed: boolean;
+  tier: string;
+  remaining: number;
+  limit: number;
+  windowDays: number;
+  resetAt: string | null;
+  reason: string;
+}
+
+export interface ConversationAiMeta {
+  audioUrl: string | null;
+  emotionHint: string | null;
+  appliedRuleIds: string[];
+}
+
+export interface ConversationTranscriptMeta {
+  audioUrl: string | null;
 }

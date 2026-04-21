@@ -13,7 +13,7 @@
  * ============================================================================
  */
 
-export type RuleKind = 'writing' | 'speaking' | 'grammar';
+export type RuleKind = 'writing' | 'speaking' | 'grammar' | 'pronunciation' | 'vocabulary' | 'conversation';
 
 export type RuleSeverity = 'critical' | 'major' | 'minor' | 'info';
 

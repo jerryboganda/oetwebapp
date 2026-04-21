@@ -2,7 +2,8 @@
 
 import { useEffect, useState } from 'react';
 import { MotionItem, MotionPresence } from '@/components/ui/motion-primitives';
-import { MessageSquare, Plus, Clock, ChevronRight, Mic, Zap, History } from 'lucide-react';
+import { MessageSquare, Clock, ChevronRight, Mic, Zap, History, Sparkles } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
@@ -10,201 +11,245 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader, ExamTypeBadge } from '@/c
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { analytics } from '@/lib/analytics';
 import {
   createConversation,
   getConversationHistory,
+  getConversationTaskTypes,
+  getConversationEntitlement,
 } from '@/lib/api';
+import type {
+  ConversationHistoryItem,
+  ConversationTaskTypeCatalog,
+  ConversationEntitlement,
+} from '@/lib/types/conversation';
+import { formatScaledScore } from '@/lib/scoring';
 
-type SessionSummary = {
-  id: string;
-  taskTypeCode: string;
-  examTypeCode: string;
-  state: string;
-  turnCount: number;
-  durationSeconds: number;
-  createdAt: string;
-  completedAt: string | null;
+const TASK_ICONS: Record<string, LucideIcon> = {
+  'oet-roleplay': Mic,
+  'oet-handover': Zap,
 };
-
-const TASK_TYPES = [
-  { code: 'oet-roleplay', label: 'OET Clinical Role Play', description: 'Practise 5-minute clinical scenarios', icon: Mic },
-  { code: 'ielts-part2', label: 'IELTS Part 2 Long Turn', description: '1–2 minute individual talk', icon: MessageSquare },
-  { code: 'oet-handover', label: 'OET Handover', description: 'Practise structured clinical handovers', icon: Zap },
-];
 
 const STATE_LABELS: Record<string, { label: string; color: string }> = {
   preparing: { label: 'Preparing', color: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' },
   active: { label: 'In Progress', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' },
-  evaluating: { label: 'Evaluating...', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' },
+  evaluating: { label: 'Evaluating…', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' },
   evaluated: { label: 'Completed', color: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' },
   completed: { label: 'Completed', color: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' },
   abandoned: { label: 'Abandoned', color: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
+  failed: { label: 'Failed', color: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
 };
 
 export default function ConversationPage() {
   const router = useRouter();
-  const [history, setHistory] = useState<SessionSummary[]>([]);
+  const [history, setHistory] = useState<ConversationHistoryItem[]>([]);
+  const [catalog, setCatalog] = useState<ConversationTaskTypeCatalog | null>(null);
+  const [entitlement, setEntitlement] = useState<ConversationEntitlement | null>(null);
   const [loading, setLoading] = useState(true);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     analytics.track('conversation_page_viewed');
-    getConversationHistory(1, 10)
-      .then((data: Record<string, unknown>) => {
-        const items = Array.isArray(data?.items) ? data.items : (Array.isArray(data) ? data : []);
-        setHistory(items as SessionSummary[]);
+    Promise.allSettled([
+      getConversationTaskTypes() as Promise<ConversationTaskTypeCatalog>,
+      getConversationEntitlement() as Promise<ConversationEntitlement>,
+      getConversationHistory(1, 10) as Promise<{ items?: ConversationHistoryItem[] }>,
+    ])
+      .then(([catRes, entRes, histRes]) => {
+        if (catRes.status === 'fulfilled') setCatalog(catRes.value);
+        if (entRes.status === 'fulfilled') setEntitlement(entRes.value);
+        if (histRes.status === 'fulfilled') setHistory(Array.isArray(histRes.value?.items) ? histRes.value.items : []);
+        else setError('Could not load conversation history.');
       })
-      .catch(() => setError('Could not load conversation history.'))
       .finally(() => setLoading(false));
   }, []);
 
   async function handleStart(taskTypeCode: string) {
     if (creating) return;
-    setCreating(true);
+    if (entitlement && !entitlement.allowed) { setError(entitlement.reason); return; }
+    setCreating(taskTypeCode);
     setError(null);
     try {
-      const session = await createConversation({ examFamilyCode: 'oet', taskTypeCode }) as Record<string, unknown>;
-      analytics.track('conversation_started', { taskTypeCode, sessionId: String(session.id) });
+      const session = (await createConversation({ taskTypeCode })) as { id?: string };
+      if (!session?.id) throw new Error('no session id');
+      analytics.track('conversation_started', { taskTypeCode, sessionId: session.id });
       router.push(`/conversation/${session.id}`);
-    } catch {
-      setError('Failed to start conversation. Please try again.');
-      setCreating(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to start conversation.');
+      setCreating(null);
     }
   }
 
   const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-  const formatDuration = (s: number) => s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`;
+  const formatDuration = (s: number) => (s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`);
+
+  const remainingLabel = (() => {
+    if (!entitlement) return 'Loading…';
+    if (entitlement.limit === -1 || entitlement.remaining === -1) return 'Unlimited';
+    return `${entitlement.remaining}/${entitlement.limit} left`;
+  })();
+
   const heroHighlights = [
     { icon: MessageSquare, label: 'Sessions', value: `${history.length}` },
     { icon: Mic, label: 'Mode', value: 'AI partner' },
+    { icon: Sparkles, label: 'Entitlement', value: remainingLabel },
     { icon: History, label: 'Status', value: 'Live history' },
   ];
+
+  const entitlementVariant: 'default' | 'success' | 'warning' | 'danger' =
+    !entitlement ? 'default'
+      : !entitlement.allowed ? 'danger'
+      : entitlement.tier === 'paid' || entitlement.tier === 'trial' ? 'success'
+      : entitlement.remaining <= 1 ? 'warning' : 'default';
 
   return (
     <LearnerDashboardShell>
       <div className="space-y-6">
-      <LearnerPageHero
-        eyebrow="Practice"
-        title="AI Conversation Practice"
-        description="Practise speaking with an AI partner. Get real-time transcription and detailed evaluation."
-        icon={MessageSquare}
-        accent="purple"
-        highlights={heroHighlights}
-      />
-
-      {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
-
-      {/* Start New Session */}
-      <section className="mb-8">
-        <LearnerSurfaceSectionHeader
-          eyebrow="Session builder"
-          title="Start a new conversation"
-          description="Choose a conversation type to begin practising."
-          className="mb-4"
-        />
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {TASK_TYPES.map((task, i) => (
-            <MotionItem
-              key={task.code}
-              delayIndex={i}
-            >
-              <button
-                onClick={() => handleStart(task.code)}
-                disabled={creating}
-                className="group w-full rounded-3xl border border-border bg-surface p-5 text-left shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical disabled:opacity-50"
-              >
-              <div className="flex items-start gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
-                  <task.icon className="w-5 h-5" />
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-semibold text-navy transition-colors group-hover:text-primary-dark">
-                    {task.label}
-                  </h3>
-                  <p className="mt-1 text-xs text-muted">{task.description}</p>
-                </div>
-                <ChevronRight className="mt-1 h-4 w-4 text-muted transition-colors group-hover:text-primary" />
-              </div>
-              </button>
-            </MotionItem>
-          ))}
-        </div>
-      </section>
-
-      {/* History */}
-      <section>
-        <LearnerSurfaceSectionHeader
-          eyebrow="History"
-          title="Recent conversations"
-          description="Review and continue your previous practice sessions."
-          className="mb-4"
+        <LearnerPageHero
+          eyebrow="Practice"
+          title="AI Conversation Practice"
+          description="Practise speaking with an AI partner. Every session is scored against the OET Speaking rubric, projected to the 0–500 scale (pass = 350). Advisory only."
+          icon={MessageSquare}
+          accent="purple"
+          highlights={heroHighlights}
         />
 
-        {loading ? (
-          <div className="space-y-3">
-            {Array.from({ length: 3 }).map((_, i) => (
-              <Skeleton key={i} className="h-20 rounded-3xl" />
-            ))}
+        {entitlement && !entitlement.allowed && (
+          <InlineAlert variant="warning">
+            {entitlement.reason}
+            {entitlement.resetAt && (<> {' '}Quota resets at <strong>{new Date(entitlement.resetAt).toLocaleString()}</strong>.</>)}
+          </InlineAlert>
+        )}
+
+        {error && <InlineAlert variant="warning">{error}</InlineAlert>}
+
+        <section>
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
+            <LearnerSurfaceSectionHeader
+              eyebrow="Session builder"
+              title="Start a new conversation"
+              description="Choose a scenario type to begin practising. Sessions are ~5 minutes and graded automatically."
+            />
+            {entitlement && (
+              <Badge variant={entitlementVariant}>
+                {entitlement.tier.toUpperCase()} · {remainingLabel}
+              </Badge>
+            )}
           </div>
-        ) : history.length === 0 ? (
-          <Card className="border-dashed border-border p-8 text-center shadow-sm">
-            <MessageSquare className="mx-auto mb-3 h-10 w-10 text-gray-300" />
-            <p className="text-sm font-semibold text-navy">No conversations yet</p>
-            <p className="mt-1 text-xs text-muted">Start your first AI conversation above</p>
-          </Card>
-        ) : (
-          <MotionPresence>
-            <div className="space-y-3">
-              {history.map((session, i) => {
-                const stateInfo = STATE_LABELS[session.state] ?? STATE_LABELS.preparing;
-                const isViewable = session.state === 'evaluated' || session.state === 'completed';
+
+          {loading && !catalog ? (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {Array.from({ length: 2 }).map((_, i) => (<Skeleton key={i} className="h-24 rounded-3xl" />))}
+            </div>
+          ) : catalog && catalog.taskTypes.length > 0 ? (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              {catalog.taskTypes.map((task, i) => {
+                const Icon = TASK_ICONS[task.code] ?? MessageSquare;
+                const isCreatingThis = creating === task.code;
+                const disabled = !!creating || (entitlement ? !entitlement.allowed : false);
                 return (
-                  <MotionItem
-                    key={session.id}
-                    delayIndex={i}
-                  >
-                    <Link
-                      href={isViewable ? `/conversation/${session.id}/results` : `/conversation/${session.id}`}
-                      className="block rounded-3xl border border-border bg-surface p-4 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical"
-                    >
-                      <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-3 min-w-0">
-                          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
-                            <MessageSquare className="h-4 w-4" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2 mb-0.5">
-                              <span className="truncate text-sm font-semibold text-navy">
-                                {session.taskTypeCode.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
-                              </span>
-                              <ExamTypeBadge examType={session.examTypeCode} size="sm" />
-                            </div>
-                            <div className="flex items-center gap-3 text-xs text-muted">
-                              <span>{dateFormatter.format(new Date(session.createdAt))}</span>
-                              <span className="flex items-center gap-1">
-                                <Clock className="h-3 w-3" />{formatDuration(session.durationSeconds)}
-                              </span>
-                              <span>{session.turnCount} turns</span>
-                            </div>
-                          </div>
+                  <MotionItem key={task.code} delayIndex={i}>
+                    <button onClick={() => handleStart(task.code)} disabled={disabled}
+                      className="group w-full rounded-3xl border border-border bg-surface p-5 text-left shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical disabled:opacity-50">
+                      <div className="flex items-start gap-3">
+                        <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
+                          <Icon className="w-5 h-5" />
                         </div>
-                        <div className="flex items-center gap-2">
-                          <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${stateInfo.color}`}>
-                            {stateInfo.label}
-                          </span>
-                          <ChevronRight className="h-4 w-4 text-muted" />
+                        <div className="flex-1 min-w-0">
+                          <h3 className="text-sm font-semibold text-navy transition-colors group-hover:text-primary-dark">
+                            {task.label}
+                          </h3>
+                          <p className="mt-1 text-xs text-muted">{task.description}</p>
+                          {isCreatingThis && (<p className="mt-2 text-xs text-primary">Creating session…</p>)}
                         </div>
+                        <ChevronRight className="mt-1 h-4 w-4 text-muted transition-colors group-hover:text-primary" />
                       </div>
-                    </Link>
+                    </button>
                   </MotionItem>
                 );
               })}
             </div>
-          </MotionPresence>
-        )}
-      </section>
+          ) : (
+            <Card className="border-dashed border-border p-8 text-center shadow-sm">
+              <MessageSquare className="mx-auto mb-3 h-10 w-10 text-gray-300" />
+              <p className="text-sm font-semibold text-navy">No scenario types are currently enabled</p>
+              <p className="mt-1 text-xs text-muted">Please contact your administrator.</p>
+            </Card>
+          )}
+        </section>
+
+        <section>
+          <LearnerSurfaceSectionHeader
+            eyebrow="History"
+            title="Recent conversations"
+            description="Review and continue your previous practice sessions."
+            className="mb-4"
+          />
+
+          {loading ? (
+            <div className="space-y-3">
+              {Array.from({ length: 3 }).map((_, i) => (<Skeleton key={i} className="h-20 rounded-3xl" />))}
+            </div>
+          ) : history.length === 0 ? (
+            <Card className="border-dashed border-border p-8 text-center shadow-sm">
+              <MessageSquare className="mx-auto mb-3 h-10 w-10 text-gray-300" />
+              <p className="text-sm font-semibold text-navy">No conversations yet</p>
+              <p className="mt-1 text-xs text-muted">Start your first AI conversation above</p>
+            </Card>
+          ) : (
+            <MotionPresence>
+              <div className="space-y-3">
+                {history.map((session, i) => {
+                  const stateInfo = STATE_LABELS[session.state] ?? STATE_LABELS.preparing;
+                  const isViewable = session.state === 'evaluated' || session.state === 'completed';
+                  return (
+                    <MotionItem key={session.id} delayIndex={i}>
+                      <Link href={isViewable ? `/conversation/${session.id}/results` : `/conversation/${session.id}`}
+                        className="block rounded-3xl border border-border bg-surface p-4 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="flex items-center gap-3 min-w-0">
+                            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">
+                              <MessageSquare className="h-4 w-4" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2 mb-0.5">
+                                <span className="truncate text-sm font-semibold text-navy">
+                                  {session.taskTypeCode.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+                                </span>
+                                <ExamTypeBadge examType={session.examTypeCode} size="sm" />
+                              </div>
+                              <div className="flex flex-wrap items-center gap-3 text-xs text-muted">
+                                <span>{dateFormatter.format(new Date(session.createdAt))}</span>
+                                <span className="flex items-center gap-1">
+                                  <Clock className="h-3 w-3" />{formatDuration(session.durationSeconds)}
+                                </span>
+                                <span>{session.turnCount} turns</span>
+                                {session.scaledScore != null && (
+                                  <span className="font-medium text-navy">
+                                    {formatScaledScore(session.scaledScore)}
+                                    {session.overallGrade ? ` · Grade ${session.overallGrade}` : ''}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${stateInfo.color}`}>
+                              {stateInfo.label}
+                            </span>
+                            <ChevronRight className="h-4 w-4 text-muted" />
+                          </div>
+                        </div>
+                      </Link>
+                    </MotionItem>
+                  );
+                })}
+              </div>
+            </MotionPresence>
+          )}
+        </section>
       </div>
     </LearnerDashboardShell>
   );

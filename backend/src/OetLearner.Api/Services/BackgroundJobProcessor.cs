@@ -142,7 +142,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 await CompleteContentGenerationAsync(db, job, cancellationToken);
                 break;
             case JobType.ConversationEvaluation:
-                await CompleteConversationEvaluationAsync(db, job, cancellationToken);
+                await CompleteConversationEvaluationAsync(services, db, job, cancellationToken);
                 break;
             case JobType.PronunciationAnalysis:
                 await CompletePronunciationAnalysisAsync(db, job, cancellationToken);
@@ -751,15 +751,165 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         genJob.CompletedAt = DateTimeOffset.UtcNow;
     }
 
-    private static async Task CompleteConversationEvaluationAsync(LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)
+    private static async Task CompleteConversationEvaluationAsync(IServiceProvider services, LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)
     {
         if (string.IsNullOrWhiteSpace(job.ResourceId)) return;
 
         var session = await db.ConversationSessions.FirstOrDefaultAsync(s => s.Id == job.ResourceId, cancellationToken);
         if (session == null) return;
 
+        var existing = await db.ConversationEvaluations.FirstOrDefaultAsync(e => e.SessionId == session.Id, cancellationToken);
+        if (existing is not null)
+        {
+            session.State = "evaluated";
+            session.EvaluationId = existing.Id;
+            return;
+        }
+
+        var orchestrator = services.GetRequiredService<Conversation.IConversationAiOrchestrator>();
+
+        if (!Enum.TryParse<OetLearner.Api.Services.Rulebook.ExamProfession>(
+                (session.Profession ?? "medicine").Replace("-", "").Replace("_", ""),
+                ignoreCase: true, out var profession))
+            profession = OetLearner.Api.Services.Rulebook.ExamProfession.Medicine;
+
+        var elapsedSeconds = session.StartedAt.HasValue && session.CompletedAt.HasValue
+            ? (int)(session.CompletedAt.Value - session.StartedAt.Value).TotalSeconds
+            : session.DurationSeconds;
+
+        var ctx = new Conversation.ConversationAiContext(
+            session.Id, session.UserId, null, null, profession,
+            session.TaskTypeCode, session.ScenarioJson, session.TranscriptJson,
+            session.TurnCount, elapsedSeconds, 0, null);
+
+        Conversation.ConversationAiEvaluation aiEval;
+        try
+        {
+            aiEval = await orchestrator.EvaluateAsync(ctx, cancellationToken);
+        }
+        catch (OetLearner.Api.Services.Rulebook.PromptNotGroundedException)
+        {
+            session.State = "failed";
+            session.LastErrorCode = "ungrounded";
+            return;
+        }
+        catch (Exception ex)
+        {
+            var logger = services.GetService<ILogger<BackgroundJobProcessor>>();
+            logger?.LogError(ex, "Conversation AI evaluation failed for {SessionId}", session.Id);
+            aiEval = new Conversation.ConversationAiEvaluation(
+                new[]
+                {
+                    new Conversation.ConversationAiCriterion("intelligibility", 0, "evaluation error", Array.Empty<string>()),
+                    new Conversation.ConversationAiCriterion("fluency", 0, "evaluation error", Array.Empty<string>()),
+                    new Conversation.ConversationAiCriterion("appropriateness", 0, "evaluation error", Array.Empty<string>()),
+                    new Conversation.ConversationAiCriterion("grammar_expression", 0, "evaluation error", Array.Empty<string>()),
+                },
+                Array.Empty<Conversation.ConversationAiAnnotation>(),
+                Array.Empty<string>(),
+                new[] { "The AI evaluator could not complete. Try the session again." },
+                Array.Empty<string>(), Array.Empty<string>(),
+                "AI evaluation failed.", "");
+        }
+
+        var intelligibility = aiEval.Criteria.FirstOrDefault(c => c.Id.Equals("intelligibility", StringComparison.OrdinalIgnoreCase))?.Score06 ?? 0;
+        var fluency = aiEval.Criteria.FirstOrDefault(c => c.Id.Equals("fluency", StringComparison.OrdinalIgnoreCase))?.Score06 ?? 0;
+        var appropriateness = aiEval.Criteria.FirstOrDefault(c => c.Id.Equals("appropriateness", StringComparison.OrdinalIgnoreCase))?.Score06 ?? 0;
+        var grammarExpression = aiEval.Criteria.FirstOrDefault(c => c.Id.Equals("grammar_expression", StringComparison.OrdinalIgnoreCase))?.Score06 ?? 0;
+
+        var mean = (intelligibility + fluency + appropriateness + grammarExpression) / 4.0;
+        var scaled = OetScoring.ConversationProjectedScaled(mean);
+        var band = OetScoring.GradeSpeaking(scaled);
+
+        var evaluationId = $"ce-{Guid.NewGuid():N}";
+        var evaluation = new ConversationEvaluation
+        {
+            Id = evaluationId,
+            SessionId = session.Id,
+            UserId = session.UserId,
+            OverallScaled = band.ScaledScore,
+            OverallGrade = band.Grade,
+            Passed = band.Passed,
+            CountryVariant = null,
+            CriteriaJson = JsonSupport.Serialize(aiEval.Criteria.Select(c => new
+            {
+                id = c.Id, score06 = c.Score06, maxScore = 6.0, evidence = c.Evidence, quotes = c.Quotes,
+            })),
+            StrengthsJson = JsonSupport.Serialize(aiEval.Strengths),
+            ImprovementsJson = JsonSupport.Serialize(aiEval.Improvements),
+            SuggestedPracticeJson = JsonSupport.Serialize(aiEval.SuggestedPractice),
+            AppliedRuleIdsJson = JsonSupport.Serialize(aiEval.AppliedRuleIds),
+            RulebookVersion = aiEval.RulebookVersion,
+            Advisory = aiEval.Advisory,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
+        db.ConversationEvaluations.Add(evaluation);
+
+        var examTypeCode = session.ExamTypeCode ?? "oet";
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var seededReviewKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var a in aiEval.TurnAnnotations)
+        {
+            db.ConversationTurnAnnotations.Add(new ConversationTurnAnnotation
+            {
+                Id = $"cta-{Guid.NewGuid():N}",
+                SessionId = session.Id,
+                EvaluationId = evaluationId,
+                TurnNumber = a.TurnNumber,
+                Type = a.Type,
+                Category = a.Category,
+                RuleId = a.RuleId,
+                Evidence = a.Evidence,
+                Suggestion = a.Suggestion,
+                CreatedAt = DateTimeOffset.UtcNow,
+            });
+
+            if (!string.Equals(a.Type, "error", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(a.Type, "improvement", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (string.IsNullOrWhiteSpace(a.RuleId)) continue;
+
+            var sourceId = $"{session.Id}:{a.TurnNumber}:{a.RuleId}";
+            if (!seededReviewKeys.Add(sourceId)) continue;
+
+            var existingReview = await db.ReviewItems.AnyAsync(r =>
+                r.UserId == session.UserId && r.SourceType == "conversation_issue" && r.SourceId == sourceId,
+                cancellationToken);
+            if (existingReview) continue;
+
+            db.ReviewItems.Add(new ReviewItem
+            {
+                Id = $"rv-{Guid.NewGuid():N}",
+                UserId = session.UserId,
+                ExamTypeCode = examTypeCode,
+                SubtestCode = "speaking",
+                SourceType = "conversation_issue",
+                SourceId = sourceId,
+                CriterionCode = a.Category,
+                QuestionJson = JsonSupport.Serialize(new
+                {
+                    prompt = $"Conversation turn {a.TurnNumber}: {a.Evidence}",
+                    ruleId = a.RuleId,
+                    sessionId = session.Id,
+                }),
+                AnswerJson = JsonSupport.Serialize(new
+                {
+                    suggestion = a.Suggestion ?? "Revisit the rule and re-attempt this scenario.",
+                    ruleId = a.RuleId,
+                }),
+                EaseFactor = 2.5,
+                IntervalDays = 1,
+                ReviewCount = 0,
+                ConsecutiveCorrect = 0,
+                DueDate = today.AddDays(1),
+                CreatedAt = DateTimeOffset.UtcNow,
+                Status = "active",
+            });
+        }
+
         session.State = "evaluated";
-        session.EvaluationId = $"ce-{Guid.NewGuid():N}";
+        session.EvaluationId = evaluationId;
     }
 
     private static Task CompletePronunciationAnalysisAsync(LearnerDbContext db, BackgroundJobItem job, CancellationToken cancellationToken)

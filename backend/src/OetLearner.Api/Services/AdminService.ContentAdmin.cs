@@ -659,18 +659,12 @@ public partial class AdminService
 
         return new
         {
-            total,
-            page,
-            pageSize,
+            total, page, pageSize,
             items = items.Select(t => new
             {
-                t.Id,
-                t.Title,
-                t.ProfessionId,
-                t.Difficulty,
-                t.EstimatedDurationMinutes,
-                t.Status,
-                t.CreatedAt
+                t.Id, t.Title, t.TaskTypeCode, t.ProfessionId, t.Difficulty,
+                estimatedDurationSeconds = t.EstimatedDurationSeconds,
+                t.Status, t.PublishedAtUtc, t.CreatedAt, t.UpdatedAt,
             })
         };
     }
@@ -682,18 +676,15 @@ public partial class AdminService
 
         return new
         {
-            t.Id,
-            t.Title,
-            t.ProfessionId,
-            t.Scenario,
-            t.RoleDescription,
-            t.PatientContext,
-            t.ExpectedOutcomes,
-            t.Difficulty,
-            t.EstimatedDurationMinutes,
-            t.Status,
-            t.CreatedAt,
-            t.UpdatedAt
+            t.Id, t.Title, t.TaskTypeCode, t.ProfessionId, t.Scenario, t.RoleDescription,
+            t.PatientContext, t.ExpectedOutcomes, t.Difficulty,
+            estimatedDurationSeconds = t.EstimatedDurationSeconds,
+            objectives = JsonSupport.Deserialize<string[]>(t.ObjectivesJson, Array.Empty<string>()),
+            expectedRedFlags = JsonSupport.Deserialize<string[]>(t.ExpectedRedFlagsJson, Array.Empty<string>()),
+            keyVocabulary = JsonSupport.Deserialize<string[]>(t.KeyVocabularyJson, Array.Empty<string>()),
+            patientVoice = JsonSupport.Deserialize<Dictionary<string, object?>>(t.PatientVoiceJson, new Dictionary<string, object?>()),
+            t.Status, t.PublishedAtUtc, t.CreatedAt, t.UpdatedAt,
+            t.CreatedByUserId, t.UpdatedByUserId,
         };
     }
 
@@ -707,16 +698,23 @@ public partial class AdminService
         {
             Id = id,
             Title = request.Title,
+            TaskTypeCode = string.IsNullOrWhiteSpace(request.TaskTypeCode) ? "oet-roleplay" : request.TaskTypeCode,
             ProfessionId = request.ProfessionId,
             Scenario = request.Scenario,
             RoleDescription = request.RoleDescription,
             PatientContext = request.PatientContext,
             ExpectedOutcomes = request.ExpectedOutcomes,
+            ObjectivesJson = JsonSupport.Serialize(request.Objectives ?? Array.Empty<string>()),
+            ExpectedRedFlagsJson = JsonSupport.Serialize(request.ExpectedRedFlags ?? Array.Empty<string>()),
+            KeyVocabularyJson = JsonSupport.Serialize(request.KeyVocabulary ?? Array.Empty<string>()),
+            PatientVoiceJson = request.PatientVoice is null ? "{}" : JsonSupport.Serialize(request.PatientVoice),
             Difficulty = request.Difficulty ?? "medium",
-            EstimatedDurationMinutes = request.EstimatedDurationMinutes ?? 5,
-            Status = "active",
+            EstimatedDurationSeconds = request.EstimatedDurationSeconds ?? 300,
+            Status = "draft",
             CreatedAt = now,
-            UpdatedAt = now
+            UpdatedAt = now,
+            CreatedByUserId = adminId,
+            UpdatedByUserId = adminId,
         };
         db.ConversationTemplates.Add(entity);
         await db.SaveChangesAsync(ct);
@@ -733,20 +731,55 @@ public partial class AdminService
             ?? throw ApiException.NotFound("CONVERSATION_TEMPLATE_NOT_FOUND", $"Conversation template '{templateId}' not found.");
 
         if (request.Title is not null) entity.Title = request.Title;
+        if (request.TaskTypeCode is not null) entity.TaskTypeCode = request.TaskTypeCode;
         if (request.ProfessionId is not null) entity.ProfessionId = request.ProfessionId;
         if (request.Scenario is not null) entity.Scenario = request.Scenario;
         if (request.RoleDescription is not null) entity.RoleDescription = request.RoleDescription;
         if (request.PatientContext is not null) entity.PatientContext = request.PatientContext;
         if (request.ExpectedOutcomes is not null) entity.ExpectedOutcomes = request.ExpectedOutcomes;
         if (request.Difficulty is not null) entity.Difficulty = request.Difficulty;
-        if (request.EstimatedDurationMinutes is not null) entity.EstimatedDurationMinutes = request.EstimatedDurationMinutes.Value;
+        if (request.EstimatedDurationSeconds is not null) entity.EstimatedDurationSeconds = request.EstimatedDurationSeconds.Value;
+        if (request.Objectives is not null) entity.ObjectivesJson = JsonSupport.Serialize(request.Objectives);
+        if (request.ExpectedRedFlags is not null) entity.ExpectedRedFlagsJson = JsonSupport.Serialize(request.ExpectedRedFlags);
+        if (request.KeyVocabulary is not null) entity.KeyVocabularyJson = JsonSupport.Serialize(request.KeyVocabulary);
+        if (request.PatientVoice is not null) entity.PatientVoiceJson = JsonSupport.Serialize(request.PatientVoice);
         if (request.Status is not null) entity.Status = request.Status;
         entity.UpdatedAt = DateTimeOffset.UtcNow;
+        entity.UpdatedByUserId = adminId;
 
         await db.SaveChangesAsync(ct);
         await LogAuditAsync(adminId, adminName, "Updated", "ConversationTemplate", templateId, $"Updated conversation template: {entity.Title}", ct);
 
         return new { id = templateId, entity.Status };
+    }
+
+    public async Task<object> PublishConversationTemplateAsync(
+        string adminId, string adminName, string templateId, CancellationToken ct)
+    {
+        var entity = await db.ConversationTemplates.FirstOrDefaultAsync(x => x.Id == templateId, ct)
+            ?? throw ApiException.NotFound("CONVERSATION_TEMPLATE_NOT_FOUND", $"Conversation template '{templateId}' not found.");
+
+        var issues = new List<string>();
+        if (string.IsNullOrWhiteSpace(entity.Title)) issues.Add("title_required");
+        if (string.IsNullOrWhiteSpace(entity.Scenario)) issues.Add("scenario_required");
+        if (string.IsNullOrWhiteSpace(entity.RoleDescription)) issues.Add("role_description_required");
+        if (string.IsNullOrWhiteSpace(entity.PatientContext)) issues.Add("patient_context_required");
+        var objectives = JsonSupport.Deserialize<string[]>(entity.ObjectivesJson, Array.Empty<string>());
+        if (objectives.Length < 3) issues.Add("objectives_min_3");
+        if (entity.EstimatedDurationSeconds <= 0) issues.Add("duration_required");
+        if (!new[] { "oet-roleplay", "oet-handover" }.Contains(entity.TaskTypeCode, StringComparer.OrdinalIgnoreCase))
+            issues.Add("task_type_invalid");
+        if (issues.Count > 0)
+            throw ApiException.Validation("PUBLISH_GATE_FAILED", string.Join(", ", issues));
+
+        entity.Status = "published";
+        entity.PublishedAtUtc = DateTimeOffset.UtcNow;
+        entity.UpdatedAt = DateTimeOffset.UtcNow;
+        entity.UpdatedByUserId = adminId;
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Published", "ConversationTemplate", templateId, $"Published conversation template: {entity.Title}", ct);
+
+        return new { id = templateId, status = "published", publishedAtUtc = entity.PublishedAtUtc };
     }
 
     public async Task<object> ArchiveConversationTemplateAsync(
@@ -757,6 +790,7 @@ public partial class AdminService
 
         entity.Status = "archived";
         entity.UpdatedAt = DateTimeOffset.UtcNow;
+        entity.UpdatedByUserId = adminId;
         await db.SaveChangesAsync(ct);
         await LogAuditAsync(adminId, adminName, "Archived", "ConversationTemplate", templateId, $"Archived conversation template: {entity.Title}", ct);
 

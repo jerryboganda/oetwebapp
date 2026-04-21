@@ -384,6 +384,47 @@ public static class OetScoring
     }
 
     // -----------------------------------------------------------------------
+    // Conversation projection (OET Speaking rubric 4 × 0..6 → 0..500)
+    // -----------------------------------------------------------------------
+    //
+    // Advisory projection. Anchor:
+    //   0.0 → 0
+    //   3.0 → 250
+    //   4.2 → 350 (PASS — Grade B, universal)
+    //   5.0 → 417
+    //   6.0 → 500
+
+    public static int ConversationProjectedScaled(double mean0To6)
+    {
+        if (double.IsNaN(mean0To6)) return 0;
+        var m = Math.Clamp(mean0To6, 0.0, 6.0);
+        (double From, double To, int ScaledFrom, int ScaledTo)[] anchors =
+        {
+            (0.0, 3.0, 0,   250),
+            (3.0, 4.2, 250, 350),
+            (4.2, 5.0, 350, 417),
+            (5.0, 6.0, 417, 500),
+        };
+        foreach (var (f, t, sf, st) in anchors)
+        {
+            if (m >= f && m <= t)
+            {
+                var ratio = (m - f) / (t - f == 0 ? 1 : (t - f));
+                return (int)Math.Round(sf + ratio * (st - sf));
+            }
+        }
+        return ScaledMax;
+    }
+
+    public static SpeakingResult ConversationProjectedBand(
+        double intelligibility06, double fluency06, double appropriateness06, double grammarExpression06)
+    {
+        var mean = (Math.Clamp(intelligibility06, 0, 6) + Math.Clamp(fluency06, 0, 6)
+                  + Math.Clamp(appropriateness06, 0, 6) + Math.Clamp(grammarExpression06, 0, 6)) / 4.0;
+        return GradeSpeaking(ConversationProjectedScaled(mean));
+    }
+
+    // -----------------------------------------------------------------------
     // Display formatting
     // -----------------------------------------------------------------------
 

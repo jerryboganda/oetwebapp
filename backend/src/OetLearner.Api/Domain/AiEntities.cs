@@ -203,6 +203,7 @@ public static class AiFeatureCodes
     public const string WritingCoachSuggest = "writing.coach.suggest";
     public const string WritingCoachExplain = "writing.coach.explain";
     public const string ConversationReply = "conversation.reply";
+    public const string ConversationOpening = "conversation.opening";
     public const string PronunciationTip = "pronunciation.tip";
     public const string SummarisePassage = "summarise.passage";
     public const string VocabularyGloss = "vocabulary.gloss";
@@ -211,11 +212,15 @@ public static class AiFeatureCodes
     public const string PronunciationScore = "pronunciation.score";
     public const string PronunciationFeedback = "pronunciation.feedback";
 
+    // Conversation evaluation (platform-only — scoring-critical)
+    public const string ConversationEvaluation = "conversation.evaluation";
+
     // Admin tooling (platform-only always)
     public const string AdminContentGeneration = "admin.content_generation";
     public const string AdminGrammarDraft = "admin.grammar_draft";
     public const string AdminPronunciationDraft = "admin.pronunciation_draft";
     public const string AdminVocabularyDraft = "admin.vocabulary_draft";
+    public const string AdminConversationDraft = "admin.conversation_draft";
 
     // Catch-all for calls that pre-date feature classification. Tolerated only
     // during the Slice 1 rollout; future slices will validate against this set.

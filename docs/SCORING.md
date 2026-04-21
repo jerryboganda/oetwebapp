@@ -37,6 +37,27 @@
 
 - Passing score: **350 / 500 (Grade B)** — universal, never varies by country.
 
+### AI Conversation Practice (advisory projection)
+
+- Graded on four OET Speaking rubric criteria, each **0 – 6**:
+  Intelligibility, Fluency, Appropriateness, Grammar & Expression.
+- Weighted mean (0–6) projects to the Speaking **0–500** scaled scale.
+- **Pass anchor:** **mean 4.2 / 6 ≡ 350 / 500 (Grade B)** — universal, identical
+  anchor semantics to the Pronunciation projection at 70 / 100 ≡ 350 / 500.
+- Use `conversationProjectedScaled()` (`lib/scoring.ts`) or
+  `OetScoring.ConversationProjectedScaled()` (.NET). Never inline `>= 4.2`.
+- Conversation scores are **advisory** and never replace expert-graded Speaking.
+
+Projection anchors (piecewise linear between anchors):
+
+| mean (0–6) | scaled (0–500) |
+| ---------- | -------------- |
+| 0.0        | 0              |
+| 3.0        | 250            |
+| **4.2**    | **350 (PASS)** |
+| 5.0        | 417            |
+| 6.0        | 500            |
+
 ---
 
 ## 2. Grade bands (0–500 scale)

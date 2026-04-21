@@ -5225,7 +5225,13 @@ export async function rateTutoringSession(sessionId: string, rating: number, fee
 
 // ── AI Conversation ─────────────────────────────────────────────────────
 
-export async function createConversation(params: { contentId?: string; examFamilyCode: string; taskTypeCode: string }) {
+export async function createConversation(params: {
+  contentId?: string;
+  examFamilyCode?: string;
+  taskTypeCode: string;
+  profession?: string;
+  difficulty?: string;
+}) {
   return apiRequest('/v1/conversations', {
     method: 'POST',
     body: JSON.stringify(params),
@@ -5248,6 +5254,63 @@ export async function getConversationEvaluation(sessionId: string) {
 
 export async function getConversationHistory(page = 1, pageSize = 10) {
   return apiRequest(`/v1/conversations/history?page=${page}&pageSize=${pageSize}`);
+}
+
+export async function getConversationTaskTypes() {
+  return apiRequest('/v1/conversations/task-types');
+}
+
+export async function getConversationEntitlement() {
+  return apiRequest('/v1/conversations/entitlement');
+}
+
+// ── Admin: Conversation Templates ──────────────────────────────────────
+
+export async function fetchAdminConversationTemplates(params?: {
+  profession?: string;
+  status?: string;
+  search?: string;
+  page?: number;
+  pageSize?: number;
+}) {
+  const q = new URLSearchParams();
+  if (params?.profession) q.set('profession', params.profession);
+  if (params?.status) q.set('status', params.status);
+  if (params?.search) q.set('search', params.search);
+  if (params?.page) q.set('page', String(params.page));
+  if (params?.pageSize) q.set('pageSize', String(params.pageSize));
+  const qs = q.toString();
+  return apiRequest(`/v1/admin/conversation/templates${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchAdminConversationTemplate(templateId: string) {
+  return apiRequest(`/v1/admin/conversation/templates/${encodeURIComponent(templateId)}`);
+}
+
+export async function createAdminConversationTemplate(body: Record<string, unknown>) {
+  return apiRequest('/v1/admin/conversation/templates', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function updateAdminConversationTemplate(templateId: string, body: Record<string, unknown>) {
+  return apiRequest(`/v1/admin/conversation/templates/${encodeURIComponent(templateId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  });
+}
+
+export async function publishAdminConversationTemplate(templateId: string) {
+  return apiRequest(`/v1/admin/conversation/templates/${encodeURIComponent(templateId)}/publish`, {
+    method: 'POST',
+  });
+}
+
+export async function archiveAdminConversationTemplate(templateId: string) {
+  return apiRequest(`/v1/admin/conversation/templates/${encodeURIComponent(templateId)}/archive`, {
+    method: 'POST',
+  });
 }
 
 // ── Writing Coach ───────────────────────────────────────────────────────
