@@ -294,6 +294,7 @@ public sealed record ExpertCalibrationCaseSummaryResponse(
     string Type,
     int BenchmarkScore,
     int? ReviewerScore,
+    double? AlignmentScore,
     string Status,
     DateTimeOffset CreatedAt);
 
@@ -322,7 +323,9 @@ public sealed record ExpertCalibrationSubmissionResponse(
     string DisagreementSummary,
     string Notes,
     Dictionary<string, int> SubmittedScores,
-    DateTimeOffset SubmittedAt);
+    DateTimeOffset SubmittedAt,
+    bool IsDraft = false,
+    DateTimeOffset? UpdatedAt = null);
 
 public sealed record ExpertCalibrationCaseDetailResponse(
     string Id,
@@ -339,3 +342,52 @@ public sealed record ExpertCalibrationCaseDetailResponse(
     IReadOnlyList<ExpertCalibrationRubricEntryResponse> BenchmarkRubric,
     IReadOnlyList<string> ReferenceNotes,
     ExpertCalibrationSubmissionResponse? ExistingSubmission);
+
+// ── Calibration history (supplement: GET /v1/expert/calibration/history) ──
+public sealed record ExpertCalibrationHistoryEntryResponse(
+    string Id,
+    string CaseId,
+    string CaseTitle,
+    string Profession,
+    string SubTest,
+    int BenchmarkScore,
+    int ReviewerScore,
+    double AlignmentScore,
+    string DisagreementSummary,
+    DateTimeOffset SubmittedAt);
+
+public sealed record ExpertCalibrationHistoryResponse(
+    IReadOnlyList<ExpertCalibrationHistoryEntryResponse> Entries,
+    int TotalCount,
+    DateTimeOffset GeneratedAt);
+
+// ── Calibration alignment aggregate (supplement: GET /v1/expert/calibration/alignment) ──
+public sealed record ExpertCalibrationAlignmentBreakdownResponse(
+    string SubTest,
+    int SubmissionCount,
+    double AverageAlignment,
+    double? LatestAlignment);
+
+public sealed record ExpertCalibrationAlignmentTrendPointResponse(
+    DateTimeOffset SubmittedAt,
+    double AlignmentScore);
+
+public sealed record ExpertCalibrationAlignmentResponse(
+    int TotalSubmissions,
+    double OverallAverageAlignment,
+    double? LatestAlignment,
+    double? PreviousAlignment,
+    double? DeltaFromPrevious,
+    IReadOnlyList<ExpertCalibrationAlignmentBreakdownResponse> PerSubTest,
+    IReadOnlyList<ExpertCalibrationAlignmentTrendPointResponse> Trend,
+    DateTimeOffset GeneratedAt);
+
+// ── Availability constraints (supplement: GET /v1/expert/availability/constraints) ──
+public sealed record ExpertAvailabilityConstraintsResponse(
+    int MinNoticeHours,
+    int MaxHoursPerWeek,
+    int MaxExceptionsPerMonth,
+    string MinSlotDuration,
+    string MaxSlotDuration,
+    IReadOnlyList<string> SupportedTimezones,
+    IReadOnlyList<string> DayKeys);

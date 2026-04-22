@@ -588,6 +588,36 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
             _ => ""
         });
         sb.AppendLine();
+
+        if (ctx.Kind == RuleKind.Speaking)
+        {
+            sb.AppendLine("### Formal OET Speaking Rubric — 9 criteria (scored SEPARATELY)");
+            sb.AppendLine();
+            sb.AppendLine("The OET Assessor (NOT the interlocutor) scores the audio recording after the exam against these 9 criteria. You MUST produce one score per criterion — never aggregate Clinical Communication into a single number.");
+            sb.AppendLine();
+            sb.AppendLine("**Linguistic Criteria (4, each scored 0–6):**");
+            sb.AppendLine("1. `intelligibility` — Intelligibility (pronunciation, stress, intonation, rhythm; L1 accent effect on clarity)");
+            sb.AppendLine("2. `fluency` — Fluency (speed, hesitation, self-correction, sustained utterances)");
+            sb.AppendLine("3. `appropriateness` — Appropriateness of Language (register, tone, lexis; explaining technical matters in lay terms)");
+            sb.AppendLine("4. `grammar` — Resources of Grammar & Expression (range, accuracy, flexibility of grammar and vocabulary)");
+            sb.AppendLine();
+            sb.AppendLine("**Clinical Communication Criteria (5, each scored 0–3 — level descriptors: 3=Adept, 2=Competent, 1=Partially effective, 0=Ineffective):**");
+            sb.AppendLine("5. `relationshipBuilding` — Relationship Building (greeting/introductions, attentive respectful attitude, non-judgemental approach, empathy)");
+            sb.AppendLine("6. `patientPerspective` — Understanding & Incorporating the Patient's Perspective (eliciting ideas/concerns/expectations, picking up cues, relating explanations back)");
+            sb.AppendLine("7. `providingStructure` — Providing Structure (sequencing the interview purposefully, signposting changes in topic, organising explanations)");
+            sb.AppendLine("8. `informationGathering` — Information Gathering (facilitating narrative, open-then-closed questions, avoiding compound/leading questions, clarifying, summarising)");
+            sb.AppendLine("9. `informationGiving` — Information Giving (establishing prior knowledge, pausing, encouraging reactions, checking understanding, discovering further needs)");
+            sb.AppendLine();
+            sb.AppendLine("Every feedback item MUST cite (a) the criterion code from this list AND (b) at least one rule ID from the active rulebook. Do NOT emit the legacy aggregate key `clinicalCommunication` — it is deprecated and will be rejected.");
+            sb.AppendLine();
+            sb.AppendLine("### Architectural rule — Interlocutor vs Assessor");
+            sb.AppendLine();
+            sb.AppendLine("- **Interlocutor** (actor in the role play): facilitates the role play, reads warm-up questions, plays the patient/carer. The interlocutor NEVER grades.");
+            sb.AppendLine("- **OET Assessor** (this AI pipeline in advisory form; human expert in final form): listens to the audio recording AFTER the exam and scores against all 9 criteria above.");
+            sb.AppendLine("- Your evaluation MUST be recording-based (post-hoc). Do NOT assess live interaction dynamics that are not audible on the recording.");
+            sb.AppendLine();
+        }
+
         sb.AppendLine("Always reference pass/fail using the exact OET grade letters: A, B, C+, C, D, E.");
         sb.AppendLine();
     }

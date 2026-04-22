@@ -10,11 +10,68 @@ public sealed class MockService(LearnerDbContext db)
     private static readonly string[] FullMockOrder = ["listening", "reading", "writing", "speaking"];
     private static readonly HashSet<string> ProductiveSubtests = new(["writing", "speaking"], StringComparer.OrdinalIgnoreCase);
 
+    // Privacy floor for anonymised cohort percentile signal (Phase C2). Below this threshold
+    // a learner could infer a specific peer's score, so the API returns no percentile at all.
+    private const int CohortPrivacyMinimum = 10;
+
     public async Task<object> GetMocksAsync(string userId, CancellationToken ct)
     {
-        await EnsureUserAsync(userId, ct);
+        // Business rule: the Mock Center is a READ surface, not a mutation boundary, so it must
+        // degrade gracefully for learners whose Identity account is valid but whose
+        // `Users` profile row has not yet been bootstrapped. Throwing 404 here would turn
+        // first-visit traffic into a dead page ("Failed to load mock center"). Instead we
+        // render the canonical empty shape and point the learner at the dashboard bootstrap.
+        var userExists = await db.Users.AsNoTracking().AnyAsync(x => x.Id == userId, ct);
+        if (!userExists)
+        {
+            return new
+            {
+                reports = Array.Empty<object>(),
+                learnerProfession = (string?)null,
+                availableProfessions = Array.Empty<object>(),
+                resumableAttempts = Array.Empty<object>(),
+                recommendedNextMock = new
+                {
+                    id = "mock-center-bootstrap",
+                    title = "Finish setting up your learner profile",
+                    rationale = "Complete your dashboard bootstrap so we can tailor mocks to your profession and readiness.",
+                    route = "/dashboard",
+                    latestOverallScore = (string?)null,
+                    latestOverallGrade = (string?)null,
+                    trend = (string?)null,
+                    readiness = (object?)null
+                },
+                purchasedMockReviews = new
+                {
+                    availableCredits = 0,
+                    reservedCredits = 0,
+                    consumedCredits = 0,
+                    pendingReviews = 0,
+                    completedReviews = 0,
+                    reviewTurnaroundHours = 48,
+                    reviewSlaLabel = "Expert review turnaround: within 48 hours"
+                },
+                collections = new
+                {
+                    fullMocks = Array.Empty<object>(),
+                    subTestMocks = Array.Empty<object>()
+                },
+                emptyState = new
+                {
+                    title = "Your learner profile is not fully initialised yet",
+                    description = "Open your dashboard once to finish setup, then come back here to pick a mock.",
+                    route = "/dashboard"
+                },
+                scoreGuarantee = (object?)null,
+                cohortPercentile = (object?)null
+            };
+        }
 
         var wallet = await EnsureWalletAsync(userId, ct);
+        var learnerProfession = await db.Users.AsNoTracking()
+            .Where(x => x.Id == userId)
+            .Select(x => x.ActiveProfessionId)
+            .FirstOrDefaultAsync(ct);
         var bundles = await QueryPublishedBundles()
             .Include(x => x.Sections.OrderBy(s => s.SectionOrder))
                 .ThenInclude(s => s.ContentPaper)
@@ -29,6 +86,17 @@ public sealed class MockService(LearnerDbContext db)
             .ToListAsync(ct);
 
         var attemptIds = attempts.Select(x => x.Id).ToArray();
+
+        // Pre-fetch section attempts so ProjectBundleCard can surface per-sub-test progress dots
+        // on Full Mocks without N+1 queries per bundle.
+        var sectionAttempts = attemptIds.Length == 0
+            ? new List<MockSectionAttempt>()
+            : await db.MockSectionAttempts.AsNoTracking()
+                .Where(x => attemptIds.Contains(x.MockAttemptId))
+                .ToListAsync(ct);
+        var sectionAttemptsByAttempt = sectionAttempts
+            .GroupBy(x => x.MockAttemptId)
+            .ToDictionary(g => g.Key, g => g.ToList());
         var reports = await db.MockReports.AsNoTracking()
             .Where(report => attemptIds.Contains(report.MockAttemptId))
             .OrderByDescending(report => report.GeneratedAt)
@@ -69,17 +137,51 @@ public sealed class MockService(LearnerDbContext db)
 
         var fullMocks = bundles
             .Where(x => x.MockType == "full")
-            .Select(bundle => ProjectBundleCard(bundle, attempts.FirstOrDefault(a => a.MockBundleId == bundle.Id), latestReport))
+            .Select(bundle =>
+            {
+                var attempt = attempts.FirstOrDefault(a => a.MockBundleId == bundle.Id);
+                var sections = attempt is not null && sectionAttemptsByAttempt.TryGetValue(attempt.Id, out var list)
+                    ? list
+                    : new List<MockSectionAttempt>();
+                return ProjectBundleCard(bundle, attempt, latestReport, sections);
+            })
             .ToArray();
 
         var subTestMocks = bundles
             .Where(x => x.MockType == "sub")
-            .Select(bundle => ProjectBundleCard(bundle, attempts.FirstOrDefault(a => a.MockBundleId == bundle.Id), latestReport))
+            .Select(bundle =>
+            {
+                var attempt = attempts.FirstOrDefault(a => a.MockBundleId == bundle.Id);
+                var sections = attempt is not null && sectionAttemptsByAttempt.TryGetValue(attempt.Id, out var list)
+                    ? list
+                    : new List<MockSectionAttempt>();
+                return ProjectBundleCard(bundle, attempt, latestReport, sections);
+            })
             .ToArray();
+
+        // Available profession filters are derived from the union of professions actually represented
+        // in published bundles (plus the "all" sentinel). Presenting profession chips that have zero
+        // bundles would be misleading.
+        var bundleProfessionIds = bundles
+            .Where(x => !x.AppliesToAllProfessions && !string.IsNullOrWhiteSpace(x.ProfessionId))
+            .Select(x => x.ProfessionId!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var professionRows = bundleProfessionIds.Length == 0
+            ? new List<ProfessionReference>()
+            : await db.Professions.AsNoTracking()
+                .Where(x => bundleProfessionIds.Contains(x.Id))
+                .OrderBy(x => x.SortOrder)
+                .ThenBy(x => x.Label)
+                .ToListAsync(ct);
 
         return new
         {
             reports = reportItems,
+            learnerProfession,
+            availableProfessions = professionRows
+                .Select(x => new { id = x.Id, label = x.Label })
+                .ToArray(),
             resumableAttempts = attempts
                 .Where(x => x.State is AttemptState.InProgress or AttemptState.Paused or AttemptState.Evaluating)
                 .Select(ProjectAttemptSummary)
@@ -91,7 +193,11 @@ public sealed class MockService(LearnerDbContext db)
                 rationale = latestReport is null
                     ? "Choose a published bundle to capture a clean baseline across OET sections."
                     : $"Your latest report scored {latestReport.GetValueOrDefault("overallScore")?.ToString() ?? "an updated"} overall. Run another mock to confirm the gains.",
-                route = firstFullRoute
+                route = firstFullRoute,
+                latestOverallScore = latestReport?.GetValueOrDefault("overallScore")?.ToString(),
+                latestOverallGrade = latestReport?.GetValueOrDefault("overallGrade")?.ToString(),
+                trend = ExtractReportTrend(latestReport),
+                readiness = BuildReadinessAdvisory(latestReport)
             },
             purchasedMockReviews = new
             {
@@ -99,7 +205,11 @@ public sealed class MockService(LearnerDbContext db)
                 reservedCredits = activeReservations.Sum(x => Math.Max(0, x.ReservedCredits - x.ConsumedCredits - x.ReleasedCredits)),
                 consumedCredits = await db.MockReviewReservations.AsNoTracking().Where(x => x.UserId == userId).SumAsync(x => x.ConsumedCredits, ct),
                 pendingReviews = reviewStates.Count(x => x is ReviewRequestState.Queued or ReviewRequestState.InReview or ReviewRequestState.AwaitingPayment),
-                completedReviews = reviewStates.Count(x => x == ReviewRequestState.Completed)
+                completedReviews = reviewStates.Count(x => x == ReviewRequestState.Completed),
+                // Standard expert review SLA surfaced so learners know turnaround up-front (OET business req):
+                // writing + speaking expert reviews are committed to 48h under current operations policy.
+                reviewTurnaroundHours = 48,
+                reviewSlaLabel = "Expert review turnaround: within 48 hours"
             },
             collections = new
             {
@@ -113,7 +223,15 @@ public sealed class MockService(LearnerDbContext db)
                     description = "Ask an admin to publish a full or sub-test mock bundle from the content mock bundle console.",
                     route = "/admin/content/mocks"
                 }
-                : null
+                : null,
+            // Phase C1: surface existing billing-module pledge so learners can see whether their
+            // Score Guarantee is on track from the Mock Center. Read-only signal; refund + claim
+            // flows remain owned by the billing module.
+            scoreGuarantee = await BuildScoreGuaranteeSignalAsync(userId, latestReport, ct),
+            // Phase C2: anonymised cohort percentile. Returns null when the cohort is too small
+            // (< CohortPrivacyMinimum) to prevent re-identification, or when the learner has no
+            // scored report yet.
+            cohortPercentile = await BuildCohortPercentileSignalAsync(userId, latestReport, ct)
         };
     }
 
@@ -952,15 +1070,45 @@ public sealed class MockService(LearnerDbContext db)
         return existing + newSection.TimeLimitMinutes;
     }
 
-    private static object ProjectBundleCard(MockBundle bundle, MockAttempt? latestAttempt, Dictionary<string, object?>? latestReport)
+    private static object ProjectBundleCard(MockBundle bundle, MockAttempt? latestAttempt, Dictionary<string, object?>? latestReport, IReadOnlyList<MockSectionAttempt>? latestAttemptSections = null)
     {
         var completed = latestAttempt?.State == AttemptState.Completed;
+        // Per-sub-test progress dot map for the Full Mock row. Only populated when the learner
+        // has an existing attempt for this bundle \u2014 otherwise all dots default to "not started".
+        var sectionProgress = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        if (latestAttemptSections is not null)
+        {
+            foreach (var section in latestAttemptSections)
+            {
+                if (string.IsNullOrWhiteSpace(section.SubtestCode)) continue;
+                sectionProgress[section.SubtestCode] = section.State switch
+                {
+                    AttemptState.Completed => "completed",
+                    AttemptState.InProgress => "in-progress",
+                    AttemptState.Paused => "in-progress",
+                    AttemptState.Evaluating => "in-progress",
+                    AttemptState.Abandoned => "not-started",
+                    _ => "not-started"
+                };
+            }
+        }
+
+        var includedSubtests = bundle.Sections
+            .OrderBy(x => x.SectionOrder)
+            .Select(x => x.SubtestCode)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
         return new
         {
             id = bundle.Id,
             bundleId = bundle.Id,
             title = bundle.Title,
+            mockType = bundle.MockType,
             subtest = bundle.SubtestCode,
+            professionId = bundle.ProfessionId,
+            appliesToAllProfessions = bundle.AppliesToAllProfessions,
             status = latestAttempt is null ? "available" : ToApiState(latestAttempt.State),
             score = completed ? latestReport?.GetValueOrDefault("overallScore")?.ToString() : null,
             date = latestAttempt?.CompletedAt?.ToString("MMM dd, yyyy"),
@@ -969,7 +1117,9 @@ public sealed class MockService(LearnerDbContext db)
             reason = bundle.Status == ContentStatus.Published ? null : "Not published",
             route = $"/mocks/setup?bundleId={Uri.EscapeDataString(bundle.Id)}&type={bundle.MockType}" + (bundle.SubtestCode is null ? string.Empty : $"&subtest={Uri.EscapeDataString(bundle.SubtestCode)}"),
             sectionCount = bundle.Sections.Count,
-            reviewEligibleSections = bundle.Sections.Count(x => x.ReviewEligible)
+            reviewEligibleSections = bundle.Sections.Count(x => x.ReviewEligible),
+            includedSubtests,
+            sectionProgress
         };
     }
 
@@ -1073,6 +1223,228 @@ public sealed class MockService(LearnerDbContext db)
         reservedAt = reservation.ReservedAt,
         expiresAt = reservation.ExpiresAt
     };
+
+    /// <summary>
+    /// Extracts the trend direction ("up" | "down" | "flat" | null) from the latest report payload's
+    /// priorComparison block. Returns null when no comparison is available (first report).
+    /// Used by the Mock Center "Recommended next step" card to visualise momentum.
+    /// </summary>
+    private static string? ExtractReportTrend(Dictionary<string, object?>? latestReport)
+    {
+        if (latestReport is null) return null;
+        if (!latestReport.TryGetValue("priorComparison", out var priorRaw) || priorRaw is null) return null;
+        try
+        {
+            var priorJson = JsonSupport.Serialize(priorRaw);
+            var prior = JsonSupport.Deserialize<Dictionary<string, object?>>(priorJson, new Dictionary<string, object?>());
+            if (prior.TryGetValue("exists", out var exists) && exists is bool b && !b) return null;
+            return prior.TryGetValue("overallTrend", out var trend) ? trend?.ToString() : null;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    /// <summary>
+    /// Builds a lightweight readiness advisory object for the Mock Center based on the latest report's
+    /// overall scaled score. Anchors on OET pass thresholds (350 = B grade) per docs/SCORING.md.
+    /// Returns null when no scored report exists yet.
+    /// </summary>
+    private static object? BuildReadinessAdvisory(Dictionary<string, object?>? latestReport)
+    {
+        if (latestReport is null) return null;
+        if (!latestReport.TryGetValue("overallScore", out var scoreRaw) || scoreRaw is null) return null;
+        if (!int.TryParse(scoreRaw.ToString(), out var overall)) return null;
+
+        // Canonical OET pass anchor = 350/500 (docs/SCORING.md). Tiering is advisory copy only.
+        string tier;
+        string message;
+        if (overall >= 400)
+        {
+            tier = "strong";
+            message = "You're comfortably above the OET pass line. Target consistency across all four sub-tests.";
+        }
+        else if (overall >= 350)
+        {
+            tier = "passing";
+            message = "You're at or above the OET pass line. Another full mock will confirm the result is repeatable.";
+        }
+        else if (overall >= 300)
+        {
+            tier = "developing";
+            message = "You're within striking distance. Practise the weakest sub-test before the next full mock.";
+        }
+        else
+        {
+            tier = "foundation";
+            message = "Focus on sub-test drills first — a full mock will be more useful after targeted practice.";
+        }
+
+        return new
+        {
+            tier,
+            message,
+            passThreshold = 350,
+            overallScore = overall
+        };
+    }
+
+    /// <summary>
+    /// Phase C1 — read-only Score Guarantee signal for the Mock Center. Surfaces the active pledge's
+    /// state without duplicating billing logic; refund / claim flows remain owned by the billing module.
+    /// Returns null when the learner has no pledge on file, so the UI can hide the card entirely.
+    /// </summary>
+    private async Task<object?> BuildScoreGuaranteeSignalAsync(
+        string userId,
+        Dictionary<string, object?>? latestReport,
+        CancellationToken ct)
+    {
+        // Most-recent pledge (covers both "active" and recently terminal states so the UI can show a
+        // closed result briefly before it ages out). Only surface the newest one.
+        var pledge = await db.ScoreGuaranteePledges.AsNoTracking()
+            .Where(x => x.UserId == userId)
+            .OrderByDescending(x => x.ActivatedAt)
+            .FirstOrDefaultAsync(ct);
+        if (pledge is null) return null;
+
+        var guaranteedScore = pledge.BaselineScore + pledge.GuaranteedImprovement;
+        int? latestScore = null;
+        if (latestReport is not null
+            && latestReport.TryGetValue("overallScore", out var scoreRaw)
+            && scoreRaw is not null
+            && int.TryParse(scoreRaw.ToString(), out var parsed))
+        {
+            latestScore = parsed;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var daysRemaining = pledge.ExpiresAt > now
+            ? (int)Math.Ceiling((pledge.ExpiresAt - now).TotalDays)
+            : 0;
+        var isActive = string.Equals(pledge.Status, "active", StringComparison.OrdinalIgnoreCase) && pledge.ExpiresAt > now;
+        var onTrack = latestScore.HasValue && latestScore.Value >= guaranteedScore;
+
+        // Gentle advisory copy keyed to the status + progression so the Mock Center card reads as
+        // guidance, not a verdict. Refund eligibility language is NOT made here — that belongs to
+        // /billing/score-guarantee.
+        string message;
+        if (!isActive)
+        {
+            message = pledge.Status switch
+            {
+                "claim_approved" => "Your Score Guarantee claim was approved — check billing for the refund status.",
+                "claim_rejected" => "Your Score Guarantee claim was reviewed. Visit billing for details.",
+                "claim_submitted" => "Your Score Guarantee claim is under review by the admin team.",
+                "expired" => "Your Score Guarantee window has closed.",
+                _ => "Your Score Guarantee is no longer active."
+            };
+        }
+        else if (!latestScore.HasValue)
+        {
+            message = $"Score Guarantee is active. Complete a full mock to check progress toward {guaranteedScore}/500.";
+        }
+        else if (onTrack)
+        {
+            message = $"You're on track — latest mock ({latestScore}) is at or above the guaranteed {guaranteedScore}/500.";
+        }
+        else
+        {
+            var gap = guaranteedScore - latestScore.Value;
+            message = $"Latest mock is {latestScore}/500 — {gap} points under the guaranteed {guaranteedScore}. Keep practising.";
+        }
+
+        return new
+        {
+            status = pledge.Status,
+            isActive,
+            baselineScore = pledge.BaselineScore,
+            guaranteedScore,
+            guaranteedImprovement = pledge.GuaranteedImprovement,
+            latestOverallScore = latestScore,
+            onTrack,
+            daysRemaining,
+            expiresAt = pledge.ExpiresAt,
+            message,
+            route = "/billing/score-guarantee"
+        };
+    }
+
+    /// <summary>
+    /// Phase C2 — anonymised cohort percentile. Computes the learner's percentile against the
+    /// cohort of all mock reports generated in the last 90 days. Returns null when fewer than
+    /// <see cref="CohortPrivacyMinimum"/> peer reports exist to prevent re-identification; returns
+    /// a banded percentile (rounded to the nearest 5) rather than a precise rank.
+    /// </summary>
+    private async Task<object?> BuildCohortPercentileSignalAsync(
+        string userId,
+        Dictionary<string, object?>? latestReport,
+        CancellationToken ct)
+    {
+        if (latestReport is null) return null;
+        if (!latestReport.TryGetValue("overallScore", out var scoreRaw) || scoreRaw is null) return null;
+        if (!int.TryParse(scoreRaw.ToString(), out var learnerScore)) return null;
+
+        var since = DateTimeOffset.UtcNow.AddDays(-90);
+
+        // Pull the scored payloads and extract the overall score on the CLR side; reports store
+        // JSON so we cannot LINQ-translate the score extraction. We exclude the learner's own
+        // reports so the learner is ranked against peers only.
+        // MockReport has no UserId column — we join via MockAttempt to scope the cohort to peers
+        // (learners other than the current one) whose reports landed in the retention window.
+        var peerAttemptIds = db.MockAttempts.AsNoTracking()
+            .Where(a => a.UserId != userId)
+            .Select(a => a.Id);
+
+        var peerPayloads = await db.MockReports.AsNoTracking()
+            .Where(x => x.State == AsyncState.Completed
+                && x.GeneratedAt != null
+                && x.GeneratedAt >= since
+                && peerAttemptIds.Contains(x.MockAttemptId))
+            .OrderByDescending(x => x.GeneratedAt)
+            .Select(x => x.PayloadJson)
+            .Take(1000)
+            .ToListAsync(ct);
+
+        var peerScores = new List<int>(peerPayloads.Count);
+        foreach (var payload in peerPayloads)
+        {
+            var dict = JsonSupport.Deserialize<Dictionary<string, object?>>(payload, new Dictionary<string, object?>());
+            if (dict.TryGetValue("overallScore", out var peerRaw)
+                && peerRaw is not null
+                && int.TryParse(peerRaw.ToString(), out var peerScore))
+            {
+                peerScores.Add(peerScore);
+            }
+        }
+
+        if (peerScores.Count < CohortPrivacyMinimum) return null;
+
+        // Percentile = share of peers at or below the learner's score (standard convention).
+        var atOrBelow = peerScores.Count(s => s <= learnerScore);
+        var rawPercentile = (int)Math.Round(atOrBelow * 100.0 / peerScores.Count);
+        // Band to the nearest 5 to further blunt re-identification risk.
+        var bandedPercentile = Math.Clamp((int)Math.Round(rawPercentile / 5.0) * 5, 5, 95);
+
+        string label = bandedPercentile switch
+        {
+            >= 90 => "Top 10% of recent mocks",
+            >= 75 => "Top 25% of recent mocks",
+            >= 50 => "Above the recent cohort median",
+            >= 25 => "Below the recent cohort median",
+            _ => "Focus on fundamentals to climb the cohort"
+        };
+
+        return new
+        {
+            percentile = bandedPercentile,
+            cohortSize = peerScores.Count,
+            windowDays = 90,
+            learnerScore,
+            label
+        };
+    }
+
 
     private static string BuildLaunchRoute(string attemptId, MockBundleSection section, string? sectionAttemptId)
     {

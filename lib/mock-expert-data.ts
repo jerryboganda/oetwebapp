@@ -197,7 +197,17 @@ export const MOCK_SPEAKING_REVIEW_DETAIL: SpeakingReviewDetail = {
     background: 'Mr. Thompson has a history of congestive heart failure, type 2 diabetes, and hypertension. He was discharged from hospital two weeks ago after an acute exacerbation.',
   },
   aiFlags: MOCK_AI_FLAGS,
-  aiSuggestedScores: { intelligibility: 5, fluency: 4, appropriateness: 5, grammar: 4, clinicalCommunication: 5 },
+  aiSuggestedScores: {
+    intelligibility: 5,
+    fluency: 4,
+    appropriateness: 5,
+    grammar: 4,
+    relationshipBuilding: 2,
+    patientPerspective: 2,
+    providingStructure: 2,
+    informationGathering: 2,
+    informationGiving: 2,
+  },
 };
 
 // ─── CALIBRATION CASES ────────────────────────────

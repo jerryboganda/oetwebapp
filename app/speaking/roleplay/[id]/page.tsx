@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  FileText, Edit3, Play, MessageCircle, User, ShieldCheck,
+  FileText, Edit3, Play, MessageCircle, User, ShieldCheck, AlertTriangle,
 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
@@ -112,6 +112,22 @@ export default function RoleCardPreview() {
               task={card.brief}
               background={card.background}
             />
+
+            {/* Computer-based Speaking paper rule notice (rulebook RULE_61/RULE_75 + RULE_62/RULE_76). */}
+            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                <div className="space-y-1.5 text-sm leading-relaxed">
+                  <p className="font-bold text-navy">Computer-based exam rules for this card</p>
+                  <p className="text-navy/80">
+                    The role-play card above <strong>cannot be annotated on screen</strong>. You are permitted <strong>one blank piece of paper and a pen</strong> to take notes during preparation and during the role play.
+                  </p>
+                  <p className="text-navy/80">
+                    At the end of the exam you <strong>must tear or cut the paper in front of the camera</strong> to confirm nothing leaves the test environment.
+                  </p>
+                </div>
+              </div>
+            </div>
 
             <div>
               <p className="text-xs font-bold text-muted uppercase tracking-widest mb-3">Tasks</p>

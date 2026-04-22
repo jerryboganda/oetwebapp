@@ -1,5 +1,7 @@
 ﻿import type { ReactNode } from 'react';
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { ApiError } from '@/lib/api';
 const navigation = vi.hoisted(() => ({
   pathname: '/expert',
   searchParams: new URLSearchParams(),
@@ -18,6 +20,7 @@ const api = vi.hoisted(() => ({
   fetchCalibrationCases: vi.fn(),
   fetchCalibrationNotes: vi.fn(),
   fetchCalibrationCaseDetail: vi.fn(),
+  saveCalibrationDraft: vi.fn(),
   submitCalibrationCase: vi.fn(),
   fetchExpertLearners: vi.fn(),
   fetchLearnerProfile: vi.fn(),
@@ -62,6 +65,7 @@ vi.mock('@/lib/api', () => {
     fetchCalibrationCases: api.fetchCalibrationCases,
     fetchCalibrationNotes: api.fetchCalibrationNotes,
     fetchCalibrationCaseDetail: api.fetchCalibrationCaseDetail,
+    saveCalibrationDraft: api.saveCalibrationDraft,
     submitCalibrationCase: api.submitCalibrationCase,
     fetchExpertLearners: api.fetchExpertLearners,
     fetchLearnerProfile: api.fetchLearnerProfile,
@@ -106,6 +110,7 @@ beforeAll(() => {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  Object.values(api).forEach((mock) => mock.mockReset());
   navigation.pathname = '/expert';
   navigation.searchParams = new URLSearchParams();
   navigation.params = {};
@@ -182,8 +187,21 @@ describe('Expert Non-Review Pages', () => {
         type: 'writing',
         benchmarkScore: 5,
         reviewerScore: 5,
+        alignmentScore: 96.3,
         status: 'completed',
         createdAt: '2026-04-01T08:00:00.000Z',
+      },
+      {
+        id: 'case-2',
+        title: 'Speaking benchmark draft',
+        profession: 'medicine',
+        subTest: 'speaking',
+        type: 'speaking',
+        benchmarkScore: 5,
+        reviewerScore: undefined,
+        alignmentScore: null,
+        status: 'draft',
+        createdAt: '2026-04-02T08:00:00.000Z',
       },
     ]);
     api.fetchCalibrationNotes.mockResolvedValue([
@@ -201,6 +219,9 @@ describe('Expert Non-Review Pages', () => {
     expect(await screen.findByRole('heading', { name: /^calibration$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /open benchmark workspaces/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /calibration activity/i })).toBeInTheDocument();
+    expect(screen.getAllByText(/aligned \(96.3%\)/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Draft').length).toBeGreaterThan(0);
+    expect(screen.getAllByRole('button', { name: /resume draft/i }).length).toBeGreaterThan(0);
     expect(screen.getByText(/benchmark notes recorded/i)).toBeInTheDocument();
   });
 
@@ -212,13 +233,13 @@ describe('Expert Non-Review Pages', () => {
       profession: 'medicine',
       subTest: 'writing',
       type: 'writing',
-      benchmarkScore: 5,
+      benchmarkScore: 3,
       status: 'pending',
       createdAt: '2026-04-01T08:00:00.000Z',
       benchmarkLabel: 'Benchmark A',
       difficulty: 'Moderate',
       artifacts: [{ kind: 'prompt', title: 'Prompt', content: 'Review the attached discharge summary.' }],
-      benchmarkRubric: [{ criterion: 'purpose', benchmarkScore: 5, rationale: 'Purpose is fully achieved.' }],
+      benchmarkRubric: [{ criterion: 'purpose', benchmarkScore: 3, rationale: 'Purpose is fully achieved.' }],
       referenceNotes: ['Anchor to clinical purpose first.'],
       existingSubmission: null,
     });
@@ -229,6 +250,317 @@ describe('Expert Non-Review Pages', () => {
     expect(screen.getByRole('button', { name: /back to calibration/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /benchmark evidence/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /reference scoring/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /save draft/i })).toBeInTheDocument();
+  });
+
+  it('prefills draft calibration detail, keeps it editable, and saves partial draft data', async () => {
+    const user = userEvent.setup();
+    navigation.params = { caseId: 'case-1' };
+    const draftDetail = {
+      id: 'case-1',
+      title: 'Writing benchmark draft',
+      profession: 'medicine',
+      subTest: 'writing',
+      type: 'writing',
+      benchmarkScore: 3,
+      status: 'draft',
+      createdAt: '2026-04-01T08:00:00.000Z',
+      benchmarkLabel: 'Benchmark A',
+      difficulty: 'Moderate',
+      artifacts: [{ kind: 'prompt', title: 'Prompt', content: 'Review the attached discharge summary.' }],
+      benchmarkRubric: [{ criterion: 'purpose', benchmarkScore: 3, rationale: 'Purpose is fully achieved.' }],
+      referenceNotes: ['Anchor to clinical purpose first.'],
+      existingSubmission: {
+        reviewerId: 'expert-1',
+        reviewerName: 'Expert One',
+        reviewerScore: 2,
+        alignmentScore: 0,
+        disagreementSummary: '',
+        notes: 'Borderline purpose.',
+        submittedScores: { purpose: 2 },
+        submittedAt: '2026-04-01T09:00:00.000Z',
+        isDraft: true,
+        updatedAt: '2026-04-01T09:30:00.000Z',
+      },
+    };
+    const refreshedDraftDetail = {
+      ...draftDetail,
+      existingSubmission: {
+        ...draftDetail.existingSubmission,
+        notes: 'Updated after save.',
+        updatedAt: '2026-04-01T10:00:00.000Z',
+      },
+    };
+
+    api.fetchCalibrationCaseDetail.mockResolvedValueOnce(draftDetail).mockResolvedValueOnce(refreshedDraftDetail);
+    api.saveCalibrationDraft.mockResolvedValue({
+      success: true,
+      caseId: 'case-1',
+      isDraft: true,
+      scores: { purpose: 2 },
+      notes: 'Updated after save.',
+      updatedAt: '2026-04-01T09:30:00.000Z',
+    });
+
+    renderPage(<CalibrationCaseWorkspacePage />);
+
+    const scoreSelect = await screen.findByLabelText('Calibration score for purpose');
+    expect(scoreSelect).toHaveValue('2');
+    expect(scoreSelect).not.toBeDisabled();
+    expect(screen.getByLabelText(/calibration notes/i)).toHaveValue('Borderline purpose.');
+    expect(screen.getAllByText(/draft saved/i).length).toBeGreaterThan(0);
+    expect(screen.getByText(/draft \(editable\)/i)).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: /save draft/i }));
+    expect(api.fetchCalibrationCaseDetail).toHaveBeenCalledTimes(2);
+    expect(api.fetchCalibrationCaseDetail).toHaveBeenNthCalledWith(1, 'case-1');
+    expect(api.fetchCalibrationCaseDetail).toHaveBeenNthCalledWith(2, 'case-1');
+    expect(api.saveCalibrationDraft).toHaveBeenCalledWith('case-1', {
+      scores: { purpose: 2 },
+      notes: 'Borderline purpose.',
+    });
+    expect(await screen.findByDisplayValue('Updated after save.')).toBeInTheDocument();
+  });
+
+  it('submits from a draft, reloads the final submission, and locks the workspace', async () => {
+    const user = userEvent.setup();
+    navigation.params = { caseId: 'case-1' };
+    const draftDetail = {
+      id: 'case-1',
+      title: 'Writing benchmark draft',
+      profession: 'medicine',
+      subTest: 'writing',
+      type: 'writing',
+      benchmarkScore: 3,
+      status: 'draft',
+      createdAt: '2026-04-01T08:00:00.000Z',
+      benchmarkLabel: 'Benchmark A',
+      difficulty: 'Moderate',
+      artifacts: [{ kind: 'prompt', title: 'Prompt', content: 'Review the attached discharge summary.' }],
+      benchmarkRubric: [{ criterion: 'purpose', benchmarkScore: 3, rationale: 'Purpose is fully achieved.' }],
+      referenceNotes: ['Anchor to clinical purpose first.'],
+      existingSubmission: {
+        reviewerId: 'expert-1',
+        reviewerName: 'Expert One',
+        reviewerScore: 2,
+        alignmentScore: 0,
+        disagreementSummary: '',
+        notes: 'Borderline purpose.',
+        submittedScores: { purpose: 2 },
+        submittedAt: '2026-04-01T09:00:00.000Z',
+        isDraft: true,
+        updatedAt: '2026-04-01T09:30:00.000Z',
+      },
+    };
+
+    const finalDetail = {
+      ...draftDetail,
+      status: 'completed',
+      existingSubmission: {
+        ...draftDetail.existingSubmission,
+        isDraft: false,
+        notes: 'Final aligned submission.',
+        reviewerScore: 3,
+        alignmentScore: 96.3,
+        disagreementSummary: 'Aligned with benchmark.',
+      },
+    };
+
+    api.fetchCalibrationCaseDetail.mockResolvedValueOnce(draftDetail).mockResolvedValueOnce(finalDetail);
+    api.submitCalibrationCase.mockResolvedValue({ success: true, caseId: 'case-1', alignment: 96.3 });
+
+    renderPage(<CalibrationCaseWorkspacePage />);
+
+    await user.click(await screen.findByRole('button', { name: /submit calibration/i }));
+
+    expect(api.submitCalibrationCase).toHaveBeenCalledWith('case-1', {
+      scores: { purpose: 2 },
+      notes: 'Borderline purpose.',
+    });
+    expect(api.fetchCalibrationCaseDetail).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText(/submitted scores and notes from your completed benchmark attempt/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /save draft/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /submit calibration/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/96.3/i)).toBeInTheDocument();
+  });
+
+  it('surfaces already-submitted conflicts and switches to locked read-only state', async () => {
+    const user = userEvent.setup();
+    navigation.params = { caseId: 'case-1' };
+    const draftDetail = {
+      id: 'case-1',
+      title: 'Writing benchmark draft',
+      profession: 'medicine',
+      subTest: 'writing',
+      type: 'writing',
+      benchmarkScore: 3,
+      status: 'draft',
+      createdAt: '2026-04-01T08:00:00.000Z',
+      benchmarkLabel: 'Benchmark A',
+      difficulty: 'Moderate',
+      artifacts: [{ kind: 'prompt', title: 'Prompt', content: 'Review the attached discharge summary.' }],
+      benchmarkRubric: [{ criterion: 'purpose', benchmarkScore: 3, rationale: 'Purpose is fully achieved.' }],
+      referenceNotes: ['Anchor to clinical purpose first.'],
+      existingSubmission: {
+        reviewerId: 'expert-1',
+        reviewerName: 'Expert One',
+        reviewerScore: 2,
+        alignmentScore: 0,
+        disagreementSummary: '',
+        notes: 'Borderline purpose.',
+        submittedScores: { purpose: 2 },
+        submittedAt: '2026-04-01T09:00:00.000Z',
+        isDraft: true,
+        updatedAt: '2026-04-01T09:30:00.000Z',
+      },
+    };
+
+    const completedDetail = {
+      ...draftDetail,
+      status: 'completed',
+      existingSubmission: {
+        ...draftDetail.existingSubmission,
+        reviewerScore: 3,
+        alignmentScore: 96.3,
+        isDraft: false,
+        disagreementSummary: 'Aligned with benchmark.',
+        notes: 'Final aligned submission.',
+      },
+    };
+
+    api.fetchCalibrationCaseDetail.mockResolvedValueOnce(draftDetail).mockResolvedValueOnce(completedDetail);
+    api.submitCalibrationCase.mockRejectedValue(
+      new ApiError(
+        409,
+        'calibration_already_submitted',
+        'This calibration case has already been submitted.',
+        false,
+      ),
+    );
+
+    renderPage(<CalibrationCaseWorkspacePage />);
+
+    await user.click(await screen.findByRole('button', { name: /submit calibration/i }));
+
+    expect(api.submitCalibrationCase).toHaveBeenCalledWith('case-1', {
+      scores: { purpose: 2 },
+      notes: 'Borderline purpose.',
+    });
+    expect(api.fetchCalibrationCaseDetail).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText(/calibration already submitted/i)).toBeInTheDocument();
+    expect(await screen.findByText(/already been submitted/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /save draft/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /submit calibration/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/submitted scores and notes from your completed benchmark attempt/i)).toBeInTheDocument();
+  });
+
+  it('locks the workspace when a draft save hits an already-submitted conflict', async () => {
+    const user = userEvent.setup();
+    navigation.params = { caseId: 'case-1' };
+    const draftDetail = {
+      id: 'case-1',
+      title: 'Writing benchmark draft',
+      profession: 'medicine',
+      subTest: 'writing',
+      type: 'writing',
+      benchmarkScore: 3,
+      status: 'draft',
+      createdAt: '2026-04-01T08:00:00.000Z',
+      benchmarkLabel: 'Benchmark A',
+      difficulty: 'Moderate',
+      artifacts: [{ kind: 'prompt', title: 'Prompt', content: 'Review the attached discharge summary.' }],
+      benchmarkRubric: [{ criterion: 'purpose', benchmarkScore: 3, rationale: 'Purpose is fully achieved.' }],
+      referenceNotes: ['Anchor to clinical purpose first.'],
+      existingSubmission: {
+        reviewerId: 'expert-1',
+        reviewerName: 'Expert One',
+        reviewerScore: 2,
+        alignmentScore: 0,
+        disagreementSummary: '',
+        notes: 'Borderline purpose.',
+        submittedScores: { purpose: 2 },
+        submittedAt: '2026-04-01T09:00:00.000Z',
+        isDraft: true,
+        updatedAt: '2026-04-01T09:30:00.000Z',
+      },
+    };
+
+    const completedDetail = {
+      ...draftDetail,
+      status: 'completed',
+      existingSubmission: {
+        ...draftDetail.existingSubmission,
+        reviewerScore: 3,
+        alignmentScore: 96.3,
+        isDraft: false,
+        disagreementSummary: 'Aligned with benchmark.',
+        notes: 'Final aligned submission.',
+      },
+    };
+
+    api.fetchCalibrationCaseDetail.mockResolvedValueOnce(draftDetail).mockResolvedValueOnce(completedDetail);
+    api.saveCalibrationDraft.mockRejectedValue(
+      new ApiError(
+        409,
+        'calibration_already_submitted',
+        'This calibration case has already been submitted.',
+        false,
+      ),
+    );
+
+    renderPage(<CalibrationCaseWorkspacePage />);
+
+    await user.click(await screen.findByRole('button', { name: /save draft/i }));
+
+    expect(api.saveCalibrationDraft).toHaveBeenCalledWith('case-1', {
+      scores: { purpose: 2 },
+      notes: 'Borderline purpose.',
+    });
+    expect(api.fetchCalibrationCaseDetail).toHaveBeenCalledTimes(2);
+    expect(await screen.findByText(/already been submitted/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /save draft/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /submit calibration/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/submitted scores and notes from your completed benchmark attempt/i)).toBeInTheDocument();
+  });
+
+  it('keeps completed calibration detail read-only', async () => {
+    navigation.params = { caseId: 'case-1' };
+    api.fetchCalibrationCaseDetail.mockResolvedValue({
+      id: 'case-1',
+      title: 'Writing benchmark completed',
+      profession: 'medicine',
+      subTest: 'writing',
+      type: 'writing',
+      benchmarkScore: 3,
+      status: 'completed',
+      createdAt: '2026-04-01T08:00:00.000Z',
+      benchmarkLabel: 'Benchmark A',
+      difficulty: 'Moderate',
+      artifacts: [{ kind: 'prompt', title: 'Prompt', content: 'Review the attached discharge summary.' }],
+      benchmarkRubric: [{ criterion: 'purpose', benchmarkScore: 3, rationale: 'Purpose is fully achieved.' }],
+      referenceNotes: ['Anchor to clinical purpose first.'],
+      existingSubmission: {
+        reviewerId: 'expert-1',
+        reviewerName: 'Expert One',
+        reviewerScore: 3,
+        alignmentScore: 100,
+        disagreementSummary: 'Aligned with benchmark.',
+        notes: 'Final notes.',
+        submittedScores: { purpose: 3 },
+        submittedAt: '2026-04-01T09:00:00.000Z',
+        isDraft: false,
+        updatedAt: '2026-04-01T09:00:00.000Z',
+      },
+    });
+
+    renderPage(<CalibrationCaseWorkspacePage />);
+
+    const scoreSelect = await screen.findByLabelText('Calibration score for purpose');
+    expect(scoreSelect).toBeDisabled();
+    expect(screen.getByLabelText(/calibration notes/i)).toBeDisabled();
+    expect(screen.queryByRole('button', { name: /save draft/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /submit calibration/i })).not.toBeInTheDocument();
+    expect(screen.getByText(/calibration already submitted/i)).toBeInTheDocument();
   });
 
   it('renders the learners directory inside the learner-style route surface', async () => {

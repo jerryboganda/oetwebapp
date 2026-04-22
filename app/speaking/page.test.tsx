@@ -1,9 +1,10 @@
 import { render, screen } from '@testing-library/react';
 import type { Submission } from '@/lib/mock-data';
 
-const { mockFetchSpeakingHome, mockFetchSubmissions, mockTrack } = vi.hoisted(() => ({
+const { mockFetchSpeakingHome, mockFetchSubmissions, mockFetchMockReports, mockTrack } = vi.hoisted(() => ({
   mockFetchSpeakingHome: vi.fn(),
   mockFetchSubmissions: vi.fn(),
+  mockFetchMockReports: vi.fn(),
   mockTrack: vi.fn(),
 }));
 
@@ -31,6 +32,7 @@ vi.mock('@/lib/analytics', () => ({
 vi.mock('@/lib/api', () => ({
   fetchSpeakingHome: mockFetchSpeakingHome,
   fetchSubmissions: mockFetchSubmissions,
+  fetchMockReports: mockFetchMockReports,
 }));
 
 import SpeakingPage from './page';
@@ -120,6 +122,7 @@ describe('Speaking page', () => {
         actions: {},
       },
     ] satisfies Submission[]);
+    mockFetchMockReports.mockResolvedValue([]);
   });
 
   it('shows dashboard-style speaking focus and readable speaking evidence dates', async () => {

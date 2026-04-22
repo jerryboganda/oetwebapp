@@ -106,6 +106,72 @@ export const OET_SCALED_PASS_C_PLUS = 300 as const;
 export const OET_SCALED_MIN = 0 as const;
 export const OET_SCALED_MAX = 500 as const;
 
+/**
+ * Canonical OET Writing criterion codes (match `rulebooks/writing/common/assessment-criteria.json`).
+ *
+ * Source: Dr. Ahmed Hesham corrections + OET rulebook R16.1 / R16.2.
+ * British spelling is intentional (OET is a British English exam administered by CBLA).
+ */
+export const WRITING_CRITERION_CODES = [
+  'purpose',
+  'content',
+  'conciseness_clarity',
+  'genre_style',
+  'organisation_layout',
+  'language',
+] as const;
+export type WritingCriterionCode = (typeof WRITING_CRITERION_CODES)[number];
+
+/**
+ * Per-criterion max raw scores. Purpose is the ONLY writing criterion
+ * on the 0–3 scale (rulebook R16.2); all others are 0–7 (rulebook R16.1).
+ *
+ * Total raw max = 3 + 7 × 5 = 38.
+ */
+export const WRITING_CRITERION_MAX_SCORES: Readonly<Record<WritingCriterionCode, number>> = {
+  purpose: 3,
+  content: 7,
+  conciseness_clarity: 7,
+  genre_style: 7,
+  organisation_layout: 7,
+  language: 7,
+} as const;
+
+/** Maximum total raw Writing score across all six criteria. */
+export const WRITING_RAW_MAX = 38 as const;
+
+/**
+ * Sum a map of Writing criterion scores into a total raw score (out of 38).
+ * Each criterion is clamped to its max per `WRITING_CRITERION_MAX_SCORES` —
+ * a model or human grader accidentally treating Purpose as 0–7 cannot
+ * over-inflate the final score.
+ *
+ * Missing criteria contribute 0. Unknown keys are ignored.
+ */
+export function writingRawTotalFromCriterionScores(
+  scores: Partial<Record<WritingCriterionCode, number>> | Record<string, number | undefined>,
+): number {
+  let total = 0;
+  for (const code of WRITING_CRITERION_CODES) {
+    const raw = Number((scores as Record<string, number | undefined>)[code] ?? 0);
+    if (!Number.isFinite(raw) || raw <= 0) continue;
+    total += Math.min(raw, WRITING_CRITERION_MAX_SCORES[code]);
+  }
+  return total;
+}
+
+/**
+ * Convert a Writing raw score (0–38) to the OET scaled score (0–500).
+ * Anchored linearly so raw `WRITING_RAW_MAX` (38) ≡ `OET_SCALED_MAX` (500).
+ *
+ * Purpose is enforced at 0–3 before this function via `writingRawTotalFromCriterionScores`.
+ */
+export function writingRawToScaled(raw: number): number {
+  const clamped = Math.max(0, Math.min(WRITING_RAW_MAX, Math.round(raw)));
+  return Math.round((clamped * OET_SCALED_MAX) / WRITING_RAW_MAX);
+}
+
+
 /** Countries whose Writing pass mark is Grade B (350/500). */
 export const WRITING_GRADE_B_COUNTRIES: readonly WritingGradeBCountry[] = [
   'GB',

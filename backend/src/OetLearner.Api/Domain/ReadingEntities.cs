@@ -85,8 +85,11 @@ public class ReadingPart
 }
 
 /// <summary>
-/// One passage within a part. Part A = 4 short texts (single topic),
-/// Part B = 6 short workplace texts, Part C = 2 long articles.
+/// One passage within a part. Part A = 4 medical texts on a single topic
+/// (variable length — no cap, Text C may include large tables/graphs);
+/// Part B = 6 short extracts from different healthcare contexts
+/// (policies, notices, guidelines, clinical communications);
+/// Part C = 2 long articles.
 /// </summary>
 [Index(nameof(ReadingPartId), nameof(DisplayOrder))]
 public class ReadingText
@@ -295,7 +298,13 @@ public class ReadingPolicy
         "[\"MatchingTextReference\",\"ShortAnswer\",\"SentenceCompletion\",\"MultipleChoice3\",\"MultipleChoice4\"]";
     [MaxLength(32)]
     public string ShortAnswerNormalisation { get; set; } = "trim_collapse_case_insensitive";
-    public bool ShortAnswerAcceptSynonyms { get; set; } = true;
+    /// <summary>
+    /// NON-STANDARD MODE. Default <c>false</c> to stay OET-faithful:
+    /// real OET Reading Part A answers are copied word-for-word from the
+    /// text. Enabling synonym acceptance fundamentally changes the
+    /// assessment and must be explicitly opted in by the admin.
+    /// </summary>
+    public bool ShortAnswerAcceptSynonyms { get; set; } = false;
     public bool MatchingAllowPartialCredit { get; set; } = true;
     [MaxLength(32)]
     public string SentenceCompletionStrictness { get; set; } = "exact_from_bank";

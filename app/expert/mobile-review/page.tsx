@@ -44,11 +44,17 @@ const WRITING_CRITERIA: Omit<CriterionScore, 'score'>[] = [
 ];
 
 const SPEAKING_CRITERIA: Omit<CriterionScore, 'score'>[] = [
+  // Linguistic (0–6)
   { code: 'intelligibility', label: 'Intelligibility', maxScore: 6 },
   { code: 'fluency', label: 'Fluency', maxScore: 6 },
-  { code: 'appropriateness', label: 'Appropriateness', maxScore: 6 },
-  { code: 'grammar', label: 'Grammar & Expression', maxScore: 6 },
-  { code: 'clinical', label: 'Clinical Communication', maxScore: 6 },
+  { code: 'appropriateness', label: 'Appropriateness of Language', maxScore: 6 },
+  { code: 'grammar', label: 'Resources of Grammar & Expression', maxScore: 6 },
+  // Clinical Communication (0–3)
+  { code: 'relationshipBuilding', label: 'Relationship Building', maxScore: 3 },
+  { code: 'patientPerspective', label: "Patient's Perspective", maxScore: 3 },
+  { code: 'providingStructure', label: 'Providing Structure', maxScore: 3 },
+  { code: 'informationGathering', label: 'Information Gathering', maxScore: 3 },
+  { code: 'informationGiving', label: 'Information Giving', maxScore: 3 },
 ];
 
 /* ── step enum ───────────────────────────────── */

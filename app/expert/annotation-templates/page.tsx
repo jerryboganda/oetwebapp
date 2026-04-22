@@ -23,7 +23,8 @@ type ModalMode = 'create' | 'edit';
 const SUBTESTS = ['writing', 'speaking', 'reading', 'listening'];
 const CRITERIA: Record<string, string[]> = {
   writing: ['overall_task_fulfilment', 'appropriateness_of_language', 'comprehension_of_stimulus', 'linguistic_features_(grammar_and_cohesion)', 'linguistic_features_(vocabulary)', 'presentation_features'],
-  speaking: ['intelligibility', 'fluency', 'appropriateness_of_language', 'resources_of_grammar_and_expression', 'relationship_building'],
+  // OET Speaking — 9 criteria (4 linguistic + 5 clinical-communication).
+  speaking: ['intelligibility', 'fluency', 'appropriateness', 'grammar', 'relationshipBuilding', 'patientPerspective', 'providingStructure', 'informationGathering', 'informationGiving'],
 };
 
 export default function AnnotationTemplatesPage() {

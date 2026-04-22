@@ -455,12 +455,15 @@ public sealed class SpeakingEvaluationPipeline(
     private static List<object> BuildCriterionScores(IReadOnlyList<UnifiedFinding> findings, int scaledEstimate)
     {
         var baseline = scaledEstimate >= OetScoring.ScaledPassGradeB ? 4 : 3;
-        var criteria = new[] { "intelligibility", "fluency", "appropriateness", "grammar_expression" };
-        return criteria.Select(criterion =>
+        // OET Speaking 9 criteria (4 linguistic 0–6 + 5 clinical 0–3).
+        var linguistic = new[] { "intelligibility", "fluency", "appropriateness", "grammar" };
+        var clinical = new[] { "relationshipBuilding", "patientPerspective", "providingStructure", "informationGathering", "informationGiving" };
+        var result = new List<object>();
+        foreach (var criterion in linguistic)
         {
             var related = findings.Count(f => CriterionFromFinding(f) == criterion);
             var score = Math.Clamp(baseline - related, 2, 5);
-            return (object)new
+            result.Add(new
             {
                 criterionCode = criterion,
                 scoreRange = $"{score}-{Math.Min(score + 1, 6)}/6",
@@ -468,8 +471,24 @@ public sealed class SpeakingEvaluationPipeline(
                 explanation = related > 0
                     ? "Rulebook findings are linked to this criterion in the transcript markers."
                     : "No direct rulebook marker was linked to this criterion in the current transcript evidence."
-            };
-        }).ToList();
+            });
+        }
+        var clinicalBaseline = scaledEstimate >= OetScoring.ScaledPassGradeB ? 2 : 1;
+        foreach (var criterion in clinical)
+        {
+            var related = findings.Count(f => CriterionFromFinding(f) == criterion);
+            var score = Math.Clamp(clinicalBaseline - (related > 1 ? 1 : 0), 0, 3);
+            result.Add(new
+            {
+                criterionCode = criterion,
+                scoreRange = $"{score}/3",
+                confidenceBand = related > 0 ? "medium" : "low",
+                explanation = related > 0
+                    ? "Rulebook findings are linked to this clinical-communication criterion."
+                    : "No direct rulebook marker was linked to this clinical-communication criterion in the current transcript."
+            });
+        }
+        return result;
     }
 
     private static List<object> BuildFeedbackItems(
@@ -549,11 +568,23 @@ public sealed class SpeakingEvaluationPipeline(
     private static string CriterionFromFinding(UnifiedFinding finding)
     {
         var text = $"{finding.RuleId} {finding.Message}".ToLowerInvariant();
+        // Clinical Communication (5 criteria, 0–3) — route first so clinical cues win over generic linguistic keywords.
+        if (text.Contains("empathy") || text.Contains("rapport") || text.Contains("greeting") || text.Contains("introduc") || text.Contains("judgemental") || text.Contains("respectful") || text.Contains("attitude"))
+            return "relationshipBuilding";
+        if (text.Contains("patient's perspective") || text.Contains("patient perspective") || text.Contains("concerns") || text.Contains("expectations") || text.Contains("cue") || text.Contains("ideas"))
+            return "patientPerspective";
+        if (text.Contains("signpost") || text.Contains("structure") || text.Contains("sequence") || text.Contains("organising") || text.Contains("organizing") || text.Contains("recap") || text.Contains("summariz") || text.Contains("summaris"))
+            return "providingStructure";
+        if (text.Contains("open question") || text.Contains("closed question") || text.Contains("compound question") || text.Contains("leading question") || text.Contains("clarifying") || text.Contains("information gather"))
+            return "informationGathering";
+        if (text.Contains("check") && text.Contains("understanding") || text.Contains("information giving") || text.Contains("pause") || text.Contains("silence") || text.Contains("warning shot") || text.Contains("feedback") || text.Contains("explain"))
+            return "informationGiving";
+        // Linguistic (4 criteria, 0–6)
         if (text.Contains("jargon") || text.Contains("plain") || text.Contains("grammar") || text.Contains("expression"))
-            return "grammar_expression";
-        if (text.Contains("empathy") || text.Contains("sensitive") || text.Contains("patient") || text.Contains("tone"))
+            return "grammar";
+        if (text.Contains("sensitive") || text.Contains("tone") || text.Contains("register") || text.Contains("appropriate"))
             return "appropriateness";
-        if (text.Contains("monologue") || text.Contains("pause") || text.Contains("silence") || text.Contains("recap"))
+        if (text.Contains("monologue") || text.Contains("hesitation") || text.Contains("fluency") || text.Contains("filler"))
             return "fluency";
         return "intelligibility";
     }

@@ -50,7 +50,7 @@ const partGuides: LearnerSurfaceCardModel[] = [
     eyebrow: 'Part A',
     eyebrowIcon: Clock,
     title: 'Lock exact details first',
-    description: 'Use the opening window for rapid extraction across the short texts before moving into the longer timer block.',
+    description: 'Use the opening window for rapid extraction across the four medical texts (varied length — Text C may include large tables) before moving into the longer timer block.',
     metaItems: [
       { icon: Target, label: '20 items' },
       { icon: Clock, label: 'Strict timer' },
@@ -62,8 +62,8 @@ const partGuides: LearnerSurfaceCardModel[] = [
     accent: 'blue',
     eyebrow: 'Part B',
     eyebrowIcon: FileText,
-    title: 'Read workplace purpose',
-    description: 'Track the intent of short workplace notices and choose the option supported by the exact wording.',
+    title: 'Read the purpose of each extract',
+    description: 'Short extracts from different healthcare contexts — policies, notices, guidelines, clinical communications. Choose the option supported by the exact wording.',
     metaItems: [
       { icon: Target, label: '6 items' },
       { icon: ListChecks, label: '3 options' },
@@ -124,7 +124,7 @@ export default function ReadingHome() {
     };
   }, [authLoading, isAuthenticated]);
 
-  const activeAttempts = home?.activeAttempts ?? [];
+  const activeAttempts = useMemo(() => home?.activeAttempts ?? [], [home]);
   const latestResult = home?.recentResults[0] ?? null;
   const papers = home?.papers ?? [];
   const recentResults = home?.recentResults ?? [];

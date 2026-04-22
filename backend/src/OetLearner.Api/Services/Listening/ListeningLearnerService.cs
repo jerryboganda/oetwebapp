@@ -99,9 +99,22 @@ public sealed class ListeningLearnerService(LearnerDbContext db)
         var latestEvaluation = latestCompletedAttempt is null
             ? null
             : evaluations.FirstOrDefault(e => e.AttemptId == latestCompletedAttempt.Id);
-        IReadOnlyList<ListeningErrorClusterDto> latestClusters = latestCompletedAttempt is null
-            ? new List<ListeningErrorClusterDto>()
-            : BuildReview(latestCompletedAttempt, await ResolveSourceAsync(latestCompletedAttempt.ContentId, ct)).ErrorClusters;
+
+        // Hardening: a completed attempt may reference a paper that was later unpublished or whose
+        // ExtractedTextJson is malformed. Never let that bubble a 500 through the Listening home endpoint.
+        IReadOnlyList<ListeningErrorClusterDto> latestClusters = new List<ListeningErrorClusterDto>();
+        if (latestCompletedAttempt is not null)
+        {
+            try
+            {
+                var source = await ResolveSourceAsync(latestCompletedAttempt.ContentId, ct);
+                latestClusters = BuildReview(latestCompletedAttempt, source).ErrorClusters;
+            }
+            catch (Exception)
+            {
+                latestClusters = new List<ListeningErrorClusterDto>();
+            }
+        }
 
         var drillGroups = latestClusters.Count > 0
             ? latestClusters.Select(c => BuildDrill(c.ErrorType, latestCompletedAttempt?.ContentId, latestCompletedAttempt?.Id)).ToList()
@@ -111,8 +124,26 @@ public sealed class ListeningLearnerService(LearnerDbContext db)
                 BuildDrill("numbers_and_frequencies", legacyTasks.FirstOrDefault()?.Id, latestCompletedAttempt?.Id)
             };
 
-        var paperDtos = papers.Select(p => PaperHomeDto(p, attempts.FirstOrDefault(a => a.ContentId == p.Id))).ToList();
-        var featuredTasks = legacyTasks.Select(LegacyTaskHomeDto).ToList();
+        // Hardening: individual paper DTO extraction reads free-form ExtractedTextJson; one malformed
+        // paper must not take the whole endpoint down.
+        var paperDtos = new List<object>();
+        foreach (var paper in papers)
+        {
+            try
+            {
+                paperDtos.Add(PaperHomeDto(paper, attempts.FirstOrDefault(a => a.ContentId == paper.Id)));
+            }
+            catch (Exception)
+            {
+                // Skip malformed paper rather than fail the whole home surface.
+            }
+        }
+
+        var featuredTasks = new List<object>();
+        foreach (var task in legacyTasks)
+        {
+            try { featuredTasks.Add(LegacyTaskHomeDto(task)); } catch { }
+        }
 
         return new
         {

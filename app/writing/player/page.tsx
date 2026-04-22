@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react';
 import type { Transition } from 'motion/react';
-import { ChevronLeft, Maximize, Minimize } from 'lucide-react';
+import { ChevronLeft, Maximize, Minimize, BookOpen } from 'lucide-react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
@@ -20,6 +20,17 @@ import { useIsMobile } from '@/hooks/use-mobile';
 import { deriveWritingCaseNotesMarkers, inferWritingLetterType, lintWritingLetter } from '@/lib/rulebook';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed';
+
+/**
+ * Official OET Writing exam phases. Source: Dr. Ahmed Hesham corrections.
+ *
+ * Reading window is 5 min; writing window is 40 min. During the reading window
+ * the editor MUST be read-only AND the case notes MUST NOT allow highlighting,
+ * annotation, or copying. After 5 minutes both unlock for the full 40-minute
+ * writing period. Applies to ALL OET professions (Medicine, Nursing, etc.).
+ */
+const READING_WINDOW_SECONDS = 5 * 60;
+const WRITING_WINDOW_SECONDS = 40 * 60;
 
 export default function WritingPlayer() {
   const searchParams = useSearchParams();
@@ -42,6 +53,15 @@ export default function WritingPlayer() {
   const [submitting, setSubmitting] = useState(false);
   const [timerRunning, setTimerRunning] = useState(true);
   const [mobileView, setMobileView] = useState<'notes' | 'editor'>('notes');
+  /**
+   * OET Writing phase enforcement. The exam is split into a 5-minute reading
+   * window (editor + highlighting locked) followed by a 40-minute writing
+   * window. Once the reading window ends it cannot be re-entered.
+   *
+   * Source: Dr. Ahmed Hesham corrections (applies to ALL OET professions).
+   */
+  const [phase, setPhase] = useState<'reading' | 'writing'>('reading');
+  const isReadingPhase = phase === 'reading';
   const saveTimerRef = useRef<NodeJS.Timeout | undefined>(undefined);
   const hasUnsavedChanges = useRef(false);
   const latestContentRef = useRef('');
@@ -185,6 +205,30 @@ export default function WritingPlayer() {
     triggerAutoSave();
   }, [triggerAutoSave]);
 
+  /**
+   * Transition the player from the 5-minute reading phase into the 40-minute
+   * writing phase. Called when the reading-window countdown reaches zero.
+   * Idempotent so rapid duplicate fires from the Timer cannot reset progress.
+   */
+  const handleReadingWindowComplete = useCallback(() => {
+    setPhase(prev => {
+      if (prev !== 'reading') return prev;
+      analytics.track('writing_reading_window_ended', { taskId });
+      return 'writing';
+    });
+    // When the reading window ends we auto-surface the editor on mobile so
+    // the learner immediately sees where to start writing.
+    setMobileView(prev => (prev === 'notes' ? 'editor' : prev));
+  }, [taskId]);
+
+  const handleWritingWindowComplete = useCallback(() => {
+    // Writing window expired — auto-submit so the learner does not lose work.
+    if (!submitting && !isSubmittingRef.current) {
+      void handleSubmit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [submitting]);
+
   if (loading || !task) {
     return (
       <div className="flex min-h-[var(--app-viewport-height,100dvh)] flex-col overflow-hidden bg-background-light">
@@ -232,7 +276,15 @@ export default function WritingPlayer() {
                 </div>
 
                 <div className="flex items-center gap-2 self-end sm:gap-3 sm:self-auto sm:justify-end">
-                  <Timer mode="countdown" initialSeconds={45 * 60} running={timerRunning} size={isMobile ? 'sm' : 'md'} showWarning />
+                  <Timer
+                    key={`writing-timer-${phase}`}
+                    mode="countdown"
+                    initialSeconds={isReadingPhase ? READING_WINDOW_SECONDS : WRITING_WINDOW_SECONDS}
+                    running={timerRunning}
+                    size={isMobile ? 'sm' : 'md'}
+                    showWarning={!isReadingPhase}
+                    onComplete={isReadingPhase ? handleReadingWindowComplete : handleWritingWindowComplete}
+                  />
                   <button
                     onClick={() => setIsDistractionFree(true)}
                     className="pressable hidden touch-target rounded-2xl p-2 text-gray-500 hover:bg-gray-100 hover:text-navy lg:inline-flex"
@@ -250,6 +302,31 @@ export default function WritingPlayer() {
           )}
         </AnimatePresence>
 
+        {/* Reading-window banner: visible for the full 5 minutes, announces that
+            writing + highlighting are locked. Disappears once phase flips to 'writing'. */}
+        <AnimatePresence initial={false}>
+          {isReadingPhase && !isDistractionFree && (
+            <motion.div
+              key="writing-reading-banner"
+              initial={{ y: -8, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -8, opacity: 0 }}
+              transition={panelTransition}
+              role="status"
+              aria-live="polite"
+              className="flex items-start gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900"
+            >
+              <BookOpen aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
+              <div className="flex-1">
+                <p className="font-semibold">Reading window &mdash; 5 minutes</p>
+                <p className="text-xs text-amber-800/90">
+                  Read the case notes carefully. Typing, highlighting, copying, and scratchpad edits are locked until the reading window ends.
+                </p>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Distraction Free Floating Toolbar */}
         <AnimatePresence initial={false}>
           {isDistractionFree && (
@@ -261,7 +338,15 @@ export default function WritingPlayer() {
               transition={panelTransition}
               className="absolute left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-4 rounded-full border border-gray-200 bg-white px-4 py-2 shadow-lg"
             >
-              <Timer mode="countdown" initialSeconds={45 * 60} running={timerRunning} size="sm" showWarning />
+              <Timer
+                key={`writing-timer-df-${phase}`}
+                mode="countdown"
+                initialSeconds={isReadingPhase ? READING_WINDOW_SECONDS : WRITING_WINDOW_SECONDS}
+                running={timerRunning}
+                size="sm"
+                showWarning={!isReadingPhase}
+                onComplete={isReadingPhase ? handleReadingWindowComplete : handleWritingWindowComplete}
+              />
               <button
                 onClick={() => setIsDistractionFree(false)}
                 className="flex items-center gap-1.5 text-sm font-bold text-primary transition-colors hover:text-primary-dark"
@@ -323,6 +408,7 @@ export default function WritingPlayer() {
                       activeTab={activeTab}
                       onTabChange={setActiveTab}
                       taskId={task.id}
+                      readingWindowLocked={isReadingPhase}
                       className="h-full border-r-0"
                     />
                   </motion.div>
@@ -343,7 +429,8 @@ export default function WritingPlayer() {
                         fontSize={fontSize}
                         onFontSizeChange={setFontSize}
                         showFontSizeControls={false}
-                        placeholder="Begin writing your response..."
+                        placeholder={isReadingPhase ? 'Writing is locked for the 5-minute reading window\u2026' : 'Begin writing your response...'}
+                        disabled={isReadingPhase}
                         className="min-h-0 flex-1"
                       />
                       <RulebookFindingsPanel
@@ -376,6 +463,7 @@ export default function WritingPlayer() {
                 activeTab={activeTab}
                 onTabChange={setActiveTab}
                 taskId={task.id}
+                readingWindowLocked={isReadingPhase}
               />
             </motion.div>
             <motion.div
@@ -391,7 +479,8 @@ export default function WritingPlayer() {
                   fontSize={fontSize}
                   onFontSizeChange={setFontSize}
                   showFontSizeControls={!isMobile}
-                  placeholder="Begin writing your response..."
+                  placeholder={isReadingPhase ? 'Writing is locked for the 5-minute reading window\u2026' : 'Begin writing your response...'}
+                  disabled={isReadingPhase}
                   className="min-h-0 flex-1"
                 />
                 <RulebookFindingsPanel

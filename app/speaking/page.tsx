@@ -1,19 +1,28 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { ArrowRight, Clock, Heart, Mic, Star, Volume2 } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { ArrowRight, Award, BookOpen, Clock, FileText, Heart, Mic, RefreshCw, Star, Volume2 } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { fetchSpeakingHome, fetchSubmissions, type SpeakingHome } from '@/lib/api';
-import type { Submission } from '@/lib/mock-data';
+import { fetchSpeakingHome, fetchSubmissions, fetchMockReports, type SpeakingHome } from '@/lib/api';
+import type { Submission, MockReport } from '@/lib/mock-data';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { createLearnerMetaLabel, type LearnerSurfaceCardModel } from '@/lib/learner-surface';
+
+interface SpeakingLatestEvaluationDto {
+  evaluationId?: string | null;
+  scoreRange?: string | null;
+  confidenceLabel?: string | null;
+  strengths?: string[];
+  issues?: string[];
+}
 
 const evidenceDateFormatter = new Intl.DateTimeFormat('en-US', {
   month: 'short',
@@ -26,27 +35,41 @@ const primaryLinkClasses = 'pressable inline-flex items-center justify-center ga
 export default function SpeakingHome() {
   const [home, setHome] = useState<SpeakingHome | null>(null);
   const [submissions, setSubmissions] = useState<Submission[]>([]);
+  const [mockReports, setMockReports] = useState<MockReport[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     analytics.track('module_entry', { module: 'speaking' });
-    Promise.all([fetchSpeakingHome(), fetchSubmissions()])
-      .then(([speakingHome, allSubmissions]) => {
+    Promise.all([fetchSpeakingHome(), fetchSubmissions(), fetchMockReports()])
+      .then(([speakingHome, allSubmissions, reports]) => {
         setHome(speakingHome);
         setSubmissions(allSubmissions.filter((sub) => sub.subTest === 'Speaking'));
+        setMockReports(Array.isArray(reports) ? reports : []);
       })
       .catch(() => setError('Failed to load speaking tasks. Please try again.'))
       .finally(() => setLoading(false));
   }, []);
 
-  if (error) {
-    return (
-      <LearnerDashboardShell pageTitle="Speaking">
-        <InlineAlert variant="error">{error}</InlineAlert>
-      </LearnerDashboardShell>
-    );
-  }
+  const resumeAttempt = useMemo(() => {
+    return (home?.pastAttempts ?? []).find((attempt) => {
+      const state = attempt?.state?.toLowerCase() ?? '';
+      return state === 'in_progress' || state === 'in-progress' || state === 'draft';
+    }) ?? null;
+  }, [home]);
+
+  const latestEvaluation = useMemo<SpeakingLatestEvaluationDto | null>(() => {
+    const raw = home?.latestEvaluation;
+    if (!raw || typeof raw !== 'object') return null;
+    const record = raw as Record<string, unknown>;
+    return {
+      evaluationId: typeof record.evaluationId === 'string' ? record.evaluationId : null,
+      scoreRange: typeof record.scoreRange === 'string' ? record.scoreRange : null,
+      confidenceLabel: typeof record.confidenceLabel === 'string' ? record.confidenceLabel : null,
+      strengths: Array.isArray(record.strengths) ? record.strengths.filter((s): s is string => typeof s === 'string') : [],
+      issues: Array.isArray(record.issues) ? record.issues.filter((s): s is string => typeof s === 'string') : [],
+    };
+  }, [home]);
 
   if (loading) {
     return (
@@ -150,6 +173,55 @@ export default function SpeakingHome() {
           ]}
         />
 
+        {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+
+        {/* Resume in-progress speaking attempt — backend surfaces pastAttempts[].state='in_progress'. */}
+        {resumeAttempt ? (
+          <MotionSection>
+            <LearnerSurfaceCard card={{
+              kind: 'task',
+              sourceType: 'backend_task',
+              accent: 'indigo',
+              eyebrow: 'Resume Attempt',
+              eyebrowIcon: RefreshCw,
+              title: 'Continue your in-progress role play',
+              description: 'Your speaking attempt is paused on the server — pick it up exactly where you stopped. No credits are spent until you submit for evaluation.',
+              metaItems: [
+                { icon: Clock, label: 'Paused' },
+                { label: 'In progress' },
+              ],
+              primaryAction: { label: 'Resume Role Play', href: resumeAttempt.route },
+              secondaryAction: { label: 'Pick a Different Scenario', href: '/speaking/selection', variant: 'outline' },
+            }} />
+          </MotionSection>
+        ) : null}
+
+        {/* Rulebook Source-of-Truth band — parity with Writing / Reading / Selection. */}
+        <MotionSection delayIndex={1} className="rounded-[24px] border border-gray-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+              <p className="text-xs font-black uppercase tracking-widest text-muted">Rulebook Source of Truth</p>
+              <h2 className="mt-2 text-lg font-black text-navy">Study the exact rules your speaking is judged against</h2>
+              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
+                Every speaking audit is grounded in Dr. Hesham&apos;s rulebook — including the ping-pong conversation rule and the Breaking Bad News protocol. Open the rulebook to understand the real standard behind the feedback.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3">
+              <Link href="/speaking/rulebook/RULE_22">
+                <Button variant="outline" className="whitespace-nowrap">
+                  <BookOpen className="h-4 w-4" /> Speaking rules
+                </Button>
+              </Link>
+              <Link href="/speaking/rulebook/RULE_44">
+                <Button variant="ghost" className="whitespace-nowrap">
+                  Breaking bad news
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </MotionSection>
+
         {recommendedCard ? (
           <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
             <MotionSection>
@@ -167,6 +239,35 @@ export default function SpeakingHome() {
               </LearnerSurfaceCard>
             </MotionSection>
           </section>
+        ) : null}
+
+        {/* Latest Result — surfaces home.latestEvaluation rubric summary from the backend. */}
+        {latestEvaluation && latestEvaluation.scoreRange ? (
+          <MotionSection delayIndex={2}>
+            <LearnerSurfaceSectionHeader
+              eyebrow="Latest Result"
+              title="Read your most recent rubric-graded speaking evaluation"
+              description="Open the full card to see strengths, issues, and the rulebook-grounded audit route."
+              className="mb-4"
+            />
+            <LearnerSurfaceCard card={{
+              kind: 'evidence',
+              sourceType: 'backend_summary',
+              accent: 'emerald',
+              eyebrow: 'Rubric Summary',
+              eyebrowIcon: Award,
+              title: latestEvaluation.scoreRange ?? 'Rubric-graded',
+              description: 'Your role play was graded against the OET Speaking criteria. Open the result to see the full breakdown and rulebook audit.',
+              metaItems: [
+                ...(latestEvaluation.confidenceLabel ? [{ label: latestEvaluation.confidenceLabel }] : []),
+                ...((latestEvaluation.strengths ?? []).slice(0, 1).map((s) => ({ label: `Strength: ${s}` }))),
+                ...((latestEvaluation.issues ?? []).slice(0, 1).map((s) => ({ label: `Issue: ${s}` }))),
+              ],
+              primaryAction: latestEvaluation.evaluationId
+                ? { label: 'Open Result', href: `/speaking/results/${latestEvaluation.evaluationId}` }
+                : { label: 'View Submissions', href: '/submissions', variant: 'outline' },
+            }} />
+          </MotionSection>
         ) : null}
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-12">
@@ -351,6 +452,47 @@ export default function SpeakingHome() {
             </section>
           </div>
         </div>
+
+        {/* Recent Mock Reports — cross-module evidence parity with Writing / Reading / Listening. */}
+        <MotionSection delayIndex={3}>
+          <LearnerSurfaceSectionHeader
+            eyebrow="Recent Mock Reports"
+            title="Track speaking impact inside full mocks"
+            description="Confirm whether gains from isolated role plays and drills are transferring under full-exam pressure."
+            action={<Link href="/mocks" className="text-sm font-bold text-primary hover:underline">Open Mock Center</Link>}
+            className="mb-4"
+          />
+          {mockReports.length > 0 ? (
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              {mockReports.slice(0, 2).map((report, index) => (
+                <MotionItem key={report.id} delayIndex={index}>
+                  <LearnerSurfaceCard card={{
+                    kind: 'evidence',
+                    sourceType: 'backend_summary',
+                    accent: 'slate',
+                    eyebrow: 'Mock Evidence',
+                    eyebrowIcon: FileText,
+                    title: report.title,
+                    description: report.summary,
+                    metaItems: [
+                      { label: report.date },
+                      { label: report.overallScore },
+                    ],
+                    primaryAction: { label: 'View Report', href: `/mocks/report/${report.id}`, variant: 'outline' },
+                  }} />
+                </MotionItem>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-[24px] border border-dashed border-gray-200 bg-surface/80 p-6 text-sm text-muted">
+              <p>Complete a mock to see speaking transfer evidence here.</p>
+              <div className="mt-3 flex flex-wrap gap-4">
+                <Link href="/mocks" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Open Mock Center <ArrowRight className="h-4 w-4" /></Link>
+                <Link href="/progress" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Track Progress <ArrowRight className="h-4 w-4" /></Link>
+              </div>
+            </div>
+          )}
+        </MotionSection>
       </div>
     </LearnerDashboardShell>
   );

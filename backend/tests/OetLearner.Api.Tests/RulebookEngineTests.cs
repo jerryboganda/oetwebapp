@@ -24,8 +24,8 @@ public class RulebookLoaderTests
         var book = _loader.Load(RuleKind.Speaking, ExamProfession.Medicine);
         Assert.Equal(RuleKind.Speaking, book.Kind);
         Assert.Equal(ExamProfession.Medicine, book.Profession);
-        Assert.Equal(7, book.Sections.Count);
-        Assert.Equal(55, book.Rules.Count);
+        Assert.Equal(8, book.Sections.Count);
+        Assert.Equal(62, book.Rules.Count);
     }
 
     [Fact]

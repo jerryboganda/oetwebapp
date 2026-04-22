@@ -1,5 +1,6 @@
 {
   "$schema": "https://opencode.ai/config.json",
+  "plugin": ["oh-my-openagent"],
   "permission": {
     "read": {
       "C:/Users/Admin/Desktop/New OET Web App/oetwebapp/.opencode/get-shit-done/*": "allow"

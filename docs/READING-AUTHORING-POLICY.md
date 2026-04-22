@@ -66,7 +66,7 @@ continuously, expiry grabs the last saved state; learner sees a clear
 |---|---|---|---|
 | `EnabledQuestionTypes` (global) | Which types authors may use | all 5 enabled | any subset |
 | `ShortAnswerNormalisation` (global) | Match strategy for short-answer items | `trim_collapse_case_insensitive` | `exact`, `trim_only`, `fuzzy_levenshtein_1` |
-| `ShortAnswerAcceptSynonyms` (global) | Respect per-question `AcceptedSynonymsJson` | `true` | `false` |
+| `ShortAnswerAcceptSynonyms` (global) | **NON-STANDARD MODE.** Respects per-question `AcceptedSynonymsJson`. Real OET Part A answers are copied word-for-word from the text; enabling this fundamentally changes the assessment. Must be clearly disclosed to learners when on. | `false` (OET-faithful) | `true` (non-standard) |
 | `MatchingAllowPartialCredit` (global) | Part A matching: credit for each correct item individually | `true` | `false` (all-or-nothing) |
 | `SentenceCompletionStrictness` (global) | Enforce exact phrase-bank match | `exact_from_bank` | `normalised_match`, `fuzzy_match` |
 | `UnknownTypeFallbackPolicy` (global) | Grader encounters an unknown type | `skip_with_zero` | `fail_grading`, `grade_as_correct` |

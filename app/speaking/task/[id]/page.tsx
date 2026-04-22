@@ -8,6 +8,7 @@ import {
   Mic, Square, RotateCcw, CheckCircle2, AlertCircle,
   FileText, Edit3, ChevronUp, ChevronDown,
   Wifi, WifiOff, User, ShieldCheck, Loader2, Play, Pause,
+  Scissors,
 } from 'lucide-react';
 import { AppShell } from '@/components/layout/app-shell';
 import { Button } from '@/components/ui/button';
@@ -51,6 +52,10 @@ function LiveSpeakingTaskContent() {
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  // CBT at-home rule: candidate must destroy (tear/cut) any scratch paper in view of the camera
+  // before submission. Enforced in exam mode; optional acknowledgement in self-study mode.
+  const [paperDestroyed, setPaperDestroyed] = useState(false);
+  const paperRuleRequired = mode === 'exam';
   const [audioLevels, setAudioLevels] = useState<number[]>([10, 10, 10, 10, 10]);
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
 
@@ -373,8 +378,19 @@ function LiveSpeakingTaskContent() {
     router.push('/speaking/selection');
   };
 
+  const handlePaperDestroyedToggle = (checked: boolean) => {
+    setPaperDestroyed(checked);
+    if (checked) {
+      analytics.track('speaking_cbt_paper_destroyed', { taskId: id, mode });
+    }
+  };
+
   const confirmSubmit = async () => {
     if (isSubmitting) return;
+    if (paperRuleRequired && !paperDestroyed) {
+      setSubmitError('Please confirm you have destroyed your scratch paper on camera before submitting.');
+      return;
+    }
 
     const durationSeconds = getRecordedDurationSeconds();
     pauseDurationClock();
@@ -726,11 +742,48 @@ function LiveSpeakingTaskContent() {
                 <CheckCircle2 className="w-8 h-8 text-green-500" />
               </div>
               <h3 id="speaking-submit-dialog-title" className="text-2xl font-black mb-2">Finish Task?</h3>
-              <p className="text-muted text-sm leading-relaxed mb-8">
+              <p className="text-muted text-sm leading-relaxed mb-6">
                 Are you ready to submit your recording for evaluation? You won&apos;t be able to make changes after this.
               </p>
+
+              <div className="mb-6 rounded-2xl border border-amber-300/70 bg-amber-50 p-4">
+                <div className="flex items-start gap-3">
+                  <Scissors className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-700" aria-hidden="true" />
+                  <div className="flex-1">
+                    <p className="text-sm font-bold text-amber-900">
+                      Destroy your scratch paper on camera
+                    </p>
+                    <p className="mt-1 text-xs leading-relaxed text-amber-900/80">
+                      OET rules for the at-home computer-based Speaking test require any paper notes to be
+                      torn or cut in full view of the webcam before you submit. This is verified by the proctor
+                      from the session recording.
+                    </p>
+                    <label className="mt-3 flex items-start gap-2 text-xs text-amber-900">
+                      <input
+                        type="checkbox"
+                        checked={paperDestroyed}
+                        onChange={(e) => handlePaperDestroyedToggle(e.target.checked)}
+                        disabled={isSubmitting}
+                        className="mt-0.5 h-4 w-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                        aria-describedby="speaking-paper-destroy-hint"
+                      />
+                      <span id="speaking-paper-destroy-hint">
+                        I have torn or cut my scratch paper in front of the camera
+                        {paperRuleRequired ? ' (required)' : ' (recommended for exam realism)'}.
+                      </span>
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              {submitError && (
+                <p role="alert" className="mb-4 rounded-xl bg-danger/10 p-3 text-xs font-semibold text-danger">
+                  {submitError}
+                </p>
+              )}
+
               <div className="flex flex-col gap-3">
-                <Button ref={submitPrimaryActionRef} fullWidth onClick={confirmSubmit} disabled={isSubmitting} className="py-4 rounded-2xl font-black">
+                <Button ref={submitPrimaryActionRef} fullWidth onClick={confirmSubmit} disabled={isSubmitting || (paperRuleRequired && !paperDestroyed)} className="py-4 rounded-2xl font-black">
                   {isSubmitting ? 'Submitting...' : 'Submit for Evaluation'}
                 </Button>
                 <Button variant="outline" fullWidth onClick={() => setShowSubmitConfirm(false)} disabled={isSubmitting} className="py-4 rounded-2xl">

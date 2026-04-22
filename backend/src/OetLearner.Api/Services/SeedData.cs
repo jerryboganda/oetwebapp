@@ -269,15 +269,15 @@ public static partial class SeedData
                 State = "submitted",
                 RubricEntriesJson = JsonSupport.Serialize(new Dictionary<string, int>
                 {
-                    ["purpose"] = 4, ["content"] = 5, ["conciseness"] = 3, ["genre"] = 4, ["organization"] = 4, ["language"] = 4
+                    ["purpose"] = 2, ["content"] = 5, ["conciseness_clarity"] = 5, ["genre_style"] = 5, ["organisation_layout"] = 5, ["language"] = 5
                 }),
                 CriterionCommentsJson = JsonSupport.Serialize(new Dictionary<string, string>
                 {
                     ["purpose"] = "Clear opening statement.",
                     ["content"] = "All key details are relevant.",
-                    ["conciseness"] = "Some extraneous clinical detail remains.",
-                    ["genre"] = "Appropriate register.",
-                    ["organization"] = "Well structured.",
+                    ["conciseness_clarity"] = "Some extraneous clinical detail remains.",
+                    ["genre_style"] = "Appropriate register.",
+                    ["organisation_layout"] = "Well structured.",
                     ["language"] = "Minor grammatical issues."
                 }),
                 FinalCommentDraft = "Clear improvement in structure and clinical filtering.",
@@ -299,7 +299,7 @@ public static partial class SeedData
                 State = "saved",
                 RubricEntriesJson = JsonSupport.Serialize(new Dictionary<string, int>
                 {
-                    ["purpose"] = 4, ["content"] = 4, ["conciseness"] = 3, ["genre"] = 4, ["organization"] = 4, ["language"] = 3
+                    ["purpose"] = 2, ["content"] = 4, ["conciseness_clarity"] = 4, ["genre_style"] = 5, ["organisation_layout"] = 5, ["language"] = 4
                 }),
                 CriterionCommentsJson = JsonSupport.Serialize(new Dictionary<string, string>
                 {
@@ -721,14 +721,19 @@ public static partial class SeedData
         db.Criteria.AddRange(
             new CriterionReference { Id = "cri-purpose", SubtestCode = "writing", Code = "purpose", Label = "Purpose", Description = "How clearly the purpose of the letter is conveyed.", Status = "active", SortOrder = 1 },
             new CriterionReference { Id = "cri-content", SubtestCode = "writing", Code = "content", Label = "Content", Description = "Relevance and completeness of clinical content.", Status = "active", SortOrder = 2 },
-            new CriterionReference { Id = "cri-conciseness", SubtestCode = "writing", Code = "conciseness", Label = "Conciseness & Clarity", Description = "Clarity of writing without unnecessary detail.", Status = "active", SortOrder = 3 },
-            new CriterionReference { Id = "cri-genre", SubtestCode = "writing", Code = "genre", Label = "Genre & Style", Description = "Appropriate register and professional tone.", Status = "active", SortOrder = 4 },
-            new CriterionReference { Id = "cri-organization", SubtestCode = "writing", Code = "organization", Label = "Organisation & Layout", Description = "Logical structure and formatting.", Status = "active", SortOrder = 5 },
+            new CriterionReference { Id = "cri-conciseness-clarity", SubtestCode = "writing", Code = "conciseness_clarity", Label = "Conciseness & Clarity", Description = "Clarity of writing without unnecessary detail. Scored 0\u20137.", Status = "active", SortOrder = 3 },
+            new CriterionReference { Id = "cri-genre-style", SubtestCode = "writing", Code = "genre_style", Label = "Genre & Style", Description = "Appropriate register and professional tone. Scored 0\u20137.", Status = "active", SortOrder = 4 },
+            new CriterionReference { Id = "cri-organisation-layout", SubtestCode = "writing", Code = "organisation_layout", Label = "Organisation & Layout", Description = "Logical structure and formatting conventions (address, date, salutation, closure). Scored 0\u20137.", Status = "active", SortOrder = 5 },
             new CriterionReference { Id = "cri-language", SubtestCode = "writing", Code = "language", Label = "Language", Description = "Accuracy and range of grammar and vocabulary.", Status = "active", SortOrder = 6 },
-            new CriterionReference { Id = "cri-intelligibility", SubtestCode = "speaking", Code = "intelligibility", Label = "Intelligibility", Description = "Pronunciation, stress, and clarity.", Status = "active", SortOrder = 1 },
-            new CriterionReference { Id = "cri-fluency", SubtestCode = "speaking", Code = "fluency", Label = "Fluency", Description = "Smoothness, pacing, and hesitation control.", Status = "active", SortOrder = 2 },
-            new CriterionReference { Id = "cri-appropriateness", SubtestCode = "speaking", Code = "appropriateness", Label = "Appropriateness of Language", Description = "Suitability of professional vocabulary and tone.", Status = "active", SortOrder = 3 },
-            new CriterionReference { Id = "cri-grammar-expression", SubtestCode = "speaking", Code = "grammar_expression", Label = "Resources of Grammar and Expression", Description = "Range and accuracy of spoken language.", Status = "active", SortOrder = 4 }
+            new CriterionReference { Id = "cri-intelligibility", SubtestCode = "speaking", Code = "intelligibility", Label = "Intelligibility", Description = "Pronunciation, stress, and clarity. Scored 0\u20136.", Status = "active", SortOrder = 1 },
+            new CriterionReference { Id = "cri-fluency", SubtestCode = "speaking", Code = "fluency", Label = "Fluency", Description = "Smoothness, pacing, and hesitation control. Scored 0\u20136.", Status = "active", SortOrder = 2 },
+            new CriterionReference { Id = "cri-appropriateness", SubtestCode = "speaking", Code = "appropriateness", Label = "Appropriateness of Language", Description = "Suitability of professional vocabulary and tone. Scored 0\u20136.", Status = "active", SortOrder = 3 },
+            new CriterionReference { Id = "cri-grammar", SubtestCode = "speaking", Code = "grammar", Label = "Resources of Grammar & Expression", Description = "Range and accuracy of spoken language. Scored 0\u20136.", Status = "active", SortOrder = 4 },
+            new CriterionReference { Id = "cri-relationship-building", SubtestCode = "speaking", Code = "relationshipBuilding", Label = "Relationship Building", Description = "Initiating the interaction, attentive/respectful attitude, non-judgemental approach, empathy. Scored 0\u20133.", Status = "active", SortOrder = 5 },
+            new CriterionReference { Id = "cri-patient-perspective", SubtestCode = "speaking", Code = "patientPerspective", Label = "Understanding & Incorporating Patient's Perspective", Description = "Eliciting/exploring the patient's ideas, concerns, and expectations; relating explanations back to them. Scored 0\u20133.", Status = "active", SortOrder = 6 },
+            new CriterionReference { Id = "cri-providing-structure", SubtestCode = "speaking", Code = "providingStructure", Label = "Providing Structure", Description = "Sequencing purposefully, signposting topic changes, organising explanations. Scored 0\u20133.", Status = "active", SortOrder = 7 },
+            new CriterionReference { Id = "cri-information-gathering", SubtestCode = "speaking", Code = "informationGathering", Label = "Information Gathering", Description = "Facilitating narrative, open-then-closed questioning, avoiding compound/leading questions, clarifying, summarising. Scored 0\u20133.", Status = "active", SortOrder = 8 },
+            new CriterionReference { Id = "cri-information-giving", SubtestCode = "speaking", Code = "informationGiving", Label = "Information Giving", Description = "Establishing prior knowledge, pausing, encouraging reactions, checking understanding, discovering further needs. Scored 0\u20133.", Status = "active", SortOrder = 9 }
         );
 
         db.ContentItems.AddRange(
@@ -1028,16 +1033,16 @@ public static partial class SeedData
                 IssuesJson = JsonSupport.Serialize(new[] { "Some details remain more extensive than the GP needs", "Proofreading should be more systematic" }),
                 CriterionScoresJson = JsonSupport.Serialize(new[]
                 {
-                    new { criterionCode = "purpose", scoreRange = "4-5/6", confidenceBand = "medium", explanation = "The letter purpose is clear early." },
-                    new { criterionCode = "content", scoreRange = "5/6", confidenceBand = "high", explanation = "Important postoperative details are included." },
-                    new { criterionCode = "conciseness", scoreRange = "3-4/6", confidenceBand = "medium", explanation = "Some lower-value detail still appears." },
-                    new { criterionCode = "genre", scoreRange = "4/6", confidenceBand = "medium", explanation = "Register is mostly appropriate." },
-                    new { criterionCode = "organization", scoreRange = "4-5/6", confidenceBand = "medium", explanation = "Structure is easy to follow." },
-                    new { criterionCode = "language", scoreRange = "4/6", confidenceBand = "medium", explanation = "Minor grammar issues remain." }
+                    new { criterionCode = "purpose", scoreRange = "2/3", confidenceBand = "medium", explanation = "The letter purpose is clear early. Purpose is scored 0\u20133 only." },
+                    new { criterionCode = "content", scoreRange = "5/7", confidenceBand = "high", explanation = "Important postoperative details are included." },
+                    new { criterionCode = "conciseness_clarity", scoreRange = "4/7", confidenceBand = "medium", explanation = "Some lower-value detail still appears." },
+                    new { criterionCode = "genre_style", scoreRange = "4/7", confidenceBand = "medium", explanation = "Register is mostly appropriate." },
+                    new { criterionCode = "organisation_layout", scoreRange = "5/7", confidenceBand = "medium", explanation = "Structure is easy to follow." },
+                    new { criterionCode = "language", scoreRange = "4/7", confidenceBand = "medium", explanation = "Minor grammar issues remain." }
                 }),
                 FeedbackItemsJson = JsonSupport.Serialize(new[]
                 {
-                    new { feedbackItemId = "wf-1", criterionCode = "conciseness", type = "anchored_comment", anchor = new { snippet = "under spinal anaesthesia", position = 112 }, message = "This detail may be unnecessary for the receiving GP unless it changes ongoing care.", severity = "medium", suggestedFix = "Focus on post-discharge relevance." },
+                    new { feedbackItemId = "wf-1", criterionCode = "conciseness_clarity", type = "anchored_comment", anchor = new { snippet = "under spinal anaesthesia", position = 112 }, message = "This detail may be unnecessary for the receiving GP unless it changes ongoing care.", severity = "medium", suggestedFix = "Focus on post-discharge relevance." },
                     new { feedbackItemId = "wf-2", criterionCode = "language", type = "anchored_comment", anchor = new { snippet = "please arrange", position = 380 }, message = "Good direct handover of the GP action item.", severity = "low", suggestedFix = "Keep this level of clarity." }
                 }),
                 GeneratedAt = now.AddDays(-4).AddHours(1),
@@ -1326,15 +1331,15 @@ public static partial class SeedData
             State = "submitted",
             RubricEntriesJson = JsonSupport.Serialize(new Dictionary<string, int>
             {
-                ["purpose"] = 4, ["content"] = 5, ["conciseness"] = 3, ["genre"] = 4, ["organization"] = 4, ["language"] = 4
+                ["purpose"] = 2, ["content"] = 5, ["conciseness_clarity"] = 5, ["genre_style"] = 5, ["organisation_layout"] = 5, ["language"] = 5
             }),
             CriterionCommentsJson = JsonSupport.Serialize(new Dictionary<string, string>
             {
                 ["purpose"] = "Clear opening statement.",
                 ["content"] = "All key details are relevant.",
-                ["conciseness"] = "Some extraneous clinical detail remains.",
-                ["genre"] = "Appropriate register.",
-                ["organization"] = "Well structured.",
+                ["conciseness_clarity"] = "Some extraneous clinical detail remains.",
+                ["genre_style"] = "Appropriate register.",
+                ["organisation_layout"] = "Well structured.",
                 ["language"] = "Minor grammatical issues."
             }),
             FinalCommentDraft = "Clear improvement in structure and clinical filtering.",
@@ -1364,12 +1369,12 @@ public static partial class SeedData
                 }),
                 ReferenceRubricJson = JsonSupport.Serialize(new[]
                 {
-                    new { criterion = "purpose", benchmarkScore = 4, rationale = "Referral purpose is established immediately." },
+                    new { criterion = "purpose", benchmarkScore = 2, rationale = "Referral purpose is established immediately. Scored 0\u20133." },
                     new { criterion = "content", benchmarkScore = 5, rationale = "The strongest benchmark keeps only information that changes follow-up urgency." },
-                    new { criterion = "conciseness", benchmarkScore = 3, rationale = "A few extra procedural details reduce efficiency." },
-                    new { criterion = "genre", benchmarkScore = 4, rationale = "Professional referral register is sustained." },
-                    new { criterion = "organization", benchmarkScore = 4, rationale = "Information flows from reason for referral to current concerns and request." },
-                    new { criterion = "language", benchmarkScore = 4, rationale = "Minor slips remain, but overall control is strong." }
+                    new { criterion = "conciseness_clarity", benchmarkScore = 5, rationale = "A few extra procedural details reduce efficiency; strong benchmarks cut them." },
+                    new { criterion = "genre_style", benchmarkScore = 5, rationale = "Professional referral register is sustained." },
+                    new { criterion = "organisation_layout", benchmarkScore = 5, rationale = "Information flows from reason for referral to current concerns and request." },
+                    new { criterion = "language", benchmarkScore = 5, rationale = "Minor slips remain, but overall control is strong." }
                 }),
                 ReferenceNotesJson = JsonSupport.Serialize(new[]
                 {
@@ -1400,8 +1405,12 @@ public static partial class SeedData
                     new { criterion = "intelligibility", benchmarkScore = 5, rationale = "Speech is consistently easy to follow." },
                     new { criterion = "fluency", benchmarkScore = 5, rationale = "The benchmark delivery stays steady with minimal hesitation." },
                     new { criterion = "appropriateness", benchmarkScore = 4, rationale = "Register is professional with one slightly abrupt reassurance phrase." },
-                    new { criterion = "grammar", benchmarkScore = 5, rationale = "Grammar stays controlled throughout the handover." },
-                    new { criterion = "clinicalCommunication", benchmarkScore = 5, rationale = "Prioritisation, escalation, and safety-netting are explicit." }
+                    new { criterion = "grammar", benchmarkScore = 5, rationale = "Grammar and expression stay controlled throughout the handover." },
+                    new { criterion = "relationshipBuilding", benchmarkScore = 2, rationale = "Respectful and attentive tone; empathy shown to the on-call doctor's priorities." },
+                    new { criterion = "patientPerspective", benchmarkScore = 2, rationale = "Candidate relays the patient's concerns and picks up the deterioration cue." },
+                    new { criterion = "providingStructure", benchmarkScore = 3, rationale = "Opens with a concise summary, signposts escalation, and closes with a clear follow-up request." },
+                    new { criterion = "informationGathering", benchmarkScore = 2, rationale = "Open question used to confirm plan; avoids compound questioning." },
+                    new { criterion = "informationGiving", benchmarkScore = 3, rationale = "Prioritisation, escalation, and safety-netting are explicit." }
                 }),
                 ReferenceNotesJson = JsonSupport.Serialize(new[]
                 {
@@ -1421,7 +1430,7 @@ public static partial class SeedData
             Id = "ecr-001",
             CalibrationCaseId = "cal-001",
             ReviewerId = "expert-001",
-            SubmittedRubricJson = JsonSupport.Serialize(new Dictionary<string, int> { ["purpose"] = 4, ["content"] = 5, ["conciseness"] = 3, ["genre"] = 4, ["organization"] = 4, ["language"] = 4 }),
+            SubmittedRubricJson = JsonSupport.Serialize(new Dictionary<string, int> { ["purpose"] = 2, ["content"] = 5, ["conciseness_clarity"] = 5, ["genre_style"] = 5, ["organisation_layout"] = 5, ["language"] = 5 }),
             ReviewerScore = 4,
             AlignmentScore = 100.0,
             Notes = "Agreed with benchmark scoring.",
@@ -1755,7 +1764,7 @@ public static partial class SeedData
                 CriteriaConfigJson = JsonSupport.Serialize(new object[]
                 {
                     new { subtest = "writing", criteria = new[] { "purpose", "content", "conciseness", "genre", "organization", "language" } },
-                    new { subtest = "speaking", criteria = new[] { "intelligibility", "fluency", "appropriateness", "grammar_expression" } }
+                    new { subtest = "speaking", criteria = new[] { "intelligibility", "fluency", "appropriateness", "grammar", "relationshipBuilding", "patientPerspective", "providingStructure", "informationGathering", "informationGiving" } }
                 }),
                 SortOrder = 1,
                 IsActive = true,
@@ -2715,7 +2724,7 @@ public static partial class SeedData
                 "reading-parts-b-c",
                 "reading",
                 "Reading Parts B/C: Reasoning",
-                "Handle workplace notices and long texts with evidence-based elimination.",
+                "Part B handles short extracts from different healthcare contexts; Part C handles 2 long articles with evidence-based elimination.",
                 "reading",
                 6,
                 60,

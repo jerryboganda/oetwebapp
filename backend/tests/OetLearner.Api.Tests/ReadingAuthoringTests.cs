@@ -208,7 +208,7 @@ public class ReadingAuthoringTests
     [Fact]
     public async Task ShortAnswer_respects_synonyms()
     {
-        var (db, structure, _, grader, _) = Build();
+        var (db, structure, policy, grader, _) = Build();
         await SeedPaperAsync(db, "p1");
         await structure.EnsureCanonicalPartsAsync("p1", default);
         var partA = await db.ReadingParts.FirstAsync(p => p.PaperId == "p1" && p.PartCode == ReadingPartCode.A);
@@ -217,6 +217,13 @@ public class ReadingAuthoringTests
             "What does ORT stand for?", "[]", "\"ORT\"",
             "[\"oral rehydration therapy\",\"oral-rehydration\"]", false, null, null), "admin", default);
 
+        // Synonym acceptance is OFF by default (OET-faithful). This test
+        // explicitly opts in via the policy snapshot — non-standard mode.
+        var snapshot = (await policy.ResolveForUserAsync("u1", default)) with
+        {
+            ShortAnswerAcceptSynonyms = true,
+        };
+
         db.ReadingAttempts.Add(new ReadingAttempt
         {
             Id = "a1", UserId = "u1", PaperId = "p1",
@@ -224,7 +231,7 @@ public class ReadingAuthoringTests
             LastActivityAt = DateTimeOffset.UtcNow,
             Status = ReadingAttemptStatus.InProgress,
             MaxRawScore = 42,
-            PolicySnapshotJson = "{}",
+            PolicySnapshotJson = JsonSerializer.Serialize(snapshot),
         });
         db.ReadingAnswers.Add(new ReadingAnswer
         {

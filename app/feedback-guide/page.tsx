@@ -32,7 +32,7 @@ export default function FeedbackGuidePage() {
   const heroHighlights = [
     { icon: CheckCircle2, label: 'Writing criteria', value: `${WRITING_CRITERIA.length}` },
     { icon: Target, label: 'Speaking criteria', value: `${SPEAKING_CRITERIA.length}` },
-    { icon: TrendingUp, label: 'Score bands', value: '0-7 / 0-6' },
+    { icon: TrendingUp, label: 'Score bands', value: '0–7 / 0–6 / 0–3' },
   ];
 
   return (

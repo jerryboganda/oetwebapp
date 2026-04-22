@@ -47,30 +47,57 @@ const WRITING_RUBRIC = [
 ];
 
 const SPEAKING_RUBRIC = [
-  { criterion: 'Intelligibility', weight: 'High', bands: [
+  // Linguistic criteria (0–6)
+  { criterion: 'Intelligibility', weight: 'High', scale: '0–6', bands: [
     { range: '5–6', desc: 'Easily understood throughout; clear pronunciation.' },
     { range: '3–4', desc: 'Generally understood; occasional unclear words.' },
     { range: '1–2', desc: 'Frequent misunderstandings; requires listener effort.' },
   ]},
-  { criterion: 'Fluency', weight: 'High', bands: [
+  { criterion: 'Fluency', weight: 'High', scale: '0–6', bands: [
     { range: '5–6', desc: 'Smooth, natural pace with appropriate pausing.' },
     { range: '3–4', desc: 'Some hesitations but maintains communication.' },
     { range: '1–2', desc: 'Frequent long pauses; broken delivery.' },
   ]},
-  { criterion: 'Appropriateness', weight: 'Medium', bands: [
+  { criterion: 'Appropriateness of Language', weight: 'Medium', scale: '0–6', bands: [
     { range: '5–6', desc: 'Language perfectly suited to clinical context and patient.' },
     { range: '3–4', desc: 'Generally appropriate with occasional misjudgements.' },
     { range: '1–2', desc: 'Frequently inappropriate register or tone.' },
   ]},
-  { criterion: 'Grammar & Expression', weight: 'Medium', bands: [
+  { criterion: 'Resources of Grammar & Expression', weight: 'Medium', scale: '0–6', bands: [
     { range: '5–6', desc: 'Wide range; rare errors; effective medical terminology.' },
     { range: '3–4', desc: 'Adequate range; some errors but meaning clear.' },
     { range: '1–2', desc: 'Very limited; frequent errors obscure meaning.' },
   ]},
-  { criterion: 'Relationship Building', weight: 'High', bands: [
-    { range: '5–6', desc: 'Genuine empathy; active listening; strong rapport.' },
-    { range: '3–4', desc: 'Shows some empathy; basic rapport established.' },
-    { range: '1–2', desc: 'Little empathy; mechanical interaction.' },
+  // Clinical Communication criteria (0–3 each — level descriptors)
+  { criterion: 'Relationship Building', weight: 'High', scale: '0–3', bands: [
+    { range: '3', desc: 'Adept: clear greeting/introduction, respectful attitude, non-judgemental, genuine empathy.' },
+    { range: '2', desc: 'Competent: introductions present, empathy shown but may be generic.' },
+    { range: '1', desc: 'Partially effective: mechanical greeting; empathy missing or misplaced.' },
+    { range: '0', desc: 'Ineffective: no greeting/introduction or disrespectful tone.' },
+  ]},
+  { criterion: "Understanding & Incorporating Patient's Perspective", weight: 'High', scale: '0–3', bands: [
+    { range: '3', desc: 'Adept: elicits ideas/concerns/expectations; relates explanations back to them.' },
+    { range: '2', desc: 'Competent: acknowledges concerns; picks up some cues.' },
+    { range: '1', desc: 'Partially effective: misses cues; concerns not explored.' },
+    { range: '0', desc: 'Ineffective: ignores patient perspective.' },
+  ]},
+  { criterion: 'Providing Structure', weight: 'Medium', scale: '0–3', bands: [
+    { range: '3', desc: 'Adept: logical sequencing, explicit signposting, organised explanations.' },
+    { range: '2', desc: 'Competent: generally organised; some signposting.' },
+    { range: '1', desc: 'Partially effective: jumps between topics without signposting.' },
+    { range: '0', desc: 'Ineffective: disorganised, confusing flow.' },
+  ]},
+  { criterion: 'Information Gathering', weight: 'High', scale: '0–3', bands: [
+    { range: '3', desc: 'Adept: open-then-closed questions; facilitates narrative; clarifies; summarises.' },
+    { range: '2', desc: 'Competent: mostly appropriate questioning; one compound/leading question.' },
+    { range: '1', desc: 'Partially effective: over-reliance on closed questions or interruptions.' },
+    { range: '0', desc: 'Ineffective: leading/compound questions throughout.' },
+  ]},
+  { criterion: 'Information Giving', weight: 'High', scale: '0–3', bands: [
+    { range: '3', desc: 'Adept: establishes prior knowledge, pauses, checks understanding, explores further needs.' },
+    { range: '2', desc: 'Competent: explains clearly; some feedback sought.' },
+    { range: '1', desc: 'Partially effective: monologue-style explanation; no checking.' },
+    { range: '0', desc: 'Ineffective: no prior-knowledge check, no pausing, no checking.' },
   ]},
 ];
 

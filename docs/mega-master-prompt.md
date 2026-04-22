@@ -208,8 +208,9 @@ Already existing: Nursing, Medicine, Dentistry, Pharmacy, Physiotherapy, Academi
 - Interlocutor audio playback for preparation
 
 **Reading (OET):**
-- Part A: Expeditious reading (skimming and scanning) -- 4 short texts, summary completion
-- Part B: Careful reading -- 6 multiple-choice questions on 2 longer texts
+- Part A: Expeditious reading (skimming and scanning) -- 4 medical texts on one clinical topic (variable length; Text C may include large tables/graphs), 20 items (matching / short-answer / sentence-completion)
+- Part B: Careful reading -- 6 short extracts from different healthcare contexts (policies, notices, guidelines, clinical communications), 3-option MCQ
+- Part C: Careful reading -- 2 long healthcare articles, 8 items each (4-option MCQ)
 - Timed practice matching real exam conditions
 - Strategy-specific drills (detail extraction, inference, vocabulary in context)
 - Answer analysis with explanation for every option

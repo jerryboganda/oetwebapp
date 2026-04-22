@@ -967,17 +967,38 @@ public partial class LearnerService(
         };
     }
 
-    public async Task<object> GetSubmissionsAsync(string userId, CancellationToken cancellationToken)
+    public Task<object> GetSubmissionsAsync(string userId, CancellationToken cancellationToken)
+        => GetSubmissionsAsync(userId, cursor: null, limit: null, cancellationToken);
+
+    public async Task<object> GetSubmissionsAsync(string userId, string? cursor, int? limit, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
-        var attempts = (await db.Attempts
+        var pageSize = CursorPagination.NormalizeLimit(limit);
+        var ordered = (await db.Attempts
             .Where(x => x.UserId == userId)
             .ToListAsync(cancellationToken))
             .OrderByDescending(x => x.SubmittedAt ?? x.StartedAt)
+            .ThenByDescending(x => x.Id, StringComparer.Ordinal)
             .ToList();
+
+        IEnumerable<Attempt> window = ordered;
+        if (CursorPagination.TryDecode(cursor, out var decoded))
+        {
+            window = ordered.Where(x =>
+            {
+                var ts = x.SubmittedAt ?? x.StartedAt;
+                if (ts < decoded.Timestamp) return true;
+                if (ts == decoded.Timestamp) return string.CompareOrdinal(x.Id, decoded.Id) < 0;
+                return false;
+            });
+        }
+
+        var page = window.Take(pageSize + 1).ToList();
+        var hasMore = page.Count > pageSize;
+        var pageAttempts = hasMore ? page.Take(pageSize).ToList() : page;
         var items = new List<object>();
 
-        foreach (var attempt in attempts)
+        foreach (var attempt in pageAttempts)
         {
             var content = await db.ContentItems.FirstAsync(x => x.Id == attempt.ContentId, cancellationToken);
             var eval = (await db.Evaluations
@@ -1013,7 +1034,15 @@ public partial class LearnerService(
             });
         }
 
-        return new { items, nextCursor = (string?)null };
+        string? nextCursor = null;
+        if (hasMore)
+        {
+            var last = pageAttempts[^1];
+            var ts = last.SubmittedAt ?? last.StartedAt;
+            nextCursor = CursorPagination.Encode(ts, last.Id);
+        }
+
+        return new { items, nextCursor };
     }
 
     public async Task<object> CompareSubmissionsAsync(string userId, string? leftId, string? rightId, CancellationToken cancellationToken)
@@ -2679,17 +2708,44 @@ public partial class LearnerService(
         };
     }
 
-    public async Task<object> GetInvoicesAsync(string userId, CancellationToken cancellationToken)
+    public Task<object> GetInvoicesAsync(string userId, CancellationToken cancellationToken)
+        => GetInvoicesAsync(userId, cursor: null, limit: null, cancellationToken);
+
+    public async Task<object> GetInvoicesAsync(string userId, string? cursor, int? limit, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
+        var pageSize = CursorPagination.NormalizeLimit(limit);
         var invoices = (await db.Invoices
             .Where(x => x.UserId == userId)
             .ToListAsync(cancellationToken))
             .OrderByDescending(x => x.IssuedAt)
+            .ThenByDescending(x => x.Id, StringComparer.Ordinal)
             .ToList();
+
+        IEnumerable<Invoice> window = invoices;
+        if (CursorPagination.TryDecode(cursor, out var decoded))
+        {
+            window = invoices.Where(x =>
+            {
+                if (x.IssuedAt < decoded.Timestamp) return true;
+                if (x.IssuedAt == decoded.Timestamp) return string.CompareOrdinal(x.Id, decoded.Id) < 0;
+                return false;
+            });
+        }
+
+        var page = window.Take(pageSize + 1).ToList();
+        var hasMore = page.Count > pageSize;
+        var pageInvoices = hasMore ? page.Take(pageSize).ToList() : page;
+        string? nextCursor = null;
+        if (hasMore)
+        {
+            var last = pageInvoices[^1];
+            nextCursor = CursorPagination.Encode(last.IssuedAt, last.Id);
+        }
+
         return new
         {
-            items = invoices.Select(x => new
+            items = pageInvoices.Select(x => new
             {
                 invoiceId = x.Id,
                 date = x.IssuedAt,
@@ -2699,7 +2755,7 @@ public partial class LearnerService(
                 description = x.Description,
                 downloadUrl = platformLinks.BuildApiUrl($"/v1/billing/invoices/{Uri.EscapeDataString(x.Id)}/download")
             }),
-            nextCursor = (string?)null
+            nextCursor
         };
     }
 
@@ -5309,13 +5365,22 @@ public partial class LearnerService(
         "purpose" => "Purpose",
         "content" => "Content",
         "conciseness" => "Conciseness & Clarity",
+        "conciseness_clarity" => "Conciseness & Clarity",
         "genre" => "Genre & Style",
+        "genre_style" => "Genre & Style",
         "organization" => "Organisation & Layout",
+        "organisation_layout" => "Organisation & Layout",
         "language" => "Language",
         "intelligibility" => "Intelligibility",
         "fluency" => "Fluency",
         "appropriateness" => "Appropriateness of Language",
-        "grammar_expression" => "Resources of Grammar and Expression",
+        "grammar" => "Resources of Grammar & Expression",
+        "grammar_expression" => "Resources of Grammar & Expression",
+        "relationshipBuilding" => "Relationship Building",
+        "patientPerspective" => "Understanding & Incorporating Patient's Perspective",
+        "providingStructure" => "Providing Structure",
+        "informationGathering" => "Information Gathering",
+        "informationGiving" => "Information Giving",
         _ => code ?? "Criterion"
     };
 

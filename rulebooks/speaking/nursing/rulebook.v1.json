@@ -8,7 +8,8 @@
     { "id": "01", "title": "OET Speaking Format and Scoring Anchor", "order": 1 },
     { "id": "02", "title": "Patient-Centred Nursing Communication", "order": 2 },
     { "id": "03", "title": "Role-Play Structure and Handover Safety", "order": 3 },
-    { "id": "04", "title": "Risk Language, Lifestyle Advice, and Follow-Up", "order": 4 }
+    { "id": "04", "title": "Risk Language, Lifestyle Advice, and Follow-Up", "order": 4 },
+    { "id": "05", "title": "Assessment Architecture & Computer-Based Exam Format", "order": 5 }
   ],
   "rules": [
     {
@@ -156,6 +157,65 @@
       "title": "Escalate red flags clearly",
       "body": "Mention safety-critical changes such as uncontrolled pain, fever, bleeding, shortness of breath, confusion, falls risk, reduced urine output, or worsening mobility without burying them in minor details.",
       "appliesTo": ["handover", "post_op", "discharge_advice"]
+    },
+    {
+      "id": "RULE_70",
+      "section": "05",
+      "severity": "critical",
+      "title": "9 scoreable criteria \u2014 scored separately",
+      "body": "The OET Speaking recording is scored against NINE criteria, not six. Linguistic criteria (4, each 0\u20136): Intelligibility, Fluency, Appropriateness of Language, Resources of Grammar & Expression. Clinical Communication criteria (5, each 0\u20133 \u2014 descriptors: Adept / Competent / Partially effective / Ineffective): Relationship Building; Understanding & Incorporating the Patient's Perspective; Providing Structure; Information Gathering; Information Giving. Grouping Clinical Communication into a single aggregate score is WRONG \u2014 every feedback item must cite one of the nine criterion codes AND a rule ID.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "RULE_71",
+      "section": "05",
+      "severity": "critical",
+      "title": "Interlocutor does NOT grade",
+      "body": "The interlocutor is an ACTOR: they facilitate the role play, read warm-up questions, and play the patient/carer. The interlocutor NEVER assesses or scores the candidate.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "RULE_72",
+      "section": "05",
+      "severity": "critical",
+      "title": "OET Assessor grades the recording",
+      "body": "A separate OET Assessor listens to the audio recording AFTER the exam and scores it against all 9 criteria. The platform's AI evaluation pipeline must therefore evaluate the recording post-hoc, not live interaction dynamics that are not audible on the recording.",
+      "appliesTo": "all"
+    },
+    {
+      "id": "RULE_73",
+      "section": "05",
+      "severity": "critical",
+      "title": "Computer-based Speaking is always at home",
+      "body": "In the computer-based OET, Speaking is always taken at home \u2014 never at a test centre. The device check and mic check flow must enforce or clearly inform the candidate of the full environment requirement list (RULE_74) before the exam can start.",
+      "appliesTo": "all",
+      "checkId": "speaking_cbt_at_home"
+    },
+    {
+      "id": "RULE_74",
+      "section": "05",
+      "severity": "critical",
+      "title": "Computer-based environment requirements",
+      "body": "Location: at home only. Room: indoors, well-lit, solid walls (no glass panels or transparent partitions). Other people: candidate must be completely alone \u2014 if anyone enters the room, the exam is stopped. Monitors: single monitor only. Webcam: wired or built-in webcam that can move; Bluetooth webcam NOT permitted. Microphone & speakers: built-in or USB plug-in only; Bluetooth NOT allowed; NO headsets during Speaking. Power: device plugged directly into power; no docking station; no battery-only. VPN / Virtual machines: fully disabled before the exam starts. Extra screens: all other screens (TV, second monitor) unplugged.",
+      "appliesTo": "all",
+      "checkId": "speaking_cbt_environment"
+    },
+    {
+      "id": "RULE_75",
+      "section": "05",
+      "severity": "critical",
+      "title": "Paper + pen permitted; on-screen annotation is NOT",
+      "body": "Computer-based Speaking: candidates CANNOT highlight or annotate the role-play card on screen. However they ARE permitted ONE blank piece of paper and a pen to take notes during preparation time and during the role play. Paper-based Speaking: candidates may annotate the card with pencil (no separate paper needed).",
+      "appliesTo": "all"
+    },
+    {
+      "id": "RULE_76",
+      "section": "05",
+      "severity": "critical",
+      "title": "Destroy paper at end of computer-based exam",
+      "body": "At the end of the computer-based Speaking exam, the candidate MUST tear or cut the blank paper in front of the camera to confirm nothing is removed from the test environment. The preparation screen must explicitly inform the candidate of this before the exam starts.",
+      "appliesTo": "all",
+      "checkId": "speaking_cbt_paper_destruction"
     }
   ],
   "tables": {

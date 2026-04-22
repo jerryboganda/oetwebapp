@@ -238,6 +238,22 @@ public sealed class ContentPaperService(LearnerDbContext db) : IContentPaperServ
             }
         }
 
+        // Listening publish gate — canonical OET shape (Part A = 24, Part B = 6, Part C = 12 → 42 items;
+        // Part B MCQ must expose exactly 3 options per item). Mirrors ReadingStructureService's approach.
+        if (string.Equals(paper.SubtestCode, "listening", StringComparison.OrdinalIgnoreCase))
+        {
+            var listeningValidation = await new Listening.ListeningStructureService(db).ValidatePaperAsync(paper.Id, ct);
+            if (!listeningValidation.IsPublishReady)
+            {
+                var blockers = listeningValidation.Issues
+                    .Where(i => string.Equals(i.Severity, "error", StringComparison.OrdinalIgnoreCase))
+                    .Select(i => $"{i.Code}: {i.Message}")
+                    .ToList();
+                throw new InvalidOperationException(
+                    $"Listening structure is not publish-ready: {string.Join("; ", blockers)}");
+            }
+        }
+
         var now = DateTimeOffset.UtcNow;
         paper.Status = ContentStatus.Published;
         paper.PublishedAt = now;

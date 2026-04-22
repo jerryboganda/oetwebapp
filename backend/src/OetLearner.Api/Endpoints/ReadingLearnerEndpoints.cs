@@ -401,7 +401,8 @@ public static class ReadingLearnerEndpoints
                 nameof(ReadingQuestionType.MultipleChoice4),
             },
             ShortAnswerNormalisation: "trim_collapse_case_insensitive",
-            ShortAnswerAcceptSynonyms: true,
+            // OET-faithful default. Synonym acceptance is non-standard mode.
+            ShortAnswerAcceptSynonyms: false,
             MatchingAllowPartialCredit: true,
             UnknownTypeFallbackPolicy: "skip_with_zero",
             ShowExplanationsAfterSubmit: true,

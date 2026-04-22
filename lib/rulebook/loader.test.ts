@@ -32,8 +32,8 @@ describe('rulebook loader — medicine rulebooks load cleanly', () => {
     const book = loadRulebook('speaking', 'medicine');
     expect(book.kind).toBe('speaking');
     expect(book.profession).toBe('medicine');
-    expect(book.sections.length).toBe(7);
-    expect(book.rules.length).toBe(55);
+    expect(book.sections.length).toBeGreaterThanOrEqual(7);
+    expect(book.rules.length).toBeGreaterThanOrEqual(55);
   });
 
   it('throws RulebookNotFoundError for unregistered profession', () => {

@@ -156,6 +156,17 @@ public class ExpertCalibrationResult
     public string Notes { get; set; } = string.Empty;
 
     public DateTimeOffset SubmittedAt { get; set; }
+
+    /// <summary>
+    /// True when the reviewer saved a draft and has not yet submitted.
+    /// Drafts never contribute to alignment/history metrics and can be overwritten or discarded.
+    /// </summary>
+    public bool IsDraft { get; set; }
+
+    /// <summary>
+    /// Last mutation timestamp; distinct from <see cref="SubmittedAt"/> (the moment of final submit).
+    /// </summary>
+    public DateTimeOffset? UpdatedAt { get; set; }
 }
 
 public class ExpertCalibrationNote

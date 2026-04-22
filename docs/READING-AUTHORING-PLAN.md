@@ -45,8 +45,8 @@ OET Reading is a fixed-shape 60-minute paper, 42 scored items:
 
 | Part | Time | Items | Item type | Texts |
 |---|---|---|---|---|
-| **Part A** | 15 min (strict) | **20** | `matching` + `short_answer` + `sentence_completion` | **4 short medical texts** on a single clinical topic (in your data: "Diarrhea & Dehydration in Children") |
-| **Part B** | 45 min shared with C | **6** | `multiple_choice` (A/B/C) | **6 short workplace texts** (policies, emails, guidelines) |
+| **Part A** | 15 min (strict) | **20** | `matching` + `short_answer` + `sentence_completion` | **4 medical texts** on a single clinical topic (variable length — Text C may include large tables/graphs; no length cap is enforced) |
+| **Part B** | 45 min shared with C | **6** | `multiple_choice` (A/B/C) | **6 short extracts from different healthcare contexts** (policies, notices, guidelines, clinical communications) |
 | **Part C** | 45 min shared with B | **16** (8 per text × 2) | `multiple_choice` (A/B/C/D) | **2 long healthcare articles**, 8 questions each |
 | **Total** | **60 min** | **42** | — | **12 texts** |
 
@@ -112,7 +112,7 @@ Indexed `(paper_id, part_code)` unique.
 
 ### 2.2 `ReadingText`
 
-One text (passage) within a part. Part A has 4 short texts with a single topic. Part B has 6 short workplace texts. Part C has 2 long articles.
+One text (passage) within a part. Part A has 4 medical texts on a single topic (variable length — no cap). Part B has 6 short extracts from different healthcare contexts (policies, notices, guidelines, clinical communications). Part C has 2 long articles.
 
 ```csharp
 public class ReadingText

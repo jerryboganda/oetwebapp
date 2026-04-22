@@ -195,6 +195,170 @@ public class ExpertFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFa
     }
 
     [Fact]
+    public async Task ExpertCalibrationDraft_RoundTripsAndRemainsUnfinished()
+    {
+        using var factory = new FirstPartyAuthTestWebApplicationFactory();
+        using var client = CreateExpertClient(factory);
+
+        var saveResponse = await client.PostAsJsonAsync("/v1/expert/calibration/cases/cal-002/draft", new
+        {
+            scores = new Dictionary<string, int>
+            {
+                ["intelligibility"] = 5,
+                ["relationshipBuilding"] = 2
+            },
+            notes = "Saved for later."
+        });
+        saveResponse.EnsureSuccessStatusCode();
+
+        using var saveJson = JsonDocument.Parse(await saveResponse.Content.ReadAsStringAsync());
+        Assert.True(saveJson.RootElement.GetProperty("isDraft").GetBoolean());
+        Assert.Equal(2, saveJson.RootElement.GetProperty("scores").GetProperty("relationshipBuilding").GetInt32());
+
+        var detailResponse = await client.GetAsync("/v1/expert/calibration/cases/cal-002");
+        detailResponse.EnsureSuccessStatusCode();
+        using var detailJson = JsonDocument.Parse(await detailResponse.Content.ReadAsStringAsync());
+        Assert.Equal("draft", detailJson.RootElement.GetProperty("status").GetString());
+        var existingSubmission = detailJson.RootElement.GetProperty("existingSubmission");
+        Assert.True(existingSubmission.GetProperty("isDraft").GetBoolean());
+        Assert.Equal("Saved for later.", existingSubmission.GetProperty("notes").GetString());
+        Assert.Equal(5, existingSubmission.GetProperty("submittedScores").GetProperty("intelligibility").GetInt32());
+
+        var casesResponse = await client.GetAsync("/v1/expert/calibration/cases");
+        casesResponse.EnsureSuccessStatusCode();
+        using var casesJson = JsonDocument.Parse(await casesResponse.Content.ReadAsStringAsync());
+        var draftCase = FindArrayItem(casesJson.RootElement, "id", "cal-002");
+        Assert.Equal("draft", draftCase.GetProperty("status").GetString());
+        Assert.Equal(JsonValueKind.Null, draftCase.GetProperty("alignmentScore").ValueKind);
+
+        var dashboardResponse = await client.GetAsync("/v1/expert/dashboard");
+        dashboardResponse.EnsureSuccessStatusCode();
+        using var dashboardJson = JsonDocument.Parse(await dashboardResponse.Content.ReadAsStringAsync());
+        Assert.True(dashboardJson.RootElement.GetProperty("calibrationDueCount").GetInt32() >= 1);
+
+        var historyResponse = await client.GetAsync("/v1/expert/calibration/history");
+        historyResponse.EnsureSuccessStatusCode();
+        using var historyJson = JsonDocument.Parse(await historyResponse.Content.ReadAsStringAsync());
+        Assert.DoesNotContain(historyJson.RootElement.GetProperty("entries").EnumerateArray(), entry => entry.GetProperty("caseId").GetString() == "cal-002");
+    }
+
+    [Fact]
+    public async Task ExpertCalibrationDraft_SubmitUpgradesAndUsesNormalizedSpeakingAlignment()
+    {
+        using var factory = new FirstPartyAuthTestWebApplicationFactory();
+        using var client = CreateExpertClient(factory);
+
+        var draftResponse = await client.PostAsJsonAsync("/v1/expert/calibration/cases/cal-002/draft", new
+        {
+            scores = new Dictionary<string, int>
+            {
+                ["intelligibility"] = 4
+            },
+            notes = "Initial pass."
+        });
+        draftResponse.EnsureSuccessStatusCode();
+
+        var submitResponse = await client.PostAsJsonAsync("/v1/expert/calibration/cases/cal-002/submit", new
+        {
+            scores = new Dictionary<string, int>
+            {
+                ["intelligibility"] = 5,
+                ["fluency"] = 5,
+                ["appropriateness"] = 4,
+                ["grammar"] = 5,
+                ["relationshipBuilding"] = 2,
+                ["patientPerspective"] = 2,
+                ["providingStructure"] = 3,
+                ["informationGathering"] = 2,
+                ["informationGiving"] = 2
+            },
+            notes = "Final aligned submission."
+        });
+        submitResponse.EnsureSuccessStatusCode();
+
+        using var submitJson = JsonDocument.Parse(await submitResponse.Content.ReadAsStringAsync());
+        var alignment = submitJson.RootElement.GetProperty("alignment").GetDouble();
+        Assert.InRange(alignment, 96.25, 96.35);
+
+        var detailResponse = await client.GetAsync("/v1/expert/calibration/cases/cal-002");
+        detailResponse.EnsureSuccessStatusCode();
+        using var detailJson = JsonDocument.Parse(await detailResponse.Content.ReadAsStringAsync());
+        Assert.Equal("completed", detailJson.RootElement.GetProperty("status").GetString());
+        var existingSubmission = detailJson.RootElement.GetProperty("existingSubmission");
+        Assert.False(existingSubmission.GetProperty("isDraft").GetBoolean());
+        Assert.InRange(existingSubmission.GetProperty("alignmentScore").GetDouble(), 96.25, 96.35);
+        Assert.Equal("Final aligned submission.", existingSubmission.GetProperty("notes").GetString());
+
+        var casesResponse = await client.GetAsync("/v1/expert/calibration/cases");
+        casesResponse.EnsureSuccessStatusCode();
+        using var casesJson = JsonDocument.Parse(await casesResponse.Content.ReadAsStringAsync());
+        var completedCase = FindArrayItem(casesJson.RootElement, "id", "cal-002");
+        Assert.Equal("completed", completedCase.GetProperty("status").GetString());
+        Assert.InRange(completedCase.GetProperty("alignmentScore").GetDouble(), 96.25, 96.35);
+
+        var historyResponse = await client.GetAsync("/v1/expert/calibration/history");
+        historyResponse.EnsureSuccessStatusCode();
+        using var historyJson = JsonDocument.Parse(await historyResponse.Content.ReadAsStringAsync());
+        var historyEntry = FindArrayItem(historyJson.RootElement.GetProperty("entries"), "caseId", "cal-002");
+        Assert.InRange(historyEntry.GetProperty("alignmentScore").GetDouble(), 96.25, 96.35);
+
+        var alignmentResponse = await client.GetAsync("/v1/expert/calibration/alignment");
+        alignmentResponse.EnsureSuccessStatusCode();
+        using var alignmentJson = JsonDocument.Parse(await alignmentResponse.Content.ReadAsStringAsync());
+        Assert.True(alignmentJson.RootElement.GetProperty("totalSubmissions").GetInt32() >= 2);
+        Assert.InRange(alignmentJson.RootElement.GetProperty("latestAlignment").GetDouble(), 96.25, 96.35);
+    }
+
+    [Fact]
+    public async Task ExpertCalibrationDraft_SubmitThenRejectsFurtherDraftOrSubmitMutations()
+    {
+        using var factory = new FirstPartyAuthTestWebApplicationFactory();
+        using var client = CreateExpertClient(factory);
+
+        var submitPayload = new
+        {
+            scores = new Dictionary<string, int>
+            {
+                ["intelligibility"] = 5,
+                ["fluency"] = 5,
+                ["appropriateness"] = 4,
+                ["grammar"] = 5,
+                ["relationshipBuilding"] = 2,
+                ["patientPerspective"] = 2,
+                ["providingStructure"] = 3,
+                ["informationGathering"] = 2,
+                ["informationGiving"] = 2
+            },
+            notes = "Final aligned submission."
+        };
+
+        var firstSubmit = await client.PostAsJsonAsync("/v1/expert/calibration/cases/cal-002/submit", submitPayload);
+        firstSubmit.EnsureSuccessStatusCode();
+
+        var draftConflict = await client.PostAsJsonAsync("/v1/expert/calibration/cases/cal-002/draft", new
+        {
+            scores = new Dictionary<string, int> { ["intelligibility"] = 4 },
+            notes = "Cannot overwrite."
+        });
+        var draftConflictBody = await draftConflict.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.Conflict, draftConflict.StatusCode);
+        Assert.Contains("calibration_already_submitted", draftConflictBody);
+
+        var submitConflict = await client.PostAsJsonAsync("/v1/expert/calibration/cases/cal-002/submit", submitPayload);
+        var submitConflictBody = await submitConflict.Content.ReadAsStringAsync();
+        Assert.Equal(HttpStatusCode.Conflict, submitConflict.StatusCode);
+        Assert.Contains("calibration_already_submitted", submitConflictBody);
+
+        var lockedDetailResponse = await client.GetAsync("/v1/expert/calibration/cases/cal-002");
+        lockedDetailResponse.EnsureSuccessStatusCode();
+        using var lockedDetailJson = JsonDocument.Parse(await lockedDetailResponse.Content.ReadAsStringAsync());
+        Assert.Equal("completed", lockedDetailJson.RootElement.GetProperty("status").GetString());
+        var lockedExistingSubmission = lockedDetailJson.RootElement.GetProperty("existingSubmission");
+        Assert.False(lockedExistingSubmission.GetProperty("isDraft").GetBoolean());
+        Assert.InRange(lockedExistingSubmission.GetProperty("alignmentScore").GetDouble(), 96.25, 96.35);
+    }
+
+    [Fact]
     public async Task ExpertSchedule_GetAndSave()
     {
         using var client = CreateExpertClient(_factory);
@@ -377,7 +541,7 @@ public class ExpertFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFa
 
         var draftResponse = await client.PutAsJsonAsync("/v1/expert/reviews/review-queue-002/draft", new
         {
-            scores = new Dictionary<string, int> { ["purpose"] = 5, ["content"] = 5, ["conciseness"] = 4, ["genre"] = 4, ["organization"] = 5, ["language"] = 4 },
+            scores = new Dictionary<string, int> { ["purpose"] = 3, ["content"] = 5, ["conciseness"] = 4, ["genre"] = 4, ["organization"] = 5, ["language"] = 4 },
             criterionComments = new Dictionary<string, string> { ["purpose"] = "Excellent clarity." },
             finalComment = "Strong submission overall.",
             anchoredComments = new[] { new { text = "Tighten this point.", startOffset = 5, endOffset = 18 } },
@@ -398,7 +562,7 @@ public class ExpertFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFa
 
         var submitResponse = await client.PostAsJsonAsync("/v1/expert/reviews/review-queue-002/writing/submit", new
         {
-            scores = new Dictionary<string, int> { ["purpose"] = 5, ["content"] = 5, ["conciseness"] = 4, ["genre"] = 4, ["organization"] = 5, ["language"] = 4 },
+            scores = new Dictionary<string, int> { ["purpose"] = 3, ["content"] = 5, ["conciseness"] = 4, ["genre"] = 4, ["organization"] = 5, ["language"] = 4 },
             criterionComments = new Dictionary<string, string> { ["purpose"] = "Excellent clarity." },
             finalComment = "Strong submission overall.",
             version
@@ -540,6 +704,15 @@ public class ExpertFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFa
         });
 
         Assert.Equal(HttpStatusCode.BadRequest, dupResponse.StatusCode);
+    }
+
+    private static JsonElement FindArrayItem(JsonElement array, string propertyName, string expectedValue)
+    {
+        var match = array.EnumerateArray().FirstOrDefault(item =>
+            item.TryGetProperty(propertyName, out var property) &&
+            property.GetString() == expectedValue);
+        Assert.NotEqual(JsonValueKind.Undefined, match.ValueKind);
+        return match;
     }
 
     private static HttpClient CreateExpertClient(TestWebApplicationFactory factory, string expertId = "expert-001")

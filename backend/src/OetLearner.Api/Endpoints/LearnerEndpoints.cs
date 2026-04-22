@@ -65,7 +65,7 @@ public static class LearnerEndpoints
         v1.MapPost("/study-plan/items/{itemId}/swap", async (HttpContext http, string itemId, StudyPlanSwapRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.SwapStudyPlanItemAsync(http.UserId(), itemId, request, ct)));
         v1.MapGet("/readiness", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReadinessAsync(http.UserId(), ct)));
         v1.MapGet("/progress", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetProgressAsync(http.UserId(), ct)));
-        v1.MapGet("/submissions", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSubmissionsAsync(http.UserId(), ct)));
+        v1.MapGet("/submissions", async (HttpContext http, [FromQuery] string? cursor, [FromQuery] int? limit, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSubmissionsAsync(http.UserId(), cursor, limit, ct)));
         v1.MapGet("/submissions/compare", async (HttpContext http, [FromQuery] string? leftId, [FromQuery] string? rightId, LearnerService service, CancellationToken ct) => Results.Ok(await service.CompareSubmissionsAsync(http.UserId(), leftId, rightId, ct)));
 
         var writing = v1.MapGroup("/writing");
@@ -166,7 +166,7 @@ public static class LearnerEndpoints
                 string.IsNullOrWhiteSpace(addOnCodes)
                     ? null
                     : addOnCodes.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries).ToList()), ct)));
-        billing.MapGet("/invoices", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetInvoicesAsync(http.UserId(), ct)));
+        billing.MapGet("/invoices", async (HttpContext http, [FromQuery] string? cursor, [FromQuery] int? limit, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetInvoicesAsync(http.UserId(), cursor, limit, ct)));
         billing.MapGet("/invoices/{invoiceId}/download", async (HttpContext http, string invoiceId, LearnerService service, CancellationToken ct) =>
         {
             var file = await service.GetInvoiceDownloadAsync(http.UserId(), invoiceId, ct);

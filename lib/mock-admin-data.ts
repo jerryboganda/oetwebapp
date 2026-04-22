@@ -104,13 +104,17 @@ export const mockCriteria: AdminCriteria[] = [
   { id: 'CRI-002', name: 'Content', type: 'writing', weight: 7, status: 'active', description: 'Are all required details included?' },
   { id: 'CRI-003', name: 'Conciseness & Clarity', type: 'writing', weight: 7, status: 'active', description: 'Is the language clear and concise?' },
   { id: 'CRI-004', name: 'Genre & Style', type: 'writing', weight: 7, status: 'active', description: 'Is the tone appropriate for the profession?' },
-  { id: 'CRI-005', name: 'Organization & Layout', type: 'writing', weight: 7, status: 'active', description: 'Is the structure logical?' },
+  { id: 'CRI-005', name: 'Organisation & Layout', type: 'writing', weight: 7, status: 'active', description: 'Is the structure logical?' },
   { id: 'CRI-006', name: 'Language', type: 'writing', weight: 7, status: 'active', description: 'Grammar, vocabulary, and punctuation' },
-  { id: 'CRI-007', name: 'Intelligibility', type: 'speaking', weight: 6, status: 'active', description: 'Pronunciation, intonation, rhythm' },
-  { id: 'CRI-008', name: 'Fluency', type: 'speaking', weight: 6, status: 'active', description: 'Smoothness of speech, hesitations' },
-  { id: 'CRI-009', name: 'Appropriateness of Language', type: 'speaking', weight: 6, status: 'active', description: 'Professional tone and vocabulary' },
-  { id: 'CRI-010', name: 'Resources of Grammar and Expression', type: 'speaking', weight: 6, status: 'active', description: 'Accuracy and range of grammar' },
-  { id: 'CRI-011', name: 'Clinical Communication Skills', type: 'speaking', weight: 6, status: 'active', description: 'Relationship-building, information gathering, empathy' },
+  { id: 'CRI-007', name: 'Intelligibility', type: 'speaking', weight: 6, status: 'active', description: 'Pronunciation, intonation, rhythm (0–6).' },
+  { id: 'CRI-008', name: 'Fluency', type: 'speaking', weight: 6, status: 'active', description: 'Smoothness of speech, hesitations (0–6).' },
+  { id: 'CRI-009', name: 'Appropriateness of Language', type: 'speaking', weight: 6, status: 'active', description: 'Professional tone and vocabulary (0–6).' },
+  { id: 'CRI-010', name: 'Resources of Grammar & Expression', type: 'speaking', weight: 6, status: 'active', description: 'Accuracy and range of grammar (0–6).' },
+  { id: 'CRI-011', name: 'Relationship Building', type: 'speaking', weight: 3, status: 'active', description: 'Greeting/introductions, respectful attitude, empathy (0–3).' },
+  { id: 'CRI-012', name: "Understanding & Incorporating Patient's Perspective", type: 'speaking', weight: 3, status: 'active', description: 'Eliciting ideas/concerns/expectations, picking up cues (0–3).' },
+  { id: 'CRI-013', name: 'Providing Structure', type: 'speaking', weight: 3, status: 'active', description: 'Sequencing, signposting, organising explanations (0–3).' },
+  { id: 'CRI-014', name: 'Information Gathering', type: 'speaking', weight: 3, status: 'active', description: 'Open-then-closed questions, clarifying, summarising (0–3).' },
+  { id: 'CRI-015', name: 'Information Giving', type: 'speaking', weight: 3, status: 'active', description: 'Pausing, checking understanding, exploring further needs (0–3).' },
 ];
 
 export interface AdminAIConfig {

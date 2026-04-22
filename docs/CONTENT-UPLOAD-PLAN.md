@@ -40,8 +40,8 @@ Three samples. Two PDFs per sample:
 
 ```
 Reading Sample N/
-├─ Part A Reading.pdf       ← Part A (expedited reading, 4 short texts)
-└─ Reading Part B&C.pdf     ← Part B (short workplace) + Part C (long passages)
+├─ Part A Reading.pdf       ← Part A (expeditious reading, 4 medical texts on one topic)
+└─ Reading Part B&C.pdf     ← Part B (short extracts from healthcare contexts) + Part C (long passages)
 ```
 
 **Implications:**

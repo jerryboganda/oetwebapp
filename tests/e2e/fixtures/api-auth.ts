@@ -206,7 +206,7 @@ export async function createDisposableSpeakingReviewRequest(request: APIRequestC
   return createClaimedExpertReviewRequest(request, {
     attemptId: 'sa-001',
     subtest: 'speaking',
-    focusAreas: ['fluency', 'clinicalCommunication'],
+    focusAreas: ['fluency', 'relationshipBuilding'],
     learnerNotes: 'QA disposable expert speaking review request created for automated expert workflow coverage.',
   });
 }

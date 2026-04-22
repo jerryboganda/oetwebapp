@@ -10,8 +10,25 @@ namespace OetLearner.Api.Services;
 
 public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, MediaStorageService mediaStorage, PlatformLinkService platformLinks, NotificationService notifications, PronunciationService pronunciationService)
 {
-    private static readonly string[] WritingCriteria = ["purpose", "content", "conciseness", "genre", "organization", "language"];
-    private static readonly string[] SpeakingCriteria = ["intelligibility", "fluency", "appropriateness", "grammar", "clinicalCommunication"];
+    // Canonical writing criterion codes (match rulebooks/writing/common/assessment-criteria.json).
+    // Purpose is scored 0\u20133; all others 0\u20137 (rulebook R16.1 / R16.2). British spelling is intentional.
+    private static readonly string[] WritingCriteria = ["purpose", "content", "conciseness_clarity", "genre_style", "organisation_layout", "language"];
+
+    // Canonical OET Speaking 9-criterion codes per official CBLA format
+    // (source: rulebooks/speaking/common/assessment-criteria.json; Dr. Ahmed Hesham corrections April 2026).
+    //   Linguistic (4, scale 0\u20136 each):
+    //     intelligibility, fluency, appropriateness, grammar (Resources of Grammar & Expression)
+    //   Clinical Communication (5, scale 0\u20133 each):
+    //     relationshipBuilding, patientPerspective, providingStructure,
+    //     informationGathering, informationGiving
+    // The legacy aggregate "clinicalCommunication" key is DEPRECATED; it is not accepted on new writes.
+    private static readonly string[] SpeakingCriteria = [
+        "intelligibility", "fluency", "appropriateness", "grammar",
+        "relationshipBuilding", "patientPerspective", "providingStructure",
+        "informationGathering", "informationGiving"
+    ];
+    private static readonly string[] SpeakingLinguisticCriteria = ["intelligibility", "fluency", "appropriateness", "grammar"];
+    private static readonly string[] SpeakingClinicalCriteria = ["relationshipBuilding", "patientPerspective", "providingStructure", "informationGathering", "informationGiving"];
     private const int MaxQueuePageSize = 100;
     private const int MaxLearnerPageSize = 100;
     private const int MaxFinalCommentLength = 4000;
@@ -166,7 +183,10 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
 
         var pendingCalibrationCount = await db.ExpertCalibrationCases
             .AsNoTracking()
-            .Where(calibrationCase => !db.ExpertCalibrationResults.Any(result => result.CalibrationCaseId == calibrationCase.Id && result.ReviewerId == reviewerId))
+            .Where(calibrationCase => !db.ExpertCalibrationResults.Any(result =>
+                result.CalibrationCaseId == calibrationCase.Id &&
+                result.ReviewerId == reviewerId &&
+                !result.IsDraft))
             .CountAsync(ct);
 
         var assignedLearnerCount = await db.ExpertReviewAssignments
@@ -914,6 +934,12 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         return cases.Select(calibrationCase =>
         {
             results.TryGetValue(calibrationCase.Id, out var result);
+            var status = result is null
+                ? "pending"
+                : result.IsDraft ? "draft" : "completed";
+            var alignmentScore = result is null || result.IsDraft
+                ? null
+                : (double?)ResolveCalibrationAlignment(calibrationCase, result);
             return new ExpertCalibrationCaseSummaryResponse(
                 calibrationCase.Id,
                 calibrationCase.Title,
@@ -921,8 +947,9 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
                 calibrationCase.SubtestCode,
                 calibrationCase.SubtestCode,
                 calibrationCase.BenchmarkScore,
-                result?.ReviewerScore,
-                result is not null ? "completed" : "pending",
+                result is null || result.IsDraft ? null : result.ReviewerScore,
+                alignmentScore,
+                status,
                 calibrationCase.CreatedAt);
         }).ToList();
     }
@@ -973,7 +1000,7 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
             calibrationCase.BenchmarkLabel,
             calibrationCase.BenchmarkScore,
             calibrationCase.Difficulty,
-            existingSubmission is not null ? "completed" : "pending",
+            existingSubmission is not null ? (existingSubmission.IsDraft ? "draft" : "completed") : "pending",
             calibrationCase.CreatedAt,
             artifacts,
             benchmarkRubric,
@@ -984,11 +1011,13 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
                     reviewerId,
                     expert.DisplayName,
                     existingSubmission.ReviewerScore,
-                    existingSubmission.AlignmentScore,
+                    existingSubmission.IsDraft ? 0 : ResolveCalibrationAlignment(calibrationCase, existingSubmission),
                     existingSubmission.DisagreementSummary,
                     existingSubmission.Notes,
                     JsonSupport.Deserialize(existingSubmission.SubmittedRubricJson, new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)),
-                    existingSubmission.SubmittedAt));
+                    existingSubmission.SubmittedAt,
+                    existingSubmission.IsDraft,
+                    existingSubmission.UpdatedAt));
     }
 
     public async Task<object> SubmitCalibrationAsync(string caseId, string reviewerId, ExpertCalibrationSubmitRequest request, CancellationToken ct)
@@ -1016,62 +1045,64 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
 
         var existingResult = await db.ExpertCalibrationResults
             .FirstOrDefaultAsync(result => result.CalibrationCaseId == caseId && result.ReviewerId == reviewerId, ct);
-        if (existingResult is not null)
+        if (existingResult is not null && !existingResult.IsDraft)
         {
             throw ApiException.Conflict("calibration_already_submitted", "This calibration case has already been submitted.");
         }
 
         var normalizedScores = NormalizeScores(request.Scores, calibrationCase.SubtestCode);
-        var benchmarkRubric = DeserializeCalibrationRubric(calibrationCase);
-        var benchmarkLookup = benchmarkRubric.ToDictionary(
-            entry => entry.Criterion,
-            entry => entry.BenchmarkScore,
-            StringComparer.OrdinalIgnoreCase);
+        var benchmarkLookup = NormalizeCalibrationBenchmarkScores(
+            DeserializeCalibrationRubric(calibrationCase),
+            calibrationCase.SubtestCode);
+        ValidateCompleteCalibrationScores(normalizedScores, benchmarkLookup);
 
-        var reviewerScore = normalizedScores.Count == 0
-            ? 0
-            : (int)Math.Round(normalizedScores.Values.Average(), MidpointRounding.AwayFromZero);
+        var reviewerScore = CalculateCalibrationReviewerScore(normalizedScores);
+        var alignment = CalculateCalibrationAlignment(normalizedScores, benchmarkLookup, calibrationCase.SubtestCode);
 
-        var maxCriterionScore = string.Equals(calibrationCase.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase) ? 7 : 6;
-        var comparableCriteria = normalizedScores.Keys
-            .Where(criterion => benchmarkLookup.ContainsKey(criterion))
-            .ToList();
-
-        var alignment = comparableCriteria.Count == 0
-            ? calibrationCase.BenchmarkScore > 0
-                ? Math.Round(100.0 - Math.Abs(reviewerScore - calibrationCase.BenchmarkScore) / calibrationCase.BenchmarkScore * 100.0, 1)
-                : 100.0
-            : Math.Round(
-                Math.Max(
-                    0.0,
-                    100.0 - comparableCriteria.Sum(criterion => Math.Abs(normalizedScores[criterion] - benchmarkLookup[criterion])) * 100.0 / (comparableCriteria.Count * maxCriterionScore)),
-                1);
-
-        var largestDelta = comparableCriteria
+        var largestDelta = benchmarkLookup.Keys
             .Select(criterion => new
             {
                 Criterion = criterion,
-                Gap = Math.Abs(normalizedScores[criterion] - benchmarkLookup[criterion])
+                Gap = Math.Abs(normalizedScores[criterion] - benchmarkLookup[criterion]),
+                NormalizedGap = Math.Abs(normalizedScores[criterion] - benchmarkLookup[criterion]) /
+                    Math.Max(1.0, MaxScoreForCriterion(calibrationCase.SubtestCode, criterion))
             })
-            .OrderByDescending(item => item.Gap)
+            .OrderByDescending(item => item.NormalizedGap)
             .FirstOrDefault();
 
         var disagreementSummary = largestDelta is null || largestDelta.Gap == 0
             ? "Aligned with benchmark."
             : $"{ToLabel(largestDelta.Criterion)} differs from benchmark by {largestDelta.Gap} point(s).";
 
-        db.ExpertCalibrationResults.Add(new ExpertCalibrationResult
+        if (existingResult is null)
         {
-            Id = $"ecr-{Guid.NewGuid():N}",
-            CalibrationCaseId = caseId,
-            ReviewerId = reviewerId,
-            SubmittedRubricJson = JsonSupport.Serialize(normalizedScores),
-            ReviewerScore = reviewerScore,
-            AlignmentScore = alignment,
-            DisagreementSummary = disagreementSummary,
-            Notes = request.Notes?.Trim() ?? string.Empty,
-            SubmittedAt = DateTimeOffset.UtcNow
-        });
+            db.ExpertCalibrationResults.Add(new ExpertCalibrationResult
+            {
+                Id = $"ecr-{Guid.NewGuid():N}",
+                CalibrationCaseId = caseId,
+                ReviewerId = reviewerId,
+                SubmittedRubricJson = JsonSupport.Serialize(normalizedScores),
+                ReviewerScore = reviewerScore,
+                AlignmentScore = alignment,
+                DisagreementSummary = disagreementSummary,
+                Notes = request.Notes?.Trim() ?? string.Empty,
+                SubmittedAt = DateTimeOffset.UtcNow,
+                IsDraft = false,
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+        }
+        else
+        {
+            // Upgrade an existing draft into a final submission.
+            existingResult.SubmittedRubricJson = JsonSupport.Serialize(normalizedScores);
+            existingResult.ReviewerScore = reviewerScore;
+            existingResult.AlignmentScore = alignment;
+            existingResult.DisagreementSummary = disagreementSummary;
+            existingResult.Notes = request.Notes?.Trim() ?? string.Empty;
+            existingResult.SubmittedAt = DateTimeOffset.UtcNow;
+            existingResult.UpdatedAt = DateTimeOffset.UtcNow;
+            existingResult.IsDraft = false;
+        }
 
         db.ExpertCalibrationNotes.Add(new ExpertCalibrationNote
         {
@@ -1088,6 +1119,83 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         await db.SaveChangesAsync(ct);
 
         return new { success = true, caseId, alignment };
+    }
+
+    /// <summary>
+    /// Saves a calibration submission as a draft so the reviewer can resume later without losing work.
+    /// Supplement §4.8: preserves reviewer work where possible. Drafts never contribute to
+    /// alignment/history aggregates and are replaced (not duplicated) on subsequent saves.
+    /// Supplement: <c>POST /v1/expert/calibration/cases/{caseId}/draft</c>.
+    /// </summary>
+    public async Task<object> SaveCalibrationDraftAsync(string caseId, string reviewerId, ExpertCalibrationSubmitRequest request, CancellationToken ct)
+    {
+        var expert = await EnsureExpertAsync(reviewerId, ct);
+
+        if (!string.IsNullOrWhiteSpace(request.Notes) && request.Notes.Trim().Length > MaxCalibrationNotesLength)
+        {
+            throw ApiException.Validation(
+                "calibration_notes_too_long",
+                "Calibration notes are too long.",
+                [new ApiFieldError("notes", "too_long", $"Calibration notes cannot exceed {MaxCalibrationNotesLength} characters.")]);
+        }
+
+        var calibrationCase = await db.ExpertCalibrationCases
+            .FirstOrDefaultAsync(existingCase => existingCase.Id == caseId, ct)
+            ?? throw ApiException.NotFound("calibration_case_not_found", "The requested calibration case does not exist.");
+
+        var existing = await db.ExpertCalibrationResults
+            .FirstOrDefaultAsync(result => result.CalibrationCaseId == caseId && result.ReviewerId == reviewerId, ct);
+        if (existing is not null && !existing.IsDraft)
+        {
+            throw ApiException.Conflict(
+                "calibration_already_submitted",
+                "This calibration case has already been submitted and cannot be saved as a draft.");
+        }
+
+        var normalizedScores = request.Scores.Count == 0
+            ? new Dictionary<string, int>()
+            : NormalizeScores(request.Scores, calibrationCase.SubtestCode);
+
+        var reviewerScore = normalizedScores.Count == 0
+            ? 0
+            : (int)Math.Round(normalizedScores.Values.Average(), MidpointRounding.AwayFromZero);
+
+        var normalizedNotes = request.Notes?.Trim() ?? string.Empty;
+        var now = DateTimeOffset.UtcNow;
+
+        if (existing is null)
+        {
+            existing = new ExpertCalibrationResult
+            {
+                Id = $"ecr-{Guid.NewGuid():N}",
+                CalibrationCaseId = caseId,
+                ReviewerId = reviewerId,
+                SubmittedAt = now
+            };
+            db.ExpertCalibrationResults.Add(existing);
+        }
+
+        existing.SubmittedRubricJson = JsonSupport.Serialize(normalizedScores);
+        existing.ReviewerScore = reviewerScore;
+        existing.AlignmentScore = 0;
+        existing.DisagreementSummary = string.Empty;
+        existing.Notes = normalizedNotes;
+        existing.IsDraft = true;
+        existing.UpdatedAt = now;
+
+        await LogExpertAuditAsync(reviewerId, expert.DisplayName, "Saved Calibration Draft", caseId, "Calibration draft saved.", ct);
+        await RecordExpertEventAsync(reviewerId, "expert_calibration_draft_saved", new { caseId, scoreCount = normalizedScores.Count }, ct);
+        await db.SaveChangesAsync(ct);
+
+        return new
+        {
+            success = true,
+            caseId,
+            isDraft = true,
+            scores = normalizedScores,
+            notes = normalizedNotes,
+            updatedAt = existing.UpdatedAt
+        };
     }
 
     public async Task<object> GetAvailabilityAsync(string reviewerId, CancellationToken ct)
@@ -1153,6 +1261,187 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
             days = request.Days,
             lastUpdatedAt = availability.EffectiveFrom
         };
+    }
+
+    /// <summary>
+    /// Returns static business rules for reviewer availability so the Schedule page can
+    /// validate user input client-side without the server silently rejecting edits.
+    /// Supplement: <c>GET /v1/expert/availability/constraints</c>.
+    /// </summary>
+    public async Task<ExpertAvailabilityConstraintsResponse> GetAvailabilityConstraintsAsync(string reviewerId, CancellationToken ct)
+    {
+        await EnsureExpertAsync(reviewerId, ct);
+
+        // Intentionally static; elevate to admin-configurable later if business rules change.
+        return new ExpertAvailabilityConstraintsResponse(
+            MinNoticeHours: 24,
+            MaxHoursPerWeek: 60,
+            MaxExceptionsPerMonth: 12,
+            MinSlotDuration: "00:30",
+            MaxSlotDuration: "12:00",
+            SupportedTimezones: new[]
+            {
+                "UTC",
+                "Europe/London",
+                "Europe/Dublin",
+                "Europe/Berlin",
+                "America/New_York",
+                "America/Chicago",
+                "America/Denver",
+                "America/Los_Angeles",
+                "Asia/Dubai",
+                "Asia/Karachi",
+                "Asia/Kolkata",
+                "Asia/Singapore",
+                "Asia/Tokyo",
+                "Australia/Sydney",
+                "Pacific/Auckland"
+            },
+            DayKeys: new[] { "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday" });
+    }
+
+    /// <summary>
+    /// Returns the reviewer's calibration submission history ordered newest first.
+    /// Supplement: <c>GET /v1/expert/calibration/history</c>.
+    /// </summary>
+    public async Task<ExpertCalibrationHistoryResponse> GetCalibrationHistoryAsync(string reviewerId, int limit, CancellationToken ct)
+    {
+        await EnsureExpertAsync(reviewerId, ct);
+        var effectiveLimit = Math.Clamp(limit, 1, 200);
+
+        var results = await db.ExpertCalibrationResults
+            .AsNoTracking()
+            .Where(r => r.ReviewerId == reviewerId && !r.IsDraft)
+            .OrderByDescending(r => r.SubmittedAt)
+            .Take(effectiveLimit)
+            .ToListAsync(ct);
+
+        var total = await db.ExpertCalibrationResults
+            .AsNoTracking()
+            .CountAsync(r => r.ReviewerId == reviewerId && !r.IsDraft, ct);
+
+        if (results.Count == 0)
+        {
+            return new ExpertCalibrationHistoryResponse(Array.Empty<ExpertCalibrationHistoryEntryResponse>(), 0, DateTimeOffset.UtcNow);
+        }
+
+        var caseIds = results.Select(r => r.CalibrationCaseId).Distinct().ToList();
+        var cases = await db.ExpertCalibrationCases
+            .AsNoTracking()
+            .Where(c => caseIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, ct);
+
+        var professionIds = cases.Values.Select(c => c.ProfessionId).Distinct().ToList();
+        var professionNames = await db.Professions
+            .AsNoTracking()
+            .Where(p => professionIds.Contains(p.Id))
+            .ToDictionaryAsync(p => p.Id, p => p.Label, ct);
+
+        var entries = results.Select(r =>
+        {
+            cases.TryGetValue(r.CalibrationCaseId, out var @case);
+            var professionName = @case is not null && professionNames.TryGetValue(@case.ProfessionId, out var pn)
+                ? pn
+                : @case?.ProfessionId ?? string.Empty;
+
+            return new ExpertCalibrationHistoryEntryResponse(
+                Id: r.Id,
+                CaseId: r.CalibrationCaseId,
+                CaseTitle: @case?.Title ?? "(deleted case)",
+                Profession: professionName,
+                SubTest: @case?.SubtestCode ?? string.Empty,
+                BenchmarkScore: @case?.BenchmarkScore ?? 0,
+                ReviewerScore: r.ReviewerScore,
+                AlignmentScore: @case is null ? r.AlignmentScore : ResolveCalibrationAlignment(@case, r),
+                DisagreementSummary: r.DisagreementSummary ?? string.Empty,
+                SubmittedAt: r.SubmittedAt);
+        }).ToList();
+
+        return new ExpertCalibrationHistoryResponse(entries, total, DateTimeOffset.UtcNow);
+    }
+
+    /// <summary>
+    /// Returns aggregate alignment statistics across the reviewer's calibration submissions,
+    /// plus per-sub-test breakdown and a 12-point trend. Supplement:
+    /// <c>GET /v1/expert/calibration/alignment</c>.
+    /// </summary>
+    public async Task<ExpertCalibrationAlignmentResponse> GetCalibrationAlignmentAsync(string reviewerId, CancellationToken ct)
+    {
+        await EnsureExpertAsync(reviewerId, ct);
+
+        var results = await db.ExpertCalibrationResults
+            .AsNoTracking()
+            .Where(r => r.ReviewerId == reviewerId && !r.IsDraft)
+            .OrderByDescending(r => r.SubmittedAt)
+            .ToListAsync(ct);
+
+        if (results.Count == 0)
+        {
+            return new ExpertCalibrationAlignmentResponse(
+                TotalSubmissions: 0,
+                OverallAverageAlignment: 0,
+                LatestAlignment: null,
+                PreviousAlignment: null,
+                DeltaFromPrevious: null,
+                PerSubTest: Array.Empty<ExpertCalibrationAlignmentBreakdownResponse>(),
+                Trend: Array.Empty<ExpertCalibrationAlignmentTrendPointResponse>(),
+                GeneratedAt: DateTimeOffset.UtcNow);
+        }
+
+        var caseIds = results.Select(r => r.CalibrationCaseId).Distinct().ToList();
+        var cases = await db.ExpertCalibrationCases
+            .AsNoTracking()
+            .Where(c => caseIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, ct);
+
+        var scoredResults = results
+            .Select(r =>
+            {
+                cases.TryGetValue(r.CalibrationCaseId, out var calibrationCase);
+                var alignment = calibrationCase is null ? r.AlignmentScore : ResolveCalibrationAlignment(calibrationCase, r);
+                return new
+                {
+                    Result = r,
+                    Alignment = alignment,
+                    SubTest = calibrationCase?.SubtestCode ?? "unknown"
+                };
+            })
+            .ToList();
+
+        var overallAverage = Math.Round(scoredResults.Average(r => r.Alignment), 1);
+        var latest = scoredResults[0].Alignment;
+        double? previous = scoredResults.Count > 1 ? scoredResults[1].Alignment : null;
+        double? delta = previous is null ? null : Math.Round(latest - previous.Value, 1);
+
+        var perSubTest = scoredResults
+            .GroupBy(r => r.SubTest)
+            .Select(g =>
+            {
+                var ordered = g.OrderByDescending(r => r.Result.SubmittedAt).ToList();
+                return new ExpertCalibrationAlignmentBreakdownResponse(
+                    SubTest: g.Key,
+                    SubmissionCount: ordered.Count,
+                    AverageAlignment: Math.Round(ordered.Average(r => r.Alignment), 1),
+                    LatestAlignment: ordered[0].Alignment);
+            })
+            .OrderBy(b => b.SubTest, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var trend = scoredResults
+            .OrderBy(r => r.Result.SubmittedAt)
+            .TakeLast(12)
+            .Select(r => new ExpertCalibrationAlignmentTrendPointResponse(r.Result.SubmittedAt, r.Alignment))
+            .ToList();
+
+        return new ExpertCalibrationAlignmentResponse(
+            TotalSubmissions: results.Count,
+            OverallAverageAlignment: overallAverage,
+            LatestAlignment: latest,
+            PreviousAlignment: previous,
+            DeltaFromPrevious: delta,
+            PerSubTest: perSubTest,
+            Trend: trend,
+            GeneratedAt: DateTimeOffset.UtcNow);
     }
 
     public async Task<ExpertQueueFilterMetadataResponse> GetQueueFilterMetadataAsync(string reviewerId, CancellationToken ct)
@@ -1357,11 +1646,22 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
             ? 0.0
             : Math.Round(completedReviews.Average(reviewRequest => ((reviewRequest.CompletedAt ?? reviewRequest.CreatedAt) - reviewRequest.CreatedAt).TotalHours), 1);
 
-        var calibrationAlignment = await db.ExpertCalibrationResults
+        var completedCalibrationResults = await db.ExpertCalibrationResults
             .AsNoTracking()
-            .Where(result => result.ReviewerId == reviewerId)
-            .Select(result => (double?)result.AlignmentScore)
-            .AverageAsync(ct) ?? 100.0;
+            .Where(result => result.ReviewerId == reviewerId && !result.IsDraft)
+            .ToListAsync(ct);
+        var completedCalibrationCaseIds = completedCalibrationResults.Select(result => result.CalibrationCaseId).Distinct().ToArray();
+        var completedCalibrationCases = await db.ExpertCalibrationCases
+            .AsNoTracking()
+            .Where(calibrationCase => completedCalibrationCaseIds.Contains(calibrationCase.Id))
+            .ToDictionaryAsync(calibrationCase => calibrationCase.Id, ct);
+        var calibrationAlignment = completedCalibrationResults.Count == 0
+            ? 100.0
+            : completedCalibrationResults
+                .Select(result => completedCalibrationCases.TryGetValue(result.CalibrationCaseId, out var calibrationCase)
+                    ? ResolveCalibrationAlignment(calibrationCase, result)
+                    : result.AlignmentScore)
+                .Average();
 
         var reworkCount = assignments.Count(assignment => !string.IsNullOrWhiteSpace(assignment.ReasonCode) && !string.Equals(assignment.ReasonCode, "submitted", StringComparison.OrdinalIgnoreCase));
         var reworkRate = handledReviewIds.Count == 0
@@ -1989,20 +2289,27 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         return isWriting
             ? new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
             {
-                ["purpose"] = 4,
+                // Purpose is the ONLY writing criterion on the 0\u20133 scale; others 0\u20137 (rulebook R16.1 / R16.2).
+                ["purpose"] = 2,
                 ["content"] = 4,
-                ["conciseness"] = 3,
-                ["genre"] = 4,
-                ["organization"] = 4,
+                ["conciseness_clarity"] = 4,
+                ["genre_style"] = 4,
+                ["organisation_layout"] = 4,
                 ["language"] = 4
             }
             : new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase)
             {
+                // Linguistic (0–6)
                 ["intelligibility"] = 4,
                 ["fluency"] = 3,
                 ["appropriateness"] = 4,
                 ["grammar"] = 4,
-                ["clinicalCommunication"] = 4
+                // Clinical Communication (0–3)
+                ["relationshipBuilding"] = 2,
+                ["patientPerspective"] = 2,
+                ["providingStructure"] = 2,
+                ["informationGathering"] = 2,
+                ["informationGiving"] = 2
             };
     }
 
@@ -2299,11 +2606,17 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         return string.Equals(calibrationCase.SubtestCode, "speaking", StringComparison.OrdinalIgnoreCase)
             ? new List<ExpertCalibrationRubricEntryResponse>
             {
+                // Linguistic criteria (0–6 scale)
                 new("intelligibility", 5, "Speech remains easy to follow with only minor stress-related hesitation."),
                 new("fluency", 5, "Delivery is steady and recovers quickly after clarification moments."),
                 new("appropriateness", 4, "Register is professional but one reassurance phrase is slightly abrupt."),
-                new("grammar", 5, "Grammar is controlled throughout the handover."),
-                new("clinicalCommunication", 5, "Escalation, prioritisation, and safety-netting are explicit and well organised.")
+                new("grammar", 5, "Grammar and expression are controlled throughout the handover."),
+                // Clinical Communication criteria (0–3 scale)
+                new("relationshipBuilding", 2, "Respectful attitude and empathy are evident; introductions are complete."),
+                new("patientPerspective", 2, "The candidate acknowledges the patient's concerns but misses one cue."),
+                new("providingStructure", 3, "Clear signposting and logical sequencing of the handover."),
+                new("informationGathering", 2, "Uses open-then-closed questioning; one compound question observed."),
+                new("informationGiving", 2, "Pauses to check understanding; one safety-net checkback missed.")
             }
             : new List<ExpertCalibrationRubricEntryResponse>
             {
@@ -2341,8 +2654,8 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
 
     private static Dictionary<string, int> NormalizeScores(Dictionary<string, int> scores, string subtestCode)
     {
-        var criteria = string.Equals(subtestCode, "writing", StringComparison.OrdinalIgnoreCase) ? WritingCriteria : SpeakingCriteria;
-        var maxScore = string.Equals(subtestCode, "writing", StringComparison.OrdinalIgnoreCase) ? 7 : 6;
+        var isWriting = string.Equals(subtestCode, "writing", StringComparison.OrdinalIgnoreCase);
+        var criteria = isWriting ? WritingCriteria : SpeakingCriteria;
         var normalized = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var (key, value) in scores)
@@ -2356,6 +2669,7 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
                     [new ApiFieldError("scores", "invalid_criterion", $"'{key}' is not a valid criterion for this review.")]);
             }
 
+            var maxScore = MaxScoreForCriterion(subtestCode, normalizedKey);
             if (value < 0 || value > maxScore)
             {
                 throw ApiException.Validation(
@@ -2368,6 +2682,134 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         }
 
         return normalized;
+    }
+
+    /// <summary>
+    /// Per-criterion max score. Writing: Purpose=3, others=7 (rulebook R16.1/R16.2).
+    /// Speaking: linguistic=6, clinical-communication cluster=3 (OET CBLA official).
+    /// </summary>
+    private static int MaxScoreForCriterion(string subtestCode, string criterionCode)
+    {
+        if (string.Equals(subtestCode, "writing", StringComparison.OrdinalIgnoreCase))
+        {
+            return string.Equals(criterionCode, "purpose", StringComparison.OrdinalIgnoreCase) ? 3 : 7;
+        }
+        return SpeakingClinicalCriteria.Contains(criterionCode, StringComparer.OrdinalIgnoreCase) ? 3 : 6;
+    }
+
+    private static Dictionary<string, int> NormalizeCalibrationBenchmarkScores(
+        IReadOnlyCollection<ExpertCalibrationRubricEntryResponse> benchmarkRubric,
+        string subtestCode)
+    {
+        var criteria = string.Equals(subtestCode, "writing", StringComparison.OrdinalIgnoreCase) ? WritingCriteria : SpeakingCriteria;
+        var normalized = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var entry in benchmarkRubric)
+        {
+            var normalizedKey = NormalizeCriterionKey(entry.Criterion, criteria);
+            if (normalizedKey is null)
+            {
+                continue;
+            }
+
+            var maxScore = MaxScoreForCriterion(subtestCode, normalizedKey);
+            normalized[normalizedKey] = Math.Clamp(entry.BenchmarkScore, 0, maxScore);
+        }
+
+        return normalized;
+    }
+
+    private static void ValidateCompleteCalibrationScores(
+        IReadOnlyDictionary<string, int> normalizedScores,
+        IReadOnlyDictionary<string, int> benchmarkLookup)
+    {
+        if (benchmarkLookup.Count == 0)
+        {
+            throw ApiException.Validation(
+                "calibration_rubric_missing",
+                "This calibration case does not have a benchmark rubric.",
+                [new ApiFieldError("scores", "missing_benchmark", "A benchmark rubric is required before this calibration case can be submitted.")]);
+        }
+
+        var missing = benchmarkLookup.Keys
+            .Where(criterion => !normalizedScores.ContainsKey(criterion))
+            .ToArray();
+        if (missing.Length > 0)
+        {
+            throw ApiException.Validation(
+                "calibration_scores_incomplete",
+                "Complete every benchmark criterion before submitting.",
+                missing.Select(criterion => new ApiFieldError($"scores.{criterion}", "required", $"A score for {criterion} is required before final submission.")));
+        }
+    }
+
+    private static int CalculateCalibrationReviewerScore(IReadOnlyDictionary<string, int> normalizedScores)
+    {
+        return normalizedScores.Count == 0
+            ? 0
+            : (int)Math.Round(normalizedScores.Values.Average(), MidpointRounding.AwayFromZero);
+    }
+
+    private static double CalculateCalibrationAlignment(
+        IReadOnlyDictionary<string, int> normalizedScores,
+        IReadOnlyDictionary<string, int> benchmarkLookup,
+        string subtestCode)
+    {
+        var comparableCriteria = benchmarkLookup.Keys
+            .Where(normalizedScores.ContainsKey)
+            .ToList();
+        if (comparableCriteria.Count == 0)
+        {
+            return 0;
+        }
+
+        var averageSimilarity = comparableCriteria.Average(criterion =>
+        {
+            var criterionMax = Math.Max(1.0, MaxScoreForCriterion(subtestCode, criterion));
+            var delta = Math.Abs(normalizedScores[criterion] - benchmarkLookup[criterion]);
+            return Math.Max(0.0, 1.0 - delta / criterionMax);
+        });
+
+        return Math.Round(averageSimilarity * 100.0, 1);
+    }
+
+    private static double ResolveCalibrationAlignment(ExpertCalibrationCase calibrationCase, ExpertCalibrationResult result)
+    {
+        if (result.IsDraft)
+        {
+            return 0;
+        }
+
+        try
+        {
+            var criteria = string.Equals(calibrationCase.SubtestCode, "writing", StringComparison.OrdinalIgnoreCase)
+                ? WritingCriteria
+                : SpeakingCriteria;
+            var rawScores = JsonSupport.Deserialize(result.SubmittedRubricJson, new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase));
+            var normalizedScores = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var (key, value) in rawScores)
+            {
+                var normalizedKey = NormalizeCriterionKey(key, criteria);
+                if (normalizedKey is null)
+                {
+                    continue;
+                }
+
+                var maxScore = MaxScoreForCriterion(calibrationCase.SubtestCode, normalizedKey);
+                normalizedScores[normalizedKey] = Math.Clamp(value, 0, maxScore);
+            }
+
+            var benchmarkLookup = NormalizeCalibrationBenchmarkScores(
+                DeserializeCalibrationRubric(calibrationCase),
+                calibrationCase.SubtestCode);
+
+            return CalculateCalibrationAlignment(normalizedScores, benchmarkLookup, calibrationCase.SubtestCode);
+        }
+        catch
+        {
+            return result.AlignmentScore;
+        }
     }
 
     private static Dictionary<string, string> NormalizeCriterionComments(Dictionary<string, string> criterionComments, string subtestCode)
@@ -2686,8 +3128,18 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         {
             var candidateKey = candidate.Replace("_", string.Empty, StringComparison.Ordinal).Replace("-", string.Empty, StringComparison.Ordinal).ToLowerInvariant();
             return candidateKey == normalized
-                || (candidate == "grammar" && normalized == "grammarexpression")
-                || (candidate == "clinicalCommunication" && normalized == "clinicalcommunicationskills");
+                // Backward-compat aliases for legacy writing criterion codes stored before canonical rename.
+                || (candidate == "conciseness_clarity" && (normalized == "conciseness" || normalized == "clarity"))
+                || (candidate == "genre_style" && (normalized == "genre" || normalized == "style"))
+                || (candidate == "organisation_layout" && (normalized == "organisation" || normalized == "organization" || normalized == "layout"))
+                // Speaking aliases: collapse the many grammar spellings to canonical "grammar".
+                || (candidate == "grammar" && (normalized == "grammarexpression" || normalized == "resources" || normalized == "resourcesofgrammarandexpression" || normalized == "resourcesofgrammarexpression"))
+                // Speaking clinical criteria: accept snake_case / spaced / partial forms.
+                || (candidate == "relationshipBuilding" && (normalized == "relationshipbuilding" || normalized == "relationship"))
+                || (candidate == "patientPerspective" && (normalized == "patientperspective" || normalized == "understandingpatientperspective" || normalized == "understandingandincorporatingpatientsperspective" || normalized == "patientperspectives"))
+                || (candidate == "providingStructure" && (normalized == "providingstructure" || normalized == "structure"))
+                || (candidate == "informationGathering" && (normalized == "informationgathering" || normalized == "gathering"))
+                || (candidate == "informationGiving" && (normalized == "informationgiving" || normalized == "giving"));
         });
     }
 

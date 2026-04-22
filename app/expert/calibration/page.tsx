@@ -25,7 +25,7 @@ type AsyncStatus = 'loading' | 'error' | 'empty' | 'success';
 const FILTER_GROUPS: FilterGroup[] = [
   { id: 'profession', label: 'Profession', options: [{ id: 'nursing', label: 'Nursing' }, { id: 'medicine', label: 'Medicine' }, { id: 'dentistry', label: 'Dentistry' }] },
   { id: 'subTest', label: 'Sub-test', options: [{ id: 'writing', label: 'Writing' }, { id: 'speaking', label: 'Speaking' }] },
-  { id: 'status', label: 'Status', options: [{ id: 'pending', label: 'Pending' }, { id: 'completed', label: 'Completed' }] },
+  { id: 'status', label: 'Status', options: [{ id: 'pending', label: 'Pending' }, { id: 'draft', label: 'Draft' }, { id: 'completed', label: 'Completed' }] },
 ];
 
 export default function CalibrationCenterPage() {
@@ -80,9 +80,9 @@ export default function CalibrationCenterPage() {
   }), [cases, filters]);
 
   const completedCases = cases.filter((entry) => entry.status === 'completed');
-  const pendingCount = cases.filter((entry) => entry.status === 'pending').length;
+  const openCount = cases.filter((entry) => entry.status !== 'completed').length;
   const alignmentPct = completedCases.length > 0
-    ? Math.round((completedCases.filter((entry) => Math.abs((entry.benchmarkScore ?? 0) - (entry.reviewerScore ?? 0)) <= 20).length / completedCases.length) * 100)
+    ? Math.round(completedCases.reduce((total, entry) => total + (entry.alignmentScore ?? 0), 0) / completedCases.length)
     : 0;
 
   const columns: Column<CalibrationCase>[] = [
@@ -93,31 +93,58 @@ export default function CalibrationCenterPage() {
     {
       key: 'status',
       header: 'Status',
-      render: (row) => (
-        <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${row.status === 'completed' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-50 text-amber-700'}`}>
-          {row.status}
-        </span>
-      ),
+      render: (row) => {
+        const statusStyle = row.status === 'completed'
+          ? 'bg-emerald-50 text-emerald-700'
+          : row.status === 'draft'
+            ? 'bg-blue-50 text-blue-700'
+            : 'bg-amber-50 text-amber-700';
+        return (
+          <span className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium ${statusStyle}`}>
+            {row.status === 'draft' ? 'Draft' : row.status === 'completed' ? 'Completed' : 'Pending'}
+          </span>
+        );
+      },
     },
     {
       key: 'alignment',
       header: 'Alignment',
-      render: (row) => row.status === 'pending'
-        ? <span className="text-xs text-muted">Awaiting submission</span>
-        : <span className="text-sm font-medium text-navy">{Math.abs((row.benchmarkScore ?? 0) - (row.reviewerScore ?? 0)) <= 20 ? 'Aligned' : 'Needs review'}</span>,
+      render: (row) => {
+        if (row.status === 'pending') {
+          return <span className="text-xs text-muted">Awaiting submission</span>;
+        }
+
+        if (row.status === 'draft') {
+          return <span className="text-xs text-blue-700">Draft saved</span>;
+        }
+
+        const alignmentScore = row.alignmentScore ?? 0;
+        return (
+          <span className="text-sm font-medium text-navy">
+            {alignmentScore >= 90 ? 'Aligned' : 'Needs review'} ({alignmentScore.toFixed(1)}%)
+          </span>
+        );
+      },
     },
     {
       key: 'actions',
       header: 'Action',
-      render: (row) => (
-        <button
-          type="button"
-          onClick={() => router.push(`/expert/calibration/${row.id}`)}
-          className="text-sm font-medium text-primary hover:underline"
-        >
-          {row.status === 'pending' ? 'Open workspace' : 'Review benchmark'}
-        </button>
-      ),
+      render: (row) => {
+        const actionLabel = row.status === 'draft'
+          ? 'Resume draft'
+          : row.status === 'pending'
+            ? 'Open workspace'
+            : 'Review benchmark';
+        return (
+          <button
+            type="button"
+            onClick={() => router.push(`/expert/calibration/${row.id}`)}
+            className="text-sm font-medium text-primary hover:underline"
+          >
+            {actionLabel}
+          </button>
+        );
+      },
     },
   ];
 
@@ -142,7 +169,7 @@ export default function CalibrationCenterPage() {
             description="Benchmark cases open in a learner-style workspace with exemplar artifacts, rubric rationale, and alignment evidence instead of the older inline scorer."
             highlights={[
               { icon: CheckCircle, label: 'Alignment', value: `${alignmentPct}%` },
-              { icon: Clock, label: 'Pending cases', value: String(pendingCount) },
+              { icon: Clock, label: 'Open cases', value: String(openCount) },
               { icon: GraduationCap, label: 'Total benchmarks', value: String(cases.length) },
             ]}
             aside={<ExpertRouteFreshnessBadge value={notes[0]?.createdAt} />}
@@ -157,10 +184,10 @@ export default function CalibrationCenterPage() {
               icon={CheckCircle}
             />
             <ExpertRouteSummaryCard
-              label="Pending Cases"
-              value={pendingCount}
-              hint="Benchmark reviews still requiring your submission."
-              accent={pendingCount > 0 ? 'amber' : 'emerald'}
+              label="Open Cases"
+              value={openCount}
+              hint="Pending cases and saved drafts still requiring final submission."
+              accent={openCount > 0 ? 'amber' : 'emerald'}
               icon={Clock}
             />
             <ExpertRouteSummaryCard
@@ -257,11 +284,11 @@ export default function CalibrationCenterPage() {
             </Card>
           </section>
 
-          {pendingCount > 0 ? (
+          {openCount > 0 ? (
             <InlineAlert variant="warning">
               <div className="flex items-start gap-3">
                 <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
-                <p>{pendingCount} calibration case{pendingCount === 1 ? '' : 's'} still need attention. Open them from the table above to score directly against the benchmark workspace.</p>
+                <p>{openCount} calibration case{openCount === 1 ? '' : 's'} still need attention. Open or resume them from the table above to score directly against the benchmark workspace.</p>
               </div>
             </InlineAlert>
           ) : null}

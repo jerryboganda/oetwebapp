@@ -39,6 +39,7 @@ const TRACKED_EVENTS = [
   'calibration_case_started',
   'calibration_case_completed',
   'expert_calibration_case_viewed',
+  'expert_calibration_draft_saved',
   'expert_calibration_case_submitted',
   'expert_schedule_saved',
   'expert_metrics_viewed',
@@ -118,6 +119,12 @@ const TRACKED_EVENTS = [
   'writing_coach_enabled',
   'writing_coach_suggestion_accepted',
   'writing_coach_suggestion_dismissed',
+  // Writing module phase events
+  'writing_reading_window_ended',
+  // Speaking module — CBT at-home exam environment events
+  'speaking_cbt_environment_confirmed',
+  'speaking_cbt_paper_acknowledged',
+  'speaking_cbt_paper_destroyed',
   // Marketplace events
   'marketplace_page_viewed',
   'marketplace_submission_created',

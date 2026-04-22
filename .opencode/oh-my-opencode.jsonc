@@ -1,0 +1,153 @@
+{
+  // Oh My OpenCode config for OET Prep Platform
+  // -----------------------------------------------------------------------
+  // Strategy: surgical adoption of omo tools only. GSD remains the primary
+  // workflow/orchestration system. See AGENTS.md § "Skill Routing" and the
+  // full plan recorded by the assistant session on the omo install decision.
+  //
+  // All agents/categories route to the DigitalOcean Inference provider
+  // already configured in ~/.config/opencode/opencode.json — no other
+  // provider auth is required.
+  // -----------------------------------------------------------------------
+
+  "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/oh-my-opencode.schema.json",
+
+  // === Orchestration: keep GSD as primary ================================
+  // GSD (.opencode/agents/gsd-*.md + .opencode/get-shit-done/workflows/)
+  // already provides planner/executor/verifier/reviewer/roadmapper etc.
+  // Disable Sisyphus so omo does NOT inject its own orchestrator loop.
+  "sisyphus_agent": {
+    "disabled": true,
+    "planner_enabled": false,
+    "default_builder_enabled": false,
+    "replace_plan": false
+  },
+
+  // Disable every omo agent individually — GSD has equivalents and the
+  // duplication creates mental overhead + routing fights.
+  "disabled_agents": [
+    "sisyphus",
+    "hephaestus",
+    "prometheus",
+    "metis",
+    "atlas",
+    "oracle",
+    "librarian",
+    "explore",
+    "multimodal-looker",
+    "momus",
+    "sisyphus-junior"
+  ],
+
+  // Disable commands that overlap GSD workflows.
+  // Valid options per schema: init-deep | ralph-loop | ulw-loop | cancel-ralph
+  //                           | refactor | start-work | stop-continuation | remove-ai-slops
+  "disabled_commands": [
+    "init-deep", // GSD has gsd-codebase-mapper; AGENTS.md is hand-tuned
+    "start-work", // GSD has /gsd-plan-phase + /gsd-execute-plan
+    "ralph-loop",
+    "ulw-loop",
+    "cancel-ralph",
+    "refactor",
+    "stop-continuation"
+  ],
+
+  // Disable hooks that conflict with GSD's own guards & injectors.
+  "disabled_hooks": [
+    "ralph-loop",
+    "todo-continuation-enforcer", // opencode + GSD already track todos
+    "startup-toast",
+    "keyword-detector",
+    "auto-slash-command",
+    "rules-injector", // AGENTS.md is the single source of truth
+    "agent-usage-reminder",
+    "start-work"
+    // NOTE: do NOT disable `no-sisyphus-gpt` (docs: never disable it).
+    // NOTE: `directory-agents-injector` auto-disabled on OpenCode 1.1.37+.
+  ],
+
+  // === MCPs: keep only keyless, high-signal ones =========================
+  // websearch (Exa) requires EXA_API_KEY — skip per user decision.
+  // context7 (Upstash) is keyless and pulls real library docs inline.
+  // grep_app (Vercel) is keyless and searches GitHub code globally.
+  "disabled_mcps": ["websearch"],
+
+  // === Edit tool: Hashline replaces Edit tool ============================
+  // Content-hash anchored edits. Kills stale-line edit errors.
+  // Inspired by oh-my-pi; see docs/reference/configuration.md#hashline-edit
+  "hashline_edit": true,
+
+  // === LSP: TypeScript + C# for the OET monorepo =========================
+  // Enables lsp_rename / lsp_goto_definition / lsp_find_references /
+  // lsp_diagnostics across 217 TS routes + 195+ C# endpoints.
+  "lsp": {
+    "typescript-language-server": {
+      "command": ["typescript-language-server", "--stdio"],
+      "extensions": [".ts", ".tsx", ".mts", ".cts", ".js", ".jsx", ".mjs", ".cjs"],
+      "priority": 10,
+      "env": {
+        "NODE_OPTIONS": "--max-old-space-size=4096"
+      }
+    }
+    // Note: a C# LSP (`OmniSharp` or `csharp-ls`) can be added later if
+    // wanted for backend/ work. Not enabled by default to avoid native
+    // dependency friction on Windows.
+  },
+
+  // === Category fallbacks (defensive, DO-only) ===========================
+  // All omo agents are disabled above, but if any tool delegates via
+  // task() with a category, we route to DigitalOcean Inference models
+  // only. Never fall through to anthropic/openai/opencode prefixes
+  // because the user does not have those providers configured.
+  "categories": {
+    "quick": {
+      "model": "digitalocean/openai-gpt-5-mini",
+      "description": "Trivial edits, typos, single-file fixes"
+    },
+    "unspecified-low": {
+      "model": "digitalocean/do-claude-sonnet-4.6",
+      "description": "General low-effort tasks"
+    },
+    "unspecified-high": {
+      "model": "digitalocean/do-claude-opus-4.7",
+      "variant": "max",
+      "description": "General high-effort tasks"
+    },
+    "deep": {
+      "model": "digitalocean/openai-gpt-5.4",
+      "description": "Autonomous research + execution"
+    },
+    "ultrabrain": {
+      "model": "digitalocean/openai-gpt-5.4-pro",
+      "description": "Hard logic, architecture decisions"
+    },
+    "visual-engineering": {
+      "model": "digitalocean/do-claude-sonnet-4.6",
+      "description": "Tailwind / Next.js / React UI work"
+    },
+    "writing": {
+      "model": "digitalocean/openai-gpt-5-mini",
+      "description": "Docs, prose, release notes"
+    },
+    "artistry": {
+      "model": "digitalocean/do-claude-opus-4.7",
+      "description": "Creative / unconventional"
+    }
+  },
+
+  // Also disable all tmux features (Linux/macOS only; you're on Windows).
+  "tmux": { "enabled": false },
+
+  // Don't auto-refresh models.dev over the network every startup.
+  "model_capabilities": {
+    "auto_refresh_on_start": false
+  },
+
+  // Experimental: keep conservative. Context pruning etc. off by default.
+  "experimental": {
+    "aggressive_truncation": false,
+    "auto_resume": false,
+    "task_system": false,
+    "dynamic_context_pruning": { "enabled": false }
+  }
+}

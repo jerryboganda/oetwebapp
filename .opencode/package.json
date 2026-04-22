@@ -1,7 +1,9 @@
 {
   "type": "commonjs",
   "dependencies": {
+    "@code-yeongyu/comment-checker": "^0.7.0",
+    "@kilocode/plugin": "7.2.14",
     "@opencode-ai/plugin": "1.4.6",
-    "@kilocode/plugin": "7.2.14"
+    "oh-my-opencode": "^3.17.4"
   }
 }

@@ -1,10 +1,11 @@
 import { render, screen } from '@testing-library/react';
 import type { WritingTask, WritingSubmission } from '@/lib/mock-data';
 
-const { mockFetchWritingHome, mockFetchWritingTasks, mockFetchWritingSubmissions, mockTrack } = vi.hoisted(() => ({
+const { mockFetchWritingHome, mockFetchWritingTasks, mockFetchWritingSubmissions, mockFetchMockReports, mockTrack } = vi.hoisted(() => ({
   mockFetchWritingHome: vi.fn(),
   mockFetchWritingTasks: vi.fn(),
   mockFetchWritingSubmissions: vi.fn(),
+  mockFetchMockReports: vi.fn(),
   mockTrack: vi.fn(),
 }));
 
@@ -26,6 +27,7 @@ vi.mock('@/lib/api', () => ({
   fetchWritingHome: mockFetchWritingHome,
   fetchWritingTasks: mockFetchWritingTasks,
   fetchWritingSubmissions: mockFetchWritingSubmissions,
+  fetchMockReports: mockFetchMockReports,
 }));
 
 import WritingHome from './page';
@@ -61,13 +63,14 @@ describe('Writing home page', () => {
     ] satisfies WritingTask[]);
 
     mockFetchWritingSubmissions.mockResolvedValue([] satisfies WritingSubmission[]);
+    mockFetchMockReports.mockResolvedValue([]);
   });
 
   it('shows rulebook entry points on the writing home surface', async () => {
     render(<WritingHome />);
 
     expect(await screen.findByText(/Study the exact rules your writing is judged against/i)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: /Writing rules/i })).toHaveAttribute('href', '/writing/rulebook/R03.4');
-    expect(screen.getByRole('link', { name: /Discharge template rule/i })).toHaveAttribute('href', '/writing/rulebook/R14.2');
+    expect(screen.getByRole('link', { name: /Open Rulebook/i })).toHaveAttribute('href', '/writing/rulebook');
+    expect(screen.getByRole('link', { name: /Model Answers/i })).toHaveAttribute('href', '/writing/model');
   });
 });

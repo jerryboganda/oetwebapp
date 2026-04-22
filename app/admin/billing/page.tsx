@@ -460,7 +460,7 @@ export default function BillingPage() {
       render: (addOn) => (
         <div className="space-y-1 text-muted">
           <p>{formatCurrency(addOn.price, addOn.currency)} / {addOn.interval}</p>
-          <p className="text-xs">{addOn.grantCredits} credits Â· qty step {addOn.quantityStep}</p>
+          <p className="text-xs">{addOn.grantCredits} credits - qty step {addOn.quantityStep}</p>
         </div>
       ),
     },
@@ -521,7 +521,7 @@ export default function BillingPage() {
       render: (coupon) => (
         <div className="space-y-1 text-muted">
           <p>{coupon.redemptionCount} redemptions</p>
-          <p className="text-xs">{coupon.usageLimitTotal == null ? 'Unlimited' : `${coupon.usageLimitTotal} total`} Â· {coupon.usageLimitPerUser == null ? 'No per-user limit' : `${coupon.usageLimitPerUser} per user`}</p>
+          <p className="text-xs">{coupon.usageLimitTotal == null ? 'Unlimited' : `${coupon.usageLimitTotal} total`} - {coupon.usageLimitPerUser == null ? 'No per-user limit' : `${coupon.usageLimitPerUser} per user`}</p>
         </div>
       ),
     },

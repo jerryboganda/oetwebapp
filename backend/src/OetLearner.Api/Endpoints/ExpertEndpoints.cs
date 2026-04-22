@@ -96,6 +96,17 @@ public static class ExpertEndpoints
             => Results.Ok(await service.SubmitCalibrationAsync(caseId, http.ExpertId(), request, ct)))
             .RequireRateLimiting("PerUserWrite");
 
+        expert.MapPost("/calibration/cases/{caseId}/draft", async (string caseId, HttpContext http, ExpertCalibrationSubmitRequest request, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.SaveCalibrationDraftAsync(caseId, http.ExpertId(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        // Calibration history + alignment (supplement §4.8)
+        expert.MapGet("/calibration/history", async (HttpContext http, ExpertService service, CancellationToken ct, [FromQuery] int? limit)
+            => Results.Ok(await service.GetCalibrationHistoryAsync(http.ExpertId(), limit ?? 50, ct)));
+
+        expert.MapGet("/calibration/alignment", async (HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetCalibrationAlignmentAsync(http.ExpertId(), ct)));
+
         // Schedule / Availability
         expert.MapGet("/schedule", async (HttpContext http, ExpertService service, CancellationToken ct)
             => Results.Ok(await service.GetAvailabilityAsync(http.ExpertId(), ct)));
@@ -103,6 +114,10 @@ public static class ExpertEndpoints
         expert.MapPut("/schedule", async (HttpContext http, ExpertAvailabilityUpdateRequest request, ExpertService service, CancellationToken ct)
             => Results.Ok(await service.SaveAvailabilityAsync(http.ExpertId(), request, ct)))
             .RequireRateLimiting("PerUserWrite");
+
+        // Availability business-rule constraints (supplement: GET /v1/expert/availability/constraints)
+        expert.MapGet("/availability/constraints", async (HttpContext http, ExpertService service, CancellationToken ct)
+            => Results.Ok(await service.GetAvailabilityConstraintsAsync(http.ExpertId(), ct)));
 
         // Schedule exceptions
         expert.MapPost("/schedule/exceptions", async (HttpContext http, CreateScheduleExceptionRequest request, ExpertService service, CancellationToken ct)

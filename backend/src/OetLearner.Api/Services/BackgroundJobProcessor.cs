@@ -372,14 +372,14 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         {
             new { criterionCode = "purpose", scoreRange = "4-5/6", confidenceBand = "medium", explanation = "Purpose is clear in the opening lines." },
             new { criterionCode = "content", scoreRange = "4-5/6", confidenceBand = "high", explanation = "Key discharge details are present." },
-            new { criterionCode = "conciseness", scoreRange = concisenessBand, confidenceBand = "medium", explanation = "Conciseness improves when only ongoing-care information is retained." },
-            new { criterionCode = "genre", scoreRange = "4/6", confidenceBand = "medium", explanation = "Tone remains professional overall." },
-            new { criterionCode = "organization", scoreRange = "4/6", confidenceBand = "medium", explanation = "The sequence of information is logical." },
+            new { criterionCode = "conciseness_clarity", scoreRange = concisenessBand, confidenceBand = "medium", explanation = "Conciseness & Clarity improve when only ongoing-care information is retained." },
+            new { criterionCode = "genre_style", scoreRange = "4/7", confidenceBand = "medium", explanation = "Tone and register remain professional overall." },
+            new { criterionCode = "organisation_layout", scoreRange = "4/7", confidenceBand = "medium", explanation = "The sequence and layout of information are logical." },
             new { criterionCode = "language", scoreRange = "4/6", confidenceBand = "medium", explanation = "Grammar and wording are generally secure." }
         });
         evaluation.FeedbackItemsJson = JsonSupport.Serialize(new[]
         {
-            new { feedbackItemId = $"{evaluation.Id}-1", criterionCode = "conciseness", type = "anchored_comment", anchor = new { snippet = attempt.DraftContent.Length > 80 ? attempt.DraftContent[..80] : attempt.DraftContent }, message = "Prioritise information that changes the reader's follow-up actions.", severity = "medium", suggestedFix = "Remove low-impact procedural details." }
+            new { feedbackItemId = $"{evaluation.Id}-1", criterionCode = "conciseness_clarity", type = "anchored_comment", anchor = new { snippet = attempt.DraftContent.Length > 80 ? attempt.DraftContent[..80] : attempt.DraftContent }, message = "Prioritise information that changes the reader's follow-up actions.", severity = "medium", suggestedFix = "Remove low-impact procedural details." }
         });
         evaluation.GeneratedAt = DateTimeOffset.UtcNow;
         evaluation.ModelExplanationSafe = "This training estimate is based on criterion-level writing signals and is not an official OET result.";

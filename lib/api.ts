@@ -314,10 +314,13 @@ function normalizeCriterionName(code: string | null | undefined): string {
     case 'content':
       return 'Content';
     case 'conciseness':
+    case 'conciseness_clarity':
       return 'Conciseness & Clarity';
     case 'genre':
+    case 'genre_style':
       return 'Genre & Style';
     case 'organization':
+    case 'organisation_layout':
       return 'Organisation & Layout';
     case 'language':
       return 'Language';
@@ -326,9 +329,27 @@ function normalizeCriterionName(code: string | null | undefined): string {
     case 'fluency':
       return 'Fluency';
     case 'appropriateness':
+    case 'appropriateness_of_language':
       return 'Appropriateness of Language';
+    case 'grammar':
     case 'grammar_expression':
-      return 'Resources of Grammar and Expression';
+    case 'resources_of_grammar_and_expression':
+      return 'Resources of Grammar & Expression';
+    case 'relationshipbuilding':
+    case 'relationship_building':
+      return 'Relationship Building';
+    case 'patientperspective':
+    case 'patient_perspective':
+      return "Understanding & Incorporating Patient's Perspective";
+    case 'providingstructure':
+    case 'providing_structure':
+      return 'Providing Structure';
+    case 'informationgathering':
+    case 'information_gathering':
+      return 'Information Gathering';
+    case 'informationgiving':
+    case 'information_giving':
+      return 'Information Giving';
     default:
       return titleCase(code ?? 'Criterion');
   }
@@ -422,6 +443,7 @@ export function isApiError(error: unknown): error is ApiError {
 function mapErrorCodeToUserMessage(code: string, fallback: string): string {
   switch (code) {
     case 'draft_version_conflict': return 'Your draft was updated in another tab. Please refresh and try again.';
+    case 'calibration_already_submitted': return 'This calibration case is already finalized and is now locked.';
     case 'idempotency_duplicate': return 'This action was already completed.';
     case 'not_found': return 'The requested resource was not found.';
     case 'forbidden': return 'You do not have permission to perform this action.';
@@ -1945,8 +1967,24 @@ export async function fetchProgressEvidenceSummary(): Promise<ProgressEvidenceSu
 }
 
 export async function fetchSubmissions(): Promise<Submission[]> {
-  const response = await apiRequest<{ items: ApiRecord[] }>('/v1/submissions');
-  return response.items.map((item) => ({
+  // Follow the cursor until exhausted so callers that expect the full history
+  // still get it, while the wire protocol uses the real cursor pagination
+  // contract documented in the learner blueprint.
+  const collected: ApiRecord[] = [];
+  let cursor: string | null = null;
+  // Hard safety cap to prevent runaway loops if the server mis-behaves.
+  for (let page = 0; page < 50; page += 1) {
+    const query: string = cursor ? `?cursor=${encodeURIComponent(cursor)}&limit=100` : '?limit=100';
+    const response: { items: ApiRecord[]; nextCursor?: string | null } = await apiRequest<{
+      items: ApiRecord[];
+      nextCursor?: string | null;
+    }>(`/v1/submissions${query}`);
+    collected.push(...(response.items ?? []));
+    const next: string | null = response.nextCursor ?? null;
+    if (!next) break;
+    cursor = next;
+  }
+  return collected.map((item) => ({
     id: item.submissionId,
     contentId: item.contentId,
     taskName: item.taskName,
@@ -2622,11 +2660,93 @@ export async function requestRework(reviewRequestId: string, reason: string): Pr
   });
 }
 
-export async function submitCalibrationCase(caseId: string, payload: { scores: Record<string, number>; notes?: string }): Promise<{ success: boolean }> {
+export async function submitCalibrationCase(
+  caseId: string,
+  payload: { scores: Record<string, number>; notes?: string },
+): Promise<{ success: boolean; caseId: string; alignment: number }> {
   return apiRequest(`/v1/expert/calibration/cases/${encodeURIComponent(caseId)}/submit`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
+}
+
+export async function saveCalibrationDraft(
+  caseId: string,
+  payload: { scores: Record<string, number>; notes?: string },
+): Promise<{ success: boolean; caseId: string; isDraft: boolean; scores: Record<string, number>; notes: string; updatedAt: string | null }> {
+  return apiRequest(`/v1/expert/calibration/cases/${encodeURIComponent(caseId)}/draft`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+// ─── Expert calibration history + alignment (supplement §4.8) ───
+
+export interface ExpertCalibrationHistoryEntry {
+  id: string;
+  caseId: string;
+  caseTitle: string;
+  profession: string;
+  subTest: string;
+  benchmarkScore: number;
+  reviewerScore: number;
+  alignmentScore: number;
+  disagreementSummary: string;
+  submittedAt: string;
+}
+
+export interface ExpertCalibrationHistory {
+  entries: ExpertCalibrationHistoryEntry[];
+  totalCount: number;
+  generatedAt: string;
+}
+
+export interface ExpertCalibrationAlignmentBreakdown {
+  subTest: string;
+  submissionCount: number;
+  averageAlignment: number;
+  latestAlignment: number | null;
+}
+
+export interface ExpertCalibrationAlignmentTrendPoint {
+  submittedAt: string;
+  alignmentScore: number;
+}
+
+export interface ExpertCalibrationAlignment {
+  totalSubmissions: number;
+  overallAverageAlignment: number;
+  latestAlignment: number | null;
+  previousAlignment: number | null;
+  deltaFromPrevious: number | null;
+  perSubTest: ExpertCalibrationAlignmentBreakdown[];
+  trend: ExpertCalibrationAlignmentTrendPoint[];
+  generatedAt: string;
+}
+
+export async function fetchExpertCalibrationHistory(limit?: number): Promise<ExpertCalibrationHistory> {
+  const query = typeof limit === 'number' ? `?limit=${limit}` : '';
+  return apiRequest<ExpertCalibrationHistory>(`/v1/expert/calibration/history${query}`);
+}
+
+export async function fetchExpertCalibrationAlignment(): Promise<ExpertCalibrationAlignment> {
+  return apiRequest<ExpertCalibrationAlignment>('/v1/expert/calibration/alignment');
+}
+
+// ─── Expert availability constraints (supplement: GET /v1/expert/availability/constraints) ───
+
+export interface ExpertAvailabilityConstraints {
+  minNoticeHours: number;
+  maxHoursPerWeek: number;
+  maxExceptionsPerMonth: number;
+  minSlotDuration: string;
+  maxSlotDuration: string;
+  supportedTimezones: string[];
+  dayKeys: string[];
+}
+
+export async function fetchExpertAvailabilityConstraints(): Promise<ExpertAvailabilityConstraints> {
+  return apiRequest<ExpertAvailabilityConstraints>('/v1/expert/availability/constraints');
 }
 
 // ─── Admin / CMS API ───

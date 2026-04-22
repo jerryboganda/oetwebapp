@@ -280,7 +280,7 @@ If a requirement specifies a quantity of test cases (e.g., "30 calculations"), c
 **Insufficient assertions:** {N} → {WARNING}
 ```
 
-**Impact on status:** Any BLOCKER from test quality audit ��� overall status = `gaps_found`, regardless of other checks passing.
+**Impact on status:** Any BLOCKER from test quality audit => overall status = `gaps_found`, regardless of other checks passing.
 </step>
 
 <step name="identify_human_verification">

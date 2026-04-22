@@ -81,7 +81,65 @@ export interface ExpertChecklistItem {
 
 export type WritingCriterionKey = 'purpose' | 'content' | 'conciseness' | 'genre' | 'organization' | 'language';
 
-export type SpeakingCriterionKey = 'intelligibility' | 'fluency' | 'appropriateness' | 'grammar' | 'clinicalCommunication';
+/**
+ * OET Speaking — 9 scoreable criteria per official CBLA assessment format
+ * (source: Dr. Ahmed Hesham corrections, April 2026).
+ *
+ * Linguistic (4) — scale 0–6 each
+ *   intelligibility, fluency, appropriateness, grammar (Resources of Grammar & Expression)
+ *
+ * Clinical Communication (5) — scale 0–3 each
+ *   relationshipBuilding, patientPerspective, providingStructure,
+ *   informationGathering, informationGiving
+ *
+ * A separate OET Assessor grades the recording after the exam against all 9;
+ * the interlocutor never grades. The legacy combined "clinicalCommunication"
+ * code is DEPRECATED and retained only for backward-compat read of old drafts.
+ */
+export const SPEAKING_LINGUISTIC_CRITERIA = [
+  'intelligibility',
+  'fluency',
+  'appropriateness',
+  'grammar',
+] as const;
+
+export const SPEAKING_CLINICAL_CRITERIA = [
+  'relationshipBuilding',
+  'patientPerspective',
+  'providingStructure',
+  'informationGathering',
+  'informationGiving',
+] as const;
+
+export type SpeakingLinguisticCriterionKey = typeof SPEAKING_LINGUISTIC_CRITERIA[number];
+export type SpeakingClinicalCriterionKey = typeof SPEAKING_CLINICAL_CRITERIA[number];
+export type SpeakingCriterionKey = SpeakingLinguisticCriterionKey | SpeakingClinicalCriterionKey;
+
+/** Canonical max score per criterion (linguistic 0–6, clinical 0–3). */
+export const SPEAKING_CRITERION_MAX_SCORES: Record<SpeakingCriterionKey, number> = {
+  intelligibility: 6,
+  fluency: 6,
+  appropriateness: 6,
+  grammar: 6,
+  relationshipBuilding: 3,
+  patientPerspective: 3,
+  providingStructure: 3,
+  informationGathering: 3,
+  informationGiving: 3,
+};
+
+/** Human-readable labels aligned with the official CBLA criterion names. */
+export const SPEAKING_CRITERION_LABELS: Record<SpeakingCriterionKey, string> = {
+  intelligibility: 'Intelligibility',
+  fluency: 'Fluency',
+  appropriateness: 'Appropriateness of Language',
+  grammar: 'Resources of Grammar & Expression',
+  relationshipBuilding: 'Relationship Building',
+  patientPerspective: "Understanding & Incorporating Patient's Perspective",
+  providingStructure: 'Providing Structure',
+  informationGathering: 'Information Gathering',
+  informationGiving: 'Information Giving',
+};
 
 export interface ReviewRequest {
   id: string;
@@ -195,6 +253,8 @@ export interface ReviewDraft {
   version?: number;
 }
 
+export type CalibrationCaseStatus = 'pending' | 'draft' | 'completed';
+
 export interface CalibrationCase {
   id: string;
   title: string;
@@ -203,7 +263,8 @@ export interface CalibrationCase {
   type: SubmissionType;
   benchmarkScore: number;
   reviewerScore?: number;
-  status: 'pending' | 'completed';
+  alignmentScore?: number | null;
+  status: CalibrationCaseStatus;
   createdAt: string;
 }
 
@@ -228,6 +289,8 @@ export interface CalibrationSubmission {
   notes: string;
   submittedScores: Record<string, number>;
   submittedAt: string;
+  isDraft?: boolean;
+  updatedAt?: string | null;
 }
 
 export interface CalibrationCaseDetail extends CalibrationCase {

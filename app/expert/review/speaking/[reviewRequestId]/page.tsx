@@ -22,17 +22,23 @@ type AsyncStatus = 'loading' | 'error' | 'partial' | 'success';
 const LINGUISTIC_CRITERIA: { key: SpeakingCriterionKey; label: string }[] = [
   { key: 'intelligibility', label: 'Intelligibility' },
   { key: 'fluency', label: 'Fluency' },
-  { key: 'appropriateness', label: 'Appropriateness' },
-  { key: 'grammar', label: 'Grammar' },
+  { key: 'appropriateness', label: 'Appropriateness of Language' },
+  { key: 'grammar', label: 'Resources of Grammar & Expression' },
 ];
 
+// OET Clinical Communication — 5 separate criteria, each scored 0–3
+// (NOT a single aggregate). Source: rulebooks/speaking/common/assessment-criteria.json.
 const CLINICAL_CRITERIA: { key: SpeakingCriterionKey; label: string }[] = [
-  { key: 'clinicalCommunication', label: 'Clinical Communication Skills' },
+  { key: 'relationshipBuilding', label: 'Relationship Building' },
+  { key: 'patientPerspective', label: "Understanding & Incorporating Patient's Perspective" },
+  { key: 'providingStructure', label: 'Providing Structure' },
+  { key: 'informationGathering', label: 'Information Gathering' },
+  { key: 'informationGiving', label: 'Information Giving' },
 ];
 
 const ALL_CRITERIA = [...LINGUISTIC_CRITERIA, ...CLINICAL_CRITERIA];
 
-const BAND_OPTIONS = [
+const LINGUISTIC_BAND_OPTIONS = [
   { value: '6', label: '6 (Excellent)' },
   { value: '5', label: '5 (Good)' },
   { value: '4', label: '4 (Satisfactory)' },
@@ -41,6 +47,16 @@ const BAND_OPTIONS = [
   { value: '1', label: '1 (Very Poor)' },
   { value: '0', label: '0 (Unscorable)' },
 ];
+
+// Clinical Communication cluster level descriptors (OET CBLA official).
+const CLINICAL_BAND_OPTIONS = [
+  { value: '3', label: '3 (Adept use)' },
+  { value: '2', label: '2 (Competent use)' },
+  { value: '1', label: '1 (Partially effective use)' },
+  { value: '0', label: '0 (Ineffective use)' },
+];
+
+const BAND_OPTIONS = LINGUISTIC_BAND_OPTIONS;
 
 type DraftCandidate = {
   reviewId: string;
@@ -390,7 +406,7 @@ export default function SpeakingReviewWorkspace() {
     };
   }, [reviewDetail]);
 
-  const renderCriteriaGroup = (title: string, criteria: { key: SpeakingCriterionKey; label: string }[]) => (
+  const renderCriteriaGroup = (title: string, criteria: { key: SpeakingCriterionKey; label: string }[], bandOptions = LINGUISTIC_BAND_OPTIONS) => (
     <>
       <h3 className="font-bold text-navy border-b border-gray-200 pb-2">{title}</h3>
       {criteria.map(({ key, label }) => (
@@ -399,7 +415,7 @@ export default function SpeakingReviewWorkspace() {
             label={label}
             value={scores[key] ?? ''}
             onChange={(event) => handleScoreChange(key, event.target.value)}
-            options={BAND_OPTIONS}
+            options={bandOptions}
             placeholder="Select band..."
             error={validationErrors.has(key) ? 'Score required' : undefined}
             aria-label={`Score for ${label}`}
@@ -619,7 +635,7 @@ export default function SpeakingReviewWorkspace() {
             )}
 
             {renderCriteriaGroup('Linguistic Criteria', LINGUISTIC_CRITERIA)}
-            <div className="mt-2">{renderCriteriaGroup('Clinical Communication', CLINICAL_CRITERIA)}</div>
+            <div className="mt-2">{renderCriteriaGroup('Clinical Communication', CLINICAL_CRITERIA, CLINICAL_BAND_OPTIONS)}</div>
 
             <div className="p-3 bg-white border border-gray-200 rounded-md">
               <Textarea

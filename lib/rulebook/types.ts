@@ -39,6 +39,32 @@ export type LetterType =
   | 'non_medical_referral'
   | 'specialist_to_gp';
 
+/**
+ * The six official OET Writing task types. These are the ONLY valid task types
+ * for authoring UI, scenario-type filters, and AI grounding. "advisory" and
+ * "response" are NOT valid OET Writing task types and must never appear here.
+ *
+ * Source: Dr. Ahmed Hesham corrections + official OET Writing exam rules.
+ */
+export const WRITING_LETTER_TYPES: readonly LetterType[] = [
+  'routine_referral',
+  'urgent_referral',
+  'discharge',
+  'transfer',
+  'non_medical_referral',
+  'specialist_to_gp',
+] as const;
+
+/** Human-friendly labels for each canonical writing letter type. */
+export const WRITING_LETTER_TYPE_LABELS: Readonly<Record<LetterType, string>> = {
+  routine_referral: 'Routine Referral',
+  urgent_referral: 'Urgent Referral',
+  discharge: 'Discharge Letter',
+  transfer: 'Transfer Letter',
+  non_medical_referral: 'Referral to Non-Medical Professional',
+  specialist_to_gp: 'Referral to GP',
+} as const;
+
 export type SpeakingCardType =
   | 'first_visit_routine'
   | 'first_visit_emergency'

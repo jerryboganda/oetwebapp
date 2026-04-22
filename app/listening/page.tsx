@@ -108,8 +108,14 @@ export default function ListeningHome() {
   const tasks = home?.featuredTasks ?? [];
   const activeAttempts = home?.activeAttempts ?? [];
   const recentResults = home?.recentResults ?? [];
-  const drills = home?.drillGroups?.length ? home.drillGroups : home?.distractorDrills ?? [];
-  const firstDrill = drills[0];
+  const safeDrills = useMemo(() => {
+    const groups = Array.isArray(home?.drillGroups) ? home!.drillGroups : [];
+    const distractor = Array.isArray(home?.distractorDrills) ? home!.distractorDrills : [];
+    return groups.length ? groups : distractor;
+  }, [home]);
+  const firstDrill = safeDrills[0];
+  const partCollections = Array.isArray(home?.partCollections) ? home!.partCollections : [];
+  const mockSets = Array.isArray(home?.mockSets) ? home!.mockSets : [];
   const transcriptRoute = home?.transcriptBackedReview?.route ?? null;
   const hasPractice = papers.length + tasks.length > 0;
 
@@ -122,12 +128,12 @@ export default function ListeningHome() {
     {
       icon: History,
       label: 'Resume',
-      value: activeAttempts.length ? `${activeAttempts.length} active` : 'No active attempt',
+      value: loading ? 'Loading...' : activeAttempts.length ? `${activeAttempts.length} active` : 'No active attempt',
     },
     {
       icon: FileText,
       label: 'Transcript review',
-      value: transcriptRoute ? 'Latest result ready' : 'Available after submit',
+      value: loading ? 'Loading...' : transcriptRoute ? 'Latest result ready' : 'Available after submit',
     },
   ], [activeAttempts.length, loading, papers.length, tasks.length, transcriptRoute]);
 
@@ -220,7 +226,11 @@ export default function ListeningHome() {
                 </div>
               ) : (
                 <div className="rounded-[24px] border border-dashed border-gray-200 bg-surface/80 p-6 text-sm text-muted">
-                  {home?.emptyStates.activeAttempts}
+                  <p>{home?.emptyStates.activeAttempts ?? 'No in-progress Listening attempt.'}</p>
+                  <div className="mt-3 flex flex-wrap gap-4">
+                    <Link href="/mocks" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Open Mock Center <ArrowRight className="h-4 w-4" /></Link>
+                    <Link href="/study-plan" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">View Study Plan <ArrowRight className="h-4 w-4" /></Link>
+                  </div>
                 </div>
               )}
             </section>
@@ -272,10 +282,49 @@ export default function ListeningHome() {
                 </div>
               ) : (
                 <div className="rounded-[24px] border border-dashed border-gray-200 bg-surface/80 p-6 text-sm text-muted">
-                  {home?.emptyStates.papers}
+                  <p>{home?.emptyStates.papers ?? 'No published Listening papers are ready yet.'}</p>
+                  <div className="mt-3 flex flex-wrap gap-4">
+                    <Link href="/mocks" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Run a Full Mock <ArrowRight className="h-4 w-4" /></Link>
+                    <Link href="/study-plan" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Review Study Plan <ArrowRight className="h-4 w-4" /></Link>
+                  </div>
                 </div>
               )}
             </section>
+
+            {partCollections.length > 0 ? (
+              <section>
+                <LearnerSurfaceSectionHeader
+                  eyebrow="Part Focus"
+                  title="Work on the parts that decide your grade"
+                  description="Part A trains consultation-note detail capture. Parts B and C train purpose, attitude, and distractor control in workplace and presentation audio."
+                  className="mb-5"
+                />
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  {partCollections.map((part, index) => {
+                    const partCard: LearnerSurfaceCardModel = {
+                      kind: 'navigation',
+                      sourceType: 'backend_summary',
+                      accent: index === 0 ? 'indigo' : 'amber',
+                      eyebrow: part.available ? 'Ready to practise' : 'Awaiting published papers',
+                      eyebrowIcon: Headphones,
+                      title: part.title,
+                      description: part.description,
+                      metaItems: [
+                        { icon: CheckCircle2, label: part.available ? 'Available' : 'Locked' },
+                      ],
+                      primaryAction: part.available && part.route
+                        ? { label: 'Open Part Practice', href: part.route }
+                        : { label: 'See Study Plan', href: '/study-plan', variant: 'outline' },
+                    };
+                    return (
+                      <MotionItem key={part.id} delayIndex={index}>
+                        <LearnerSurfaceCard card={partCard} />
+                      </MotionItem>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
 
             <section className="grid grid-cols-1 gap-8 lg:grid-cols-2">
               <LearnerSurfaceCard card={drillCard}>
@@ -332,10 +381,49 @@ export default function ListeningHome() {
                 </div>
               ) : (
                 <div className="rounded-[24px] border border-dashed border-gray-200 bg-surface/80 p-6 text-sm text-muted">
-                  {home?.emptyStates.recentResults}
+                  <p>{home?.emptyStates.recentResults ?? 'Complete a Listening task to unlock transcript-backed review and canonical OET score display.'}</p>
+                  <div className="mt-3 flex flex-wrap gap-4">
+                    <Link href="/mocks" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Open Mock Center <ArrowRight className="h-4 w-4" /></Link>
+                    <Link href="/progress" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Track Progress <ArrowRight className="h-4 w-4" /></Link>
+                  </div>
                 </div>
               )}
             </section>
+
+            {mockSets.length > 0 ? (
+              <section>
+                <LearnerSurfaceSectionHeader
+                  eyebrow="Mock Launchers"
+                  title="Take Listening under full-mock conditions"
+                  description="Launch a full OET practice or exam-mode mock, or run a sub-test mock to rehearse Listening with the same timer, controls, and policy."
+                  className="mb-5"
+                />
+                <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+                  {mockSets.map((mock, index) => {
+                    const mockCard: LearnerSurfaceCardModel = {
+                      kind: 'navigation',
+                      sourceType: 'backend_summary',
+                      accent: mock.mode === 'exam' ? 'rose' : 'indigo',
+                      eyebrow: mock.mode === 'exam' ? 'Exam Mode' : 'Practice Mode',
+                      eyebrowIcon: Sparkles,
+                      title: mock.title,
+                      description: mock.mode === 'exam'
+                        ? 'Strict timer, one play, no scrub — closest to real OET conditions.'
+                        : 'Timer relaxed, pause and scrub allowed — drill targeted Listening items.',
+                      metaItems: [
+                        { icon: Clock, label: mock.strictTimer ? 'Strict timer' : 'Relaxed timer' },
+                      ],
+                      primaryAction: { label: mock.mode === 'exam' ? 'Start Exam Mock' : 'Start Practice Mock', href: mock.route ?? '/mocks' },
+                    };
+                    return (
+                      <MotionItem key={mock.id} delayIndex={index}>
+                        <LearnerSurfaceCard card={mockCard} />
+                      </MotionItem>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null}
 
             <section>
               <LearnerSurfaceSectionHeader
