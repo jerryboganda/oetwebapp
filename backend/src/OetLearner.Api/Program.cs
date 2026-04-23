@@ -491,6 +491,7 @@ builder.Services.AddScoped<MediaNormalizationService>();
 builder.Services.AddScoped<VideoLessonService>();
 builder.Services.AddScoped<StrategyGuideService>();
 builder.Services.AddScoped<NotificationService>();
+builder.Services.AddSingleton<OetLearner.Api.Services.DevicePairing.IDevicePairingCodeService, OetLearner.Api.Services.DevicePairing.InMemoryDevicePairingCodeService>();
 builder.Services.AddScoped<AnalyticsIngestionService>();
 builder.Services.AddSingleton<PlatformLinkService>();
 builder.Services.AddSingleton<MediaStorageService>();
@@ -993,6 +994,9 @@ app.MapRulebookEndpoints();
 
 // ── Media Management ──
 app.MapMediaEndpoints();
+
+// ── Device Pairing (H13 scaffold) ──
+app.MapDevicePairingEndpoints();
 
 app.MapHub<NotificationHub>("/v1/notifications/hub").RequireAuthorization();
 app.MapHub<ConversationHub>("/v1/conversations/hub").RequireAuthorization();

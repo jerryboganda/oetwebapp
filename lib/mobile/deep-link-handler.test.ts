@@ -130,4 +130,65 @@ describe('deep-link-handler', () => {
       expect(removeFn).toHaveBeenCalled();
     });
   });
+
+  describe('H13 device pairing dispatch', () => {
+    async function setupPairingListener() {
+      let urlOpenCallback: ((event: { url: string }) => void) | undefined;
+      mockApp.addListener.mockImplementation(async (event: string, cb: unknown) => {
+        if (event === 'appUrlOpen') {
+          urlOpenCallback = cb as typeof urlOpenCallback;
+        }
+        return { remove: vi.fn() };
+      });
+      mockApp.getLaunchUrl.mockResolvedValue(null);
+      return { getCallback: () => urlOpenCallback! };
+    }
+
+    it('routes /pair with valid code to onPairing and skips onDeepLink', async () => {
+      const onPairing = vi.fn();
+      const onDeepLink = vi.fn();
+      const { getCallback } = await setupPairingListener();
+      await initializeDeepLinkHandler({ onPairing, onDeepLink });
+
+      getCallback()({ url: 'https://app.oetwithdrhesham.co.uk/pair?code=abc123' });
+
+      expect(onPairing).toHaveBeenCalledWith('ABC123');
+      expect(onDeepLink).not.toHaveBeenCalled();
+    });
+
+    it('falls through to onDeepLink when /pair has no code', async () => {
+      const onPairing = vi.fn();
+      const onDeepLink = vi.fn();
+      const { getCallback } = await setupPairingListener();
+      await initializeDeepLinkHandler({ onPairing, onDeepLink });
+
+      getCallback()({ url: 'https://app.oetwithdrhesham.co.uk/pair' });
+
+      expect(onPairing).not.toHaveBeenCalled();
+      expect(onDeepLink).toHaveBeenCalledWith(expect.objectContaining({ path: '/pair' }));
+    });
+
+    it('falls through to onDeepLink when /pair code is malformed', async () => {
+      const onPairing = vi.fn();
+      const onDeepLink = vi.fn();
+      const { getCallback } = await setupPairingListener();
+      await initializeDeepLinkHandler({ onPairing, onDeepLink });
+
+      getCallback()({ url: 'https://app.oetwithdrhesham.co.uk/pair?code=ab1' });
+      getCallback()({ url: 'https://app.oetwithdrhesham.co.uk/pair?code=ABC-12' });
+
+      expect(onPairing).not.toHaveBeenCalled();
+      expect(onDeepLink).toHaveBeenCalledTimes(2);
+    });
+
+    it('ignores /pair from unknown hosts', async () => {
+      const onPairing = vi.fn();
+      const { getCallback } = await setupPairingListener();
+      await initializeDeepLinkHandler({ onPairing });
+
+      getCallback()({ url: 'https://evil.com/pair?code=ABC123' });
+
+      expect(onPairing).not.toHaveBeenCalled();
+    });
+  });
 });

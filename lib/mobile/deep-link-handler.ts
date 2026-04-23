@@ -12,6 +12,13 @@ export interface DeepLinkEvent {
 
 export interface DeepLinkHandlers {
   onDeepLink?: (event: DeepLinkEvent) => void;
+  /**
+   * H13 device pairing: invoked when a `/pair?code=XXXXXX` deep link arrives.
+   * The callback receives the 6-char pairing code, which the mobile client
+   * should POST to `/v1/device-pairing/redeem` to complete the handoff.
+   * Only fired for codes that look well-formed (6–8 alphanumeric chars).
+   */
+  onPairing?: (code: string) => void;
 }
 
 // ── Configuration ───────────────────────────────────────────────
@@ -72,7 +79,7 @@ export async function initializeDeepLinkHandler(
     const appUrlOpenListener = await App.addListener('appUrlOpen', (event) => {
       const deepLink = parseDeepLinkUrl(event.url);
       if (deepLink) {
-        handlers.onDeepLink?.(deepLink);
+        dispatchDeepLink(deepLink, handlers);
       }
     });
     cleanup.push(() => appUrlOpenListener.remove());
@@ -83,7 +90,7 @@ export async function initializeDeepLinkHandler(
       if (launchUrl?.url) {
         const deepLink = parseDeepLinkUrl(launchUrl.url);
         if (deepLink) {
-          handlers.onDeepLink?.(deepLink);
+          dispatchDeepLink(deepLink, handlers);
         }
       }
     } catch {
@@ -103,3 +110,25 @@ export async function initializeDeepLinkHandler(
     });
   };
 }
+
+// ── Dispatch ──────────────────────────────────────────────────
+
+const PAIRING_CODE_REGEX = /^[A-Za-z0-9]{6,8}$/;
+
+/**
+ * Routes a parsed deep link to the correct handler. The `/pair` path is
+ * specialised for H13 device-pairing; all other paths flow through the
+ * generic `onDeepLink`. When `/pair` arrives WITHOUT a valid `code`, the
+ * event still flows through `onDeepLink` so the UI can render an error.
+ */
+function dispatchDeepLink(event: DeepLinkEvent, handlers: DeepLinkHandlers): void {
+  if (event.path === '/pair') {
+    const code = event.queryParams.code;
+    if (code && PAIRING_CODE_REGEX.test(code)) {
+      handlers.onPairing?.(code.toUpperCase());
+      return;
+    }
+  }
+  handlers.onDeepLink?.(event);
+}
+
