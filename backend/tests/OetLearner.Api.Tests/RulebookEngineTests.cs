@@ -538,4 +538,68 @@ public class AiGatewayAndPromptTests
         Assert.Equal("1.0.0", result.RulebookVersion);
         Assert.NotEmpty(result.AppliedRuleIds);
     }
+
+    [Fact]
+    public async Task Gateway_Refuses_Writing_Prompt_Missing_LetterType()
+    {
+        var gateway = BuildGateway();
+        var ex = Assert.Throws<PromptNotGroundedException>(() =>
+            gateway.BuildGroundedPrompt(new AiGroundingContext
+            {
+                Kind = RuleKind.Writing,
+                Profession = ExamProfession.Medicine,
+                Task = AiTaskMode.Score,
+                // LetterType intentionally omitted
+            }));
+        Assert.Contains("LetterType", ex.Message);
+        await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task Gateway_Refuses_Writing_Prompt_With_Whitespace_LetterType()
+    {
+        var gateway = BuildGateway();
+        var ex = Assert.Throws<PromptNotGroundedException>(() =>
+            gateway.BuildGroundedPrompt(new AiGroundingContext
+            {
+                Kind = RuleKind.Writing,
+                Profession = ExamProfession.Medicine,
+                Task = AiTaskMode.Score,
+                LetterType = "   ",
+            }));
+        Assert.Contains("LetterType", ex.Message);
+        await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task Gateway_Refuses_Speaking_Prompt_Missing_CardType()
+    {
+        var gateway = BuildGateway();
+        var ex = Assert.Throws<PromptNotGroundedException>(() =>
+            gateway.BuildGroundedPrompt(new AiGroundingContext
+            {
+                Kind = RuleKind.Speaking,
+                Profession = ExamProfession.Medicine,
+                Task = AiTaskMode.Score,
+                // CardType intentionally omitted
+            }));
+        Assert.Contains("CardType", ex.Message);
+        await Task.CompletedTask;
+    }
+
+    [Fact]
+    public async Task Gateway_Refuses_Speaking_Prompt_With_Whitespace_CardType()
+    {
+        var gateway = BuildGateway();
+        var ex = Assert.Throws<PromptNotGroundedException>(() =>
+            gateway.BuildGroundedPrompt(new AiGroundingContext
+            {
+                Kind = RuleKind.Speaking,
+                Profession = ExamProfession.Medicine,
+                Task = AiTaskMode.Score,
+                CardType = "\t",
+            }));
+        Assert.Contains("CardType", ex.Message);
+        await Task.CompletedTask;
+    }
 }
