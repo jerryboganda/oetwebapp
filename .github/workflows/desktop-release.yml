@@ -1,0 +1,176 @@
+name: Desktop Release
+
+# Builds a production Windows Electron installer (NSIS) for the OET Prep desktop shell.
+#
+# Triggers:
+#  - Manual: workflow_dispatch with version + publish_mode + allow_unsigned inputs.
+#  - Tag push: any tag matching v*.*.*-desktop (e.g. v1.2.0-desktop) fires an automated build
+#    and uploads the installer as a workflow artifact. Publishing to GitHub Releases is
+#    explicitly opt-in via the `publish_mode` input on dispatch, never automatic on tag.
+#
+# Current scope:
+#  - Windows x64 only. package.json "build".win target is the only platform configured.
+#  - macOS and Linux builds are intentionally NOT wired yet — they need Apple Developer ID
+#    signing material / notarisation and a Linux GPG key respectively, which we do not hold.
+#    When those are available add matching jobs mirroring the android-release pattern in
+#    .github/workflows/mobile-release.yml.
+#
+# Required repository secrets for a signed build (at least one group):
+#  A) Classic code-signing certificate (PFX):
+#       WIN_CSC_LINK                 — base64-encoded .pfx contents
+#       WIN_CSC_KEY_PASSWORD         — password for the PFX
+#     (or the electron-builder legacy names CSC_LINK / CSC_KEY_PASSWORD)
+#  B) Azure Trusted Signing:
+#       AZURE_TENANT_ID
+#       AZURE_CLIENT_ID
+#       AZURE_CLIENT_SECRET
+#       AZURE_CODE_SIGNING_ACCOUNT_NAME
+#       AZURE_CODE_SIGNING_PROFILE_NAME
+#
+# For unsigned throwaway builds ONLY, set the workflow input `allow_unsigned=true`.
+# scripts/desktop-dist.cjs will refuse to build a signed release without one of the
+# groups above present — that guard is preserved end-to-end.
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Semantic version to stamp into package.json and installer (e.g. 1.2.0)'
+        required: true
+        type: string
+      publish_mode:
+        description: 'electron-builder --publish mode (never = artifact only; onTagOrDraft = GitHub Release draft)'
+        required: true
+        type: choice
+        options:
+          - never
+          - onTagOrDraft
+        default: never
+      allow_unsigned:
+        description: 'Allow unsigned Windows build (DO NOT use for production releases)'
+        required: false
+        type: boolean
+        default: false
+  push:
+    tags:
+      - 'v*.*.*-desktop'
+
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  NODE_VERSION: '22'
+  DOTNET_VERSION: '10.0.x'
+  NEXT_TELEMETRY_DISABLED: '1'
+
+jobs:
+  windows:
+    name: Windows x64 Release
+    runs-on: windows-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Resolve version
+        id: version
+        shell: pwsh
+        run: |
+          if ('${{ github.event_name }}' -eq 'push') {
+            # Tag ref looks like refs/tags/v1.2.0-desktop → strip leading 'v' and trailing '-desktop'.
+            $tag = '${{ github.ref_name }}'
+            $v = $tag -replace '^v', '' -replace '-desktop$', ''
+          } else {
+            $v = '${{ inputs.version }}'
+          }
+          if (-not ($v -match '^\d+\.\d+\.\d+(-[A-Za-z0-9.\-]+)?$')) {
+            throw "Resolved version '$v' is not a valid semver string."
+          }
+          "version=$v" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+          Write-Host "Resolved desktop version: $v"
+
+      - name: Stamp package.json version
+        shell: pwsh
+        run: |
+          npm version ${{ steps.version.outputs.version }} --no-git-tag-version --allow-same-version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Validate signing configuration
+        if: inputs.allow_unsigned != true
+        shell: pwsh
+        env:
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_CODE_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_CODE_SIGNING_ACCOUNT_NAME }}
+          AZURE_CODE_SIGNING_PROFILE_NAME: ${{ secrets.AZURE_CODE_SIGNING_PROFILE_NAME }}
+        run: |
+          $hasClassic = ($env:WIN_CSC_LINK -and $env:WIN_CSC_KEY_PASSWORD) -or ($env:CSC_LINK -and $env:CSC_KEY_PASSWORD)
+          $hasAzure = $env:AZURE_TENANT_ID -and $env:AZURE_CLIENT_ID -and $env:AZURE_CLIENT_SECRET -and $env:AZURE_CODE_SIGNING_ACCOUNT_NAME -and $env:AZURE_CODE_SIGNING_PROFILE_NAME
+          if (-not $hasClassic -and -not $hasAzure) {
+            throw "No Windows code-signing secrets configured. Set WIN_CSC_LINK+WIN_CSC_KEY_PASSWORD (or CSC_LINK+CSC_KEY_PASSWORD) or the AZURE_* Trusted Signing secrets. For local throwaway builds re-run with allow_unsigned=true."
+          }
+          Write-Host "Code-signing configuration detected."
+
+      - name: Package desktop (electron-builder NSIS)
+        shell: pwsh
+        env:
+          ELECTRON_PUBLISH_MODE: ${{ inputs.publish_mode || 'never' }}
+          ELECTRON_ALLOW_UNSIGNED_WINDOWS_BUILD: ${{ inputs.allow_unsigned == true && 'true' || 'false' }}
+          # Code-signing (forwarded verbatim; electron-builder picks whichever group is non-empty).
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_CODE_SIGNING_ACCOUNT_NAME: ${{ secrets.AZURE_CODE_SIGNING_ACCOUNT_NAME }}
+          AZURE_CODE_SIGNING_PROFILE_NAME: ${{ secrets.AZURE_CODE_SIGNING_PROFILE_NAME }}
+          # Runtime config baked into the Next.js build.
+          NEXT_PUBLIC_API_BASE_URL: ${{ vars.DESKTOP_API_BASE_URL || 'https://api.oetwithdrhesham.co.uk' }}
+          APP_URL: ${{ vars.DESKTOP_APP_URL || 'https://app.oetwithdrhesham.co.uk' }}
+          ELECTRON_UPDATES_URL: ${{ vars.ELECTRON_UPDATES_URL }}
+          ELECTRON_CERT_PINS: ${{ secrets.ELECTRON_CERT_PINS }}
+          # electron-builder GitHub publish credentials (used only when publish_mode != never).
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: npm run desktop:dist
+
+      - name: Inspect outputs
+        if: always()
+        shell: pwsh
+        run: |
+          if (Test-Path dist/desktop) {
+            Get-ChildItem dist/desktop -Recurse | Select-Object FullName,Length | Format-Table -AutoSize
+          } else {
+            Write-Host '::warning::dist/desktop not produced; packaging failed before copy stage.'
+          }
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: desktop-windows-x64-${{ steps.version.outputs.version }}
+          path: |
+            dist/desktop/*.exe
+            dist/desktop/*.blockmap
+            dist/desktop/latest*.yml
+          if-no-files-found: error
+          retention-days: 90
