@@ -20,6 +20,8 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.FileProviders;
 using Microsoft.Extensions.Options;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
@@ -1344,6 +1346,10 @@ public class AuthFlowsTests
         var service = new AuthService(
             new LearnerDbContext(dbOptions),
             passwordHasher,
+            new PasswordPolicyService(
+                new StubHttpClientFactory(),
+                Options.Create(new PasswordPolicyOptions { BreachCheckEnabled = false }),
+                NullLogger<PasswordPolicyService>.Instance),
             tokenService,
             emailOtpService,
             externalAuthTicketService,
@@ -1879,5 +1885,10 @@ public class AuthFlowsTests
         public string EnvironmentName { get; set; } = "Development";
         public string ContentRootPath { get; set; } = AppContext.BaseDirectory;
         public IFileProvider ContentRootFileProvider { get; set; } = new NullFileProvider();
+    }
+
+    private sealed class StubHttpClientFactory : IHttpClientFactory
+    {
+        public HttpClient CreateClient(string name) => new HttpClient();
     }
 }

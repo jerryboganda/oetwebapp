@@ -25,9 +25,45 @@ export default function ExternalAuthCallbackPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const provider = readProvider(params?.provider);
-  const token = searchParams.get('token');
+  const [token, setToken] = useState<string | null>(null);
+  const [tokenReady, setTokenReady] = useState(false);
   const nextHref = searchParams.get('next');
   const [error, setError] = useState<string | null>(null);
+
+  // Security (H11): read the exchange token from the URL fragment (#token=...) rather than
+  // the query string. Fragments are never sent to servers (no Referer leak, no access-log leak,
+  // no server-side proxy leak). Immediately strip the fragment via history.replaceState before
+  // any async work so the token disappears from the address bar, browser history entry, and
+  // window.location.hash for any downstream listeners. Backward-compatibility: if a token is
+  // still present in the query string (stale bookmark, older backend), we accept it and strip
+  // it from the URL the same way. This can be removed after one deploy cycle.
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      setTokenReady(true);
+      return;
+    }
+
+    const hash = window.location.hash.startsWith('#') ? window.location.hash.slice(1) : window.location.hash;
+    const hashParams = new URLSearchParams(hash);
+    const hashToken = hashParams.get('token');
+
+    const queryToken = searchParams.get('token');
+
+    const resolved = hashToken ?? queryToken ?? null;
+    setToken(resolved);
+
+    if (hashToken || queryToken) {
+      // Strip both hash and ?token= from the visible URL; preserve ?next= if present.
+      const url = new URL(window.location.href);
+      url.hash = '';
+      if (url.searchParams.has('token')) {
+        url.searchParams.delete('token');
+      }
+      window.history.replaceState(null, '', url.toString());
+    }
+
+    setTokenReady(true);
+  }, [searchParams]);
 
   const subtitle = useMemo(() => {
     if (provider) {
@@ -39,6 +75,11 @@ export default function ExternalAuthCallbackPage() {
 
   useEffect(() => {
     let cancelled = false;
+
+    // Wait for the fragment-stripping effect to run before deciding whether the token is missing.
+    if (!tokenReady) {
+      return;
+    }
 
     const completeExchange = async () => {
       if (!provider || !token) {
@@ -94,7 +135,7 @@ export default function ExternalAuthCallbackPage() {
     return () => {
       cancelled = true;
     };
-  }, [nextHref, provider, router, token]);
+  }, [nextHref, provider, router, token, tokenReady]);
 
   return (
     <AuthScreenShell

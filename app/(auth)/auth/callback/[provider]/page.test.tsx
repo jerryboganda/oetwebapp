@@ -54,4 +54,50 @@ describe('ExternalAuthCallbackPage', () => {
       expect(mockReplace).toHaveBeenCalledWith('/expert/queue?assignment=assigned');
     });
   });
+
+  it('reads the exchange token from the URL fragment and strips it before exchange (H11)', async () => {
+    mockExchangeExternalAuth.mockResolvedValueOnce({
+      status: 'authenticated',
+      session: {
+        accessToken: 'access-token-2',
+        refreshToken: 'refresh-token-2',
+        accessTokenExpiresAt: '2099-03-27T00:15:00.000Z',
+        refreshTokenExpiresAt: '2099-04-26T00:00:00.000Z',
+        currentUser: {
+          userId: 'learner-001',
+          email: 'learner@oet-prep.dev',
+          role: 'learner',
+          displayName: 'Learner One',
+          isEmailVerified: true,
+          isAuthenticatorEnabled: false,
+          requiresEmailVerification: false,
+          requiresMfa: false,
+          emailVerifiedAt: '2026-03-27T00:00:00.000Z',
+          authenticatorEnabledAt: null,
+        },
+      },
+      registration: null,
+    });
+
+    // Simulate the backend redirect: token lives in the fragment, ?next= in the query.
+    window.history.replaceState(null, '', '/auth/callback/google?next=%2Fdashboard#token=fragment-token');
+
+    renderWithRouter(<ExternalAuthCallbackPage />, {
+      router: { replace: mockReplace },
+      params: { provider: 'google' },
+      searchParams: new URLSearchParams({ next: '/dashboard' }),
+    });
+
+    await waitFor(() => {
+      expect(mockExchangeExternalAuth).toHaveBeenCalledWith('google', 'fragment-token');
+    });
+
+    // Fragment and any ?token= must be stripped from the visible URL immediately.
+    expect(window.location.hash).toBe('');
+    expect(new URL(window.location.href).searchParams.has('token')).toBe(false);
+
+    await waitFor(() => {
+      expect(mockReplace).toHaveBeenCalledWith('/dashboard');
+    });
+  });
 });
