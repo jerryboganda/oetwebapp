@@ -299,7 +299,7 @@ public class AiGatewayQuotaIntegrationTests
 
         var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
         {
-            Kind = RuleKind.Writing, Profession = ExamProfession.Medicine, Task = AiTaskMode.Score,
+            Kind = RuleKind.Writing, Profession = ExamProfession.Medicine, Task = AiTaskMode.Score, LetterType = "routine_referral",
         });
 
         var result = await gateway.CompleteAsync(new AiGatewayRequest
@@ -362,7 +362,7 @@ public class AiGatewayQuotaIntegrationTests
 
         var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
         {
-            Kind = RuleKind.Writing, Profession = ExamProfession.Medicine, Task = AiTaskMode.Score,
+            Kind = RuleKind.Writing, Profession = ExamProfession.Medicine, Task = AiTaskMode.Score, LetterType = "routine_referral",
         });
 
         var ex = await Assert.ThrowsAsync<AiQuotaDeniedException>(() =>
@@ -414,7 +414,7 @@ public class AiGatewayQuotaIntegrationTests
 
         var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
         {
-            Kind = RuleKind.Writing, Profession = ExamProfession.Medicine, Task = AiTaskMode.Score,
+            Kind = RuleKind.Writing, Profession = ExamProfession.Medicine, Task = AiTaskMode.Score, LetterType = "routine_referral",
         });
 
         var result = await gateway.CompleteAsync(new AiGatewayRequest

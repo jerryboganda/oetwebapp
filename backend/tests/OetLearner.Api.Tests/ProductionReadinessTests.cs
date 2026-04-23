@@ -333,7 +333,15 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
             ["Smtp:Username"] = "brevo-login@example.test",
             ["Smtp:Password"] = "brevo-smtp-key-placeholder",
             ["Smtp:FromEmail"] = "no-reply@example.test",
-            ["Smtp:FromName"] = "OET Learner"
+            ["Smtp:FromName"] = "OET Learner",
+            // C5 UploadScannerValidator refuses noop in Production. Boot-test factory has no DI
+            // override, so use a non-noop stub provider keyword that passes the validator.
+            // None of these tests exercise actual uploads, so the host never resolves a scanner.
+            ["UploadScanner:Provider"] = "clamav",
+            ["UploadScanner:Host"] = "localhost",
+            ["UploadScanner:Port"] = "3310",
+            // C7 PasswordPolicy HIBP check hits real network from tests; disable it here.
+            ["PasswordPolicy:BreachCheckEnabled"] = "false"
         };
 
         configure?.Invoke(settings);

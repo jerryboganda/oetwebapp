@@ -1617,7 +1617,16 @@ public class AuthFlowsTests
                 ["Smtp:Username"] = "brevo-login@example.test",
                 ["Smtp:Password"] = "brevo-smtp-key-placeholder",
                 ["Smtp:FromEmail"] = "no-reply@example.test",
-                ["Smtp:FromName"] = "OET Learner"
+                ["Smtp:FromName"] = "OET Learner",
+                // Production-env test factory: C5 UploadScannerValidator refuses noop provider.
+                // DI swap below registers TestCleanUploadScanner so this config is cosmetic for the validator only.
+                ["UploadScanner:Provider"] = "clamav",
+                ["UploadScanner:Host"] = "localhost",
+                ["UploadScanner:Port"] = "3310",
+                // Disable HIBP breach check in tests (C7 password policy). Fixture passwords
+                // like "Password123!" are in the breach corpus; tests assert success paths
+                // that would otherwise fail with 400. Length + complexity remain enforced.
+                ["PasswordPolicy:BreachCheckEnabled"] = "false"
             };
 
             _previousValues = settings.ToDictionary(
@@ -1640,9 +1649,11 @@ public class AuthFlowsTests
             {
                 services.RemoveAll<IEmailSender>();
                 services.RemoveAll<TimeProvider>();
+                services.RemoveAll<OetLearner.Api.Services.Content.IUploadScanner>();
                 services.AddSingleton(Sender);
                 services.AddSingleton<IEmailSender>(Sender);
                 services.AddSingleton<TimeProvider>(TimeProvider);
+                services.AddSingleton<OetLearner.Api.Services.Content.IUploadScanner, TestCleanUploadScanner>();
             });
         }
 
@@ -1890,5 +1901,10 @@ public class AuthFlowsTests
     private sealed class StubHttpClientFactory : IHttpClientFactory
     {
         public HttpClient CreateClient(string name) => new HttpClient();
+    }
+    private sealed class TestCleanUploadScanner : OetLearner.Api.Services.Content.IUploadScanner
+    {
+        public Task<(bool clean, string? reason)> ScanAsync(Stream stream, string filename, CancellationToken ct)
+            => Task.FromResult<(bool, string?)>((true, null));
     }
 }

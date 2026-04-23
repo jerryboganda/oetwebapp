@@ -448,6 +448,7 @@ public class AiGatewayAndPromptTests
             Profession = ExamProfession.Medicine,
             Task = AiTaskMode.Score,
             CandidateCountry = "USA",
+            LetterType = "routine_referral",
         });
         Assert.Equal(300, prompt.Metadata.ScoringPassMark);
         Assert.Equal("C+", prompt.Metadata.ScoringGrade);
@@ -463,6 +464,7 @@ public class AiGatewayAndPromptTests
             Profession = ExamProfession.Medicine,
             Task = AiTaskMode.Coach,
             CandidateCountry = "USA",
+            CardType = "first_visit_routine",
         });
         Assert.Equal(350, prompt.Metadata.ScoringPassMark);
         Assert.Equal("B", prompt.Metadata.ScoringGrade);
@@ -529,6 +531,7 @@ public class AiGatewayAndPromptTests
             Kind = RuleKind.Writing,
             Profession = ExamProfession.Medicine,
             Task = AiTaskMode.Score,
+            LetterType = "routine_referral",
         });
         var result = await gateway.CompleteAsync(new AiGatewayRequest { Prompt = prompt });
         Assert.False(string.IsNullOrWhiteSpace(result.Completion));

@@ -186,6 +186,7 @@ public class AiGatewayRecorderIntegrationTests
             Kind = RuleKind.Writing,
             Profession = ExamProfession.Medicine,
             Task = AiTaskMode.Score,
+            LetterType = "routine_referral",
         });
 
         var result = await gateway.CompleteAsync(new AiGatewayRequest
@@ -271,6 +272,7 @@ public class AiGatewayRecorderIntegrationTests
             Kind = RuleKind.Writing,
             Profession = ExamProfession.Medicine,
             Task = AiTaskMode.Score,
+            LetterType = "routine_referral",
         });
 
         await Assert.ThrowsAsync<HttpRequestException>(() =>
@@ -302,6 +304,7 @@ public class AiGatewayRecorderIntegrationTests
             Kind = RuleKind.Writing,
             Profession = ExamProfession.Medicine,
             Task = AiTaskMode.Score,
+            LetterType = "routine_referral",
         });
 
         var result = await gateway.CompleteAsync(new AiGatewayRequest { Prompt = prompt });
