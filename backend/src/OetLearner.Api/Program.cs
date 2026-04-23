@@ -158,7 +158,13 @@ if (brevoOptions.Enabled)
         client.BaseAddress = new Uri(string.IsNullOrWhiteSpace(configuredBrevoOptions.BaseUrl) ? "https://api.brevo.com/v3" : configuredBrevoOptions.BaseUrl);
         client.DefaultRequestHeaders.Add("api-key", configuredBrevoOptions.ApiKey);
         client.DefaultRequestHeaders.Add("accept", "application/json");
-    });
+    })
+    // Transient Brevo outages must not cascade into 5xx from our API. The standard
+    // resilience handler adds rate limiting, retry with exponential backoff + jitter,
+    // a circuit breaker, and total + per-attempt timeouts. Defaults (3 retries, 30s
+    // total timeout, 10s per attempt) are safe for transactional email and honour any
+    // CancellationToken the caller passes.
+    .AddStandardResilienceHandler();
     builder.Services.AddTransient<IEmailSender, BrevoEmailSender>();
 }
 else
