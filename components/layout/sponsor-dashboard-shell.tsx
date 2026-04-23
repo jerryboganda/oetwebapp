@@ -13,7 +13,7 @@ export function SponsorDashboardShell({
   ...shellProps
 }: SponsorDashboardShellProps) {
   return (
-    <AppShell {...shellProps} workspaceRole="sponsor">
+    <AppShell requiredRole="sponsor" {...shellProps} workspaceRole="sponsor">
       <LearnerWorkspaceContainer className={workspaceClassName}>
         {children}
       </LearnerWorkspaceContainer>

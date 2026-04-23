@@ -23,6 +23,7 @@ export function LearnerDashboardShell({
 
   return (
     <AppShell
+      requiredRole="learner"
       {...shellProps}
       navItems={learnerNavItems}
       mobileMenuSections={learnerMobileMenuSections}
