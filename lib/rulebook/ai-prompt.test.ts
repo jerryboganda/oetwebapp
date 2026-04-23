@@ -21,6 +21,7 @@ describe('AI rulebook-grounded prompt — writing', () => {
       profession: 'medicine',
       task: 'score',
       candidateCountry: 'UK',
+      letterType: 'routine_referral',
     });
     expect(p.metadata.scoringPassMark).toBe(350);
     expect(p.metadata.scoringGrade).toBe('B');
@@ -33,6 +34,7 @@ describe('AI rulebook-grounded prompt — writing', () => {
       profession: 'medicine',
       task: 'score',
       candidateCountry: 'USA',
+      letterType: 'routine_referral',
     });
     expect(p.metadata.scoringPassMark).toBe(300);
     expect(p.metadata.scoringGrade).toBe('C+');
@@ -44,6 +46,7 @@ describe('AI rulebook-grounded prompt — writing', () => {
       profession: 'medicine',
       task: 'score',
       candidateCountry: 'Qatar',
+      letterType: 'routine_referral',
     });
     expect(p.metadata.scoringPassMark).toBe(300);
     expect(p.metadata.scoringGrade).toBe('C+');
@@ -54,12 +57,13 @@ describe('AI rulebook-grounded prompt — writing', () => {
       kind: 'writing',
       profession: 'medicine',
       task: 'score',
+      letterType: 'routine_referral',
     });
     expect(p.metadata.scoringPassMark).toBe(350);
   });
 
   it('system prompt cites the canonical OET scoring rules', () => {
-    const p = buildAiGroundedPrompt({ kind: 'writing', profession: 'medicine', task: 'score' });
+    const p = buildAiGroundedPrompt({ kind: 'writing', profession: 'medicine', task: 'score', letterType: 'routine_referral' });
     expect(p.system).toMatch(/30\/42 ≡ 350\/500/);
     expect(p.system).toMatch(/Grade C\+ at 300\/500 for US\/QA/);
     expect(p.system).toMatch(/SPEAKING: Grade B at 350\/500, universal/);
@@ -87,7 +91,7 @@ describe('AI rulebook-grounded prompt — writing', () => {
   });
 
   it('system prompt contains the strict guardrails', () => {
-    const p = buildAiGroundedPrompt({ kind: 'writing', profession: 'medicine', task: 'score' });
+    const p = buildAiGroundedPrompt({ kind: 'writing', profession: 'medicine', task: 'score', letterType: 'routine_referral' });
     expect(p.system).toMatch(/Cite rule IDs explicitly/);
     expect(p.system).toMatch(/Do NOT invent/);
     expect(p.system).toMatch(/Do NOT produce a numeric grade/);
@@ -95,7 +99,7 @@ describe('AI rulebook-grounded prompt — writing', () => {
   });
 
   it('score task reply format contains a JSON shape with criteriaScores', () => {
-    const p = buildAiGroundedPrompt({ kind: 'writing', profession: 'medicine', task: 'score' });
+    const p = buildAiGroundedPrompt({ kind: 'writing', profession: 'medicine', task: 'score', letterType: 'routine_referral' });
     expect(p.system).toMatch(/criteriaScores/);
     expect(p.system).toMatch(/estimatedScaledScore/);
     expect(p.system).toMatch(/estimatedGrade/);
@@ -108,6 +112,7 @@ describe('AI rulebook-grounded prompt — speaking', () => {
       kind: 'speaking',
       profession: 'medicine',
       task: 'coach',
+      cardType: 'first_visit_routine',
       candidateCountry: 'USA',
     });
     expect(p.metadata.scoringPassMark).toBe(350);
@@ -146,14 +151,14 @@ describe('AI rulebook-grounded prompt — task-specific reply formats', () => {
   it.each(['score', 'coach', 'correct', 'generate_feedback', 'generate_content'] as const)(
     '%s task produces a JSON reply contract',
     (task) => {
-      const p = buildAiGroundedPrompt({ kind: 'writing', profession: 'medicine', task });
+      const p = buildAiGroundedPrompt({ kind: 'writing', profession: 'medicine', task, letterType: 'routine_referral' });
       expect(p.system).toMatch(/Reply format/);
       expect(p.system).toMatch(/```json/);
     },
   );
 
   it('summarise task produces a plain-text reply contract', () => {
-    const p = buildAiGroundedPrompt({ kind: 'writing', profession: 'medicine', task: 'summarise' });
+    const p = buildAiGroundedPrompt({ kind: 'writing', profession: 'medicine', task: 'summarise', letterType: 'routine_referral' });
     expect(p.system).toMatch(/Reply format/);
     expect(p.system).toMatch(/Plain text/);
   });
