@@ -19,8 +19,11 @@ using OetLearner.Api.Endpoints;
 using OetLearner.Api.Hubs;
 using OetLearner.Api.Security;
 using OetLearner.Api.Services;
+using OetLearner.Api.Observability;
 
 var builder = WebApplication.CreateBuilder(args);
+// H10: wire Sentry early so host-level startup exceptions are captured. No-op unless Sentry:Dsn is set.
+builder.AddSentryIfConfigured();
 const string HybridDevelopmentAuthScheme = "DevelopmentOrJwt";
 var authOptions = builder.Configuration.GetSection("Auth").Get<AuthOptions>() ?? new AuthOptions();
 var authTokenOptions = builder.Configuration.GetSection(AuthTokenOptions.SectionName).Get<AuthTokenOptions>() ?? new AuthTokenOptions();
@@ -812,6 +815,13 @@ app.UseExceptionHandler(handler =>
             context.Request.Method,
             context.Request.Path,
             correlationId ?? "missing");
+
+        // H10: forward unhandled exceptions to Sentry. No-op when Sentry:Dsn is empty
+        // because SentrySdk is not initialised. PII is scrubbed by SentryBootstrap.ScrubPii.
+        if (exception is not null)
+        {
+            Sentry.SentrySdk.CaptureException(exception);
+        }
 
         context.Response.StatusCode = StatusCodes.Status500InternalServerError;
         var payload = new
