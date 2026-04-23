@@ -142,6 +142,7 @@ builder.Services.Configure<ExternalAuthOptions>(builder.Configuration.GetSection
 builder.Services.Configure<AiProviderOptions>(builder.Configuration.GetSection(AiProviderOptions.SectionName));
 builder.Services.Configure<WebPushOptions>(builder.Configuration.GetSection(WebPushOptions.SectionName));
 builder.Services.Configure<NotificationProofHarnessOptions>(builder.Configuration.GetSection(NotificationProofHarnessOptions.SectionName));
+builder.Services.Configure<PasswordPolicyOptions>(builder.Configuration.GetSection("PasswordPolicy"));
 builder.Services.AddSingleton(TimeProvider.System);
 builder.Services.AddSignalR();
 builder.Services.AddSingleton<IWebPushDispatcher, WebPushDispatcher>();
@@ -167,6 +168,18 @@ else
 builder.Services.AddScoped<EmailOtpService>();
 builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<AuthService>();
+// HIBP breach-check client. User-Agent is required by the HIBP API; anything
+// identifying your app is acceptable. Timeout is short because breach-check
+// failure is fail-open (we do not want HIBP hiccups to block sign-ups).
+builder.Services.AddHttpClient(PasswordPolicyService.HibpHttpClientName, client =>
+{
+    var pwOptions = builder.Configuration.GetSection("PasswordPolicy").Get<PasswordPolicyOptions>() ?? new PasswordPolicyOptions();
+    client.BaseAddress = new Uri(pwOptions.BreachApiBaseUrl);
+    client.Timeout = pwOptions.BreachApiTimeout;
+    client.DefaultRequestHeaders.Add("User-Agent", "OetLearner-PasswordPolicy");
+    client.DefaultRequestHeaders.Add("Add-Padding", "true");
+});
+builder.Services.AddScoped<PasswordPolicyService>();
 builder.Services.AddScoped<ExternalAuthService>();
 
 if (corsOrigins.Length > 0)
@@ -242,6 +255,38 @@ builder.Services.AddRateLimiter(options =>
             PermitLimit = 5,
             Window = TimeSpan.FromMinutes(1),
             QueueLimit = 0,
+        });
+    });
+    // Tighter policy for anonymous auth endpoints to mitigate credential stuffing,
+    // OTP bombing, and account-enumeration probes. Partitioned by IP because callers
+    // are unauthenticated; users behind NAT share a bucket (acceptable trade-off).
+    // Dev/test gets headroom so the E2E matrix doesn't false-positive.
+    var authBrutePermit = builder.Environment.IsDevelopment() ? 500 : 10;
+    options.AddPolicy("AuthBruteforce", httpContext =>
+    {
+        var key = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter($"auth-brute-{key}", _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = authBrutePermit,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        });
+    });
+    // Email-scoped OTP throttle. Applied to endpoints that accept a target email
+    // in the request body (verification OTP, forgot-password). Key is derived from
+    // a header the handler sets; handlers MUST call context.Items["otp_email"] = normalizedEmail
+    // before RequireRateLimiting runs for this policy.
+    var otpPermit = builder.Environment.IsDevelopment() ? 100 : 5;
+    options.AddPolicy("AuthOtpSend", httpContext =>
+    {
+        var email = (httpContext.Items["otp_email"] as string)
+            ?? httpContext.Connection.RemoteIpAddress?.ToString()
+            ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter($"auth-otp-{email}", _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = otpPermit,
+            Window = TimeSpan.FromHours(1),
+            QueueLimit = 0
         });
     });
 });
@@ -590,12 +635,30 @@ builder.Services.AddHostedService<OetLearner.Api.Services.AiManagement.AiCreditR
 
 // Content Upload subsystem (Slice 2). IFileStorage sits in front of disk
 // access so future S3/R2 swap is a DI-only change.
+builder.Services.AddSingleton<OetLearner.Api.Services.Content.IHtmlSanitizer,
+    OetLearner.Api.Services.Content.HtmlSanitizerService>();
 builder.Services.AddSingleton<OetLearner.Api.Services.Content.IFileStorage,
     OetLearner.Api.Services.Content.LocalFileStorage>();
 builder.Services.AddSingleton<OetLearner.Api.Services.Content.IUploadContentValidator,
     OetLearner.Api.Services.Content.MagicByteValidator>();
-builder.Services.AddSingleton<OetLearner.Api.Services.Content.IUploadScanner,
-    OetLearner.Api.Services.Content.NoOpUploadScanner>();
+// Upload antivirus scanner. Provider is chosen via UploadScanner:Provider
+// configuration. In production we REFUSE to boot on NoOp — see the fail-fast
+// check below that runs after builder.Build().
+builder.Services.Configure<UploadScannerOptions>(builder.Configuration.GetSection("UploadScanner"));
+{
+    var scannerSection = builder.Configuration.GetSection("UploadScanner");
+    var provider = (scannerSection["Provider"] ?? "noop").Trim().ToLowerInvariant();
+    if (string.Equals(provider, "clamav", StringComparison.Ordinal))
+    {
+        builder.Services.AddSingleton<OetLearner.Api.Services.Content.IUploadScanner,
+            OetLearner.Api.Services.Content.ClamAvUploadScanner>();
+    }
+    else
+    {
+        builder.Services.AddSingleton<OetLearner.Api.Services.Content.IUploadScanner,
+            OetLearner.Api.Services.Content.NoOpUploadScanner>();
+    }
+}
 builder.Services.AddScoped<OetLearner.Api.Services.Content.IChunkedUploadService,
     OetLearner.Api.Services.Content.ChunkedUploadService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Content.IContentPaperService,
@@ -641,6 +704,25 @@ builder.Services.AddSingleton<ZoomMeetingService>();
 builder.Services.AddScoped<PrivateSpeakingService>();
 
 var app = builder.Build();
+
+// ── Production safety gate: forbid NoOpUploadScanner when running in production. ──
+// Rationale: the NoOp scanner accepts every byte; if production accidentally
+// boots with it (misconfiguration, missing env var, container swap), learner
+// content uploads can carry malware into storage. Better to refuse to start
+// and make the operator look at the config than to silently become a vector.
+// Dev/test explicitly opt in via the default UploadScanner:Provider=noop.
+{
+    var scanner = app.Services.GetRequiredService<OetLearner.Api.Services.Content.IUploadScanner>();
+    if (app.Environment.IsProduction()
+        && scanner is OetLearner.Api.Services.Content.NoOpUploadScanner)
+    {
+        throw new InvalidOperationException(
+            "UploadScanner:Provider is 'noop' in Production. Configure UploadScanner:Provider=clamav "
+            + "(or another real scanner) and set UploadScanner:Host / UploadScanner:Port. See "
+            + "Configuration/UploadScannerOptions.cs for the full option surface.");
+    }
+}
+
 
 if (trustForwardHeaders)
 {

@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services.Reading;
 
@@ -101,8 +102,34 @@ public sealed record ReadingValidationIssue(
 public sealed record ReadingValidationCounts(
     int PartACount, int PartBCount, int PartCCount, int TotalPoints);
 
-public sealed class ReadingStructureService(LearnerDbContext db) : IReadingStructureService
+public sealed class ReadingStructureService : IReadingStructureService
 {
+    private readonly LearnerDbContext db;
+    private readonly IHtmlSanitizer htmlSanitizer;
+
+    /// <summary>
+    /// Primary DI constructor. Always use this in production wiring; it gives
+    /// you the full sanitizer. The secondary constructor below exists ONLY for
+    /// the legacy code paths that construct this service inline purely to call
+    /// <see cref="ValidatePaperAsync"/> (read-only). Those call sites should be
+    /// migrated to DI over time — they never hit the sanitize-on-write path, so
+    /// the no-op sanitizer in the secondary ctor is safe for them.
+    /// </summary>
+    public ReadingStructureService(LearnerDbContext db, IHtmlSanitizer htmlSanitizer)
+    {
+        this.db = db;
+        this.htmlSanitizer = htmlSanitizer;
+    }
+
+    /// <summary>
+    /// Read-only construction helper. DO NOT use this for code paths that call
+    /// <c>UpsertTextAsync</c> — it would silently skip sanitization.
+    /// </summary>
+    public ReadingStructureService(LearnerDbContext db)
+        : this(db, new NoOpHtmlSanitizer())
+    {
+    }
+
     /// <summary>Canonical OET shape. Non-configurable invariant
     /// (<c>docs/READING-AUTHORING-POLICY.md</c> §11).</summary>
     public static readonly IReadOnlyDictionary<ReadingPartCode, (int Items, int Minutes)> CanonicalShape =
@@ -187,7 +214,7 @@ public sealed class ReadingStructureService(LearnerDbContext db) : IReadingStruc
                 DisplayOrder = args.DisplayOrder,
                 Title = args.Title.Trim(),
                 Source = args.Source,
-                BodyHtml = args.BodyHtml,
+                BodyHtml = htmlSanitizer.SanitizePassage(args.BodyHtml),
                 WordCount = args.WordCount,
                 TopicTag = args.TopicTag,
                 CreatedAt = now,
@@ -201,7 +228,7 @@ public sealed class ReadingStructureService(LearnerDbContext db) : IReadingStruc
             row.DisplayOrder = args.DisplayOrder;
             row.Title = args.Title.Trim();
             row.Source = args.Source;
-            row.BodyHtml = args.BodyHtml;
+            row.BodyHtml = htmlSanitizer.SanitizePassage(args.BodyHtml);
             row.WordCount = args.WordCount;
             row.TopicTag = args.TopicTag;
             row.UpdatedAt = now;

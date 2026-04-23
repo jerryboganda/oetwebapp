@@ -195,3 +195,46 @@ Notes:
 
 - The desktop stack uses development auth, so the backend accepts the seeded local accounts immediately.
 - The frontend is built against `http://localhost:5198`, so it can be opened directly in your browser on the host machine.
+
+
+## Disaster Recovery
+
+The production compose stack includes an oet-db-backup sidecar that runs an encrypted pg_dump on BACKUP_SCHEDULE (default 02:17 UTC daily). Backups are kept locally in the oet_db_backups volume for BACKUP_RETENTION_DAYS (default 14) and optionally pushed to S3-compatible storage via BACKUP_S3_URL.
+
+### Prerequisites
+
+- BACKUP_GPG_PASSPHRASE is set in .env.production. Without it backups are stored in plaintext which defeats the purpose.
+- BACKUP_S3_URL is set to an offsite bucket. Local-only backups are lost if the VPS disk fails.
+- BACKUP_AWS_ACCESS_KEY_ID / BACKUP_AWS_SECRET_ACCESS_KEY scoped to write-only on the bucket. Use a dedicated IAM user, not your root key.
+
+### Run a backup immediately
+
+``nssh root@185.252.233.186
+cd /root/oetwebsite
+docker compose -f docker-compose.production.yml exec -e RUN_ONCE_NOW=YES db-backup /usr/local/bin/entrypoint.sh
+``n
+### List backups
+
+``ndocker compose -f docker-compose.production.yml exec db-backup ls -lh /backups
+``n
+### Restore procedure
+
+1. Copy the target backup from S3 (or pick a local one from the volume) into the sidecar container.
+2. Restore into a **non-live** database first and verify:
+
+``ndocker compose -f docker-compose.production.yml exec \\
+  -e CONFIRM_RESTORE=YES \\
+  -e BACKUP_FILE=/backups/oet-20260423T021700Z.dump.gpg \\
+  -e BACKUP_GPG_PASSPHRASE=... \\
+  -e TARGET_DB=oet_learner_restore_check \\
+  db-backup /usr/local/bin/postgres-restore.sh
+``n
+3. Point a temporary API container at the restored DB and run smoke tests.
+4. Only if (3) succeeds, restore into the live DB by also setting RESTORE_INTO_LIVE=YES and TARGET_DB=\. Announce a maintenance window first.
+
+### Verify backups are happening
+
+``ndocker compose -f docker-compose.production.yml logs -f db-backup
+``n
+A successful run ends with [backup] ok: /backups/oet-...dump.gpg. If you see nothing for 48 hours, the sidecar is not running \u2014 check BACKUP_SCHEDULE and docker compose ps db-backup.
+

@@ -18,6 +18,10 @@
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="10.0.1" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="10.1.7" />
     <PackageReference Include="WebPush" Version="1.0.12" />
+    <!-- Whitelist-based HTML sanitizer. Used by IHtmlSanitizer to scrub admin-authored
+         HTML (reading passages, grammar explanations, etc.) at persist time. DO NOT
+         render raw admin HTML without routing it through HtmlSanitizerService first. -->
+    <PackageReference Include="HtmlSanitizer" Version="9.0.892" />
   </ItemGroup>
 
   <!--

@@ -18,6 +18,7 @@ namespace OetLearner.Api.Services;
 public sealed class AuthService(
     LearnerDbContext db,
     IPasswordHasher<ApplicationUserAccount> passwordHasher,
+    PasswordPolicyService passwordPolicy,
     AuthTokenService tokenService,
     EmailOtpService emailOtpService,
     ExternalAuthTicketService externalAuthTicketService,
@@ -46,7 +47,10 @@ public sealed class AuthService(
             throw ApiException.Validation("invalid_registration_role", "Only learner self-registration is supported.");
         }
 
-        if (string.IsNullOrWhiteSpace(request.Password))
+        // Password complexity + HIBP breach check is centralised in PasswordPolicyService.
+        // Do not re-check here; we still need request.Password to be non-null for the below
+        // reference, but validation (including the null/whitespace case) lives in the policy.
+        if (request.Password is null)
         {
             throw ApiException.Validation("password_required", "Password is required.");
         }
@@ -105,6 +109,11 @@ public sealed class AuthService(
             sessionId,
             countryTarget,
             cancellationToken);
+        // Enforce password policy now that we have the resolved email. Placed here (not
+        // at the top of the method) so the policy can reject passwords that equal or
+        // contain the local-part of the user's email address.
+        await passwordPolicy.EnsurePasswordAcceptableAsync(request.Password, email, cancellationToken);
+
         var normalizedEmail = email.ToUpperInvariant();
         var existingAccount = await db.ApplicationUserAccounts
             .AnyAsync(x => x.NormalizedEmail == normalizedEmail, cancellationToken);
@@ -332,13 +341,22 @@ public sealed class AuthService(
 
     public async Task<AuthSessionResponse> RefreshAsync(RefreshTokenRequest request, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+        // C1: prefer the HttpOnly cookie over the request body. New clients stop
+        // sending the body entirely; legacy clients keep working until they're
+        // updated. Do NOT throw when the body is missing as long as the cookie is
+        // present — that's the migration target.
+        var presented = ReadRefreshCookie();
+        if (string.IsNullOrWhiteSpace(presented))
+        {
+            presented = request.RefreshToken;
+        }
+        if (string.IsNullOrWhiteSpace(presented))
         {
             throw ApiException.Validation("refresh_token_required", "Refresh token is required.");
         }
 
         var now = timeProvider.GetUtcNow();
-        var tokenHash = tokenService.HashRefreshToken(request.RefreshToken);
+        var tokenHash = tokenService.HashRefreshToken(presented);
         var refreshToken = await db.RefreshTokenRecords
             .Include(x => x.ApplicationUserAccount)
             .SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
@@ -388,12 +406,18 @@ public sealed class AuthService(
 
     public async Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(request.NewPassword))
+        // Defer policy enforcement until after OTP verification: the OTP both proves
+        // the user owns the email and gives us the account record used for the
+        // email-similarity checks inside the policy service. Policy also rejects the
+        // null/empty case, so the explicit guard is kept only for a clear early error.
+        if (request.NewPassword is null)
         {
             throw ApiException.Validation("new_password_required", "A new password is required.");
         }
 
         var account = await emailOtpService.VerifyPasswordResetOtpAsync(request.Email, request.ResetToken, cancellationToken);
+        await passwordPolicy.EnsurePasswordAcceptableAsync(request.NewPassword, account.Email, cancellationToken);
+
         var now = timeProvider.GetUtcNow();
         account.PasswordHash = passwordHasher.HashPassword(account, request.NewPassword);
         account.UpdatedAt = now;
@@ -531,12 +555,24 @@ public sealed class AuthService(
 
     public async Task SignOutAsync(SignOutRequest request, CancellationToken cancellationToken = default)
     {
-        if (string.IsNullOrWhiteSpace(request.RefreshToken))
+        // C1: prefer cookie, fall back to body.
+        var presented = ReadRefreshCookie();
+        if (string.IsNullOrWhiteSpace(presented))
         {
-            throw ApiException.Validation("refresh_token_required", "Refresh token is required.");
+            presented = request.RefreshToken;
+        }
+        // Always clear the cookie, even if no token was supplied — a sign-out that
+        // leaves a cookie behind is a correctness bug.
+        ClearRefreshCookie();
+
+        if (string.IsNullOrWhiteSpace(presented))
+        {
+            // Silent return rather than 4xx: sign-out should be idempotent from
+            // the client's perspective. The cookie has just been cleared.
+            return;
         }
 
-        var tokenHash = tokenService.HashRefreshToken(request.RefreshToken);
+        var tokenHash = tokenService.HashRefreshToken(presented);
         var refreshToken = await db.RefreshTokenRecords
             .SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
         if (refreshToken is null || refreshToken.RevokedAt is not null)
@@ -702,6 +738,69 @@ public sealed class AuthService(
         return session;
     }
 
+    // ═══════════════════════════════════════════════════════════════════════
+    //  Refresh cookie helpers — C1 (HttpOnly refresh cookie migration)
+    //
+    //  The refresh token is currently returned BOTH in the response body (legacy)
+    //  AND as an HttpOnly cookie. The body path stays alive one release so that
+    //  existing mobile / desktop shells that persist refreshToken manually keep
+    //  working while the clients migrate to relying on the cookie. New web
+    //  traffic already benefits because middleware forwards the cookie on every
+    //  proxied API call and RefreshAsync below prefers it over the body.
+    //
+    //  Cookie invariants:
+    //   * HttpOnly  — hard block on JS access, which is the entire point
+    //   * Secure    — refuse to send on http (except localhost dev)
+    //   * SameSite  — Strict because the refresh endpoint is same-origin via
+    //                  the Next.js /api/backend proxy. Cross-origin flows use
+    //                  the body path (legacy) until they move off that model.
+    //   * Path=/v1/auth — minimise exposure surface so the cookie only rides
+    //                  on auth-endpoint requests, not on every /v1/* call.
+    // ═══════════════════════════════════════════════════════════════════════
+    private const string RefreshCookieName = "oet_rt";
+
+    private void SetRefreshCookie(string refreshToken, DateTimeOffset expires)
+    {
+        var httpContext = httpContextAccessor.HttpContext;
+        if (httpContext is null) return;
+
+        var isLocalhostDev = environment.IsDevelopment()
+            && (httpContext.Request.Host.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+                || httpContext.Request.Host.Host.Equals("127.0.0.1", StringComparison.Ordinal));
+
+        httpContext.Response.Cookies.Append(RefreshCookieName, refreshToken, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = !isLocalhostDev,
+            SameSite = SameSiteMode.Strict,
+            Path = "/v1/auth",
+            Expires = expires,
+            IsEssential = true,
+        });
+    }
+
+    private void ClearRefreshCookie()
+    {
+        var httpContext = httpContextAccessor.HttpContext;
+        if (httpContext is null) return;
+        httpContext.Response.Cookies.Delete(RefreshCookieName, new CookieOptions
+        {
+            HttpOnly = true,
+            Secure = true,
+            SameSite = SameSiteMode.Strict,
+            Path = "/v1/auth",
+        });
+    }
+
+    private string? ReadRefreshCookie()
+    {
+        var httpContext = httpContextAccessor.HttpContext;
+        if (httpContext is null) return null;
+        return httpContext.Request.Cookies.TryGetValue(RefreshCookieName, out var value)
+            ? value
+            : null;
+    }
+
     private async Task<AuthSessionResponse> CreateSessionCoreAsync(
         ApplicationUserAccount account,
         AuthenticatedSessionSubject subject,
@@ -733,6 +832,11 @@ public sealed class AuthService(
         });
 
         await Task.CompletedTask;
+
+        // C1: also set refresh as an HttpOnly cookie. Body still carries it for
+        // clients that haven't migrated (desktop/mobile shells).
+        SetRefreshCookie(issuedSession.RefreshToken, issuedSession.RefreshTokenExpiresAt);
+
         return new AuthSessionResponse(
             issuedSession.AccessToken,
             issuedSession.RefreshToken,

@@ -867,12 +867,40 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
         }
     }
 
+    // H2: Require explicit letter/card type at grounded-prompt build time. The
+    // prior code emitted the literal string "letter type TBD" or "card type TBD"
+    // when the field was missing, which meant a downstream AI would produce
+    // generic, non-scenario-specific feedback the learner could not act on.
+    // Failing fast here surfaces the authoring bug at the source instead of
+    // letting it cross the provider boundary.
+    private static string RequireLetterType(AiGroundingContext ctx)
+    {
+        if (string.IsNullOrWhiteSpace(ctx.LetterType))
+        {
+            throw new PromptNotGroundedException(
+                "AiGroundingContext.LetterType is required for RuleKind.Writing prompts. "
+                + "Populate it from the ContentPaper or WritingAttempt being graded before calling BuildGroundedPrompt.");
+        }
+        return ctx.LetterType.Trim().ToLowerInvariant();
+    }
+
+    private static string RequireCardType(AiGroundingContext ctx)
+    {
+        if (string.IsNullOrWhiteSpace(ctx.CardType))
+        {
+            throw new PromptNotGroundedException(
+                "AiGroundingContext.CardType is required for RuleKind.Speaking prompts. "
+                + "Populate it from the ContentPaper or SpeakingAttempt being graded before calling BuildGroundedPrompt.");
+        }
+        return ctx.CardType.Trim().ToLowerInvariant();
+    }
+
     private static string RenderTaskInstruction(AiGroundingContext ctx, int passMark, string passGrade)
     {
         var baseText = ctx.Kind switch
         {
-            RuleKind.Writing => $"Task: analyse the candidate's OET Writing letter ({ctx.LetterType ?? "letter type TBD"}) against the active rulebook, and produce rule-cited feedback.",
-            RuleKind.Speaking => $"Task: analyse the candidate's OET Speaking transcript ({ctx.CardType ?? "card type TBD"}) against the active rulebook, and produce rule-cited feedback.",
+            RuleKind.Writing => $"Task: analyse the candidate's OET Writing letter ({RequireLetterType(ctx)}) against the active rulebook, and produce rule-cited feedback.",
+            RuleKind.Speaking => $"Task: analyse the candidate's OET Speaking transcript ({RequireCardType(ctx)}) against the active rulebook, and produce rule-cited feedback.",
             RuleKind.Grammar => "Task: produce a grammar teaching draft (title, content blocks, exercises) grounded in the grammar rulebook. Every exercise must cite ≥1 grammar rule ID in appliedRuleIds.",
             RuleKind.Pronunciation => ctx.Task switch
             {
