@@ -3363,7 +3363,7 @@ public static partial class SeedData
             Dialect = AiProviderDialect.OpenAiCompatible,
             BaseUrl = "https://inference.do-ai.run/v1",
             EncryptedApiKey = string.Empty,  // synchronised from AI__ApiKey at boot
-            ApiKeyHint = "(synchronised from AI__ApiKey env var at boot)",
+            ApiKeyHint = "pending",
             DefaultModel = "anthropic-claude-opus-4.7",
             PricePer1kPromptTokens = 0.0150m,     // Claude Opus 4.x input rate
             PricePer1kCompletionTokens = 0.0750m, // Claude Opus 4.x output rate
