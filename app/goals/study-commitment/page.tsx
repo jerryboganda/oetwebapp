@@ -82,35 +82,35 @@ export default function StudyCommitmentPage() {
           <Card className="p-6">
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-center">
               <MotionItem>
-                <div className="p-3 rounded-lg bg-indigo-50 dark:bg-indigo-900/20">
-                  <Clock className="w-5 h-5 text-indigo-600 dark:text-indigo-400 mx-auto mb-1" />
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Daily Goal</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-gray-100">{commitment.dailyMinutes}m</p>
+                <div className="p-3 rounded-lg bg-primary/10">
+                  <Clock className="w-5 h-5 text-primary mx-auto mb-1" />
+                  <p className="text-xs text-muted">Daily Goal</p>
+                  <p className="text-xl font-bold text-navy">{commitment.dailyMinutes}m</p>
                 </div>
               </MotionItem>
               <MotionItem>
-                <div className="p-3 rounded-lg bg-green-50 dark:bg-green-900/20">
-                  <Shield className="w-5 h-5 text-green-600 dark:text-green-400 mx-auto mb-1" />
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Freeze Shield</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                <div className="p-3 rounded-lg bg-success/10">
+                  <Shield className="w-5 h-5 text-success mx-auto mb-1" />
+                  <p className="text-xs text-muted">Freeze Shield</p>
+                  <p className="text-xl font-bold text-navy">
                     {commitment.freezeProtections - commitment.freezeProtectionsUsed}/{commitment.freezeProtections}
                   </p>
                 </div>
               </MotionItem>
               <MotionItem>
-                <div className="p-3 rounded-lg bg-orange-50 dark:bg-orange-900/20">
-                  <Flame className="w-5 h-5 text-orange-600 dark:text-orange-400 mx-auto mb-1" />
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Status</p>
+                <div className="p-3 rounded-lg bg-warning/10">
+                  <Flame className="w-5 h-5 text-warning mx-auto mb-1" />
+                  <p className="text-xs text-muted">Status</p>
                   <Badge variant={commitment.isActive ? 'success' : 'outline'}>
                     {commitment.isActive ? 'Active' : 'Inactive'}
                   </Badge>
                 </div>
               </MotionItem>
               <MotionItem>
-                <div className="p-3 rounded-lg bg-purple-50 dark:bg-purple-900/20">
-                  <Target className="w-5 h-5 text-purple-600 dark:text-purple-400 mx-auto mb-1" />
-                  <p className="text-xs text-gray-500 dark:text-gray-400">Weekly Target</p>
-                  <p className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                <div className="p-3 rounded-lg bg-primary/10">
+                  <Target className="w-5 h-5 text-primary mx-auto mb-1" />
+                  <p className="text-xs text-muted">Weekly Target</p>
+                  <p className="text-xl font-bold text-navy">
                     {Math.round((commitment.dailyMinutes * 7) / 60)}h
                   </p>
                 </div>
@@ -136,8 +136,8 @@ export default function StudyCommitmentPage() {
                 onClick={() => setSelectedMinutes(m)}
                 className={`px-4 py-2 rounded-full text-sm font-medium border transition-colors ${
                   selectedMinutes === m
-                    ? 'bg-indigo-600 text-white border-indigo-600'
-                    : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border-gray-300 dark:border-gray-600 hover:border-indigo-400'
+                    ? 'bg-primary text-white border-primary'
+                    : 'bg-surface text-navy border-border-hover hover:border-primary/30'
                 }`}
               >
                 {m} min
@@ -149,7 +149,7 @@ export default function StudyCommitmentPage() {
               {isMutating ? 'Saving…' : commitment ? 'Update Goal' : 'Set Goal'}
             </Button>
           </div>
-          <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+          <p className="mt-2 text-xs text-muted">
             You&apos;ll receive 3 streak freeze protections when you set a commitment. Missing a day without protection will reset your streak.
           </p>
         </Card>

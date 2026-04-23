@@ -321,7 +321,7 @@ function MicEnvironmentCheckContent() {
 
         {/* Compatibility Warning */}
         {isCompatible === false && (
-          <Card className="border-rose-200 bg-rose-50/60 p-5 shadow-sm">
+          <Card className="border-danger/30 bg-danger/10 p-5 shadow-sm">
             <InlineAlert variant="error">
               Your browser or device does not support the required audio recording features. Please try using a modern browser like Chrome or Safari.
             </InlineAlert>
@@ -335,18 +335,18 @@ function MicEnvironmentCheckContent() {
         />
 
           {/* Step 0: Computer-based exam environment acknowledgement (at-home rule + paper rule) */}
-          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-all ${cbtEnvConfirmed && cbtPaperAcknowledged ? 'border-green-200' : 'border-amber-200'}`}>
+          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-all ${cbtEnvConfirmed && cbtPaperAcknowledged ? 'border-success/30' : 'border-warning/30'}`}>
             <div className="flex items-start justify-between mb-6">
               <div className="flex items-center gap-4">
-                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${cbtEnvConfirmed && cbtPaperAcknowledged ? 'bg-green-50' : 'bg-amber-50'}`}>
-                  <Home className={`h-6 w-6 ${cbtEnvConfirmed && cbtPaperAcknowledged ? 'text-green-600' : 'text-amber-600'}`} />
+                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${cbtEnvConfirmed && cbtPaperAcknowledged ? 'bg-success/10' : 'bg-amber-50'}`}>
+                  <Home className={`h-6 w-6 ${cbtEnvConfirmed && cbtPaperAcknowledged ? 'text-success' : 'text-warning'}`} />
                 </div>
                 <div>
                   <h2 className="font-bold text-navy">At-home exam environment</h2>
                   <p className="text-sm text-muted">Computer-based OET Speaking is always taken at home, never at a test centre.</p>
                 </div>
               </div>
-              {cbtEnvConfirmed && cbtPaperAcknowledged && <CheckCircle2 className="w-6 h-6 text-green-500" />}
+              {cbtEnvConfirmed && cbtPaperAcknowledged && <CheckCircle2 className="w-6 h-6 text-success" />}
             </div>
 
             <div className="space-y-4">
@@ -371,16 +371,16 @@ function MicEnvironmentCheckContent() {
                       setCbtEnvConfirmed(e.target.checked);
                       if (e.target.checked) analytics.track('speaking_cbt_environment_confirmed', { taskId });
                     }}
-                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    className="mt-0.5 h-4 w-4 rounded border-border-hover text-primary focus:ring-primary"
                     aria-label="I confirm all environment requirements are met"
                   />
                   <span className="text-sm text-navy">I confirm my exam environment meets ALL of the requirements above.</span>
                 </label>
               </div>
 
-              <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
+              <div className="rounded-2xl border border-warning/30 bg-amber-50 p-4">
                 <div className="flex items-start gap-3">
-                  <ShieldCheck className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                  <ShieldCheck className="h-5 w-5 text-warning shrink-0 mt-0.5" />
                   <div className="space-y-1">
                     <p className="text-sm font-bold text-navy">Paper &amp; pen rule (computer-based only)</p>
                     <p className="text-sm text-navy/80 leading-relaxed">
@@ -399,7 +399,7 @@ function MicEnvironmentCheckContent() {
                       setCbtPaperAcknowledged(e.target.checked);
                       if (e.target.checked) analytics.track('speaking_cbt_paper_acknowledged', { taskId });
                     }}
-                    className="mt-0.5 h-4 w-4 rounded border-gray-300 text-primary focus:ring-primary"
+                    className="mt-0.5 h-4 w-4 rounded border-border-hover text-primary focus:ring-primary"
                     aria-label="I understand the paper and pen rule"
                   />
                   <span className="text-sm text-navy">I have one blank paper + pen ready, understand the card cannot be annotated on screen, and will destroy the paper in front of the camera at the end.</span>
@@ -409,18 +409,18 @@ function MicEnvironmentCheckContent() {
           </section>
 
           {/* Step 1: Permission */}
-          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-all ${permissionStatus === 'success' ? 'border-green-200' : 'border-border'}`}>
+          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-all ${permissionStatus === 'success' ? 'border-success/30' : 'border-border'}`}>
             <div className="flex items-start justify-between mb-6">
               <div className="flex items-center gap-4">
-                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${permissionStatus === 'success' ? 'bg-green-50' : 'bg-blue-50'}`}>
-                  <Mic className={`h-6 w-6 ${permissionStatus === 'success' ? 'text-green-600' : 'text-blue-600'}`} />
+                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${permissionStatus === 'success' ? 'bg-success/10' : 'bg-info/10'}`}>
+                  <Mic className={`h-6 w-6 ${permissionStatus === 'success' ? 'text-success' : 'text-info'}`} />
                 </div>
                 <div>
                   <h2 className="font-bold text-navy">Microphone Access</h2>
                   <p className="text-sm text-muted">Allow access to your microphone to record your speech.</p>
                 </div>
               </div>
-              {permissionStatus === 'success' && <CheckCircle2 className="w-6 h-6 text-green-500" />}
+              {permissionStatus === 'success' && <CheckCircle2 className="w-6 h-6 text-success" />}
             </div>
 
             {permissionStatus !== 'success' && (
@@ -430,25 +430,25 @@ function MicEnvironmentCheckContent() {
             )}
             
             {permissionStatus === 'error' && (
-              <p className="mt-3 text-xs text-red-600 font-medium flex items-center gap-1">
+              <p className="mt-3 text-xs text-danger font-medium flex items-center gap-1">
                 <AlertTriangle className="w-3 h-3" /> Permission denied. Please enable mic access in your browser settings.
               </p>
             )}
           </section>
 
           {/* Step 2: Recording & Playback Test */}
-          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-all ${recordingStatus === 'finished' ? 'border-green-200' : 'border-border'} ${permissionStatus !== 'success' ? 'pointer-events-none opacity-50' : ''}`}>
+          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-all ${recordingStatus === 'finished' ? 'border-success/30' : 'border-border'} ${permissionStatus !== 'success' ? 'pointer-events-none opacity-50' : ''}`}>
             <div className="flex items-start justify-between mb-6">
               <div className="flex items-center gap-4">
-                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${recordingStatus === 'finished' ? 'bg-green-50' : 'bg-purple-50'}`}>
-                  <Volume2 className={`h-6 w-6 ${recordingStatus === 'finished' ? 'text-green-600' : 'text-purple-600'}`} />
+                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${recordingStatus === 'finished' ? 'bg-success/10' : 'bg-primary/10'}`}>
+                  <Volume2 className={`h-6 w-6 ${recordingStatus === 'finished' ? 'text-success' : 'text-primary'}`} />
                 </div>
                 <div>
                   <h2 className="font-bold text-navy">Recording & Playback</h2>
                   <p className="text-sm text-muted">Record a 3-second sample to ensure your audio is clear.</p>
                 </div>
               </div>
-              {recordingStatus === 'finished' && <CheckCircle2 className="w-6 h-6 text-green-500" />}
+              {recordingStatus === 'finished' && <CheckCircle2 className="w-6 h-6 text-success" />}
             </div>
 
             <div className="flex flex-wrap gap-4">
@@ -475,18 +475,18 @@ function MicEnvironmentCheckContent() {
           </section>
 
           {/* Step 3: Environment Check */}
-          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-all ${isNoisy ? 'border-amber-200' : 'border-border'} ${permissionStatus !== 'success' ? 'pointer-events-none opacity-50' : ''}`}>
+          <section className={`rounded-3xl border bg-surface p-6 shadow-sm transition-all ${isNoisy ? 'border-warning/30' : 'border-border'} ${permissionStatus !== 'success' ? 'pointer-events-none opacity-50' : ''}`}>
             <div className="flex items-center justify-between mb-6">
               <div className="flex items-center gap-4">
-                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${isNoisy ? 'bg-amber-50' : 'bg-blue-50'}`}>
-                  <BarChart3 className={`h-6 w-6 ${isNoisy ? 'text-amber-600' : 'text-blue-600'}`} />
+                <div className={`flex h-12 w-12 items-center justify-center rounded-2xl transition-colors ${isNoisy ? 'bg-amber-50' : 'bg-info/10'}`}>
+                  <BarChart3 className={`h-6 w-6 ${isNoisy ? 'text-warning' : 'text-info'}`} />
                 </div>
                 <div>
                   <h2 className="font-bold text-navy">Environment Noise</h2>
                   <p className="text-sm text-muted">We&apos;re monitoring background noise levels.</p>
                 </div>
               </div>
-              {!isNoisy && permissionStatus === 'success' && <CheckCircle2 className="w-6 h-6 text-green-500" />}
+              {!isNoisy && permissionStatus === 'success' && <CheckCircle2 className="w-6 h-6 text-success" />}
             </div>
 
             {/* Visualizer */}
@@ -498,7 +498,7 @@ function MicEnvironmentCheckContent() {
                 return (
                   <motion.div 
                     key={i}
-                    className={`flex-1 rounded-t-sm ${isNoisy ? 'bg-amber-400' : 'bg-primary'}`}
+                    className={`flex-1 rounded-t-sm ${isNoisy ? 'bg-warning' : 'bg-primary'}`}
                     animate={{ height: `${height}%` }}
                     transition={{ duration: 0.1 }}
                   />
@@ -512,10 +512,10 @@ function MicEnvironmentCheckContent() {
                   initial={{ height: 0, opacity: 0 }}
                   animate={{ height: 'auto', opacity: 1 }}
                   exit={{ height: 0, opacity: 0 }}
-                  className="mt-4 flex items-start gap-3 rounded-2xl border border-amber-100 bg-amber-50 p-3"
+                  className="mt-4 flex items-start gap-3 rounded-2xl border border-warning/30 bg-amber-50 p-3"
                 >
-                  <AlertTriangle className="w-5 h-5 text-amber-600 shrink-0" />
-                  <p className="text-xs text-amber-800 leading-relaxed">
+                  <AlertTriangle className="w-5 h-5 text-warning shrink-0" />
+                  <p className="text-xs text-warning leading-relaxed">
                     <strong>High background noise detected.</strong> For the best results, please move to a quieter location or use a headset with a microphone.
                   </p>
                 </motion.div>

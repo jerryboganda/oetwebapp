@@ -70,9 +70,9 @@ function ListeningResultsContent() {
     return (
       <LearnerDashboardShell pageTitle="Listening Results" backHref="/listening">
         <div className="space-y-6">
-          <Skeleton className="h-64 rounded-[32px]" />
-          <Skeleton className="h-32 rounded-[24px]" />
-          <Skeleton className="h-48 rounded-[24px]" />
+          <Skeleton className="h-64 rounded-2xl" />
+          <Skeleton className="h-32 rounded-2xl" />
+          <Skeleton className="h-48 rounded-2xl" />
         </div>
       </LearnerDashboardShell>
     );
@@ -82,7 +82,7 @@ function ListeningResultsContent() {
     return (
       <LearnerDashboardShell pageTitle="Listening Results" backHref="/listening">
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-          <AlertCircle className="h-12 w-12 text-rose-500" />
+          <AlertCircle className="h-12 w-12 text-danger" />
           <h2 className="text-xl font-black text-navy">Result not found</h2>
           <p className="max-w-md text-sm text-muted">{error ?? 'Complete a Listening task before opening results.'}</p>
           <Link href="/listening"><Button variant="ghost">Back to Listening</Button></Link>
@@ -97,7 +97,7 @@ function ListeningResultsContent() {
         <motion.section
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
-          className="rounded-[32px] border border-gray-200 bg-surface p-8 shadow-sm sm:p-10"
+          className="rounded-2xl border border-border bg-surface p-8 shadow-sm sm:p-10"
         >
           <div className="flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
             <div>
@@ -107,7 +107,7 @@ function ListeningResultsContent() {
                 This is graded on the server from the authored answer key. The Listening pass anchor is 30/42 raw = 350/500 = Grade B.
               </p>
             </div>
-            <div className={`rounded-[24px] border p-5 text-center ${result.passed ? 'border-emerald-100 bg-emerald-50 text-emerald-900' : 'border-rose-100 bg-rose-50 text-rose-900'}`}>
+            <div className={`rounded-2xl border p-5 text-center ${result.passed ? 'border-success/20 bg-success/10 text-success' : 'border-danger/20 bg-danger/10 text-danger'}`}>
               <p className="text-xs font-black uppercase tracking-widest">{result.passed ? 'Threshold Met' : 'Below Threshold'}</p>
               <p className="mt-2 text-4xl font-black">Grade {result.grade}</p>
               <p className="mt-1 text-sm">{result.scaledScore} / 500</p>
@@ -115,15 +115,15 @@ function ListeningResultsContent() {
           </div>
 
           <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            <div className="rounded-2xl border border-gray-100 bg-background-light p-4">
+            <div className="rounded-2xl border border-border bg-background-light p-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted">Raw</p>
               <p className="mt-2 text-2xl font-black text-navy">{result.rawScore} / {result.maxRawScore}</p>
             </div>
-            <div className="rounded-2xl border border-gray-100 bg-background-light p-4">
+            <div className="rounded-2xl border border-border bg-background-light p-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted">Correct</p>
               <p className="mt-2 text-2xl font-black text-navy">{result.correctCount}</p>
             </div>
-            <div className="rounded-2xl border border-gray-100 bg-background-light p-4">
+            <div className="rounded-2xl border border-border bg-background-light p-4">
               <p className="text-xs font-black uppercase tracking-widest text-muted">Review Policy</p>
               <p className="mt-2 text-sm font-bold capitalize text-navy">{result.transcriptAccess.state.replace(/_/g, ' ')}</p>
             </div>
@@ -133,19 +133,19 @@ function ListeningResultsContent() {
         {result.recommendedNextDrill ? (
           <motion.section initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
             <h2 className="mb-4 text-sm font-black uppercase tracking-widest text-muted">Recommended Next Step</h2>
-            <Link href={result.recommendedNextDrill.launchRoute} className="group block rounded-[24px] border border-indigo-100 bg-indigo-50 p-6 transition-all hover:border-indigo-200 hover:shadow-md">
+            <Link href={result.recommendedNextDrill.launchRoute} className="group block rounded-2xl border border-primary/30 bg-primary/10 p-6 transition-all hover:border-primary/40 hover:shadow-md">
               <div className="flex items-start gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-indigo-100">
-                  <Target className="h-6 w-6 text-indigo-600" />
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-primary/10">
+                  <Target className="h-6 w-6 text-primary" />
                 </div>
                 <div className="flex-1">
-                  <h3 className="mb-1 text-lg font-black text-indigo-900 transition-colors group-hover:text-indigo-700">
+                  <h3 className="mb-1 text-lg font-black text-primary transition-colors group-hover:text-primary">
                     {result.recommendedNextDrill.title}
                   </h3>
-                  <p className="mb-4 text-sm leading-relaxed text-indigo-700/80">
+                  <p className="mb-4 text-sm leading-relaxed text-primary/80">
                     {result.recommendedNextDrill.description}
                   </p>
-                  <span className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2 text-sm font-bold text-indigo-600 shadow-sm transition-colors group-hover:bg-indigo-600 group-hover:text-white">
+                  <span className="inline-flex items-center gap-2 rounded-xl bg-surface px-4 py-2 text-sm font-bold text-primary shadow-sm transition-colors group-hover:bg-primary group-hover:text-white">
                     Start Drill <ArrowRight className="h-4 w-4" />
                   </span>
                 </div>
@@ -160,17 +160,17 @@ function ListeningResultsContent() {
             {result.itemReview.map((item) => {
               const isExpanded = expandedItems[item.questionId];
               return (
-                <div key={item.questionId} className="overflow-hidden rounded-[24px] border border-gray-200 bg-surface shadow-sm">
+                <div key={item.questionId} className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
                   <button
                     onClick={() => toggleItem(item.questionId)}
                     aria-expanded={isExpanded}
-                    className="flex w-full items-start gap-4 p-5 text-left transition-colors hover:bg-gray-50 sm:p-6"
+                    className="flex w-full items-start gap-4 p-5 text-left transition-colors hover:bg-background-light sm:p-6"
                   >
                     <div className="mt-0.5 shrink-0">
                       {item.isCorrect ? (
-                        <CheckCircle2 className="h-6 w-6 text-green-500" />
+                        <CheckCircle2 className="h-6 w-6 text-success" />
                       ) : (
-                        <XCircle className="h-6 w-6 text-rose-500" />
+                        <XCircle className="h-6 w-6 text-danger" />
                       )}
                     </div>
                     <div className="flex-1 pr-4">
@@ -190,54 +190,54 @@ function ListeningResultsContent() {
                         initial={{ height: 0, opacity: 0 }}
                         animate={{ height: 'auto', opacity: 1 }}
                         exit={{ height: 0, opacity: 0 }}
-                        className="border-t border-gray-100"
+                        className="border-t border-border"
                       >
-                        <div className="space-y-6 bg-gray-50/50 p-5 sm:p-6">
+                        <div className="space-y-6 bg-background-light/50 p-5 sm:p-6">
                           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-                            <div className={`rounded-xl border p-4 ${item.isCorrect ? 'border-green-100 bg-green-50' : 'border-rose-100 bg-rose-50'}`}>
-                              <span className={`mb-2 block text-[10px] font-black uppercase tracking-widest ${item.isCorrect ? 'text-green-600' : 'text-rose-600'}`}>
+                            <div className={`rounded-xl border p-4 ${item.isCorrect ? 'border-success/30 bg-success/10' : 'border-danger/30 bg-danger/10'}`}>
+                              <span className={`mb-2 block text-[10px] font-black uppercase tracking-widest ${item.isCorrect ? 'text-success' : 'text-danger'}`}>
                                 Your Answer
                               </span>
-                              <p className={`text-sm font-medium ${item.isCorrect ? 'text-green-900' : 'text-rose-900'}`}>
+                              <p className={`text-sm font-medium ${item.isCorrect ? 'text-success' : 'text-danger'}`}>
                                 {item.learnerAnswer || 'No answer recorded'}
                               </p>
                             </div>
                             {!item.isCorrect ? (
-                              <div className="rounded-xl border border-green-100 bg-green-50 p-4">
-                                <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-green-600">
+                              <div className="rounded-xl border border-success/30 bg-success/10 p-4">
+                                <span className="mb-2 block text-[10px] font-black uppercase tracking-widest text-success">
                                   Correct Answer
                                 </span>
-                                <p className="text-sm font-medium text-green-900">{item.correctAnswer}</p>
+                                <p className="text-sm font-medium text-success">{item.correctAnswer}</p>
                               </div>
                             ) : null}
                           </div>
 
                           {!item.isCorrect && item.distractorExplanation ? (
-                            <div className="flex items-start gap-3 rounded-xl border border-amber-100 bg-amber-50 p-4">
-                              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-500" />
+                            <div className="flex items-start gap-3 rounded-xl border border-warning/30 bg-warning/10 p-4">
+                              <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
                               <div>
-                                <span className="mb-1 block text-xs font-black uppercase tracking-widest text-amber-700">Distractor Trap</span>
-                                <p className="text-sm leading-relaxed text-amber-900">{item.distractorExplanation}</p>
+                                <span className="mb-1 block text-xs font-black uppercase tracking-widest text-warning">Distractor Trap</span>
+                                <p className="text-sm leading-relaxed text-warning">{item.distractorExplanation}</p>
                               </div>
                             </div>
                           ) : null}
 
                           <div>
                             <span className="mb-2 block text-xs font-black uppercase tracking-widest text-muted">Explanation</span>
-                            <p className="text-sm leading-relaxed text-gray-700">{item.explanation}</p>
+                            <p className="text-sm leading-relaxed text-muted">{item.explanation}</p>
                           </div>
 
                           {item.transcript?.allowed && item.transcript.excerpt ? (
                             <div className="pt-2">
                               {revealedTranscripts[item.questionId] ? (
-                                <div className="relative rounded-xl border border-gray-200 bg-surface p-4">
-                                  <Quote className="absolute left-2 top-2 h-8 w-8 text-gray-100" />
-                                  <p className="relative z-10 border-l-2 border-primary pl-6 text-sm italic text-gray-700">
+                                <div className="relative rounded-xl border border-border bg-surface p-4">
+                                  <Quote className="absolute left-2 top-2 h-8 w-8 text-border" />
+                                  <p className="relative z-10 border-l-2 border-primary pl-6 text-sm italic text-muted">
                                     {item.transcript.excerpt}
                                   </p>
                                   <button
                                     onClick={(event) => toggleTranscript(item.questionId, event)}
-                                    className="mt-3 text-xs font-bold uppercase tracking-widest text-muted hover:text-gray-600"
+                                    className="mt-3 text-xs font-bold uppercase tracking-widest text-muted hover:text-navy"
                                   >
                                     Hide Transcript
                                   </button>
@@ -262,7 +262,7 @@ function ListeningResultsContent() {
           </div>
         </motion.section>
 
-        <section className="rounded-[24px] border border-gray-200 bg-surface p-5 shadow-sm">
+        <section className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
           <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-widest text-muted">Transcript Access</p>

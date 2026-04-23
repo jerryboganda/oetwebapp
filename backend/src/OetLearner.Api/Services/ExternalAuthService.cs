@@ -191,11 +191,19 @@ public sealed class ExternalAuthService(
     private Uri BuildFrontendCallbackRedirect(string provider, string exchangeToken, string? nextPath, string? platform)
     {
         var baseUrl = string.Equals(platform, "desktop", StringComparison.Ordinal) ? "oet-prep://" : ResolvePublicWebBaseUrl();
-        var callbackUrl = $"{baseUrl}/auth/callback/{provider}?token={Uri.EscapeDataString(exchangeToken)}";
+        // Security (H11): the exchange token is a short-lived, single-use, Data-Protection-encrypted
+        // ticket, but placing it in the query string leaks it via Referer headers, browser history,
+        // and upstream proxy/server access logs. Moving it into the URL fragment (#) keeps the token
+        // client-side only: fragments are NEVER sent to servers and are stripped from Referer.
+        // The frontend callback page reads the fragment, immediately clears it via history.replaceState,
+        // then exchanges it for a session. Desktop (oet-prep://) and mobile shells preserve fragments
+        // natively, so no shell changes are required.
+        var callbackUrl = $"{baseUrl}/auth/callback/{provider}";
         if (!string.IsNullOrWhiteSpace(nextPath))
         {
-            callbackUrl += $"&next={Uri.EscapeDataString(nextPath)}";
+            callbackUrl += $"?next={Uri.EscapeDataString(nextPath)}";
         }
+        callbackUrl += $"#token={Uri.EscapeDataString(exchangeToken)}";
 
         return new Uri(callbackUrl);
     }

@@ -67,7 +67,7 @@ export default function SubmissionComparisonPage() {
               <>
                 <section className="grid gap-6 md:grid-cols-2">
                   {[comparison.left, comparison.right].map((side, index) => (
-                    <div key={side?.attemptId ?? index} className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
+                    <div key={side?.attemptId ?? index} className="rounded-[28px] border border-border bg-surface p-6 shadow-sm">
                       <p className="text-xs font-black uppercase tracking-widest text-muted">{index === 0 ? 'Baseline attempt' : 'Comparison attempt'}</p>
                       <h2 className="mt-3 text-xl font-black text-navy">{side?.subtest ?? 'Unknown subtest'}</h2>
                       <p className="mt-2 text-sm text-muted">Attempt id: {side?.attemptId}</p>
@@ -76,17 +76,17 @@ export default function SubmissionComparisonPage() {
                   ))}
                 </section>
 
-                <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
+                <section className="rounded-[28px] border border-border bg-surface p-6 shadow-sm">
                   <LearnerSurfaceSectionHeader
                     eyebrow="What changed"
                     title="Keep the progress narrative short and explicit"
                     description="Comparison copy should tell the learner what improved without making them infer the story from raw numbers alone."
                     className="mb-4"
                   />
-                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-5">
+                  <div className="rounded-2xl border border-success/30 bg-success/10 p-5">
                     <div className="flex items-start gap-3">
-                      <TrendingUp className="mt-0.5 h-5 w-5 text-emerald-600" />
-                      <p className="text-sm leading-6 text-emerald-900">{comparison.summary}</p>
+                      <TrendingUp className="mt-0.5 h-5 w-5 text-success" />
+                      <p className="text-sm leading-6 text-success">{comparison.summary}</p>
                     </div>
                   </div>
                 </section>

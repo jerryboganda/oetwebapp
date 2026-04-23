@@ -71,7 +71,7 @@ export default function MockRouteRedirectPage() {
           </div>
         </div>
       ) : (
-        <div className="mx-auto max-w-xl space-y-4 rounded-3xl border border-gray-200 bg-white p-6 shadow-sm">
+        <div className="mx-auto max-w-xl space-y-4 rounded-3xl border border-border bg-surface p-6 shadow-sm">
           <InlineAlert variant="error">{visibleError}</InlineAlert>
           <div className="flex justify-end">
             <Button type="button" onClick={() => router.push('/mocks')}>

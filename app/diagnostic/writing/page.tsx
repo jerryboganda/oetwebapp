@@ -157,7 +157,7 @@ export default function DiagnosticWritingPage() {
         {task && (
           <div className="flex flex-1 min-h-0 h-[calc(100dvh-4rem)] flex-col overflow-hidden md:flex-row">
             {/* Case Notes Panel — left side on desktop */}
-            <div className="hidden md:flex md:w-[320px] lg:w-[380px] shrink-0 border-r border-gray-200">
+            <div className="hidden md:flex md:w-[320px] lg:w-[380px] shrink-0 border-r border-border">
               <WritingCaseNotesPanel
                 caseNotes={task.caseNotes}
                 scratchpad={scratchpad}
@@ -200,25 +200,25 @@ export default function DiagnosticWritingPage() {
               />
 
               {/* Bottom Bar */}
-              <div className="px-4 py-3 border-t border-gray-200 bg-surface flex items-center justify-between gap-4 shrink-0">
+              <div className="px-4 py-3 border-t border-border bg-surface flex items-center justify-between gap-4 shrink-0">
                 <div className="flex items-center gap-3 text-xs text-muted">
                   {saveStatus === 'saved' && (
-                    <span className="flex items-center gap-1 text-emerald-600">
+                    <span className="flex items-center gap-1 text-success">
                       <CheckCircle2 className="w-3.5 h-3.5" /> Saved
                     </span>
                   )}
                   {saveStatus === 'saving' && (
-                    <span className="flex items-center gap-1 text-amber-600">
+                    <span className="flex items-center gap-1 text-warning">
                       <Save className="w-3.5 h-3.5" /> Saving…
                     </span>
                   )}
                   {saveStatus === 'offline-saved' && (
-                    <span className="flex items-center gap-1 text-blue-600">
+                    <span className="flex items-center gap-1 text-info">
                       <Save className="w-3.5 h-3.5" /> Saved locally
                     </span>
                   )}
                   {saveStatus === 'failed' && (
-                    <span className="flex items-center gap-1 text-red-600">Save failed — will retry</span>
+                    <span className="flex items-center gap-1 text-danger">Save failed — will retry</span>
                   )}
                 </div>
 

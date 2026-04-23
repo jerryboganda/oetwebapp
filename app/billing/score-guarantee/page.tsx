@@ -121,7 +121,7 @@ export default function ScoreGuaranteePage() {
             />
             <div className="mt-4 flex flex-col sm:flex-row items-stretch sm:items-end gap-3 max-w-md">
               <div className="flex-1">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Baseline OET Score</label>
+                <label className="block text-sm font-medium text-navy mb-1">Baseline OET Score</label>
                 <Input
                   type="number"
                   min={0}
@@ -135,7 +135,7 @@ export default function ScoreGuaranteePage() {
                 {isMutating ? 'Activating…' : 'Activate Guarantee'}
               </Button>
             </div>
-            <p className="mt-3 text-xs text-gray-500 dark:text-gray-400">
+            <p className="mt-3 text-xs text-muted">
               Requires an active subscription. Guarantee is valid for 180 days.
             </p>
           </Card>
@@ -148,7 +148,7 @@ export default function ScoreGuaranteePage() {
           <MotionSection>
             <Card className="p-6">
               <div className="flex items-center justify-between mb-4">
-                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Your Score Guarantee</h3>
+                <h3 className="font-semibold text-navy">Your Score Guarantee</h3>
                 <Badge variant={STATUS_BADGE[pledge.status]?.variant ?? 'default'}>
                   {STATUS_BADGE[pledge.status]?.label ?? pledge.status}
                 </Badge>
@@ -156,29 +156,29 @@ export default function ScoreGuaranteePage() {
 
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
                 <MotionItem>
-                  <div className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Baseline</p>
-                    <p className="text-2xl font-bold text-gray-900 dark:text-gray-100">{pledge.baselineScore}</p>
+                  <div className="text-center p-3 rounded-lg bg-background-light">
+                    <p className="text-xs text-muted">Baseline</p>
+                    <p className="text-2xl font-bold text-navy">{pledge.baselineScore}</p>
                   </div>
                 </MotionItem>
                 <MotionItem>
-                  <div className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Target</p>
-                    <p className="text-2xl font-bold text-green-600 dark:text-green-400">
+                  <div className="text-center p-3 rounded-lg bg-background-light">
+                    <p className="text-xs text-muted">Target</p>
+                    <p className="text-2xl font-bold text-success">
                       {pledge.baselineScore + pledge.guaranteedImprovement}
                     </p>
                   </div>
                 </MotionItem>
                 <MotionItem>
-                  <div className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Improvement</p>
-                    <p className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">+{pledge.guaranteedImprovement}</p>
+                  <div className="text-center p-3 rounded-lg bg-background-light">
+                    <p className="text-xs text-muted">Improvement</p>
+                    <p className="text-2xl font-bold text-primary">+{pledge.guaranteedImprovement}</p>
                   </div>
                 </MotionItem>
                 <MotionItem>
-                  <div className="text-center p-3 rounded-lg bg-gray-50 dark:bg-gray-800/50">
-                    <p className="text-xs text-gray-500 dark:text-gray-400">Expires</p>
-                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                  <div className="text-center p-3 rounded-lg bg-background-light">
+                    <p className="text-xs text-muted">Expires</p>
+                    <p className="text-sm font-medium text-navy">
                       {new Date(pledge.expiresAt).toLocaleDateString()}
                     </p>
                   </div>
@@ -198,7 +198,7 @@ export default function ScoreGuaranteePage() {
                 />
                 <div className="mt-4 space-y-3 max-w-md">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Actual OET Score</label>
+                    <label className="block text-sm font-medium text-navy mb-1">Actual OET Score</label>
                     <Input
                       type="number"
                       min={0}
@@ -209,7 +209,7 @@ export default function ScoreGuaranteePage() {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Note (optional)</label>
+                    <label className="block text-sm font-medium text-navy mb-1">Note (optional)</label>
                     <Input
                       value={claimNote}
                       onChange={(e) => setClaimNote(e.target.value)}

@@ -93,14 +93,14 @@ export default function VocabularyQuizHistoryPage() {
         </div>
       ) : items.length === 0 ? (
         <Card className="border-dashed border-border p-8 text-center shadow-sm">
-          <History className="mx-auto mb-3 h-10 w-10 text-gray-300" />
+          <History className="mx-auto mb-3 h-10 w-10 text-muted/40" />
           <p className="text-muted">No past quiz sessions yet.</p>
           <Link href="/vocabulary/quiz" className="mt-3 inline-flex items-center gap-1 text-sm text-primary hover:underline">
             Start your first quiz
           </Link>
         </Card>
       ) : (
-        <div className="overflow-hidden rounded-3xl border border-border bg-surface shadow-sm">
+        <div className="overflow-hidden rounded-2xl border border-border bg-surface shadow-sm">
           {items.map(item => (
             <div key={item.id} className="flex flex-wrap items-center gap-3 border-b border-border px-4 py-3 last:border-0">
               <div className="flex-1">
@@ -111,7 +111,7 @@ export default function VocabularyQuizHistoryPage() {
               </div>
               <div className="text-right">
                 <div className="text-sm font-bold text-navy">{item.correctCount}/{item.termsQuizzed}</div>
-                <div className={`text-xs font-medium ${item.score >= 80 ? 'text-green-600' : item.score >= 60 ? 'text-amber-600' : 'text-red-600'}`}>
+                <div className={`text-xs font-medium ${item.score >= 80 ? 'text-success' : item.score >= 60 ? 'text-warning' : 'text-danger'}`}>
                   {Math.round(item.score)}%
                 </div>
               </div>
@@ -125,7 +125,7 @@ export default function VocabularyQuizHistoryPage() {
           <button
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="rounded-lg border border-gray-200 bg-surface px-3 py-1.5 text-sm text-navy disabled:opacity-40 hover:bg-background-light"
+            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-navy disabled:opacity-40 hover:bg-background-light"
           >
             Prev
           </button>
@@ -133,7 +133,7 @@ export default function VocabularyQuizHistoryPage() {
           <button
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
-            className="rounded-lg border border-gray-200 bg-surface px-3 py-1.5 text-sm text-navy disabled:opacity-40 hover:bg-background-light"
+            className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-navy disabled:opacity-40 hover:bg-background-light"
           >
             Next
           </button>

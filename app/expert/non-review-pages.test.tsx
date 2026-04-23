@@ -309,7 +309,7 @@ describe('Expert Non-Review Pages', () => {
     expect(scoreSelect).not.toBeDisabled();
     expect(screen.getByLabelText(/calibration notes/i)).toHaveValue('Borderline purpose.');
     expect(screen.getAllByText(/draft saved/i).length).toBeGreaterThan(0);
-    expect(screen.getByText(/draft \(editable\)/i)).toBeInTheDocument();
+    expect(screen.getAllByText(/draft \(editable\)/i).length).toBeGreaterThan(0);
 
     await user.click(screen.getByRole('button', { name: /save draft/i }));
     expect(api.fetchCalibrationCaseDetail).toHaveBeenCalledTimes(2);

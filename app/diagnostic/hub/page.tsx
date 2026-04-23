@@ -28,10 +28,10 @@ const SUBTEST_CONFIG: Record<
   string,
   { icon: typeof PenLine; color: string; bg: string; route: string }
 > = {
-  Writing: { icon: PenLine, color: 'text-blue-600', bg: 'bg-blue-50', route: '/diagnostic/writing' },
-  Speaking: { icon: Mic, color: 'text-violet-600', bg: 'bg-violet-50', route: '/diagnostic/speaking' },
-  Reading: { icon: BookOpen, color: 'text-emerald-600', bg: 'bg-emerald-50', route: '/diagnostic/reading' },
-  Listening: { icon: Headphones, color: 'text-amber-600', bg: 'bg-amber-50', route: '/diagnostic/listening' },
+  Writing: { icon: PenLine, color: 'text-info', bg: 'bg-info/10', route: '/diagnostic/writing' },
+  Speaking: { icon: Mic, color: 'text-primary', bg: 'bg-primary/10', route: '/diagnostic/speaking' },
+  Reading: { icon: BookOpen, color: 'text-success', bg: 'bg-success/10', route: '/diagnostic/reading' },
+  Listening: { icon: Headphones, color: 'text-warning', bg: 'bg-amber-50', route: '/diagnostic/listening' },
 };
 
 export default function DiagnosticHubPage() {
@@ -93,7 +93,7 @@ export default function DiagnosticHubPage() {
                     : `${completedCount} of ${totalCount} completed — complete them in any order.`}
                 </p>
                 {/* Progress bar */}
-                <div className="w-full max-w-sm mx-auto h-2 bg-gray-200 rounded-full overflow-hidden">
+                <div className="w-full max-w-sm mx-auto h-2 bg-border rounded-full overflow-hidden">
                   <div
                     className="h-full bg-primary rounded-full transition-all duration-500"
                     style={{ width: `${(completedCount / totalCount) * 100}%` }}
@@ -114,14 +114,14 @@ export default function DiagnosticHubPage() {
                   return (
                     <Card
                       key={sub.subTest}
-                      className={isComplete ? 'border-emerald-200 bg-emerald-50/30' : ''}
+                      className={isComplete ? 'border-success/30 bg-success/10' : ''}
                     >
                       <div className="flex items-start gap-4">
                         <div
                           className={`w-12 h-12 rounded-xl ${config.bg} ${config.color} flex items-center justify-center shrink-0`}
                         >
                           {isComplete ? (
-                            <CheckCircle2 className="w-6 h-6 text-emerald-600" />
+                            <CheckCircle2 className="w-6 h-6 text-success" />
                           ) : (
                             <Icon className="w-6 h-6" />
                           )}
@@ -136,14 +136,14 @@ export default function DiagnosticHubPage() {
                             {sub.estimatedDuration}
                           </p>
                           {sub.completedAt && (
-                            <p className="text-xs text-emerald-600 mt-1">
+                            <p className="text-xs text-success mt-1">
                               Completed {new Date(sub.completedAt).toLocaleDateString()}
                             </p>
                           )}
                         </div>
                       </div>
                       {!isComplete && (
-                        <div className="mt-4 pt-3 border-t border-gray-100">
+                        <div className="mt-4 pt-3 border-t border-border">
                           <Button
                             size="sm"
                             fullWidth

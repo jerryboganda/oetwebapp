@@ -43,7 +43,7 @@ export default function ListeningDrillPage() {
           Back to listening
         </Button>
 
-        {loading ? <Skeleton className="h-48 rounded-[24px]" /> : null}
+        {loading ? <Skeleton className="h-48 rounded-2xl" /> : null}
         {!loading && error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
         {!loading && drill ? (
@@ -61,7 +61,7 @@ export default function ListeningDrillPage() {
               ]}
             />
 
-            <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
+            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
               <LearnerSurfaceSectionHeader
                 eyebrow="How to use this drill"
                 title="The drill tells the learner exactly what to practise"
@@ -70,7 +70,7 @@ export default function ListeningDrillPage() {
               />
               <div className="space-y-3">
                 {drill.highlights.map((highlight) => (
-                  <div key={highlight} className="rounded-2xl border border-gray-100 bg-background-light p-4 text-sm text-navy">
+                  <div key={highlight} className="rounded-2xl border border-border bg-background-light p-4 text-sm text-navy">
                     {highlight}
                   </div>
                 ))}

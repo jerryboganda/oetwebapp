@@ -31,7 +31,7 @@ async function apiRequest<T = unknown>(path: string, init?: RequestInit): Promis
 }
 
 const SUBTEST_ICON: Record<string, typeof BookOpen> = { reading: BookOpen, listening: Headphones, writing: PenLine, speaking: Mic };
-const SUBTEST_COLOR: Record<string, string> = { reading: 'bg-blue-100 text-blue-700 dark:bg-blue-950 dark:text-blue-300', listening: 'bg-purple-100 text-purple-700 dark:bg-purple-950 dark:text-purple-300', writing: 'bg-amber-100 text-amber-700 dark:bg-amber-950 dark:text-amber-300', speaking: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-300' };
+const SUBTEST_COLOR: Record<string, string> = { reading: 'bg-info/10 text-info', listening: 'bg-primary/10 text-primary', writing: 'bg-warning/10 text-warning', speaking: 'bg-success/10 text-success' };
 
 export default function InterleavedPracticePage() {
   const [session, setSession] = useState<InterleavedSession | null>(null);
@@ -92,7 +92,7 @@ export default function InterleavedPracticePage() {
             <MotionItem>
               <Card className="p-5 shadow-sm">
                 <div className="flex items-start gap-3">
-                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-amber-50 text-amber-600">
+                  <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-warning/10 text-warning">
                     <Lightbulb className="h-4 w-4" />
                   </div>
                   <div className="min-w-0">
@@ -118,7 +118,7 @@ export default function InterleavedPracticePage() {
                 return (
                   <MotionItem key={task.order}>
                     <Card className="flex items-center gap-4 p-4 shadow-sm">
-                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${SUBTEST_COLOR[task.subtestCode] ?? 'bg-slate-100 text-slate-700'}`}>
+                      <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl border ${SUBTEST_COLOR[task.subtestCode] ?? 'bg-background-light text-navy'}`}>
                         <Icon className="w-5 h-5" />
                       </div>
                       <div className="flex-1 min-w-0">

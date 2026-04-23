@@ -21,9 +21,9 @@ import {
 import { analytics } from '@/lib/analytics';
 
 const DIFFICULTY_COLORS: Record<string, string> = {
-  easy: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
-  medium: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
-  hard: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+  easy: 'bg-success/10 text-success border border-success/20',
+  medium: 'bg-warning/10 text-warning border border-warning/20',
+  hard: 'bg-danger/10 text-danger border border-danger/20',
 };
 
 const FOCUS_LABEL: Record<string, string> = {
@@ -235,7 +235,7 @@ export default function PronunciationPage() {
                               )}
                             </div>
                             <div className="flex items-center gap-3 mt-2 flex-wrap">
-                              <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${DIFFICULTY_COLORS[drill.difficulty] ?? 'bg-gray-100 text-gray-500'}`}>
+                              <span className={`rounded-full px-2 py-0.5 text-xs font-medium capitalize ${DIFFICULTY_COLORS[drill.difficulty] ?? 'bg-background-light text-muted border border-border'}`}>
                                 {drill.difficulty}
                               </span>
                               <span className="text-xs text-muted">{FOCUS_LABEL[drill.focus] ?? drill.focus}</span>

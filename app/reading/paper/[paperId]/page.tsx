@@ -209,7 +209,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
 
         {!attempt ? (
           <section className="rounded-[20px] border border-border bg-surface px-5 py-8 text-center shadow-sm">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-blue-50 text-blue-700">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-info/10 text-info">
               <Clock className="h-6 w-6" />
             </div>
             <h1 className="mt-4 text-2xl font-semibold tracking-tight text-navy">{structure.paper.title}</h1>
@@ -385,7 +385,7 @@ function PartTabs({
           >
             <span>Part {part.partCode}</span>
             <span className="ml-2 text-xs font-semibold text-muted">{answered}/{part.questions.length}</span>
-            {flaggedCount ? <span className="ml-2 text-xs text-amber-700">{flaggedCount} flagged</span> : null}
+            {flaggedCount ? <span className="ml-2 text-xs text-warning">{flaggedCount} flagged</span> : null}
             {part.partCode === 'A' && partALocked ? <span className="ml-2 text-xs text-danger">locked</span> : null}
           </button>
         );
@@ -497,8 +497,8 @@ function QuestionNavigator({
             className={cn(
               'relative min-h-11 rounded-lg border text-sm font-bold transition-colors',
               isActive ? 'border-primary bg-primary text-white' : 'border-border bg-background-light text-navy hover:border-primary/40',
-              answered && !isActive && 'border-emerald-200 bg-emerald-50 text-emerald-800',
-              isFlagged && !isActive && 'border-amber-200 bg-amber-50 text-amber-800',
+              answered && !isActive && 'border-success/30 bg-success/10 text-success',
+              isFlagged && !isActive && 'border-warning/30 bg-warning/10 text-warning',
             )}
           >
             {question.displayOrder}
@@ -537,7 +537,7 @@ function QuestionInput({
           <h3 className="mt-2 text-base font-semibold leading-7 text-navy">{question.stem}</h3>
         </div>
         <Button variant="ghost" size="sm" onClick={onToggleFlag} aria-pressed={flagged}>
-          <Bookmark className={cn('h-4 w-4', flagged && 'fill-current text-amber-700')} />
+          <Bookmark className={cn('h-4 w-4', flagged && 'fill-current text-warning')} />
           {flagged ? 'Flagged' : 'Flag'}
         </Button>
       </div>

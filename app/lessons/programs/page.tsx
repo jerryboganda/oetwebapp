@@ -106,9 +106,9 @@ export default function ProgramBrowserPage() {
                       {TYPE_LABELS[program.programType] ?? program.programType}
                     </Badge>
                     {program.isAccessible ? (
-                      <Unlock className="w-4 h-4 text-green-500" />
+                      <Unlock className="w-4 h-4 text-success" />
                     ) : (
-                      <Lock className="w-4 h-4 text-amber-500" />
+                      <Lock className="w-4 h-4 text-warning" />
                     )}
                   </div>
 

@@ -113,21 +113,21 @@ export default function RemediationPage() {
       {data && data.weakAreas.length > 0 && (
         <MotionSection>
           <LearnerSurfaceSectionHeader icon={<BarChart3 className="w-5 h-5" />} title="Identified Weak Areas" />
-          <p className="text-sm text-gray-500 mb-4">Based on {data.evaluationsAnalyzed} recent evaluations</p>
+          <p className="text-sm text-muted mb-4">Based on {data.evaluationsAnalyzed} recent evaluations</p>
           <div className="space-y-3">
             {data.weakAreas.map((wa, i) => (
               <MotionItem key={`${wa.subtestCode}-${wa.criterionCode}`}>
                 <Card className="p-4 flex items-center gap-4">
-                  <div className="w-10 h-10 rounded-full bg-red-100 dark:bg-red-900/20 flex items-center justify-center flex-shrink-0">
-                    <span className="text-sm font-bold text-red-600 dark:text-red-400">#{i + 1}</span>
+                  <div className="w-10 h-10 rounded-full bg-danger/10 flex items-center justify-center flex-shrink-0">
+                    <span className="text-sm font-bold text-danger">#{i + 1}</span>
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium text-gray-900 dark:text-gray-100 capitalize">
+                    <p className="font-medium text-navy capitalize">
                       {wa.subtestCode} — {wa.criterionCode}
                     </p>
                     <div className="flex items-center gap-3 mt-1">
-                      <span className="text-sm text-gray-500">Avg: {wa.averageScore}/6</span>
-                      <span className="text-sm text-gray-500">{wa.evaluationCount} evals</span>
+                      <span className="text-sm text-muted">Avg: {wa.averageScore}/6</span>
+                      <span className="text-sm text-muted">{wa.evaluationCount} evals</span>
                       <Badge variant={wa.trend === 'improving' ? 'success' : wa.trend === 'declining' ? 'danger' : 'outline'}>
                         {wa.trend === 'improving' ? '↑ Improving' : wa.trend === 'declining' ? '↓ Declining' : 'Stable'}
                       </Badge>
@@ -156,12 +156,12 @@ export default function RemediationPage() {
             {data.recommendations.map((rec, i) => (
               <MotionItem key={i}>
                 <Card className="p-4">
-                  <p className="font-medium text-sm capitalize text-gray-900 dark:text-gray-100">
+                  <p className="font-medium text-sm capitalize text-navy">
                     {rec.area.subtestCode} — {rec.area.criterionCode}
                   </p>
                   <ul className="mt-2 space-y-1">
                     {rec.suggestedResources.map((r) => (
-                      <li key={r.id} className="text-xs text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                      <li key={r.id} className="text-xs text-muted flex items-center gap-1">
                         <BookOpen className="w-3 h-3" /> {r.title}
                       </li>
                     ))}
@@ -182,8 +182,8 @@ export default function RemediationPage() {
               <MotionItem key={r.id}>
                 <Card className="p-3">
                   <Badge variant="outline" className="mb-2">{r.resourceType.replace(/_/g, ' ')}</Badge>
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{r.title}</p>
-                  <p className="text-xs text-gray-500 mt-1 capitalize">{r.difficulty}</p>
+                  <p className="text-sm font-medium text-navy">{r.title}</p>
+                  <p className="text-xs text-muted mt-1 capitalize">{r.difficulty}</p>
                 </Card>
               </MotionItem>
             ))}

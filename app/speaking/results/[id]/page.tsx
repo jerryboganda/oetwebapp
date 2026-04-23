@@ -87,7 +87,7 @@ export default function SpeakingResultSummary() {
           <motion.div
             initial={{ opacity: 0, scale: 0.9 }}
             animate={{ opacity: 1, scale: 1 }}
-            className="max-w-md w-full bg-white rounded-3xl p-10 shadow-xl border border-gray-100"
+            className="max-w-md w-full bg-surface rounded-3xl p-10 shadow-xl border border-border"
           >
             <div className="w-20 h-20 bg-primary/5 rounded-3xl flex items-center justify-center mx-auto mb-8 relative">
               <Loader2 className="w-10 h-10 text-primary animate-spin" />
@@ -101,7 +101,7 @@ export default function SpeakingResultSummary() {
             </p>
             <div className="space-y-4">
               {['Response quality', 'Task communication', 'Score estimation'].map((label, index) => (
-                <div key={label} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-100">
+                <div key={label} className="flex items-center justify-between p-4 bg-background-light rounded-2xl border border-border">
                   <span className="text-sm font-bold text-muted">{label}</span>
                   <motion.div
                     initial={{ width: 0 }}
@@ -181,7 +181,7 @@ export default function SpeakingResultSummary() {
               </p>
             </div>
 
-            <div className="w-px h-24 bg-gray-100 hidden md:block" />
+            <div className="w-px h-24 bg-border hidden md:block" />
 
             <div className="flex flex-col gap-4 w-full md:w-auto">
               <Link href={`/speaking/transcript/${id}`}>
@@ -202,15 +202,15 @@ export default function SpeakingResultSummary() {
           <MotionSection delayIndex={1}>
             <Card className="p-8 h-full">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-xl bg-green-50 flex items-center justify-center">
-                  <Zap className="w-5 h-5 text-green-600" />
+                <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center">
+                  <Zap className="w-5 h-5 text-success" />
                 </div>
                 <h2 className="text-lg font-black text-navy">Key Strengths</h2>
               </div>
               <ul className="space-y-4">
                 {result.strengths.map((strength, index) => (
                   <li key={index} className="flex gap-4 items-start">
-                    <CheckCircle2 className="w-5 h-5 text-green-500 shrink-0 mt-0.5" />
+                    <CheckCircle2 className="w-5 h-5 text-success shrink-0 mt-0.5" />
                     <p className="text-sm text-navy font-medium leading-relaxed">{strength}</p>
                   </li>
                 ))}
@@ -221,15 +221,15 @@ export default function SpeakingResultSummary() {
           <MotionSection delayIndex={2}>
             <Card className="p-8 h-full">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center">
-                  <Target className="w-5 h-5 text-amber-600" />
+                <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center">
+                  <Target className="w-5 h-5 text-warning" />
                 </div>
                 <h2 className="text-lg font-black text-navy">Top Improvements</h2>
               </div>
               <ul className="space-y-4">
                 {result.improvements.map((improvement, index) => (
                   <li key={index} className="flex gap-4 items-start">
-                    <AlertCircle className="w-5 h-5 text-amber-500 shrink-0 mt-0.5" />
+                    <AlertCircle className="w-5 h-5 text-warning shrink-0 mt-0.5" />
                     <p className="text-sm text-navy font-medium leading-relaxed">{improvement}</p>
                   </li>
                 ))}
@@ -242,8 +242,8 @@ export default function SpeakingResultSummary() {
           <MotionSection delayIndex={3}>
             <Card className="p-8 h-full">
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-xl bg-rose-50 flex items-center justify-center">
-                  <Headphones className="w-5 h-5 text-rose-600" />
+                <div className="w-10 h-10 rounded-xl bg-danger/10 flex items-center justify-center">
+                  <Headphones className="w-5 h-5 text-danger" />
                 </div>
                 <h2 className="text-lg font-black text-navy">Pronunciation Insight</h2>
               </div>

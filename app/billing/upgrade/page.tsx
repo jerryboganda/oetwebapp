@@ -75,8 +75,8 @@ export default function BillingUpgradePage() {
                     <p className="text-3xl font-bold mt-2">${plan.price}<span className="text-sm font-normal text-muted-foreground">/{plan.interval}</span></p>
                     <p className="text-sm text-muted-foreground mt-2">{plan.description}</p>
                     <div className="mt-4 space-y-2 text-sm">
-                      <div className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-500" /> {plan.includedCredits} review credits</div>
-                      {plan.trialDays > 0 && <div className="flex items-center gap-2"><Check className="w-4 h-4 text-emerald-500" /> {plan.trialDays}-day free trial</div>}
+                      <div className="flex items-center gap-2"><Check className="w-4 h-4 text-success" /> {plan.includedCredits} review credits</div>
+                      {plan.trialDays > 0 && <div className="flex items-center gap-2"><Check className="w-4 h-4 text-success" /> {plan.trialDays}-day free trial</div>}
                     </div>
                     {!plan.isCurrent && (
                       <Button variant={plan.isUpgrade ? 'secondary' : 'outline'} size="sm" className="w-full mt-4">

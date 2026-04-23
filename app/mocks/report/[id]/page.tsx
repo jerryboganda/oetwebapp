@@ -27,10 +27,10 @@ import { oetGradeFromScaled } from '@/lib/scoring';
 import { mockReportToStatementOfResults } from '@/lib/adapters/oet-sor-adapter';
 
 const SUBTEST_META: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
-  listening: { icon: Headphones, color: 'text-indigo-600', bg: 'bg-indigo-100' },
-  reading:   { icon: FileText,   color: 'text-blue-600',   bg: 'bg-blue-100' },
-  writing:   { icon: PenTool,    color: 'text-rose-600',   bg: 'bg-rose-100' },
-  speaking:  { icon: Mic,        color: 'text-purple-600', bg: 'bg-purple-100' },
+  listening: { icon: Headphones, color: 'text-primary', bg: 'bg-primary/10' },
+  reading:   { icon: FileText,   color: 'text-info',   bg: 'bg-info/10' },
+  writing:   { icon: PenTool,    color: 'text-rose-600',   bg: 'bg-rose-50' },
+  speaking:  { icon: Mic,        color: 'text-primary', bg: 'bg-primary/10' },
 };
 
 /**
@@ -46,9 +46,9 @@ function scoreColor(score: string) {
   const grade = Number.isFinite(numeric)
     ? oetGradeFromScaled(numeric)
     : (trimmed.toUpperCase().replace(/^GRADE\s*/, '').split(/\s|,/)[0] ?? '');
-  if (grade === 'A' || grade === 'B') return 'text-green-600';
-  if (grade === 'C+' || grade === 'C') return 'text-amber-500';
-  if (grade === 'D' || grade === 'E') return 'text-rose-600';
+  if (grade === 'A' || grade === 'B') return 'text-success';
+  if (grade === 'C+' || grade === 'C') return 'text-warning';
+  if (grade === 'D' || grade === 'E') return 'text-danger';
   return 'text-muted';
 }
 
@@ -107,7 +107,7 @@ function MockReportContent() {
         {/* 1. Overall Score */}
         <MotionSection
           delayIndex={1}
-          className="bg-surface rounded-[32px] border border-gray-200 p-8 sm:p-10 text-center shadow-sm flex flex-col items-center"
+          className="bg-surface rounded-2xl border border-border p-8 sm:p-10 text-center shadow-sm flex flex-col items-center"
         >
           <div className="w-24 h-24 rounded-full bg-primary/10 flex items-center justify-center mb-6">
             <span className="text-5xl font-black text-primary">{report.overallScore}</span>
@@ -120,13 +120,13 @@ function MockReportContent() {
         {comp.exists && (
           <MotionSection
             delayIndex={1}
-            className="bg-background-light rounded-[24px] border border-gray-200 p-6"
+            className="bg-background-light rounded-2xl border border-border p-6"
           >
             <div className="flex items-start gap-4">
               <div className={`w-10 h-10 rounded-full flex items-center justify-center shrink-0 ${
-                comp.overallTrend === 'up'   ? 'bg-green-100 text-green-600' :
-                comp.overallTrend === 'down' ? 'bg-rose-100 text-rose-600' :
-                                               'bg-gray-200 text-gray-600'
+                comp.overallTrend === 'up'   ? 'bg-success/10 text-success' :
+                comp.overallTrend === 'down' ? 'bg-danger/10 text-danger' :
+                                               'bg-border text-muted'
               }`}>
                 {comp.overallTrend === 'up'   && <TrendingUp className="w-5 h-5" />}
                 {comp.overallTrend === 'down' && <TrendingDown className="w-5 h-5" />}
@@ -152,7 +152,7 @@ function MockReportContent() {
               const meta = SUBTEST_META[test.id] ?? SUBTEST_META.listening;
               const Icon = meta.icon;
               return (
-                <div key={test.id} className="bg-surface rounded-[24px] border border-gray-200 p-5 flex items-center justify-between shadow-sm">
+                <div key={test.id} className="bg-surface rounded-2xl border border-border p-5 flex items-center justify-between shadow-sm">
                   <div className="flex items-center gap-4">
                     <div className={`w-12 h-12 rounded-2xl ${meta.bg} flex items-center justify-center shrink-0`}>
                       <Icon className={`w-6 h-6 ${meta.color}`} />
@@ -161,7 +161,7 @@ function MockReportContent() {
                       <h3 className="text-base font-bold text-navy">{test.name}</h3>
                       <p className="text-xs text-muted">Raw: {test.rawScore}</p>
                       {test.reviewState ? (
-                        <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-amber-700">
+                        <p className="mt-1 text-[10px] font-black uppercase tracking-widest text-warning">
                           Review {test.reviewState.replace(/_/g, ' ')}
                         </p>
                       ) : null}
@@ -179,19 +179,19 @@ function MockReportContent() {
           delayIndex={3}
         >
           <h2 className="text-sm font-black text-muted uppercase tracking-widest mb-4">Area for Improvement</h2>
-          <div className="bg-rose-50 rounded-[24px] border border-rose-100 p-6 sm:p-8">
+          <div className="bg-danger/10 rounded-2xl border border-danger/30 p-6 sm:p-8">
             <div className="flex items-start gap-4">
-              <div className="w-12 h-12 rounded-2xl bg-rose-100 flex items-center justify-center shrink-0">
-                <AlertTriangle className="w-6 h-6 text-rose-600" />
+              <div className="w-12 h-12 rounded-2xl bg-danger/10 flex items-center justify-center shrink-0">
+                <AlertTriangle className="w-6 h-6 text-danger" />
               </div>
               <div>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-black text-rose-600 uppercase tracking-widest">{report.weakestCriterion.subtest}</span>
-                  <span className="text-rose-300">•</span>
-                  <span className="text-xs font-black text-rose-600 uppercase tracking-widest">Weakest Criterion</span>
+                  <span className="text-xs font-black text-danger uppercase tracking-widest">{report.weakestCriterion.subtest}</span>
+                  <span className="text-danger/40">•</span>
+                  <span className="text-xs font-black text-danger uppercase tracking-widest">Weakest Criterion</span>
                 </div>
-                <h3 className="text-lg font-black text-rose-900 mb-2">{report.weakestCriterion.criterion}</h3>
-                <p className="text-sm text-rose-800/80 leading-relaxed">{report.weakestCriterion.description}</p>
+                <h3 className="text-lg font-black text-danger mb-2">{report.weakestCriterion.criterion}</h3>
+                <p className="text-sm text-danger/80 leading-relaxed">{report.weakestCriterion.description}</p>
               </div>
             </div>
           </div>
@@ -210,7 +210,7 @@ function MockReportContent() {
           delayIndex={5}
           className="pt-4"
         >
-          <div className="bg-navy rounded-[32px] p-8 text-center text-white relative overflow-hidden shadow-lg">
+          <div className="bg-navy rounded-2xl p-8 text-center text-white relative overflow-hidden shadow-lg">
             <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,_rgba(255,255,255,0.1),_transparent)]" />
             <div className="relative z-10">
               <div className="w-16 h-16 rounded-full bg-white/10 flex items-center justify-center mx-auto mb-4">
@@ -222,7 +222,7 @@ function MockReportContent() {
               </p>
               <Link
                 href="/study-plan"
-                className="bg-white text-navy px-8 py-4 rounded-xl font-black hover:bg-gray-100 transition-colors inline-flex items-center justify-center gap-2"
+                className="bg-white text-navy px-8 py-4 rounded-xl font-black hover:bg-background-light transition-colors inline-flex items-center justify-center gap-2"
               >
                 Update Study Plan
               </Link>

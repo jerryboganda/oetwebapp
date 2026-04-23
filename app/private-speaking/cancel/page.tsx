@@ -11,12 +11,12 @@ export default function PrivateSpeakingCancelPage() {
   return (
     <LearnerDashboardShell>
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6">
-      <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center">
-        <XCircle className="w-8 h-8 text-red-600 dark:text-red-400" />
+      <div className="w-16 h-16 bg-danger/10 rounded-full flex items-center justify-center">
+        <XCircle className="w-8 h-8 text-danger" />
       </div>
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Payment Cancelled</h1>
-        <p className="text-gray-500 dark:text-gray-400">
+        <h1 className="text-2xl font-bold text-navy mb-2">Payment Cancelled</h1>
+        <p className="text-muted">
           Your booking was not completed. The reserved time slot has been released.
           You can try booking again at any time.
         </p>

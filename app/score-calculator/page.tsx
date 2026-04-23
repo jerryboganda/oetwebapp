@@ -51,33 +51,33 @@ export default function ScoreCalculatorPage() {
               title="Score Equivalence Table"
               description="See how OET grades map to other major English proficiency exams."
             />
-            <div className="overflow-x-auto rounded-xl border border-gray-200 dark:border-gray-700">
-              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                <thead className="bg-gray-50 dark:bg-gray-800/50">
+            <div className="overflow-x-auto rounded-xl border border-border">
+              <table className="min-w-full divide-y divide-border">
+                <thead className="bg-background-light">
                   <tr>
                     {['OET Grade', 'OET Score', 'IELTS', 'PTE Academic', 'CEFR'].map((h) => (
-                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 uppercase tracking-wider">
+                      <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-muted uppercase tracking-wider">
                         {h}
                       </th>
                     ))}
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                <tbody className="divide-y divide-border">
                   {data.equivalences.map((row) => (
                     <MotionItem
                       key={row.oetGrade}
                       className={`cursor-pointer transition-colors ${
                         highlight === row.oetGrade
-                          ? 'bg-indigo-50 dark:bg-indigo-900/20'
-                          : 'hover:bg-gray-50 dark:hover:bg-gray-800/30'
+                          ? 'bg-primary/10'
+                          : 'hover:bg-background-light'
                       }`}
                       onClick={() => setHighlight(highlight === row.oetGrade ? null : row.oetGrade)}
                     >
-                      <td className="px-4 py-3 text-sm font-semibold text-indigo-700 dark:text-indigo-300">{row.oetGrade}</td>
-                      <td className="px-4 py-3 text-sm text-gray-900 dark:text-gray-100">{row.oetScore}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{row.ielts}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{row.pte}</td>
-                      <td className="px-4 py-3 text-sm text-gray-700 dark:text-gray-300">{row.cefr}</td>
+                      <td className="px-4 py-3 text-sm font-semibold text-primary">{row.oetGrade}</td>
+                      <td className="px-4 py-3 text-sm text-navy">{row.oetScore}</td>
+                      <td className="px-4 py-3 text-sm text-navy">{row.ielts}</td>
+                      <td className="px-4 py-3 text-sm text-navy">{row.pte}</td>
+                      <td className="px-4 py-3 text-sm text-navy">{row.cefr}</td>
                     </MotionItem>
                   ))}
                 </tbody>
@@ -96,11 +96,11 @@ export default function ScoreCalculatorPage() {
               {data.institutions.map((inst) => (
                 <MotionItem
                   key={`${inst.institution}-${inst.profession}`}
-                  className="rounded-xl border border-gray-200 dark:border-gray-700 p-4 bg-white dark:bg-gray-900"
+                  className="rounded-xl border border-border p-4 bg-surface"
                 >
-                  <h3 className="font-semibold text-gray-900 dark:text-gray-100 text-sm">{inst.institution}</h3>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{inst.country} &middot; {inst.profession}</p>
-                  <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-300 text-xs font-medium">
+                  <h3 className="font-semibold text-navy text-sm">{inst.institution}</h3>
+                  <p className="text-xs text-muted mt-1">{inst.country} &middot; {inst.profession}</p>
+                  <div className="mt-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-success/10 text-success text-xs font-medium">
                     Min. Grade {inst.minimumOetGrade}
                   </div>
                 </MotionItem>

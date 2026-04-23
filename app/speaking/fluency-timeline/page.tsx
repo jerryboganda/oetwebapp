@@ -36,7 +36,7 @@ interface FluencyData {
   benchmarks: { idealWordsPerMinute: { min: number; max: number }; maxAcceptableFillerRatio: number; maxAcceptablePauseSeconds: number };
 }
 
-const RATING_COLORS: Record<string, string> = { good: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300', fair: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300', poor: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300' };
+const RATING_COLORS: Record<string, string> = { good: 'bg-success/10 text-success', fair: 'bg-warning/10 text-warning', poor: 'bg-danger/10 text-danger' };
 
 export default function FluencyTimelinePage() {
   const [data, setData] = useState<FluencyData | null>(null);
@@ -73,9 +73,9 @@ export default function FluencyTimelinePage() {
             <LearnerSurfaceSectionHeader title="Overview Metrics" />
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <MotionItem><Card className="p-4 text-center"><Gauge className="w-5 h-5 mx-auto mb-2 text-primary" /><p className="text-2xl font-bold">{data.averageWordsPerMinute}</p><p className="text-xs text-muted-foreground">Avg WPM</p><p className="text-xs text-muted-foreground/70">Ideal: {data.benchmarks.idealWordsPerMinute.min}–{data.benchmarks.idealWordsPerMinute.max}</p></Card></MotionItem>
-              <MotionItem><Card className="p-4 text-center"><AlertTriangle className="w-5 h-5 mx-auto mb-2 text-amber-500" /><p className="text-2xl font-bold">{data.totalFillerWords}</p><p className="text-xs text-muted-foreground">Filler Words</p><p className="text-xs text-muted-foreground/70">{data.fillerRatio}% ratio</p></Card></MotionItem>
-              <MotionItem><Card className="p-4 text-center"><Clock className="w-5 h-5 mx-auto mb-2 text-blue-500" /><p className="text-2xl font-bold">{data.pauseCount}</p><p className="text-xs text-muted-foreground">Long Pauses</p></Card></MotionItem>
-              <MotionItem><Card className="p-4 text-center"><Mic className="w-5 h-5 mx-auto mb-2 text-purple-500" /><p className="text-2xl font-bold">{Math.round(data.totalDurationSeconds)}s</p><p className="text-xs text-muted-foreground">Total Duration</p><p className="text-xs text-muted-foreground/70">{data.totalWords} words</p></Card></MotionItem>
+              <MotionItem><Card className="p-4 text-center"><AlertTriangle className="w-5 h-5 mx-auto mb-2 text-warning" /><p className="text-2xl font-bold">{data.totalFillerWords}</p><p className="text-xs text-muted-foreground">Filler Words</p><p className="text-xs text-muted-foreground/70">{data.fillerRatio}% ratio</p></Card></MotionItem>
+              <MotionItem><Card className="p-4 text-center"><Clock className="w-5 h-5 mx-auto mb-2 text-info" /><p className="text-2xl font-bold">{data.pauseCount}</p><p className="text-xs text-muted-foreground">Long Pauses</p></Card></MotionItem>
+              <MotionItem><Card className="p-4 text-center"><Mic className="w-5 h-5 mx-auto mb-2 text-primary" /><p className="text-2xl font-bold">{Math.round(data.totalDurationSeconds)}s</p><p className="text-xs text-muted-foreground">Total Duration</p><p className="text-xs text-muted-foreground/70">{data.totalWords} words</p></Card></MotionItem>
             </div>
 
             <LearnerSurfaceSectionHeader title="Segment Timeline" />
@@ -91,13 +91,13 @@ export default function FluencyTimelinePage() {
                       <p className="text-sm">{seg.text}</p>
                       <div className="flex gap-3 mt-1">
                         <span className="text-xs text-muted-foreground">{seg.wordsPerMinute} WPM</span>
-                        {seg.fillerCount > 0 && <span className="text-xs text-amber-600">{seg.fillerCount} filler{seg.fillerCount > 1 ? 's' : ''}</span>}
-                        {seg.isPause && <span className="text-xs text-red-600">{seg.pauseBefore}s pause</span>}
+                        {seg.fillerCount > 0 && <span className="text-xs text-warning">{seg.fillerCount} filler{seg.fillerCount > 1 ? 's' : ''}</span>}
+                        {seg.isPause && <span className="text-xs text-danger">{seg.pauseBefore}s pause</span>}
                       </div>
                     </div>
                     <div className="flex-shrink-0 w-20">
                       <div className="h-2 rounded-full bg-muted overflow-hidden">
-                        <div className={`h-full rounded-full ${seg.fluencyRating === 'good' ? 'bg-emerald-500' : seg.fluencyRating === 'fair' ? 'bg-amber-500' : 'bg-red-500'}`} style={{ width: `${Math.min(100, seg.wordsPerMinute / 2)}%` }} />
+                        <div className={`h-full rounded-full ${seg.fluencyRating === 'good' ? 'bg-success' : seg.fluencyRating === 'fair' ? 'bg-warning' : 'bg-danger'}`} style={{ width: `${Math.min(100, seg.wordsPerMinute / 2)}%` }} />
                       </div>
                     </div>
                   </Card>

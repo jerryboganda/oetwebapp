@@ -79,3 +79,6 @@ vscode-digitalocean-model-provider/
 _extracted/
 _extract_*.py
 _check_pdf_libs.py
+
+# oh-my-opencode cross-session task state
+.sisyphus/

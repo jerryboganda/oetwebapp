@@ -209,11 +209,11 @@ export default function VideoLessonPage() {
     <LearnerDashboardShell>
       <div className="space-y-6">
         <div className="flex items-start gap-3">
-          <Link href="/lessons" className="mt-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300" aria-label="Back to video lessons">
+          <Link href="/lessons" className="mt-1 text-muted/60 hover:text-muted" aria-label="Back to video lessons">
             <ArrowLeft className="h-5 w-5" />
           </Link>
           <div className="min-w-0 flex-1">
-            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-gray-500">
+            <div className="mb-2 flex flex-wrap items-center gap-2 text-xs text-muted">
               <Badge variant="muted">{lesson.examTypeCode.toUpperCase()}</Badge>
               <Badge variant="outline">{SUBTEST_LABELS[lesson.subtestCode ?? ''] ?? 'General'}</Badge>
               <span className="inline-flex items-center gap-1 font-semibold">
@@ -224,7 +224,7 @@ export default function VideoLessonPage() {
               {locked && <Badge variant="warning">Upgrade required</Badge>}
               {!locked && lesson.isPreviewEligible && <Badge variant="info">Preview access</Badge>}
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{lesson.title}</h1>
+            <h1 className="text-2xl font-bold text-navy">{lesson.title}</h1>
             {lesson.programTitle && (
               <p className="mt-1 text-sm text-muted">
                 {lesson.programTitle}{lesson.moduleTitle ? ` / ${lesson.moduleTitle}` : ''}
@@ -275,7 +275,7 @@ export default function VideoLessonPage() {
                 </div>
                 <span className="text-sm font-bold text-primary">{progress}%</span>
               </div>
-              <div className="mt-4 h-2 overflow-hidden rounded-full bg-gray-100">
+              <div className="mt-4 h-2 overflow-hidden rounded-full bg-background-light">
                 <div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} />
               </div>
             </Card>
@@ -301,7 +301,7 @@ export default function VideoLessonPage() {
                   )}
                 </div>
                 {transcriptText ? (
-                  <div className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg bg-gray-50 p-4 text-sm leading-6 text-gray-700">
+                  <div className="max-h-72 overflow-y-auto whitespace-pre-wrap rounded-lg bg-background-light p-4 text-sm leading-6 text-navy">
                     {transcriptText}
                   </div>
                 ) : (

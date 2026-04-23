@@ -1,0 +1,5 @@
+interface:
+  display_name: "Frontend Owner"
+  short_description: "Own Next.js, React, and shared UI changes"
+  default_prompt: "Own frontend work in app/, components/, contexts/, hooks/, and lib/. Preserve the existing design system, Tailwind v4, motion/react, and App Router conventions. Treat shared-contract files as serialized and avoid collateral edits outside the requested surface."
+

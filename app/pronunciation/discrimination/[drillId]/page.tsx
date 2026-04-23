@@ -176,11 +176,11 @@ export default function PronunciationDiscriminationPage() {
         <Link
           href={`/pronunciation/${drill.id}`}
           aria-label="Back to drill"
-          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          className="text-muted/60 hover:text-muted"
         >
           <ArrowLeft className="w-5 h-5" />
         </Link>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white">
+        <h1 className="text-2xl font-bold text-navy">
           Listening discrimination — {drill.label}
         </h1>
       </div>
@@ -234,7 +234,7 @@ export default function PronunciationDiscriminationPage() {
 
         {done && (
           <section aria-labelledby="results-heading" className="rounded-3xl border border-border bg-surface p-6 shadow-sm text-center">
-            <h2 id="results-heading" className="mb-2 text-lg font-semibold text-navy dark:text-white">
+            <h2 id="results-heading" className="mb-2 text-lg font-semibold text-navy">
               You got {stats.correct} / {stats.total} correct
             </h2>
             <p className="mb-4 text-sm text-muted">
@@ -285,9 +285,9 @@ function DiscriminationChoice({
   const state = !disabled
     ? 'border-border bg-surface hover:border-primary'
     : selected
-      ? (correct ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20' : 'border-rose-500 bg-rose-50 dark:bg-rose-900/20')
+      ? (correct ? 'border-success bg-success/10' : 'border-danger bg-danger/10')
       : correct
-        ? 'border-emerald-500 bg-emerald-50 dark:bg-emerald-900/20'
+        ? 'border-success bg-success/10'
         : 'border-border bg-surface opacity-60';
   return (
     <button
@@ -298,7 +298,7 @@ function DiscriminationChoice({
       aria-label={`Choose ${label}: ${word}`}
     >
       <div className="text-xs uppercase tracking-[0.18em] text-muted">{label}</div>
-      <div className="mt-1 text-2xl font-semibold text-navy dark:text-white">{word}</div>
+      <div className="mt-1 text-2xl font-semibold text-navy">{word}</div>
     </button>
   );
 }

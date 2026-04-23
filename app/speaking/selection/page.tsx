@@ -69,7 +69,7 @@ export default function SpeakingTaskSelection() {
   return (
     <LearnerDashboardShell pageTitle="Select Speaking Task">
       <div className="space-y-6">
-        <Card className="border-gray-200 bg-white p-5 shadow-sm">
+        <Card className="border-border bg-surface p-5 shadow-sm">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-widest text-muted">Rulebook Source of Truth</p>

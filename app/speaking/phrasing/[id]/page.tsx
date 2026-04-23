@@ -101,7 +101,7 @@ function BetterPhrasingContent() {
           <span className="text-xs font-bold text-muted">
             Segment {currentIndex + 1} of {segments.length}
           </span>
-          <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden hidden md:block">
+          <div className="w-32 h-2 bg-background-light rounded-full overflow-hidden hidden md:block">
             <motion.div
               initial={{ width: 0 }}
               animate={{ width: `${progress}%` }}
@@ -124,7 +124,7 @@ function BetterPhrasingContent() {
               {/* Original Phrase Card */}
               <Card className="p-8">
                 <div className="flex items-center gap-3 mb-4">
-                  <div className="w-8 h-8 rounded-lg bg-gray-50 flex items-center justify-center">
+                  <div className="w-8 h-8 rounded-lg bg-background-light flex items-center justify-center">
                     <MessageSquare className="w-4 h-4 text-muted" />
                   </div>
                   <h2 className="text-xs font-bold text-muted uppercase tracking-widest">Your Original Phrase</h2>
@@ -133,13 +133,13 @@ function BetterPhrasingContent() {
                   &quot;{currentSegment.originalPhrase}&quot;
                 </p>
 
-                <div className="mt-8 pt-8 border-t border-gray-100">
+                <div className="mt-8 pt-8 border-t border-border">
                   <div className="flex items-start gap-4">
-                    <div className="w-10 h-10 rounded-xl bg-amber-50 flex items-center justify-center shrink-0">
-                      <AlertCircle className="w-5 h-5 text-amber-600" />
+                    <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center shrink-0">
+                      <AlertCircle className="w-5 h-5 text-warning" />
                     </div>
                     <div>
-                      <h3 className="text-xs font-bold text-amber-600 uppercase tracking-widest mb-1">Issue Explanation</h3>
+                      <h3 className="text-xs font-bold text-warning uppercase tracking-widest mb-1">Issue Explanation</h3>
                       <p className="text-sm text-muted leading-relaxed">{currentSegment.issueExplanation}</p>
                     </div>
                   </div>
@@ -179,7 +179,7 @@ function BetterPhrasingContent() {
                     whileHover={{ scale: 1.05 }}
                     whileTap={{ scale: 0.95 }}
                     onClick={toggleRecording}
-                    className={`w-20 h-20 rounded-full flex items-center justify-center transition-all shadow-lg ${isRecording ? 'bg-red-500 animate-pulse' : 'bg-primary hover:bg-primary/90'}`}
+                    className={`w-20 h-20 rounded-full flex items-center justify-center transition-all shadow-lg ${isRecording ? 'bg-danger animate-pulse' : 'bg-primary hover:bg-primary/90'}`}
                   >
                     <Mic className={`w-8 h-8 text-white ${isRecording ? 'animate-bounce' : ''}`} />
                   </motion.button>
@@ -188,7 +188,7 @@ function BetterPhrasingContent() {
                       initial={{ opacity: 0, scale: 0.5 }}
                       animate={{ opacity: 1, scale: 1 }}
                       onClick={() => setPlaybackActive(!playbackActive)}
-                      className="w-14 h-14 rounded-full bg-gray-100 text-muted flex items-center justify-center hover:bg-gray-200 transition-all"
+                      className="w-14 h-14 rounded-full bg-background-light text-muted flex items-center justify-center hover:bg-border transition-all"
                     >
                       {playbackActive ? <RotateCcw className="w-6 h-6" /> : <Play className="w-6 h-6 fill-current ml-1" />}
                     </motion.button>
@@ -204,7 +204,7 @@ function BetterPhrasingContent() {
       </main>
 
       {/* Footer Controls */}
-      <footer className="bg-white border-t border-gray-200 p-6 z-20 shrink-0">
+      <footer className="bg-surface border-t border-border p-6 z-20 shrink-0">
         <div className="max-w-3xl mx-auto flex items-center justify-between">
           <Button variant="ghost" onClick={handlePrev} disabled={currentIndex === 0}>
             <ChevronLeft className="w-5 h-5" /> Previous
@@ -214,7 +214,7 @@ function BetterPhrasingContent() {
             {segments.map((_, i) => (
               <div
                 key={i}
-                className={`w-2 h-2 rounded-full transition-all ${i === currentIndex ? 'bg-primary w-6' : 'bg-gray-200'}`}
+                className={`w-2 h-2 rounded-full transition-all ${i === currentIndex ? 'bg-primary w-6' : 'bg-border'}`}
               />
             ))}
           </div>

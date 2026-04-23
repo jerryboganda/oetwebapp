@@ -297,9 +297,9 @@ export default function DiagnosticSpeakingPage() {
                 </p>
               </div>
 
-              <Card className="bg-amber-50/30 border-amber-200">
+              <Card className="bg-amber-50/30 border-warning/30">
                 <div className="flex items-center justify-between mb-4">
-                  <p className="text-xs font-semibold text-amber-700">PREPARATION TIME</p>
+                  <p className="text-xs font-semibold text-warning">PREPARATION TIME</p>
                   <Timer mode="countdown" initialSeconds={60} size="sm" />
                 </div>
                 <SpeakingRoleCard
@@ -310,7 +310,7 @@ export default function DiagnosticSpeakingPage() {
                   background={roleCard.background}
                 />
                 {roleCard.tasks.length > 0 && (
-                  <div className="mt-4 pt-3 border-t border-amber-200/50">
+                  <div className="mt-4 pt-3 border-t border-warning/30">
                     <p className="text-xs font-semibold text-primary uppercase tracking-wide mb-2">Tasks</p>
                     <ol className="space-y-1.5">
                       {roleCard.tasks.map((t, i) => (
@@ -323,10 +323,10 @@ export default function DiagnosticSpeakingPage() {
                 )}
               </Card>
 
-              <Card className="bg-gray-50/50">
+              <Card className="bg-background-light/50">
                 <h4 className="text-sm font-bold text-navy mb-2">Your Notes</h4>
                 <textarea
-                  className="w-full min-h-[100px] text-sm border border-gray-200 rounded p-3 resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 text-navy"
+                  className="w-full min-h-[100px] text-sm border border-border rounded p-3 resize-none focus:outline-none focus:ring-2 focus:ring-primary/20 text-navy"
                   placeholder="Jot down key points for your response..."
                 />
               </Card>
@@ -343,10 +343,10 @@ export default function DiagnosticSpeakingPage() {
           {phase === 'recording' && roleCard && (
             <div className="space-y-6">
               <div className="text-center space-y-2">
-                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-red-50 text-red-600 text-sm font-bold">
+                <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-danger/10 text-danger text-sm font-bold">
                   <span className="relative flex h-3 w-3">
-                    <span className="absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75 animate-ping" />
-                    <span className="relative inline-flex rounded-full h-3 w-3 bg-red-500" />
+                    <span className="absolute inline-flex h-full w-full rounded-full bg-danger opacity-75 animate-ping" />
+                    <span className="relative inline-flex rounded-full h-3 w-3 bg-danger" />
                   </span>
                   Recording in Progress
                 </div>
@@ -356,7 +356,7 @@ export default function DiagnosticSpeakingPage() {
               </div>
 
               {/* Compact role card during recording */}
-              <Card className="bg-gray-50/50 border-gray-200">
+              <Card className="bg-background-light/50 border-border">
                 <p className="text-xs font-semibold text-muted mb-2">ROLE CARD REFERENCE</p>
                 <p className="text-sm text-navy font-semibold">{roleCard.title}</p>
                 <p className="text-xs text-muted mt-1">{roleCard.brief}</p>
@@ -391,7 +391,7 @@ export default function DiagnosticSpeakingPage() {
           {phase === 'review' && (
             <div className="space-y-6">
               <div className="text-center">
-                <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto mb-3" />
+                <CheckCircle2 className="w-12 h-12 text-success mx-auto mb-3" />
                 <h2 className="text-xl font-bold text-navy">Recording Complete</h2>
                 <p className="text-sm text-muted mt-1">
                   Duration: {Math.floor(recordingSeconds / 60)}:{(recordingSeconds % 60).toString().padStart(2, '0')}
@@ -405,7 +405,7 @@ export default function DiagnosticSpeakingPage() {
                 {previewUrl ? (
                   <audio controls src={previewUrl} className="w-full" />
                 ) : (
-                  <div className="h-12 bg-gray-100 rounded-lg flex items-center justify-center text-xs text-muted">
+                  <div className="h-12 bg-background-light rounded-lg flex items-center justify-center text-xs text-muted">
                     Audio preview will appear here after recording.
                   </div>
                 )}
@@ -430,7 +430,7 @@ export default function DiagnosticSpeakingPage() {
                 <h2 className="text-xl font-bold text-navy">Uploading Recording…</h2>
                 <p className="text-sm text-muted mt-1">Please don&apos;t close this page.</p>
               </div>
-              <div className="w-full max-w-sm mx-auto h-2 bg-gray-200 rounded-full overflow-hidden">
+              <div className="w-full max-w-sm mx-auto h-2 bg-border rounded-full overflow-hidden">
                 <div
                   className="h-full bg-primary rounded-full transition-all duration-300"
                   style={{ width: `${uploadProgress}%` }}
@@ -443,7 +443,7 @@ export default function DiagnosticSpeakingPage() {
           {/* Phase: Done */}
           {phase === 'done' && (
             <div className="text-center space-y-4 py-12">
-              <CheckCircle2 className="w-16 h-16 text-emerald-500 mx-auto" />
+              <CheckCircle2 className="w-16 h-16 text-success mx-auto" />
               <h2 className="text-xl font-bold text-navy">Submitted Successfully</h2>
               <p className="text-sm text-muted">Redirecting to diagnostic hub…</p>
             </div>

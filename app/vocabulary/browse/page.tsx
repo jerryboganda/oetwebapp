@@ -124,7 +124,7 @@ export default function BrowseVocabularyPage() {
       {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
 
       {/* Filters */}
-      <Card className="mb-6 border-gray-200 bg-surface p-4">
+      <Card className="mb-6 border-border bg-surface p-4">
         <LearnerSurfaceSectionHeader
           eyebrow="Search"
           title="Filter terms"
@@ -139,13 +139,13 @@ export default function BrowseVocabularyPage() {
               placeholder="Search terms..."
               value={search}
               onChange={e => { setSearch(e.target.value); setPage(1); }}
-              className="w-full rounded-xl border border-gray-200 bg-background-light pl-9 pr-4 py-2.5 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-primary/30"
+              className="w-full rounded-xl border border-border bg-background-light pl-9 pr-4 py-2.5 text-sm text-navy focus:outline-none focus:ring-2 focus:ring-primary/30"
             />
           </div>
           <select
             value={category}
             onChange={e => { setCategory(e.target.value); setPage(1); }}
-            className="rounded-xl border border-gray-200 bg-background-light px-3 py-2.5 text-sm text-navy capitalize"
+            className="rounded-xl border border-border bg-background-light px-3 py-2.5 text-sm text-navy capitalize"
           >
             <option value="">All Categories ({total})</option>
             {categories.map(c => (
@@ -162,7 +162,7 @@ export default function BrowseVocabularyPage() {
           {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}
         </div>
       ) : terms.length === 0 ? (
-        <Card className="border-gray-200 bg-surface px-4 sm:px-8 py-6 sm:py-12 text-center text-muted">No terms found. Try a different search.</Card>
+        <Card className="border-border bg-surface px-4 sm:px-8 py-6 sm:py-12 text-center text-muted">No terms found. Try a different search.</Card>
       ) : (
         <>
           <div className="space-y-3 mb-6">
@@ -170,7 +170,7 @@ export default function BrowseVocabularyPage() {
               <MotionItem
                 key={term.id}
                 delayIndex={i}
-                className="flex gap-4 rounded-2xl border border-gray-200 bg-surface p-4"
+                className="flex gap-4 rounded-2xl border border-border bg-surface p-4"
               >
                 <div className="flex-1 min-w-0">
                   <div className="mb-1 flex flex-wrap items-center gap-2">
@@ -205,7 +205,7 @@ export default function BrowseVocabularyPage() {
                 <button
                   onClick={() => handleAdd(term.id)}
                   disabled={adding.has(term.id) || added.has(term.id)}
-                  className={`flex-shrink-0 rounded-lg p-2 transition-colors ${added.has(term.id) ? 'bg-green-50 text-green-500' : 'text-muted hover:bg-background-light hover:text-primary'}`}
+                  className={`flex-shrink-0 rounded-lg p-2 transition-colors ${added.has(term.id) ? 'bg-success/10 text-success' : 'text-muted hover:bg-background-light hover:text-primary'}`}
                   title="Add to my list"
                   aria-label={added.has(term.id) ? `${term.term} added to your list` : `Add ${term.term} to your list`}
                 >
@@ -217,9 +217,9 @@ export default function BrowseVocabularyPage() {
 
           {totalPages > 1 && (
             <div className="flex items-center justify-center gap-2">
-              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="rounded-lg border border-gray-200 bg-surface px-3 py-1.5 text-sm text-navy disabled:opacity-40 hover:bg-background-light">Prev</button>
+              <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1} className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-navy disabled:opacity-40 hover:bg-background-light">Prev</button>
               <span className="text-sm text-muted">{page} / {totalPages}</span>
-              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="rounded-lg border border-gray-200 bg-surface px-3 py-1.5 text-sm text-navy disabled:opacity-40 hover:bg-background-light">Next</button>
+              <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages} className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm text-navy disabled:opacity-40 hover:bg-background-light">Next</button>
             </div>
           )}
         </>

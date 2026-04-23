@@ -1,7 +1,15 @@
 {
   "servers": {
     "context-mode": {
-      "command": "context-mode"
+      "command": "cmd",
+      "args": ["/c", "context-mode"]
+    },
+    "jcodemunch": {
+      "command": "C:\\Users\\Dr Faisal Maqsood PC\\AppData\\Local\\Programs\\Python\\Python310\\Scripts\\jcodemunch-mcp.exe"
+    },
+    "cc-token-saver": {
+      "command": "py",
+      "args": ["-3.10", "${workspaceFolder}/.claude/mcp/cc_token_saver_mcp/launch.py"]
     }
   }
 }

@@ -91,8 +91,8 @@ export default function SmartRemindersPage() {
                 onClick={() => setPreferredSlot(slot.id)}
                 className={`flex items-center gap-2 px-4 py-3 rounded-xl border transition-colors ${
                   preferredSlot === slot.id
-                    ? 'bg-indigo-50 dark:bg-indigo-900/20 border-indigo-300 dark:border-indigo-700 text-indigo-700 dark:text-indigo-300'
-                    : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 text-gray-700 dark:text-gray-300 hover:border-indigo-300'
+                    ? 'bg-primary/10 border-primary/30 text-primary'
+                    : 'bg-surface border-border text-navy hover:border-primary/30'
                 }`}
               >
                 {slot.icon}
@@ -119,8 +119,8 @@ export default function SmartRemindersPage() {
               onClick={() => setPushEnabled(!pushEnabled)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
                 pushEnabled
-                  ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 text-green-700 dark:text-green-300'
-                  : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500'
+                  ? 'bg-success/10 border-success/30 text-success'
+                  : 'bg-background-light border-border text-muted'
               }`}
             >
               <Smartphone className="w-4 h-4" />
@@ -132,8 +132,8 @@ export default function SmartRemindersPage() {
               onClick={() => setEmailEnabled(!emailEnabled)}
               className={`flex items-center gap-2 px-4 py-2 rounded-lg border transition-colors ${
                 emailEnabled
-                  ? 'bg-green-50 dark:bg-green-900/20 border-green-300 dark:border-green-700 text-green-700 dark:text-green-300'
-                  : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 text-gray-500'
+                  ? 'bg-success/10 border-success/30 text-success'
+                  : 'bg-background-light border-border text-muted'
               }`}
             >
               <Mail className="w-4 h-4" />
@@ -159,18 +159,18 @@ export default function SmartRemindersPage() {
                 onClick={() => togglePref(pref.id)}
                 className={`w-full flex items-center gap-4 p-4 rounded-xl border transition-colors text-left ${
                   pref.enabled
-                    ? 'bg-white dark:bg-gray-900 border-indigo-200 dark:border-indigo-800'
-                    : 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700 opacity-70'
+                    ? 'bg-surface border-primary/30'
+                    : 'bg-background-light border-border opacity-70'
                 }`}
               >
-                <div className={pref.enabled ? 'text-indigo-600 dark:text-indigo-400' : 'text-gray-400'}>
+                <div className={pref.enabled ? 'text-primary' : 'text-muted/60'}>
                   {pref.icon}
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900 dark:text-gray-100">{pref.label}</p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400">{pref.description}</p>
+                  <p className="text-sm font-medium text-navy">{pref.label}</p>
+                  <p className="text-xs text-muted">{pref.description}</p>
                 </div>
-                <div className={`w-10 h-6 rounded-full transition-colors ${pref.enabled ? 'bg-indigo-600' : 'bg-gray-300 dark:bg-gray-600'}`}>
+                <div className={`w-10 h-6 rounded-full transition-colors ${pref.enabled ? 'bg-primary' : 'bg-border'}`}>
                   <div className={`w-4 h-4 bg-white rounded-full mt-1 transition-transform ${pref.enabled ? 'translate-x-5' : 'translate-x-1'}`} />
                 </div>
               </button>

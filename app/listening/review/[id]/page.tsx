@@ -47,7 +47,7 @@ export default function ListeningReviewPage() {
           Back to listening
         </Button>
 
-        {loading ? <Skeleton className="h-48 rounded-[24px]" /> : null}
+        {loading ? <Skeleton className="h-48 rounded-2xl" /> : null}
         {!loading && error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
         {!loading && review ? (
@@ -65,7 +65,7 @@ export default function ListeningReviewPage() {
               ]}
             />
 
-            <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
+            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
               <LearnerSurfaceSectionHeader
                 eyebrow="Review Policy"
                 title="Transcript support is controlled item by item"
@@ -73,12 +73,12 @@ export default function ListeningReviewPage() {
                 className="mb-4"
               />
               <div className="grid gap-4 md:grid-cols-[1fr_auto] md:items-center">
-                <div className="rounded-2xl border border-gray-100 bg-background-light p-4 text-sm text-muted">
+                <div className="rounded-2xl border border-border bg-background-light p-4 text-sm text-muted">
                   <span className="font-bold text-navy">Policy:</span> {review.transcriptAccess.policy.replace(/_/g, ' ')}
                   <br />
                   {review.transcriptAccess.reason}
                 </div>
-                <div className="rounded-2xl border border-violet-100 bg-violet-50 px-4 py-3 text-sm font-bold capitalize text-violet-800">
+                <div className="rounded-2xl border border-primary/30 bg-primary/10 px-4 py-3 text-sm font-bold capitalize text-primary">
                   {review.transcriptAccess.state}
                 </div>
               </div>
@@ -86,12 +86,12 @@ export default function ListeningReviewPage() {
 
             <section className="space-y-4">
               {review.itemReview.map((question) => (
-                <div key={question.questionId} className="rounded-[24px] border border-gray-200 bg-surface p-5 shadow-sm">
+                <div key={question.questionId} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
                   <div className="flex items-start gap-3">
                     {question.isCorrect ? (
-                      <CheckCircle2 className="mt-1 h-5 w-5 shrink-0 text-emerald-500" />
+                      <CheckCircle2 className="mt-1 h-5 w-5 shrink-0 text-success" />
                     ) : (
-                      <XCircle className="mt-1 h-5 w-5 shrink-0 text-rose-500" />
+                      <XCircle className="mt-1 h-5 w-5 shrink-0 text-danger" />
                     )}
                     <div>
                       <p className="text-xs font-black uppercase tracking-widest text-muted">
@@ -101,11 +101,11 @@ export default function ListeningReviewPage() {
                     </div>
                   </div>
                   <div className="mt-4 grid gap-3 md:grid-cols-2">
-                    <div className="rounded-2xl border border-gray-100 bg-background-light p-4">
+                    <div className="rounded-2xl border border-border bg-background-light p-4">
                       <p className="text-xs font-black uppercase tracking-widest text-muted">Your answer</p>
                       <p className="mt-2 text-sm text-navy">{question.learnerAnswer || 'No answer recorded'}</p>
                     </div>
-                    <div className="rounded-2xl border border-gray-100 bg-background-light p-4">
+                    <div className="rounded-2xl border border-border bg-background-light p-4">
                       <p className="text-xs font-black uppercase tracking-widest text-muted">Correct answer</p>
                       <p className="mt-2 text-sm text-navy">{question.correctAnswer}</p>
                     </div>
@@ -113,18 +113,18 @@ export default function ListeningReviewPage() {
                   <p className="mt-4 text-sm text-muted">{question.explanation}</p>
                   {question.transcript?.allowed && question.transcript.excerpt ? (
                     <SelectionToVocab source="listening" sourceRefPrefix={`listening:${attemptId}:${question.questionId}`}>
-                      <div className="mt-4 rounded-2xl border border-blue-100 bg-blue-50 p-4 text-sm text-blue-900">
+                      <div className="mt-4 rounded-2xl border border-info/30 bg-info/10 p-4 text-sm text-info">
                         Transcript clue: {question.transcript.excerpt}
                       </div>
                     </SelectionToVocab>
                   ) : (
-                    <div className="mt-4 flex items-start gap-3 rounded-2xl border border-gray-100 bg-background-light p-4 text-sm text-muted">
+                    <div className="mt-4 flex items-start gap-3 rounded-2xl border border-border bg-background-light p-4 text-sm text-muted">
                       <FileLock2 className="mt-0.5 h-4 w-4 shrink-0" />
                       Transcript excerpt restricted for this item.
                     </div>
                   )}
                   {question.distractorExplanation ? (
-                    <div className="mt-3 rounded-2xl border border-amber-100 bg-amber-50 p-4 text-sm text-amber-900">
+                    <div className="mt-3 rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
                       Distractor explanation: {question.distractorExplanation}
                     </div>
                   ) : null}
@@ -133,14 +133,14 @@ export default function ListeningReviewPage() {
             </section>
 
             {review.recommendedNextDrill ? (
-              <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
+              <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
                 <LearnerSurfaceSectionHeader
                   eyebrow="Next Drill"
                   title="Move directly into the error-type drill"
                   description="The learner should not need to hunt for the next recommended practice step after understanding the transcript evidence."
                   className="mb-4"
                 />
-                <div className="flex flex-col gap-4 rounded-2xl border border-gray-100 bg-background-light p-4 md:flex-row md:items-center md:justify-between">
+                <div className="flex flex-col gap-4 rounded-2xl border border-border bg-background-light p-4 md:flex-row md:items-center md:justify-between">
                   <div>
                     <p className="font-bold text-navy">{review.recommendedNextDrill.title}</p>
                     <p className="mt-1 text-sm text-muted">{review.recommendedNextDrill.description}</p>

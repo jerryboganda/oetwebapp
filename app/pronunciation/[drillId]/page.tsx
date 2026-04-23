@@ -178,15 +178,15 @@ export default function PronunciationDrillPage() {
         <Link
           href="/pronunciation"
           aria-label="Back to pronunciation drills"
-          className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+          className="text-muted/60 hover:text-muted"
         >
           <ArrowLeft className="w-5 h-5" />
         </Link>
         <div>
-          <div className="flex items-center gap-2 text-xs text-gray-400 mb-0.5">
+          <div className="flex items-center gap-2 text-xs text-muted/60 mb-0.5">
             <Mic className="w-3.5 h-3.5 text-rose-500" aria-hidden />
             <span className="capitalize">{drill.difficulty}</span>
-            <span className="font-mono bg-gray-100 dark:bg-gray-700 px-1.5 rounded text-gray-600 dark:text-gray-300">
+            <span className="font-mono bg-background-light px-1.5 rounded text-muted">
               {drill.targetPhoneme}
             </span>
             {drill.primaryRuleId && (
@@ -195,7 +195,7 @@ export default function PronunciationDrillPage() {
               </span>
             )}
           </div>
-          <h1 className="text-2xl font-bold text-gray-900 dark:text-white">{drill.label}</h1>
+          <h1 className="text-2xl font-bold text-navy">{drill.label}</h1>
         </div>
       </div>
 
@@ -222,11 +222,11 @@ export default function PronunciationDrillPage() {
           <div className="grid grid-cols-3 gap-3 rounded-xl border border-border bg-surface p-4 text-center shadow-sm">
             <div>
               <div className="text-[11px] uppercase tracking-[0.18em] text-muted">Average score</div>
-              <div className="mt-1 text-lg font-semibold text-navy dark:text-white">{Math.round(progress.averageScore)}%</div>
+              <div className="mt-1 text-lg font-semibold text-navy">{Math.round(progress.averageScore)}%</div>
             </div>
             <div>
               <div className="text-[11px] uppercase tracking-[0.18em] text-muted">Attempts</div>
-              <div className="mt-1 text-lg font-semibold text-navy dark:text-white">{progress.attemptCount}</div>
+              <div className="mt-1 text-lg font-semibold text-navy">{progress.attemptCount}</div>
             </div>
             <div>
               <div className="text-[11px] uppercase tracking-[0.18em] text-muted">Last practiced</div>
@@ -239,11 +239,11 @@ export default function PronunciationDrillPage() {
 
         {drill.audioModelUrl && (
           <div className="bg-surface rounded-xl border border-border p-4 flex items-center gap-4">
-            <div className="p-3 bg-rose-100 dark:bg-rose-900/30 rounded-lg">
-              <Volume2 className="w-6 h-6 text-rose-600 dark:text-rose-400" aria-hidden />
+            <div className="p-3 bg-rose-50 rounded-lg">
+              <Volume2 className="w-6 h-6 text-rose-600" aria-hidden />
             </div>
             <div className="flex-1">
-              <label htmlFor="model-audio" className="text-sm font-medium text-navy dark:text-white">
+              <label htmlFor="model-audio" className="text-sm font-medium text-navy">
                 Model audio
               </label>
               <audio id="model-audio" controls src={drill.audioModelUrl} className="mt-2 w-full h-8" />
@@ -253,7 +253,7 @@ export default function PronunciationDrillPage() {
 
         {exampleWords.length > 0 && (
           <section aria-labelledby="example-words-heading">
-            <h2 id="example-words-heading" className="text-lg font-semibold text-navy dark:text-white mb-3">
+            <h2 id="example-words-heading" className="text-lg font-semibold text-navy mb-3">
               Example words
             </h2>
             <div className="flex flex-wrap gap-2">
@@ -261,7 +261,7 @@ export default function PronunciationDrillPage() {
                 <MotionItem
                   key={`${word}-${i}`}
                   delayIndex={i}
-                  className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-navy shadow-sm dark:text-white/90"
+                  className="rounded-lg border border-border bg-surface px-3 py-1.5 text-sm font-medium text-navy shadow-sm"
                 >
                   {word}
                 </MotionItem>
@@ -272,7 +272,7 @@ export default function PronunciationDrillPage() {
 
         {minimalPairs.length > 0 && (
           <section aria-labelledby="minimal-pairs-heading">
-            <h2 id="minimal-pairs-heading" className="text-lg font-semibold text-navy dark:text-white mb-3">
+            <h2 id="minimal-pairs-heading" className="text-lg font-semibold text-navy mb-3">
               Minimal pairs
             </h2>
             <p className="text-xs text-muted mb-2">Each pair differs by one phoneme. Practise to stop merging them.</p>
@@ -280,11 +280,11 @@ export default function PronunciationDrillPage() {
               {minimalPairs.map((pair, i) => (
                 <div key={`${pair.a}-${pair.b}-${i}`}
                      className="flex items-center gap-2 rounded-lg border border-border bg-surface p-3 text-sm shadow-sm">
-                  <span className="font-medium text-rose-600 dark:text-rose-400" aria-label={`First: ${pair.a}`}>
+                  <span className="font-medium text-rose-600" aria-label={`First: ${pair.a}`}>
                     {pair.a}
                   </span>
                   <span className="text-xs uppercase text-muted">vs</span>
-                  <span className="font-medium text-blue-600 dark:text-blue-400" aria-label={`Second: ${pair.b}`}>
+                  <span className="font-medium text-info" aria-label={`Second: ${pair.b}`}>
                     {pair.b}
                   </span>
                 </div>
@@ -301,13 +301,13 @@ export default function PronunciationDrillPage() {
 
         {sentences.length > 0 && (
           <section aria-labelledby="sentences-heading">
-            <h2 id="sentences-heading" className="text-lg font-semibold text-navy dark:text-white mb-3">
+            <h2 id="sentences-heading" className="text-lg font-semibold text-navy mb-3">
               Practice sentences
             </h2>
             <div className="space-y-2">
               {sentences.map((sentence, i) => (
                 <div key={`${sentence}-${i}`}
-                     className="rounded-lg border border-border bg-surface p-3 text-sm italic text-navy shadow-sm dark:text-white/90">
+                     className="rounded-lg border border-border bg-surface p-3 text-sm italic text-navy shadow-sm">
                   {sentence}
                 </div>
               ))}
@@ -317,12 +317,12 @@ export default function PronunciationDrillPage() {
 
         {drill.tipsHtml && (
           <section aria-labelledby="tips-heading"
-                   className="rounded-2xl border border-rose-200 bg-rose-50/80 p-5 shadow-sm dark:border-rose-900/40 dark:bg-rose-950/20">
-            <h3 id="tips-heading" className="mb-3 flex items-center gap-2 text-sm font-semibold text-rose-800 dark:text-rose-200">
+                   className="rounded-2xl border border-rose-200 bg-rose-50/80 p-5 shadow-sm">
+            <h3 id="tips-heading" className="mb-3 flex items-center gap-2 text-sm font-semibold text-rose-800">
               <AlertTriangle className="h-4 w-4" aria-hidden /> Articulation tips
             </h3>
             <div
-              className="prose prose-sm max-w-none text-rose-950 prose-p:my-2 prose-strong:text-rose-900 dark:prose-invert dark:text-rose-100"
+              className="prose prose-sm max-w-none text-rose-950 prose-p:my-2 prose-strong:text-rose-900"
               /* Admin-authored HTML; trusted source. */
               dangerouslySetInnerHTML={{ __html: drill.tipsHtml }}
             />

@@ -197,7 +197,7 @@ export default function SpeakingHome() {
         ) : null}
 
         {/* Rulebook Source-of-Truth band — parity with Writing / Reading / Selection. */}
-        <MotionSection delayIndex={1} className="rounded-[24px] border border-gray-200 bg-white p-5 shadow-sm">
+        <MotionSection delayIndex={1} className="rounded-[24px] border border-border bg-surface p-5 shadow-sm">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-widest text-muted">Rulebook Source of Truth</p>
@@ -302,7 +302,7 @@ export default function SpeakingHome() {
                         <Card className="border-gray-200/70">
                           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                             <div className="flex items-start gap-4">
-                              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-purple-50 text-purple-600">
+                              <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
                                 <Mic className="h-5 w-5" />
                               </div>
                               <div className="min-w-0">
@@ -432,7 +432,7 @@ export default function SpeakingHome() {
                         <Link
                           key={sub.id}
                           href={`/speaking/results/${sub.evaluationId ?? sub.id}`}
-                          className="block rounded-xl border border-gray-200 px-4 py-3 transition-all duration-200 hover:border-gray-300 hover:bg-gray-50"
+                          className="block rounded-xl border border-border px-4 py-3 transition-all duration-200 hover:border-border-hover hover:bg-background-light"
                         >
                           <div className="flex items-start justify-between gap-3">
                             <div className="min-w-0">

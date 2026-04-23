@@ -71,12 +71,12 @@ export default function LeaderboardPage() {
 
       {/* Controls */}
       <div className="flex flex-wrap gap-3 mb-6">
-        <div className="flex rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div className="flex rounded-lg border border-border overflow-hidden">
           {(['weekly', 'monthly', 'alltime'] as const).map(p => (
             <button
               key={p}
               onClick={() => setPeriod(p)}
-              className={`px-4 py-2 text-sm font-medium capitalize ${period === p ? 'bg-indigo-600 text-white' : 'bg-white dark:bg-gray-800 text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700'}`}
+              className={`px-4 py-2 text-sm font-medium capitalize ${period === p ? 'bg-primary text-white' : 'bg-surface text-muted hover:bg-background-light'}`}
             >
               {p === 'alltime' ? 'All Time' : p}
             </button>
@@ -85,7 +85,7 @@ export default function LeaderboardPage() {
         <select
           value={examType}
           onChange={e => setExamType(e.target.value)}
-          className="px-3 py-2 text-sm border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+          className="px-3 py-2 text-sm border border-border rounded-lg bg-surface text-navy"
         >
           <option value="">All Exams</option>
           <option value="oet">OET</option>
@@ -96,18 +96,18 @@ export default function LeaderboardPage() {
 
       {/* My position */}
       {myPos && (
-        <div className="bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800 rounded-xl p-4 mb-6 flex items-center justify-between">
+        <div className="bg-primary/10 border border-primary/30 rounded-xl p-4 mb-6 flex items-center justify-between">
           <div>
-            <div className="text-sm font-medium text-indigo-700 dark:text-indigo-300">Your Position</div>
-            <div className="text-2xl font-bold text-indigo-900 dark:text-white">
+            <div className="text-sm font-medium text-primary">Your Position</div>
+            <div className="text-2xl font-bold text-primary">
               {myPos.optedIn ? (myPos.rank ? `#${myPos.rank}` : 'Unranked') : 'Not participating'}
             </div>
-            <div className="text-sm text-indigo-600 dark:text-indigo-400">{myPos.totalXp.toLocaleString()} XP · Level {myPos.level}</div>
+            <div className="text-sm text-primary">{myPos.totalXp.toLocaleString()} XP · Level {myPos.level}</div>
           </div>
           <button
             onClick={toggleOptIn}
             disabled={toggling}
-            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${myPos.optedIn ? 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 border border-gray-300 dark:border-gray-600' : 'bg-indigo-600 text-white hover:bg-indigo-700'}`}
+            className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${myPos.optedIn ? 'bg-surface text-navy border border-border-hover' : 'bg-primary text-white hover:bg-primary/90'}`}
           >
             {myPos.optedIn ? 'Opt Out' : 'Join Rankings'}
           </button>
@@ -120,14 +120,14 @@ export default function LeaderboardPage() {
           {Array.from({ length: 10 }).map((_, i) => <Skeleton key={i} className="h-14 rounded-xl" />)}
         </div>
       ) : entries.length === 0 ? (
-        <div className="text-center py-12 text-gray-400">No leaderboard data yet for this period.</div>
+        <div className="text-center py-12 text-muted/60">No leaderboard data yet for this period.</div>
       ) : (
-        <div className="bg-white dark:bg-gray-800 rounded-2xl border border-gray-200 dark:border-gray-700 overflow-hidden">
+        <div className="bg-surface rounded-2xl border border-border overflow-hidden">
           {entries.map((entry, i) => (
             <MotionItem
               key={entry.rank}
               delayIndex={i}
-              className={`flex items-center gap-4 px-5 py-3.5 border-b border-gray-100 dark:border-gray-700 last:border-0 ${entry.isCurrentUser ? 'bg-indigo-50 dark:bg-indigo-900/20' : ''}`}
+              className={`flex items-center gap-4 px-5 py-3.5 border-b border-border last:border-0 ${entry.isCurrentUser ? 'bg-primary/10' : ''}`}
             >
               <div className="w-8 text-center">
                 {entry.rank <= 3 ? (
@@ -135,16 +135,16 @@ export default function LeaderboardPage() {
                     {entry.rank === 1 ? <Crown className="w-5 h-5 mx-auto" /> : <Medal className="w-5 h-5 mx-auto" />}
                   </span>
                 ) : (
-                  <span className="text-sm font-semibold text-gray-400">#{entry.rank}</span>
+                  <span className="text-sm font-semibold text-muted/60">#{entry.rank}</span>
                 )}
               </div>
               <div className="flex-1 min-w-0">
-                <div className="font-medium text-gray-900 dark:text-white text-sm truncate">
-                  {entry.displayName} {entry.isCurrentUser && <span className="text-indigo-500 text-xs">(you)</span>}
+                <div className="font-medium text-navy text-sm truncate">
+                  {entry.displayName} {entry.isCurrentUser && <span className="text-primary text-xs">(you)</span>}
                 </div>
-                <div className="text-xs text-gray-400">Level {entry.level}</div>
+                <div className="text-xs text-muted/60">Level {entry.level}</div>
               </div>
-              <div className="text-sm font-semibold text-gray-700 dark:text-gray-300">{entry.totalXp.toLocaleString()} XP</div>
+              <div className="text-sm font-semibold text-navy">{entry.totalXp.toLocaleString()} XP</div>
             </MotionItem>
           ))}
         </div>

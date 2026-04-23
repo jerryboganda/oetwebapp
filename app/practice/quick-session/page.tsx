@@ -157,9 +157,9 @@ export default function MobileQuickSessionPage() {
                 description="Each card below uses the same surface language as the dashboard, just in a denser format."
               />
               {[
-                { mode: 'vocab', icon: BookOpen, label: 'Medical Vocabulary', desc: '8 questions · Fill-in and multiple choice', color: 'bg-blue-50 text-blue-700 border-blue-200' },
-                { mode: 'listening', icon: Headphones, label: 'Listening Snap Quiz', desc: '5 audio clips with comprehension questions', color: 'bg-purple-50 text-purple-700 border-purple-200' },
-                { mode: 'grammar', icon: BookOpen, label: 'Grammar Quick-Fix', desc: '8 sentence correction exercises', color: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+                { mode: 'vocab', icon: BookOpen, label: 'Medical Vocabulary', desc: '8 questions · Fill-in and multiple choice', color: 'bg-info/10 text-info border-info/30' },
+                { mode: 'listening', icon: Headphones, label: 'Listening Snap Quiz', desc: '5 audio clips with comprehension questions', color: 'bg-primary/10 text-primary border-primary/30' },
+                { mode: 'grammar', icon: BookOpen, label: 'Grammar Quick-Fix', desc: '8 sentence correction exercises', color: 'bg-success/10 text-success border-success/30' },
               ].map(m => (
                 <MotionItem key={m.mode}>
                   <Card className="p-5 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical active:scale-[0.99] cursor-pointer" onClick={() => startSession(m.mode)}>
@@ -219,8 +219,8 @@ export default function MobileQuickSessionPage() {
                 {q.options.map((opt, i) => {
                   let cls = 'border-border bg-muted/20';
                   if (revealed) {
-                    if (i === q.correctIndex) cls = 'border-green-500 bg-green-50 dark:bg-green-950';
-                    else if (i === userAnswer && i !== q.correctIndex) cls = 'border-red-500 bg-red-50 dark:bg-red-950';
+                    if (i === q.correctIndex) cls = 'border-success bg-success/10';
+                    else if (i === userAnswer && i !== q.correctIndex) cls = 'border-danger bg-danger/10';
                   } else if (userAnswer === i) {
                     cls = 'border-primary bg-primary/5';
                   }
@@ -236,8 +236,8 @@ export default function MobileQuickSessionPage() {
                             {String.fromCharCode(65 + i)}
                           </span>
                           <span>{opt}</span>
-                          {revealed && i === q.correctIndex && <CheckCircle2 className="h-4 w-4 text-green-600 ml-auto shrink-0" />}
-                          {revealed && i === userAnswer && i !== q.correctIndex && <XCircle className="h-4 w-4 text-red-500 ml-auto shrink-0" />}
+                          {revealed && i === q.correctIndex && <CheckCircle2 className="h-4 w-4 text-success ml-auto shrink-0" />}
+                          {revealed && i === userAnswer && i !== q.correctIndex && <XCircle className="h-4 w-4 text-danger ml-auto shrink-0" />}
                         </div>
                       </button>
                     </MotionItem>
@@ -247,8 +247,8 @@ export default function MobileQuickSessionPage() {
 
               {/* explanation */}
               {revealed && (
-                <Card className="border-blue-200 bg-blue-50/50 p-4 shadow-sm dark:border-blue-800 dark:bg-blue-950/30">
-                  <p className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-1">Explanation</p>
+                <Card className="border-info/30 bg-info/10 p-4 shadow-sm">
+                  <p className="text-xs font-medium text-info mb-1">Explanation</p>
                   <p className="text-sm text-muted-foreground">{q.explanation}</p>
                 </Card>
               )}
@@ -302,7 +302,7 @@ export default function MobileQuickSessionPage() {
                 const correct = answers[i] === q.correctIndex;
                 return (
                   <div key={q.id} className="flex items-center gap-2 text-sm">
-                    {correct ? <CheckCircle2 className="h-4 w-4 text-green-600 shrink-0" /> : <XCircle className="h-4 w-4 text-red-500 shrink-0" />}
+                    {correct ? <CheckCircle2 className="h-4 w-4 text-success shrink-0" /> : <XCircle className="h-4 w-4 text-danger shrink-0" />}
                     <span className="truncate flex-1">{q.prompt.slice(0, 50)}…</span>
                   </div>
                 );

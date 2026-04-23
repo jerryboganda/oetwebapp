@@ -255,8 +255,8 @@ function PlayerContent() {
       <AppShell pageTitle="Listening Task" distractionFree>
         <div className="mx-auto max-w-3xl space-y-6 px-4 py-8 sm:px-6 lg:px-8">
           <Skeleton className="h-16 rounded-2xl" />
-          <Skeleton className="h-48 rounded-[24px]" />
-          <Skeleton className="h-48 rounded-[24px]" />
+          <Skeleton className="h-48 rounded-2xl" />
+          <Skeleton className="h-48 rounded-2xl" />
         </div>
       </AppShell>
     );
@@ -266,7 +266,7 @@ function PlayerContent() {
     return (
       <AppShell pageTitle="Listening Task" distractionFree>
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
-          <AlertCircle className="h-12 w-12 text-rose-500" />
+          <AlertCircle className="h-12 w-12 text-danger" />
           <h2 className="text-xl font-black text-navy">Listening task unavailable</h2>
           <p className="max-w-md text-sm text-muted">{loadError ?? 'Task not found.'}</p>
           <Link href="/listening"><Button variant="ghost">Back to Listening</Button></Link>
@@ -319,7 +319,7 @@ function PlayerContent() {
         {!hasStarted ? (
           <motion.div
             {...sectionMotion}
-            className="mt-8 rounded-[32px] border border-gray-200 bg-surface p-8 text-center shadow-sm sm:p-12"
+            className="mt-8 rounded-2xl border border-border bg-surface p-8 text-center shadow-sm sm:p-12"
           >
             <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-primary/10">
               <Volume2 className="h-10 w-10 text-primary" />
@@ -332,37 +332,37 @@ function PlayerContent() {
               </p>
             ) : null}
 
-            <div className="mx-auto mb-8 max-w-lg space-y-4 rounded-2xl bg-gray-50 p-6 text-left">
+            <div className="mx-auto mb-8 max-w-lg space-y-4 rounded-2xl bg-background-light p-6 text-left">
               <h3 className="text-sm font-black uppercase tracking-widest text-muted">Before you start</h3>
-              <ul className="space-y-3 text-sm text-gray-600">
+              <ul className="space-y-3 text-sm text-muted">
                 <li className="flex items-start gap-2">
-                  <CheckCircle2 className="h-5 w-5 shrink-0 text-green-500" />
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
                   <span>Answers autosave to your server attempt as you work.</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <CheckCircle2 className="h-5 w-5 shrink-0 text-green-500" />
+                  <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
                   <span>Transcript evidence and answer keys stay locked until submit.</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <Lock className="h-5 w-5 shrink-0 text-amber-600" />
+                  <Lock className="h-5 w-5 shrink-0 text-warning" />
                   <span><strong className="text-navy">Forward-only exam:</strong> once you press Next on a section, it locks permanently and you cannot return to it.</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <Timer className="h-5 w-5 shrink-0 text-amber-600" />
+                  <Timer className="h-5 w-5 shrink-0 text-warning" />
                   <span><strong className="text-navy">Review windows:</strong> A1 = 60s, A2 = 60s, C1 = 30s, C2 = 120s. Part B has no review window. Answer boxes remain editable during each window for its own section only.</span>
                 </li>
                 <li className="flex items-start gap-2">
-                  <Volume2 className="h-5 w-5 shrink-0 text-gray-500" />
+                  <Volume2 className="h-5 w-5 shrink-0 text-muted" />
                   <span>Part B consists of six short workplace extracts (~40 seconds each), one multiple-choice item per extract.</span>
                 </li>
                 {isExam ? (
                   <li className="flex items-start gap-2">
-                    <AlertCircle className="h-5 w-5 shrink-0 text-rose-500" />
-                    <span className="font-bold text-rose-700">Exam mode plays once and disables pause/scrub controls.</span>
+                    <AlertCircle className="h-5 w-5 shrink-0 text-danger" />
+                    <span className="font-bold text-danger">Exam mode plays once and disables pause/scrub controls.</span>
                   </li>
                 ) : (
                   <li className="flex items-start gap-2">
-                    <CheckCircle2 className="h-5 w-5 shrink-0 text-green-500" />
+                    <CheckCircle2 className="h-5 w-5 shrink-0 text-success" />
                     <span>Practice mode allows pause and scrubbing while you build accuracy.</span>
                   </li>
                 )}
@@ -404,7 +404,7 @@ function PlayerContent() {
                 className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition-colors ${
                   isExam
                     ? 'cursor-not-allowed bg-white/10 text-white/30'
-                    : 'bg-white text-navy hover:bg-gray-100'
+                    : 'bg-surface text-navy hover:bg-background-light'
                 }`}
               >
                 {isPlaying ? <Pause className="h-6 w-6" /> : <Play className="ml-1 h-6 w-6" />}
@@ -416,7 +416,7 @@ function PlayerContent() {
                 </div>
                 <div className="relative h-2.5 w-full overflow-hidden rounded-full bg-white/20">
                   <div
-                    className="absolute left-0 top-0 h-full bg-blue-400 transition-all duration-100 ease-linear"
+                    className="absolute left-0 top-0 h-full bg-info transition-all duration-100 ease-linear"
                     style={{ width: `${duration > 0 ? (progress / duration) * 100 : 0}%` }}
                   />
                   {session.modePolicy.canScrub ? (
@@ -441,7 +441,7 @@ function PlayerContent() {
             {saveState === 'error' ? <InlineAlert variant="warning">One answer did not autosave. Keep working; submit will retry saving all answers.</InlineAlert> : null}
 
             {/* Section stepper — forward only. Completed sections are permanently locked. */}
-            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-gray-200 bg-surface p-3 text-xs font-black uppercase tracking-widest">
+            <div className="flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface p-3 text-xs font-black uppercase tracking-widest">
               {sectionsInPaper.map((code, idx) => {
                 const state = idx < currentSectionIndex
                   ? 'locked'
@@ -453,12 +453,12 @@ function PlayerContent() {
                     key={code}
                     className={`inline-flex items-center gap-1 rounded-full px-3 py-1.5 ${
                       state === 'locked'
-                        ? 'bg-gray-100 text-gray-400'
+                        ? 'bg-background-light text-muted/60'
                         : state === 'active'
                           ? 'bg-primary text-white'
                           : state === 'reviewing'
-                            ? 'bg-amber-100 text-amber-800'
-                            : 'bg-gray-50 text-muted'
+                            ? 'bg-warning/10 text-warning'
+                            : 'bg-background-light text-muted'
                     }`}
                   >
                     {state === 'locked' ? <Lock className="h-3 w-3" /> : state === 'reviewing' ? <Timer className="h-3 w-3" /> : null}
@@ -473,20 +473,20 @@ function PlayerContent() {
 
             {/* Review-window countdown banner — answer boxes stay editable. */}
             {phase === 'review' && currentSection ? (
-              <div className="flex flex-col gap-3 rounded-2xl border-2 border-amber-300 bg-amber-50 p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-3 rounded-2xl border-2 border-warning/30 bg-warning/10 p-5 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start gap-3">
-                  <Timer className="mt-0.5 h-5 w-5 shrink-0 text-amber-700" />
+                  <Timer className="mt-0.5 h-5 w-5 shrink-0 text-warning" />
                   <div>
-                    <p className="text-sm font-black text-amber-900">
+                    <p className="text-sm font-black text-warning">
                       {LISTENING_SECTION_LABEL[currentSection]} — review window
                     </p>
-                    <p className="mt-0.5 text-xs text-amber-800">
+                    <p className="mt-0.5 text-xs text-warning">
                       You can finish completing any words you abbreviated. Answers for this section remain fully editable until the timer hits zero or you press Next.
                     </p>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
-                  <span className="rounded-xl bg-amber-200 px-3 py-2 font-mono text-lg font-black text-amber-900">
+                  <span className="rounded-xl bg-warning/20 px-3 py-2 font-mono text-lg font-black text-warning">
                     {formatReviewSeconds(reviewSecondsRemaining)}
                   </span>
                   <Button
@@ -509,7 +509,7 @@ function PlayerContent() {
                 <>
                   {/* Intra-section question jumper — free navigation between this section's questions only. */}
                   {(sectionGroups?.[currentSection]?.length ?? 0) > 1 ? (
-                    <div className="sticky top-40 z-10 flex flex-wrap items-center gap-2 rounded-2xl border border-gray-200 bg-surface/95 p-3 backdrop-blur">
+                    <div className="sticky top-40 z-10 flex flex-wrap items-center gap-2 rounded-2xl border border-border bg-surface/95 p-3 backdrop-blur">
                       <span className="mr-1 text-[10px] font-black uppercase tracking-widest text-muted">
                         Jump to
                       </span>
@@ -528,8 +528,8 @@ function PlayerContent() {
                             aria-label={`Go to question ${question.number}`}
                             className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-xs font-black transition-colors ${
                               isAnswered
-                                ? 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                                : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                                ? 'bg-success/10 text-success hover:bg-success/20'
+                                : 'bg-background-light text-muted hover:bg-border'
                             }`}
                           >
                             {question.number}
@@ -546,7 +546,7 @@ function PlayerContent() {
                   // physically unreachable — that's the forward-only lock.
                   const canEdit = true;
                   return (
-                    <div id={`listening-question-${question.id}`} key={question.id} className="rounded-[24px] border border-gray-200 bg-surface p-6 shadow-sm scroll-mt-48 sm:p-8">
+                    <div id={`listening-question-${question.id}`} key={question.id} className="rounded-2xl border border-border bg-surface p-6 shadow-sm scroll-mt-48 sm:p-8">
                       <h3 className="mb-6 text-lg font-medium leading-relaxed text-navy">
                         <span className="mb-2 block text-xs font-black uppercase tracking-widest text-muted">
                           {LISTENING_SECTION_LABEL[currentSection]} / Question {question.number}
@@ -565,12 +565,12 @@ function PlayerContent() {
                                 className={`w-full rounded-xl border-2 p-4 text-left transition-all sm:p-5 ${
                                   isSelected
                                     ? 'border-primary bg-primary/5 font-medium text-primary'
-                                    : 'border-gray-100 text-gray-700 hover:border-gray-200 hover:bg-gray-50'
+                                    : 'border-border text-navy hover:border-border-hover hover:bg-background-light'
                                 } ${!canEdit ? 'cursor-not-allowed opacity-60' : ''}`}
                               >
                                 <div className="flex items-center gap-4">
                                   <div className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 transition-colors ${
-                                    isSelected ? 'border-primary' : 'border-gray-300'
+                                    isSelected ? 'border-primary' : 'border-border-hover'
                                   }`}>
                                     {isSelected ? <div className="h-2.5 w-2.5 rounded-full bg-primary" /> : null}
                                   </div>
@@ -592,7 +592,7 @@ function PlayerContent() {
                             onChange={(event) => handleAnswerChange(question.id, event.target.value)}
                             readOnly={!canEdit}
                             placeholder="Type your answer here..."
-                            className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-base text-navy outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
+                            className="w-full rounded-xl border border-border bg-surface px-4 py-3 text-base text-navy outline-none transition focus:border-primary focus:ring-2 focus:ring-primary/15"
                             aria-label={`Answer for question ${question.number}`}
                           />
                         </div>

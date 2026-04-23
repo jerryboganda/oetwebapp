@@ -131,7 +131,7 @@ export default function AiSettingsPage() {
         {error && <InlineAlert variant="error">{error}</InlineAlert>}
 
         {/* Usage meter */}
-        <section className="bg-surface rounded-[24px] border border-gray-200 p-6 space-y-3">
+        <section className="bg-surface rounded-2xl border border-border p-6 space-y-3">
           <h2 className="text-lg font-semibold">AI credit usage</h2>
           {loading ? (
             <Skeleton className="h-20 w-full" />
@@ -144,9 +144,9 @@ export default function AiSettingsPage() {
                 </span>
                 <span className="text-sm text-muted">Today: {usage.tokensUsedToday.toLocaleString()}</span>
               </div>
-              <div className="w-full h-2 bg-gray-100 rounded-full overflow-hidden">
+              <div className="w-full h-2 bg-background-light rounded-full overflow-hidden">
                 <div
-                  className={`h-full transition-all ${monthlyPct > 85 ? 'bg-red-500' : monthlyPct > 60 ? 'bg-amber-500' : 'bg-emerald-500'}`}
+                  className={`h-full transition-all ${monthlyPct > 85 ? 'bg-danger' : monthlyPct > 60 ? 'bg-warning' : 'bg-success'}`}
                   style={{ width: `${monthlyPct}%` }}
                 />
               </div>
@@ -165,7 +165,7 @@ export default function AiSettingsPage() {
         </section>
 
         {/* Mode preference */}
-        <section className="bg-surface rounded-[24px] border border-gray-200 p-6 space-y-4">
+        <section className="bg-surface rounded-2xl border border-border p-6 space-y-4">
           <h2 className="text-lg font-semibold">How should we route AI calls?</h2>
           <p className="text-sm text-muted">
             Your choice applies to non-scoring features (practice, summarisation, conversation). Scoring-critical
@@ -196,7 +196,7 @@ export default function AiSettingsPage() {
         </section>
 
         {/* Stored credentials */}
-        <section className="bg-surface rounded-[24px] border border-gray-200 p-6 space-y-4">
+        <section className="bg-surface rounded-2xl border border-border p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-lg font-semibold">Stored API keys</h2>
             <Button variant="primary" onClick={() => setShowAdd(true)}>
@@ -208,7 +208,7 @@ export default function AiSettingsPage() {
           ) : credentials.length === 0 ? (
             <p className="text-sm text-muted">No API keys stored. Add one to route calls through your own account.</p>
           ) : (
-            <ul className="divide-y divide-gray-100">
+            <ul className="divide-y divide-border">
               {credentials.map((c) => (
                 <li key={c.id} className="py-3 flex items-center justify-between">
                   <div>

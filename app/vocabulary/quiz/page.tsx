@@ -175,7 +175,7 @@ export default function VocabQuizPage() {
       </div>
 
       {/* Format picker */}
-      <Card className="mb-4 border-gray-200 bg-surface p-4">
+      <Card className="mb-4 border-border bg-surface p-4">
         <div className="mb-2 text-xs font-medium uppercase text-muted">Quiz format</div>
         <div className="flex flex-wrap gap-2">
           {QUIZ_FORMATS.map(fmt => (
@@ -185,7 +185,7 @@ export default function VocabQuizPage() {
               className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
                 format === fmt.id
                   ? 'bg-primary text-white'
-                  : 'border border-gray-200 bg-background-light text-navy hover:border-primary/30'
+                  : 'border border-border bg-background-light text-navy hover:border-primary/30'
               }`}
             >
               {fmt.label}
@@ -212,27 +212,27 @@ export default function VocabQuizPage() {
         </div>
       ) : result ? (
         <MotionSection className="mx-auto max-w-md py-12 text-center">
-          <Card className="border-gray-200 bg-surface p-8">
+          <Card className="border-border bg-surface p-8">
             <div className="text-6xl font-bold text-navy mb-2">{result.correctCount}/{result.termsQuizzed}</div>
             <div className="text-xl text-muted mb-4">{Math.round(result.score)}% correct</div>
             <div className="text-xs text-muted mb-2">
               {result.durationSeconds}s · {result.format.replace(/_/g, ' ')}
             </div>
             {result.xpAwarded > 0 && (
-              <div className="inline-flex items-center gap-1.5 rounded-full bg-amber-100 px-4 py-2 text-sm font-medium text-amber-700 mb-4">
+              <div className="inline-flex items-center gap-1.5 rounded-full bg-warning/10 px-4 py-2 text-sm font-medium text-warning mb-4">
                 +{result.xpAwarded} XP earned
               </div>
             )}
             {result.newlyMasteredTermIds?.length > 0 && (
-              <div className="mb-6 rounded-2xl bg-green-50 p-3 text-sm text-green-700">
+              <div className="mb-6 rounded-2xl bg-success/10 p-3 text-sm text-success">
                 🎉 You mastered {result.newlyMasteredTermIds.length} new term{result.newlyMasteredTermIds.length > 1 ? 's' : ''}!
               </div>
             )}
             <div className="flex flex-wrap gap-3 justify-center">
-              <Link href="/vocabulary" className="rounded-xl border border-gray-200 bg-background-light px-5 py-2.5 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-surface">
+              <Link href="/vocabulary" className="rounded-xl border border-border bg-background-light px-5 py-2.5 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-surface">
                 Back to Vocabulary
               </Link>
-              <Link href="/vocabulary/quiz/history" className="rounded-xl border border-gray-200 bg-background-light px-5 py-2.5 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-surface">
+              <Link href="/vocabulary/quiz/history" className="rounded-xl border border-border bg-background-light px-5 py-2.5 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-surface">
                 See history
               </Link>
               <button onClick={() => loadQuiz(format)} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90">
@@ -262,7 +262,7 @@ export default function VocabQuizPage() {
             <div className="h-1.5 rounded-full bg-primary transition-all" style={{ width: `${Math.min(100, ((current + 1) / questions.length) * 100)}%` }} />
           </div>
 
-          <Card className="mb-4 border-gray-200 bg-surface p-6">
+          <Card className="mb-4 border-border bg-surface p-6">
             <div className="mb-2 text-xs font-medium uppercase text-muted">
               {q.format === 'context_usage' ? 'Context Usage' : q.format === 'synonym_match' ? 'Synonym' : q.format === 'fill_blank' ? 'Fill the blank' : q.format === 'audio_recognition' ? 'Audio' : 'What does this word mean?'}
             </div>
@@ -283,11 +283,11 @@ export default function VocabQuizPage() {
           {isMcqFormat && q.options && q.options.length > 0 && (
             <div className="space-y-2">
               {q.options.map((option, idx) => {
-                let cls = 'border border-gray-200 bg-surface text-navy hover:border-primary/30 hover:bg-background-light';
+                let cls = 'border border-border bg-surface text-navy hover:border-primary/30 hover:bg-background-light';
                 if (revealed) {
-                  if (idx === q.correctIndex) cls = 'border border-green-300 bg-green-50 text-green-900';
-                  else if (idx === selectedOption) cls = 'border border-red-300 bg-red-50 text-red-900';
-                  else cls = 'border border-gray-200 bg-background-light text-muted opacity-70';
+                  if (idx === q.correctIndex) cls = 'border border-success/30 bg-success/10 text-success';
+                  else if (idx === selectedOption) cls = 'border border-danger/30 bg-danger/10 text-danger';
+                  else cls = 'border border-border bg-background-light text-muted opacity-70';
                 }
                 return (
                   <button
@@ -300,8 +300,8 @@ export default function VocabQuizPage() {
                       {idx + 1}
                     </span>
                     <span className="text-sm">{option}</span>
-                    {revealed && idx === q.correctIndex && <CheckCircle2 className="w-4 h-4 text-green-500 ml-auto" />}
-                    {revealed && idx === selectedOption && idx !== q.correctIndex && <XCircle className="w-4 h-4 text-red-500 ml-auto" />}
+                    {revealed && idx === q.correctIndex && <CheckCircle2 className="w-4 h-4 text-success ml-auto" />}
+                    {revealed && idx === selectedOption && idx !== q.correctIndex && <XCircle className="w-4 h-4 text-danger ml-auto" />}
                   </button>
                 );
               })}
@@ -317,7 +317,7 @@ export default function VocabQuizPage() {
                 onKeyDown={e => { if (e.key === 'Enter' && !revealed) handleTextSubmit(); }}
                 disabled={revealed}
                 placeholder="Type your answer…"
-                className="w-full rounded-2xl border border-gray-200 bg-surface px-4 py-3 text-base text-navy focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
+                className="w-full rounded-2xl border border-border bg-surface px-4 py-3 text-base text-navy focus:outline-none focus:ring-2 focus:ring-primary/30 disabled:opacity-60"
                 aria-label="Your answer"
                 autoFocus
               />
@@ -331,7 +331,7 @@ export default function VocabQuizPage() {
                 </button>
               )}
               {revealed && (
-                <div className={`rounded-2xl p-3 text-sm ${answers[q.termId]?.correct ? 'bg-green-50 text-green-900' : 'bg-red-50 text-red-900'}`}>
+                <div className={`rounded-2xl p-3 text-sm ${answers[q.termId]?.correct ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
                   {answers[q.termId]?.correct ? 'Correct!' : (<>
                     Not quite. The correct answer is <strong>{q.correctAnswer}</strong>.
                   </>)}
@@ -354,7 +354,7 @@ export default function VocabQuizPage() {
           )}
         </div>
       ) : !premiumBlock ? (
-        <div className="text-center py-12 text-gray-400">
+        <div className="text-center py-12 text-muted/60">
           No quiz questions available for this format. Try another format or add more words to your vocabulary list first.
         </div>
       ) : null}

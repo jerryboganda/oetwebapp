@@ -48,15 +48,15 @@ type Booking = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-  Reserved: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
-  PendingPayment: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
-  Confirmed: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-  ZoomCreated: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
-  InProgress: 'bg-indigo-100 text-indigo-700 dark:bg-indigo-900/30 dark:text-indigo-300',
-  Completed: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
-  Cancelled: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
-  Expired: 'bg-gray-100 text-gray-500 dark:bg-gray-800 dark:text-gray-400',
-  Failed: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300',
+  Reserved: 'bg-warning/10 text-warning',
+  PendingPayment: 'bg-warning/10 text-warning',
+  Confirmed: 'bg-info/10 text-info',
+  ZoomCreated: 'bg-success/10 text-success',
+  InProgress: 'bg-primary/10 text-primary',
+  Completed: 'bg-success/10 text-success',
+  Cancelled: 'bg-danger/10 text-danger',
+  Expired: 'bg-background-light text-muted',
+  Failed: 'bg-danger/10 text-danger',
 };
 
 const FRIENDLY_STATUS: Record<string, string> = {
@@ -248,10 +248,10 @@ export default function PrivateSpeakingPage() {
 
       {/* View mode toggle */}
       <div className="flex gap-2 mb-6">
-        <button onClick={() => setViewMode('browse')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'browse' ? 'bg-indigo-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
+        <button onClick={() => setViewMode('browse')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'browse' ? 'bg-primary text-white' : 'bg-background-light text-muted hover:bg-border'}`}>
           Browse Slots
         </button>
-        <button onClick={() => setViewMode('bookings')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'bookings' ? 'bg-indigo-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-700'}`}>
+        <button onClick={() => setViewMode('bookings')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors ${viewMode === 'bookings' ? 'bg-primary text-white' : 'bg-background-light text-muted hover:bg-border'}`}>
           My Bookings {bookings.length > 0 && <span className="ml-1 bg-white/20 px-1.5 rounded-full text-xs">{bookings.length}</span>}
         </button>
       </div>
@@ -263,17 +263,17 @@ export default function PrivateSpeakingPage() {
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-3 mb-5">
             <div className="flex items-center gap-2">
               <button onClick={() => setWeekOffset(Math.max(0, weekOffset - 1))} disabled={weekOffset === 0}
-                className="p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 disabled:opacity-30 transition-colors">
+                className="p-2.5 rounded-lg border border-border hover:bg-background-light disabled:opacity-30 transition-colors">
                 <ChevronLeft className="w-4 h-4" />
               </button>
-              <span className="text-sm font-medium text-gray-700 dark:text-gray-300 min-w-[200px] text-center">{weekLabel}</span>
+              <span className="text-sm font-medium text-navy min-w-[200px] text-center">{weekLabel}</span>
               <button onClick={() => setWeekOffset(weekOffset + 1)}
-                className="p-2.5 rounded-lg border border-gray-200 dark:border-gray-700 hover:bg-gray-100 dark:hover:bg-gray-800 transition-colors">
+                className="p-2.5 rounded-lg border border-border hover:bg-background-light transition-colors">
                 <ChevronRight className="w-4 h-4" />
               </button>
             </div>
             <select value={selectedTutor ?? ''} onChange={e => setSelectedTutor(e.target.value || null)}
-              className="px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-700 dark:text-gray-300">
+              className="px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy">
               <option value="">All tutors</option>
               {tutors.map(t => (
                 <option key={t.id} value={t.id}>{t.displayName}</option>
@@ -286,21 +286,21 @@ export default function PrivateSpeakingPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-6">
               {tutors.map(t => (
                 <button key={t.id} onClick={() => setSelectedTutor(t.id)}
-                  className="text-left bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4 hover:border-indigo-300 dark:hover:border-indigo-600 transition-colors">
+                  className="text-left bg-surface rounded-xl border border-border p-4 hover:border-primary/30 transition-colors">
                   <div className="flex items-center gap-3 mb-2">
-                    <div className="w-10 h-10 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
-                      <User className="w-5 h-5 text-indigo-600 dark:text-indigo-400" />
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                      <User className="w-5 h-5 text-primary" />
                     </div>
                     <div>
-                      <h4 className="font-medium text-gray-900 dark:text-white text-sm">{t.displayName}</h4>
-                      <div className="flex items-center gap-1 text-xs text-gray-400">
-                        {t.averageRating > 0 && <><Star className="w-3 h-3 text-yellow-400 fill-yellow-400" /> {t.averageRating.toFixed(1)}</>}
+                      <h4 className="font-medium text-navy text-sm">{t.displayName}</h4>
+                      <div className="flex items-center gap-1 text-xs text-muted/60">
+                        {t.averageRating > 0 && <><Star className="w-3 h-3 text-warning fill-warning" /> {t.averageRating.toFixed(1)}</>}
                         {t.totalSessions > 0 && <span className="ml-1">· {t.totalSessions} sessions</span>}
                       </div>
                     </div>
                   </div>
-                  {t.bio && <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2">{t.bio}</p>}
-                  <div className="mt-2 text-xs text-indigo-600 dark:text-indigo-400">
+                  {t.bio && <p className="text-xs text-muted line-clamp-2">{t.bio}</p>}
+                  <div className="mt-2 text-xs text-primary">
                     {formatPrice(t.priceOverrideMinorUnits ?? config.defaultPriceMinorUnits, config.currency)} · {t.slotDurationOverrideMinutes ?? config.defaultSlotDurationMinutes} min
                   </div>
                 </button>
@@ -311,7 +311,7 @@ export default function PrivateSpeakingPage() {
           {slotsLoading ? (
             <div className="space-y-3"><Skeleton className="h-32 rounded-xl" /><Skeleton className="h-32 rounded-xl" /></div>
           ) : Object.keys(slotsByDate).length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
+            <div className="text-center py-12 text-muted/60">
               <Calendar className="w-10 h-10 mx-auto mb-3 opacity-30" />
               <p>No available slots this week. Try another week or tutor.</p>
             </div>
@@ -319,7 +319,7 @@ export default function PrivateSpeakingPage() {
             <div className="space-y-4">
               {Object.entries(slotsByDate).sort(([a], [b]) => a.localeCompare(b)).map(([date, daySlots]) => (
                 <div key={date}>
-                  <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 mb-2">
+                  <h3 className="text-sm font-semibold text-navy mb-2">
                     {new Date(date + 'T00:00:00').toLocaleDateString('en-AU', { weekday: 'long', day: 'numeric', month: 'long' })}
                   </h3>
                   <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
@@ -330,12 +330,12 @@ export default function PrivateSpeakingPage() {
                           onClick={() => setSelectedSlot(isSelected ? null : slot)}
                           className={`p-3 rounded-lg border text-left transition-all text-sm ${
                             isSelected
-                              ? 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900/20 ring-2 ring-indigo-300'
-                              : 'border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 hover:border-indigo-300'
+                              ? 'border-primary bg-primary/10 ring-2 ring-primary/30'
+                              : 'border-border bg-surface hover:border-primary/30'
                           }`}>
-                          <div className="font-medium text-gray-900 dark:text-white">{slot.startTimeLocal}</div>
-                          <div className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{slot.tutorDisplayName}</div>
-                          <div className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">
+                          <div className="font-medium text-navy">{slot.startTimeLocal}</div>
+                          <div className="text-xs text-muted mt-0.5">{slot.tutorDisplayName}</div>
+                          <div className="text-xs text-primary mt-1">
                             {formatPrice(slot.priceMinorUnits, slot.currency)} · {slot.durationMinutes}m
                           </div>
                         </button>
@@ -349,29 +349,29 @@ export default function PrivateSpeakingPage() {
 
           {/* Booking confirmation panel */}
           {selectedSlot && (
-            <MotionSection className="fixed bottom-[calc(var(--bottom-nav-height)+0.5rem)] lg:bottom-6 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md bg-white dark:bg-gray-800 rounded-xl border border-indigo-200 dark:border-indigo-700 shadow-2xl p-5 z-40">
+            <MotionSection className="fixed bottom-[calc(var(--bottom-nav-height)+0.5rem)] lg:bottom-6 left-4 right-4 sm:left-auto sm:right-6 sm:max-w-md bg-surface rounded-xl border border-primary/30 shadow-2xl p-5 z-40">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="font-semibold text-gray-900 dark:text-white">Confirm Booking</h3>
-                <button onClick={() => setSelectedSlot(null)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5" /></button>
+                <h3 className="font-semibold text-navy">Confirm Booking</h3>
+                <button onClick={() => setSelectedSlot(null)} className="text-muted/60 hover:text-muted"><X className="w-5 h-5" /></button>
               </div>
-              <div className="space-y-2 text-sm text-gray-600 dark:text-gray-300 mb-4">
-                <div className="flex items-center gap-2"><User className="w-4 h-4 text-gray-400" /> {selectedSlot.tutorDisplayName}</div>
-                <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-gray-400" /> {formatDate(selectedSlot.startTimeUtc)}</div>
-                <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-gray-400" /> {selectedSlot.durationMinutes} minutes</div>
-                <div className="flex items-center gap-2"><CreditCard className="w-4 h-4 text-gray-400" /> {formatPrice(selectedSlot.priceMinorUnits, selectedSlot.currency)}</div>
+              <div className="space-y-2 text-sm text-muted mb-4">
+                <div className="flex items-center gap-2"><User className="w-4 h-4 text-muted/60" /> {selectedSlot.tutorDisplayName}</div>
+                <div className="flex items-center gap-2"><Calendar className="w-4 h-4 text-muted/60" /> {formatDate(selectedSlot.startTimeUtc)}</div>
+                <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-muted/60" /> {selectedSlot.durationMinutes} minutes</div>
+                <div className="flex items-center gap-2"><CreditCard className="w-4 h-4 text-muted/60" /> {formatPrice(selectedSlot.priceMinorUnits, selectedSlot.currency)}</div>
               </div>
               <textarea
                 placeholder="Notes for the tutor (optional)"
                 value={bookingNotes}
                 onChange={e => setBookingNotes(e.target.value)}
                 rows={2}
-                className="w-full px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg text-sm bg-white dark:bg-gray-900 text-gray-800 dark:text-gray-200 resize-none focus:outline-none focus:ring-2 focus:ring-indigo-400 mb-3"
+                className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy resize-none focus:outline-none focus:ring-2 focus:ring-primary/40 mb-3"
               />
               <button onClick={handleBook} disabled={bookingInProgress}
-                className="w-full px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors">
+                className="w-full px-5 py-2.5 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium disabled:opacity-50 transition-colors">
                 {bookingInProgress ? 'Processing...' : `Pay ${formatPrice(selectedSlot.priceMinorUnits, selectedSlot.currency)} & Book`}
               </button>
-                <p className="text-xs text-gray-400 text-center mt-2">
+                <p className="text-xs text-muted/60 text-center mt-2">
                   You&apos;ll be redirected to secure checkout. Slot reserved for {config.reservationTimeoutMinutes} minutes.
                 </p>
             </MotionSection>
@@ -384,7 +384,7 @@ export default function PrivateSpeakingPage() {
         <>
           <LearnerSurfaceSectionHeader title="Your Bookings" />
           {bookings.length === 0 ? (
-            <div className="text-center py-12 text-gray-400">
+            <div className="text-center py-12 text-muted/60">
               <Mic className="w-10 h-10 mx-auto mb-3 opacity-30" />
               <p>No bookings yet. Browse available slots to get started.</p>
             </div>
@@ -392,16 +392,16 @@ export default function PrivateSpeakingPage() {
             <div className="space-y-3">
               {bookings.map((booking, i) => (
                 <MotionItem key={booking.id} delayIndex={i}
-                  className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 p-4">
+                  className="bg-surface rounded-xl border border-border p-4">
                   <div className="flex flex-col sm:flex-row sm:items-center gap-3">
                     <div className="flex-1">
                       <div className="flex items-center gap-2 mb-1">
-                        <span className="font-medium text-gray-900 dark:text-white text-sm">{booking.tutorName ?? 'Tutor'}</span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[booking.status] ?? 'bg-gray-100 text-gray-500'}`}>
+                        <span className="font-medium text-navy text-sm">{booking.tutorName ?? 'Tutor'}</span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full ${STATUS_COLORS[booking.status] ?? 'bg-background-light text-muted'}`}>
                           {FRIENDLY_STATUS[booking.status] ?? booking.status}
                         </span>
                       </div>
-                      <div className="flex items-center gap-3 text-xs text-gray-400">
+                      <div className="flex items-center gap-3 text-xs text-muted/60">
                         <span className="flex items-center gap-1"><Calendar className="w-3.5 h-3.5" />{formatDate(booking.sessionStartUtc)}</span>
                         <span>{booking.durationMinutes} min</span>
                         <span>{formatPrice(booking.priceMinorUnits, booking.currency)}</span>
@@ -412,7 +412,7 @@ export default function PrivateSpeakingPage() {
                       {/* Zoom join button */}
                       {booking.zoomJoinUrl && (booking.status === 'ZoomCreated' || booking.status === 'Confirmed') && (
                         <a href={booking.zoomJoinUrl} target="_blank" rel="noopener noreferrer"
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-medium transition-colors">
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-info hover:bg-info/90 text-white rounded-lg text-xs font-medium transition-colors">
                           <Video className="w-3.5 h-3.5" /> Join Zoom
                         </a>
                       )}
@@ -420,7 +420,7 @@ export default function PrivateSpeakingPage() {
                       {/* Cancel button */}
                       {(booking.status === 'Confirmed' || booking.status === 'ZoomCreated') && (
                         <button onClick={() => handleCancel(booking.id)}
-                          className="text-xs text-red-500 hover:text-red-600 font-medium">
+                          className="text-xs text-danger hover:text-danger font-medium">
                           Cancel
                         </button>
                       )}
@@ -431,23 +431,23 @@ export default function PrivateSpeakingPage() {
                           <div className="flex flex-wrap items-center gap-2">
                             {[1, 2, 3, 4, 5].map(v => (
                               <button key={v} onClick={() => setRatingValue(v)}
-                                className={`w-10 h-10 rounded-full text-sm ${ratingValue >= v ? 'text-yellow-400' : 'text-gray-300'}`}>★</button>
+                                className={`w-10 h-10 rounded-full text-sm ${ratingValue >= v ? 'text-warning' : 'text-muted/40'}`}>★</button>
                             ))}
                             <input type="text" placeholder="Feedback" value={ratingFeedback}
                               onChange={e => setRatingFeedback(e.target.value)}
-                              className="px-2 py-1 border border-gray-200 dark:border-gray-700 rounded text-xs w-24" />
-                            <button onClick={() => handleRate(booking.id)} className="text-xs px-3 py-2.5 bg-yellow-500 hover:bg-yellow-600 text-white rounded-lg">Submit</button>
-                            <button onClick={() => setRatingSession(null)} className="text-xs text-gray-400 py-2 px-1">Cancel</button>
+                              className="px-2 py-1 border border-border rounded text-xs w-24" />
+                            <button onClick={() => handleRate(booking.id)} className="text-xs px-3 py-2.5 bg-warning hover:bg-warning/90 text-white rounded-lg">Submit</button>
+                            <button onClick={() => setRatingSession(null)} className="text-xs text-muted/60 py-2 px-1">Cancel</button>
                           </div>
                         ) : (
-                          <button onClick={() => setRatingSession(booking.id)} className="flex items-center gap-1.5 text-sm text-yellow-500 hover:text-yellow-600 font-medium py-2 px-1">
+                          <button onClick={() => setRatingSession(booking.id)} className="flex items-center gap-1.5 text-sm text-warning hover:text-warning font-medium py-2 px-1">
                             <Star className="w-4 h-4" /> Rate
                           </button>
                         )
                       )}
 
                       {booking.learnerRating !== null && (
-                        <div className="flex items-center gap-1 text-yellow-400 text-sm">
+                        <div className="flex items-center gap-1 text-warning text-sm">
                           {'★'.repeat(booking.learnerRating)}{'☆'.repeat(5 - booking.learnerRating)}
                         </div>
                       )}

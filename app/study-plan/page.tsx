@@ -35,6 +35,7 @@ const SUBTEST_ICONS: Record<SubTest, React.ElementType> = {
   Speaking: Mic,
 };
 
+// Subtest accents — DESIGN palette tier-2 tints.
 const SUBTEST_COLORS: Record<SubTest, string> = {
   Reading: 'bg-blue-100 text-blue-700 border-blue-200',
   Listening: 'bg-purple-100 text-purple-700 border-purple-200',
@@ -119,8 +120,8 @@ export default function StudyPlanPage() {
         animate={{ opacity: 1, y: 0 }}
         exit={{ opacity: 0, scale: 0.95 }}
         key={task.id}
-        className={`bg-surface border rounded-xl overflow-hidden transition-all duration-200 ${
-          isCompleted ? 'border-gray-200 opacity-60' : 'border-gray-200/60 shadow-sm hover:border-gray-300 hover:shadow-md'
+        className={`bg-surface border border-border rounded-2xl overflow-hidden shadow-sm transition-all duration-200 ${
+          isCompleted ? 'opacity-60' : 'hover:shadow-md'
         }`}
       >
         <div className="p-4 sm:p-5">
@@ -133,13 +134,13 @@ export default function StudyPlanPage() {
                   {task.subTest}
                 </span>
                 {isCompleted && (
-                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold uppercase bg-green-100 text-green-700 border border-green-200">
+                  <span className="inline-flex items-center gap-1 px-2 py-1 rounded-md text-xs font-bold uppercase bg-success/10 text-success border border-success/20">
                     <CheckCircle2 className="w-3.5 h-3.5" /> Done
                   </span>
                 )}
               </div>
 
-              <h3 className={`text-base font-bold text-navy mb-1.5 ${isCompleted ? 'line-through text-gray-500' : ''}`}>
+              <h3 className={`text-base font-bold text-navy mb-1.5 ${isCompleted ? 'line-through text-muted' : ''}`}>
                 {task.title}
               </h3>
 
@@ -167,7 +168,7 @@ export default function StudyPlanPage() {
                       exit={{ height: 0, opacity: 0 }}
                       className="overflow-hidden"
                     >
-                      <p className="mt-2 p-3 bg-blue-50/50 border border-blue-100 rounded-lg text-sm text-navy/80 leading-relaxed">
+                      <p className="mt-2 p-3 bg-info/5 border border-info/20 rounded-lg text-sm text-navy/80 leading-relaxed">
                         {task.rationale}
                       </p>
                     </motion.div>
@@ -177,7 +178,7 @@ export default function StudyPlanPage() {
             </div>
 
             {/* Actions */}
-            <div className="flex flex-row sm:flex-col items-center sm:items-stretch justify-end gap-2 shrink-0 border-t sm:border-t-0 pt-3 sm:pt-0 border-gray-100">
+            <div className="flex flex-row sm:flex-col items-center sm:items-stretch justify-end gap-2 shrink-0 border-t sm:border-t-0 pt-3 sm:pt-0 border-border">
               {!isCompleted ? (
                 <>
                   <Button variant="primary" size="sm" onClick={() => handleStart(task)} className="flex-1 sm:flex-none">

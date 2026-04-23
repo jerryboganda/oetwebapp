@@ -31,10 +31,10 @@ interface DriftData {
 }
 
 const DRIFT_COLOR: Record<string, string> = {
-  severe: 'text-red-600 bg-red-50 dark:bg-red-950',
-  moderate: 'text-amber-600 bg-amber-50 dark:bg-amber-950',
-  mild: 'text-yellow-600 bg-yellow-50 dark:bg-yellow-950',
-  'on-track': 'text-emerald-600 bg-emerald-50 dark:bg-emerald-950',
+  severe: 'text-danger bg-danger/10',
+  moderate: 'text-warning bg-warning/10',
+  mild: 'text-warning bg-warning/10',
+  'on-track': 'text-success bg-success/10',
 };
 
 export default function StudyPlanDriftPage() {
@@ -92,7 +92,7 @@ export default function StudyPlanDriftPage() {
                         </div>
                         <div className="flex justify-between mt-1 text-xs text-muted-foreground">
                           <span>{s.completed}/{s.total} done</span>
-                          {s.overdue > 0 && <span className="text-red-500">{s.overdue} overdue</span>}
+                          {s.overdue > 0 && <span className="text-danger">{s.overdue} overdue</span>}
                         </div>
                       </Card>
                     </MotionItem>

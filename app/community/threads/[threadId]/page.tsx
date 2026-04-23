@@ -84,9 +84,9 @@ function formatDate(dateStr: string) {
 
 function roleColor(role: string) {
   switch (role) {
-    case 'expert': return 'text-purple-700 bg-purple-50 border-purple-200';
-    case 'admin': return 'text-red-700 bg-red-50 border-red-200';
-    default: return 'text-blue-700 bg-blue-50 border-blue-200';
+    case 'expert': return 'text-primary bg-primary/10 border-primary/30';
+    case 'admin': return 'text-danger bg-danger/10 border-danger/30';
+    default: return 'text-info bg-info/10 border-info/30';
   }
 }
 
@@ -278,17 +278,17 @@ export default function ThreadPage() {
               <div>
                 <div className="flex flex-wrap items-center gap-2 mb-2">
                   {thread.isPinned && (
-                    <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50">
+                    <Badge variant="outline" className="text-warning border-warning/30 bg-warning/10">
                       <Pin className="mr-1 h-3 w-3" /> Pinned
                     </Badge>
                   )}
                   {thread.isLocked && (
-                    <Badge variant="outline" className="text-gray-500 border-gray-300">
+                    <Badge variant="outline" className="text-muted border-border-hover">
                       <Lock className="mr-1 h-3 w-3" /> Locked
                     </Badge>
                   )}
                   {isAuthor && (
-                    <Badge variant="outline" className="text-emerald-600 border-emerald-300 bg-emerald-50">
+                    <Badge variant="outline" className="text-success border-success/30 bg-success/10">
                       Your thread
                     </Badge>
                   )}
@@ -308,22 +308,22 @@ export default function ThreadPage() {
                       size="sm"
                       onClick={handleDelete}
                       disabled={deleting}
-                      className="text-red-600 hover:bg-red-50"
+                      className="text-danger hover:bg-danger/10"
                     >
                       <Trash2 className="mr-1 h-3.5 w-3.5" /> {deleting ? 'Deleting…' : 'Delete'}
                     </Button>
                   </div>
                 )}
                 {isAdmin && (
-                  <div className="flex flex-wrap items-center gap-2 mt-2 rounded-lg border border-red-100 bg-red-50/50 p-2">
-                    <Badge variant="outline" className="text-red-600 border-red-300 bg-red-50 text-xs mr-1">Admin</Badge>
+                  <div className="flex flex-wrap items-center gap-2 mt-2 rounded-lg border border-danger/30 bg-danger/10 p-2">
+                    <Badge variant="outline" className="text-danger border-danger/30 bg-danger/10 text-xs mr-1">Admin</Badge>
                     <Button
                       variant="outline"
                       size="sm"
                       onClick={handleAdminPin}
                       disabled={moderating}
                     >
-                      <Pin className={`mr-1 h-3.5 w-3.5 ${thread.isPinned ? 'text-amber-600' : ''}`} />
+                      <Pin className={`mr-1 h-3.5 w-3.5 ${thread.isPinned ? 'text-warning' : ''}`} />
                       {thread.isPinned ? 'Unpin' : 'Pin'}
                     </Button>
                     <Button
@@ -332,7 +332,7 @@ export default function ThreadPage() {
                       onClick={handleAdminLock}
                       disabled={moderating}
                     >
-                      <Lock className={`mr-1 h-3.5 w-3.5 ${thread.isLocked ? 'text-red-600' : ''}`} />
+                      <Lock className={`mr-1 h-3.5 w-3.5 ${thread.isLocked ? 'text-danger' : ''}`} />
                       {thread.isLocked ? 'Unlock' : 'Lock'}
                     </Button>
                     <Button
@@ -340,7 +340,7 @@ export default function ThreadPage() {
                       size="sm"
                       onClick={() => setDeleteThreadConfirm(true)}
                       disabled={moderating}
-                      className="text-red-600 hover:bg-red-50"
+                      className="text-danger hover:bg-danger/10"
                     >
                       <Trash2 className="mr-1 h-3.5 w-3.5" /> Delete
                     </Button>
@@ -397,7 +397,7 @@ export default function ThreadPage() {
                     <div className="flex items-start gap-3">
                       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-surface text-muted">
                         {reply.isExpertVerified ? (
-                          <ShieldCheck className="h-4 w-4 text-purple-600" />
+                          <ShieldCheck className="h-4 w-4 text-primary" />
                         ) : (
                           <User className="h-4 w-4" />
                         )}
@@ -409,7 +409,7 @@ export default function ThreadPage() {
                             {reply.authorRole}
                           </Badge>
                           {reply.isExpertVerified && (
-                            <Badge variant="outline" className="text-purple-600 border-purple-300 bg-purple-50">
+                            <Badge variant="outline" className="text-primary border-primary/30 bg-primary/10">
                               <ShieldCheck className="mr-1 h-3 w-3" /> Verified
                             </Badge>
                           )}
@@ -429,7 +429,7 @@ export default function ThreadPage() {
                               size="sm"
                               onClick={() => setDeleteReplyTarget(reply)}
                               disabled={moderating}
-                              className="text-red-600 hover:bg-red-50 ml-auto text-xs h-6 px-2"
+                              className="text-danger hover:bg-danger/10 ml-auto text-xs h-6 px-2"
                             >
                               <Trash2 className="mr-1 h-3 w-3" /> Delete
                             </Button>
@@ -500,7 +500,7 @@ export default function ThreadPage() {
               size="sm"
               onClick={handleAdminDeleteThread}
               disabled={moderating}
-              className="bg-red-600 text-white hover:bg-red-700"
+              className="bg-danger text-white hover:bg-danger/90"
             >
               {moderating ? 'Deleting…' : 'Delete Thread'}
             </Button>
@@ -523,7 +523,7 @@ export default function ThreadPage() {
               size="sm"
               onClick={handleAdminDeleteReply}
               disabled={moderating}
-              className="bg-red-600 text-white hover:bg-red-700"
+              className="bg-danger text-white hover:bg-danger/90"
             >
               {moderating ? 'Deleting…' : 'Delete Reply'}
             </Button>

@@ -203,8 +203,8 @@ export default function DiagnosticListeningPage() {
                     className={cn(
                       'w-8 h-8 rounded text-xs font-bold transition-colors',
                       currentQ === i && 'bg-primary text-white',
-                      currentQ !== i && answers[q.id]?.trim() && 'bg-emerald-100 text-emerald-700',
-                      currentQ !== i && !answers[q.id]?.trim() && 'bg-gray-100 text-muted hover:bg-gray-200',
+                      currentQ !== i && answers[q.id]?.trim() && 'bg-success/10 text-success',
+                      currentQ !== i && !answers[q.id]?.trim() && 'bg-background-light text-muted hover:bg-border',
                     )}
                   >
                     {q.number}
@@ -234,7 +234,7 @@ export default function DiagnosticListeningPage() {
                               'flex items-center gap-3 p-3 rounded border cursor-pointer transition-colors',
                               answers[question.id] === opt
                                 ? 'border-primary bg-primary/5'
-                                : 'border-gray-200 hover:border-gray-300',
+                                : 'border-border hover:border-border-hover',
                             )}
                           >
                             <input
@@ -258,7 +258,7 @@ export default function DiagnosticListeningPage() {
                         value={answers[question.id] ?? ''}
                         onChange={(e) => setAnswer(question.id, e.target.value)}
                         placeholder="Type your answer…"
-                        className="w-full px-3 py-2 border border-gray-200 rounded text-sm text-navy focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        className="w-full px-3 py-2 border border-border rounded text-sm text-navy focus:outline-none focus:ring-2 focus:ring-primary/20"
                       />
                     )}
 
@@ -267,7 +267,7 @@ export default function DiagnosticListeningPage() {
                       <select
                         value={answers[question.id] ?? ''}
                         onChange={(e) => setAnswer(question.id, e.target.value)}
-                        className="w-full px-3 py-2 border border-gray-200 rounded text-sm text-navy focus:outline-none focus:ring-2 focus:ring-primary/20"
+                        className="w-full px-3 py-2 border border-border rounded text-sm text-navy focus:outline-none focus:ring-2 focus:ring-primary/20"
                       >
                         <option value="">Select a match…</option>
                         {question.options.map((opt, i) => (
@@ -280,7 +280,7 @@ export default function DiagnosticListeningPage() {
               )}
 
               {/* Navigation footer */}
-              <div className="pt-4 border-t border-gray-200 flex items-center justify-between shrink-0 mt-4">
+              <div className="pt-4 border-t border-border flex items-center justify-between shrink-0 mt-4">
                 <Button
                   variant="outline"
                   size="sm"
@@ -324,11 +324,11 @@ export default function DiagnosticListeningPage() {
           <p className="text-sm text-muted">
             You have answered <strong>{answeredCount}</strong> of <strong>{questions.length}</strong> questions.
             {answeredCount < questions.length && (
-              <span className="text-amber-600 font-semibold"> Some questions are unanswered.</span>
+              <span className="text-warning font-semibold"> Some questions are unanswered.</span>
             )}
           </p>
           {answeredCount === questions.length && (
-            <div className="flex items-center gap-2 text-emerald-600 text-sm font-semibold">
+            <div className="flex items-center gap-2 text-success text-sm font-semibold">
               <CheckCircle2 className="w-4 h-4" /> All questions answered
             </div>
           )}

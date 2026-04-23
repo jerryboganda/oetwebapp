@@ -264,7 +264,7 @@ export function Sidebar({
             {visibleLevel !== null && (
               <Link
                 href="/achievements"
-                className="flex items-center gap-1 rounded-full bg-amber-500 px-2.5 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-amber-600 dark:bg-amber-600 dark:text-white dark:hover:bg-amber-500"
+                className="flex items-center gap-1 rounded-full bg-warning px-2.5 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-warning/90 dark:bg-warning dark:text-white dark:hover:bg-warning/90"
               >
                 <Zap className="w-3.5 h-3.5" />
                 Lv.{visibleLevel}

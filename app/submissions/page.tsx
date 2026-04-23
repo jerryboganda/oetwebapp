@@ -20,6 +20,7 @@ import React from 'react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-error';
+import { Button } from '@/components/ui/button';
 import { fetchSubmissions } from '@/lib/api';
 import type { Submission, SubTest, ReviewStatus } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
@@ -144,7 +145,7 @@ export default function SubmissionHistory() {
                   <MotionItem
                     key={sub.id}
                     delayIndex={idx}
-                    className="bg-surface rounded-[24px] border border-gray-200 p-5 sm:p-6 shadow-sm flex flex-col md:flex-row gap-6 justify-between hover:border-gray-300 transition-colors"
+                    className="bg-surface rounded-[24px] border border-border p-5 sm:p-6 shadow-sm flex flex-col md:flex-row gap-6 justify-between hover:border-gray-300 transition-colors"
                   >
                     <div className="flex-1 space-y-4">
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
@@ -172,30 +173,33 @@ export default function SubmissionHistory() {
                     </div>
 
                     <div className="flex flex-col gap-2 md:w-48 shrink-0 border-t md:border-t-0 md:border-l border-gray-100 pt-5 md:pt-0 md:pl-6 justify-center">
-                      <button
+                      <Button
+                        variant="outline"
+                        fullWidth
                         onClick={() => sub.actions.reopenFeedbackRoute && router.push(sub.actions.reopenFeedbackRoute)}
                         disabled={!sub.actions.reopenFeedbackRoute}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-navy text-sm font-bold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <MessageSquare className="w-4 h-4" />
                         Reopen Feedback
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        variant="outline"
+                        fullWidth
                         onClick={() => sub.actions.compareRoute && router.push(sub.actions.compareRoute)}
                         disabled={!sub.actions.compareRoute}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-white border border-gray-200 text-navy text-sm font-bold rounded-xl hover:bg-gray-50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <GitCompare className="w-4 h-4" />
                         Compare Attempts
-                      </button>
-                      <button
+                      </Button>
+                      <Button
+                        variant="primary"
+                        fullWidth
                         onClick={() => sub.actions.requestReviewRoute && router.push(sub.actions.requestReviewRoute)}
                         disabled={!canRequest || !sub.actions.requestReviewRoute}
-                        className="w-full flex items-center justify-center gap-2 px-4 py-2.5 bg-navy text-white text-sm font-bold rounded-xl hover:bg-navy/90 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                       >
                         <Send className="w-4 h-4" />
                         Request Review
-                      </button>
+                      </Button>
                     </div>
                   </MotionItem>
                 );

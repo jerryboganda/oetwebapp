@@ -70,14 +70,17 @@ export default function ReadinessCenter() {
     );
   }
 
-  const riskBg =
-    data.overallRisk === 'High'     ? 'bg-rose-600' :
-    data.overallRisk === 'Moderate' ? 'bg-amber-500' :
-                                      'bg-green-600';
+  // Risk accent is expressed via icon tile + eyebrow chip on a Surface White card,
+  // not via a saturated full-bleed background.
+  const riskAccent =
+    data.overallRisk === 'High'     ? { tile: 'bg-danger/10 text-danger', chip: 'bg-danger/10 text-danger border-danger/20' } :
+    data.overallRisk === 'Moderate' ? { tile: 'bg-warning/10 text-warning', chip: 'bg-warning/10 text-warning border-warning/20' } :
+                                      { tile: 'bg-success/10 text-success', chip: 'bg-success/10 text-success border-success/20' };
   const riskIcon =
     data.overallRisk === 'High' ? ShieldAlert :
     data.overallRisk === 'Moderate' ? Shield :
     ShieldCheck;
+  const RiskIconCmp = riskIcon;
 
   // ── Risk Gauge Data ──
   const apiRiskPercent = riskData?.riskProbability;
@@ -132,15 +135,16 @@ export default function ReadinessCenter() {
         {/* 1. Risk Probability Gauge + Recommended Study + Risk Factors */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <MotionSection
-            className={`rounded-[32px] p-8 text-white relative overflow-hidden shadow-lg ${riskBg}`}
+            className="bg-surface border border-border rounded-[24px] p-8 shadow-sm relative overflow-hidden"
           >
-            <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
             <div className="relative z-10">
               <div className="flex items-center gap-2 mb-4">
-                {data.overallRisk === 'High'     ? <ShieldAlert className="w-6 h-6" /> :
-                 data.overallRisk === 'Moderate' ? <Shield className="w-6 h-6" /> :
-                                                    <ShieldCheck className="w-6 h-6" />}
-                <span className="text-sm font-black uppercase tracking-widest opacity-90">Target-Date Risk</span>
+                <span className={`inline-flex h-8 w-8 items-center justify-center rounded-xl ${riskAccent.tile}`}>
+                  <RiskIconCmp className="w-4 h-4" />
+                </span>
+                <span className={`inline-flex items-center gap-1.5 rounded-md border px-2.5 py-1 text-[11px] font-bold uppercase tracking-wider ${riskAccent.chip}`}>
+                  Target-Date Risk
+                </span>
               </div>
 
               {/* ── Risk Probability Gauge ── */}
@@ -148,21 +152,21 @@ export default function ReadinessCenter() {
                 <svg viewBox="0 0 200 120" className="w-48 h-auto">
                   <defs>
                     <linearGradient id="gaugeGrad" x1="0%" y1="0%" x2="100%" y2="0%">
-                      <stop offset="0%" stopColor="#22c55e" />
-                      <stop offset="50%" stopColor="#f59e0b" />
-                      <stop offset="100%" stopColor="#ef4444" />
+                      <stop offset="0%" stopColor="var(--color-success)" />
+                      <stop offset="50%" stopColor="var(--color-warning)" />
+                      <stop offset="100%" stopColor="var(--color-danger)" />
                     </linearGradient>
                   </defs>
-                  <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="rgba(255,255,255,0.2)" strokeWidth="14" strokeLinecap="round" />
+                  <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="var(--color-border)" strokeWidth="14" strokeLinecap="round" />
                   <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="url(#gaugeGrad)" strokeWidth="14" strokeLinecap="round" strokeDasharray={`${251 * (riskPercent / 100)} 251`} />
-                  <circle cx={needleX} cy={needleY} r="6" fill="white" stroke="rgba(0,0,0,0.2)" strokeWidth="1" />
-                  <text x="100" y="95" textAnchor="middle" className="fill-white text-2xl font-black">{riskPercent}%</text>
-                  <text x="100" y="112" textAnchor="middle" className="fill-white/70 text-[10px] font-bold uppercase tracking-widest">probability</text>
+                  <circle cx={needleX} cy={needleY} r="6" fill="var(--color-navy)" stroke="var(--color-surface)" strokeWidth="2" />
+                  <text x="100" y="95" textAnchor="middle" className="fill-navy text-2xl font-black">{riskPercent}%</text>
+                  <text x="100" y="112" textAnchor="middle" className="fill-muted text-[10px] font-bold uppercase tracking-widest">probability</text>
                 </svg>
               </div>
 
-              <h2 className="text-3xl font-black mb-2 text-center">{data.overallRisk} Risk</h2>
-              <p className="text-white/90 text-sm leading-relaxed text-center max-w-sm mx-auto">
+              <h2 className="text-3xl font-black mb-2 text-center text-navy">{data.overallRisk} Risk</h2>
+              <p className="text-muted text-sm leading-relaxed text-center max-w-sm mx-auto">
                 With {data.weeksRemaining} weeks remaining until your exam, you are at a {data.overallRisk.toLowerCase()} risk of not meeting your target scores.
               </p>
             </div>
@@ -170,9 +174,9 @@ export default function ReadinessCenter() {
 
           <MotionSection
             delayIndex={1}
-            className="bg-navy rounded-[32px] p-8 text-white relative overflow-hidden shadow-lg flex flex-col justify-center"
+            className="bg-navy rounded-[24px] p-8 text-white relative overflow-hidden shadow-sm flex flex-col justify-center"
           >
-            <div className="absolute bottom-0 left-0 w-64 h-64 bg-primary opacity-20 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3" />
+            <div className="absolute bottom-0 left-0 w-64 h-64 bg-primary/10 rounded-full blur-3xl translate-y-1/2 -translate-x-1/3" aria-hidden="true" />
             <div className="relative z-10">
               <div className="flex items-center gap-2 mb-4">
                 <Clock className="w-6 h-6 text-primary" />
@@ -191,30 +195,38 @@ export default function ReadinessCenter() {
           {/* ── Risk Factors Breakdown ── */}
           <MotionSection
             delayIndex={2}
-            className="bg-surface rounded-[32px] border border-gray-200 p-6 shadow-sm"
+            className="bg-surface rounded-[24px] border border-border p-6 shadow-sm"
           >
             <div className="flex items-center gap-2 mb-5">
-              <AlertTriangle className="w-5 h-5 text-amber-500" />
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-xl bg-warning/10 text-warning">
+                <AlertTriangle className="w-4 h-4" />
+              </span>
               <span className="text-xs font-black uppercase tracking-widest text-muted">Risk Factors</span>
             </div>
             <div className="space-y-4">
-              {riskFactors.map((factor) => (
+              {riskFactors.map((factor) => {
+                const sevToken =
+                  factor.severity === 'high'   ? { chip: 'bg-danger/10 text-danger',   bar: 'bg-danger' } :
+                  factor.severity === 'medium' ? { chip: 'bg-warning/10 text-warning', bar: 'bg-warning' } :
+                                                 { chip: 'bg-success/10 text-success', bar: 'bg-success' };
+                return (
                 <div key={factor.label}>
                   <div className="flex items-center justify-between mb-1.5">
                     <span className="text-sm font-semibold text-navy">{factor.label}</span>
-                    <span className={`text-xs font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${factor.severity === 'high' ? 'text-rose-700 bg-rose-100' : factor.severity === 'medium' ? 'text-amber-700 bg-amber-100' : 'text-emerald-700 bg-emerald-100'}`}>{factor.severity}</span>
+                    <span className={`text-xs font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${sevToken.chip}`}>{factor.severity}</span>
                   </div>
-                  <div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
+                  <div className="h-2 w-full bg-background-light rounded-full overflow-hidden">
                     <motion.div
                       initial={{ width: 0 }}
                       animate={{ width: `${factor.impact}%` }}
                       transition={{ duration: 0.8, delay: 0.4 }}
-                      className={`h-full rounded-full ${factor.severity === 'high' ? 'bg-rose-500' : factor.severity === 'medium' ? 'bg-amber-400' : 'bg-emerald-400'}`}
+                      className={`h-full rounded-full ${sevToken.bar}`}
                     />
                   </div>
                   <p className="text-[11px] text-muted mt-1">{factor.description}</p>
                 </div>
-              ))}
+                );
+              })}
             </div>
           </MotionSection>
         </div>
@@ -231,7 +243,7 @@ export default function ReadinessCenter() {
                 description="Each sub-test should show current readiness, target, and whether it is the weakest link."
                 className="mb-4"
               />
-              <div className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm space-y-8">
+              <div className="bg-surface rounded-[24px] border border-border p-6 sm:p-8 shadow-sm space-y-8">
                 {data.subTests.map((test, idx) => {
                   const Icon = SUBTEST_ICONS[test.id] ?? FileText;
                   return (
@@ -248,7 +260,7 @@ export default function ReadinessCenter() {
                             <h3 className="text-base font-bold text-navy flex items-center gap-2">
                               {test.name}
                               {test.isWeakest && (
-                                <span className="bg-rose-100 text-rose-700 text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-md font-black flex items-center gap-1">
+                                <span className="bg-danger/10 text-danger text-[10px] uppercase tracking-widest px-2 py-0.5 rounded-md font-black flex items-center gap-1">
                                   <AlertTriangle className="w-3 h-3" /> Weakest Link
                                 </span>
                               )}
@@ -261,9 +273,9 @@ export default function ReadinessCenter() {
                           <span className="text-xs text-muted ml-1">/ {test.target}% target</span>
                         </div>
                       </div>
-                      <div className="h-3 w-full bg-gray-100 rounded-full overflow-hidden relative">
+                      <div className="h-3 w-full bg-background-light rounded-full overflow-hidden relative">
                         <div
-                          className="absolute top-0 bottom-0 w-0.5 bg-gray-400 z-10"
+                          className="absolute top-0 bottom-0 w-0.5 bg-border z-10"
                           style={{ left: `${test.target}%` }}
                         />
                         <motion.div
@@ -291,10 +303,15 @@ export default function ReadinessCenter() {
                   <MotionItem
                     key={blocker.id}
                     delayIndex={idx}
-                    className="bg-rose-50 rounded-2xl border border-rose-100 p-5"
+                    className="bg-surface rounded-[24px] border border-danger/20 p-5 shadow-sm"
                   >
-                    <h3 className="text-sm font-bold text-rose-900 mb-2">{blocker.title}</h3>
-                    <p className="text-xs text-rose-800/80 leading-relaxed">{blocker.description}</p>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="inline-flex h-7 w-7 items-center justify-center rounded-lg bg-danger/10 text-danger">
+                        <AlertTriangle className="w-3.5 h-3.5" />
+                      </span>
+                      <h3 className="text-sm font-bold text-navy">{blocker.title}</h3>
+                    </div>
+                    <p className="text-xs text-muted leading-relaxed">{blocker.description}</p>
                   </MotionItem>
                 ))}
               </div>
@@ -311,26 +328,26 @@ export default function ReadinessCenter() {
             />
             <MotionSection
               delayIndex={1}
-              className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm"
+              className="bg-surface rounded-[24px] border border-border p-6 sm:p-8 shadow-sm"
             >
               <p className="text-sm text-muted mb-6 leading-relaxed">
                 Readiness estimates are calculated using your recent performance data, weighted by full mocks and expert reviews.
               </p>
               <div className="space-y-4">
-                <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                <div className="flex items-center justify-between py-3 border-b border-border">
                   <span className="text-sm font-medium text-muted">Full Mocks</span>
                   <span className="text-base font-black text-navy">{data.evidence.mocksCompleted}</span>
                 </div>
-                <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                <div className="flex items-center justify-between py-3 border-b border-border">
                   <span className="text-sm font-medium text-muted">Practice Questions</span>
                   <span className="text-base font-black text-navy">{data.evidence.practiceQuestions}</span>
                 </div>
-                <div className="flex items-center justify-between py-3 border-b border-gray-100">
+                <div className="flex items-center justify-between py-3 border-b border-border">
                   <span className="text-sm font-medium text-muted">Expert Reviews</span>
                   <span className="text-base font-black text-navy">{data.evidence.expertReviews}</span>
                 </div>
               </div>
-              <div className="mt-6 bg-background-light rounded-xl p-4 border border-gray-100">
+              <div className="mt-6 bg-background-light rounded-xl p-4 border border-border">
                 <div className="flex items-start gap-3">
                   <TrendingUp className="w-5 h-5 text-primary shrink-0 mt-0.5" />
                   <div>

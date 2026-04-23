@@ -350,11 +350,11 @@ export default function StrategyGuidePage() {
             ))}
 
             {takeaways.length > 0 ? (
-              <Card className="border-emerald-200 bg-emerald-50">
-                <h2 className="text-lg font-bold text-emerald-900">Key takeaways</h2>
+              <Card className="border-success/30 bg-success/10">
+                <h2 className="text-lg font-bold text-success">Key takeaways</h2>
                 <ul className="mt-3 space-y-2">
                   {takeaways.map((item) => (
-                    <li key={item} className="flex gap-2 text-sm leading-6 text-emerald-800">
+                    <li key={item} className="flex gap-2 text-sm leading-6 text-success">
                       <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden="true" />
                       <span>{item}</span>
                     </li>

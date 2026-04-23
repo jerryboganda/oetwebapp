@@ -161,7 +161,7 @@ export default function LessonsPage() {
               </select>
             </div>
 
-            <div className="grid grid-cols-3 overflow-hidden rounded-lg border border-border bg-white text-xs font-semibold text-muted">
+            <div className="grid grid-cols-3 overflow-hidden rounded-lg border border-border bg-surface text-xs font-semibold text-muted">
               {([
                 ['all', `All (${lessons.length})`],
                 ['continue', `Continue (${continueLessons.length})`],
@@ -171,7 +171,7 @@ export default function LessonsPage() {
                   key={key}
                   type="button"
                   onClick={() => setView(key)}
-                  className={`px-3 py-2 transition-colors ${view === key ? 'bg-primary text-white' : 'hover:bg-gray-50'}`}
+                  className={`px-3 py-2 transition-colors ${view === key ? 'bg-primary text-white' : 'hover:bg-lavender/30'}`}
                 >
                   {label}
                 </button>
@@ -219,7 +219,7 @@ export default function LessonsPage() {
                   <MotionItem key={lesson.id} delayIndex={index}>
                     <Link href={`/lessons/${lesson.id}`} className="group block h-full">
                       <article className="flex h-full flex-col overflow-hidden rounded-2xl border border-border bg-surface shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical active:scale-[0.99]">
-                        <div className="relative flex h-40 items-center justify-center bg-[#243b53]">
+                        <div className="relative flex h-40 items-center justify-center bg-navy">
                           {lesson.thumbnailUrl ? (
                             <Image
                               src={lesson.thumbnailUrl}
@@ -243,7 +243,7 @@ export default function LessonsPage() {
                               <Badge variant="default">Available</Badge>
                             )}
                           </div>
-                          <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-black/65 px-2 py-1 text-xs text-white">
+                          <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-navy/70 px-2 py-1 text-xs text-white">
                             <Clock className="h-3 w-3" />
                             {formatDuration(lesson.durationSeconds)}
                           </div>
@@ -260,7 +260,7 @@ export default function LessonsPage() {
                           {lesson.description && <p className="mt-2 line-clamp-2 text-xs leading-5 text-muted">{lesson.description}</p>}
 
                           <div className="mt-auto pt-4">
-                            <div className="h-2 overflow-hidden rounded-full bg-gray-100">
+                            <div className="h-2 overflow-hidden rounded-full bg-background-light">
                               <div className="h-full rounded-full bg-primary" style={{ width: `${progress}%` }} />
                             </div>
                             <div className="mt-3 flex items-center justify-between text-xs font-semibold">

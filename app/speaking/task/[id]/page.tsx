@@ -432,7 +432,7 @@ function LiveSpeakingTaskContent() {
   if (cardLoading) {
     return (
       <AppShell pageTitle="Speaking Task" workspaceRole="learner" className="px-3 sm:px-4 lg:px-6">
-        <div className="flex min-h-[420px] items-center justify-center rounded-3xl border border-gray-200/80 bg-surface shadow-sm">
+        <div className="flex min-h-[420px] items-center justify-center rounded-3xl border border-border/80 bg-surface shadow-sm">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
       </AppShell>
@@ -441,22 +441,22 @@ function LiveSpeakingTaskContent() {
 
   return (
     <AppShell pageTitle={card?.title ?? 'Speaking Task'} workspaceRole="learner" className="px-3 sm:px-4 lg:px-6">
-    <div className="mx-auto flex min-h-[calc(100vh-7rem)] w-full max-w-[1280px] flex-col overflow-hidden rounded-[24px] border border-gray-200/80 bg-surface text-navy shadow-sm">
+    <div className="mx-auto flex min-h-[calc(100vh-7rem)] w-full max-w-[1280px] flex-col overflow-hidden rounded-2xl border border-border/80 bg-surface text-navy shadow-sm">
       {/* Top Bar */}
-      <header className="z-20 flex items-center justify-between gap-3 border-b border-gray-200/80 bg-white/85 px-4 py-3 backdrop-blur-md sm:px-6 sm:py-4">
+      <header className="z-20 flex items-center justify-between gap-3 border-b border-border/80 bg-white/85 px-4 py-3 backdrop-blur-md sm:px-6 sm:py-4">
         <div className="flex items-center gap-3 min-w-0 overflow-hidden">
           <div className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${
-            mode === 'self' ? 'bg-purple-50 text-purple-700 border border-purple-100' :
-            'bg-amber-50 text-amber-700 border border-amber-100'
+            mode === 'self' ? 'bg-primary/10 text-primary border border-primary/30' :
+            'bg-amber-50 text-warning border border-warning/30'
           }`}>
             {mode === 'self' ? <User className="w-3 h-3" /> : <ShieldCheck className="w-3 h-3" />}
             {mode === 'self' ? 'Self Practice' : 'Exam Simulation'}
           </div>
-          <div className="hidden h-4 w-px bg-gray-200 sm:block" />
+          <div className="hidden h-4 w-px bg-border sm:block" />
           <div className="hidden sm:flex items-center gap-2 text-muted">
-            {connectionStatus === 'connected' ? <Wifi className="w-4 h-4 text-green-500" /> : 
-             connectionStatus === 'connecting' ? <Loader2 className="w-4 h-4 animate-spin text-blue-500" /> :
-             <WifiOff className="w-4 h-4 text-red-500" />}
+            {connectionStatus === 'connected' ? <Wifi className="w-4 h-4 text-success" /> : 
+             connectionStatus === 'connecting' ? <Loader2 className="w-4 h-4 animate-spin text-info" /> :
+             <WifiOff className="w-4 h-4 text-danger" />}
             <span className="text-[10px] font-bold uppercase tracking-wider">
               {connectionStatus === 'connected' ? 'Live' : connectionStatus === 'connecting' ? 'Connecting' : 'Disconnected'}
             </span>
@@ -481,13 +481,13 @@ function LiveSpeakingTaskContent() {
               animate={recordingState === 'recording' ? { scale: [1, 1.05, 1] } : {}}
               transition={{ repeat: Infinity, duration: 2 }}
               className={`w-48 h-48 rounded-full border-2 flex items-center justify-center transition-all duration-500 ${
-                recordingState === 'recording' ? 'border-red-300 bg-red-50 shadow-[0_0_40px_rgba(239,68,68,0.14)]' :
-                recordingState === 'paused' ? 'border-amber-300 bg-amber-50 shadow-[0_0_40px_rgba(245,158,11,0.14)]' : 'border-gray-200 bg-white'
+                recordingState === 'recording' ? 'border-danger/30 bg-danger/10 shadow-[0_0_40px_rgba(239,68,68,0.14)]' :
+                recordingState === 'paused' ? 'border-warning/30 bg-amber-50 shadow-[0_0_40px_rgba(245,158,11,0.14)]' : 'border-border bg-surface'
               }`}
             >
               <div className={`w-40 h-40 rounded-full flex items-center justify-center transition-all ${
-                recordingState === 'recording' ? 'bg-red-100/70' :
-                recordingState === 'paused' ? 'bg-amber-100/70' : 'bg-gray-50'
+                recordingState === 'recording' ? 'bg-danger/10' :
+                recordingState === 'paused' ? 'bg-warning/10' : 'bg-background-light'
               }`}>
                 {recordingState === 'recording' ? (
                   <div className="flex items-center gap-1 h-10 items-end">
@@ -496,12 +496,12 @@ function LiveSpeakingTaskContent() {
                         key={i}
                         animate={{ height: level }}
                         transition={{ type: 'tween', duration: 0.1 }}
-                        className="w-1.5 bg-red-500 rounded-full"
+                        className="w-1.5 bg-danger rounded-full"
                       />
                     ))}
                   </div>
                 ) : recordingState === 'paused' ? (
-                  <Pause className="w-12 h-12 text-amber-500" />
+                  <Pause className="w-12 h-12 text-warning" />
                 ) : (
                   <Mic className="w-12 h-12 text-muted" />
                 )}
@@ -514,8 +514,8 @@ function LiveSpeakingTaskContent() {
                 animate={{ opacity: 1, y: 0 }}
                 className="absolute -bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-2"
               >
-                <div className="w-2 h-2 rounded-full bg-red-500 animate-pulse" />
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-red-500">Recording</span>
+                <div className="w-2 h-2 rounded-full bg-danger animate-pulse" />
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-danger">Recording</span>
               </motion.div>
             )}
             {recordingState === 'paused' && (
@@ -524,8 +524,8 @@ function LiveSpeakingTaskContent() {
                 animate={{ opacity: 1, y: 0 }}
                 className="absolute -bottom-8 left-1/2 -translate-x-1/2 flex items-center gap-2"
               >
-                <div className="w-2 h-2 rounded-full bg-amber-500" />
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-500">Paused</span>
+                <div className="w-2 h-2 rounded-full bg-warning" />
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-warning">Paused</span>
               </motion.div>
             )}
           </div>
@@ -547,7 +547,7 @@ function LiveSpeakingTaskContent() {
             {recordingState === 'idle' ? (
               <button
                 onClick={handleStartRecording}
-                className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-all shadow-lg shadow-red-500/20"
+                className="w-16 h-16 rounded-full bg-danger hover:bg-danger/90 flex items-center justify-center transition-all shadow-lg shadow-danger/20"
                 aria-label="Start recording"
               >
                 <Mic className="w-6 h-6 text-white" />
@@ -555,7 +555,7 @@ function LiveSpeakingTaskContent() {
             ) : recordingState === 'paused' ? (
               <button
                 onClick={handleStartRecording}
-                className="w-16 h-16 rounded-full bg-red-500 hover:bg-red-600 flex items-center justify-center transition-all shadow-lg shadow-red-500/20"
+                className="w-16 h-16 rounded-full bg-danger hover:bg-danger/90 flex items-center justify-center transition-all shadow-lg shadow-danger/20"
                 aria-label="Resume recording"
               >
                 <Play className="w-6 h-6 text-white ml-1" />
@@ -563,7 +563,7 @@ function LiveSpeakingTaskContent() {
             ) : recordingState === 'recording' ? (
               <button
                 onClick={handlePauseRecording}
-                className="w-16 h-16 rounded-full border border-gray-200 bg-white hover:bg-gray-50 flex items-center justify-center transition-all shadow-sm"
+                className="w-16 h-16 rounded-full border border-border bg-surface hover:bg-background-light flex items-center justify-center transition-all shadow-sm"
                 aria-label="Pause recording"
               >
                 <Pause className="w-6 h-6 text-navy" />
@@ -577,7 +577,7 @@ function LiveSpeakingTaskContent() {
           <button 
             onClick={() => setShowRoleCard(!showRoleCard)}
             className={`px-5 py-3 min-h-[44px] rounded-full text-xs font-bold flex items-center gap-2 transition-all ${
-              showRoleCard ? 'bg-primary text-white shadow-sm' : 'border border-gray-200 bg-white text-navy shadow-sm hover:bg-gray-50'
+              showRoleCard ? 'bg-primary text-white shadow-sm' : 'border border-border bg-surface text-navy shadow-sm hover:bg-background-light'
             }`}
           >
             <FileText className="w-4 h-4" /> Role Card {showRoleCard ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
@@ -585,7 +585,7 @@ function LiveSpeakingTaskContent() {
           <button 
             onClick={() => setShowNotes(!showNotes)}
             className={`px-5 py-3 min-h-[44px] rounded-full text-xs font-bold flex items-center gap-2 transition-all ${
-              showNotes ? 'bg-primary text-white shadow-sm' : 'border border-gray-200 bg-white text-navy shadow-sm hover:bg-gray-50'
+              showNotes ? 'bg-primary text-white shadow-sm' : 'border border-border bg-surface text-navy shadow-sm hover:bg-background-light'
             }`}
           >
             <Edit3 className="w-4 h-4" /> Notes {showNotes ? <ChevronDown className="w-3 h-3" /> : <ChevronUp className="w-3 h-3" />}
@@ -599,11 +599,11 @@ function LiveSpeakingTaskContent() {
               initial={{ opacity: 0, y: 100 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 100 }}
-              className="absolute bottom-48 left-6 right-6 max-w-2xl mx-auto bg-surface border border-gray-200 rounded-3xl p-6 shadow-2xl z-30 max-h-[50vh] overflow-y-auto"
+              className="absolute bottom-48 left-6 right-6 max-w-2xl mx-auto bg-surface border border-border rounded-3xl p-6 shadow-2xl z-30 max-h-[50vh] overflow-y-auto"
             >
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-black uppercase tracking-widest text-muted">Role Card Reference</h3>
-                <button onClick={() => setShowRoleCard(false)} className="p-2.5 -m-1 rounded-lg text-muted hover:text-navy hover:bg-gray-100"><Square className="w-4 h-4 rotate-45" /></button>
+                <button onClick={() => setShowRoleCard(false)} className="p-2.5 -m-1 rounded-lg text-muted hover:text-navy hover:bg-background-light"><Square className="w-4 h-4 rotate-45" /></button>
               </div>
               <div className="space-y-4">
                 <div>
@@ -627,15 +627,15 @@ function LiveSpeakingTaskContent() {
               initial={{ opacity: 0, y: 100 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: 100 }}
-              className="absolute bottom-48 left-6 right-6 max-w-2xl mx-auto bg-surface border border-gray-200 rounded-3xl p-6 shadow-2xl z-30 h-[40vh] flex flex-col"
+              className="absolute bottom-48 left-6 right-6 max-w-2xl mx-auto bg-surface border border-border rounded-3xl p-6 shadow-2xl z-30 h-[40vh] flex flex-col"
             >
               <div className="flex items-center justify-between mb-4">
                 <h3 className="text-sm font-black uppercase tracking-widest text-muted">Your Notes</h3>
-                <button onClick={() => setShowNotes(false)} className="p-2.5 -m-1 rounded-lg text-muted hover:text-navy hover:bg-gray-100"><Square className="w-4 h-4 rotate-45" /></button>
+                <button onClick={() => setShowNotes(false)} className="p-2.5 -m-1 rounded-lg text-muted hover:text-navy hover:bg-background-light"><Square className="w-4 h-4 rotate-45" /></button>
               </div>
               <textarea 
                 placeholder="Type your notes here..."
-                className="flex-1 resize-none rounded-2xl border border-gray-200 bg-gray-50 p-4 text-sm leading-relaxed text-navy focus:outline-none focus:ring-2 focus:ring-primary/20"
+                className="flex-1 resize-none rounded-2xl border border-border bg-background-light p-4 text-sm leading-relaxed text-navy focus:outline-none focus:ring-2 focus:ring-primary/20"
               />
             </motion.div>
           )}
@@ -643,7 +643,7 @@ function LiveSpeakingTaskContent() {
       </main>
 
       {/* Bottom Controls */}
-      <footer className="z-40 border-t border-gray-200/80 bg-white/90 px-8 py-8 pb-[calc(2rem+env(safe-area-inset-bottom))] backdrop-blur-xl">
+      <footer className="z-40 border-t border-border/80 bg-white/90 px-8 py-8 pb-[calc(2rem+env(safe-area-inset-bottom))] backdrop-blur-xl">
         <div className="max-w-4xl mx-auto flex items-center justify-between">
           <button 
             onClick={handleStop}
@@ -651,7 +651,7 @@ function LiveSpeakingTaskContent() {
             className="flex flex-col items-center gap-2 group"
             aria-label="Cancel task"
           >
-            <div className="w-14 h-14 rounded-full border border-gray-200 bg-white flex items-center justify-center group-hover:bg-gray-50 transition-all">
+            <div className="w-14 h-14 rounded-full border border-border bg-surface flex items-center justify-center group-hover:bg-background-light transition-all">
               <RotateCcw className="w-6 h-6 text-muted group-hover:text-navy" />
             </div>
             <span className="text-[10px] font-black uppercase tracking-widest text-muted group-hover:text-navy">Cancel Task</span>
@@ -668,7 +668,7 @@ function LiveSpeakingTaskContent() {
               {isSubmitting ? 'Submitting...' : 'Submit Recording'}
             </Button>
             {submitError && (
-              <p role="alert" className="max-w-sm text-center text-xs font-bold leading-relaxed text-red-600">
+              <p role="alert" className="max-w-sm text-center text-xs font-bold leading-relaxed text-danger">
                 {submitError}
               </p>
             )}
@@ -698,10 +698,10 @@ function LiveSpeakingTaskContent() {
               role="dialog"
               aria-modal="true"
               aria-labelledby="speaking-stop-dialog-title"
-              className="relative bg-surface border border-gray-200 rounded-[24px] p-8 max-w-md w-full shadow-2xl"
+              className="relative bg-surface border border-border rounded-2xl p-8 max-w-md w-full shadow-2xl"
             >
-              <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mb-6">
-                <AlertCircle className="w-8 h-8 text-red-500" />
+              <div className="w-16 h-16 bg-danger/10 rounded-2xl flex items-center justify-center mb-6">
+                <AlertCircle className="w-8 h-8 text-danger" />
               </div>
               <h3 id="speaking-stop-dialog-title" className="text-2xl font-black mb-2">Stop Practice?</h3>
               <p className="text-muted text-sm leading-relaxed mb-8">
@@ -736,35 +736,35 @@ function LiveSpeakingTaskContent() {
               role="dialog"
               aria-modal="true"
               aria-labelledby="speaking-submit-dialog-title"
-              className="relative bg-surface border border-gray-200 rounded-[24px] p-8 max-w-md w-full shadow-2xl"
+              className="relative bg-surface border border-border rounded-2xl p-8 max-w-md w-full shadow-2xl"
             >
-              <div className="w-16 h-16 bg-green-500/10 rounded-2xl flex items-center justify-center mb-6">
-                <CheckCircle2 className="w-8 h-8 text-green-500" />
+              <div className="w-16 h-16 bg-success/10 rounded-2xl flex items-center justify-center mb-6">
+                <CheckCircle2 className="w-8 h-8 text-success" />
               </div>
               <h3 id="speaking-submit-dialog-title" className="text-2xl font-black mb-2">Finish Task?</h3>
               <p className="text-muted text-sm leading-relaxed mb-6">
                 Are you ready to submit your recording for evaluation? You won&apos;t be able to make changes after this.
               </p>
 
-              <div className="mb-6 rounded-2xl border border-amber-300/70 bg-amber-50 p-4">
+              <div className="mb-6 rounded-2xl border border-warning/30 bg-amber-50 p-4">
                 <div className="flex items-start gap-3">
-                  <Scissors className="mt-0.5 h-5 w-5 flex-shrink-0 text-amber-700" aria-hidden="true" />
+                  <Scissors className="mt-0.5 h-5 w-5 flex-shrink-0 text-warning" aria-hidden="true" />
                   <div className="flex-1">
-                    <p className="text-sm font-bold text-amber-900">
+                    <p className="text-sm font-bold text-warning">
                       Destroy your scratch paper on camera
                     </p>
-                    <p className="mt-1 text-xs leading-relaxed text-amber-900/80">
+                    <p className="mt-1 text-xs leading-relaxed text-warning/80">
                       OET rules for the at-home computer-based Speaking test require any paper notes to be
                       torn or cut in full view of the webcam before you submit. This is verified by the proctor
                       from the session recording.
                     </p>
-                    <label className="mt-3 flex items-start gap-2 text-xs text-amber-900">
+                    <label className="mt-3 flex items-start gap-2 text-xs text-warning">
                       <input
                         type="checkbox"
                         checked={paperDestroyed}
                         onChange={(e) => handlePaperDestroyedToggle(e.target.checked)}
                         disabled={isSubmitting}
-                        className="mt-0.5 h-4 w-4 rounded border-amber-400 text-amber-600 focus:ring-amber-500"
+                        className="mt-0.5 h-4 w-4 rounded border-warning/30 text-warning focus:ring-warning"
                         aria-describedby="speaking-paper-destroy-hint"
                       />
                       <span id="speaking-paper-destroy-hint">
@@ -803,7 +803,7 @@ export default function LiveSpeakingTask() {
   return (
     <Suspense fallback={
       <AppShell pageTitle="Speaking Task" workspaceRole="learner" className="px-3 sm:px-4 lg:px-6">
-        <div className="flex min-h-[420px] items-center justify-center rounded-3xl border border-gray-200/80 bg-surface shadow-sm">
+        <div className="flex min-h-[420px] items-center justify-center rounded-3xl border border-border/80 bg-surface shadow-sm">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>
       </AppShell>

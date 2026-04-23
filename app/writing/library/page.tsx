@@ -64,17 +64,17 @@ export default function WritingTaskLibrary() {
         <div>
           <div className="flex items-center gap-3 mb-2">
             <div className="w-10 h-10 rounded-lg bg-white/10 flex items-center justify-center">
-              <BookOpen className="w-5 h-5 text-blue-300" />
+              <BookOpen className="w-5 h-5 text-info" />
             </div>
             <h1 className="text-3xl sm:text-4xl font-bold">Writing Task Library</h1>
           </div>
-          <p className="text-gray-300 text-lg">Browse and select practice tasks to improve your clinical writing.</p>
+          <p className="text-muted/40 text-lg">Browse and select practice tasks to improve your clinical writing.</p>
         </div>
       </header>
 
       <main className="-mt-6 relative z-10">
         <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange}
-          onClear={() => setFilters({})} className="mb-6 bg-white p-4 rounded-xl border border-gray-200 shadow-sm" />
+          onClear={() => setFilters({})} className="mb-6 bg-surface p-4 rounded-xl border border-border shadow-sm" />
 
         {loading ? (
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">

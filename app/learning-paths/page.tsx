@@ -51,9 +51,9 @@ async function apiRequest<T = unknown>(path: string): Promise<T> {
 }
 
 const DIFFICULTY_COLORS: Record<string, string> = {
-  easy: 'text-green-600 bg-green-50 dark:text-green-400 dark:bg-green-900/20',
-  medium: 'text-amber-600 bg-amber-50 dark:text-amber-400 dark:bg-amber-900/20',
-  hard: 'text-red-600 bg-red-50 dark:text-red-400 dark:bg-red-900/20',
+  easy: 'text-success bg-success/10',
+  medium: 'text-warning bg-warning/10',
+  hard: 'text-danger bg-danger/10',
 };
 
 export default function LearningPathsPage() {
@@ -97,13 +97,13 @@ export default function LearningPathsPage() {
         <MotionSection>
           <Card className="p-5">
             <div className="flex items-center justify-between mb-3">
-              <h3 className="font-semibold text-gray-900 dark:text-gray-100">Overall Progress</h3>
-              <span className="text-2xl font-bold text-indigo-600 dark:text-indigo-400">{data.overallProgress}%</span>
+              <h3 className="font-semibold text-navy">Overall Progress</h3>
+              <span className="text-2xl font-bold text-primary">{data.overallProgress}%</span>
             </div>
-            <div className="h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-              <div className="h-full bg-indigo-600 dark:bg-indigo-400 rounded-full transition-all" style={{ width: `${data.overallProgress}%` }} />
+            <div className="h-3 bg-border rounded-full overflow-hidden">
+              <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${data.overallProgress}%` }} />
             </div>
-            <p className="text-xs text-gray-500 mt-2">{data.totalContent} total content items across all subtests</p>
+            <p className="text-xs text-muted mt-2">{data.totalContent} total content items across all subtests</p>
           </Card>
         </MotionSection>
       )}
@@ -117,8 +117,8 @@ export default function LearningPathsPage() {
               <MotionItem key={rec.id}>
                 <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer">
                   <Badge className={DIFFICULTY_COLORS[rec.difficulty] ?? ''}>{rec.difficulty}</Badge>
-                  <p className="font-medium mt-2 text-sm text-gray-900 dark:text-gray-100">{rec.title}</p>
-                  <p className="text-xs text-gray-500 capitalize">{rec.subtestCode}</p>
+                  <p className="font-medium mt-2 text-sm text-navy">{rec.title}</p>
+                  <p className="text-xs text-muted capitalize">{rec.subtestCode}</p>
                 </Card>
               </MotionItem>
             ))}
@@ -134,23 +134,23 @@ export default function LearningPathsPage() {
             title={sp.subtestCode.charAt(0).toUpperCase() + sp.subtestCode.slice(1)}
           />
           <div className="flex items-center gap-3 mt-2 mb-4">
-            <div className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
-              <div className="h-full bg-indigo-500 rounded-full transition-all" style={{ width: `${sp.progressPercent}%` }} />
+            <div className="flex-1 h-2 bg-border rounded-full overflow-hidden">
+              <div className="h-full bg-primary rounded-full transition-all" style={{ width: `${sp.progressPercent}%` }} />
             </div>
-            <span className="text-sm font-medium text-gray-600">{sp.completedItems}/{sp.totalItems}</span>
+            <span className="text-sm font-medium text-muted">{sp.completedItems}/{sp.totalItems}</span>
           </div>
           <div className="space-y-2">
             {sp.items.map((item) => (
               <MotionItem key={item.id}>
                 <Card className={`p-3 flex items-center gap-3 ${item.completed ? 'opacity-60' : ''}`}>
                   {item.completed ? (
-                    <CheckCircle2 className="w-5 h-5 text-green-500 flex-shrink-0" />
+                    <CheckCircle2 className="w-5 h-5 text-success flex-shrink-0" />
                   ) : (
-                    <ChevronRight className="w-5 h-5 text-gray-400 flex-shrink-0" />
+                    <ChevronRight className="w-5 h-5 text-muted/60 flex-shrink-0" />
                   )}
                   <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">{item.title}</p>
-                    <p className="text-xs text-gray-500">{item.durationMinutes}min · {item.difficulty}</p>
+                    <p className="text-sm font-medium text-navy truncate">{item.title}</p>
+                    <p className="text-xs text-muted">{item.durationMinutes}min · {item.difficulty}</p>
                   </div>
                   {!item.completed && (
                     <Button size="sm" variant="outline">Start</Button>

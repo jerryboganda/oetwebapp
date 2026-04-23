@@ -34,6 +34,20 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 type CompletionPoint = { day: string; completed: number };
 type VolumePoint = { week: string; submissions: number };
 
+const CHART_COLORS = {
+  primary: '#7c3aed',
+  info: '#2563eb',
+  success: '#10b981',
+  warning: '#d97706',
+  danger: '#ef4444',
+  navy: '#0f172a',
+  muted: '#526072',
+  border: '#d8e0e8',
+} as const;
+
+const CHART_TICK = { fontSize: 12, fill: CHART_COLORS.muted } as const;
+const CHART_TOOLTIP_STYLE = { borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' } as const;
+
 export default function ProgressDashboard() {
   const [criterionFilter, setCriterionFilter] = useState('Writing');
   const [trendData, setTrendData] = useState<TrendPoint[]>([]);
@@ -76,7 +90,7 @@ export default function ProgressDashboard() {
   const hasTrendData = trendData.length > 0;
 
   const trendEmptyState = (
-    <div className="flex h-full min-h-[240px] items-center justify-center rounded-3xl border border-dashed border-gray-200 bg-background-light/60 px-6 text-center">
+    <div className="flex h-full min-h-[240px] items-center justify-center rounded-3xl border border-dashed border-border bg-background-light/60 px-6 text-center">
       <div className="max-w-sm space-y-2">
         <p className="text-sm font-black uppercase tracking-widest text-muted">No trend data yet</p>
         <p className="text-sm text-muted">
@@ -123,7 +137,7 @@ export default function ProgressDashboard() {
             {/* 1. Sub-test Trend */}
             <MotionSection
               delayIndex={0}
-              className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm"
+              className="bg-surface rounded-2xl border border-border p-6 sm:p-8 shadow-sm"
             >
               <LearnerSurfaceSectionHeader
                 eyebrow="Sub-test Performance Trend"
@@ -132,8 +146,8 @@ export default function ProgressDashboard() {
                 className="mb-6"
               />
               <div className="flex items-center gap-3 mb-6">
-                <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center shrink-0">
-                  <TrendingUp className="w-5 h-5 text-blue-600" />
+                <div className="w-10 h-10 rounded-xl bg-info/10 flex items-center justify-center shrink-0">
+                  <TrendingUp className="w-5 h-5 text-info" />
                 </div>
                 <div>
                   <h2 className="text-base font-black text-navy">Sub-test Performance Trend</h2>
@@ -144,15 +158,15 @@ export default function ProgressDashboard() {
                 {hasTrendData ? (
                   <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                     <LineChart data={trendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} />
-                      <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.border} />
+                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={CHART_TICK} dy={10} />
+                      <YAxis axisLine={false} tickLine={false} tick={CHART_TICK} />
+                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
                       <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
-                      <Line type="monotone" dataKey="reading" name="Reading" stroke="#2563eb" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      <Line type="monotone" dataKey="listening" name="Listening" stroke="#4f46e5" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      <Line type="monotone" dataKey="writing" name="Writing" stroke="#e11d48" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      <Line type="monotone" dataKey="speaking" name="Speaking" stroke="#9333ea" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="reading" name="Reading" stroke={CHART_COLORS.info} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="listening" name="Listening" stroke={CHART_COLORS.primary} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="writing" name="Writing" stroke={CHART_COLORS.danger} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                      <Line type="monotone" dataKey="speaking" name="Speaking" stroke={CHART_COLORS.navy} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
                     </LineChart>
                   </ResponsiveContainer>
                 ) : trendEmptyState}
@@ -162,7 +176,7 @@ export default function ProgressDashboard() {
             {/* 2. Criterion Trend */}
             <MotionSection
               delayIndex={1}
-              className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm"
+              className="bg-surface rounded-2xl border border-border p-6 sm:p-8 shadow-sm"
             >
               <LearnerSurfaceSectionHeader
                 eyebrow="Criterion Trend"
@@ -172,15 +186,15 @@ export default function ProgressDashboard() {
               />
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center shrink-0">
-                    <Activity className="w-5 h-5 text-purple-600" />
+                  <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center shrink-0">
+                    <Activity className="w-5 h-5 text-primary" />
                   </div>
                   <div>
                     <h2 className="text-base font-black text-navy">Criterion Trend</h2>
                     <p className="text-xs text-muted">Deep dive into specific scoring criteria</p>
                   </div>
                 </div>
-                <div className="flex items-center gap-2 bg-background-light p-1 rounded-xl border border-gray-200">
+                <div className="flex items-center gap-2 bg-background-light p-1 rounded-xl border border-border">
                   {['Writing', 'Speaking'].map(f => (
                     <button
                       key={f}
@@ -196,15 +210,15 @@ export default function ProgressDashboard() {
                 {hasTrendData ? (
                   <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                     <LineChart data={trendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} />
-                      <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.border} />
+                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={CHART_TICK} dy={10} />
+                      <YAxis axisLine={false} tickLine={false} tick={CHART_TICK} />
+                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
                       <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
                       {criterionFilter === 'Writing' ? (
-                        <Line type="monotone" dataKey="writing" name="Writing Score" stroke="#e11d48" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                        <Line type="monotone" dataKey="writing" name="Writing Score" stroke={CHART_COLORS.danger} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
                       ) : (
-                        <Line type="monotone" dataKey="speaking" name="Speaking Score" stroke="#9333ea" strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
+                        <Line type="monotone" dataKey="speaking" name="Speaking Score" stroke={CHART_COLORS.primary} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
                       )}
                     </LineChart>
                   </ResponsiveContainer>
@@ -216,7 +230,7 @@ export default function ProgressDashboard() {
               {/* 3. Completion Trend */}
               <MotionSection
                 delayIndex={2}
-                className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm"
+                className="bg-surface rounded-2xl border border-border p-6 sm:p-8 shadow-sm"
               >
                 <LearnerSurfaceSectionHeader
                   eyebrow="Completion Trend"
@@ -225,8 +239,8 @@ export default function ProgressDashboard() {
                   className="mb-6"
                 />
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-xl bg-green-100 flex items-center justify-center shrink-0">
-                    <CheckCircle2 className="w-5 h-5 text-green-600" />
+                  <div className="w-10 h-10 rounded-xl bg-success/10 flex items-center justify-center shrink-0">
+                    <CheckCircle2 className="w-5 h-5 text-success" />
                   </div>
                   <div>
                     <h2 className="text-base font-black text-navy">Completion Trend</h2>
@@ -238,15 +252,15 @@ export default function ProgressDashboard() {
                     <AreaChart data={completionData} margin={{ top: 5, right: 0, bottom: 5, left: -20 }}>
                       <defs>
                         <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                          <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                          <stop offset="5%" stopColor={CHART_COLORS.success} stopOpacity={0.3} />
+                          <stop offset="95%" stopColor={CHART_COLORS.success} stopOpacity={0} />
                         </linearGradient>
                       </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                      <XAxis dataKey="day" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} />
-                      <Tooltip contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
-                      <Area type="monotone" dataKey="completed" name="Tasks Completed" stroke="#10b981" strokeWidth={3} fillOpacity={1} fill="url(#colorCompleted)" />
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.border} />
+                      <XAxis dataKey="day" axisLine={false} tickLine={false} tick={CHART_TICK} dy={10} />
+                      <YAxis axisLine={false} tickLine={false} tick={CHART_TICK} />
+                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
+                      <Area type="monotone" dataKey="completed" name="Tasks Completed" stroke={CHART_COLORS.success} strokeWidth={3} fillOpacity={1} fill="url(#colorCompleted)" />
                     </AreaChart>
                   </ResponsiveContainer>
                 </div>
@@ -255,7 +269,7 @@ export default function ProgressDashboard() {
               {/* 4. Submission Volume */}
               <MotionSection
                 delayIndex={3}
-                className="bg-surface rounded-[32px] border border-gray-200 p-6 sm:p-8 shadow-sm"
+                className="bg-surface rounded-2xl border border-border p-6 sm:p-8 shadow-sm"
               >
                 <LearnerSurfaceSectionHeader
                   eyebrow="Submission Volume"
@@ -264,8 +278,8 @@ export default function ProgressDashboard() {
                   className="mb-6"
                 />
                 <div className="flex items-center gap-3 mb-6">
-                  <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center shrink-0">
-                    <Send className="w-5 h-5 text-amber-600" />
+                  <div className="w-10 h-10 rounded-xl bg-warning/10 flex items-center justify-center shrink-0">
+                    <Send className="w-5 h-5 text-warning" />
                   </div>
                   <div>
                     <h2 className="text-base font-black text-navy">Submission Volume</h2>
@@ -275,11 +289,11 @@ export default function ProgressDashboard() {
                 <div className="h-[220px] w-full sm:h-[240px] lg:h-[250px]">
                   <ResponsiveContainer width="100%" height="100%" minWidth={0}>
                     <BarChart data={volumeData} margin={{ top: 5, right: 0, bottom: 5, left: -20 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
-                      <XAxis dataKey="week" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: '#6b7280' }} />
-                      <Tooltip cursor={{ fill: '#f3f4f6' }} contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' }} />
-                      <Bar dataKey="submissions" name="Submissions" fill="#f59e0b" radius={[6, 6, 0, 0]} barSize={32} />
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.border} />
+                      <XAxis dataKey="week" axisLine={false} tickLine={false} tick={CHART_TICK} dy={10} />
+                      <YAxis axisLine={false} tickLine={false} tick={CHART_TICK} />
+                      <Tooltip cursor={{ fill: CHART_COLORS.border }} contentStyle={CHART_TOOLTIP_STYLE} />
+                      <Bar dataKey="submissions" name="Submissions" fill={CHART_COLORS.warning} radius={[6, 6, 0, 0]} barSize={32} />
                     </BarChart>
                   </ResponsiveContainer>
                 </div>
@@ -289,7 +303,7 @@ export default function ProgressDashboard() {
             {/* 5. Review Usage */}
             <MotionSection
               delayIndex={4}
-              className="bg-navy rounded-[32px] p-6 sm:p-8 text-white shadow-lg relative overflow-hidden"
+              className="bg-navy rounded-2xl p-6 sm:p-8 text-white shadow-lg relative overflow-hidden"
             >
               <div className="mb-6 relative z-10">
                 <p className="text-xs font-black uppercase tracking-widest text-white/60 mb-2">Expert Review Turnaround</p>

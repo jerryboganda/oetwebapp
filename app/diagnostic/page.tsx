@@ -27,31 +27,31 @@ const SUB_TESTS = [
     icon: PenLine,
     duration: '45 mins',
     description: 'Complete a timed writing task aligned to your selected exam family',
-    color: 'text-blue-600',
-    bg: 'bg-blue-50',
+    color: 'text-info',
+    bg: 'bg-info/10',
   },
   {
     name: 'Speaking',
     icon: Mic,
     duration: '20 mins',
     description: 'Respond to a timed speaking prompt aligned to your selected exam family',
-    color: 'text-violet-600',
-    bg: 'bg-violet-50',
+    color: 'text-primary',
+    bg: 'bg-primary/10',
   },
   {
     name: 'Reading',
     icon: BookOpen,
     duration: '30 mins',
     description: 'Answer questions on exam-style reading passages',
-    color: 'text-emerald-600',
-    bg: 'bg-emerald-50',
+    color: 'text-success',
+    bg: 'bg-success/10',
   },
   {
     name: 'Listening',
     icon: Headphones,
     duration: '25 mins',
     description: 'Listen to exam-style audio and answer questions',
-    color: 'text-amber-600',
+    color: 'text-warning',
     bg: 'bg-amber-50',
   },
 ];
@@ -189,7 +189,7 @@ export default function DiagnosticIntroPage() {
             description="This page should answer what the diagnostic is, how it behaves, and what the learner gets afterward."
             className="mb-4"
           />
-          <Card className="bg-gray-50/50 border-gray-200">
+          <Card className="bg-background-light/50 border-border">
             <ul className="space-y-2 text-xs text-muted">
               <li className="flex items-start gap-2">
                 <span className="w-5 h-5 rounded-full bg-primary/10 text-primary text-xs font-bold flex items-center justify-center shrink-0 mt-px">1</span>

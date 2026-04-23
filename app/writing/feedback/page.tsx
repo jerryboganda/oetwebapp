@@ -34,7 +34,7 @@ function Highlight({ id, children, active, onToggle }: { id: string; children: R
       tabIndex={0}
       aria-pressed={active}
       className={`cursor-pointer transition-colors rounded px-1 py-0.5 ${
-        active ? 'bg-blue-200 border-b-2 border-blue-500' : 'bg-yellow-100 hover:bg-yellow-200 border-b border-transparent'
+        active ? 'bg-info/20 border-b-2 border-info' : 'bg-warning/10 hover:bg-warning/20 border-b border-transparent'
       }`}
     >
       {children}
@@ -132,7 +132,7 @@ export default function WritingDetailedFeedback() {
                           &quot;{ac.text}&quot;
                         </Highlight>
                         {activeComment === ac.id && (
-                          <MotionItem className="mt-2 ml-4 p-3 bg-blue-50 border border-blue-200 rounded-lg text-sm text-blue-900">
+                          <MotionItem className="mt-2 ml-4 p-3 bg-info/10 border border-info/30 rounded-lg text-sm text-info">
                             <span className="font-semibold">{criterion.name}:</span> {ac.comment}
                           </MotionItem>
                         )}
@@ -197,15 +197,15 @@ export default function WritingDetailedFeedback() {
                   {(criterion.omissions.length > 0 || criterion.unnecessaryDetails.length > 0) && (
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
                       {criterion.omissions.length > 0 && (
-                        <div className="rounded-2xl border border-red-100 bg-red-50 p-4">
-                          <h4 className="text-xs font-bold text-red-700 uppercase tracking-wider mb-3 flex items-center gap-2"><MinusCircle className="w-4 h-4" /> Omissions</h4>
-                          <ul className="space-y-2">{criterion.omissions.map((item, i) => (<li key={i} className="text-sm text-red-900 flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-red-400 mt-1.5 shrink-0" /><span className="leading-snug">{item}</span></li>))}</ul>
+                        <div className="rounded-2xl border border-danger/30 bg-danger/10 p-4">
+                          <h4 className="text-xs font-bold text-danger uppercase tracking-wider mb-3 flex items-center gap-2"><MinusCircle className="w-4 h-4" /> Omissions</h4>
+                          <ul className="space-y-2">{criterion.omissions.map((item, i) => (<li key={i} className="text-sm text-danger flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-danger mt-1.5 shrink-0" /><span className="leading-snug">{item}</span></li>))}</ul>
                         </div>
                       )}
                       {criterion.unnecessaryDetails.length > 0 && (
-                        <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
-                          <h4 className="text-xs font-bold text-amber-700 uppercase tracking-wider mb-3 flex items-center gap-2"><XCircle className="w-4 h-4" /> Unnecessary</h4>
-                          <ul className="space-y-2">{criterion.unnecessaryDetails.map((item, i) => (<li key={i} className="text-sm text-amber-900 flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 mt-1.5 shrink-0" /><span className="leading-snug">{item}</span></li>))}</ul>
+                        <div className="rounded-2xl border border-warning/30 bg-warning/10 p-4">
+                          <h4 className="text-xs font-bold text-warning uppercase tracking-wider mb-3 flex items-center gap-2"><XCircle className="w-4 h-4" /> Unnecessary</h4>
+                          <ul className="space-y-2">{criterion.unnecessaryDetails.map((item, i) => (<li key={i} className="text-sm text-warning flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-warning mt-1.5 shrink-0" /><span className="leading-snug">{item}</span></li>))}</ul>
                         </div>
                       )}
                     </div>
@@ -213,9 +213,9 @@ export default function WritingDetailedFeedback() {
 
                   {/* Revision Suggestions */}
                   {criterion.revisionSuggestions.length > 0 && (
-                    <div className="rounded-2xl border border-green-100 bg-green-50 p-4">
-                      <h4 className="text-xs font-bold text-green-700 uppercase tracking-wider mb-3 flex items-center gap-2"><Lightbulb className="w-4 h-4" /> Revision Suggestions</h4>
-                      <ul className="space-y-3">{criterion.revisionSuggestions.map((item, i) => (<li key={i} className="text-sm text-green-900 flex items-start gap-2"><ArrowRight className="w-4 h-4 text-green-500 shrink-0 mt-0.5" /><span className="leading-snug">{item}</span></li>))}</ul>
+                    <div className="rounded-2xl border border-success/30 bg-success/10 p-4">
+                      <h4 className="text-xs font-bold text-success uppercase tracking-wider mb-3 flex items-center gap-2"><Lightbulb className="w-4 h-4" /> Revision Suggestions</h4>
+                      <ul className="space-y-3">{criterion.revisionSuggestions.map((item, i) => (<li key={i} className="text-sm text-success flex items-start gap-2"><ArrowRight className="w-4 h-4 text-success shrink-0 mt-0.5" /><span className="leading-snug">{item}</span></li>))}</ul>
                     </div>
                   )}
                 </Card>

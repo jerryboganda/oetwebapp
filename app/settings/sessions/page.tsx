@@ -173,9 +173,9 @@ export default function SessionsPage() {
           </div>
         ) : null}
 
-        <div className="bg-surface rounded-[24px] border border-gray-200 shadow-sm overflow-hidden">
+        <div className="bg-surface rounded-2xl border border-border shadow-sm overflow-hidden">
           {loading ? (
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-border">
               {[1, 2, 3].map((i) => (
                 <div key={i} className="flex items-center gap-4 p-5">
                   <Skeleton className="w-10 h-10 rounded-xl" />
@@ -190,7 +190,7 @@ export default function SessionsPage() {
           ) : sessions.length === 0 ? (
             <div className="p-8 text-center text-muted">No active sessions found.</div>
           ) : (
-            <div className="divide-y divide-gray-100">
+            <div className="divide-y divide-border">
               {sessions.map((session) => {
                 const { label: deviceLabel, icon: DeviceIcon } = parseDeviceLabel(session.deviceInfo);
                 const masked = maskIpAddress(session.ipAddress);
@@ -203,8 +203,8 @@ export default function SessionsPage() {
                     className={`flex items-center justify-between p-4 sm:p-5 ${session.isCurrent ? 'bg-navy/[0.03]' : ''}`}
                   >
                     <div className="flex items-center gap-4 pr-4 min-w-0">
-                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${session.isCurrent ? 'bg-navy/10 border-navy/20' : 'bg-gray-50 border-gray-100'}`}>
-                        <DeviceIcon className={`w-5 h-5 ${session.isCurrent ? 'text-navy' : 'text-gray-600'}`} />
+                      <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border ${session.isCurrent ? 'bg-navy/10 border-navy/20' : 'bg-background-light border-border'}`}>
+                        <DeviceIcon className={`w-5 h-5 ${session.isCurrent ? 'text-navy' : 'text-muted'}`} />
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
@@ -218,7 +218,7 @@ export default function SessionsPage() {
                         <p className="text-xs text-muted mt-0.5 truncate">
                           IP: {masked} · {lastActive}
                         </p>
-                        <p className="text-[11px] text-gray-400 mt-0.5">
+                        <p className="text-[11px] text-muted/60 mt-0.5">
                           Created {formatRelativeTime(session.createdAt)}
                         </p>
                       </div>

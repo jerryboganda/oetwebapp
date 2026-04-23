@@ -131,7 +131,7 @@ export default function MockPlayerPage() {
             />
 
             {session.reviewReservation ? (
-              <section className="rounded-[24px] border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+              <section className="rounded-2xl border border-warning/30 bg-warning/10 p-4 text-sm text-warning">
                 <p className="text-[11px] font-black uppercase tracking-widest">Review reservation</p>
                 <p className="mt-1">
                   {session.reviewReservation.pendingCredits} pending / {session.reviewReservation.consumedCredits} consumed / state {session.reviewReservation.state.replace(/_/g, ' ')}
@@ -140,7 +140,7 @@ export default function MockPlayerPage() {
             ) : null}
 
             <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-              <div className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
+              <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
                 <LearnerSurfaceSectionHeader
                   eyebrow="Section States"
                   title="Every mock section now has a real launch path"
@@ -156,7 +156,7 @@ export default function MockPlayerPage() {
                       className={`flex w-full items-center justify-between rounded-2xl border p-4 text-left transition-colors ${
                         selectedSection?.id === section.id
                           ? 'border-primary bg-primary/5'
-                          : 'border-gray-200 bg-white hover:border-gray-300'
+                          : 'border-border bg-surface hover:border-border-hover'
                       }`}
                     >
                       <div>
@@ -173,7 +173,7 @@ export default function MockPlayerPage() {
                 </div>
               </div>
 
-              <div className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
+              <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
                 <LearnerSurfaceSectionHeader
                   eyebrow="Current Launch"
                   title={selectedSection?.title ?? 'Select a section'}
@@ -183,7 +183,7 @@ export default function MockPlayerPage() {
 
                 {selectedSection ? (
                   <div className="space-y-4">
-                    <div className="rounded-2xl border border-gray-100 bg-background-light p-4 text-sm text-muted">
+                    <div className="rounded-2xl border border-border bg-background-light p-4 text-sm text-muted">
                       <p>Strict timer: {session.config.strictTimer ? 'Enabled' : 'Flexible'}</p>
                       <p className="mt-1">Review attached: {selectedSection.reviewSelected ? 'Yes' : 'No'}</p>
                       <p className="mt-1">Content: {selectedSection.contentPaperTitle ?? selectedSection.contentPaperId ?? 'Published section'}</p>
@@ -215,14 +215,14 @@ export default function MockPlayerPage() {
                     )}
                   </div>
                 ) : (
-                  <div className="rounded-2xl border border-gray-100 bg-background-light p-4 text-sm text-muted">
+                  <div className="rounded-2xl border border-border bg-background-light p-4 text-sm text-muted">
                     Select a section to continue.
                   </div>
                 )}
               </div>
             </section>
 
-            <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
+            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
               <LearnerSurfaceSectionHeader
                 eyebrow="Why this matters"
                 title="The mock setup is now honored end to end"
@@ -230,15 +230,15 @@ export default function MockPlayerPage() {
                 className="mb-4"
               />
               <div className="grid gap-4 md:grid-cols-3">
-                <div className="rounded-2xl border border-gray-100 bg-background-light p-4">
+                <div className="rounded-2xl border border-border bg-background-light p-4">
                   <p className="text-xs font-black uppercase tracking-widest text-muted">Mode</p>
                   <p className="mt-2 text-sm font-bold text-navy">{session.config.mode === 'exam' ? 'Exam simulation' : 'Practice mode'}</p>
                 </div>
-                <div className="rounded-2xl border border-gray-100 bg-background-light p-4">
+                <div className="rounded-2xl border border-border bg-background-light p-4">
                   <p className="text-xs font-black uppercase tracking-widest text-muted">Timer</p>
                   <p className="mt-2 text-sm font-bold text-navy">{session.config.strictTimer ? 'Strict timer active' : 'Flexible timing'}</p>
                 </div>
-                <div className="rounded-2xl border border-gray-100 bg-background-light p-4">
+                <div className="rounded-2xl border border-border bg-background-light p-4">
                   <p className="text-xs font-black uppercase tracking-widest text-muted">Review selection</p>
                   <p className="mt-2 text-sm font-bold text-navy">{session.config.reviewSelection.replace(/_/g, ' ')}</p>
                 </div>

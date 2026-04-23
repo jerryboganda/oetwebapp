@@ -15,10 +15,10 @@ import { analytics } from '@/lib/analytics';
 import type { VocabularyFlashcard } from '@/lib/types/vocabulary';
 
 const QUALITY_OPTIONS = [
-  { q: 0, key: '1', label: 'Forgot', color: 'bg-red-500 hover:bg-red-600 text-white' },
-  { q: 2, key: '2', label: 'Hard', color: 'bg-orange-500 hover:bg-orange-600 text-white' },
-  { q: 3, key: '3', label: 'Good', color: 'bg-blue-500 hover:bg-blue-600 text-white' },
-  { q: 5, key: '4', label: 'Easy', color: 'bg-green-500 hover:bg-green-600 text-white' },
+  { q: 0, key: '1', label: 'Forgot', color: 'bg-danger hover:bg-danger/90 text-white' },
+  { q: 2, key: '2', label: 'Hard', color: 'bg-warning hover:bg-warning/90 text-white' },
+  { q: 3, key: '3', label: 'Good', color: 'bg-info hover:bg-info/90 text-white' },
+  { q: 5, key: '4', label: 'Easy', color: 'bg-success hover:bg-success/90 text-white' },
 ];
 
 export default function FlashcardsPage() {
@@ -111,12 +111,12 @@ export default function FlashcardsPage() {
         <Skeleton className="h-64 rounded-2xl" />
       ) : done ? (
         <MotionSection className="mx-auto max-w-md py-16 text-center">
-          <Card className="border-gray-200 bg-surface p-8">
-            <CheckCircle2 className="mx-auto mb-4 h-16 w-16 text-green-500" />
+          <Card className="border-border bg-surface p-8">
+            <CheckCircle2 className="mx-auto mb-4 h-16 w-16 text-success" />
             <h2 className="mb-2 text-2xl font-bold text-navy">All done!</h2>
             <p className="mb-6 text-muted">{stats.reviewed} cards reviewed · {stats.easy} marked easy</p>
           <div className="flex gap-3 justify-center">
-            <Link href="/vocabulary" className="rounded-xl border border-gray-200 bg-background-light px-5 py-2.5 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-surface">
+            <Link href="/vocabulary" className="rounded-xl border border-border bg-background-light px-5 py-2.5 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-surface">
               Back to Vocabulary
             </Link>
             <button onClick={() => { setCurrent(0); setFlipped(false); setDone(false); setStats({ reviewed: 0, easy: 0 }); }} className="inline-flex items-center gap-1.5 rounded-xl bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90">
@@ -126,8 +126,8 @@ export default function FlashcardsPage() {
           </Card>
         </MotionSection>
       ) : cards.length === 0 ? (
-        <Card className="border-gray-200 bg-surface px-4 sm:px-8 py-8 sm:py-16 text-center">
-          <CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-green-400" />
+        <Card className="border-border bg-surface px-4 sm:px-8 py-8 sm:py-16 text-center">
+          <CheckCircle2 className="mx-auto mb-3 h-12 w-12 text-success" />
           <p className="text-muted">No flashcards due right now. Come back later!</p>
           <Link href="/vocabulary" className="mt-4 inline-block text-sm font-medium text-primary hover:underline">Back to Vocabulary</Link>
         </Card>
@@ -153,7 +153,7 @@ export default function FlashcardsPage() {
               animate={{ rotateY: 0, opacity: 1 }}
               exit={{ rotateY: flipped ? 90 : -90, opacity: 0 }}
               transition={{ duration: 0.2 }}
-              className="mb-4 flex min-h-[220px] cursor-pointer select-none flex-col items-center justify-center rounded-2xl border border-gray-200 bg-surface p-8 text-center"
+              className="mb-4 flex min-h-[220px] cursor-pointer select-none flex-col items-center justify-center rounded-2xl border border-border bg-surface p-8 text-center"
               onClick={() => !flipped && setFlipped(true)}
               role="button"
               tabIndex={0}
@@ -177,17 +177,17 @@ export default function FlashcardsPage() {
                 </>
               ) : (
                 <>
-                  <div className="mb-4 text-xs font-medium uppercase text-green-500">Definition</div>
+                  <div className="mb-4 text-xs font-medium uppercase text-success">Definition</div>
                   <div className="mb-4 text-lg text-navy">{card.definition}</div>
                   {card.exampleSentence && (
-                    <div className="mt-2 w-full border-t border-gray-100 pt-3 text-sm italic text-muted">
+                    <div className="mt-2 w-full border-t border-border pt-3 text-sm italic text-muted">
                       &quot;{card.exampleSentence}&quot;
                     </div>
                   )}
                   {card.synonyms?.length > 0 && (
                     <div className="mt-3 flex flex-wrap justify-center gap-1">
                       {card.synonyms.slice(0, 4).map((s, i) => (
-                        <span key={i} className="rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600">{s}</span>
+                        <span key={i} className="rounded-full bg-background-light px-2 py-0.5 text-xs text-muted">{s}</span>
                       ))}
                     </div>
                   )}

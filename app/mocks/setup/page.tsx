@@ -31,10 +31,10 @@ type MockType = 'full' | 'sub';
 type MockSubType = 'reading' | 'listening' | 'writing' | 'speaking';
 
 const SUBTEST_META: Record<MockSubType, { label: string; icon: ElementType; active: string }> = {
-  listening: { label: 'Listening', icon: Headphones, active: 'border-indigo-500 bg-indigo-50 text-indigo-700' },
-  reading: { label: 'Reading', icon: FileText, active: 'border-blue-500 bg-blue-50 text-blue-700' },
-  writing: { label: 'Writing', icon: PenTool, active: 'border-rose-500 bg-rose-50 text-rose-700' },
-  speaking: { label: 'Speaking', icon: Mic, active: 'border-purple-500 bg-purple-50 text-purple-700' },
+  listening: { label: 'Listening', icon: Headphones, active: 'border-primary bg-primary/10 text-primary' },
+  reading: { label: 'Reading', icon: FileText, active: 'border-info bg-info/10 text-info' },
+  writing: { label: 'Writing', icon: PenTool, active: 'border-danger bg-danger/10 text-danger' },
+  speaking: { label: 'Speaking', icon: Mic, active: 'border-primary bg-primary/10 text-primary' },
 };
 
 function isSubtest(value: string | null): value is MockSubType {
@@ -202,8 +202,8 @@ export default function MockSetup() {
 
         {loading ? (
           <div className="space-y-4">
-            <Skeleton className="h-48 rounded-[28px]" />
-            <Skeleton className="h-48 rounded-[28px]" />
+            <Skeleton className="h-48 rounded-2xl" />
+            <Skeleton className="h-48 rounded-2xl" />
           </div>
         ) : null}
 
@@ -211,7 +211,7 @@ export default function MockSetup() {
 
         {!loading ? (
           <>
-            <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm sm:p-8">
+            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8">
               <LearnerSurfaceSectionHeader
                 eyebrow="1. Mock Type"
                 title="Choose full simulation or focused sub-test"
@@ -228,11 +228,11 @@ export default function MockSetup() {
                     type="button"
                     onClick={() => handleMockTypeChange(id)}
                     className={`rounded-2xl border-2 p-5 text-left transition-all ${
-                      mockType === id ? 'border-primary bg-primary/5 ring-4 ring-primary/10' : 'border-gray-200 hover:border-gray-300 hover:bg-gray-50'
+                      mockType === id ? 'border-primary bg-primary/5 ring-4 ring-primary/10' : 'border-border hover:border-border-hover hover:bg-background-light'
                     }`}
                   >
                     <div className="mb-3 flex items-center justify-between">
-                      <span className={`flex h-10 w-10 items-center justify-center rounded-full ${mockType === id ? 'bg-primary text-white' : 'bg-gray-100 text-muted'}`}>
+                      <span className={`flex h-10 w-10 items-center justify-center rounded-full ${mockType === id ? 'bg-primary text-white' : 'bg-background-light text-muted'}`}>
                         <Icon className="h-5 w-5" />
                       </span>
                       {mockType === id ? <Check className="h-5 w-5 text-primary" /> : null}
@@ -254,7 +254,7 @@ export default function MockSetup() {
                           key={id}
                           type="button"
                           onClick={() => handleSubTypeChange(id)}
-                          className={`rounded-xl border px-4 py-3 transition-colors ${subType === id ? meta.active : 'border-gray-200 bg-white text-muted hover:bg-gray-50'}`}
+                          className={`rounded-xl border px-4 py-3 transition-colors ${subType === id ? meta.active : 'border-border bg-surface text-muted hover:bg-background-light'}`}
                         >
                           <Icon className="mx-auto mb-2 h-5 w-5" />
                           <span className="text-sm font-bold">{meta.label}</span>
@@ -268,7 +268,7 @@ export default function MockSetup() {
 
             <MotionPresence>
               {showProfession ? (
-                <MotionSection className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm sm:p-8">
+                <MotionSection className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8">
                   <LearnerSurfaceSectionHeader
                     eyebrow="2. Profession"
                     title="Match profession-scoped content"
@@ -286,7 +286,7 @@ export default function MockSetup() {
                           setSelectedBundleId(null);
                         }}
                         className={`rounded-xl border px-4 py-3 text-left text-sm font-bold transition-colors ${
-                          profession === item.id ? 'border-primary bg-primary/5 text-primary' : 'border-gray-200 bg-white text-navy hover:bg-gray-50'
+                          profession === item.id ? 'border-primary bg-primary/5 text-primary' : 'border-border bg-surface text-navy hover:bg-background-light'
                         }`}
                       >
                         {item.label}
@@ -297,7 +297,7 @@ export default function MockSetup() {
               ) : null}
             </MotionPresence>
 
-            <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm sm:p-8">
+            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8">
               <LearnerSurfaceSectionHeader
                 eyebrow={showProfession ? '3. Bundle' : '2. Bundle'}
                 title="Pick the authored mock route"
@@ -316,7 +316,7 @@ export default function MockSetup() {
                       type="button"
                       onClick={() => setSelectedBundleId(bundle.bundleId)}
                       className={`rounded-2xl border p-5 text-left transition-colors ${
-                        selectedBundle?.bundleId === bundle.bundleId ? 'border-primary bg-primary/5' : 'border-gray-200 bg-white hover:border-gray-300'
+                        selectedBundle?.bundleId === bundle.bundleId ? 'border-primary bg-primary/5' : 'border-border bg-surface hover:border-border-hover'
                       }`}
                     >
                       <div className="flex items-start justify-between gap-3">
@@ -341,7 +341,7 @@ export default function MockSetup() {
               )}
             </section>
 
-            <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm sm:p-8">
+            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8">
               <LearnerSurfaceSectionHeader
                 eyebrow={showProfession ? '4. Environment' : '3. Environment'}
                 title="Set timing and exam behavior"
@@ -352,28 +352,28 @@ export default function MockSetup() {
                 <button
                   type="button"
                   onClick={() => handleModeChange('exam')}
-                  className={`rounded-2xl border-2 p-4 text-left transition-colors ${mode === 'exam' ? 'border-rose-500 bg-rose-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                  className={`rounded-2xl border-2 p-4 text-left transition-colors ${mode === 'exam' ? 'border-danger bg-danger/10' : 'border-border hover:bg-background-light'}`}
                 >
-                  <ShieldCheck className={`mb-3 h-5 w-5 ${mode === 'exam' ? 'text-rose-500' : 'text-muted'}`} />
+                  <ShieldCheck className={`mb-3 h-5 w-5 ${mode === 'exam' ? 'text-danger' : 'text-muted'}`} />
                   <p className="text-sm font-bold text-navy">Exam Mode</p>
                   <p className="mt-1 text-xs text-muted">Strict timing and full simulation behavior.</p>
                 </button>
                 <button
                   type="button"
                   onClick={() => handleModeChange('practice')}
-                  className={`rounded-2xl border-2 p-4 text-left transition-colors ${mode === 'practice' ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'}`}
+                  className={`rounded-2xl border-2 p-4 text-left transition-colors ${mode === 'practice' ? 'border-info bg-info/10' : 'border-border hover:bg-background-light'}`}
                 >
-                  <Award className={`mb-3 h-5 w-5 ${mode === 'practice' ? 'text-blue-500' : 'text-muted'}`} />
+                  <Award className={`mb-3 h-5 w-5 ${mode === 'practice' ? 'text-info' : 'text-muted'}`} />
                   <p className="text-sm font-bold text-navy">Practice Mode</p>
                   <p className="mt-1 text-xs text-muted">Flexible timing for targeted practice.</p>
                 </button>
               </div>
-              <div className="mt-6 flex items-center justify-between border-t border-gray-100 pt-6">
+              <div className="mt-6 flex items-center justify-between border-t border-border pt-6">
                 <div className="pr-4">
                   <p className="flex items-center gap-2 text-sm font-bold text-navy"><Clock className="h-4 w-4 text-muted" /> Strict Timer</p>
                   <p className="mt-1 text-xs text-muted">Auto-enforce each section limit from the authored bundle.</p>
                   {mode === 'exam' ? (
-                    <p className="mt-2 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-rose-500">
+                    <p className="mt-2 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-danger">
                       <Info className="h-3 w-3" /> Required in exam mode
                     </p>
                   ) : null}
@@ -382,7 +382,7 @@ export default function MockSetup() {
                   type="button"
                   onClick={() => mode !== 'exam' && setStrictTimer(!strictTimer)}
                   disabled={mode === 'exam'}
-                  className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full transition-colors ${strictTimer ? 'bg-primary' : 'bg-gray-200'} ${mode === 'exam' ? 'cursor-not-allowed opacity-50' : ''}`}
+                  className={`relative inline-flex h-8 w-14 shrink-0 items-center rounded-full transition-colors ${strictTimer ? 'bg-primary' : 'bg-border'} ${mode === 'exam' ? 'cursor-not-allowed opacity-50' : ''}`}
                   role="switch"
                   aria-checked={strictTimer}
                 >
@@ -392,14 +392,14 @@ export default function MockSetup() {
               </div>
             </section>
 
-            <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm sm:p-8">
+            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8">
               <LearnerSurfaceSectionHeader
                 eyebrow={showProfession ? '5. Review Credits' : '4. Review Credits'}
                 title="Reserve expert review at mock start"
                 description="Credits are reserved immediately, consumed when eligible Writing/Speaking evidence is submitted, and released if the attempt is cancelled."
                 className="mb-4"
               />
-              <div className="mb-4 inline-flex rounded-md bg-amber-100 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-amber-800">
+              <div className="mb-4 inline-flex rounded-md bg-warning/10 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-warning">
                 {availableCredits} credits available
               </div>
               <div className="grid gap-3 sm:grid-cols-2">
@@ -413,10 +413,10 @@ export default function MockSetup() {
                       onClick={() => setReviewSelection(option.id)}
                       className={`rounded-2xl border p-4 text-left transition-colors ${
                         selectedReviewSelection === option.id
-                          ? 'border-amber-400 bg-amber-50'
+                          ? 'border-warning bg-warning/10'
                           : disabled
-                            ? 'cursor-not-allowed border-gray-200 bg-gray-50 opacity-60'
-                            : 'border-gray-200 bg-white hover:border-gray-300'
+                            ? 'cursor-not-allowed border-border bg-background-light opacity-60'
+                            : 'border-border bg-surface hover:border-border-hover'
                       }`}
                     >
                       <p className="text-sm font-bold text-navy">{option.label}</p>
@@ -437,7 +437,7 @@ export default function MockSetup() {
 
             {startError ? <InlineAlert variant="error">{startError}</InlineAlert> : null}
 
-            <div className="sticky bottom-4 z-10 rounded-2xl border border-gray-200 bg-surface/95 p-3 shadow-lg backdrop-blur">
+            <div className="sticky bottom-4 z-10 rounded-2xl border border-border bg-surface/95 p-3 shadow-lg backdrop-blur">
               <Button
                 onClick={handleStart}
                 disabled={starting || !selectedBundle || insufficientCredits}

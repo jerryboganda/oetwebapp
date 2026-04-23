@@ -437,7 +437,7 @@ function safeDrillCard(drill: SafeDrillDto): LearnerSurfaceCardModel {
 
 function EmptyPapersState() {
   return (
-    <div className="rounded-[24px] border border-dashed border-gray-200 bg-surface/80 p-8 text-center">
+    <div className="rounded-[24px] border border-dashed border-border bg-surface/80 p-8 text-center">
       <p className="text-base font-bold text-navy">No structured Reading papers are ready yet</p>
       <p className="mt-2 text-sm text-muted">
         Published papers will appear here after the authoring structure passes the Reading publish gate.
@@ -462,7 +462,7 @@ function EmptyPapersState() {
 
 function EmptyStateBox({ title, description }: { title: string; description: string }) {
   return (
-    <div className="rounded-[24px] border border-dashed border-gray-200 bg-surface/80 p-6 text-center">
+    <div className="rounded-[24px] border border-dashed border-border bg-surface/80 p-6 text-center">
       <p className="text-base font-bold text-navy">{title}</p>
       <p className="mt-2 text-sm text-muted">{description}</p>
     </div>

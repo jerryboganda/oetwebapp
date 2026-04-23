@@ -140,10 +140,10 @@ export default function ReferralPage() {
                   {info.referralCode}
                 </div>
                 <Button variant="outline" size="sm" onClick={copyCode} className="h-12 w-12 shrink-0">
-                  {copied ? <CheckCircle2 className="h-5 w-5 text-green-600" /> : <Copy className="h-5 w-5" />}
+                  {copied ? <CheckCircle2 className="h-5 w-5 text-success" /> : <Copy className="h-5 w-5" />}
                 </Button>
               </div>
-              {copied && <p className="text-xs text-green-600 text-center">Copied to clipboard!</p>}
+              {copied && <p className="text-xs text-success text-center">Copied to clipboard!</p>}
 
               {/* share buttons */}
               <div className="flex gap-3">
@@ -171,12 +171,12 @@ export default function ReferralPage() {
         {info && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <Card className="p-4 text-center">
-              <Users className="h-5 w-5 mx-auto mb-1.5 text-blue-500" />
+              <Users className="h-5 w-5 mx-auto mb-1.5 text-info" />
               <p className="text-2xl font-bold">{info.referralsMade}</p>
               <p className="text-xs text-muted-foreground">Friends Referred</p>
             </Card>
             <Card className="p-4 text-center">
-              <DollarSign className="h-5 w-5 mx-auto mb-1.5 text-green-500" />
+              <DollarSign className="h-5 w-5 mx-auto mb-1.5 text-success" />
               <p className="text-2xl font-bold">{info.creditsEarned}</p>
               <p className="text-xs text-muted-foreground">Credits Earned</p>
             </Card>

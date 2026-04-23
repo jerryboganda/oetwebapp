@@ -225,7 +225,7 @@ export default function ListeningHome() {
                   })}
                 </div>
               ) : (
-                <div className="rounded-[24px] border border-dashed border-gray-200 bg-surface/80 p-6 text-sm text-muted">
+                <div className="rounded-[24px] border border-dashed border-border bg-surface/80 p-6 text-sm text-muted">
                   <p>{home?.emptyStates.activeAttempts ?? 'No in-progress Listening attempt.'}</p>
                   <div className="mt-3 flex flex-wrap gap-4">
                     <Link href="/mocks" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Open Mock Center <ArrowRight className="h-4 w-4" /></Link>
@@ -281,7 +281,7 @@ export default function ListeningHome() {
                   {tasks.map(taskToCard)}
                 </div>
               ) : (
-                <div className="rounded-[24px] border border-dashed border-gray-200 bg-surface/80 p-6 text-sm text-muted">
+                <div className="rounded-[24px] border border-dashed border-border bg-surface/80 p-6 text-sm text-muted">
                   <p>{home?.emptyStates.papers ?? 'No published Listening papers are ready yet.'}</p>
                   <div className="mt-3 flex flex-wrap gap-4">
                     <Link href="/mocks" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Run a Full Mock <ArrowRight className="h-4 w-4" /></Link>
@@ -380,7 +380,7 @@ export default function ListeningHome() {
                   })}
                 </div>
               ) : (
-                <div className="rounded-[24px] border border-dashed border-gray-200 bg-surface/80 p-6 text-sm text-muted">
+                <div className="rounded-[24px] border border-dashed border-border bg-surface/80 p-6 text-sm text-muted">
                   <p>{home?.emptyStates.recentResults ?? 'Complete a Listening task to unlock transcript-backed review and canonical OET score display.'}</p>
                   <div className="mt-3 flex flex-wrap gap-4">
                     <Link href="/mocks" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Open Mock Center <ArrowRight className="h-4 w-4" /></Link>
@@ -464,7 +464,7 @@ export default function ListeningHome() {
                   })}
                 </div>
               ) : (
-                <div className="rounded-[24px] border border-dashed border-gray-200 bg-surface/80 p-6 text-sm text-muted">
+                <div className="rounded-[24px] border border-dashed border-border bg-surface/80 p-6 text-sm text-muted">
                   Complete a mock to see Listening transfer evidence here.
                 </div>
               )}

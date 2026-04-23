@@ -23,10 +23,10 @@ import { analytics } from '@/lib/analytics';
 import type { EscalationStatus, LearnerEscalation } from '@/lib/types/learner';
 
 const STATUS_CONFIG: Record<EscalationStatus, { label: string; icon: React.ElementType; classes: string }> = {
-  Pending:  { label: 'Pending',   icon: Clock,        classes: 'bg-amber-100 text-amber-700' },
-  InReview: { label: 'In Review', icon: Search,       classes: 'bg-blue-100 text-blue-700' },
-  Resolved: { label: 'Resolved',  icon: CheckCircle2, classes: 'bg-green-100 text-green-700' },
-  Rejected: { label: 'Rejected',  icon: XCircle,      classes: 'bg-red-100 text-red-700' },
+  Pending:  { label: 'Pending',   icon: Clock,        classes: 'bg-warning/10 text-warning' },
+  InReview: { label: 'In Review', icon: Search,       classes: 'bg-info/10 text-info' },
+  Resolved: { label: 'Resolved',  icon: CheckCircle2, classes: 'bg-success/10 text-success' },
+  Rejected: { label: 'Rejected',  icon: XCircle,      classes: 'bg-danger/10 text-danger' },
 };
 
 function StatusBadge({ status }: { status: EscalationStatus }) {
@@ -137,7 +137,7 @@ export default function EscalationsPage() {
 
         {/* ─── Submit Form ─── */}
         {showForm ? (
-          <div className="rounded-[24px] border border-border bg-surface p-6 space-y-4">
+          <div className="rounded-2xl border border-border bg-surface p-6 space-y-4">
             <div className="flex items-center justify-between">
               <h3 className="text-lg font-semibold text-navy">Submit New Escalation</h3>
               <Button variant="ghost" size="sm" onClick={() => setShowForm(false)} aria-label="Close form">
@@ -229,7 +229,7 @@ export default function EscalationsPage() {
                   onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') router.push(`/escalations/${esc.id}`); }}
                   role="button"
                   tabIndex={0}
-                  className="rounded-[24px] border border-border bg-surface p-5 cursor-pointer hover:border-primary/30 hover:shadow-sm transition-all"
+                  className="rounded-2xl border border-border bg-surface p-5 cursor-pointer hover:border-primary/30 hover:shadow-sm transition-all"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="min-w-0 flex-1 space-y-1">

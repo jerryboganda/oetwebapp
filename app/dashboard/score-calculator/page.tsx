@@ -37,13 +37,13 @@ async function apiRequest<T = unknown>(path: string): Promise<T> {
 
 /* ── grade colour helpers ──────────────────────── */
 const GRADE_COLORS: Record<string, string> = {
-  'A':  'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
-  'B+': 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200',
-  'B':  'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
-  'C+': 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
-  'C':  'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200',
-  'D':  'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
-  'E':  'bg-red-200 text-red-900 dark:bg-red-950 dark:text-red-300',
+  'A':  'bg-success/10 text-success',
+  'B+': 'bg-success/10 text-success',
+  'B':  'bg-info/10 text-info',
+  'C+': 'bg-warning/10 text-warning',
+  'C':  'bg-warning/10 text-warning',
+  'D':  'bg-danger/10 text-danger',
+  'E':  'bg-danger/10 text-danger',
 };
 
 export default function ScoreCalculatorPage() {
@@ -202,7 +202,7 @@ export default function ScoreCalculatorPage() {
               const meetsReq = oetScore >= req.oetMinScore;
               return (
                 <MotionItem key={i}>
-                  <Card className={`p-4 transition-colors ${meetsReq ? 'border-green-200 dark:border-green-800' : ''}`}>
+                  <Card className={`p-4 transition-colors ${meetsReq ? 'border-success/30' : ''}`}>
                     <div className="flex items-center justify-between">
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-1">

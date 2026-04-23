@@ -100,7 +100,7 @@ export default function RoleCardPreview() {
           />
 
           <Card className="flex-1 p-6 space-y-6">
-            <div className="border-b border-gray-100 pb-4">
+            <div className="border-b border-border pb-4">
               <p className="text-xs font-bold text-primary uppercase tracking-widest mb-1">OET Speaking Practice</p>
               <h3 className="text-xl font-bold text-navy">{card.title}</h3>
             </div>
@@ -114,9 +114,9 @@ export default function RoleCardPreview() {
             />
 
             {/* Computer-based Speaking paper rule notice (rulebook RULE_61/RULE_75 + RULE_62/RULE_76). */}
-            <div className="rounded-2xl border border-amber-200 bg-amber-50 p-4">
+            <div className="rounded-2xl border border-warning/30 bg-amber-50 p-4">
               <div className="flex items-start gap-3">
-                <AlertTriangle className="h-5 w-5 text-amber-600 shrink-0 mt-0.5" />
+                <AlertTriangle className="h-5 w-5 text-warning shrink-0 mt-0.5" />
                 <div className="space-y-1.5 text-sm leading-relaxed">
                   <p className="font-bold text-navy">Computer-based exam rules for this card</p>
                   <p className="text-navy/80">
@@ -134,7 +134,7 @@ export default function RoleCardPreview() {
               <ul className="space-y-3">
                 {card.tasks.map((task, i) => (
                   <li key={i} className="flex gap-3 items-start">
-                    <span className="shrink-0 w-6 h-6 rounded-full bg-gray-100 text-muted text-xs font-bold flex items-center justify-center">
+                    <span className="shrink-0 w-6 h-6 rounded-full bg-background-light text-muted text-xs font-bold flex items-center justify-center">
                       {i + 1}
                     </span>
                     <p className="text-sm text-navy leading-relaxed">{task}</p>
@@ -155,7 +155,7 @@ export default function RoleCardPreview() {
 
           <div className="flex-1 flex flex-col gap-6">
             <Card className="flex-1 flex flex-col overflow-hidden">
-              <div className="bg-gray-50 px-4 py-2 border-b border-gray-100 flex items-center justify-between">
+              <div className="bg-background-light px-4 py-2 border-b border-border flex items-center justify-between">
                 <span className="text-xs font-bold text-muted uppercase">Scratchpad</span>
                 <span className="text-xs text-muted">Local only</span>
               </div>
@@ -172,14 +172,14 @@ export default function RoleCardPreview() {
                 <h4 className="text-xs font-bold text-muted uppercase tracking-widest">Practice Mode</h4>
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                   {([
-                    { id: 'self', label: 'Guided Self-Practice', icon: User, color: 'text-purple-600', bg: 'bg-purple-50' },
-                    { id: 'exam', label: 'Simulation', icon: ShieldCheck, color: 'text-amber-600', bg: 'bg-amber-50' },
+                    { id: 'self', label: 'Guided Self-Practice', icon: User, color: 'text-primary', bg: 'bg-primary/10' },
+                    { id: 'exam', label: 'Simulation', icon: ShieldCheck, color: 'text-warning', bg: 'bg-amber-50' },
                   ] as const).map((m) => (
                     <button
                       key={m.id}
                       onClick={() => setSelectedMode(m.id)}
                       className={`flex flex-col items-center gap-2 p-3 rounded-xl border transition-all ${
-                        selectedMode === m.id ? 'border-primary bg-primary/5' : 'border-gray-200 hover:border-gray-300'
+                        selectedMode === m.id ? 'border-primary bg-primary/5' : 'border-border hover:border-border-hover'
                       }`}
                     >
                       <div className={`w-8 h-8 rounded-lg flex items-center justify-center ${m.bg}`}>
@@ -206,7 +206,7 @@ export default function RoleCardPreview() {
 
             <Card className="border-primary/15 bg-primary/5 p-5">
               <div className="flex items-start gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-white text-primary">
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-surface text-primary">
                   <MessageCircle className="h-5 w-5" />
                 </div>
                 <div>

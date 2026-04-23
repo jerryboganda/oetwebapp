@@ -91,40 +91,40 @@ export default function WritingResultSummary() {
           ]}
         />
 
-        <MotionSection className="rounded-[24px] border border-blue-200 bg-blue-50/70 p-4 flex items-start gap-3 shadow-sm">
-          <Info className="w-5 h-5 shrink-0 mt-0.5 text-blue-600" />
-          <p className="text-sm leading-relaxed text-blue-900">
+        <MotionSection className="rounded-2xl border border-info/30 bg-info/10 p-4 flex items-start gap-3 shadow-sm">
+          <Info className="w-5 h-5 shrink-0 mt-0.5 text-info" />
+          <p className="text-sm leading-relaxed text-info">
             <strong>{result.methodLabel}:</strong> {result.learnerDisclaimer}
           </p>
         </MotionSection>
 
         <MotionSection delayIndex={1} className="grid grid-cols-1 gap-4 md:grid-cols-3 mb-8">
-          <Card className="border-gray-200 bg-background-light p-4">
+          <Card className="border-border bg-background-light p-4">
             <p className="text-xs font-bold uppercase tracking-wider text-muted">Exam Family</p>
             <p className="mt-2 text-base font-bold text-navy">{result.examFamilyLabel}</p>
           </Card>
-          <Card className="border-gray-200 bg-background-light p-4">
+          <Card className="border-border bg-background-light p-4">
             <p className="text-xs font-bold uppercase tracking-wider text-muted">Confidence</p>
             <p className="mt-2 text-base font-bold text-navy">{result.confidenceLabel}</p>
           </Card>
-          <Card className="border-gray-200 bg-background-light p-4">
+          <Card className="border-border bg-background-light p-4">
             <p className="text-xs font-bold uppercase tracking-wider text-muted">Provenance</p>
             <p className="mt-2 text-base font-bold text-navy">{result.provenanceLabel}</p>
           </Card>
         </MotionSection>
 
         {result.humanReviewRecommended ? (
-          <MotionSection delayIndex={2} className="rounded-[24px] border border-amber-200 bg-amber-50/80 p-4 flex items-start gap-3 shadow-sm">
-            <ShieldAlert className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" />
-            <p className="text-sm text-amber-900 leading-relaxed">
+          <MotionSection delayIndex={2} className="rounded-2xl border border-warning/30 bg-warning/10 p-4 flex items-start gap-3 shadow-sm">
+            <ShieldAlert className="w-5 h-5 text-warning shrink-0 mt-0.5" />
+            <p className="text-sm text-warning leading-relaxed">
               Human review is recommended here because the AI score is still a practice estimate. Use expert review for higher-stakes decisions and borderline readiness calls.
             </p>
           </MotionSection>
         ) : null}
 
         <MotionSection delayIndex={3}>
-          <Card className="border-gray-200 bg-surface p-8 text-center">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 divide-y md:divide-y-0 md:divide-x divide-gray-100">
+          <Card className="border-border bg-surface p-8 text-center">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-8 divide-y md:divide-y-0 md:divide-x divide-border">
               <div className="flex flex-col items-center justify-center pt-4 md:pt-0">
                 <div className="text-sm font-bold text-muted uppercase tracking-wider mb-2 flex items-center gap-1.5">
                   <BarChart3 className="w-4 h-4" />
@@ -156,17 +156,17 @@ export default function WritingResultSummary() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
           <MotionSection delayIndex={4}>
-            <Card className="border-gray-200 bg-surface p-6">
+            <Card className="border-border bg-surface p-6">
               <div className="flex items-center gap-2 mb-6">
-                <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center shrink-0">
-                  <ThumbsUp className="w-4 h-4 text-green-600" />
+                <div className="w-8 h-8 rounded-full bg-success/10 flex items-center justify-center shrink-0">
+                  <ThumbsUp className="w-4 h-4 text-success" />
                 </div>
                 <h2 className="text-lg font-bold text-navy">Top Strengths</h2>
               </div>
               <ul className="space-y-4">
                 {result.topStrengths.map((strength, index) => (
-                  <li key={index} className="flex items-start gap-3 text-gray-700">
-                    <span className="w-1.5 h-1.5 rounded-full bg-green-500 mt-2 shrink-0" />
+                  <li key={index} className="flex items-start gap-3 text-navy">
+                    <span className="w-1.5 h-1.5 rounded-full bg-success mt-2 shrink-0" />
                     <span className="leading-relaxed">{strength}</span>
                   </li>
                 ))}
@@ -174,17 +174,17 @@ export default function WritingResultSummary() {
             </Card>
           </MotionSection>
           <MotionSection delayIndex={5}>
-            <Card className="border-gray-200 bg-surface p-6">
+            <Card className="border-border bg-surface p-6">
               <div className="flex items-center gap-2 mb-6">
-                <div className="w-8 h-8 rounded-full bg-amber-100 flex items-center justify-center shrink-0">
-                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                <div className="w-8 h-8 rounded-full bg-warning/10 flex items-center justify-center shrink-0">
+                  <AlertTriangle className="w-4 h-4 text-warning" />
                 </div>
                 <h2 className="text-lg font-bold text-navy">Top Issues to Fix</h2>
               </div>
               <ul className="space-y-4">
                 {result.topIssues.map((issue, index) => (
-                  <li key={index} className="flex items-start gap-3 text-gray-700">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 mt-2 shrink-0" />
+                  <li key={index} className="flex items-start gap-3 text-navy">
+                    <span className="w-1.5 h-1.5 rounded-full bg-warning mt-2 shrink-0" />
                     <span className="leading-relaxed">{issue}</span>
                   </li>
                 ))}
@@ -197,16 +197,16 @@ export default function WritingResultSummary() {
           <Link href={`/writing/feedback?id=${resultId}`} className="group rounded-2xl border border-primary/20 bg-primary px-4 py-5 text-center text-white transition-all shadow-sm hover:bg-primary/90 hover:shadow-md">
             <BarChart3 className="w-6 h-6 mb-2 opacity-80 group-hover:opacity-100 transition-opacity" />
             <span className="font-bold">View Detailed Feedback</span>
-            <span className="text-xs text-blue-100 mt-1">See criterion breakdown</span>
+            <span className="text-xs text-info mt-1">See criterion breakdown</span>
           </Link>
-          <Link href={`/writing/player?taskId=${result.taskId}`} className="group rounded-2xl border border-gray-200 bg-surface px-4 py-5 text-center text-navy transition-all shadow-sm hover:border-primary/30 hover:shadow-md">
-            <Edit3 className="w-6 h-6 mb-2 text-gray-400 group-hover:text-primary transition-colors" />
+          <Link href={`/writing/player?taskId=${result.taskId}`} className="group rounded-2xl border border-border bg-surface px-4 py-5 text-center text-navy transition-all shadow-sm hover:border-primary/30 hover:shadow-md">
+            <Edit3 className="w-6 h-6 mb-2 text-muted/60 group-hover:text-primary transition-colors" />
             <span className="font-bold group-hover:text-primary transition-colors">Revise Submission</span>
             <span className="text-xs text-muted mt-1">Try improving your response</span>
           </Link>
-          <Link href={`/writing/expert-request?id=${resultId}`} className="group rounded-2xl border border-gray-200 bg-surface px-4 py-5 text-center text-navy transition-all shadow-sm hover:border-amber-300 hover:shadow-md">
-            <Star className="w-6 h-6 mb-2 text-gray-400 group-hover:text-amber-500 transition-colors" />
-            <span className="font-bold group-hover:text-amber-600 transition-colors">Request Expert Review</span>
+          <Link href={`/writing/expert-request?id=${resultId}`} className="group rounded-2xl border border-border bg-surface px-4 py-5 text-center text-navy transition-all shadow-sm hover:border-warning/30 hover:shadow-md">
+            <Star className="w-6 h-6 mb-2 text-muted/60 group-hover:text-warning transition-colors" />
+            <span className="font-bold group-hover:text-warning transition-colors">Request Expert Review</span>
             <span className="text-xs text-muted mt-1">Get human feedback</span>
           </Link>
         </MotionSection>

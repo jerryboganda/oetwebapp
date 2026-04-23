@@ -19,10 +19,10 @@ import { analytics } from '@/lib/analytics';
 import type { VocabularyTerm, LearnerVocabulary } from '@/lib/types/vocabulary';
 
 const MASTERY_COLORS: Record<string, string> = {
-  new: 'bg-gray-100 text-gray-700',
-  learning: 'bg-blue-100 text-blue-700',
-  reviewing: 'bg-yellow-100 text-yellow-700',
-  mastered: 'bg-green-100 text-green-700',
+  new: 'bg-background-light text-navy',
+  learning: 'bg-info/10 text-info',
+  reviewing: 'bg-warning/10 text-warning',
+  mastered: 'bg-success/10 text-success',
 };
 
 export default function VocabularyTermDetailPage() {
@@ -142,7 +142,7 @@ export default function VocabularyTermDetailPage() {
       <div className="grid gap-6 lg:grid-cols-3">
         <div className="space-y-6 lg:col-span-2">
           {/* Definition */}
-          <Card className="border-gray-200 bg-surface p-6">
+          <Card className="border-border bg-surface p-6">
             <LearnerSurfaceSectionHeader
               eyebrow="Definition"
               title={term.term}
@@ -162,8 +162,8 @@ export default function VocabularyTermDetailPage() {
             </div>
             <p className="mt-4 text-base text-navy">{term.definition}</p>
             {term.contextNotes && (
-              <div className="mt-4 rounded-2xl bg-blue-50 p-4 text-sm text-blue-900">
-                <div className="mb-1 text-xs font-semibold uppercase text-blue-700">Usage notes</div>
+              <div className="mt-4 rounded-2xl bg-info/10 p-4 text-sm text-info">
+                <div className="mb-1 text-xs font-semibold uppercase text-info">Usage notes</div>
                 {term.contextNotes}
               </div>
             )}
@@ -171,7 +171,7 @@ export default function VocabularyTermDetailPage() {
 
           {/* Example */}
           {term.exampleSentence && (
-            <Card className="border-gray-200 bg-surface p-6">
+            <Card className="border-border bg-surface p-6">
               <LearnerSurfaceSectionHeader
                 eyebrow="Example"
                 title="In clinical context"
@@ -186,7 +186,7 @@ export default function VocabularyTermDetailPage() {
 
           {/* Synonyms / Collocations / Related */}
           {(term.synonyms?.length > 0 || term.collocations?.length > 0 || term.relatedTerms?.length > 0) && (
-            <Card className="border-gray-200 bg-surface p-6">
+            <Card className="border-border bg-surface p-6">
               <LearnerSurfaceSectionHeader
                 eyebrow="Context"
                 title="Synonyms, collocations, and related terms"
@@ -199,7 +199,7 @@ export default function VocabularyTermDetailPage() {
                     <div className="mb-2 text-xs font-semibold uppercase text-muted">Synonyms</div>
                     <div className="flex flex-wrap gap-2">
                       {term.synonyms.map((s, i) => (
-                        <span key={i} className="rounded-full bg-gray-100 px-3 py-1 text-sm text-navy">{s}</span>
+                        <span key={i} className="rounded-full bg-background-light px-3 py-1 text-sm text-navy">{s}</span>
                       ))}
                     </div>
                   </div>
@@ -209,7 +209,7 @@ export default function VocabularyTermDetailPage() {
                     <div className="mb-2 text-xs font-semibold uppercase text-muted">Collocations</div>
                     <div className="flex flex-wrap gap-2">
                       {term.collocations.map((s, i) => (
-                        <span key={i} className="rounded-full bg-blue-50 px-3 py-1 text-sm text-blue-700">{s}</span>
+                        <span key={i} className="rounded-full bg-info/10 px-3 py-1 text-sm text-info">{s}</span>
                       ))}
                     </div>
                   </div>
@@ -219,7 +219,7 @@ export default function VocabularyTermDetailPage() {
                     <div className="mb-2 text-xs font-semibold uppercase text-muted">Related terms</div>
                     <div className="flex flex-wrap gap-2">
                       {term.relatedTerms.map((s, i) => (
-                        <span key={i} className="rounded-full border border-gray-200 bg-surface px-3 py-1 text-sm text-navy">{s}</span>
+                        <span key={i} className="rounded-full border border-border bg-surface px-3 py-1 text-sm text-navy">{s}</span>
                       ))}
                     </div>
                   </div>
@@ -231,7 +231,7 @@ export default function VocabularyTermDetailPage() {
 
         {/* Sidebar: My list card */}
         <div className="space-y-4">
-          <Card className="border-gray-200 bg-surface p-6">
+          <Card className="border-border bg-surface p-6">
             <div className="mb-3 text-xs font-semibold uppercase text-muted">My word bank</div>
             {myEntry ? (
               <>
@@ -249,7 +249,7 @@ export default function VocabularyTermDetailPage() {
                 <button
                   onClick={handleRemove}
                   disabled={saving}
-                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-100 disabled:opacity-50"
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-danger/30 bg-danger/10 px-4 py-2 text-sm font-medium text-danger hover:bg-danger/20 disabled:opacity-50"
                 >
                   <Trash2 className="h-4 w-4" /> Remove from my list
                 </button>
@@ -269,7 +269,7 @@ export default function VocabularyTermDetailPage() {
           </Card>
 
           {/* Metadata card */}
-          <Card className="border-gray-200 bg-surface p-6 text-sm">
+          <Card className="border-border bg-surface p-6 text-sm">
             <div className="mb-3 text-xs font-semibold uppercase text-muted">About</div>
             <div className="space-y-2 text-muted">
               <div>Exam: <span className="font-medium text-navy">{term.examTypeCode.toUpperCase()}</span></div>

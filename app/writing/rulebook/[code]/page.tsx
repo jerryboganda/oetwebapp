@@ -30,7 +30,7 @@ export default async function WritingRulePage({ params }: { params: Promise<{ co
           </Link>
         </div>
 
-        <Card className="border-gray-200 bg-surface p-8">
+        <Card className="border-border bg-surface p-8">
           <div className="flex flex-wrap items-center gap-3">
             <Badge variant={severityVariant[rule.severity]} size="sm">{rule.severity}</Badge>
             <Badge variant="muted" size="sm">{rule.id}</Badge>
@@ -52,14 +52,14 @@ export default async function WritingRulePage({ params }: { params: Promise<{ co
         </Card>
 
         {rule.exemplarPhrases?.length ? (
-          <Card className="border-gray-200 bg-surface p-6">
+          <Card className="border-border bg-surface p-6">
             <div className="flex items-center gap-2">
               <BookOpen className="h-5 w-5 text-primary" />
               <h2 className="text-lg font-black text-navy">Exemplar phrasing</h2>
             </div>
             <div className="mt-4 space-y-3">
               {rule.exemplarPhrases.map((phrase) => (
-                <div key={phrase} className="rounded-2xl border border-gray-100 bg-background-light p-4 text-sm text-navy">
+                <div key={phrase} className="rounded-2xl border border-border bg-background-light p-4 text-sm text-navy">
                   “{phrase}”
                 </div>
               ))}
@@ -68,14 +68,14 @@ export default async function WritingRulePage({ params }: { params: Promise<{ co
         ) : null}
 
         {rule.forbiddenPatterns?.length ? (
-          <Card className="border-amber-200 bg-amber-50/80 p-6">
+          <Card className="border-warning/30 bg-warning/10 p-6">
             <div className="flex items-center gap-2">
-              <AlertTriangle className="h-5 w-5 text-amber-600" />
-              <h2 className="text-lg font-black text-amber-900">Engine-enforced forbidden patterns</h2>
+              <AlertTriangle className="h-5 w-5 text-warning" />
+              <h2 className="text-lg font-black text-warning">Engine-enforced forbidden patterns</h2>
             </div>
-            <ul className="mt-4 space-y-2 text-sm text-amber-900">
+            <ul className="mt-4 space-y-2 text-sm text-warning">
               {rule.forbiddenPatterns.map((pattern) => (
-                <li key={pattern} className="rounded-xl border border-amber-200 bg-white/70 px-3 py-2 font-mono text-xs">{pattern}</li>
+                <li key={pattern} className="rounded-xl border border-warning/30 bg-white/70 px-3 py-2 font-mono text-xs">{pattern}</li>
               ))}
             </ul>
           </Card>

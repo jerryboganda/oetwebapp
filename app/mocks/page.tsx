@@ -446,7 +446,7 @@ export default function MockCenter() {
           <MotionSection>
             <div
               role="alert"
-              className="rounded-[24px] border border-red-200 bg-red-50/60 p-6 shadow-sm"
+              className="rounded-[24px] border border-danger/20 bg-danger/5 p-6 shadow-sm"
             >
               <InlineAlert variant="error" title="We couldn't load the Mock Center right now">
                 {error} If this keeps happening, the mock service may be warming up &mdash; try again

@@ -266,16 +266,16 @@ export default function ConversationSessionPage() {
 
         {state === 'evaluating' && (
           <MotionSection className="text-center py-16">
-            <Loader2 className="w-12 h-12 text-purple-500 mx-auto mb-4 animate-spin" />
-            <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Evaluating your conversation</h2>
-            <p className="text-gray-500">Our AI is analysing your performance. This usually takes a few seconds.</p>
+            <Loader2 className="w-12 h-12 text-primary mx-auto mb-4 animate-spin" />
+            <h2 className="text-xl font-bold text-navy mb-2">Evaluating your conversation</h2>
+            <p className="text-muted">Our AI is analysing your performance. This usually takes a few seconds.</p>
           </MotionSection>
         )}
 
         {!scenario && !loading && (
           <div className="text-center py-16">
-            <AlertCircle className="w-12 h-12 text-gray-300 mx-auto mb-4" />
-            <p className="text-gray-500">Could not load conversation scenario.</p>
+            <AlertCircle className="w-12 h-12 text-muted/40 mx-auto mb-4" />
+            <p className="text-muted">Could not load conversation scenario.</p>
           </div>
         )}
       </div>

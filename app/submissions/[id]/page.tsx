@@ -95,7 +95,7 @@ export default function SubmissionEvidencePage() {
             ) : null}
 
             <section className="grid gap-6 lg:grid-cols-[1.2fr_0.8fr]">
-              <div className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
+              <div className="rounded-[28px] border border-border bg-surface p-6 shadow-sm">
                 <LearnerSurfaceSectionHeader
                   eyebrow="Strengths & Issues"
                   title="Keep the main evidence readable first"
@@ -104,9 +104,9 @@ export default function SubmissionEvidencePage() {
                 />
 
                 <div className="grid gap-4 md:grid-cols-2">
-                  <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-                    <p className="text-xs font-black uppercase tracking-widest text-emerald-700">Strengths</p>
-                    <ul className="mt-3 space-y-2 text-sm text-emerald-900">
+                  <div className="rounded-2xl border border-success/30 bg-success/10 p-4">
+                    <p className="text-xs font-black uppercase tracking-widest text-success">Strengths</p>
+                    <ul className="mt-3 space-y-2 text-sm text-success">
                       {(detail.strengths.length ? detail.strengths : ['No strengths have been surfaced for this attempt yet.']).map((item) => (
                         <li key={item} className="flex gap-2">
                           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" />
@@ -116,9 +116,9 @@ export default function SubmissionEvidencePage() {
                     </ul>
                   </div>
 
-                  <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
-                    <p className="text-xs font-black uppercase tracking-widest text-amber-700">Needs Attention</p>
-                    <ul className="mt-3 space-y-2 text-sm text-amber-900">
+                  <div className="rounded-2xl border border-warning/30 bg-amber-50/60 p-4">
+                    <p className="text-xs font-black uppercase tracking-widest text-warning">Needs Attention</p>
+                    <ul className="mt-3 space-y-2 text-sm text-warning">
                       {(detail.issues.length ? detail.issues : ['No issue summary is available for this attempt yet.']).map((item) => (
                         <li key={item} className="flex gap-2">
                           <Clock className="mt-0.5 h-4 w-4 shrink-0" />
@@ -130,7 +130,7 @@ export default function SubmissionEvidencePage() {
                 </div>
               </div>
 
-              <div className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
+              <div className="rounded-[28px] border border-border bg-surface p-6 shadow-sm">
                 <LearnerSurfaceSectionHeader
                   eyebrow="Next Actions"
                   title="Move from evidence to the next step"
@@ -158,7 +158,7 @@ export default function SubmissionEvidencePage() {
             </section>
 
             {detail.criteria?.length ? (
-              <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
+              <section className="rounded-[28px] border border-border bg-surface p-6 shadow-sm">
                 <LearnerSurfaceSectionHeader
                   eyebrow="Criterion Evidence"
                   title="Criterion-level scoring stays visible for productive skills"
@@ -167,7 +167,7 @@ export default function SubmissionEvidencePage() {
                 />
                 <div className="grid gap-4 md:grid-cols-2">
                   {detail.criteria.map((criterion) => (
-                    <div key={criterion.name} className="rounded-2xl border border-gray-200 bg-background-light p-4">
+                    <div key={criterion.name} className="rounded-2xl border border-border bg-background-light p-4">
                       <div className="flex items-center justify-between gap-4">
                         <p className="font-bold text-navy">{criterion.name}</p>
                         <span className="text-sm font-black text-primary">{criterion.score}/{criterion.maxScore}</span>
@@ -180,7 +180,7 @@ export default function SubmissionEvidencePage() {
             ) : null}
 
             {detail.transcript?.length ? (
-              <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
+              <section className="rounded-[28px] border border-border bg-surface p-6 shadow-sm">
                 <LearnerSurfaceSectionHeader
                   eyebrow="Transcript Evidence"
                   title="Reopen the speaking transcript in the same learner workspace"
@@ -189,7 +189,7 @@ export default function SubmissionEvidencePage() {
                 />
                 <div className="space-y-3">
                   {detail.transcript.slice(0, 10).map((line) => (
-                    <div key={line.id} className="rounded-2xl border border-gray-100 bg-background-light p-4">
+                    <div key={line.id} className="rounded-2xl border border-border bg-background-light p-4">
                       <p className="text-xs font-black uppercase tracking-widest text-muted">{line.speaker}</p>
                       <p className="mt-2 text-sm leading-6 text-navy">{line.text}</p>
                     </div>
@@ -205,7 +205,7 @@ export default function SubmissionEvidencePage() {
             ) : null}
 
             {detail.questionReview?.length ? (
-              <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
+              <section className="rounded-[28px] border border-border bg-surface p-6 shadow-sm">
                 <LearnerSurfaceSectionHeader
                   eyebrow="Question Review"
                   title="Objective evidence stays item by item"
@@ -214,29 +214,29 @@ export default function SubmissionEvidencePage() {
                 />
                 <div className="space-y-4">
                   {detail.questionReview.map((item) => (
-                    <div key={item.id} className="rounded-2xl border border-gray-100 bg-background-light p-4">
+                    <div key={item.id} className="rounded-2xl border border-border bg-background-light p-4">
                       <div className="flex items-start justify-between gap-4">
                         <div>
                           <p className="text-xs font-black uppercase tracking-widest text-muted">Question {item.number}</p>
                           <p className="mt-2 text-sm font-bold text-navy">{item.text}</p>
                         </div>
-                        <span className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-widest ${item.isCorrect ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'}`}>
+                        <span className={`rounded-full px-3 py-1 text-xs font-black uppercase tracking-widest ${item.isCorrect ? 'bg-success/10 text-success' : 'bg-danger/10 text-danger'}`}>
                           {item.isCorrect ? 'Correct' : 'Review'}
                         </span>
                       </div>
                       <div className="mt-4 grid gap-3 md:grid-cols-2">
-                        <div className="rounded-2xl border border-gray-200 bg-white p-3">
+                        <div className="rounded-2xl border border-border bg-surface p-3">
                           <p className="text-xs font-black uppercase tracking-widest text-muted">Your answer</p>
                           <p className="mt-2 text-sm text-navy">{item.learnerAnswer || 'No answer recorded'}</p>
                         </div>
-                        <div className="rounded-2xl border border-gray-200 bg-white p-3">
+                        <div className="rounded-2xl border border-border bg-surface p-3">
                           <p className="text-xs font-black uppercase tracking-widest text-muted">Correct answer</p>
                           <p className="mt-2 text-sm text-navy">{item.correctAnswer}</p>
                         </div>
                       </div>
                       <p className="mt-3 text-sm text-muted">{item.explanation}</p>
                       {item.transcriptExcerpt ? (
-                        <div className="mt-3 rounded-2xl border border-blue-100 bg-blue-50 p-3 text-sm text-blue-900">
+                        <div className="mt-3 rounded-2xl border border-info/30 bg-info/10 p-3 text-sm text-info">
                           Transcript clue: {item.transcriptExcerpt}
                         </div>
                       ) : null}

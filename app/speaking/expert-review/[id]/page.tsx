@@ -73,8 +73,8 @@ function ExpertReviewRequestContent() {
       <LearnerDashboardShell pageTitle="Request Submitted">
         <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
           <MotionPage className="max-w-md w-full">
-            <div className="w-24 h-24 bg-green-50 rounded-3xl flex items-center justify-center mx-auto mb-8">
-              <CheckCircle2 className="w-12 h-12 text-green-600" />
+            <div className="w-24 h-24 bg-success/10 rounded-3xl flex items-center justify-center mx-auto mb-8">
+              <CheckCircle2 className="w-12 h-12 text-success" />
             </div>
             <h1 className="text-3xl font-black text-navy mb-4 tracking-tight">Request Submitted</h1>
             <p className="text-muted mb-10 leading-relaxed">
@@ -122,10 +122,10 @@ function ExpertReviewRequestContent() {
           {/* AI vs Human Distinction */}
           <InlineAlert variant="info">
             <div className="flex items-start gap-4">
-              <Sparkles className="w-6 h-6 text-blue-600 shrink-0" />
+                <Sparkles className="w-6 h-6 text-info shrink-0" />
               <div>
-                <h2 className="text-sm font-bold text-blue-900 uppercase tracking-widest mb-1">Beyond AI Evaluation</h2>
-                <p className="text-sm text-blue-800/80 leading-relaxed">
+                <h2 className="text-sm font-bold text-info uppercase tracking-widest mb-1">Beyond AI Evaluation</h2>
+                <p className="text-sm text-info/80 leading-relaxed">
                   While our AI provides immediate insights, an Expert Review offers deep clinical nuance, specific OET grading, and personalized coaching from certified healthcare educators.
                 </p>
               </div>
@@ -149,11 +149,11 @@ function ExpertReviewRequestContent() {
                   type="button"
                   onClick={() => toggleFocus(area.id)}
                   className={`flex items-start gap-4 p-4 rounded-2xl border-2 transition-all text-left ${
-                    selectedFocus.includes(area.id) ? 'border-primary bg-primary/5' : 'border-gray-100 hover:border-gray-200 bg-white'
+                    selectedFocus.includes(area.id) ? 'border-primary bg-primary/5' : 'border-border hover:border-border-hover bg-surface'
                   }`}
                 >
                   <div className={`w-5 h-5 rounded-md border-2 mt-0.5 flex items-center justify-center transition-all ${
-                    selectedFocus.includes(area.id) ? 'bg-primary border-primary' : 'border-gray-300'
+                    selectedFocus.includes(area.id) ? 'bg-primary border-primary' : 'border-border-hover'
                   }`}>
                     {selectedFocus.includes(area.id) && <CheckCircle2 className="w-4 h-4 text-white" />}
                   </div>
@@ -178,7 +178,7 @@ function ExpertReviewRequestContent() {
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="E.g., 'I struggled with the transition to the physical exam explanation. Please check my empathy during the patient's interruption.'"
-              className="w-full h-32 p-4 bg-gray-50 border border-gray-200 rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
+              className="w-full h-32 p-4 bg-surface border border-border text-navy rounded-2xl text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 resize-none"
             />
           </Card>
 
@@ -198,7 +198,7 @@ function ExpertReviewRequestContent() {
                   type="button"
                   onClick={() => setTurnaroundId(opt.id)}
                   className={`p-6 rounded-2xl border-2 transition-all text-center ${
-                    turnaroundId === opt.id ? 'border-primary bg-primary/5' : 'border-gray-100 hover:border-gray-200 bg-white'
+                    turnaroundId === opt.id ? 'border-primary bg-primary/5' : 'border-border hover:border-border-hover bg-surface'
                   }`}
                 >
                   <h3 className="text-sm font-bold text-navy mb-1">{opt.label}</h3>
@@ -243,7 +243,7 @@ function ExpertReviewRequestContent() {
           </Button>
 
           {selectedFocus.length === 0 && (
-            <p className="text-center text-xs font-bold text-amber-600 uppercase tracking-widest">
+            <p className="text-center text-xs font-bold text-warning uppercase tracking-widest">
               Please select at least one focus area
             </p>
           )}

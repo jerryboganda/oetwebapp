@@ -33,11 +33,11 @@ async function apiRequest<T = unknown>(path: string): Promise<T> {
 
 /* ── certificate type config ──────────────────── */
 const TYPE_CONFIG: Record<string, { icon: typeof Award; color: string; bg: string }> = {
-  study_plan_complete:  { icon: Trophy,   color: 'text-amber-600',   bg: 'bg-amber-50 dark:bg-amber-950' },
-  mock_exam_passed:     { icon: Star,     color: 'text-blue-600',    bg: 'bg-blue-50 dark:bg-blue-950' },
-  readiness_threshold:  { icon: Award,    color: 'text-green-600',   bg: 'bg-green-50 dark:bg-green-950' },
-  diagnostic_complete:  { icon: FileText, color: 'text-purple-600',  bg: 'bg-purple-50 dark:bg-purple-950' },
-  streak_milestone:     { icon: Trophy,   color: 'text-orange-600',  bg: 'bg-orange-50 dark:bg-orange-950' },
+  study_plan_complete:  { icon: Trophy,   color: 'text-warning',  bg: 'bg-warning/10' },
+  mock_exam_passed:     { icon: Star,     color: 'text-info',     bg: 'bg-info/10' },
+  readiness_threshold:  { icon: Award,    color: 'text-success',  bg: 'bg-success/10' },
+  diagnostic_complete:  { icon: FileText, color: 'text-primary',  bg: 'bg-primary/10' },
+  streak_milestone:     { icon: Trophy,   color: 'text-warning',  bg: 'bg-warning/10' },
 };
 
 const DEFAULT_TYPE = { icon: Award, color: 'text-primary', bg: 'bg-primary/5' };

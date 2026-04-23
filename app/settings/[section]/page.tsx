@@ -179,7 +179,7 @@ const accentStyles: Record<LearnerSurfaceAccent, {
 };
 
 const tagToneStyles: Record<Exclude<FieldTagTone, 'section'>, string> = {
-  muted: 'border-gray-200 bg-gray-100 text-gray-600',
+  muted: 'border-border bg-background-light text-muted',
   writing: 'border-rose-200 bg-rose-50 text-rose-700',
   speaking: 'border-purple-200 bg-purple-50 text-purple-700',
   reading: 'border-blue-200 bg-blue-50 text-blue-700',
@@ -668,7 +668,7 @@ function fieldStatus(field: FieldConfig, value: string | boolean): { label: stri
 
 function inputClasses(accent: LearnerSurfaceAccent) {
   return cn(
-    'w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm text-navy outline-none transition-shadow',
+    'w-full rounded-2xl border border-border bg-surface px-4 py-3 text-sm text-navy outline-none transition-shadow',
     accentStyles[accent].inputFocus,
   );
 }
@@ -699,7 +699,7 @@ function SettingsSectionHelperCard({
   const palette = accentStyles[accent];
 
   return (
-    <section className={cn('overflow-hidden rounded-[24px] border shadow-sm', palette.helperSurface)}>
+    <section className={cn('overflow-hidden rounded-2xl border shadow-sm', palette.helperSurface)}>
       <div className={cn('bg-gradient-to-br p-5 sm:p-6', palette.helperGlow)}>
         <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="flex items-start gap-4">
@@ -745,7 +745,7 @@ function SettingsSectionForm({
         const FieldIcon = field.icon;
 
         return (
-          <div key={field.key} className="rounded-[24px] border border-gray-200 bg-surface p-5 shadow-sm transition-shadow duration-200 hover:shadow-md">
+          <div key={field.key} className="rounded-2xl border border-border bg-surface p-5 shadow-sm transition-shadow duration-200 hover:shadow-md">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div className="flex min-w-0 flex-1 items-start gap-4">
                 <div className={cn('flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border', palette.softBadge)}>
@@ -771,7 +771,7 @@ function SettingsSectionForm({
                   onClick={() => onChange(field.key, !Boolean(value))}
                   className={cn(
                     'relative inline-flex h-8 w-13 shrink-0 items-center rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-2',
-                    Boolean(value) ? palette.toggleOn : 'bg-gray-200',
+                    Boolean(value) ? palette.toggleOn : 'bg-border',
                     toggleFocusClasses(accent),
                   )}
                   aria-checked={Boolean(value)}
@@ -857,14 +857,14 @@ function DangerZoneDeleteSection() {
 
   return (
     <div className="space-y-6">
-      <div className="rounded-[24px] border-2 border-red-300 bg-red-50/50 p-6 shadow-sm">
+      <div className="rounded-2xl border-2 border-danger/30 bg-danger/10 p-6 shadow-sm">
         <div className="flex items-start gap-4">
-          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-red-200 bg-red-100">
-            <Trash2 className="h-5 w-5 text-red-600" />
+          <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl border border-danger/30 bg-danger/10">
+            <Trash2 className="h-5 w-5 text-danger" />
           </div>
           <div className="flex-1">
-            <h3 className="text-lg font-bold text-red-900">Delete your account</h3>
-            <p className="mt-2 max-w-2xl text-sm leading-6 text-red-800">
+            <h3 className="text-lg font-bold text-danger">Delete your account</h3>
+            <p className="mt-2 max-w-2xl text-sm leading-6 text-danger">
               This action cannot be undone. After 30 days, your account and all associated data will be permanently deleted. During the grace period you can contact support to cancel the deletion.
             </p>
           </div>
@@ -872,7 +872,7 @@ function DangerZoneDeleteSection() {
 
         <div className="mt-6 space-y-4">
           <div>
-            <label htmlFor="delete-password" className="block text-sm font-semibold text-red-900">
+            <label htmlFor="delete-password" className="block text-sm font-semibold text-danger">
               Confirm your password
             </label>
             <input
@@ -883,20 +883,20 @@ function DangerZoneDeleteSection() {
               placeholder="Enter your password to confirm"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              className="mt-1.5 w-full rounded-2xl border border-red-200 bg-white px-4 py-3 text-sm text-navy outline-none transition-shadow focus:border-red-400 focus:ring-2 focus:ring-red-100"
+              className="mt-1.5 w-full rounded-2xl border border-danger/30 bg-surface px-4 py-3 text-sm text-navy outline-none transition-shadow focus:border-danger focus:ring-2 focus:ring-danger/10"
             />
           </div>
 
           <div>
-            <label htmlFor="delete-reason" className="block text-sm font-semibold text-red-900">
-              Reason for leaving <span className="font-normal text-red-600">(optional)</span>
+            <label htmlFor="delete-reason" className="block text-sm font-semibold text-danger">
+              Reason for leaving <span className="font-normal text-danger">(optional)</span>
             </label>
             <textarea
               id="delete-reason"
               placeholder="Why are you leaving? (optional)"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              className="mt-1.5 min-h-24 w-full rounded-2xl border border-red-200 bg-white px-4 py-3 text-sm text-navy outline-none transition-shadow focus:border-red-400 focus:ring-2 focus:ring-red-100"
+              className="mt-1.5 min-h-24 w-full rounded-2xl border border-danger/30 bg-surface px-4 py-3 text-sm text-navy outline-none transition-shadow focus:border-danger focus:ring-2 focus:ring-danger/10"
             />
           </div>
 
@@ -907,10 +907,10 @@ function DangerZoneDeleteSection() {
             disabled={!password.trim() || deleting}
             onClick={handleDelete}
             className={cn(
-              'inline-flex items-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-red-400 focus-visible:ring-offset-2',
+              'inline-flex items-center gap-2 rounded-2xl px-6 py-3 text-sm font-bold text-white transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger focus-visible:ring-offset-2',
               password.trim() && !deleting
-                ? 'bg-red-600 hover:bg-red-700 cursor-pointer'
-                : 'bg-red-300 cursor-not-allowed',
+                ? 'bg-danger hover:bg-danger/90 cursor-pointer'
+                : 'bg-danger/40 cursor-not-allowed',
             )}
           >
             {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
@@ -1026,7 +1026,7 @@ export default function LearnerSettingsSectionPage() {
 
         {loading ? (
           <div className="space-y-4">
-            {[1, 2, 3].map((item) => <Skeleton key={item} className="h-40 rounded-[24px]" />)}
+            {[1, 2, 3].map((item) => <Skeleton key={item} className="h-40 rounded-2xl" />)}
           </div>
         ) : null}
 
@@ -1081,7 +1081,7 @@ export default function LearnerSettingsSectionPage() {
 
             <SettingsSectionForm accent={config.accent} data={data} onChange={handleChange} />
 
-            <div className="rounded-[24px] border border-gray-200 bg-surface px-5 py-4 shadow-sm">
+            <div className="rounded-2xl border border-border bg-surface px-5 py-4 shadow-sm">
               <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="space-y-2">
                   <div className="flex flex-wrap items-center gap-2">

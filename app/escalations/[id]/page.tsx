@@ -22,10 +22,10 @@ import { analytics } from '@/lib/analytics';
 import type { EscalationStatus, LearnerEscalation } from '@/lib/types/learner';
 
 const STATUS_CONFIG: Record<EscalationStatus, { label: string; icon: React.ElementType; classes: string }> = {
-  Pending:  { label: 'Pending',   icon: Clock,        classes: 'bg-amber-100 text-amber-700' },
-  InReview: { label: 'In Review', icon: Search,       classes: 'bg-blue-100 text-blue-700' },
-  Resolved: { label: 'Resolved',  icon: CheckCircle2, classes: 'bg-green-100 text-green-700' },
-  Rejected: { label: 'Rejected',  icon: XCircle,      classes: 'bg-red-100 text-red-700' },
+  Pending:  { label: 'Pending',   icon: Clock,        classes: 'bg-warning/10 text-warning' },
+  InReview: { label: 'In Review', icon: Search,       classes: 'bg-info/10 text-info' },
+  Resolved: { label: 'Resolved',  icon: CheckCircle2, classes: 'bg-success/10 text-success' },
+  Rejected: { label: 'Rejected',  icon: XCircle,      classes: 'bg-danger/10 text-danger' },
 };
 
 function StatusBadge({ status }: { status: EscalationStatus }) {

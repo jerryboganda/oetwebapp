@@ -204,7 +204,7 @@ export default function FreezePage() {
                 </Button>
                 <Link
                   href="/"
-                  className="inline-flex items-center justify-center rounded-lg border border-gray-300 px-4 py-3 text-sm font-medium text-navy transition-colors hover:bg-gray-50"
+                  className="inline-flex items-center justify-center rounded-lg border border-border-hover px-4 py-3 text-sm font-medium text-navy transition-colors hover:bg-background-light"
                 >
                   Back to dashboard
                 </Link>
@@ -218,13 +218,13 @@ export default function FreezePage() {
             </CardHeader>
             <CardContent className="space-y-4">
               {currentFreeze ? (
-                <div className="space-y-3 rounded-2xl border border-gray-200 bg-background-light p-4">
+                <div className="space-y-3 rounded-2xl border border-border bg-background-light p-4">
                   <div className="flex items-center justify-between gap-3">
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Freeze ID</p>
                       <p className="mt-1 text-sm font-semibold text-navy">{currentFreeze.id}</p>
                     </div>
-                    <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-amber-800">
+                    <span className="rounded-full bg-warning/10 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-warning">
                       {currentFreeze.status}
                     </span>
                   </div>
@@ -248,12 +248,12 @@ export default function FreezePage() {
                   </div>
                 </div>
               ) : (
-                <div className="rounded-2xl border border-dashed border-gray-200 bg-background-light p-4 text-sm text-muted">
+                <div className="rounded-2xl border border-dashed border-border bg-background-light p-4 text-sm text-muted">
                   No active freeze is currently applied. Requests will appear here after they are submitted or approved.
                 </div>
               )}
 
-              <div className="rounded-2xl border border-gray-200 bg-surface p-4">
+              <div className="rounded-2xl border border-border bg-surface p-4">
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Eligibility</p>
                 <p className="mt-2 text-sm text-navy">
                   {eligibility.eligible === false

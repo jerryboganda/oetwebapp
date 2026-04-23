@@ -32,10 +32,10 @@ const SUBTEST_CONFIG: Record<
   string,
   { icon: typeof PenLine; color: string; bg: string; barColor: 'primary' | 'success' | 'danger' }
 > = {
-  Writing: { icon: PenLine, color: 'text-blue-600', bg: 'bg-blue-50', barColor: 'primary' },
-  Speaking: { icon: Mic, color: 'text-violet-600', bg: 'bg-violet-50', barColor: 'primary' },
-  Reading: { icon: BookOpen, color: 'text-emerald-600', bg: 'bg-emerald-50', barColor: 'success' },
-  Listening: { icon: Headphones, color: 'text-amber-600', bg: 'bg-amber-50', barColor: 'primary' },
+  Writing: { icon: PenLine, color: 'text-info', bg: 'bg-info/10', barColor: 'primary' },
+  Speaking: { icon: Mic, color: 'text-primary', bg: 'bg-primary/10', barColor: 'primary' },
+  Reading: { icon: BookOpen, color: 'text-success', bg: 'bg-success/10', barColor: 'success' },
+  Listening: { icon: Headphones, color: 'text-warning', bg: 'bg-amber-50', barColor: 'primary' },
 };
 
 export default function DiagnosticResultsPage() {
@@ -159,13 +159,13 @@ export default function DiagnosticResultsPage() {
                   <div className="space-y-2 mb-3">
                     {result.strengths.slice(0, 2).map((s, i) => (
                       <p key={i} className="text-xs text-navy flex items-start gap-1.5">
-                        <CheckCircle2 className="w-3.5 h-3.5 text-emerald-500 shrink-0 mt-0.5" />
+                        <CheckCircle2 className="w-3.5 h-3.5 text-success shrink-0 mt-0.5" />
                         {s}
                       </p>
                     ))}
                     {result.issues.slice(0, 2).map((s, i) => (
                       <p key={i} className="text-xs text-navy flex items-start gap-1.5">
-                        <AlertTriangle className="w-3.5 h-3.5 text-amber-500 shrink-0 mt-0.5" />
+                        <AlertTriangle className="w-3.5 h-3.5 text-warning shrink-0 mt-0.5" />
                         {s}
                       </p>
                     ))}
@@ -173,7 +173,7 @@ export default function DiagnosticResultsPage() {
 
                   {/* Expand criterion breakdown */}
                   {result.criterionBreakdown.length > 0 && (
-                    <div className="mt-auto pt-3 border-t border-gray-100">
+                    <div className="mt-auto pt-3 border-t border-border">
                       <button
                         onClick={() =>
                           setExpandedSubTest(isExpanded ? null : result.subTest)

@@ -254,13 +254,13 @@ export default function WritingPlayer() {
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -8 }}
               transition={panelTransition}
-              className="shrink-0 border-b border-gray-200 bg-white"
+              className="shrink-0 border-b border-border bg-surface"
             >
               <div className="flex flex-col gap-3 px-3 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-4">
                 <div className="flex min-w-0 items-center gap-3">
                   <button
                     onClick={() => (hasUnsavedChanges.current ? setShowLeaveModal(true) : router.push('/writing'))}
-                    className="pressable touch-target rounded-2xl p-2 text-gray-500 hover:bg-gray-100 hover:text-navy"
+                    className="pressable touch-target rounded-2xl p-2 text-muted hover:bg-background-light hover:text-navy"
                     aria-label="Leave writing task"
                   >
                     <ChevronLeft className="h-5 w-5" />
@@ -269,7 +269,7 @@ export default function WritingPlayer() {
                   <div className="min-w-0 flex-1">
                     <h1 className="truncate text-base font-bold leading-tight text-navy sm:text-lg">{task.title}</h1>
                     <div className="mt-1 flex flex-wrap items-center gap-2 text-[11px] font-medium text-muted sm:text-xs">
-                      <span className="rounded bg-blue-100 px-1.5 py-0.5 text-blue-700">{task.profession}</span>
+                      <span className="rounded bg-info/10 px-1.5 py-0.5 text-info">{task.profession}</span>
                       <span>{task.scenarioType}</span>
                     </div>
                   </div>
@@ -287,7 +287,7 @@ export default function WritingPlayer() {
                   />
                   <button
                     onClick={() => setIsDistractionFree(true)}
-                    className="pressable hidden touch-target rounded-2xl p-2 text-gray-500 hover:bg-gray-100 hover:text-navy lg:inline-flex"
+                    className="pressable hidden touch-target rounded-2xl p-2 text-muted hover:bg-background-light hover:text-navy lg:inline-flex"
                     title="Distraction Free"
                     aria-label="Enter distraction-free mode"
                   >
@@ -314,12 +314,12 @@ export default function WritingPlayer() {
               transition={panelTransition}
               role="status"
               aria-live="polite"
-              className="flex items-start gap-3 border-b border-amber-200 bg-amber-50 px-4 py-2.5 text-sm text-amber-900"
+              className="flex items-start gap-3 border-b border-warning/30 bg-warning/10 px-4 py-2.5 text-sm text-warning"
             >
               <BookOpen aria-hidden className="mt-0.5 h-4 w-4 shrink-0" />
               <div className="flex-1">
                 <p className="font-semibold">Reading window &mdash; 5 minutes</p>
-                <p className="text-xs text-amber-800/90">
+                <p className="text-xs text-warning/90">
                   Read the case notes carefully. Typing, highlighting, copying, and scratchpad edits are locked until the reading window ends.
                 </p>
               </div>
@@ -336,7 +336,7 @@ export default function WritingPlayer() {
               animate={{ y: 0, opacity: 1 }}
               exit={{ y: -16, opacity: 0 }}
               transition={panelTransition}
-              className="absolute left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-4 rounded-full border border-gray-200 bg-white px-4 py-2 shadow-lg"
+              className="absolute left-1/2 top-4 z-50 flex -translate-x-1/2 items-center gap-4 rounded-full border border-border bg-surface px-4 py-2 shadow-lg"
             >
               <Timer
                 key={`writing-timer-df-${phase}`}
@@ -361,8 +361,8 @@ export default function WritingPlayer() {
         {/* Main Workspace */}
         <main className="flex flex-1 min-h-0 flex-col overflow-hidden">
           <div className="flex h-full flex-col lg:hidden">
-            <div className="border-b border-gray-200 bg-white/90 px-3 py-3 shadow-sm backdrop-blur">
-              <div className="grid grid-cols-2 rounded-[20px] border border-gray-200 bg-background-light p-1">
+            <div className="border-b border-border bg-surface/90 px-3 py-3 shadow-sm backdrop-blur">
+              <div className="grid grid-cols-2 rounded-[20px] border border-border bg-background-light p-1">
                 <button
                   type="button"
                   onClick={() => setMobileView('notes')}
@@ -438,7 +438,7 @@ export default function WritingPlayer() {
                         subtitle={`Live checks grounded in Dr. Hesham's Writing rulebook. Inferred letter type: ${inferredLetterType.replace(/_/g, ' ')}.`}
                         findings={lintFindings}
                         inactiveMessage={lintInactiveMessage}
-                        className="shrink-0 rounded-none rounded-b-[24px] border-t border-gray-200"
+                        className="shrink-0 rounded-none rounded-b-[24px] border-t border-border"
                         ruleHref={(ruleId) => `/writing/rulebook/${ruleId}`}
                       />
                     </div>
@@ -488,7 +488,7 @@ export default function WritingPlayer() {
                   subtitle={`Live checks grounded in Dr. Hesham's Writing rulebook. Inferred letter type: ${inferredLetterType.replace(/_/g, ' ')}.`}
                   findings={lintFindings}
                   inactiveMessage={lintInactiveMessage}
-                  className="shrink-0 rounded-none rounded-b-[24px] border-t border-gray-200"
+                  className="shrink-0 rounded-none rounded-b-[24px] border-t border-border"
                   ruleHref={(ruleId) => `/writing/rulebook/${ruleId}`}
                 />
               </div>

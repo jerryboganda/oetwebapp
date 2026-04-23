@@ -233,7 +233,7 @@ export default function WritingHome() {
           </MotionSection>
         ) : null}
 
-        <MotionSection delayIndex={1} className="rounded-[24px] border border-gray-200 bg-white p-5 shadow-sm">
+        <MotionSection delayIndex={1} className="rounded-[24px] border border-border bg-surface p-5 shadow-sm">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
               <p className="text-xs font-black uppercase tracking-widest text-muted">Rulebook Source of Truth</p>
@@ -323,19 +323,19 @@ export default function WritingHome() {
 
           <MotionCollapse open={activeTab !== 'past'}>
                 <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange}
-                  onClear={() => setFilters({})} className="mb-6 bg-white p-4 rounded-xl border border-gray-200 shadow-sm" />
+                  onClear={() => setFilters({})} className="mb-6 bg-surface p-4 rounded-xl border border-border shadow-sm" />
           </MotionCollapse>
 
-          <div className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="bg-surface rounded-2xl shadow-sm border border-border overflow-hidden">
             <AnimatePresence mode="wait">
               {activeTab === 'practice' && (
-                <motion.div key="practice" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="divide-y divide-gray-100">
+                <motion.div key="practice" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="divide-y divide-border">
                   {filteredTasks.length === 0 ? (
                     <div className="p-10">
                       <EmptyState title={hasActiveFilters ? 'No tasks match your filters' : 'No practice tasks available'} description={hasActiveFilters ? 'Try removing some filters to see more tasks.' : 'Check back later for new writing tasks.'} />
                     </div>
                   ) : filteredTasks.map((task) => (
-                    <div key={task.id} className="p-5 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer"
+                    <div key={task.id} className="p-5 hover:bg-background-light transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer"
                       onClick={() => { analytics.track('task_started', { taskId: task.id, subtest: 'writing' }); router.push(`/writing/player?taskId=${task.id}`); }}>
                       <div>
                         <h3 className="font-bold text-navy mb-1 group-hover:text-primary transition-colors">{task.title}</h3>
@@ -352,12 +352,12 @@ export default function WritingHome() {
               )}
 
               {activeTab === 'drills' && (
-                <motion.div key="drills" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="divide-y divide-gray-100">
+                <motion.div key="drills" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="divide-y divide-border">
                   {criterionDrillLibrary.length > 0 ? (
                     criterionDrillLibrary.map((drill, index) => (
                       <div
                         key={drill.criterionCode ?? `drill-${index}`}
-                        className="p-5 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer"
+                        className="p-5 hover:bg-background-light transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer"
                         onClick={() => router.push(drill.route ?? '/writing/library')}
                       >
                         <div>
@@ -382,7 +382,7 @@ export default function WritingHome() {
                     </div>
                   ) : (
                     filteredTasks.map((task) => (
-                      <div key={task.id} className="p-5 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer">
+                      <div key={task.id} className="p-5 hover:bg-background-light transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer">
                         <div>
                           <div className="flex items-center gap-2 mb-1">
                             <Target className="w-4 h-4 text-amber-500" />
@@ -401,7 +401,7 @@ export default function WritingHome() {
               )}
 
               {activeTab === 'past' && (
-                <motion.div key="past" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="divide-y divide-gray-100">
+                <motion.div key="past" initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 10 }} className="divide-y divide-border">
                   {submissions.length === 0 ? (
                     <div className="p-10">
                       <EmptyState
@@ -411,7 +411,7 @@ export default function WritingHome() {
                       />
                     </div>
                   ) : submissions.map((sub) => (
-                    <div key={sub.id} className="p-5 hover:bg-gray-50 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer"
+                    <div key={sub.id} className="p-5 hover:bg-background-light transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-4 group cursor-pointer"
                       onClick={() => router.push(`/writing/result?id=${sub.id}`)}>
                       <div>
                         <h3 className="font-bold text-navy mb-1 group-hover:text-primary transition-colors">{sub.taskTitle}</h3>

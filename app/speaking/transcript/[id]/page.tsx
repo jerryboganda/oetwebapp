@@ -104,8 +104,8 @@ export default function SpeakingTranscriptPage() {
     return (
       <LearnerDashboardShell pageTitle="Transcript Review">
         <div className="grid gap-6 p-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <Skeleton className="h-[70vh] rounded-[24px]" />
-          <Skeleton className="h-[70vh] rounded-[24px]" />
+          <Skeleton className="h-[70vh] rounded-2xl" />
+          <Skeleton className="h-[70vh] rounded-2xl" />
         </div>
       </LearnerDashboardShell>
     );
@@ -140,7 +140,7 @@ export default function SpeakingTranscriptPage() {
         />
 
         <section className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
-          <div className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
+          <div className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
             <LearnerSurfaceSectionHeader
               eyebrow="Transcript"
               title="Review the real conversation flow"
@@ -150,7 +150,7 @@ export default function SpeakingTranscriptPage() {
 
             <SelectionToVocab source="speaking" sourceRefPrefix={`speaking:${resultId}`} className="space-y-4">
               {review.transcript.map((line) => (
-                <div key={line.id} className="rounded-2xl border border-gray-100 bg-background-light p-4">
+                <div key={line.id} className="rounded-2xl border border-border bg-background-light p-4">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="text-xs font-black uppercase tracking-widest text-muted">{line.speaker}</p>
@@ -177,7 +177,7 @@ export default function SpeakingTranscriptPage() {
           </div>
 
           <div className="space-y-6">
-                        <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
+                        <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
               <LearnerSurfaceSectionHeader
                 eyebrow="Audio Review"
                 title="Real waveform from the learner’s recording"
@@ -185,7 +185,7 @@ export default function SpeakingTranscriptPage() {
                 className="mb-4"
               />
             
-              <div className="rounded-2xl border border-gray-100 bg-background-light p-4">
+              <div className="rounded-2xl border border-border bg-background-light p-4">
                 {review.audioAvailable && review.audioUrl && !lowBandwidthMode ? (
                   <AudioPlayerWaveform
                     audioUrl={review.audioUrl}
@@ -210,7 +210,7 @@ export default function SpeakingTranscriptPage() {
               </div>
             </section>
 
-            <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
+            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
               <LearnerSurfaceSectionHeader
                 eyebrow="Marker Detail"
                 title={selectedMarker ? markerLabel[selectedMarker.type] : 'Choose a transcript marker'}
@@ -220,17 +220,17 @@ export default function SpeakingTranscriptPage() {
 
               {selectedMarker ? (
                 <div className="space-y-4">
-                  <div className="rounded-2xl border border-gray-100 bg-background-light p-4">
+                  <div className="rounded-2xl border border-border bg-background-light p-4">
                     <p className="text-xs font-black uppercase tracking-widest text-muted">Flagged phrase</p>
                     <p className="mt-2 text-sm font-bold text-navy">&quot;{selectedMarker.text}&quot;</p>
                   </div>
-                  <div className="rounded-2xl border border-gray-100 bg-background-light p-4">
+                  <div className="rounded-2xl border border-border bg-background-light p-4">
                     <p className="text-xs font-black uppercase tracking-widest text-muted">Suggestion</p>
                     <p className="mt-2 text-sm leading-6 text-muted">{selectedMarker.suggestion}</p>
                   </div>
                 </div>
               ) : (
-                <div className="rounded-2xl border border-gray-100 bg-background-light p-4 text-sm text-muted">
+                <div className="rounded-2xl border border-border bg-background-light p-4 text-sm text-muted">
                   Choose one of the transcript markers to inspect the feedback attached to that moment.
                 </div>
               )}
@@ -240,11 +240,11 @@ export default function SpeakingTranscriptPage() {
               title="Rulebook Audit"
               subtitle={`Transcript-level checks grounded in Dr. Hesham's Speaking rulebook. Inferred card type: ${inferredCardType.replace(/_/g, ' ')}.`}
               findings={auditFindings}
-              className="rounded-[28px]"
+              className="rounded-2xl"
               ruleHref={(ruleId) => `/speaking/rulebook/${ruleId}`}
             />
 
-            <section className="rounded-[28px] border border-gray-200 bg-surface p-6 shadow-sm">
+            <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
               <LearnerSurfaceSectionHeader
                 eyebrow="Review Summary"
                 title="Keep the next speaking actions close"
@@ -252,7 +252,7 @@ export default function SpeakingTranscriptPage() {
                 className="mb-4"
               />
               <div className="space-y-3">
-                <div className="rounded-2xl border border-gray-100 bg-background-light p-4 text-sm text-muted">
+                <div className="rounded-2xl border border-border bg-background-light p-4 text-sm text-muted">
                   {allMarkers.length} transcript markers surfaced across pronunciation, fluency, grammar, vocabulary, empathy, and structure.
                 </div>
                 <Button variant="outline" fullWidth onClick={() => router.push(`/speaking/phrasing/${resultId}`)}>

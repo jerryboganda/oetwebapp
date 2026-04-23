@@ -68,7 +68,7 @@ export default function GrammarTopicPage() {
     return (
       <LearnerDashboardShell>
         <div className="space-y-6">
-          <Skeleton className="h-40 rounded-[24px]" />
+          <Skeleton className="h-40 rounded-2xl" />
           <div className="grid gap-4 md:grid-cols-2">
             {Array.from({ length: 4 }).map((_, i) => (
               <Skeleton key={i} className="h-52 rounded-2xl" />

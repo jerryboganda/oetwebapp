@@ -65,7 +65,7 @@ export default function WritingComparePage() {
   return (
     <LearnerDashboardShell>
       <div className="mb-4">
-        <Link href={`/writing/result?id=${resultId}`} className="inline-flex items-center gap-1 text-sm text-indigo-600 dark:text-indigo-400 hover:underline">
+        <Link href={`/writing/result?id=${resultId}`} className="inline-flex items-center gap-1 text-sm text-primary hover:underline">
           <ChevronLeft className="w-4 h-4" /> Back to result
         </Link>
       </div>
@@ -120,14 +120,14 @@ export default function WritingComparePage() {
         {/* Learner's Response */}
         <MotionSection>
           <Card className="h-full">
-            <div className="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <div className="p-5 border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <FileText className="w-5 h-5 text-blue-600 dark:text-blue-400" />
-                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Your Response</h3>
+                <FileText className="w-5 h-5 text-info" />
+                <h3 className="font-semibold text-navy">Your Response</h3>
               </div>
-              <span className="text-xs text-gray-500">{wordCount.learner} words</span>
+              <span className="text-xs text-muted">{wordCount.learner} words</span>
             </div>
-            <div className="p-5 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed max-h-[600px] overflow-y-auto">
+            <div className="p-5 text-sm text-navy whitespace-pre-wrap leading-relaxed max-h-[600px] overflow-y-auto">
               {(result as Record<string, unknown> | null)?.letterBody as string ?? 'No response available.'}
             </div>
           </Card>
@@ -136,16 +136,16 @@ export default function WritingComparePage() {
         {/* Model Answer */}
         <MotionSection>
           <Card className="h-full">
-            <div className="p-5 border-b border-gray-200 dark:border-gray-700 flex items-center justify-between">
+            <div className="p-5 border-b border-border flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <BookOpen className="w-5 h-5 text-green-600 dark:text-green-400" />
-                <h3 className="font-semibold text-gray-900 dark:text-gray-100">Model Answer</h3>
+                <BookOpen className="w-5 h-5 text-success" />
+                <h3 className="font-semibold text-navy">Model Answer</h3>
               </div>
-              {model && <span className="text-xs text-gray-500">{wordCount.model} words</span>}
+              {model && <span className="text-xs text-muted">{wordCount.model} words</span>}
             </div>
-            <div className="p-5 text-sm text-gray-700 dark:text-gray-300 whitespace-pre-wrap leading-relaxed max-h-[600px] overflow-y-auto">
+            <div className="p-5 text-sm text-navy whitespace-pre-wrap leading-relaxed max-h-[600px] overflow-y-auto">
               {model?.paragraphs?.map(p => p.text).join('\n\n') ?? (
-                <div className="flex flex-col items-center justify-center py-12 text-gray-400">
+                <div className="flex flex-col items-center justify-center py-12 text-muted/60">
                   <BookOpen className="w-10 h-10 mb-3 opacity-60" />
                   <p className="text-sm">Model answer not available for this task.</p>
                 </div>
@@ -158,10 +158,10 @@ export default function WritingComparePage() {
       {/* Key Differences callout */}
       {model && result && (
         <MotionSection className="mt-6">
-          <Card className="bg-indigo-50 dark:bg-indigo-900/20 border-indigo-200 dark:border-indigo-800">
+          <Card className="bg-primary/10 border-primary/30">
             <div className="p-5">
-              <h3 className="text-sm font-semibold text-indigo-800 dark:text-indigo-200 mb-2">Study Tips</h3>
-              <ul className="list-disc list-inside text-sm text-indigo-700 dark:text-indigo-300 space-y-1">
+              <h3 className="text-sm font-semibold text-primary mb-2">Study Tips</h3>
+              <ul className="list-disc list-inside text-sm text-primary space-y-1">
                 <li>Compare the opening and closing paragraphs for tone and formality.</li>
                 <li>Note how the model answer organizes key clinical information.</li>
                 <li>Look at transition phrases and cohesive devices used in the model.</li>

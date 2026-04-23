@@ -27,11 +27,11 @@ const CATEGORY_ICONS: Record<string, React.ReactNode> = {
 };
 
 const CATEGORY_COLORS: Record<string, string> = {
-  practice: 'bg-blue-50 text-blue-700',
-  streak: 'bg-amber-50 text-amber-700',
-  milestone: 'bg-purple-50 text-purple-700',
-  mastery: 'bg-emerald-50 text-emerald-700',
-  social: 'bg-rose-50 text-rose-700',
+  practice: 'bg-info/10 text-info',
+  streak: 'bg-warning/10 text-warning',
+  milestone: 'bg-primary/10 text-primary',
+  mastery: 'bg-success/10 text-success',
+  social: 'bg-danger/10 text-danger',
   xp: 'bg-primary/10 text-primary',
 };
 
@@ -133,8 +133,8 @@ export default function AchievementsPage() {
             <MotionItem delayIndex={2}>
               <Card>
                 <div className="flex items-center gap-2 mb-1">
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-amber-50">
-                    <Flame className="w-4 h-4 text-amber-600" />
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-warning/10">
+                    <Flame className="w-4 h-4 text-warning" />
                   </div>
                   <span className="text-sm font-semibold text-muted">Streak</span>
                 </div>
@@ -211,7 +211,7 @@ export default function AchievementsPage() {
                 {locked.map((ach, i) => (
                   <MotionItem key={ach.id} delayIndex={i}>
                     <Card className="flex items-start gap-3 opacity-60">
-                      <div className="p-2 rounded-lg bg-gray-100 text-muted">
+                      <div className="p-2 rounded-lg bg-background-light text-muted">
                         <Lock className="w-5 h-5" />
                       </div>
                       <div className="flex-1 min-w-0">

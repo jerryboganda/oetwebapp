@@ -38,10 +38,10 @@ const CHECKLIST: ChecklistItem[] = [
 ];
 
 const CATEGORY_META: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
-  documents: { label: 'Documents', icon: <FileText className="w-5 h-5" />, color: 'text-blue-600 dark:text-blue-400' },
-  logistics: { label: 'Logistics', icon: <MapPin className="w-5 h-5" />, color: 'text-green-600 dark:text-green-400' },
-  preparation: { label: 'Final Preparation', icon: <BookOpen className="w-5 h-5" />, color: 'text-purple-600 dark:text-purple-400' },
-  on_the_day: { label: 'On the Day', icon: <Clock className="w-5 h-5" />, color: 'text-orange-600 dark:text-orange-400' },
+  documents: { label: 'Documents', icon: <FileText className="w-5 h-5" />, color: 'text-info' },
+  logistics: { label: 'Logistics', icon: <MapPin className="w-5 h-5" />, color: 'text-success' },
+  preparation: { label: 'Final Preparation', icon: <BookOpen className="w-5 h-5" />, color: 'text-primary' },
+  on_the_day: { label: 'On the Day', icon: <Clock className="w-5 h-5" />, color: 'text-warning' },
 };
 
 const TIPS = [
@@ -83,17 +83,17 @@ export default function TestDayPrepPage() {
       <MotionSection>
         <Card className="p-5">
           <div className="flex items-center justify-between mb-2">
-            <h3 className="text-sm font-semibold text-gray-900 dark:text-gray-100">Preparation Progress</h3>
-            <span className="text-sm font-medium text-indigo-600 dark:text-indigo-400">{completedItems}/{totalItems}</span>
+            <h3 className="text-sm font-semibold text-navy">Preparation Progress</h3>
+            <span className="text-sm font-medium text-primary">{completedItems}/{totalItems}</span>
           </div>
-          <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-3">
+          <div className="w-full bg-background-light rounded-full h-3">
             <div
               className="bg-gradient-to-r from-indigo-500 to-purple-500 h-3 rounded-full transition-all duration-500"
               style={{ width: `${progressPct}%` }}
             />
           </div>
           {progressPct === 100 && (
-            <p className="mt-2 text-sm text-green-600 dark:text-green-400 font-medium">
+            <p className="mt-2 text-sm text-success font-medium">
               All done! You&apos;re ready for test day.
             </p>
           )}
@@ -117,19 +117,19 @@ export default function TestDayPrepPage() {
                       onClick={() => toggleItem(item.id)}
                       className={`w-full flex items-start gap-3 p-3 rounded-lg border transition-colors text-left ${
                         isChecked
-                          ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800'
-                          : 'bg-white dark:bg-gray-900 border-gray-200 dark:border-gray-700 hover:border-indigo-300'
+                          ? 'bg-success/10 border-success/30'
+                          : 'bg-surface border-border hover:border-primary/30'
                       }`}
                     >
                       {isChecked
-                        ? <CheckCircle2 className="w-5 h-5 text-green-600 dark:text-green-400 mt-0.5 flex-shrink-0" />
-                        : <Circle className="w-5 h-5 text-gray-400 mt-0.5 flex-shrink-0" />
+                        ? <CheckCircle2 className="w-5 h-5 text-success mt-0.5 flex-shrink-0" />
+                        : <Circle className="w-5 h-5 text-muted/60 mt-0.5 flex-shrink-0" />
                       }
                       <div>
-                        <p className={`text-sm font-medium ${isChecked ? 'line-through text-gray-400' : 'text-gray-900 dark:text-gray-100'}`}>
+                        <p className={`text-sm font-medium ${isChecked ? 'line-through text-muted/60' : 'text-navy'}`}>
                           {item.label}
                         </p>
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">{item.description}</p>
+                        <p className="text-xs text-muted mt-0.5">{item.description}</p>
                       </div>
                     </button>
                   </MotionItem>
@@ -150,8 +150,8 @@ export default function TestDayPrepPage() {
         <div className="grid gap-3 sm:grid-cols-2 mt-3">
           {TIPS.map((tip, i) => (
             <MotionItem key={i}>
-              <Card className="p-4 bg-amber-50 dark:bg-amber-900/10 border-amber-200 dark:border-amber-800">
-                <p className="text-sm text-amber-800 dark:text-amber-200">{tip}</p>
+              <Card className="p-4 bg-amber-50/60 border-warning/30">
+                <p className="text-sm text-warning">{tip}</p>
               </Card>
             </MotionItem>
           ))}

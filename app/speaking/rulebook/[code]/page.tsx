@@ -30,7 +30,7 @@ export default async function SpeakingRulePage({ params }: { params: Promise<{ c
           </Link>
         </div>
 
-        <Card className="border-gray-200 bg-surface p-8">
+        <Card className="border-border bg-surface p-8">
           <div className="flex flex-wrap items-center gap-3">
             <Badge variant={severityVariant[rule.severity]} size="sm">{rule.severity}</Badge>
             <Badge variant="muted" size="sm">{rule.id}</Badge>
@@ -52,14 +52,14 @@ export default async function SpeakingRulePage({ params }: { params: Promise<{ c
         </Card>
 
         {rule.exemplarPhrases?.length ? (
-          <Card className="border-gray-200 bg-surface p-6">
+          <Card className="border-border bg-surface p-6">
             <div className="flex items-center gap-2">
               <BookOpen className="h-5 w-5 text-primary" />
               <h2 className="text-lg font-black text-navy">Exemplar phrasing</h2>
             </div>
             <div className="mt-4 space-y-3">
               {rule.exemplarPhrases.map((phrase) => (
-                <div key={phrase} className="rounded-2xl border border-gray-100 bg-background-light p-4 text-sm text-navy">
+                <div key={phrase} className="rounded-2xl border border-border bg-background-light p-4 text-sm text-navy">
                   “{phrase}”
                 </div>
               ))}

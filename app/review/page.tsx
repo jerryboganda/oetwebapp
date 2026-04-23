@@ -26,12 +26,12 @@ type ReviewItem = {
 
 const QUALITY_LABELS = ['Again', 'Hard', 'Okay', 'Good', 'Easy', 'Perfect'];
 const QUALITY_COLORS = [
-  'bg-red-500 hover:bg-red-600',
-  'bg-orange-500 hover:bg-orange-600',
-  'bg-yellow-500 hover:bg-yellow-600',
-  'bg-lime-500 hover:bg-lime-600',
-  'bg-green-500 hover:bg-green-600',
-  'bg-emerald-600 hover:bg-emerald-700',
+  'bg-danger/10 text-danger hover:bg-danger/20 border border-danger/20',
+  'bg-warning/10 text-warning hover:bg-warning/20 border border-warning/20',
+  'bg-warning/5 text-warning hover:bg-warning/15 border border-warning/15',
+  'bg-info/10 text-info hover:bg-info/20 border border-info/20',
+  'bg-success/10 text-success hover:bg-success/20 border border-success/20',
+  'bg-success/15 text-success hover:bg-success/25 border border-success/25',
 ];
 
 export default function ReviewPage() {
@@ -117,10 +117,10 @@ export default function ReviewPage() {
           <LearnerSurfaceSectionHeader eyebrow="Session overview" title="Review at a glance" description="The overview should feel like the dashboard summary row." className="mb-4" />
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4 mb-8">
           {[
-            { label: 'Due Today', value: summary?.dueToday ?? 0, color: 'text-red-600 dark:text-red-400' },
-            { label: 'Total Due', value: summary?.due ?? 0, color: 'text-orange-600 dark:text-orange-400' },
-            { label: 'Total Items', value: summary?.total ?? 0, color: 'text-blue-600 dark:text-blue-400' },
-            { label: 'Mastered', value: summary?.mastered ?? 0, color: 'text-green-600 dark:text-green-400' },
+            { label: 'Due Today', value: summary?.dueToday ?? 0, color: 'text-danger' },
+            { label: 'Total Due', value: summary?.due ?? 0, color: 'text-warning' },
+            { label: 'Total Items', value: summary?.total ?? 0, color: 'text-info' },
+            { label: 'Mastered', value: summary?.mastered ?? 0, color: 'text-success' },
           ].map(stat => (
             <Card key={stat.label} className="rounded-3xl p-4 text-center shadow-sm">
               <div className={`text-3xl font-bold ${stat.color}`}>{stat.value}</div>
@@ -131,11 +131,26 @@ export default function ReviewPage() {
         </div>
       )}
 
-      {!started && !done && (
+      {!started && !done && items.length === 0 && (
+        <div className="mx-auto max-w-xl">
+          <div className="bg-surface border border-border rounded-2xl shadow-sm p-8 text-center">
+            <CheckCircle2 className="w-12 h-12 text-success mx-auto mb-3" />
+            <h3 className="text-lg font-bold text-navy mb-2">No items due for review</h3>
+            <p className="text-muted mb-6">You&apos;re all caught up. New items will appear here as you complete more practice activities.</p>
+            <button
+              onClick={() => { setLoading(true); setError(null); Promise.allSettled([fetchReviewSummary(), fetchDueReviewItems(20)]).then(([summaryR, itemsR]) => { if (summaryR.status === 'fulfilled') setSummary(summaryR.value as ReviewSummary); if (itemsR.status === 'fulfilled') { const loadedItems = Array.isArray(itemsR.value) ? itemsR.value : (itemsR.value?.items ?? []); setItems(loadedItems as ReviewItem[]); } setLoading(false); }); }}
+              className="inline-flex items-center gap-2 rounded-2xl bg-primary px-6 py-2.5 font-semibold text-white transition-colors hover:bg-primary-dark"
+            >
+              <RotateCcw className="w-4 h-4" /> Refresh
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!started && !done && items.length > 0 && (
         <div className="flex justify-center">
           <button
             onClick={() => setStarted(true)}
-            disabled={items.length === 0}
             className="inline-flex items-center gap-2 rounded-2xl bg-primary px-8 py-3 font-semibold text-white transition-colors hover:bg-primary-dark disabled:opacity-50"
           >
             Start Review ({items.length} items) <ChevronRight className="w-5 h-5" />
@@ -190,7 +205,7 @@ export default function ReviewPage() {
                         key={q}
                         onClick={() => handleRate(q)}
                         disabled={submitting}
-                        className={`py-2 rounded-lg text-white text-sm font-medium transition-colors ${QUALITY_COLORS[q]} disabled:opacity-50`}
+                        className={`py-2 rounded-lg text-sm font-medium transition-colors ${QUALITY_COLORS[q]} disabled:opacity-50`}
                       >
                         {label}
                       </button>
@@ -205,7 +220,7 @@ export default function ReviewPage() {
 
       {done && (
         <MotionPage className="mx-auto max-w-md py-12 text-center">
-          <CheckCircle2 className="w-16 h-16 text-green-500 mx-auto mb-4" />
+          <CheckCircle2 className="w-16 h-16 text-success mx-auto mb-4" />
           <h2 className="mb-2 text-2xl font-bold text-navy">Session Complete</h2>
           <p className="mb-6 text-muted">{sessionStats.reviewed} items reviewed · {sessionStats.correct} correct ({sessionStats.reviewed > 0 ? Math.round((sessionStats.correct / sessionStats.reviewed) * 100) : 0}%)</p>
           <button

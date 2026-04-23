@@ -18,11 +18,11 @@ import type {
 } from '@/lib/types/content-hierarchy';
 
 const PACKAGE_TYPE_COLORS: Record<string, string> = {
-  full_course: 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-400',
-  crash_course: 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-400',
-  combo: 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-400',
-  foundation: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900/30 dark:text-emerald-400',
-  standalone: 'bg-slate-100 text-slate-800 dark:bg-slate-900/30 dark:text-slate-400',
+  full_course: 'bg-primary/10 text-primary',
+  crash_course: 'bg-warning/10 text-warning',
+  combo: 'bg-primary/10 text-primary',
+  foundation: 'bg-success/10 text-success',
+  standalone: 'bg-background-light text-muted',
 };
 
 const PACKAGE_TYPE_LABELS: Record<string, string> = {
@@ -141,7 +141,7 @@ export default function PackagesPage() {
                         <ul className="space-y-2 mb-4 flex-1">
                           {pkg.comparisonFeatures.map((feature, fi) => (
                             <li key={fi} className="flex items-start gap-2 text-sm">
-                              <Check className="w-4 h-4 text-green-500 shrink-0 mt-0.5" />
+                              <Check className="w-4 h-4 text-success shrink-0 mt-0.5" />
                               <span>{feature}</span>
                             </li>
                           ))}

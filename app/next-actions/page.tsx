@@ -38,9 +38,9 @@ async function apiRequest<T = unknown>(path: string): Promise<T> {
 }
 
 const PRIORITY_STYLES: Record<string, { border: string; bg: string; icon: React.ReactNode }> = {
-  high: { border: 'border-red-200 dark:border-red-800', bg: 'bg-red-50 dark:bg-red-900/10', icon: <AlertTriangle className="w-5 h-5 text-red-500" /> },
-  medium: { border: 'border-amber-200 dark:border-amber-800', bg: 'bg-amber-50 dark:bg-amber-900/10', icon: <Target className="w-5 h-5 text-amber-500" /> },
-  low: { border: 'border-green-200 dark:border-green-800', bg: 'bg-green-50 dark:bg-green-900/10', icon: <CheckCircle2 className="w-5 h-5 text-green-500" /> },
+  high: { border: 'border-danger/30', bg: 'bg-danger/10', icon: <AlertTriangle className="w-5 h-5 text-danger" /> },
+  medium: { border: 'border-warning/30', bg: 'bg-warning/10', icon: <Target className="w-5 h-5 text-warning" /> },
+  low: { border: 'border-success/30', bg: 'bg-success/10', icon: <CheckCircle2 className="w-5 h-5 text-success" /> },
 };
 
 const TYPE_ICONS: Record<string, React.ReactNode> = {
@@ -104,9 +104,9 @@ export default function NextActionsPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-1">
                           {TYPE_ICONS[action.type]}
-                          <h3 className="font-semibold text-gray-900 dark:text-gray-100">{action.title}</h3>
+                          <h3 className="font-semibold text-navy">{action.title}</h3>
                         </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{action.subtitle}</p>
+                        <p className="text-sm text-muted">{action.subtitle}</p>
                         <div className="flex items-center gap-2 mt-2">
                           <Badge variant="outline" className="capitalize">{action.priority} priority</Badge>
                           {action.subtestCode && <Badge variant="outline" className="capitalize">{action.subtestCode}</Badge>}
@@ -121,7 +121,7 @@ export default function NextActionsPage() {
               );
             })}
           </div>
-          <p className="text-xs text-gray-400 mt-4 text-right">
+          <p className="text-xs text-muted/60 mt-4 text-right">
             Generated {data.generatedAt ? new Date(data.generatedAt).toLocaleTimeString() : 'now'}
           </p>
         </MotionSection>

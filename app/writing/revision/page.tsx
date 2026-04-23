@@ -81,7 +81,7 @@ export default function WritingRevisionMode() {
           ]}
           aside={
             <div className="flex flex-col gap-3">
-              <Link href={`/writing/feedback?id=${resultId}`} className="inline-flex items-center justify-center gap-2 rounded-xl border border-gray-200 bg-surface px-4 py-2 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-background-light">
+              <Link href={`/writing/feedback?id=${resultId}`} className="inline-flex items-center justify-center gap-2 rounded-xl border border-border bg-surface px-4 py-2 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-background-light">
                 <ChevronLeft className="w-4 h-4" /> Back to feedback
               </Link>
               <Link href="/writing" className="inline-flex items-center justify-center rounded-xl bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm transition-colors hover:bg-primary/90">
@@ -93,7 +93,7 @@ export default function WritingRevisionMode() {
 
         <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
           <MotionSection className="lg:col-span-2">
-            <Card className="border-gray-200 bg-surface p-6">
+            <Card className="border-border bg-surface p-6">
               <LearnerSurfaceSectionHeader
                 eyebrow="Criterion Delta"
                 title="What changed"
@@ -104,19 +104,19 @@ export default function WritingRevisionMode() {
                 {deltas.map((delta) => {
                   const diff = delta.revised - delta.original;
                   return (
-                    <div key={delta.name} className="rounded-2xl border border-gray-200 bg-background-light p-3">
+                    <div key={delta.name} className="rounded-2xl border border-border bg-background-light p-3">
                       <div className="mb-2 truncate text-xs font-bold uppercase tracking-wider text-muted" title={delta.name}>{delta.name}</div>
                       <div className="flex items-center justify-between gap-3">
-                        <div className="flex items-center gap-2 text-sm font-medium text-gray-600">
+                        <div className="flex items-center gap-2 text-sm font-medium text-muted">
                           <span>{delta.original}</span>
-                          <ArrowRight className="w-3 h-3 text-gray-400" />
-                          <span className={diff > 0 ? 'font-bold text-green-600' : ''}>{delta.revised}</span>
-                          <span className="text-xs text-gray-400">/ {delta.max}</span>
+                          <ArrowRight className="w-3 h-3 text-muted/60" />
+                          <span className={diff > 0 ? 'font-bold text-success' : ''}>{delta.revised}</span>
+                          <span className="text-xs text-muted/60">/ {delta.max}</span>
                         </div>
                         {diff > 0 ? (
-                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-green-100 text-xs font-bold text-green-700">+{diff}</span>
+                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-success/10 text-xs font-bold text-success">+{diff}</span>
                         ) : (
-                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-gray-100 text-xs font-bold text-gray-500"><Minus className="w-3 h-3" /></span>
+                          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-background-light text-xs font-bold text-muted"><Minus className="w-3 h-3" /></span>
                         )}
                       </div>
                     </div>
@@ -127,7 +127,7 @@ export default function WritingRevisionMode() {
           </MotionSection>
 
           <MotionSection delayIndex={1}>
-            <Card className="flex h-full flex-col border-amber-200 bg-amber-50/80 p-6">
+            <Card className="flex h-full flex-col border-warning/30 bg-warning/10 p-6">
               <LearnerSurfaceSectionHeader
                 eyebrow="Open Issues"
                 title="Still to fix"
@@ -136,8 +136,8 @@ export default function WritingRevisionMode() {
               />
               <ul className="flex-1 space-y-3">
                 {unresolvedIssues.map((issue, idx) => (
-                  <li key={idx} className="flex items-start gap-2 text-sm text-amber-900">
-                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" />
+                  <li key={idx} className="flex items-start gap-2 text-sm text-warning">
+                    <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-warning" />
                     <span className="leading-snug">{issue}</span>
                   </li>
                 ))}

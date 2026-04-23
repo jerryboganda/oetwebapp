@@ -312,11 +312,29 @@ function renderTaskInstruction(
   passMark: number,
   passGrade: 'B' | 'C+',
 ): string {
+  // H2: Require explicit letter/card type at grounded-prompt build time. The
+  // prior code emitted the literal string 'letter type TBD' / 'card type TBD'
+  // when the field was missing, which meant a downstream AI would produce
+  // generic, non-scenario-specific feedback the learner could not act on.
+  // Failing fast here surfaces the authoring bug at the source instead of
+  // letting it cross the provider boundary.
   let base: string;
   if (ctx.kind === 'writing') {
-    base = `Task: analyse the candidate's OET Writing letter (${ctx.letterType ?? 'letter type TBD'}) against the active rulebook, and produce rule-cited feedback.`;
+    if (!ctx.letterType || !ctx.letterType.trim()) {
+      throw new Error(
+        'AiGroundingContext.letterType is required for writing prompts. ' +
+          'Populate it from the ContentPaper or WritingAttempt being graded before calling buildAiGroundedPrompt.',
+      );
+    }
+    base = `Task: analyse the candidate's OET Writing letter (${ctx.letterType.trim().toLowerCase()}) against the active rulebook, and produce rule-cited feedback.`;
   } else if (ctx.kind === 'speaking') {
-    base = `Task: analyse the candidate's OET Speaking transcript (${ctx.cardType ?? 'card type TBD'}) against the active rulebook, and produce rule-cited feedback.`;
+    if (!ctx.cardType || !ctx.cardType.trim()) {
+      throw new Error(
+        'AiGroundingContext.cardType is required for speaking prompts. ' +
+          'Populate it from the ContentPaper or SpeakingAttempt being graded before calling buildAiGroundedPrompt.',
+      );
+    }
+    base = `Task: analyse the candidate's OET Speaking transcript (${ctx.cardType.trim().toLowerCase()}) against the active rulebook, and produce rule-cited feedback.`;
   } else {
     base = `Task: produce a grammar teaching draft (title, content blocks, exercises) grounded in the grammar rulebook. Every exercise must cite at least one grammar rule ID in appliedRuleIds.`;
   }

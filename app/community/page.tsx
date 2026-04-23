@@ -187,12 +187,12 @@ export default function CommunityPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-2 mb-1">
                         {thread.isPinned && (
-                          <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50">
+                          <Badge variant="outline" className="text-warning border-warning/30 bg-warning/10">
                             <Pin className="mr-1 h-3 w-3" /> Pinned
                           </Badge>
                         )}
                         {thread.isLocked && (
-                          <Badge variant="outline" className="text-gray-500 border-gray-300">
+                          <Badge variant="outline" className="text-muted border-border-hover">
                             <Lock className="mr-1 h-3 w-3" /> Locked
                           </Badge>
                         )}

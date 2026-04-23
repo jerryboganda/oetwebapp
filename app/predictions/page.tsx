@@ -139,7 +139,7 @@ export default function ScoreEstimatorPage() {
               <MotionItem key={subtest}>
                 <Card className="p-5 h-full flex flex-col">
                   <div className="flex items-center justify-between mb-4">
-                    <h3 className="font-semibold text-gray-900 dark:text-gray-100 capitalize">{subtest}</h3>
+                    <h3 className="font-semibold text-navy capitalize">{subtest}</h3>
                     {badge && <Badge variant={badge.variant}>{badge.label}</Badge>}
                   </div>
 
@@ -148,20 +148,20 @@ export default function ScoreEstimatorPage() {
                       {/* Score Range Visualization */}
                       <div className="mb-4">
                         <div className="flex items-end gap-1 mb-2">
-                          <span className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">{pred.predictedScoreMid}</span>
-                          <span className="text-sm text-gray-500 dark:text-gray-400 mb-1">/500</span>
+                          <span className="text-3xl font-bold text-primary">{pred.predictedScoreMid}</span>
+                          <span className="text-sm text-muted mb-1">/500</span>
                         </div>
-                        <div className="relative h-3 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden">
+                        <div className="relative h-3 bg-border rounded-full overflow-hidden">
                           <div
-                            className="absolute h-full bg-indigo-200 dark:bg-indigo-800 rounded-full"
+                            className="absolute h-full bg-primary/20 rounded-full"
                             style={{ left: `${(pred.predictedScoreLow / 500) * 100}%`, width: `${((pred.predictedScoreHigh - pred.predictedScoreLow) / 500) * 100}%` }}
                           />
                           <div
-                            className="absolute h-full w-1 bg-indigo-600 dark:bg-indigo-400 rounded-full"
+                            className="absolute h-full w-1 bg-primary rounded-full"
                             style={{ left: `${(pred.predictedScoreMid / 500) * 100}%` }}
                           />
                         </div>
-                        <div className="flex justify-between mt-1 text-xs text-gray-400">
+                        <div className="flex justify-between mt-1 text-xs text-muted/60">
                           <span>{pred.predictedScoreLow}</span>
                           <span>{pred.predictedScoreHigh}</span>
                         </div>
@@ -169,10 +169,10 @@ export default function ScoreEstimatorPage() {
 
                       {/* Factors */}
                       {factors && (
-                        <div className="space-y-1 text-xs text-gray-600 dark:text-gray-400 flex-1">
+                        <div className="space-y-1 text-xs text-muted flex-1">
                           <p>Based on <strong>{factors.evaluationCount}</strong> evaluations</p>
                           <p>Recent average: <strong>{factors.recentAverage}</strong></p>
-                          <p>Trend: <span className={factors.trendDirection === 'improving' ? 'text-green-600 dark:text-green-400' : factors.trendDirection === 'declining' ? 'text-red-500' : 'text-gray-500'}>
+                          <p>Trend: <span className={factors.trendDirection === 'improving' ? 'text-success' : factors.trendDirection === 'declining' ? 'text-danger' : 'text-muted'}>
                             {factors.trendDirection === 'improving' ? '↑ Improving' : factors.trendDirection === 'declining' ? '↓ Declining' : '→ Stable'}
                             {factors.trend != null && ` (${factors.trend > 0 ? '+' : ''}${factors.trend})`}
                           </span></p>
@@ -180,7 +180,7 @@ export default function ScoreEstimatorPage() {
                       )}
 
                       <div className="mt-3 flex items-center justify-between">
-                        <span className="text-xs text-gray-400">
+                        <span className="text-xs text-muted/60">
                           Updated {new Date(pred.computedAt).toLocaleDateString()}
                         </span>
                         <Button size="sm" variant="ghost" onClick={() => handleCompute(subtest)} disabled={computing === subtest}>
@@ -190,8 +190,8 @@ export default function ScoreEstimatorPage() {
                     </>
                   ) : (
                     <div className="flex flex-col items-center justify-center flex-1 py-6 text-center">
-                      <BarChart3 className="w-8 h-8 text-gray-300 dark:text-gray-600 mb-2" />
-                      <p className="text-sm text-gray-500 dark:text-gray-400 mb-3">No prediction yet</p>
+                      <BarChart3 className="w-8 h-8 text-muted/40 mb-2" />
+                      <p className="text-sm text-muted mb-3">No prediction yet</p>
                       <Button size="sm" onClick={() => handleCompute(subtest)} disabled={computing === subtest}>
                         {computing === subtest ? 'Computing…' : 'Generate Prediction'}
                       </Button>
@@ -207,28 +207,28 @@ export default function ScoreEstimatorPage() {
       {/* Overall prediction summary */}
       {predictions.length >= 2 && (
         <MotionSection className="mt-6">
-          <Card className="p-5 bg-indigo-50 dark:bg-indigo-900/10 border-indigo-200 dark:border-indigo-800">
+          <Card className="p-5 bg-primary/10 border-primary/30">
             <LearnerSurfaceSectionHeader
               icon={<Target className="w-5 h-5" />}
               title="Overall OET Prediction"
             />
             <div className="mt-3 grid grid-cols-1 sm:grid-cols-3 gap-4 text-center">
               <div>
-                <p className="text-xs text-gray-500">Estimated Range</p>
-                <p className="text-lg font-bold text-indigo-700 dark:text-indigo-300">
+                <p className="text-xs text-muted">Estimated Range</p>
+                <p className="text-lg font-bold text-primary">
                   {Math.round(predictions.reduce((s, p) => s + p.predictedScoreLow, 0) / predictions.length)}–
                   {Math.round(predictions.reduce((s, p) => s + p.predictedScoreHigh, 0) / predictions.length)}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-gray-500">Best Estimate</p>
-                <p className="text-lg font-bold text-indigo-700 dark:text-indigo-300">
+                <p className="text-xs text-muted">Best Estimate</p>
+                <p className="text-lg font-bold text-primary">
                   {Math.round(predictions.reduce((s, p) => s + p.predictedScoreMid, 0) / predictions.length)}
                 </p>
               </div>
               <div>
-                <p className="text-xs text-gray-500">Subtests Analyzed</p>
-                <p className="text-lg font-bold text-indigo-700 dark:text-indigo-300">{predictions.length}/4</p>
+                <p className="text-xs text-muted">Subtests Analyzed</p>
+                <p className="text-lg font-bold text-primary">{predictions.length}/4</p>
               </div>
             </div>
           </Card>

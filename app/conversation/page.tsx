@@ -32,13 +32,13 @@ const TASK_ICONS: Record<string, LucideIcon> = {
 };
 
 const STATE_LABELS: Record<string, { label: string; color: string }> = {
-  preparing: { label: 'Preparing', color: 'bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400' },
-  active: { label: 'In Progress', color: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300' },
-  evaluating: { label: 'Evaluating…', color: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300' },
-  evaluated: { label: 'Completed', color: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' },
-  completed: { label: 'Completed', color: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300' },
-  abandoned: { label: 'Abandoned', color: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
-  failed: { label: 'Failed', color: 'bg-red-100 text-red-700 dark:bg-red-900/40 dark:text-red-300' },
+  preparing: { label: 'Preparing', color: 'bg-background-light text-muted border border-border' },
+  active: { label: 'In Progress', color: 'bg-info/10 text-info border border-info/20' },
+  evaluating: { label: 'Evaluating…', color: 'bg-warning/10 text-warning border border-warning/20' },
+  evaluated: { label: 'Completed', color: 'bg-success/10 text-success border border-success/20' },
+  completed: { label: 'Completed', color: 'bg-success/10 text-success border border-success/20' },
+  abandoned: { label: 'Abandoned', color: 'bg-danger/10 text-danger border border-danger/20' },
+  failed: { label: 'Failed', color: 'bg-danger/10 text-danger border border-danger/20' },
 };
 
 export default function ConversationPage() {
@@ -173,7 +173,7 @@ export default function ConversationPage() {
             </div>
           ) : (
             <Card className="border-dashed border-border p-8 text-center shadow-sm">
-              <MessageSquare className="mx-auto mb-3 h-10 w-10 text-gray-300" />
+              <MessageSquare className="mx-auto mb-3 h-10 w-10 text-muted/40" />
               <p className="text-sm font-semibold text-navy">No scenario types are currently enabled</p>
               <p className="mt-1 text-xs text-muted">Please contact your administrator.</p>
             </Card>
@@ -194,7 +194,7 @@ export default function ConversationPage() {
             </div>
           ) : history.length === 0 ? (
             <Card className="border-dashed border-border p-8 text-center shadow-sm">
-              <MessageSquare className="mx-auto mb-3 h-10 w-10 text-gray-300" />
+              <MessageSquare className="mx-auto mb-3 h-10 w-10 text-muted/40" />
               <p className="text-sm font-semibold text-navy">No conversations yet</p>
               <p className="mt-1 text-xs text-muted">Start your first AI conversation above</p>
             </Card>

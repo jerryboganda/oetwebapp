@@ -265,7 +265,7 @@ export default function GoalSetupPage() {
               )}
             />
             {errors.profession && (
-              <p className="text-xs text-red-600">{errors.profession.message}</p>
+              <p className="text-xs text-danger">{errors.profession.message}</p>
             )}
           </section>
 

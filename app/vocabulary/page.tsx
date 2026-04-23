@@ -22,10 +22,10 @@ import type { LearnerVocabulary, VocabularyStats, VocabularyDailySet } from '@/l
 type MyVocabItem = Pick<LearnerVocabulary, 'termId' | 'term' | 'mastery' | 'dueAt'>;
 
 const MASTERY_COLORS: Record<string, string> = {
-  new: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-400',
-  learning: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300',
-  reviewing: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/30 dark:text-yellow-300',
-  mastered: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300',
+  new: 'bg-background-light text-muted border border-border',
+  learning: 'bg-info/10 text-info border border-info/20',
+  reviewing: 'bg-warning/10 text-warning border border-warning/20',
+  mastered: 'bg-success/10 text-success border border-success/20',
 };
 
 export default function VocabularyPage() {
@@ -91,10 +91,10 @@ export default function VocabularyPage() {
   };
 
   const quickLinks = [
-    { href: '/vocabulary/flashcards', label: 'Flashcard Review', icon: <Layers className="w-6 h-6" />, badge: displayStats.dueToday > 0 ? `${displayStats.dueToday} due` : null, color: 'bg-indigo-100 dark:bg-indigo-900/40 border-indigo-300 dark:border-indigo-700 text-indigo-900 dark:text-indigo-200' },
-    { href: '/vocabulary/quiz', label: 'Vocabulary Quiz', icon: <HelpCircle className="w-6 h-6" />, badge: null, color: 'bg-emerald-100 dark:bg-emerald-900/40 border-emerald-300 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200' },
-    { href: '/vocabulary/browse', label: 'Browse Terms', icon: <BookOpen className="w-6 h-6" />, badge: null, color: 'bg-sky-100 dark:bg-sky-900/40 border-sky-300 dark:border-sky-700 text-sky-900 dark:text-sky-200' },
-    { href: '/vocabulary/quiz/history', label: 'Quiz History', icon: <History className="w-6 h-6" />, badge: null, color: 'bg-violet-100 dark:bg-violet-900/40 border-violet-300 dark:border-violet-700 text-violet-900 dark:text-violet-200' },
+    { href: '/vocabulary/flashcards', label: 'Flashcard Review', icon: <Layers className="w-6 h-6" />, badge: displayStats.dueToday > 0 ? `${displayStats.dueToday} due` : null, iconTile: 'bg-primary/10 text-primary' },
+    { href: '/vocabulary/quiz', label: 'Vocabulary Quiz', icon: <HelpCircle className="w-6 h-6" />, badge: null, iconTile: 'bg-emerald-50 text-emerald-700' },
+    { href: '/vocabulary/browse', label: 'Browse Terms', icon: <BookOpen className="w-6 h-6" />, badge: null, iconTile: 'bg-info/10 text-info' },
+    { href: '/vocabulary/quiz/history', label: 'Quiz History', icon: <History className="w-6 h-6" />, badge: null, iconTile: 'bg-purple-50 text-purple-700' },
   ];
 
   const heroHighlights = [
@@ -129,12 +129,14 @@ export default function VocabularyPage() {
           <Link key={link.href} href={link.href}>
             <motion.div
               whileHover={{ scale: 1.02 }}
-              className={`flex cursor-pointer items-center gap-3 rounded-3xl border p-4 shadow-sm ${link.color}`}
+              className="flex cursor-pointer items-center gap-3 rounded-2xl border border-border bg-surface p-4 shadow-sm transition-all hover:border-border-hover hover:shadow-md"
             >
-              {link.icon}
+              <div className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${link.iconTile}`}>
+                {link.icon}
+              </div>
               <div>
-                <div className="font-semibold text-sm">{link.label}</div>
-                {link.badge && <div className="text-xs opacity-75">{link.badge}</div>}
+                <div className="font-semibold text-sm text-navy">{link.label}</div>
+                {link.badge && <div className="text-xs text-muted">{link.badge}</div>}
               </div>
             </motion.div>
           </Link>
@@ -149,14 +151,14 @@ export default function VocabularyPage() {
       ) : (
         <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
           {[
-            { label: 'Total Words', value: displayStats.total, color: 'text-gray-800 dark:text-white' },
+            { label: 'Total Words', value: displayStats.total, color: 'text-navy' },
             { label: 'Mastered', value: displayStats.mastered, color: 'text-green-600 dark:text-green-400' },
             { label: 'Learning', value: displayStats.learning, color: 'text-blue-600 dark:text-blue-400' },
-            { label: 'New', value: displayStats.new, color: 'text-gray-500' },
+            { label: 'New', value: displayStats.new, color: 'text-muted' },
           ].map(s => (
             <Card key={s.label} className="rounded-3xl p-4 text-center shadow-sm">
               <div className={`text-3xl font-bold ${s.color}`}>{s.value}</div>
-              <div className="text-xs text-gray-500 mt-1">{s.label}</div>
+              <div className="text-xs text-muted mt-1">{s.label}</div>
             </Card>
           ))}
         </div>
@@ -164,7 +166,7 @@ export default function VocabularyPage() {
 
       {/* Daily set CTA — surfaces due + new cards for today */}
       {dailySet && dailySet.cards.length > 0 && (
-        <Card className="rounded-3xl border-primary/30 bg-gradient-to-br from-primary/5 to-sky-50 p-5 shadow-sm">
+        <Card className="rounded-3xl border-primary/30 bg-lavender/40 p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="min-w-0">
               <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase text-primary">
@@ -201,7 +203,7 @@ export default function VocabularyPage() {
         </div>
       ) : myList.length === 0 ? (
         <Card className="border-dashed border-border p-8 text-center shadow-sm">
-          <BookOpen className="mx-auto mb-3 h-10 w-10 text-gray-300" />
+          <BookOpen className="mx-auto mb-3 h-10 w-10 text-muted/40" />
           <p className="text-muted">Your vocabulary list is empty.</p>
           <Link href="/vocabulary/browse" className="mt-3 inline-flex items-center gap-1 text-sm text-primary hover:underline">
             <Plus className="w-4 h-4" /> Browse terms to add
@@ -224,7 +226,7 @@ export default function VocabularyPage() {
               <button
                 onClick={() => handleRemove(item.termId)}
                 disabled={removing.has(item.termId)}
-                className="rounded-lg p-1.5 text-muted opacity-0 transition group-hover:opacity-100 hover:bg-red-50 hover:text-red-500 disabled:opacity-50 focus:opacity-100"
+                className="rounded-lg p-1.5 text-muted opacity-0 transition group-hover:opacity-100 hover:bg-danger/10 hover:text-danger disabled:opacity-50 focus:opacity-100"
                 aria-label={`Remove ${item.term} from my word list`}
                 title="Remove from my list"
               >

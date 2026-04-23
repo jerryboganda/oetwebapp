@@ -74,24 +74,24 @@ export default function DiagnosticInsightsPage() {
           {data.priorityOrder && (
             <MotionSection>
               <LearnerSurfaceSectionHeader icon={<Brain className="w-5 h-5" />} title="Focus Priority" />
-              <p className="text-sm text-gray-500 mb-4">
+              <p className="text-sm text-muted mb-4">
                 Diagnostic from {data.diagnosticDate ? new Date(data.diagnosticDate).toLocaleDateString() : 'recently'}
               </p>
               <div className="space-y-3">
                 {data.priorityOrder.map((po) => (
                   <MotionItem key={po.rank}>
                     <Card className="p-4 flex items-start gap-4">
-                      <div className="w-8 h-8 rounded-full bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center flex-shrink-0">
-                        <span className="text-sm font-bold text-indigo-600 dark:text-indigo-400">#{po.rank}</span>
+                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                        <span className="text-sm font-bold text-primary">#{po.rank}</span>
                       </div>
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-1">
-                          <h4 className="font-semibold text-gray-900 dark:text-gray-100 capitalize">{po.analysis.subtestCode}</h4>
+                          <h4 className="font-semibold text-navy capitalize">{po.analysis.subtestCode}</h4>
                           {po.analysis.scoreRange && (
                             <Badge variant="outline">{po.analysis.scoreRange}</Badge>
                           )}
                         </div>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">{po.analysis.recommendation}</p>
+                        <p className="text-sm text-muted">{po.analysis.recommendation}</p>
                         {po.analysis.weakCriteria.length > 0 && (
                           <div className="flex flex-wrap gap-1 mt-2">
                             {po.analysis.weakCriteria.map((wc) => (
@@ -119,12 +119,12 @@ export default function DiagnosticInsightsPage() {
                     <div key={subtest} className="text-center">
                       <div className="relative h-24 flex items-end justify-center mb-2">
                         <div
-                          className="w-12 bg-indigo-500 dark:bg-indigo-400 rounded-t-lg transition-all"
+                          className="w-12 bg-primary rounded-t-lg transition-all"
                           style={{ height: `${percent}%` }}
                         />
                       </div>
-                      <p className="text-xs font-medium capitalize text-gray-900 dark:text-gray-100">{subtest}</p>
-                      <p className="text-xs text-gray-500">{percent}%</p>
+                      <p className="text-xs font-medium capitalize text-navy">{subtest}</p>
+                      <p className="text-xs text-muted">{percent}%</p>
                     </div>
                   ))}
                 </div>
@@ -140,10 +140,10 @@ export default function DiagnosticInsightsPage() {
                 <MotionItem key={sa.subtestCode}>
                   <Card className="p-4">
                     <div className="flex items-center justify-between mb-2">
-                      <h4 className="font-semibold text-gray-900 dark:text-gray-100 capitalize">{sa.subtestCode}</h4>
+                      <h4 className="font-semibold text-navy capitalize">{sa.subtestCode}</h4>
                       {sa.scoreRange && <Badge variant="outline">{sa.scoreRange}</Badge>}
                     </div>
-                    <p className="text-sm text-gray-600 dark:text-gray-400 mb-3">{sa.recommendation}</p>
+                    <p className="text-sm text-muted mb-3">{sa.recommendation}</p>
                     {sa.weakCriteria.length > 0 ? (
                       <div>
                         <p className="text-xs font-medium text-gray-500 mb-1">Weak criteria:</p>

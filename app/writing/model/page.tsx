@@ -60,13 +60,13 @@ export default function ModelAnswerExplainer() {
             { icon: Target, label: 'Goal', value: 'High-scoring writing' },
           ]}
           aside={
-            <Link href={`/writing/result?id=wr-001`} className="inline-flex items-center justify-center rounded-xl border border-gray-200 bg-surface px-4 py-2 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-background-light">
+            <Link href={`/writing/result?id=wr-001`} className="inline-flex items-center justify-center rounded-xl border border-border bg-surface px-4 py-2 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-background-light">
               Back to result
             </Link>
           }
         />
 
-        <MotionSection className="rounded-[24px] border border-gray-200 bg-surface p-6 shadow-sm">
+        <MotionSection className="rounded-2xl border border-border bg-surface p-6 shadow-sm">
           <h2 className="mb-3 text-2xl font-bold text-navy">Why this is a strong response</h2>
           <p className="max-w-3xl leading-relaxed text-muted">
             This model answer demonstrates a high-scoring response. Below, the letter is broken down paragraph by paragraph. Review the annotations to understand the <strong>rationale</strong>, <strong>scoring criteria</strong>, <strong>included / excluded details</strong>, and <strong>profession-specific language</strong> choices.
@@ -86,9 +86,9 @@ export default function ModelAnswerExplainer() {
               {/* Left: Paragraph text */}
               <div className="w-full lg:w-5/12 shrink-0">
                 <div className="sticky top-24">
-                  <Card className="relative border-gray-200 bg-background-light p-6">
+                  <Card className="relative border-border bg-background-light p-6">
                     <div className="absolute -left-3 -top-3 w-8 h-8 bg-primary text-white rounded-full flex items-center justify-center font-bold text-sm shadow-sm border-2 border-white">{index + 1}</div>
-                    <p className="text-lg leading-relaxed text-gray-800 font-serif">{paragraph.text}</p>
+                    <p className="text-lg leading-relaxed text-navy font-serif">{paragraph.text}</p>
                   </Card>
                 </div>
               </div>
@@ -96,7 +96,7 @@ export default function ModelAnswerExplainer() {
               {/* Right: Annotations */}
               <div className="w-full lg:w-7/12 space-y-4">
                 {/* Rationale */}
-                <Card className="border-gray-200 bg-surface p-5">
+                <Card className="border-border bg-surface p-5">
                   <div className="flex flex-wrap items-center justify-between gap-4 mb-3">
                     <h3 className="text-sm font-bold text-navy uppercase tracking-wider flex items-center gap-2"><BookOpen className="w-4 h-4 text-primary" /> Rationale</h3>
                     <div className="flex flex-wrap gap-2">
@@ -105,30 +105,30 @@ export default function ModelAnswerExplainer() {
                       ))}
                     </div>
                   </div>
-                  <p className="text-gray-700 leading-relaxed text-sm">{paragraph.rationale}</p>
+                  <p className="text-navy leading-relaxed text-sm">{paragraph.rationale}</p>
                 </Card>
 
                 {/* Include / Exclude */}
-                <Card className="border-gray-200 bg-surface p-5">
+                <Card className="border-border bg-surface p-5">
                   <h3 className="text-sm font-bold text-navy uppercase tracking-wider mb-4">Include / Exclude Logic</h3>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <div>
-                      <h4 className="text-xs font-bold text-green-700 uppercase tracking-wider mb-2 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4" /> Included</h4>
-                      <ul className="space-y-2">{paragraph.included.map((item, i) => (<li key={i} className="text-sm text-gray-700 flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-green-500 mt-1.5 shrink-0" /><span className="leading-snug">{item}</span></li>))}</ul>
+                      <h4 className="text-xs font-bold text-success uppercase tracking-wider mb-2 flex items-center gap-1.5"><CheckCircle2 className="w-4 h-4" /> Included</h4>
+                      <ul className="space-y-2">{paragraph.included.map((item, i) => (<li key={i} className="text-sm text-navy flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-success mt-1.5 shrink-0" /><span className="leading-snug">{item}</span></li>))}</ul>
                     </div>
                     {paragraph.excluded.length > 0 && (
                       <div>
-                        <h4 className="text-xs font-bold text-red-700 uppercase tracking-wider mb-2 flex items-center gap-1.5"><XCircle className="w-4 h-4" /> Excluded</h4>
-                        <ul className="space-y-2">{paragraph.excluded.map((item, i) => (<li key={i} className="text-sm text-gray-700 flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-red-400 mt-1.5 shrink-0" /><span className="leading-snug">{item}</span></li>))}</ul>
+                        <h4 className="text-xs font-bold text-danger uppercase tracking-wider mb-2 flex items-center gap-1.5"><XCircle className="w-4 h-4" /> Excluded</h4>
+                        <ul className="space-y-2">{paragraph.excluded.map((item, i) => (<li key={i} className="text-sm text-navy flex items-start gap-2"><span className="w-1.5 h-1.5 rounded-full bg-danger mt-1.5 shrink-0" /><span className="leading-snug">{item}</span></li>))}</ul>
                       </div>
                     )}
                   </div>
                 </Card>
 
                 {/* Language Notes */}
-                <div className="rounded-2xl border border-blue-100 bg-blue-50/80 p-5 shadow-sm">
-                  <h3 className="text-sm font-bold text-blue-900 uppercase tracking-wider mb-2 flex items-center gap-2"><Stethoscope className="w-4 h-4" /> {model.profession} Language Notes</h3>
-                  <p className="text-blue-800 leading-relaxed text-sm">{paragraph.languageNotes}</p>
+                <div className="rounded-2xl border border-info/30 bg-info/10 p-5 shadow-sm">
+                  <h3 className="text-sm font-bold text-info uppercase tracking-wider mb-2 flex items-center gap-2"><Stethoscope className="w-4 h-4" /> {model.profession} Language Notes</h3>
+                  <p className="text-info leading-relaxed text-sm">{paragraph.languageNotes}</p>
                 </div>
               </div>
             </MotionItem>

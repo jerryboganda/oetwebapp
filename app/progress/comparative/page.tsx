@@ -37,10 +37,10 @@ async function apiRequest<T = unknown>(path: string, init?: RequestInit): Promis
 }
 
 const TIER_BADGE: Record<string, { label: string; color: string }> = {
-  top10: { label: 'Top 10%', color: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300' },
-  top25: { label: 'Top 25%', color: 'bg-blue-100 text-blue-800 dark:bg-blue-950 dark:text-blue-300' },
-  aboveMedian: { label: 'Above Median', color: 'bg-amber-100 text-amber-800 dark:bg-amber-950 dark:text-amber-300' },
-  belowMedian: { label: 'Below Median', color: 'bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300' },
+  top10: { label: 'Top 10%', color: 'bg-success/10 text-success' },
+  top25: { label: 'Top 25%', color: 'bg-info/10 text-info' },
+  aboveMedian: { label: 'Above Median', color: 'bg-warning/10 text-warning' },
+  belowMedian: { label: 'Below Median', color: 'bg-danger/10 text-danger' },
 };
 
 export default function ComparativeAnalyticsPage() {

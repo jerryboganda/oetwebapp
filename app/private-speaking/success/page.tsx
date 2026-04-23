@@ -29,17 +29,17 @@ export default function PrivateSpeakingSuccessPage() {
   return (
     <LearnerDashboardShell>
       <div className="flex flex-col items-center justify-center min-h-[60vh] text-center space-y-6">
-      <div className="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center">
-        <CheckCircle2 className="w-8 h-8 text-green-600 dark:text-green-400" />
+      <div className="w-16 h-16 bg-success/10 rounded-full flex items-center justify-center">
+        <CheckCircle2 className="w-8 h-8 text-success" />
       </div>
       <div>
-        <h1 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Payment Successful!</h1>
-        <p className="text-gray-500 dark:text-gray-400">
+        <h1 className="text-2xl font-bold text-navy mb-2">Payment Successful!</h1>
+        <p className="text-muted">
           Your private speaking session has been booked. You&rsquo;ll receive a confirmation
           with Zoom details shortly.
         </p>
         {bookingId && (
-          <p className="text-xs text-gray-400 mt-2">Booking ID: {bookingId}</p>
+          <p className="text-xs text-muted/60 mt-2">Booking ID: {bookingId}</p>
         )}
       </div>
       <Button onClick={() => router.push('/private-speaking')}>
