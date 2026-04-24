@@ -5,6 +5,15 @@ import { getRuntimeBootstrapScript } from '@/lib/runtime-signals';
 import { AppProviders } from './providers';
 import './globals.css';
 
+// Middleware injects a per-request CSP nonce into `x-nonce` + the
+// `Content-Security-Policy` response header. Next.js only stamps that nonce
+// onto <script> tags when a page is rendered *per-request*. If any page
+// (including this layout) is prerendered/cached, the HTML ships without a
+// nonce but the response CSP still requires one, so every script is blocked
+// by the browser and the client never hydrates (blank page). See:
+// https://nextjs.org/docs/app/building-your-application/configuring/content-security-policy#adding-a-nonce-with-middleware
+export const dynamic = 'force-dynamic';
+
 const bodyFont = Manrope({
   subsets: ['latin'],
   variable: '--font-sans',
