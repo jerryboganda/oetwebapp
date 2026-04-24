@@ -51,7 +51,10 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      AllowedHosts: ${API_ALLOWED_HOSTS:?Set API_ALLOWED_HOSTS to the public API host name}
+      # Always include 127.0.0.1 and localhost so the in-container Docker healthcheck
+      # (curl http://127.0.0.1:8080/health/ready) is not rejected by ASP.NET's
+      # HostFilteringMiddleware with HTTP 400 "Invalid Hostname".
+      AllowedHosts: ${API_ALLOWED_HOSTS:?Set API_ALLOWED_HOSTS to the public API host name};127.0.0.1;localhost
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
       AUTHTOKENS__ISSUER: ${AUTHTOKENS__ISSUER}
       AUTHTOKENS__AUDIENCE: ${AUTHTOKENS__AUDIENCE}
@@ -153,6 +156,11 @@ services:
       dockerfile: scripts/backup/Dockerfile
     container_name: oet-db-backup
     restart: unless-stopped
+    # Alpine's dcron (crond -f) calls setpgid(0,0) for every scheduled job.
+    # Without an init process as PID 1 the kernel returns EPERM and crond
+    # exits, causing the container to crashloop. `init: true` runs tini as
+    # PID 1 which grants the required process-group capability.
+    init: true
     depends_on:
       postgres:
         condition: service_healthy
