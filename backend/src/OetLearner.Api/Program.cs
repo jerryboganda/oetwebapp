@@ -10,6 +10,7 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
@@ -361,33 +362,71 @@ void ConfigureJwtBearer(JwtBearerOptions options)
                 return;
             }
 
-            await using var scope = context.HttpContext.RequestServices.CreateAsyncScope();
-            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-            var account = await db.ApplicationUserAccounts
-                .AsNoTracking()
-                .SingleOrDefaultAsync(x => x.Id == authAccountId, context.HttpContext.RequestAborted);
+            var memoryCache = context.HttpContext.RequestServices.GetRequiredService<IMemoryCache>();
+            var cacheKey = $"jwt:validate:{authAccountId}";
 
-            if (account is null)
+            JwtValidationCacheEntry? entry;
+            if (memoryCache.TryGetValue(cacheKey, out JwtValidationCacheEntry? cached) && cached is not null)
             {
-                context.Fail("account_not_found");
-                return;
+                entry = cached;
+            }
+            else
+            {
+                await using var scope = context.HttpContext.RequestServices.CreateAsyncScope();
+                var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+                var account = await db.ApplicationUserAccounts
+                    .AsNoTracking()
+                    .SingleOrDefaultAsync(x => x.Id == authAccountId, context.HttpContext.RequestAborted);
+
+                if (account is null)
+                {
+                    context.Fail("account_not_found");
+                    return;
+                }
+
+                string? learnerStatus = null;
+                bool? expertIsActive = null;
+                if (account.DeletedAt is null)
+                {
+                    if (string.Equals(account.Role, ApplicationUserRoles.Learner, StringComparison.Ordinal))
+                    {
+                        learnerStatus = await db.Users
+                            .AsNoTracking()
+                            .Where(x => x.AuthAccountId == account.Id)
+                            .Select(x => x.AccountStatus)
+                            .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
+                    }
+                    else if (string.Equals(account.Role, ApplicationUserRoles.Expert, StringComparison.Ordinal))
+                    {
+                        expertIsActive = await db.ExpertUsers
+                            .AsNoTracking()
+                            .Where(x => x.AuthAccountId == account.Id)
+                            .Select(x => (bool?)x.IsActive)
+                            .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
+                    }
+                }
+
+                entry = new JwtValidationCacheEntry(
+                    IsDeleted: account.DeletedAt is not null,
+                    AccountStatus: learnerStatus,
+                    ExpertIsActive: expertIsActive,
+                    Role: account.Role);
+
+                memoryCache.Set(cacheKey, entry, new MemoryCacheEntryOptions
+                {
+                    AbsoluteExpirationRelativeToNow = TimeSpan.FromSeconds(30)
+                });
             }
 
-            if (account.DeletedAt is not null)
+            if (entry.IsDeleted)
             {
                 context.Fail("account_deleted");
                 return;
             }
 
-            if (string.Equals(account.Role, ApplicationUserRoles.Learner, StringComparison.Ordinal))
+            if (string.Equals(entry.Role, ApplicationUserRoles.Learner, StringComparison.Ordinal))
             {
-                var learnerActive = await db.Users
-                    .AsNoTracking()
-                    .Where(x => x.AuthAccountId == account.Id)
-                    .Select(x => x.AccountStatus)
-                    .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
-
-                if (!string.Equals(learnerActive, "active", StringComparison.OrdinalIgnoreCase))
+                if (!string.Equals(entry.AccountStatus, "active", StringComparison.OrdinalIgnoreCase))
                 {
                     context.Fail("account_suspended");
                 }
@@ -395,15 +434,9 @@ void ConfigureJwtBearer(JwtBearerOptions options)
                 return;
             }
 
-            if (string.Equals(account.Role, ApplicationUserRoles.Expert, StringComparison.Ordinal))
+            if (string.Equals(entry.Role, ApplicationUserRoles.Expert, StringComparison.Ordinal))
             {
-                var expertActive = await db.ExpertUsers
-                    .AsNoTracking()
-                    .Where(x => x.AuthAccountId == account.Id)
-                    .Select(x => x.IsActive)
-                    .SingleOrDefaultAsync(context.HttpContext.RequestAborted);
-
-                if (!expertActive)
+                if (entry.ExpertIsActive != true)
                 {
                     context.Fail("account_suspended");
                 }
@@ -666,6 +699,18 @@ builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiUsageRecorder,
     OetLearner.Api.Services.Rulebook.AiUsageRecorder>();
 builder.Services.AddMemoryCache();
+builder.Services.AddOutputCache(options =>
+{
+    options.AddBasePolicy(b => b.Expire(TimeSpan.FromSeconds(30)));
+    options.AddPolicy("PublicCatalog", b => b
+        .Expire(TimeSpan.FromMinutes(5))
+        .SetVaryByQuery("*")
+        .Tag("catalog"));
+    options.AddPolicy("Rulebook", b => b
+        .Expire(TimeSpan.FromMinutes(10))
+        .SetVaryByQuery("*")
+        .Tag("rulebook"));
+});
 builder.Services.AddScoped<OetLearner.Api.Services.AiManagement.IAiQuotaService,
     OetLearner.Api.Services.AiManagement.AiQuotaService>();
 builder.Services.AddHttpClient("AiCredentialValidator");
@@ -944,6 +989,7 @@ if (corsOrigins.Length > 0)
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
+app.UseOutputCache();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok", service = "OET Learner API", timestamp = DateTimeOffset.UtcNow, check = "live" }))
     .AllowAnonymous();
@@ -1106,3 +1152,5 @@ static bool HasAdminPermission(AuthorizationHandlerContext ctx, params string[] 
 }
 
 public partial class Program;
+
+internal sealed record JwtValidationCacheEntry(bool IsDeleted, string? AccountStatus, bool? ExpertIsActive, string Role);

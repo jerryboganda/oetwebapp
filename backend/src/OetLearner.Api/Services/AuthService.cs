@@ -499,6 +499,8 @@ public sealed class AuthService(
         account.PasswordHash = passwordHasher.HashPassword(account, request.NewPassword);
         account.UpdatedAt = now;
 
+        memoryCache.Remove($"jwt:validate:{account.Id}");
+
         var activeRefreshTokens = await db.RefreshTokenRecords
             .Where(x => x.ApplicationUserAccountId == account.Id && x.RevokedAt == null)
             .ToListAsync(cancellationToken);

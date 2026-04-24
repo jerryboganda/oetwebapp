@@ -190,11 +190,9 @@ public sealed class ChunkedUploadService(
         string sha;
         {
             await using var output = await storage.OpenWriteAsync(assembledStagingKey, ct);
-            var partStreams = partKeys.Select<string, Stream>(k =>
-            {
-                var stream = storage.OpenReadAsync(k, ct).GetAwaiter().GetResult();
-                return stream;
-            }).ToList();
+            var partStreams = new List<Stream>(partKeys.Count);
+            foreach (var k in partKeys)
+                partStreams.Add(await storage.OpenReadAsync(k, ct));
             try
             {
                 var result = await StreamingSha256.ComputeAsync(partStreams, output, ct);

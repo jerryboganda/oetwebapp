@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Caching.Memory;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -16,7 +17,8 @@ public partial class AdminService(
     EmailOtpService emailOtpService,
     IPasswordHasher<ApplicationUserAccount> passwordHasher,
     TimeProvider timeProvider,
-    NotificationService notifications)
+    NotificationService notifications,
+    IMemoryCache memoryCache)
 {
     private const string ActiveUserStatus = "active";
     private const string SuspendedUserStatus = "suspended";
@@ -784,12 +786,17 @@ public partial class AdminService(
 
     public async Task<object> GetTaxonomyListAsync(string? type, string? status, CancellationToken ct)
     {
-        var query = db.Professions.AsQueryable();
+        var query = db.Professions.AsNoTracking().AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(status) && status != "all")
             query = query.Where(p => p.Status == status);
 
         var professions = await query.OrderBy(p => p.SortOrder).ToListAsync(ct);
+        var counts = await db.ContentItems.AsNoTracking()
+            .Where(c => c.ProfessionId != null)
+            .GroupBy(c => c.ProfessionId!)
+            .Select(g => new { Id = g.Key, C = g.Count() })
+            .ToDictionaryAsync(x => x.Id, x => x.C, ct);
         var nodes = professions.Select(p => new
         {
             p.Id,
@@ -797,7 +804,7 @@ public partial class AdminService(
             slug = p.Code,
             type = "profession",
             status = p.Status,
-            contentCount = db.ContentItems.Count(c => c.ProfessionId == p.Id)
+            contentCount = counts.TryGetValue(p.Id, out var c) ? c : 0
         });
 
         return nodes;
@@ -2009,6 +2016,8 @@ public partial class AdminService(
         {
             return;
         }
+
+        memoryCache.Remove($"jwt:validate:{authAccountId}");
 
         var now = timeProvider.GetUtcNow();
         var activeRefreshTokens = await db.RefreshTokenRecords

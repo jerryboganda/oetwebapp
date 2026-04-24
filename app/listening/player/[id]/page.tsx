@@ -74,6 +74,7 @@ function PlayerContent() {
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
+  const progressRef = useRef(0);
   const [duration, setDuration] = useState(0);
   const [hasStarted, setHasStarted] = useState(Boolean(attemptIdFromRoute));
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -119,12 +120,19 @@ function PlayerContent() {
   }, [attemptIdFromRoute, id, mode]);
 
   useEffect(() => {
+    progressRef.current = progress;
+  }, [progress]);
+
+  useEffect(() => {
     if (!attempt?.attemptId || !hasStarted) return;
     const interval = window.setInterval(() => {
-      void heartbeatListeningAttempt(attempt.attemptId, Math.round(progress), 'web').catch(() => undefined);
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+      void heartbeatListeningAttempt(attempt.attemptId, Math.round(progressRef.current), 'web').catch(() => undefined);
     }, 15000);
     return () => window.clearInterval(interval);
-  }, [attempt?.attemptId, hasStarted, progress]);
+  }, [attempt?.attemptId, hasStarted]);
 
   const ensureAttempt = async () => {
     if (!session) throw new Error('Listening session is not ready.');

@@ -1,15 +1,6 @@
-'use client';
+import FeedbackGuideContent, { type RubricCriterion } from './_content';
 
-import { useEffect } from 'react';
-import { HelpCircle, CheckCircle2, TrendingUp, Target } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { analytics } from '@/lib/analytics';
-
-const WRITING_CRITERIA = [
+const WRITING_CRITERIA: RubricCriterion[] = [
   { code: 'overall_task_fulfilment', label: 'Overall Task Fulfilment', bands: '0–7', description: 'How well the letter addresses all information from the case notes, with appropriate prioritisation.', improve: 'Identify ALL relevant case note points. Organise by clinical importance, not chronological order.' },
   { code: 'appropriateness_of_language', label: 'Appropriateness of Language', bands: '0–7', description: 'Register, tone, and formality suited to the healthcare communication purpose.', improve: 'Use formal clinical register. Avoid colloquialisms. Match tone to the recipient (GP, specialist, patient).' },
   { code: 'comprehension_of_stimulus', label: 'Comprehension of Stimulus', bands: '0–7', description: 'Accurate understanding and representation of the case note information.', improve: 'Read case notes twice. Don\'t misinterpret abbreviations. Distinguish relevant from irrelevant details.' },
@@ -18,7 +9,7 @@ const WRITING_CRITERIA = [
   { code: 'conciseness', label: 'Conciseness', bands: '0–7', description: 'Appropriate length and absence of unnecessary repetition or irrelevant information.', improve: 'Remove filler phrases. Don\'t repeat information. Keep to approximately 180-200 words.' },
 ];
 
-const SPEAKING_CRITERIA = [
+const SPEAKING_CRITERIA: RubricCriterion[] = [
   { code: 'intelligibility', label: 'Intelligibility', bands: '0–6', description: 'How clearly and easily understood your speech is.', improve: 'Focus on clear word endings and stress patterns. Slow down at key information points.' },
   { code: 'fluency', label: 'Fluency', bands: '0–6', description: 'Smooth delivery with natural pace and minimal hesitation.', improve: 'Reduce filler words (um, uh). Practice connected speech. Allow natural pauses at sentence boundaries.' },
   { code: 'appropriateness', label: 'Appropriateness of Language', bands: '0–6', description: 'Using language suited to the clinical context and patient relationship.', improve: 'Avoid jargon with patients. Use empathetic language. Adapt formality to the role-play scenario.' },
@@ -27,73 +18,5 @@ const SPEAKING_CRITERIA = [
 ];
 
 export default function FeedbackGuidePage() {
-  useEffect(() => { analytics.track('feedback_guide_viewed'); }, []);
-
-  const heroHighlights = [
-    { icon: CheckCircle2, label: 'Writing criteria', value: `${WRITING_CRITERIA.length}` },
-    { icon: Target, label: 'Speaking criteria', value: `${SPEAKING_CRITERIA.length}` },
-    { icon: TrendingUp, label: 'Score bands', value: '0–7 / 0–6 / 0–3' },
-  ];
-
-  return (
-    <LearnerDashboardShell>
-      <LearnerPageHero
-        title="Feedback Interpretation Guide"
-        description="Understand what each criterion score means and how to improve."
-        icon={HelpCircle}
-        highlights={heroHighlights}
-      />
-
-      <MotionSection className="space-y-6">
-        <LearnerSurfaceSectionHeader
-          eyebrow="Writing criteria"
-          title="How writing feedback is scored"
-          description="The writing rubric should feel like an extension of the dashboard: clear, calm, and easy to scan."
-        />
-        <div className="space-y-3">
-          {WRITING_CRITERIA.map(c => (
-            <MotionItem key={c.code}>
-              <Card className="p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-2"><h3 className="font-semibold">{c.label}</h3><Badge variant="outline">Bands {c.bands}</Badge></div>
-                <p className="text-sm text-muted-foreground">{c.description}</p>
-                <div className="mt-3 bg-success/10 rounded-lg p-3">
-                  <p className="text-sm"><TrendingUp className="w-4 h-4 inline mr-1 text-success" /><strong>How to improve:</strong> {c.improve}</p>
-                </div>
-              </Card>
-            </MotionItem>
-          ))}
-        </div>
-
-        <LearnerSurfaceSectionHeader
-          eyebrow="Speaking criteria"
-          title="How speaking feedback is scored"
-          description="Speaking feedback should feel like a guided review, not a separate design language."
-        />
-        <div className="space-y-3">
-          {SPEAKING_CRITERIA.map(c => (
-            <MotionItem key={c.code}>
-              <Card className="p-5 shadow-sm">
-                <div className="flex items-center justify-between mb-2"><h3 className="font-semibold">{c.label}</h3><Badge variant="outline">Bands {c.bands}</Badge></div>
-                <p className="text-sm text-muted-foreground">{c.description}</p>
-                <div className="mt-3 bg-success/10 rounded-lg p-3">
-                  <p className="text-sm"><TrendingUp className="w-4 h-4 inline mr-1 text-success" /><strong>How to improve:</strong> {c.improve}</p>
-                </div>
-              </Card>
-            </MotionItem>
-          ))}
-        </div>
-
-        <LearnerSurfaceSectionHeader
-          eyebrow="Score guide"
-          title="How to read the bands"
-          description="Keep the interpretation simple so learners can act on the score immediately."
-        />
-        <Card className="p-5 space-y-3 shadow-sm">
-          <div className="flex items-start gap-2"><CheckCircle2 className="w-5 h-5 text-success flex-shrink-0 mt-0.5" /><p className="text-sm"><strong>Score 5-7 (Writing) / 5-6 (Speaking):</strong> Strong performance. Focus on consistency and refinement.</p></div>
-          <div className="flex items-start gap-2"><Target className="w-5 h-5 text-warning flex-shrink-0 mt-0.5" /><p className="text-sm"><strong>Score 3-4:</strong> Adequate but needs improvement. Target specific criteria with focused practice.</p></div>
-          <div className="flex items-start gap-2"><HelpCircle className="w-5 h-5 text-danger flex-shrink-0 mt-0.5" /><p className="text-sm"><strong>Score 0-2:</strong> Significant gaps. Start with foundation resources and work with an expert reviewer.</p></div>
-        </Card>
-      </MotionSection>
-    </LearnerDashboardShell>
-  );
+  return <FeedbackGuideContent writingCriteria={WRITING_CRITERIA} speakingCriteria={SPEAKING_CRITERIA} />;
 }

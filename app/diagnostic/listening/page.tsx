@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Modal } from '@/components/ui/modal';
 import { InlineAlert } from '@/components/ui/alert';
 import { useAnalytics } from '@/hooks/use-analytics';
+import { useDebouncedLocalStorage } from '@/hooks/use-debounced-local-storage';
 import { fetchListeningTask, submitListeningAnswers } from '@/lib/api';
 import type { ListeningTask, Question } from '@/lib/mock-data';
 import { cn } from '@/lib/utils';
@@ -68,12 +69,7 @@ export default function DiagnosticListeningPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Persist answers on every change
-  useEffect(() => {
-    if (Object.keys(answers).length > 0) {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(answers));
-    }
-  }, [answers]);
+  useDebouncedLocalStorage(LOCAL_STORAGE_KEY, answers);
 
   // Simulated audio playback
   const togglePlay = () => {
