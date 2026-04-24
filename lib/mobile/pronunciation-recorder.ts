@@ -41,7 +41,6 @@ async function getPlugin(): Promise<VoiceRecorderPlugin | null> {
     const mod = (await import(
       /* webpackIgnore: true */
       /* @vite-ignore */
-      // @ts-expect-error — optional peer dep: @capacitor-community/voice-recorder
       '@capacitor-community/voice-recorder'
     )) as { VoiceRecorder: VoiceRecorderPlugin };
     pluginCache = mod?.VoiceRecorder ?? null;
