@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Endpoints;
 
@@ -33,6 +34,8 @@ public static class MediaEndpoints
         IFormFile file,
         LearnerDbContext db,
         MediaStorageService storage,
+        IUploadContentValidator validator,
+        IUploadScanner scanner,
         CancellationToken ct)
     {
         var userId = http.MediaUserId();
@@ -50,13 +53,41 @@ public static class MediaEndpoints
         if (!MediaStorageService.IsAllowedMediaExtension(originalFileName))
             return Results.BadRequest(new { code = "invalid_file_extension", message = "Allowed extensions: .jpg, .jpeg, .png, .gif, .webp, .pdf." });
 
-        var id = Guid.NewGuid().ToString("N");
-        var extension = Path.GetExtension(originalFileName).ToLowerInvariant();
-        var storageKey = $"media/{id}{extension}";
-        var normalizedContentType = file.ContentType.Split(';', 2, StringSplitOptions.TrimEntries)[0].Trim();
+        await using var buffer = new MemoryStream((int)Math.Min(file.Length, MaxMediaUploadBytes));
+        await file.CopyToAsync(buffer, ct);
+        buffer.Position = 0;
 
-        await using var stream = file.OpenReadStream();
-        var sizeBytes = await storage.SaveAsync(storageKey, stream, ct);
+        var validation = await validator.ValidateAsync(buffer, Path.GetExtension(originalFileName), ct);
+        if (!validation.Accepted
+            || string.IsNullOrWhiteSpace(validation.DetectedMime)
+            || string.IsNullOrWhiteSpace(validation.DetectedExtension)
+            || !MediaStorageService.IsAllowedMediaContentType(validation.DetectedMime))
+        {
+            return Results.BadRequest(new
+            {
+                code = "invalid_file_content",
+                message = validation.Reason ?? "The uploaded file content does not match an allowed media type.",
+            });
+        }
+
+        buffer.Position = 0;
+        var scanResult = await scanner.ScanAsync(buffer, originalFileName, ct);
+        if (!scanResult.clean)
+        {
+            return Results.BadRequest(new
+            {
+                code = "file_failed_security_scan",
+                message = "The uploaded file failed security scanning.",
+            });
+        }
+
+        var id = Guid.NewGuid().ToString("N");
+        var extension = $".{validation.DetectedExtension!.TrimStart('.').ToLowerInvariant()}";
+        var storageKey = $"media/{id}{extension}";
+        var normalizedContentType = validation.DetectedMime!;
+
+        buffer.Position = 0;
+        var sizeBytes = await storage.SaveAsync(storageKey, buffer, ct);
 
         var format = extension.TrimStart('.').ToLowerInvariant();
         if (format == "jpeg") format = "jpg";
@@ -84,21 +115,23 @@ public static class MediaEndpoints
             asset.MimeType,
             asset.Format,
             asset.SizeBytes,
-            asset.StoragePath,
             asset.Status,
             asset.UploadedBy,
             asset.UploadedAt,
-            Url = $"/v1/media/{asset.Id}/file",
+            Url = $"/v1/media/{asset.Id}/content",
         });
     }
 
     private static async Task<IResult> HandleGetByIdAsync(
         string id,
+        HttpContext http,
         LearnerDbContext db,
         CancellationToken ct)
     {
         var asset = await db.MediaAssets.FindAsync([id], ct);
         if (asset is null)
+            return Results.NotFound(new { code = "media_not_found", message = "Media asset not found." });
+        if (!await CanAccessMediaAsync(http, db, asset, ct))
             return Results.NotFound(new { code = "media_not_found", message = "Media asset not found." });
 
         return Results.Ok(new
@@ -108,12 +141,11 @@ public static class MediaEndpoints
             asset.MimeType,
             asset.Format,
             asset.SizeBytes,
-            asset.StoragePath,
             asset.Status,
             asset.UploadedBy,
             asset.UploadedAt,
             asset.ProcessedAt,
-            Url = $"/v1/media/{asset.Id}/file",
+            Url = $"/v1/media/{asset.Id}/content",
         });
     }
 
@@ -171,7 +203,7 @@ public static class MediaEndpoints
                 m.SizeBytes,
                 m.Status,
                 m.UploadedAt,
-                Url = $"/v1/media/{m.Id}/file",
+                Url = $"/v1/media/{m.Id}/content",
             })
             .ToListAsync(ct);
 
@@ -186,6 +218,7 @@ public static class MediaEndpoints
     /// </summary>
     private static async Task<IResult> HandleDownloadAsync(
         string id,
+        HttpContext http,
         LearnerDbContext db,
         OetLearner.Api.Services.Content.IFileStorage storage,
         CancellationToken ct)
@@ -194,11 +227,86 @@ public static class MediaEndpoints
         if (media is null) return Results.NotFound();
         if (media.Status != MediaAssetStatus.Ready) return Results.NotFound();
         if (string.IsNullOrWhiteSpace(media.StoragePath)) return Results.NotFound();
+        if (!await CanAccessMediaAsync(http, db, media, ct)) return Results.NotFound();
 
         if (!storage.Exists(media.StoragePath)) return Results.NotFound();
         var stream = await storage.OpenReadAsync(media.StoragePath, ct);
         return Results.Stream(stream, media.MimeType, media.OriginalFilename);
     }
+
+    private static async Task<bool> CanAccessMediaAsync(
+        HttpContext http,
+        LearnerDbContext db,
+        MediaAsset media,
+        CancellationToken ct)
+    {
+        var userId = http.MediaUserId();
+        var role = http.User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
+
+        if (string.Equals(role, ApplicationUserRoles.Admin, StringComparison.OrdinalIgnoreCase)
+            || string.Equals(media.UploadedBy, userId, StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+
+        if (!string.Equals(role, ApplicationUserRoles.Learner, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        if (await IsPublishedFreePreviewMediaAsync(db, media.Id, ct))
+        {
+            return true;
+        }
+
+        if (!await HasActiveLearnerEntitlementAsync(db, userId, ct))
+        {
+            return false;
+        }
+
+        var profession = http.User.FindFirstValue("prof") ?? http.User.FindFirstValue("profession");
+        if (string.IsNullOrWhiteSpace(profession))
+        {
+            profession = await db.Users
+                .AsNoTracking()
+                .Where(u => u.Id == userId)
+                .Select(u => u.ActiveProfessionId)
+                .SingleOrDefaultAsync(ct);
+        }
+
+        var normalizedProfession = profession?.Trim().ToLowerInvariant();
+        return await db.ContentPaperAssets
+            .AsNoTracking()
+            .AnyAsync(asset =>
+                asset.MediaAssetId == media.Id
+                && asset.IsPrimary
+                && asset.Paper != null
+                && asset.Paper.Status == ContentStatus.Published
+                && (asset.Paper.AppliesToAllProfessions
+                    || (!string.IsNullOrWhiteSpace(normalizedProfession)
+                        && asset.Paper.ProfessionId == normalizedProfession)), ct);
+    }
+
+    private static Task<bool> HasActiveLearnerEntitlementAsync(
+        LearnerDbContext db,
+        string userId,
+        CancellationToken ct)
+        => db.Subscriptions
+            .AsNoTracking()
+            .AnyAsync(subscription =>
+                subscription.UserId == userId
+                && (subscription.Status == SubscriptionStatus.Active
+                    || subscription.Status == SubscriptionStatus.Trial), ct);
+
+    private static Task<bool> IsPublishedFreePreviewMediaAsync(
+        LearnerDbContext db,
+        string mediaAssetId,
+        CancellationToken ct)
+        => db.FreePreviewAssets
+            .AsNoTracking()
+            .AnyAsync(preview =>
+                preview.MediaAssetId == mediaAssetId
+                && preview.Status == ContentStatus.Published, ct);
 }
 
 file static class MediaHttpContextExtensions

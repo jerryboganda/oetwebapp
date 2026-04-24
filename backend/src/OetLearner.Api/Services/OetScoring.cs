@@ -425,6 +425,59 @@ public static class OetScoring
     }
 
     // -----------------------------------------------------------------------
+    // Advisory tier (readiness messaging)
+    // -----------------------------------------------------------------------
+    //
+    // Centralised, UI-agnostic tiering for "how close is this learner to the
+    // OET pass line?" messaging. The 350 anchor is owned HERE — never compare
+    // scaled scores to 350/300/400 inline in endpoint or UI code (see AGENTS.md).
+    //
+    // Bands (advisory copy only; authoritative pass logic stays in
+    // <see cref="IsSpeakingPass"/> / <see cref="IsListeningReadingPassByScaled"/>
+    // / <see cref="GradeWriting"/>):
+    //   "strong"      : scaled ≥ 400 — comfortably above pass line
+    //   "passing"     : scaled ≥ 350 — at/above pass line (Grade B anchor)
+    //   "developing"  : scaled ≥ 300 — within striking distance (Grade C+)
+    //   "foundation"  : scaled < 300 — needs targeted sub-test practice first
+
+    /// <summary>Advisory readiness tier for a scaled 0–500 overall score.</summary>
+    public sealed record AdvisoryTierResult(string Tier, string Message, int PassThreshold, int OverallScore);
+
+    /// <summary>
+    /// Map a scaled 0–500 overall score to an advisory readiness tier with a
+    /// copy-ready message. Pass threshold in the payload is the universal
+    /// Grade B anchor (350); Writing country variation is not applied here —
+    /// use <see cref="GradeWriting"/> for authoritative country-aware results.
+    /// </summary>
+    public static AdvisoryTierResult AdvisoryTier(int scaled)
+    {
+        var s = ClampInt(scaled, ScaledMin, ScaledMax);
+        string tier;
+        string message;
+        if (s >= 400)
+        {
+            tier = "strong";
+            message = "You're comfortably above the OET pass line. Target consistency across all four sub-tests.";
+        }
+        else if (s >= ScaledPassGradeB)
+        {
+            tier = "passing";
+            message = "You're at or above the OET pass line. Another full mock will confirm the result is repeatable.";
+        }
+        else if (s >= ScaledPassGradeCPlus)
+        {
+            tier = "developing";
+            message = "You're within striking distance. Practise the weakest sub-test before the next full mock.";
+        }
+        else
+        {
+            tier = "foundation";
+            message = "Focus on sub-test drills first — a full mock will be more useful after targeted practice.";
+        }
+        return new AdvisoryTierResult(tier, message, ScaledPassGradeB, s);
+    }
+
+    // -----------------------------------------------------------------------
     // Display formatting
     // -----------------------------------------------------------------------
 

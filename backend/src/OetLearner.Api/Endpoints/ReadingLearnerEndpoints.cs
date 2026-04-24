@@ -26,7 +26,7 @@ public static class ReadingLearnerEndpoints
         // with the legacy LearnerService-backed /v1/reading/attempts/* routes
         // used by the ContentItem / Diagnostic flow.
         var group = app.MapGroup("/v1/reading-papers")
-            .RequireAuthorization()
+            .RequireAuthorization("LearnerOnly")
             .RequireRateLimiting("PerUser");
 
         // ── Fetch structure (no answers, no explanations) ───────────────────

@@ -153,6 +153,31 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
+    public void App_FailsFastInProduction_WhenBillingWebhookSecretIsMissing()
+    {
+        using var factory = CreateProductionFactory(settings =>
+        {
+            settings.Remove("Billing:Stripe:WebhookSecret");
+        });
+
+        var exception = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
+        Assert.Contains("Billing:Stripe", exception.ToString(), StringComparison.Ordinal);
+        Assert.Contains("WebhookSecret", exception.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void App_FailsFastInProduction_WhenSandboxBillingFallbacksAreEnabled()
+    {
+        using var factory = CreateProductionFactory(settings =>
+        {
+            settings["Billing:AllowSandboxFallbacks"] = "true";
+        });
+
+        var exception = Assert.Throws<InvalidOperationException>(() => factory.CreateClient());
+        Assert.Contains("Billing:AllowSandboxFallbacks", exception.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task SpeakingUploadPipeline_StoresBinary_AndStreamsItToExperts()
     {
         using var learner = await CreateLearnerClientAsync("audio-owner");
@@ -316,6 +341,11 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
             ["Platform:PublicApiBaseUrl"] = "https://api.example.test",
             ["Platform:FallbackEmailDomain"] = "example.test",
             ["Billing:CheckoutBaseUrl"] = "https://app.example.test/billing/checkout",
+            ["Billing:AllowSandboxFallbacks"] = "false",
+            ["Billing:Stripe:SecretKey"] = "sk_test_production_readiness",
+            ["Billing:Stripe:SuccessUrl"] = "https://app.example.test/billing/checkout?checkout=success",
+            ["Billing:Stripe:CancelUrl"] = "https://app.example.test/billing/checkout?checkout=cancelled",
+            ["Billing:Stripe:WebhookSecret"] = "whsec_production_readiness",
             ["Proxy:TrustForwardHeaders"] = "true",
             ["Proxy:EnforceHttps"] = "false",
             ["AuthTokens:Issuer"] = "https://api.example.test",

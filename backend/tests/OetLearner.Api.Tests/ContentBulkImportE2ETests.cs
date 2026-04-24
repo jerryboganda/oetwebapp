@@ -25,7 +25,7 @@ public class ContentBulkImportE2ETests
 
     private static (LearnerDbContext db, InMemoryFileStorage storage, ContentBulkImportService svc,
                     ContentPaperService paperSvc, ContentConventionParser parser)
-        Build()
+        Build(ContentUploadOptions? contentUploadOptions = null)
     {
         var options = new DbContextOptionsBuilder<LearnerDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
@@ -34,7 +34,7 @@ public class ContentBulkImportE2ETests
         var storage = new InMemoryFileStorage();
         var parser = new ContentConventionParser();
         var paperSvc = new ContentPaperService(db);
-        var opts = Options.Create(new StorageOptions { LocalRootPath = "/tmp", ContentUpload = new() });
+        var opts = Options.Create(new StorageOptions { LocalRootPath = "/tmp", ContentUpload = contentUploadOptions ?? new() });
         var svc = new ContentBulkImportService(
             db, storage, parser, paperSvc, opts,
             NullLogger<ContentBulkImportService>.Instance);
@@ -81,6 +81,23 @@ public class ContentBulkImportE2ETests
             Add("Listening ( IMPORTANT NOTE =  Same for All Professions )/Listening Sample 2/Listening Sample 2 Question-Paper.pdf", "L2-Q");
             Add("Listening ( IMPORTANT NOTE =  Same for All Professions )/Listening Sample 2/Listening Sample 2 Audio-Script.pdf", "L2-S");
             Add("Listening ( IMPORTANT NOTE =  Same for All Professions )/Listening Sample 2/Listening Sample 2 Answer-Key.pdf", "L2-A");
+        }
+        ms.Position = 0;
+        return ms;
+    }
+
+    private static Stream BuildTinyZip(params (string Path, string Content)[] entries)
+    {
+        var ms = new MemoryStream();
+        using (var zip = new ZipArchive(ms, ZipArchiveMode.Create, leaveOpen: true))
+        {
+            foreach (var (path, content) in entries)
+            {
+                var entry = zip.CreateEntry(path.Replace('\\', '/'), CompressionLevel.Optimal);
+                using var stream = entry.Open();
+                var bytes = Encoding.UTF8.GetBytes(content);
+                stream.Write(bytes, 0, bytes.Length);
+            }
         }
         ms.Position = 0;
         return ms;
@@ -205,6 +222,60 @@ public class ContentBulkImportE2ETests
         var papers = await db.ContentPapers.ToListAsync();
         Assert.Single(papers);
         Assert.Contains("Listening Sample 1", papers[0].Title);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Stage_rejects_zip_traversal_entries_and_cleans_staging()
+    {
+        var (db, storage, svc, _, _) = Build();
+        await using var zip = BuildTinyZip(("../evil.pdf", "bad"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.StagePayloadAsync("admin-1", zip, "bad.zip", default));
+
+        Assert.False(storage.AnyKeyStartsWith("uploads/staging/bulk/admin-1/"));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Stage_rejects_zip_with_too_many_entries()
+    {
+        var (db, _, svc, _, _) = Build(new ContentUploadOptions { MaxZipEntries = 1 });
+        await using var zip = BuildTinyZip(("one.pdf", "one"), ("two.pdf", "two"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.StagePayloadAsync("admin-1", zip, "too-many.zip", default));
+
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Stage_rejects_zip_entry_over_uncompressed_limit()
+    {
+        var (db, _, svc, _, _) = Build(new ContentUploadOptions { MaxZipEntryBytes = 3 });
+        await using var zip = BuildTinyZip(("oversize.pdf", "hello"));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.StagePayloadAsync("admin-1", zip, "oversize.zip", default));
+
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Stage_rejects_zip_entries_over_compression_ratio_limit()
+    {
+        var (db, _, svc, _, _) = Build(new ContentUploadOptions
+        {
+            MaxZipCompressionRatio = 1.05,
+            MaxZipEntryBytes = 200_000,
+            MaxZipUncompressedBytes = 200_000
+        });
+        await using var zip = BuildTinyZip(("compressed.pdf", new string('A', 100_000)));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.StagePayloadAsync("admin-1", zip, "compressed.zip", default));
+
         await db.DisposeAsync();
     }
 

@@ -2,6 +2,7 @@ using System.Net.Http.Headers;
 using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.RegularExpressions;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 
@@ -11,7 +12,7 @@ namespace OetLearner.Api.Services;
 /// Integrates with Zoom's Server-to-Server OAuth to create and manage meetings.
 /// Token is cached until expiry. All calls are idempotent where possible.
 /// </summary>
-public sealed class ZoomMeetingService(
+public sealed partial class ZoomMeetingService(
     IHttpClientFactory httpClientFactory,
     IOptions<ZoomOptions> options,
     ILogger<ZoomMeetingService> logger)
@@ -71,9 +72,10 @@ public sealed class ZoomMeetingService(
         if (!response.IsSuccessStatusCode)
         {
             var errorBody = await response.Content.ReadAsStringAsync(ct);
-            logger.LogError("Zoom API error {Status}: {Body}", response.StatusCode, errorBody);
+            var safeErrorBody = SanitizeProviderErrorBody(errorBody);
+            logger.LogError("Zoom API error {Status}: {Body}", response.StatusCode, safeErrorBody);
             throw new InvalidOperationException(
-                $"Zoom API returned {(int)response.StatusCode}: {errorBody}");
+                $"Zoom API returned {(int)response.StatusCode}: {safeErrorBody}");
         }
 
         var responseJson = await response.Content.ReadAsStringAsync(ct);
@@ -107,8 +109,9 @@ public sealed class ZoomMeetingService(
         if (!response.IsSuccessStatusCode)
         {
             var errorBody = await response.Content.ReadAsStringAsync(ct);
+            var safeErrorBody = SanitizeProviderErrorBody(errorBody);
             logger.LogWarning("Zoom meeting deletion failed for {MeetingId}: {Status} {Body}",
-                meetingId, response.StatusCode, errorBody);
+                meetingId, response.StatusCode, safeErrorBody);
         }
         else
         {
@@ -148,7 +151,7 @@ public sealed class ZoomMeetingService(
             if (!response.IsSuccessStatusCode)
             {
                 var errorBody = await response.Content.ReadAsStringAsync(ct);
-                logger.LogError("Zoom token error {Status}: {Body}", response.StatusCode, errorBody);
+                logger.LogError("Zoom token error {Status}: {Body}", response.StatusCode, SanitizeProviderErrorBody(errorBody));
                 throw new InvalidOperationException(
                     $"Failed to obtain Zoom access token: {response.StatusCode}");
             }
@@ -168,6 +171,18 @@ public sealed class ZoomMeetingService(
             _tokenLock.Release();
         }
     }
+
+    private static string SanitizeProviderErrorBody(string? body)
+    {
+        if (string.IsNullOrWhiteSpace(body)) return string.Empty;
+
+        var sanitized = SensitiveJsonValueRegex().Replace(body, "$1\"[redacted]\"");
+        sanitized = sanitized.Replace('\r', ' ').Replace('\n', ' ');
+        return sanitized.Length <= 512 ? sanitized : sanitized[..512] + "...";
+    }
+
+    [GeneratedRegex("(?i)(\"(?:access_token|refresh_token|token|api_key|client_secret|secret|password)\"\\s*:\\s*)\"[^\"]*\"")]
+    private static partial Regex SensitiveJsonValueRegex();
 
     // ── JSON Serialization ──────────────────────────────────────────────
 

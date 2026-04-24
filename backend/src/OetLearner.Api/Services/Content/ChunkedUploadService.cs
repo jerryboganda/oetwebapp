@@ -58,6 +58,10 @@ public sealed class ChunkedUploadService(
             throw new ArgumentException("AdminUserId required.", nameof(args));
         if (string.IsNullOrWhiteSpace(args.OriginalFilename))
             throw new ArgumentException("OriginalFilename required.", nameof(args));
+        if (args.DeclaredSizeBytes <= 0)
+            throw new ArgumentOutOfRangeException(nameof(args.DeclaredSizeBytes), "DeclaredSizeBytes must be greater than zero.");
+        if (_opts.ChunkSizeBytes <= 0)
+            throw new InvalidOperationException("Configured chunk size must be greater than zero.");
 
         var limit = ResolveSizeLimitForRole(args.IntendedRole);
         if (args.DeclaredSizeBytes > limit)
@@ -96,10 +100,35 @@ public sealed class ChunkedUploadService(
             throw new InvalidOperationException($"Upload session is {session.State} and cannot accept parts.");
         if (session.ExpiresAt < DateTimeOffset.UtcNow)
             throw new InvalidOperationException("Upload session has expired.");
+        if (partNumber > session.TotalParts)
+            throw new InvalidOperationException($"Part {partNumber} exceeds expected total part count {session.TotalParts}.");
 
         var key = ContentAddressed.StagingPartKey(
             _opts.StagingSubpath, session.AdminUserId, session.Id, partNumber);
-        var wrote = await storage.WriteAsync(key, body, ct);
+        if (storage.Exists(key))
+            throw new InvalidOperationException($"Part {partNumber} has already been uploaded.");
+
+        var remaining = session.DeclaredSizeBytes - session.ReceivedBytes;
+        if (remaining <= 0)
+            throw new InvalidOperationException("Upload session has already received the declared byte count.");
+
+        var allowedBytes = Math.Min(_opts.ChunkSizeBytes, remaining);
+        long wrote;
+        try
+        {
+            wrote = await WriteLimitedAsync(key, body, allowedBytes, ct);
+        }
+        catch
+        {
+            storage.Delete(key);
+            throw;
+        }
+
+        if (wrote <= 0)
+        {
+            storage.Delete(key);
+            throw new InvalidOperationException("Upload part was empty.");
+        }
 
         session.ReceivedBytes += wrote;
         session.PartsReceived += 1;
@@ -119,19 +148,23 @@ public sealed class ChunkedUploadService(
         }
         if (session.PartsReceived == 0)
             throw new InvalidOperationException("No parts uploaded.");
+        if (session.PartsReceived != session.TotalParts)
+            throw new InvalidOperationException($"Upload is incomplete: received {session.PartsReceived} of {session.TotalParts} parts.");
+        if (session.ReceivedBytes != session.DeclaredSizeBytes)
+            throw new InvalidOperationException($"Upload size mismatch: received {session.ReceivedBytes} of {session.DeclaredSizeBytes} declared bytes.");
 
         // Enumerate parts in order. Streams must be disposed even on failure.
         var sessionPrefix = ContentAddressed.StagingSessionPrefix(
             _opts.StagingSubpath, session.AdminUserId, session.Id);
 
-        var partKeys = Enumerable.Range(1, session.PartsReceived)
+        var partKeys = Enumerable.Range(1, session.TotalParts)
             .Select(n => ContentAddressed.StagingPartKey(
                 _opts.StagingSubpath, session.AdminUserId, session.Id, n))
             .Where(storage.Exists)
             .ToList();
 
-        if (partKeys.Count == 0)
-            throw new InvalidOperationException("No staged parts on disk for this session.");
+        if (partKeys.Count != session.TotalParts)
+            throw new InvalidOperationException("One or more staged parts are missing on disk for this session.");
 
         // Magic-byte validation: read the first part's header and verify the
         // declared extension matches the actual content. Cheap — first chunk
@@ -263,6 +296,29 @@ public sealed class ChunkedUploadService(
             => _opts.MaxPdfBytes,
         _ => _opts.MaxPdfBytes,
     };
+
+    private async Task<long> WriteLimitedAsync(string key, Stream source, long maxBytes, CancellationToken ct)
+    {
+        await using var destination = await storage.OpenWriteAsync(key, ct);
+        var buffer = new byte[81920];
+        long total = 0;
+
+        while (true)
+        {
+            var read = await source.ReadAsync(buffer, ct);
+            if (read == 0) break;
+
+            total += read;
+            if (total > maxBytes)
+            {
+                throw new InvalidOperationException($"Upload part exceeds the remaining allowed size of {maxBytes} bytes.");
+            }
+
+            await destination.WriteAsync(buffer.AsMemory(0, read), ct);
+        }
+
+        return total;
+    }
 
     private static string ClassifyKind(string mime, string ext)
     {

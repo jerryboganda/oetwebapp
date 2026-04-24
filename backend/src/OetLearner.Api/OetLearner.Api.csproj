@@ -25,7 +25,7 @@
     <!-- Polly-based HTTP resilience (retry + circuit breaker + timeout) for outbound
          HttpClients. Used by BrevoEmailSender via AddStandardResilienceHandler() so
          transient Brevo outages do not cascade into 5xx responses from our API. -->
-    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="9.0.0" />
+    <PackageReference Include="Microsoft.Extensions.Http.Resilience" Version="10.0.0" />
     <!-- Sentry error/perf monitoring (H10). Passive until Sentry:Dsn is configured at runtime:
          Program.cs wires UseSentry() only when a DSN is present, so in tests / local dev the
          SDK is a complete no-op and never touches the network. PII scrubbing is centralised

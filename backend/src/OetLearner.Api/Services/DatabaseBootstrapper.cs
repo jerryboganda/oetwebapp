@@ -14,6 +14,7 @@ public static class DatabaseBootstrapper
         IWebHostEnvironment environment,
         BootstrapOptions options,
         StorageOptions storageOptions,
+        OetLearner.Api.Services.Content.IFileStorage storage,
         CancellationToken cancellationToken = default)
     {
         var autoMigrate = options.AutoMigrate ?? environment.IsDevelopment();
@@ -64,7 +65,7 @@ public static class DatabaseBootstrapper
             {
                 await SeedData.EnsureDemoOperationalStateAsync(db, cancellationToken);
             }
-            await SeedData.EnsureDemoMediaAsync(db, environment, storageOptions, cancellationToken);
+            await SeedData.EnsureDemoMediaAsync(db, storage, cancellationToken);
         }
     }
 

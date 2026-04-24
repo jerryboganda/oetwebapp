@@ -1257,36 +1257,15 @@ public sealed class MockService(LearnerDbContext db)
         if (!latestReport.TryGetValue("overallScore", out var scoreRaw) || scoreRaw is null) return null;
         if (!int.TryParse(scoreRaw.ToString(), out var overall)) return null;
 
-        // Canonical OET pass anchor = 350/500 (docs/SCORING.md). Tiering is advisory copy only.
-        string tier;
-        string message;
-        if (overall >= 400)
-        {
-            tier = "strong";
-            message = "You're comfortably above the OET pass line. Target consistency across all four sub-tests.";
-        }
-        else if (overall >= 350)
-        {
-            tier = "passing";
-            message = "You're at or above the OET pass line. Another full mock will confirm the result is repeatable.";
-        }
-        else if (overall >= 300)
-        {
-            tier = "developing";
-            message = "You're within striking distance. Practise the weakest sub-test before the next full mock.";
-        }
-        else
-        {
-            tier = "foundation";
-            message = "Focus on sub-test drills first — a full mock will be more useful after targeted practice.";
-        }
-
+        // Canonical OET pass anchor = 350/500 (docs/SCORING.md). Tiering is advisory copy only and is
+        // centralised in OetScoring.AdvisoryTier — never compare scaled scores to 350/300/400 inline.
+        var advisory = OetScoring.AdvisoryTier(overall);
         return new
         {
-            tier,
-            message,
-            passThreshold = 350,
-            overallScore = overall
+            tier = advisory.Tier,
+            message = advisory.Message,
+            passThreshold = advisory.PassThreshold,
+            overallScore = advisory.OverallScore,
         };
     }
 

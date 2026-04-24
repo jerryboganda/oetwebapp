@@ -33,6 +33,18 @@ public sealed class ContentUploadOptions
     /// <summary>Max bytes accepted for ZIP bulk imports (Slice 5).</summary>
     public long MaxZipBytes { get; set; } = 500L * 1024 * 1024;          // 500 MB
 
+    /// <summary>Max files accepted inside one ZIP bulk import.</summary>
+    public int MaxZipEntries { get; set; } = 5000;
+
+    /// <summary>Max uncompressed bytes accepted for one ZIP entry.</summary>
+    public long MaxZipEntryBytes { get; set; } = 150L * 1024 * 1024;      // 150 MB
+
+    /// <summary>Max total uncompressed bytes accepted across a ZIP import.</summary>
+    public long MaxZipUncompressedBytes { get; set; } = 2L * 1024 * 1024 * 1024; // 2 GB
+
+    /// <summary>Max allowed uncompressed/compressed ratio for a ZIP entry.</summary>
+    public double MaxZipCompressionRatio { get; set; } = 100;
+
     /// <summary>Per-chunk upload size.</summary>
     public long ChunkSizeBytes { get; set; } = 8L * 1024 * 1024;         // 8 MB
 

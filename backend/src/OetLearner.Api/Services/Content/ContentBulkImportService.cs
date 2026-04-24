@@ -73,14 +73,18 @@ public sealed class ContentBulkImportService(
     {
         if (string.IsNullOrWhiteSpace(adminId)) throw new ArgumentException("adminId required");
 
-        // Drop the ZIP to disk first so we can seek + validate.
         var sessionId = Guid.NewGuid().ToString("N");
-        var zipKey = $"{_opts.StagingSubpath}/bulk/{adminId}/{sessionId}/__source.zip";
-        var zipBytes = await storage.WriteAsync(zipKey, zipStream, ct);
-        if (zipBytes > _opts.MaxZipBytes)
+        var stagingPrefix = $"{_opts.StagingSubpath}/bulk/{adminId}/{sessionId}";
+        var zipKey = $"{stagingPrefix}/__source.zip";
+
+        try
         {
-            storage.Delete(zipKey);
-            throw new InvalidOperationException($"ZIP exceeds {_opts.MaxZipBytes} byte limit.");
+            await WriteLimitedAsync(zipKey, zipStream, _opts.MaxZipBytes, "ZIP exceeds configured byte limit.", ct);
+        }
+        catch
+        {
+            storage.DeletePrefix(stagingPrefix);
+            throw;
         }
 
         // Extract all entries into staging using ZIP relative paths. We track
@@ -89,25 +93,52 @@ public sealed class ContentBulkImportService(
         var relativeToStaging = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var relatives = new List<string>();
 
-        await using (var s = await storage.OpenReadAsync(zipKey, ct))
-        using (var archive = new ZipArchive(s, ZipArchiveMode.Read, leaveOpen: false))
+        try
         {
-            foreach (var entry in archive.Entries)
+            await using (var s = await storage.OpenReadAsync(zipKey, ct))
+            using (var archive = new ZipArchive(s, ZipArchiveMode.Read, leaveOpen: false))
             {
-                if (string.IsNullOrWhiteSpace(entry.FullName)) continue;
-                if (entry.FullName.EndsWith("/", StringComparison.Ordinal)) continue; // dir entries
-                // Reject absolute or traversal paths outright
-                if (entry.FullName.Contains("..", StringComparison.Ordinal)
-                    || entry.FullName.StartsWith('/')
-                    || entry.FullName.StartsWith('\\'))
-                    throw new InvalidOperationException($"Rejected suspicious zip entry: {entry.FullName}");
+                var entriesSeen = 0;
+                long totalUncompressed = 0;
 
-                var stagingKey = $"{_opts.StagingSubpath}/bulk/{adminId}/{sessionId}/{entry.FullName}";
-                using var entryStream = entry.Open();
-                await storage.WriteAsync(stagingKey, entryStream, ct);
-                relativeToStaging[entry.FullName.Replace('\\', '/')] = stagingKey;
-                relatives.Add(entry.FullName.Replace('\\', '/'));
+                foreach (var entry in archive.Entries)
+                {
+                    var relativePath = NormalizeZipEntryPath(entry);
+                    if (relativePath is null) continue;
+
+                    entriesSeen += 1;
+                    if (entriesSeen > _opts.MaxZipEntries)
+                        throw new InvalidOperationException($"ZIP contains more than {_opts.MaxZipEntries} file entries.");
+
+                    if (entry.Length > _opts.MaxZipEntryBytes)
+                        throw new InvalidOperationException($"ZIP entry {relativePath} exceeds {_opts.MaxZipEntryBytes} byte limit.");
+
+                    totalUncompressed += entry.Length;
+                    if (totalUncompressed > _opts.MaxZipUncompressedBytes)
+                        throw new InvalidOperationException($"ZIP uncompressed size exceeds {_opts.MaxZipUncompressedBytes} byte limit.");
+
+                    if (entry.Length > 0 && entry.CompressedLength <= 0)
+                        throw new InvalidOperationException($"ZIP entry {relativePath} has an invalid compressed length.");
+
+                    if (entry.CompressedLength > 0)
+                    {
+                        var ratio = (double)entry.Length / entry.CompressedLength;
+                        if (ratio > _opts.MaxZipCompressionRatio)
+                            throw new InvalidOperationException($"ZIP entry {relativePath} exceeds the allowed compression ratio.");
+                    }
+
+                    var stagingKey = $"{stagingPrefix}/{relativePath}";
+                    using var entryStream = entry.Open();
+                    await WriteLimitedAsync(stagingKey, entryStream, entry.Length, $"ZIP entry {relativePath} exceeded its declared size.", ct);
+                    relativeToStaging[relativePath] = stagingKey;
+                    relatives.Add(relativePath);
+                }
             }
+        }
+        catch
+        {
+            storage.DeletePrefix(stagingPrefix);
+            throw;
         }
 
         var manifest = parser.Parse(relatives);
@@ -271,4 +302,69 @@ public sealed class ContentBulkImportService(
         "png" => "image/png",
         _ => "application/octet-stream",
     };
+
+    private async Task<long> WriteLimitedAsync(
+        string key,
+        Stream source,
+        long maxBytes,
+        string errorMessage,
+        CancellationToken ct)
+    {
+        await using var destination = await storage.OpenWriteAsync(key, ct);
+        var buffer = new byte[81920];
+        long total = 0;
+
+        while (true)
+        {
+            var read = await source.ReadAsync(buffer, ct);
+            if (read == 0) break;
+
+            total += read;
+            if (total > maxBytes)
+            {
+                throw new InvalidOperationException(errorMessage);
+            }
+
+            await destination.WriteAsync(buffer.AsMemory(0, read), ct);
+        }
+
+        return total;
+    }
+
+    private static string? NormalizeZipEntryPath(ZipArchiveEntry entry)
+    {
+        if (IsZipSymlink(entry))
+        {
+            throw new InvalidOperationException($"Rejected zip symlink entry: {entry.FullName}");
+        }
+
+        var fullName = entry.FullName.Replace('\\', '/');
+        if (string.IsNullOrWhiteSpace(fullName) || fullName.EndsWith("/", StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        if (fullName.StartsWith("/", StringComparison.Ordinal) || fullName.Contains(":", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException($"Rejected suspicious zip entry: {entry.FullName}");
+        }
+
+        var segments = fullName.Split('/');
+        if (segments.Any(segment =>
+                string.IsNullOrWhiteSpace(segment)
+                || segment == "."
+                || segment == ".."))
+        {
+            throw new InvalidOperationException($"Rejected suspicious zip entry: {entry.FullName}");
+        }
+
+        return string.Join('/', segments);
+    }
+
+    private static bool IsZipSymlink(ZipArchiveEntry entry)
+    {
+        const int UnixFileTypeMask = 0xF000;
+        const int UnixSymlink = 0xA000;
+        return ((entry.ExternalAttributes >> 16) & UnixFileTypeMask) == UnixSymlink;
+    }
 }

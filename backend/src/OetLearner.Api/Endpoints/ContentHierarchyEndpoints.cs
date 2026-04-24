@@ -167,7 +167,7 @@ public static class ContentHierarchyEndpoints
         // ── Learner: Program Browser (public, auth required) ──
 
         var learner = app.MapGroup("/v1")
-            .RequireAuthorization()
+            .RequireAuthorization("LearnerOnly")
             .RequireRateLimiting("PerUser");
 
         learner.MapGet("/programs", async (ContentHierarchyService service, CancellationToken ct,

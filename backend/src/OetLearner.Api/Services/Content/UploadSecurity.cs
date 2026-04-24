@@ -99,6 +99,26 @@ public sealed class MagicByteValidator : IUploadContentValidator
         if (header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF)
             return (ext == "jpg" || ext == "jpeg") ? new(true, "image/jpeg", "jpg", null) : new(false, "image/jpeg", "jpg", $"Declared .{ext} but file is JPEG.");
 
+        // GIF87a / GIF89a
+        if (read >= 6
+            && header[0] == 0x47 && header[1] == 0x49 && header[2] == 0x46
+            && header[3] == 0x38 && (header[4] == 0x37 || header[4] == 0x39) && header[5] == 0x61)
+        {
+            return ext == "gif"
+                ? new(true, "image/gif", "gif", null)
+                : new(false, "image/gif", "gif", $"Declared .{ext} but file is GIF.");
+        }
+
+        // WebP: RIFF .... WEBP
+        if (read >= 12
+            && header[0] == 0x52 && header[1] == 0x49 && header[2] == 0x46 && header[3] == 0x46
+            && header[8] == 0x57 && header[9] == 0x45 && header[10] == 0x42 && header[11] == 0x50)
+        {
+            return ext == "webp"
+                ? new(true, "image/webp", "webp", null)
+                : new(false, "image/webp", "webp", $"Declared .{ext} but file is WebP.");
+        }
+
         // ZIP (also used by DOCX, XLSX, PPTX, JAR, ...)
         if (header[0] == 0x50 && header[1] == 0x4B && (header[2] == 0x03 || header[2] == 0x05 || header[2] == 0x07))
             return ext == "zip" ? new(true, "application/zip", "zip", null) : new(false, "application/zip", "zip", $"Declared .{ext} but file is a ZIP container.");

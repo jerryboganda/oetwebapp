@@ -376,8 +376,7 @@ public static partial class SeedData
 
     public static async Task EnsureDemoMediaAsync(
         LearnerDbContext db,
-        IWebHostEnvironment environment,
-        StorageOptions storageOptions,
+        OetLearner.Api.Services.Content.IFileStorage storage,
         CancellationToken cancellationToken = default)
     {
         const string speakingAttemptId = "sa-001";
@@ -410,17 +409,19 @@ public static partial class SeedData
             await db.SaveChangesAsync(cancellationToken);
         }
 
-        var fullPath = ResolveStoragePath(environment, storageOptions, demoAudioStorageKey);
+        // MISSION CRITICAL (AGENTS.md §Content uploads): never write raw files via File.* — route
+        // all blob writes through IFileStorage so storage swaps (S3/R2) remain a DI-only change.
         await DemoMediaSeedLock.WaitAsync(cancellationToken);
         try
         {
-            if (File.Exists(fullPath))
+            if (storage.Exists(demoAudioStorageKey))
             {
                 return;
             }
 
-            Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
-            await File.WriteAllBytesAsync(fullPath, BuildDemoWaveFile(), cancellationToken);
+            var payload = BuildDemoWaveFile();
+            using var source = new MemoryStream(payload, writable: false);
+            await storage.WriteAsync(demoAudioStorageKey, source, cancellationToken);
         }
         finally
         {
@@ -2305,21 +2306,6 @@ public static partial class SeedData
             "<p>Watch the schwa reduction in unstressed syllables: 'funcTION' = /ˈfʌŋkʃən/, not /ˈfʌŋkʃɒn/.</p>", 75));
 
         db.PronunciationDrills.AddRange(drills);
-    }
-
-    private static string ResolveStoragePath(IWebHostEnvironment environment, StorageOptions options, string storageKey)
-    {
-        var rootPath = Path.GetFullPath(
-            Path.IsPathRooted(options.LocalRootPath)
-                ? options.LocalRootPath
-                : Path.Combine(environment.ContentRootPath, options.LocalRootPath));
-
-        var normalizedKey = storageKey
-            .Replace('\\', Path.DirectorySeparatorChar)
-            .Replace('/', Path.DirectorySeparatorChar)
-            .TrimStart(Path.DirectorySeparatorChar);
-
-        return Path.Combine(rootPath, normalizedKey);
     }
 
     private static byte[] BuildDemoWaveFile()

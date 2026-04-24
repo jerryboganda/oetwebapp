@@ -167,7 +167,7 @@ public sealed class VideoLessonServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options;
         var db = new LearnerDbContext(options);
-        var service = new VideoLessonService(db, new MediaNormalizationService(db, null!));
+        var service = new VideoLessonService(db, new MediaNormalizationService(db));
         return (db, service);
     }
 

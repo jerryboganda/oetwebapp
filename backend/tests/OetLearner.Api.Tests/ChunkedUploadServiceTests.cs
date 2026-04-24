@@ -32,6 +32,7 @@ internal sealed class InMemoryFileStorage : IFileStorage
     }
 
     public bool Exists(string key) => _files.ContainsKey(key);
+    public bool AnyKeyStartsWith(string prefix) => _files.Keys.Any(key => key.StartsWith(prefix, StringComparison.Ordinal));
     public bool Delete(string key) => _files.Remove(key);
     public long Length(string key) => _files[key].Length;
     public void Move(string src, string dst, bool overwrite)
@@ -61,14 +62,14 @@ internal sealed class InMemoryFileStorage : IFileStorage
 
 public class ChunkedUploadServiceTests
 {
-    private static (LearnerDbContext db, InMemoryFileStorage storage, ChunkedUploadService svc) Build()
+    private static (LearnerDbContext db, InMemoryFileStorage storage, ChunkedUploadService svc) Build(ContentUploadOptions? contentUploadOptions = null)
     {
         var options = new DbContextOptionsBuilder<LearnerDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options;
         var db = new LearnerDbContext(options);
         var storage = new InMemoryFileStorage();
-        var opts = Options.Create(new StorageOptions { LocalRootPath = "/tmp", ContentUpload = new() });
+        var opts = Options.Create(new StorageOptions { LocalRootPath = "/tmp", ContentUpload = contentUploadOptions ?? new() });
         var svc = new ChunkedUploadService(db, storage, opts,
             validator: null, scanner: null,
             NullLogger<ChunkedUploadService>.Instance);
@@ -78,7 +79,7 @@ public class ChunkedUploadServiceTests
     [Fact]
     public async Task Happy_path_writes_parts_and_dedups_on_replay()
     {
-        var (db, storage, svc) = Build();
+        var (db, storage, svc) = Build(new ContentUploadOptions { ChunkSizeBytes = 3 });
         var session = await svc.StartAsync(new ChunkedUploadStart(
             "admin-1", "Listening Sample 1 Audio.mp3", "audio/mpeg", 6,
             "Audio"), default);
@@ -121,6 +122,44 @@ public class ChunkedUploadServiceTests
 
         var mediaCount = await db.MediaAssets.CountAsync();
         Assert.Equal(1, mediaCount);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task UploadPart_rejects_part_numbers_beyond_declared_total()
+    {
+        var (db, storage, svc) = Build();
+        var session = await svc.StartAsync(new ChunkedUploadStart("admin-1", "x.pdf", "application/pdf", 3, "QuestionPaper"), default);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.UploadPartAsync(session.Id, 2, new MemoryStream(Encoding.ASCII.GetBytes("abc")), default));
+
+        Assert.False(storage.Exists($"uploads/staging/admin-1/{session.Id}/00002.bin"));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task UploadPart_rejects_payloads_that_exceed_remaining_declared_bytes()
+    {
+        var (db, storage, svc) = Build();
+        var session = await svc.StartAsync(new ChunkedUploadStart("admin-1", "x.pdf", "application/pdf", 5, "QuestionPaper"), default);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            svc.UploadPartAsync(session.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("toolong")), default));
+
+        Assert.False(storage.Exists($"uploads/staging/admin-1/{session.Id}/00001.bin"));
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Complete_rejects_missing_declared_parts()
+    {
+        var (db, _, svc) = Build(new ContentUploadOptions { ChunkSizeBytes = 3 });
+        var session = await svc.StartAsync(new ChunkedUploadStart("admin-1", "x.pdf", "application/pdf", 6, "QuestionPaper"), default);
+        await svc.UploadPartAsync(session.Id, 1, new MemoryStream(Encoding.ASCII.GetBytes("abc")), default);
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => svc.CompleteAsync(session.Id, default));
+
         await db.DisposeAsync();
     }
 

@@ -14,7 +14,7 @@ public static class RulebookEndpoints
 {
     public static void MapRulebookEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/v1/rulebooks").RequireAuthorization();
+        var group = app.MapGroup("/v1/rulebooks").RequireAuthorization("RulebookReader");
 
         group.MapGet("/", (IRulebookLoader loader) =>
             Results.Ok(loader.All().Select(b => new
@@ -100,7 +100,7 @@ public static class RulebookEndpoints
                     info = findings.Count(f => f.Severity == RuleSeverity.Info),
                 },
             });
-        }).RequireAuthorization();
+        }).RequireAuthorization("RulebookReader");
 
         // Speaking auditor
         app.MapPost("/v1/speaking/audit", (SpeakingAuditRequest body, SpeakingRuleEngine engine) =>
@@ -114,7 +114,7 @@ public static class RulebookEndpoints
                 body.SilenceAfterDiagnosisMs);
             var findings = engine.Audit(input);
             return Results.Ok(new { findings });
-        }).RequireAuthorization();
+        }).RequireAuthorization("RulebookReader");
 
         // Grounded AI gateway
         app.MapPost("/v1/ai/complete", async (
@@ -181,7 +181,7 @@ public static class RulebookEndpoints
                     error = qex.Message,
                 }, statusCode: StatusCodes.Status429TooManyRequests);
             }
-        }).RequireAuthorization();
+        }).RequireAuthorization("AiCaller");
     }
 
     /// <summary>

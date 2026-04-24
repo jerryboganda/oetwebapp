@@ -70,7 +70,12 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
             || string.IsNullOrWhiteSpace(successUrl)
             || string.IsNullOrWhiteSpace(cancelUrl))
         {
-            return BuildSandboxCheckout(request);
+            if (_billing.AllowSandboxFallbacks)
+            {
+                return BuildSandboxCheckout(request);
+            }
+
+            throw new InvalidOperationException("Stripe billing is not fully configured and sandbox fallbacks are disabled.");
         }
 
         using var message = new HttpRequestMessage(
@@ -185,8 +190,8 @@ public sealed class StripeGateway(HttpClient httpClient, IOptions<BillingOptions
         var secret = _billing.Stripe.WebhookSecret;
         if (string.IsNullOrWhiteSpace(secret))
         {
-            error = _billing.AllowSandboxFallbacks ? null : "Stripe webhook secret is not configured.";
-            return _billing.AllowSandboxFallbacks;
+            error = "Stripe webhook secret is not configured.";
+            return false;
         }
 
         if (!TryGetHeader(headers, "Stripe-Signature", out var signatureHeader) || string.IsNullOrWhiteSpace(signatureHeader))
@@ -246,7 +251,12 @@ public sealed class PayPalGateway(HttpClient httpClient, IOptions<BillingOptions
             || string.IsNullOrWhiteSpace(successUrl)
             || string.IsNullOrWhiteSpace(cancelUrl))
         {
-            return BuildSandboxOrder(request);
+            if (_billing.AllowSandboxFallbacks)
+            {
+                return BuildSandboxOrder(request);
+            }
+
+            throw new InvalidOperationException("PayPal billing is not fully configured and sandbox fallbacks are disabled.");
         }
 
         var accessToken = await GetAccessTokenAsync(ct);

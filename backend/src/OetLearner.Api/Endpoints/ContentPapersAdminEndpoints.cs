@@ -1,6 +1,8 @@
 using System.Security.Claims;
+using Microsoft.Extensions.Options;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Content;
@@ -121,14 +123,14 @@ public static class ContentPapersAdminEndpoints
             .RequireRateLimiting("PerUserWrite");
 
         uploads.MapPost("", async (
-            ChunkedUploadStartDto dto, IChunkedUploadService svc, HttpContext http, CancellationToken ct) =>
+            ChunkedUploadStartDto dto, IChunkedUploadService svc, IOptions<StorageOptions> options, HttpContext http, CancellationToken ct) =>
         {
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
                 ?? throw new InvalidOperationException("admin id required");
             var session = await svc.StartAsync(new ChunkedUploadStart(
                 adminId, dto.OriginalFilename, dto.DeclaredMimeType,
                 dto.DeclaredSizeBytes, dto.IntendedRole ?? "Supplementary"), ct);
-            return Results.Ok(new { uploadId = session.Id, chunkSizeBytes = 8L * 1024 * 1024, expiresAt = session.ExpiresAt });
+            return Results.Ok(new { uploadId = session.Id, chunkSizeBytes = options.Value.ContentUpload.ChunkSizeBytes, expiresAt = session.ExpiresAt });
         });
 
         uploads.MapPut("/{uploadId}/parts/{partNumber:int}", async (
