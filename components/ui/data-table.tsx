@@ -1,8 +1,7 @@
 'use client';
 
-import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
-import { getMotionDelay, getSurfaceTransition, getSurfaceVariants, prefersReducedMotion } from '@/lib/motion';
+import { useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual';
 
 import { cn } from '@/lib/utils';
 
@@ -18,6 +17,22 @@ export interface Column<T> {
 
 type RowActivationEvent = ReactMouseEvent<HTMLElement> | ReactKeyboardEvent<HTMLElement>;
 
+/**
+ * Opt-in row virtualization for very large tables (>500 rows).
+ * - When set, the desktop view uses a `<div role="table">` scroller instead
+ *   of a native `<table>`, rendering only visible rows via `@tanstack/react-virtual`.
+ * - When NOT set (default), the desktop view keeps the native `<table>` layout
+ *   so sort/sticky/print semantics and consumer CSS keep working untouched.
+ */
+export interface DataTableVirtualizeOptions {
+  /** Fixed pixel height per row. Required — virtualization needs a size oracle. */
+  rowHeight: number;
+  /** Max scroll-container height (defaults to 640px). */
+  containerHeight?: number;
+  /** Extra rows rendered above/below viewport (defaults to 8). */
+  overscan?: number;
+}
+
 interface DataTableProps<T> {
   columns: Column<T>[];
   data: T[];
@@ -27,6 +42,8 @@ interface DataTableProps<T> {
   emptyMessage?: string;
   className?: string;
   'aria-label'?: string;
+  /** Enable row virtualization for large datasets. See {@link DataTableVirtualizeOptions}. */
+  virtualize?: DataTableVirtualizeOptions;
 }
 
 export function DataTable<T>({
@@ -38,11 +55,8 @@ export function DataTable<T>({
   emptyMessage = 'No data',
   className,
   'aria-label': ariaLabel,
+  virtualize,
 }: DataTableProps<T>) {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
-  const rowVariants = getSurfaceVariants('item', reducedMotion);
-  const rowTransition = getSurfaceTransition('item', reducedMotion);
-
   if (data.length === 0) {
     return (
       <div className="rounded-[20px] border border-dashed border-gray-200 bg-background-light px-6 py-10 text-center text-sm text-muted">
@@ -149,66 +163,181 @@ export function DataTable<T>({
       </div>
 
       <div className="hidden md:block">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-full text-sm" aria-label={ariaLabel}>
-            <thead className="bg-background-light">
-              <tr className="border-b border-gray-200/60">
-                {columns.map((column) => (
-                  <th
-                    key={column.key}
-                    scope="col"
-                    className={cn(
-                      'px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-muted',
-                      column.hideOnMobile && 'hidden md:table-cell',
-                      column.className,
-                    )}
-                  >
-                    {column.header}
-                  </th>
-                ))}
-              </tr>
-            </thead>
-
-            <tbody className="divide-y divide-gray-100/90 bg-surface">
-              {data.map((row, idx) => (
-                <motion.tr
-                  key={keyExtractor(row, idx)}
-                  data-row-key={keyExtractor(row, idx)}
-                  variants={rowVariants}
-                  initial="hidden"
-                  animate="visible"
-                  transition={{ ...rowTransition, delay: getMotionDelay(idx, reducedMotion) }}
-                  onClick={(event) => onRowClick?.(row, event)}
-                  onKeyDown={(event) => {
-                    if (onRowClick && (event.key === 'Enter' || event.key === ' ')) {
-                      event.preventDefault();
-                      onRowClick(row, event);
-                    }
-                  }}
-                  tabIndex={onRowClick ? 0 : undefined}
-                  role={onRowClick ? 'button' : undefined}
-                  className={cn(
-                    'transition-colors duration-200',
-                    onRowClick && 'cursor-pointer hover:bg-primary/[0.03] focus-visible:bg-primary/[0.03] focus-visible:outline-none',
-                  )}
-                >
+        {virtualize ? (
+          <VirtualizedDesktopView
+            columns={columns}
+            data={data}
+            keyExtractor={keyExtractor}
+            onRowClick={onRowClick}
+            ariaLabel={ariaLabel}
+            options={virtualize}
+          />
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-full text-sm" aria-label={ariaLabel}>
+              <thead className="bg-background-light">
+                <tr className="border-b border-gray-200/60">
                   {columns.map((column) => (
-                    <td
+                    <th
                       key={column.key}
+                      scope="col"
                       className={cn(
-                        'px-5 py-4 align-top text-sm text-navy',
+                        'px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-muted',
                         column.hideOnMobile && 'hidden md:table-cell',
                         column.className,
                       )}
                     >
-                      {column.render(row, idx)}
-                    </td>
+                      {column.header}
+                    </th>
                   ))}
-                </motion.tr>
-              ))}
-            </tbody>
-          </table>
+                </tr>
+              </thead>
+
+              <tbody className="divide-y divide-gray-100/90 bg-surface">
+                {data.map((row, idx) => (
+                  <tr
+                    key={keyExtractor(row, idx)}
+                    data-row-key={keyExtractor(row, idx)}
+                    onClick={(event) => onRowClick?.(row, event)}
+                    onKeyDown={(event) => {
+                      if (onRowClick && (event.key === 'Enter' || event.key === ' ')) {
+                        event.preventDefault();
+                        onRowClick(row, event);
+                      }
+                    }}
+                    tabIndex={onRowClick ? 0 : undefined}
+                    role={onRowClick ? 'button' : undefined}
+                    className={cn(
+                      'transition-colors duration-200',
+                      onRowClick && 'cursor-pointer hover:bg-primary/[0.03] focus-visible:bg-primary/[0.03] focus-visible:outline-none',
+                    )}
+                  >
+                    {columns.map((column) => (
+                      <td
+                        key={column.key}
+                        className={cn(
+                          'px-5 py-4 align-top text-sm text-navy',
+                          column.hideOnMobile && 'hidden md:table-cell',
+                          column.className,
+                        )}
+                      >
+                        {column.render(row, idx)}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+interface VirtualizedDesktopViewProps<T> {
+  columns: Column<T>[];
+  data: T[];
+  keyExtractor: (row: T, index: number) => string;
+  onRowClick?: (row: T, event: RowActivationEvent) => void;
+  ariaLabel?: string;
+  options: DataTableVirtualizeOptions;
+}
+
+function VirtualizedDesktopView<T>({
+  columns,
+  data,
+  keyExtractor,
+  onRowClick,
+  ariaLabel,
+  options,
+}: VirtualizedDesktopViewProps<T>) {
+  const { rowHeight, containerHeight = 640, overscan = 8 } = options;
+  const parentRef = useRef<HTMLDivElement>(null);
+  const virtualizer = useVirtualizer({
+    count: data.length,
+    getScrollElement: () => parentRef.current,
+    estimateSize: () => rowHeight,
+    overscan,
+  });
+
+  const columnCount = columns.length;
+  const gridTemplate = `repeat(${columnCount}, minmax(0, 1fr))`;
+
+  return (
+    <div
+      ref={parentRef}
+      className="overflow-auto"
+      style={{ maxHeight: containerHeight }}
+      role="table"
+      aria-label={ariaLabel}
+      aria-rowcount={data.length + 1}
+    >
+      <div
+        role="rowgroup"
+        className="sticky top-0 z-10 bg-background-light border-b border-gray-200/60"
+      >
+        <div role="row" className="grid" style={{ gridTemplateColumns: gridTemplate }}>
+          {columns.map((column) => (
+            <div
+              key={column.key}
+              role="columnheader"
+              className={cn(
+                'px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-muted',
+                column.className,
+              )}
+            >
+              {column.header}
+            </div>
+          ))}
         </div>
+      </div>
+
+      <div role="rowgroup" style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+        {virtualizer.getVirtualItems().map((virtualRow: VirtualItem) => {
+          const row = data[virtualRow.index];
+          if (!row) return null;
+          const rowKey = keyExtractor(row, virtualRow.index);
+          return (
+            <div
+              key={rowKey}
+              role="row"
+              aria-rowindex={virtualRow.index + 2}
+              data-row-key={rowKey}
+              onClick={(event) => onRowClick?.(row, event)}
+              onKeyDown={(event) => {
+                if (onRowClick && (event.key === 'Enter' || event.key === ' ')) {
+                  event.preventDefault();
+                  onRowClick(row, event);
+                }
+              }}
+              tabIndex={onRowClick ? 0 : undefined}
+              className={cn(
+                'grid border-b border-gray-100/90 bg-surface transition-colors duration-200',
+                onRowClick && 'cursor-pointer hover:bg-primary/[0.03] focus-visible:bg-primary/[0.03] focus-visible:outline-none',
+              )}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: virtualRow.size,
+                transform: `translateY(${virtualRow.start}px)`,
+                gridTemplateColumns: gridTemplate,
+              }}
+            >
+              {columns.map((column) => (
+                <div
+                  key={column.key}
+                  role="cell"
+                  className={cn('px-5 py-4 align-top text-sm text-navy', column.className)}
+                >
+                  {column.render(row, virtualRow.index)}
+                </div>
+              ))}
+            </div>
+          );
+        })}
       </div>
     </div>
   );

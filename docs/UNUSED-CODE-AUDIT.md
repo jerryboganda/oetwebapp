@@ -1,6 +1,6 @@
 # Unused Code Audit — OET Prep Platform
 
-**Date:** 2026-04-23 (original audit) · **Closure update:** 2026-04-24
+**Date:** 2026-04-23 (original audit) · **Closure updates:** 2026-04-24, 2026-04-25
 **Tools used:** `tsc --noUnusedLocals --noUnusedParameters`, `ts-prune`, `depcheck`, manual grep
 
 ---
@@ -14,10 +14,10 @@
 | Unused type declarations (TS6196) | ~~12~~ → **0** | ✅ removed | Zero |
 | Unused exports (ts-prune, excl. framework entries) | 768 total (312 in lib/components) | ⏳ Not yet triaged — requires public-API vs dead-code judgement | Low–Medium |
 | Unused npm dependencies | 5 prod + 7 dev | ⏳ Pending — requires product/config call | Low |
-| Missing npm dependencies | 2 | ⏳ Pending | Medium |
+| Missing npm dependencies | 2 → **1** | ✅ `@capacitor-community/voice-recorder` resolved via `capacitor-voice-recorder@6.0.3` install (commit `ca9b0a8`, Unit 8 step 2); `@next/env` remains and is a depcheck false positive (present in `package.json`) | Low |
 | Root orphan artifact files | ~~19 files~~ → **0** | ✅ removed (commit `75efb3f`) | Zero |
 
-**Closed so far:** TS unused-locals family (127 → 0) and all 19 root orphan artifacts. **Remaining:** 768 unused ts-prune exports (triage), 12 npm dep questions, 2 missing deps.
+**Closed so far:** TS unused-locals family (127 → 0), all 19 root orphan artifacts, and the `@capacitor-community/voice-recorder` missing-dep. **Remaining:** 768 unused ts-prune exports — now gated through the `scripts/ts-prune-filter.mjs` pipeline (Unit 7 `a584841`, `npm run unused:scan`) which reduces the actionable survivor set to **525**; 12 npm dep questions; 1 depcheck false-positive (`@next/env`).
 
 ---
 
@@ -59,7 +59,7 @@
 
 ## Category 2: Unused Exports (ts-prune)
 
-768 total unused exports detected. After excluding Next.js framework entry points (`page.tsx`, `layout.tsx`, `route.ts`, etc.) and config files, **312 are in `lib/` and `components/`**.
+768 total unused exports detected at the 2026-04-23 baseline. After excluding Next.js framework entry points (`page.tsx`, `layout.tsx`, `route.ts`, etc.) and config files, **312 were in `lib/` and `components/`**. As of 2026-04-25, the Pass 1 filter script `scripts/ts-prune-filter.mjs` (shipped in `a584841`, Unit 7) has been wired into `npm run unused:scan` (Unit 2 `8f8986f`); the post-filter actionable survivor count at HEAD `ca9b0a8` is **525** — see `docs/TS-PRUNE-TRIAGE.md` for the full methodology and the per-bucket action plan. No `lib/` / `components/` export has been deleted yet; Pass 2 is gated on per-file `rg` confirmation.
 
 ### High-Confidence Unused Exports in `lib/`
 
@@ -110,8 +110,7 @@ Many `page.tsx` default exports are framework entry points and are **false posit
 
 | Package | Used In |
 |---------|---------|
-| `@next/env` | `capacitor.config.ts`, `scripts/desktop-dist.cjs` |
-| `@capacitor-community/voice-recorder` | `lib/mobile/pronunciation-recorder.ts` |
+| ~~`@capacitor-community/voice-recorder`~~ | ~~`lib/mobile/pronunciation-recorder.ts`~~ — ✅ resolved `ca9b0a8` (replaced with `capacitor-voice-recorder@6.0.3`; import renamed; obsolete `.d.ts` shim deleted; `@ts-expect-error` suppression removed) |
 
 ---
 
@@ -273,7 +272,7 @@ These may be WIP, future-use, or consumed by external systems:
 | `lib/content-upload-api.ts:abortUpload` | No frontend caller — may be WIP upload cancellation |
 | `lib/admin.ts:getAdminPermissionsData` | May be used by future admin pages |
 | `@google/genai` dependency | No import found — verify if backend uses it |
-| `@capacitor-community/voice-recorder` | Listed as missing — needs `npm install` |
+| ~~`@capacitor-community/voice-recorder`~~ | ✅ Resolved 2026-04-25 (`ca9b0a8`): installed `capacitor-voice-recorder@6.0.3` (pin chosen for Capacitor 6 peer compatibility; the community package was renamed upstream from v7). Dynamic import in `lib/mobile/pronunciation-recorder.ts:44` renamed accordingly; obsolete ambient `.d.ts` shim deleted; `@ts-expect-error` removed. Mobile recorder suite 45/45 green. |
 | `@next/env` | Listed as missing — used in `capacitor.config.ts` |
 
 > **⚠ MISSION CRITICAL exclusions:** Per AGENTS.md, scoring (`lib/scoring.ts`), rulebook (`lib/rulebook/`), AI gateway, and content upload core code must NEVER be flagged as unused even if ts-prune lists them — they are indirect/critical-path dependencies.

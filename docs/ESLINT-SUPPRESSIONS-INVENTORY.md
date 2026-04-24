@@ -1,15 +1,15 @@
 # Remaining `eslint-disable` / `@ts-expect-error` Inventory
 
-**Date:** 2026-04-24
-**Scope:** After Wave 4 (`d6f5b75`) removed every `react-hooks/exhaustive-deps` disable, exactly **three** suppression sites remain across `app/`, `components/`, `lib/`, and `hooks/`. This doc catalogs each one with justification, risk, and fix path. No source changes in this doc.
+**Date:** 2026-04-24 (original) · **Update:** 2026-04-25
+**Scope:** After Wave 4 (`d6f5b75`) removed every `react-hooks/exhaustive-deps` disable, three suppression sites remained across `app/`, `components/`, `lib/`, and `hooks/`. As of commit `ca9b0a8` (Unit 8 step 2) Site 3 is resolved: `capacitor-voice-recorder@6.0.3` is now installed as a regular optional dependency and the `@ts-expect-error` at `lib/mobile/pronunciation-recorder.ts:44` has been removed. **Two suppression sites remain**, both of them load-bearing documentation. No source changes in this doc.
 
-**Verification (at HEAD `40feb09`):**
+**Verification (at HEAD `ca9b0a8`):**
 
 ```powershell
 rg -n "eslint-disable|@ts-ignore|@ts-expect-error" app/ components/ lib/ hooks/
 ```
 
-Returns three hits, all listed below. Backend (`backend/`), tests (`tests/`), E2E (`tests/e2e/`), and generated (`.next/`) output are excluded by scope.
+Returns two hits, both listed below. Backend (`backend/`), tests (`tests/`), E2E (`tests/e2e/`), and generated (`.next/`) output are excluded by scope.
 
 ---
 
@@ -68,13 +68,14 @@ Returns three hits, all listed below. Backend (`backend/`), tests (`tests/`), E2
 
 ---
 
-## Site 3 — `lib/mobile/pronunciation-recorder.ts:44`
+## Site 3 — `lib/mobile/pronunciation-recorder.ts:44` ✅ Resolved (2026-04-25, `ca9b0a8`)
 
-**Directive:** `// @ts-expect-error — optional peer dep: @capacitor-community/voice-recorder`
-**Rule suppressed:** TypeScript module‑resolution error
+**Directive:** ~~`// @ts-expect-error — optional peer dep: @capacitor-community/voice-recorder`~~ **removed**
+**Rule suppressed:** ~~TypeScript module-resolution error~~ — no longer required
 **In‑file justification:**
+**Resolution:** Unit 8 step 2 installed `capacitor-voice-recorder@6.0.3` (pin chosen to satisfy the Capacitor 6 peer range; the `@capacitor-community/voice-recorder` package was renamed upstream from v7 onward and is not available under the old id). The dynamic `import('@capacitor-community/voice-recorder')` was renamed to `import('capacitor-voice-recorder')`; TypeScript now resolves the module natively, so `@ts-expect-error` was deleted. Obsolete ambient `.d.ts` shim also removed. Verification: `npx tsc --noEmit` 0 errors, `npm run lint` clean, mobile recorder suite 45/45 green.
 
-> optional peer dep: `@capacitor-community/voice-recorder`
+> (Historic context retained below for audit trail.)
 
 **Context:** `getPlugin()` dynamically imports the recorder plugin **only** on native platforms (`Capacitor.isNativePlatform()`). The package is declared an *optional peer dependency* precisely so web builds can ship without it. When `tsc` runs on a web‑only install, it cannot resolve the module — which is the whole point: the code path is unreachable on web.
 
@@ -101,17 +102,17 @@ const mod = (await import(
 
 **Autonomous‑safe?** Option 1 (ambient `.d.ts`) is autonomous‑safe. Option 2 needs a bundle‑size check.
 
----
+**Autonomous-safe?** N/A — already resolved. Option 1 (ambient `.d.ts`) and Option 3 (status-quo suppression) both superseded by the installed-dependency path.
 
 ## Summary Table
 
-| Site | File:Line | Rule | Risk | AGENTS.md lock | Fix autonomous‑safe? | Recommended |
+| Site | File:Line | Rule | Risk | AGENTS.md lock | Fix autonomous-safe? | Recommended |
 | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `components/domain/audio-player-waveform.tsx:104` | `react-hooks/exhaustive-deps` | Low | No | Yes | Convert to `useEffectEvent` next FE pass |
 | 2 | `components/domain/OetStatementOfResultsCard.tsx:441` | `@next/next/no-img-element` | None | **Yes — locked** | No | **Do not touch** |
-| 3 | `lib/mobile/pronunciation-recorder.ts:44` | `@ts-expect-error` (module resolution) | Low | No | Yes (ambient `.d.ts`) | Defer to next mobile pass |
+| 3 | ~~`lib/mobile/pronunciation-recorder.ts:44`~~ | ~~`@ts-expect-error`~~ | ✅ Resolved `ca9b0a8` | n/a | n/a | Closed (dep installed) |
 
-**Overall suppression budget in app code: 3 sites / 3 justified.** Zero unjustified suppressions, zero `@ts-ignore`, zero `any`‑casts flagged by this audit.
+**Overall suppression budget in app code: 2 sites / 2 justified.** Zero unjustified suppressions, zero `@ts-ignore`, zero `any`-casts flagged by this audit. Site 3 closed 2026-04-25 by installing `capacitor-voice-recorder@6.0.3`.
 
 ---
 
@@ -123,18 +124,19 @@ To reproduce this inventory:
 rg -n "eslint-disable|@ts-ignore|@ts-expect-error" app/ components/ lib/ hooks/
 ```
 
-Expected output at HEAD `40feb09`:
+Expected output at HEAD `ca9b0a8`:
 
 ```text
 components/domain/audio-player-waveform.tsx:104: …
 components/domain/OetStatementOfResultsCard.tsx:441: …
-lib/mobile/pronunciation-recorder.ts:44: …
+```
 ```
 
-If this count ever rises, the delta must be added here with the same six‑field profile (site, directive, rule, justification, risk, fix path).
+If this count ever rises, the delta must be added here with the same six-field profile (site, directive, rule, justification, risk, fix path).
 
 ---
 
 ## Change Log
 
 - **2026-04-24** — Initial inventory written against tree at `40feb09`. Follows the Wave 4 `exhaustive-deps` cleanup (`d6f5b75`) and the pronunciation test cleanup (`59a5a5f`).
+- **2026-04-25** — Site 3 resolved at `ca9b0a8`: installed `capacitor-voice-recorder@6.0.3`, renamed the dynamic import, deleted the `@ts-expect-error` directive and the obsolete `.d.ts` shim. Remaining suppression count: **2 / 2 justified**.

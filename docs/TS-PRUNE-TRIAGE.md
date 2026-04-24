@@ -1,28 +1,29 @@
 # `ts-prune` Unused Exports — Triage Report
 
-**Date:** 2026-04-24
-**Tool:** `ts-prune` @ project root.
-**Raw output captured to:** `ts-prune-full.txt` (1 234 lines; **gitignored, do not commit**).
+**Date:** 2026-04-24 (original) · **Update:** 2026-04-25
+**Tool:** `ts-prune` @ project root · filter helper `scripts/ts-prune-filter.mjs` · npm alias `npm run unused:scan`.
+**Raw output captured to:** `ts-prune-full.txt` (**gitignored, do not commit**). Filter-stripped output: `ts-prune-survivors.txt` (also gitignored).
 **Scope:** Documentation + classification only. **Zero source deletions in this pass.** Every bucket below is a *plan*, not a change.
 
 ---
 
 ## 1. Headline Numbers
 
-Running `npx ts-prune` at HEAD `40feb09`:
+Running `npx ts-prune` at HEAD `ca9b0a8`:
 
-| Bucket | Count | Notes |
-| --- | --- | --- |
-| Total ts-prune lines | **1 234** | Unfiltered |
-| `.next/` build output | 494 | Framework‑generated; excluded from triage |
-| `vscode-digitalocean-model-provider/` | 1 | Out‑of‑tree helper; excluded |
-| **App‑code lines (kept for triage)** | **739** | `app/`, `components/`, `lib/`, `hooks/`, `tests/`, root configs |
-| Marked `(used in module)` internally | 241 | Re‑exports used only inside their own module |
-| **Fully unused (nothing imports them)** | **498** | The set we actually have to judge |
+| Bucket | Count (2026-04-24, `40feb09`) | Count (2026-04-25, `ca9b0a8`) | Notes |
+| --- | --- | --- | --- |
+| Total ts-prune lines | 1 234 | 1 235 | Unfiltered |
+| `.next/` build output | 494 | 494 | Framework-generated; excluded from triage |
+| `vscode-digitalocean-model-provider/` | 1 | 1 | Out-of-tree helper; excluded |
+| **App-code lines (kept for triage)** | 739 | 740 | `app/`, `components/`, `lib/`, `hooks/`, `tests/`, root configs |
+| Marked `(used in module)` internally | 241 | 215 | Re-exports used only inside their own module |
+| **Fully unused (nothing imports them)** | 498 | 525 | Survivor set after Pass 1 filter (`scripts/ts-prune-filter.mjs`) |
 
-**498** is the number that matters. That is the set of exports no consumer currently imports.
+The post-filter survivor count (**525** at `ca9b0a8`) is the set Pass 2 onward will judge. The +27 delta vs. the pre-filter `498` reflects that the new filter also strips the Next.js framework-required exports from the numerator, so items that previously double-counted now collapse to a single actionable line.
+**525** is the post-filter actionable survivor count — the set Pass 2+ will judge. Pre-filter legacy number was 498; the filter (shipped `a584841`) is the authoritative source going forward.
 
-### Fully‑unused by top‑level directory
+### Fully-unused by top-level directory (pre-filter baseline — retained for comparison)
 
 | Directory | Count | Character |
 | --- | --- | --- |
@@ -30,7 +31,7 @@ Running `npx ts-prune` at HEAD `40feb09`:
 | `components/` | 144 | Public component surface — many are library‑style API |
 | `lib/` | 144 | Mixed: mock data (30), admin APIs, helpers |
 | `tests/` | 26 | Test fixtures (recharts mocks, MSW handlers) |
-| root (`middleware.ts`, `next.config.ts`, etc.) | 8 | Framework entry points |
+| root (`middleware.ts`, `next.config.ts`, etc.) | 8 | Framework entry points — filter strips |
 
 ---
 
@@ -173,7 +174,7 @@ Tests: <suite> <n>/<n>, build <ok>.
 
 Each pass is autonomous‑safe **only if** the four verification commands stay green.
 
-**Pass 1 — confirm Bucket A.** Write a filter script that excludes Next.js framework exports + root configs + `tests/mocks/` from ts-prune output. Commit the script + a README snippet under `scripts/`. No source changes.
+**Pass 1 — confirm Bucket A.** ✅ Shipped in commit `a584841` (Unit 7). `scripts/ts-prune-filter.mjs` reads the raw ts-prune output and strips Next.js framework exports (`app/**` `default`/`metadata`/`viewport`/`generateMetadata`/`generateStaticParams`/`revalidate`/`dynamic`/`runtime`/`GET`/`POST`/etc.), root configs (`middleware.ts`, `next.config.ts`, `capacitor.config.ts`, `playwright*.config.ts`, `vitest.config.ts`, `instrumentation.ts`), `tests/mocks/**`, `.next/**`, and `vscode-digitalocean-model-provider/**`. `package.json` now exposes `npm run unused:scan` (wired by Unit 2 `8f8986f`) to run the filter end-to-end. Post-filter survivor count at `ca9b0a8`: **525**. No source changes.
 
 **Pass 2 — Bucket D easy wins.** Files with a single unused type/const and zero repo‑wide consumers. One commit per file.
 
@@ -203,4 +204,5 @@ Each pass is autonomous‑safe **only if** the four verification commands stay g
 
 ## 10. Change Log
 
-- **2026-04-24** — Initial triage written against tree at `40feb09`. Methodology: `npx ts-prune` → exclude `.next/` + `vscode-digitalocean-model-provider/` + `(used in module)` → bucket by top‑level directory → classify framework vs review vs mock vs remove. MISSION‑CRITICAL clearance verified by directed grep.
+- **2026-04-24** — Initial triage written against tree at `40feb09`. Methodology: `npx ts-prune` → exclude `.next/` + `vscode-digitalocean-model-provider/` + `(used in module)` → bucket by top-level directory → classify framework vs review vs mock vs remove. MISSION-CRITICAL clearance verified by directed grep.
+- **2026-04-25** — HEAD advanced to `ca9b0a8` (Unit 8 step 2: `capacitor-voice-recorder@6.0.3` installed, pronunciation recorder import renamed, obsolete `.d.ts` shim deleted, `@ts-expect-error` suppression removed). Pass 1 shipped at `a584841` (Unit 7): `scripts/ts-prune-filter.mjs` + `npm run unused:scan`. Post-filter actionable survivor count: **525**. MISSION-CRITICAL clearance (§2) re-verified at `ca9b0a8` — still zero hits. Pass 2 onward remains pending per-file `rg` confirmation before any deletion.

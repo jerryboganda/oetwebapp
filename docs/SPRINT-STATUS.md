@@ -138,3 +138,4 @@ These are placeholders until product writes the specs; nothing is committed agai
 ## 8. Change Log
 
 - **2026-04-24** — Initial reconciliation written against tree at `40feb09`. Sources: `git log --format='%H %s'`, full body of `7d68a7b`, and the existing handoff summary.
+- **2026-04-25** — Hygiene-only update (no Sprint-2 items moved). Related commits since `40feb09`: `a584841` (Unit 7 — `scripts/ts-prune-filter.mjs` + `npm run unused:scan`), `8f8986f` (Unit 2 — ts-prune installed), `ca9b0a8` (Unit 8 step 2 — `capacitor-voice-recorder@6.0.3` installed, `@ts-expect-error` removed at `lib/mobile/pronunciation-recorder.ts:44`). `docs/ESLINT-SUPPRESSIONS-INVENTORY.md`, `docs/TS-PRUNE-TRIAGE.md`, and `docs/UNUSED-CODE-AUDIT.md` updated to match. Sprint-2 pending count unchanged (H1, H3, H4, H5, H6, H7, H8, H14).

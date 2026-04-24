@@ -54,7 +54,20 @@ interface NotificationCenterContextValue {
   unsubscribeFromPush: () => Promise<void>;
 }
 
+/**
+ * Split contexts so consumers can subscribe to just state OR just actions.
+ * Action identities are stable (wrapped in useCallback), so components that
+ * only need actions never re-render on state updates.
+ */
+type NotificationActionsValue = Pick<
+  NotificationCenterContextValue,
+  'refreshFeed' | 'loadMore' | 'markRead' | 'markAllRead' | 'updatePreferences' | 'subscribeToPush' | 'unsubscribeFromPush'
+>;
+type NotificationStateValue = Omit<NotificationCenterContextValue, keyof NotificationActionsValue>;
+
 const NotificationCenterContext = createContext<NotificationCenterContextValue | null>(null);
+const NotificationStateContext = createContext<NotificationStateValue | null>(null);
+const NotificationActionsContext = createContext<NotificationActionsValue | null>(null);
 
 const PAGE_SIZE = 20;
 const POLL_INTERVAL_MS = 30_000;
@@ -617,16 +630,72 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
     unsubscribeFromPush,
   ]);
 
+  // State-only value: excludes actions, so consumers that only read state
+  // (e.g. the bell badge) don't re-render when action refs are reconstructed.
+  const stateValue = useMemo<NotificationStateValue>(() => ({
+    notifications,
+    unreadCount,
+    totalCount,
+    hasMore: notifications.length < totalCount,
+    isLoading,
+    isRefreshing,
+    error,
+    connectionStatus,
+    preferences,
+    isPreferencesLoading,
+    preferencesError,
+    isUpdatingPreferences,
+    pushSupported,
+    pushPublicKeyConfigured,
+    pushPermission,
+    pushEnabled,
+    isUpdatingPush,
+  }), [
+    connectionStatus,
+    error,
+    isLoading,
+    isPreferencesLoading,
+    isRefreshing,
+    isUpdatingPreferences,
+    isUpdatingPush,
+    notifications,
+    preferences,
+    preferencesError,
+    pushEnabled,
+    pushPermission,
+    pushPublicKeyConfigured,
+    pushSupported,
+    totalCount,
+    unreadCount,
+  ]);
+
+  // Actions-only value: all fields are useCallback-stable, so this memo
+  // effectively never changes identity during a session — components that
+  // only fire actions will never re-render.
+  const actionsValue = useMemo<NotificationActionsValue>(() => ({
+    refreshFeed,
+    loadMore,
+    markRead,
+    markAllRead,
+    updatePreferences: updatePreferencesHandler,
+    subscribeToPush,
+    unsubscribeFromPush,
+  }), [refreshFeed, loadMore, markRead, markAllRead, updatePreferencesHandler, subscribeToPush, unsubscribeFromPush]);
+
   return (
     <NotificationCenterContext.Provider value={contextValue}>
-      {children}
-      {toastState ? (
-        <Toast
-          variant={toastState.variant}
-          message={toastState.message}
-          onClose={() => setToastState(null)}
-        />
-      ) : null}
+      <NotificationStateContext.Provider value={stateValue}>
+        <NotificationActionsContext.Provider value={actionsValue}>
+          {children}
+          {toastState ? (
+            <Toast
+              variant={toastState.variant}
+              message={toastState.message}
+              onClose={() => setToastState(null)}
+            />
+          ) : null}
+        </NotificationActionsContext.Provider>
+      </NotificationStateContext.Provider>
     </NotificationCenterContext.Provider>
   );
 }
@@ -637,6 +706,30 @@ export function useNotificationCenter() {
     throw new Error('useNotificationCenter must be used within NotificationCenterProvider');
   }
 
+  return context;
+}
+
+/**
+ * Subscribe to notification state only (no actions). Prefer this in components
+ * that do not call any mutation — the bell badge, small state chips, etc.
+ */
+export function useNotificationState() {
+  const context = useContext(NotificationStateContext);
+  if (!context) {
+    throw new Error('useNotificationState must be used within NotificationCenterProvider');
+  }
+  return context;
+}
+
+/**
+ * Subscribe to notification actions only. Identity is stable; this hook will
+ * not cause re-renders when the notification state changes.
+ */
+export function useNotificationActions() {
+  const context = useContext(NotificationActionsContext);
+  if (!context) {
+    throw new Error('useNotificationActions must be used within NotificationCenterProvider');
+  }
   return context;
 }
 
