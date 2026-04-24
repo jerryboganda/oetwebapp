@@ -8,6 +8,7 @@ coverage/
 .playwright/
 .playwright-mcp/
 playwright/.auth/
+playwright-report-prod/
 dist/
 desktop-backend-runtime/
 output/
