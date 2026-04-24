@@ -45,6 +45,7 @@ public static class ReadingLearnerEndpoints
                 .Include(p => p.Texts.OrderBy(t => t.DisplayOrder))
                 .Include(p => p.Questions.OrderBy(q => q.DisplayOrder))
                 .OrderBy(p => p.PartCode)
+                .AsSplitQuery()
                 .ToListAsync(ct);
 
             // Project every question to the learner-safe shape. Critical.

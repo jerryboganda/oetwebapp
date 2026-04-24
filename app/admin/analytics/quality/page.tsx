@@ -4,7 +4,16 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, BarChart3, CheckCircle2, Clock, Download, FileText, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { exportToCsv, formatDateForExport } from '@/lib/csv-export';
-import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import dynamic from 'next/dynamic';
+
+const RateTrendChart = dynamic(
+  () => import('./_charts').then((m) => m.RateTrendChart),
+  { ssr: false, loading: () => <div className="h-full w-full animate-pulse rounded bg-slate-100" /> },
+);
+const OperationsTrendChart = dynamic(
+  () => import('./_charts').then((m) => m.OperationsTrendChart),
+  { ssr: false, loading: () => <div className="h-full w-full animate-pulse rounded bg-slate-100" /> },
+);
 import { AdminRouteFreshnessBadge, AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
@@ -200,33 +209,13 @@ export default function QualityAnalyticsPage() {
             <div className="grid gap-6 xl:grid-cols-2">
               <AdminRoutePanel title="Quality Rates Trend" description="Agreement and appeals trends from the current analytics window.">
                 <div className="h-[240px] w-full sm:h-[280px] lg:h-[320px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={rateChartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="label" stroke="#64748b" fontSize={12} />
-                      <YAxis stroke="#64748b" fontSize={12} />
-                      <Tooltip />
-                      <Legend />
-                      <Line type="monotone" dataKey="agreement" name="Agreement" stroke="#2563eb" strokeWidth={2} dot={false} />
-                      <Line type="monotone" dataKey="appeals" name="Appeals" stroke="#dc2626" strokeWidth={2} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <RateTrendChart data={rateChartData} />
                 </div>
               </AdminRoutePanel>
 
               <AdminRoutePanel title="Operations Trend" description="Review time and risk case trend lines from the live analytics response.">
                 <div className="h-[240px] w-full sm:h-[280px] lg:h-[320px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={operationsChartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="label" stroke="#64748b" fontSize={12} />
-                      <YAxis stroke="#64748b" fontSize={12} />
-                      <Tooltip />
-                      <Legend />
-                      <Line type="monotone" dataKey="reviewTime" name="Review Time" stroke="#f59e0b" strokeWidth={2} dot={false} />
-                      <Line type="monotone" dataKey="riskCases" name="Risk Cases" stroke="#7c3aed" strokeWidth={2} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
+                  <OperationsTrendChart data={operationsChartData} />
                 </div>
               </AdminRoutePanel>
             </div>

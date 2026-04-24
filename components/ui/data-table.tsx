@@ -1,8 +1,6 @@
 'use client';
 
 import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
-import { getMotionDelay, getSurfaceTransition, getSurfaceVariants, prefersReducedMotion } from '@/lib/motion';
 
 import { cn } from '@/lib/utils';
 
@@ -39,10 +37,6 @@ export function DataTable<T>({
   className,
   'aria-label': ariaLabel,
 }: DataTableProps<T>) {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
-  const rowVariants = getSurfaceVariants('item', reducedMotion);
-  const rowTransition = getSurfaceTransition('item', reducedMotion);
-
   if (data.length === 0) {
     return (
       <div className="rounded-[20px] border border-dashed border-gray-200 bg-background-light px-6 py-10 text-center text-sm text-muted">
@@ -171,13 +165,9 @@ export function DataTable<T>({
 
             <tbody className="divide-y divide-gray-100/90 bg-surface">
               {data.map((row, idx) => (
-                <motion.tr
+                <tr
                   key={keyExtractor(row, idx)}
                   data-row-key={keyExtractor(row, idx)}
-                  variants={rowVariants}
-                  initial="hidden"
-                  animate="visible"
-                  transition={{ ...rowTransition, delay: getMotionDelay(idx, reducedMotion) }}
                   onClick={(event) => onRowClick?.(row, event)}
                   onKeyDown={(event) => {
                     if (onRowClick && (event.key === 'Enter' || event.key === ' ')) {
@@ -204,7 +194,7 @@ export function DataTable<T>({
                       {column.render(row, idx)}
                     </td>
                   ))}
-                </motion.tr>
+                </tr>
               ))}
             </tbody>
           </table>

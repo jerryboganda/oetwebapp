@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Microsoft.Extensions.Caching.Memory;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -16,7 +17,8 @@ public partial class AdminService(
     EmailOtpService emailOtpService,
     IPasswordHasher<ApplicationUserAccount> passwordHasher,
     TimeProvider timeProvider,
-    NotificationService notifications)
+    NotificationService notifications,
+    IMemoryCache memoryCache)
 {
     private const string ActiveUserStatus = "active";
     private const string SuspendedUserStatus = "suspended";
@@ -784,12 +786,17 @@ public partial class AdminService(
 
     public async Task<object> GetTaxonomyListAsync(string? type, string? status, CancellationToken ct)
     {
-        var query = db.Professions.AsQueryable();
+        var query = db.Professions.AsNoTracking().AsQueryable();
 
         if (!string.IsNullOrWhiteSpace(status) && status != "all")
             query = query.Where(p => p.Status == status);
 
         var professions = await query.OrderBy(p => p.SortOrder).ToListAsync(ct);
+        var counts = await db.ContentItems.AsNoTracking()
+            .Where(c => c.ProfessionId != null)
+            .GroupBy(c => c.ProfessionId!)
+            .Select(g => new { Id = g.Key, C = g.Count() })
+            .ToDictionaryAsync(x => x.Id, x => x.C, ct);
         var nodes = professions.Select(p => new
         {
             p.Id,
@@ -797,7 +804,7 @@ public partial class AdminService(
             slug = p.Code,
             type = "profession",
             status = p.Status,
-            contentCount = db.ContentItems.Count(c => c.ProfessionId == p.Id)
+            contentCount = counts.TryGetValue(p.Id, out var c) ? c : 0
         });
 
         return nodes;
@@ -2009,6 +2016,8 @@ public partial class AdminService(
         {
             return;
         }
+
+        memoryCache.Remove($"jwt:validate:{authAccountId}");
 
         var now = timeProvider.GetUtcNow();
         var activeRefreshTokens = await db.RefreshTokenRecords
@@ -4794,19 +4803,36 @@ public partial class AdminService(
 
     public async Task<object> GetContentEffectivenessAsync(string? subtestCode, int top, CancellationToken ct)
     {
-        var query = db.ContentItems.Where(c => c.Status == ContentStatus.Published);
+        var query = db.ContentItems.AsNoTracking().Where(c => c.Status == ContentStatus.Published);
         if (!string.IsNullOrEmpty(subtestCode)) query = query.Where(c => c.SubtestCode == subtestCode);
 
         var items = await query.Take(top > 0 ? top : 50).ToListAsync(ct);
+        var contentIds = items.Select(i => i.Id).ToList();
+
+        // Batch-load all attempts + evaluations in two queries instead of 2N.
+        var attemptsByContent = (await db.Attempts
+                .AsNoTracking()
+                .Where(a => contentIds.Contains(a.ContentId))
+                .ToListAsync(ct))
+            .GroupBy(a => a.ContentId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        var allAttemptIds = attemptsByContent.Values.SelectMany(list => list.Select(a => a.Id)).ToList();
+        var evalsByAttempt = (await db.Evaluations
+                .AsNoTracking()
+                .Where(e => allAttemptIds.Contains(e.AttemptId))
+                .ToListAsync(ct))
+            .GroupBy(e => e.AttemptId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
         var results = new List<object>();
 
         foreach (var item in items)
         {
-            var attempts = await db.Attempts.Where(a => a.ContentId == item.Id).ToListAsync(ct);
+            var attempts = attemptsByContent.TryGetValue(item.Id, out var att) ? att : [];
             var completedCount = attempts.Count(a => a.State == AttemptState.Completed);
-            var evals = await db.Evaluations
-                .Where(e => attempts.Select(a => a.Id).Contains(e.AttemptId))
-                .ToListAsync(ct);
+            var evals = attempts
+                .SelectMany(a => evalsByAttempt.TryGetValue(a.Id, out var ev) ? ev : new List<Evaluation>())
+                .ToList();
 
             var scores = evals
                 .Select(e => { var p = e.ScoreRange?.Split('-'); return p?.Length == 2 && int.TryParse(p[0], out var lo) ? lo : (int?)null; })
@@ -4842,18 +4868,46 @@ public partial class AdminService(
     public async Task<object> GetExpertEfficiencyReportAsync(int days, CancellationToken ct)
     {
         var since = DateTimeOffset.UtcNow.AddDays(-days);
-        var experts = await db.ExpertUsers.ToListAsync(ct);
+        var experts = await db.ExpertUsers.AsNoTracking().ToListAsync(ct);
+        var expertIds = experts.Select(e => e.Id).ToList();
+
+        // Batch-load assignments + drafts for all experts in two queries (was 2 per expert).
+        var assignmentsByExpert = (await db.ExpertReviewAssignments
+                .AsNoTracking()
+                .Where(a => expertIds.Contains(a.AssignedReviewerId) && a.AssignedAt >= since)
+                .ToListAsync(ct))
+            .GroupBy(a => a.AssignedReviewerId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        var draftsByExpert = (await db.ExpertReviewDrafts
+                .AsNoTracking()
+                .Where(d => expertIds.Contains(d.ReviewerId) && d.DraftSavedAt >= since)
+                .ToListAsync(ct))
+            .GroupBy(d => d.ReviewerId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // Batch-load ReviewRequests + Evaluations once across all sampled drafts.
+        var sampledDraftRRIds = draftsByExpert.Values
+            .SelectMany(list => list.Take(20).Select(d => d.ReviewRequestId))
+            .Distinct()
+            .ToList();
+        var reviewRequestsById = await db.ReviewRequests
+            .AsNoTracking()
+            .Where(r => sampledDraftRRIds.Contains(r.Id))
+            .ToDictionaryAsync(r => r.Id, ct);
+        var sampledAttemptIds = reviewRequestsById.Values.Select(r => r.AttemptId).Distinct().ToList();
+        var evaluationsByAttempt = await db.Evaluations
+            .AsNoTracking()
+            .Where(e => sampledAttemptIds.Contains(e.AttemptId))
+            .GroupBy(e => e.AttemptId)
+            .Select(g => g.First())
+            .ToDictionaryAsync(e => e.AttemptId, ct);
+
         var results = new List<object>();
 
         foreach (var expert in experts)
         {
-            var assignments = await db.ExpertReviewAssignments
-                .Where(a => a.AssignedReviewerId == expert.Id && a.AssignedAt >= since)
-                .ToListAsync(ct);
-
-            var drafts = await db.ExpertReviewDrafts
-                .Where(d => d.ReviewerId == expert.Id && d.DraftSavedAt >= since)
-                .ToListAsync(ct);
+            var assignments = assignmentsByExpert.TryGetValue(expert.Id, out var asg) ? asg : [];
+            var drafts = draftsByExpert.TryGetValue(expert.Id, out var drf) ? drf : [];
 
             var completedCount = drafts.Count;
 var draftTimeEstimates = drafts.Select(d =>
@@ -4863,15 +4917,12 @@ var draftTimeEstimates = drafts.Select(d =>
                 }).ToList();
                 var avgReviewMinutes = draftTimeEstimates.Count > 0 ? Math.Round(draftTimeEstimates.Average(), 1) : (double?)null;
 
-            // Quality alignment — compare with AI
+            // Quality alignment — compare with AI (uses pre-batched lookups)
             var aiDiffs = new List<double>();
             foreach (var draft in drafts.Take(20))
             {
-                var request = await db.ReviewRequests.FindAsync([draft.ReviewRequestId], ct);
-                if (request is null) continue;
-                var aiEval = await db.Evaluations
-                    .FirstOrDefaultAsync(e => e.AttemptId == request.AttemptId, ct);
-                if (aiEval is null) continue;
+                if (!reviewRequestsById.TryGetValue(draft.ReviewRequestId, out var request)) continue;
+                if (!evaluationsByAttempt.TryGetValue(request.AttemptId, out var aiEval)) continue;
 
                 try
                 {

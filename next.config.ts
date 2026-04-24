@@ -26,6 +26,19 @@ const nextConfig: NextConfig = {
     ];
   },
   serverExternalPackages: ['wavesurfer.js'],
+  experimental: {
+    // Tree-shake barrel imports on-demand to avoid loading the entire icon/chart/motion
+    // library when only a few exports are used. Documented Next.js optimization:
+    // https://nextjs.org/docs/app/api-reference/next-config-js/optimizePackageImports
+    optimizePackageImports: [
+      'lucide-react',
+      '@tabler/icons-react',
+      'recharts',
+      'motion',
+      'motion/react',
+      'country-flag-icons',
+    ],
+  },
   webpack: (config, {dev}) => {
     // HMR is disabled in AI Studio via DISABLE_HMR env var.
     // Do not modify — file watching is disabled to prevent flickering during agent edits.

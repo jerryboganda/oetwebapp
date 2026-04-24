@@ -730,8 +730,8 @@ describe('Admin Non-Editor Pages', () => {
 
     expect(await screen.findByRole('main', { name: /quality analytics/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^quality analytics$/i })).toBeInTheDocument();
-    expect(screen.getAllByTestId('responsive-chart')).toHaveLength(2);
-    expect(screen.getAllByTestId('line-chart')).toHaveLength(2);
+    expect(await screen.findAllByTestId('responsive-chart')).toHaveLength(2);
+    expect(await screen.findAllByTestId('line-chart')).toHaveLength(2);
   });
 
   it('renders the content creation workspace inside learner-style editor surfaces', async () => {

@@ -661,8 +661,8 @@ describe('Expert Non-Review Pages', () => {
     expect(await screen.findByRole('heading', { name: /dashboard signals/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /operational metrics/i })).toBeInTheDocument();
     expect(screen.getByLabelText(/date range filter/i)).toBeInTheDocument();
-    expect(screen.getByTestId('responsive-chart')).toBeInTheDocument();
-    expect(screen.getByTestId('bar-chart')).toBeInTheDocument();
+    expect(await screen.findByTestId('responsive-chart')).toBeInTheDocument();
+    expect(await screen.findByTestId('bar-chart')).toBeInTheDocument();
   });
 
   it('renders the schedule page inside the learner-style route surface', async () => {

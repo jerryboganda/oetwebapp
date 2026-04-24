@@ -30,36 +30,54 @@ public sealed class ConversationAudioService(
     public async Task<ConversationAudioRef> WriteAsync(Stream audio, string mimeType, CancellationToken ct)
     {
         var options = await optionsProvider.GetAsync(ct);
-        using var buffer = new MemoryStream();
-        var buf = new byte[8192];
-        long total = 0;
-        while (!ct.IsCancellationRequested)
-        {
-            var read = await audio.ReadAsync(buf, ct);
-            if (read == 0) break;
-            total += read;
-            if (total > options.MaxAudioBytes)
-                throw new InvalidOperationException($"Audio exceeds MaxAudioBytes ({options.MaxAudioBytes}).");
-            await buffer.WriteAsync(buf.AsMemory(0, read), ct);
-        }
-        buffer.Position = 0;
-        var sha = Convert.ToHexString(await SHA256.HashDataAsync(buffer, ct)).ToLowerInvariant();
-        buffer.Position = 0;
         var ext = GuessExtension(mimeType);
-        var key = $"{Root}/{sha[..2]}/{sha.Substring(2, 2)}/{sha}.{ext}";
-        if (!storage.Exists(key))
+        var tempKey = $"{Root}/_tmp/{Guid.NewGuid():N}.{ext}";
+
+        using var hasher = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var buf = new byte[81920];
+        long total = 0;
+        try
         {
-            await storage.WriteAsync(key, buffer, ct);
-            logger.LogDebug("Persisted conversation audio {Key} ({Bytes} bytes)", key, total);
+            await using (var dest = await storage.OpenWriteAsync(tempKey, ct))
+            {
+                while (true)
+                {
+                    ct.ThrowIfCancellationRequested();
+                    var read = await audio.ReadAsync(buf, ct);
+                    if (read == 0) break;
+                    total += read;
+                    if (total > options.MaxAudioBytes)
+                        throw new InvalidOperationException($"Audio exceeds MaxAudioBytes ({options.MaxAudioBytes}).");
+                    hasher.AppendData(buf, 0, read);
+                    await dest.WriteAsync(buf.AsMemory(0, read), ct);
+                }
+            }
+
+            var sha = Convert.ToHexString(hasher.GetHashAndReset()).ToLowerInvariant();
+            var key = $"{Root}/{sha[..2]}/{sha.Substring(2, 2)}/{sha}.{ext}";
+            if (storage.Exists(key))
+            {
+                storage.Delete(tempKey);
+            }
+            else
+            {
+                storage.Move(tempKey, key, overwrite: true);
+                logger.LogDebug("Persisted conversation audio {Key} ({Bytes} bytes)", key, total);
+            }
+            return new ConversationAudioRef(key,
+                $"/v1/conversations/media/{sha}.{ext}", mimeType, total, sha);
         }
-        return new ConversationAudioRef(key,
-            $"/v1/conversations/media/{sha}.{ext}", mimeType, total, sha);
+        catch
+        {
+            try { storage.Delete(tempKey); } catch { }
+            throw;
+        }
     }
 
-    public Task<Stream?> OpenReadAsync(string key, CancellationToken ct)
+    public async Task<Stream?> OpenReadAsync(string key, CancellationToken ct)
     {
-        if (!storage.Exists(key)) return Task.FromResult<Stream?>(null);
-        return storage.OpenReadAsync(key, ct).ContinueWith(t => (Stream?)t.Result, ct);
+        if (!storage.Exists(key)) return null;
+        return await storage.OpenReadAsync(key, ct);
     }
 
     public bool Delete(string key) => storage.Delete(key);

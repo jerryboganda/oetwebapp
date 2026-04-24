@@ -1,6 +1,7 @@
 'use client';
 
-import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from 'react';
+import { type Dispatch, type SetStateAction, useMemo, useState } from 'react';
+import { useDebouncedEffect } from '@/hooks/use-debounced-effect';
 import { CreditCard, DollarSign, Package, Receipt, Search, Ticket, Users } from 'lucide-react';
 import { AdminRouteSummaryCard, AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
@@ -320,59 +321,49 @@ export default function BillingPage() {
   const selectedRedemptionStatus = redemptionFilters.status?.[0];
   const selectedInvoiceStatus = invoiceFilters.status?.[0];
 
-  useEffect(() => {
-    let cancelled = false;
+  useDebouncedEffect(async ({ cancelled }) => {
+    setPageStatus('loading');
+    try {
+      const [planItems, addOnItems, couponItems, subscriptionResult, redemptionResult, invoiceResult] = await Promise.all([
+        getAdminBillingPlanData({ status: selectedPlanStatus }),
+        getAdminBillingAddOnData({ status: selectedAddOnStatus }),
+        getAdminBillingCouponData({ status: selectedCouponStatus }),
+        getAdminBillingSubscriptionData({ status: selectedSubscriptionStatus, search: subscriptionSearch || undefined, pageSize: 100 }),
+        getAdminBillingCouponRedemptionData({ couponCode: redemptionSearch || undefined, pageSize: 100 }),
+        getAdminBillingInvoiceData({
+          status: selectedInvoiceStatus,
+          search: invoiceSearch || undefined,
+          pageSize: 100,
+        }),
+      ]);
 
-    async function loadBilling() {
-      setPageStatus('loading');
-      try {
-        const [planItems, addOnItems, couponItems, subscriptionResult, redemptionResult, invoiceResult] = await Promise.all([
-          getAdminBillingPlanData({ status: selectedPlanStatus }),
-          getAdminBillingAddOnData({ status: selectedAddOnStatus }),
-          getAdminBillingCouponData({ status: selectedCouponStatus }),
-          getAdminBillingSubscriptionData({ status: selectedSubscriptionStatus, search: subscriptionSearch || undefined, pageSize: 100 }),
-          getAdminBillingCouponRedemptionData({ couponCode: redemptionSearch || undefined, pageSize: 100 }),
-          getAdminBillingInvoiceData({
-            status: selectedInvoiceStatus,
-            search: invoiceSearch || undefined,
-            pageSize: 100,
-          }),
-        ]);
+      if (cancelled) return;
 
-        if (cancelled) return;
+      setPlans(planItems);
+      setAddOns(addOnItems);
+      setCoupons(couponItems);
+      const redemptionItems = selectedRedemptionStatus ? redemptionResult.items.filter((item) => item.status === selectedRedemptionStatus) : redemptionResult.items;
 
-        setPlans(planItems);
-        setAddOns(addOnItems);
-        setCoupons(couponItems);
-        const redemptionItems = selectedRedemptionStatus ? redemptionResult.items.filter((item) => item.status === selectedRedemptionStatus) : redemptionResult.items;
-
-        setSubscriptions(subscriptionResult.items);
-        setRedemptions(redemptionItems);
-        setInvoices(invoiceResult.items);
-        setPageStatus(
-          planItems.length > 0 ||
-          addOnItems.length > 0 ||
-          couponItems.length > 0 ||
-          subscriptionResult.items.length > 0 ||
-          redemptionItems.length > 0 ||
-          invoiceResult.items.length > 0
-            ? 'success'
-            : 'empty',
-        );
-      } catch (error) {
-        console.error(error);
-        if (!cancelled) {
-          setPageStatus('error');
-          setToast({ variant: 'error', message: 'Unable to load billing operations.' });
-        }
+      setSubscriptions(subscriptionResult.items);
+      setRedemptions(redemptionItems);
+      setInvoices(invoiceResult.items);
+      setPageStatus(
+        planItems.length > 0 ||
+        addOnItems.length > 0 ||
+        couponItems.length > 0 ||
+        subscriptionResult.items.length > 0 ||
+        redemptionItems.length > 0 ||
+        invoiceResult.items.length > 0
+          ? 'success'
+          : 'empty',
+      );
+    } catch (error) {
+      console.error(error);
+      if (!cancelled) {
+        setPageStatus('error');
+        setToast({ variant: 'error', message: 'Unable to load billing operations.' });
       }
     }
-
-    const handle = window.setTimeout(loadBilling, 200);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(handle);
-    };
   }, [selectedPlanStatus, selectedAddOnStatus, selectedCouponStatus, selectedSubscriptionStatus, selectedRedemptionStatus, subscriptionSearch, redemptionSearch, selectedInvoiceStatus, invoiceSearch]);
 
   const metrics = useMemo(() => {

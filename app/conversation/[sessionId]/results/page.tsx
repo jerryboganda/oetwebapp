@@ -39,13 +39,33 @@ export default function ConversationResultsPage() {
     if (!sessionId) return;
     analytics.track('conversation_results_viewed', { sessionId });
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const MAX_ATTEMPTS = 30;
+    let attempt = 0;
+
+    const schedule = (fn: () => void, ms: number) => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(fn, ms);
+    };
+
     const poll = async () => {
+      if (cancelled) return;
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        schedule(poll, 3000);
+        return;
+      }
       try {
         const data = (await getConversationEvaluation(sessionId)) as ConversationEvaluationResponse;
         if (cancelled) return;
         setEvaluation(data);
         if (!data.ready && (data.state === 'evaluating' || data.state === 'completed')) {
-          setTimeout(poll, 3000);
+          attempt += 1;
+          if (attempt >= MAX_ATTEMPTS) {
+            setError('Evaluation is taking longer than expected. Please refresh later.');
+            return;
+          }
+          const delay = Math.min(15000, 3000 * Math.pow(1.3, attempt));
+          schedule(poll, delay);
         }
       } catch {
         if (!cancelled) setError('Failed to load evaluation results.');
@@ -54,7 +74,10 @@ export default function ConversationResultsPage() {
       }
     };
     poll();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
   }, [sessionId]);
 
   const formatDuration = (s: number) => (s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`);

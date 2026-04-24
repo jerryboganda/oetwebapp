@@ -66,12 +66,13 @@ public static class LearningContentEndpoints
             [FromQuery] string? level,
             LearnerDbContext db, CancellationToken ct) =>
         {
-            var query = db.GrammarLessons.Where(l => l.Status == "active");
+            var query = db.GrammarLessons.AsNoTracking().Where(l => l.Status == "active");
             if (!string.IsNullOrEmpty(examTypeCode)) query = query.Where(l => l.ExamTypeCode == examTypeCode);
             if (!string.IsNullOrEmpty(category)) query = query.Where(l => l.Category == category);
             if (!string.IsNullOrEmpty(level)) query = query.Where(l => l.Level == level);
 
             var progressByLessonId = await db.LearnerGrammarProgress
+                .AsNoTracking()
                 .Where(p => p.UserId == http.UserId())
                 .ToDictionaryAsync(p => p.LessonId, ct);
 

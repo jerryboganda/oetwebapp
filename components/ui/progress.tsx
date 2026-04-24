@@ -1,7 +1,6 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { motion } from 'motion/react';
 
 /* ─── Linear Progress Bar ─── */
 interface ProgressBarProps {
@@ -40,11 +39,9 @@ export function ProgressBar({ value, max = 100, label, ariaLabel, showValue, siz
         aria-valuemax={100}
         aria-label={ariaLabel ?? label}
       >
-        <motion.div
-          className={cn('h-full rounded-full', colorStyles[color])}
-          initial={{ width: 0 }}
-          animate={{ width: `${pct}%` }}
-          transition={{ type: 'spring', stiffness: 100, damping: 20, mass: 0.8 }}
+        <div
+          className={cn('h-full w-full origin-left rounded-full transition-transform duration-500 ease-out motion-reduce:transition-none', colorStyles[color])}
+          style={{ transform: `scaleX(${pct / 100})` }}
         />
       </div>
     </div>
