@@ -208,10 +208,55 @@ async function refreshSessionInternal(refreshToken?: string | null): Promise<Aut
   );
 }
 
+/**
+ * Public paths where an expired session must NOT trigger a redirect. These are
+ * pages the user is *supposed* to see signed-out. Keep in sync with the
+ * PUBLIC_PATHS set in middleware.ts.
+ */
+const PUBLIC_PATHS_NO_REDIRECT = new Set<string>([
+  '/sign-in',
+  '/register',
+  '/register/success',
+  '/terms',
+  '/forgot-password',
+  '/forgot-password/verify',
+  '/reset-password',
+  '/reset-password/success',
+  '/verify-email',
+  '/mfa/challenge',
+  '/mfa/setup',
+  '/mfa/recovery',
+  '/auth/callback',
+]);
+
+function isOnPublicAuthPath(pathname: string): boolean {
+  if (PUBLIC_PATHS_NO_REDIRECT.has(pathname)) return true;
+  if (pathname.startsWith('/auth/callback/')) return true;
+  return false;
+}
+
+/**
+ * When a background refresh fails (expired/invalid/missing refresh token) we
+ * actively bounce the user to the sign-in page. Without this, the SPA stays on
+ * a protected route, fires API calls without a bearer, and renders confusing
+ * "Request failed: 400" error cards — which is what the dashboard was showing
+ * after the SameSite cookie migration left stale Strict cookies in browsers.
+ */
+function redirectToSignInAfterSessionLoss(): void {
+  if (typeof window === 'undefined') return;
+  const currentPath = window.location.pathname;
+  if (isOnPublicAuthPath(currentPath)) return;
+  const next = encodeURIComponent(currentPath + window.location.search);
+  // Hard navigation so the Next.js middleware sees the cleared auth cookie and
+  // any in-flight React state is discarded.
+  window.location.replace(`/sign-in?next=${next}`);
+}
+
 export async function ensureFreshSession(): Promise<AuthSession | null> {
   await hydrateAuthStorage();
   const record = loadStoredSessionRecord();
   if (!record) {
+    redirectToSignInAfterSessionLoss();
     return null;
   }
 
@@ -223,6 +268,7 @@ export async function ensureFreshSession(): Promise<AuthSession | null> {
       saveStoredSession(session, record.persistence);
     } catch {
       clearStoredSession();
+      redirectToSignInAfterSessionLoss();
       return null;
     }
   }
