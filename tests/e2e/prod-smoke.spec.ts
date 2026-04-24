@@ -13,7 +13,7 @@ import { expect, test, type ConsoleMessage, type Response } from '@playwright/te
  * Run locally (PowerShell):
  *   $env:PROD_LEARNER_EMAIL  = "you@example.com"
  *   $env:PROD_LEARNER_PASSWORD = "yourpassword"
- *   npx playwright test tests/e2e/prod-smoke.spec.ts --project=chromium --workers=1
+ *   npx playwright test tests/e2e/prod-smoke.spec.ts --project=chromium-unauth --workers=1
  *
  * The test FAILS if:
  *  - sign-in does not succeed

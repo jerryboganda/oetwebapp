@@ -23,8 +23,13 @@ npm run test:e2e:install
 ## 3. Run the smoke
 
 ```powershell
-npx playwright test tests/e2e/prod-smoke.spec.ts --project=chromium --workers=1
+npx playwright test tests/e2e/prod-smoke.spec.ts --project=chromium-unauth --workers=1
 ```
+
+> The `chromium-unauth` project has no saved auth state, which matches what the
+> spec expects (it signs in itself with the env credentials). Avoid
+> `chromium-learner` etc. because those projects preload a saved learner auth
+> state from `tests/e2e/setup/` which would conflict.
 
 ## 4. Read the report
 
