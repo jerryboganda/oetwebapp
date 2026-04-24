@@ -1,8 +1,9 @@
-'use client';
-
-import { motion, useReducedMotion } from 'motion/react';
 import { cn } from '@/lib/utils';
-import { getSurfaceMotion, prefersReducedMotion } from '@/lib/motion';
+
+// Skeletons are pure loading placeholders. No motion library required:
+// `motion-safe:animate-pulse` is a plain Tailwind utility. This keeps the
+// file server-renderable (no `'use client'`) and avoids shipping motion runtime
+// for a component that only renders static shapes while content loads.
 
 /* Skeleton Loader */
 interface SkeletonProps {
@@ -49,13 +50,8 @@ export function Skeleton({ className, variant = 'rectangle', width, height, line
 
 /* Card Skeleton */
 export function CardSkeleton({ className }: { className?: string }) {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
-  const motionProps = getSurfaceMotion('item', reducedMotion);
-
   return (
-    <motion.div
-      layout
-      {...motionProps}
+    <div
       className={cn('rounded-[24px] border border-gray-200 bg-surface p-5 shadow-sm', className)}
       role="status"
       aria-busy="true"
@@ -67,19 +63,14 @@ export function CardSkeleton({ className }: { className?: string }) {
         <Skeleton className="h-10 w-24 rounded-2xl" />
         <Skeleton className="h-10 w-24 rounded-2xl" />
       </div>
-    </motion.div>
+    </div>
   );
 }
 
 /* Page Skeleton */
 export function PageSkeleton({ className }: { className?: string }) {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
-  const motionProps = getSurfaceMotion('section', reducedMotion);
-
   return (
-    <motion.div
-      layout
-      {...motionProps}
+    <div
       className={cn('flex flex-col gap-8', className)}
       role="status"
       aria-busy="true"
@@ -107,6 +98,6 @@ export function PageSkeleton({ className }: { className?: string }) {
         <CardSkeleton />
         <CardSkeleton />
       </div>
-    </motion.div>
+    </div>
   );
 }

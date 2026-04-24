@@ -27,7 +27,7 @@ import {
 import Link from 'next/link';
 import { motion, useReducedMotion } from 'motion/react';
 import { getMotionDelay, getSurfaceTransition, getSurfaceVariants, prefersReducedMotion } from '@/lib/motion';
-import { useNotificationCenter } from '@/contexts/notification-center-context';
+import { useNotificationCenter, useNotificationState } from '@/contexts/notification-center-context';
 import { Button } from '@/components/ui/button';
 import { Drawer } from '@/components/ui/modal';
 import { cn } from '@/lib/utils';
@@ -386,7 +386,9 @@ type NotificationBellButtonProps = ComponentPropsWithoutRef<'button'> & { open?:
 
 const NotificationBellButton = forwardRef<HTMLButtonElement, NotificationBellButtonProps>(
   function NotificationBellButton({ open, className, ...buttonProps }, ref) {
-    const { unreadCount } = useNotificationCenter();
+    // Only `unreadCount` is needed here — subscribe to state-only context
+    // so the bell button skips re-renders caused by action reference changes.
+    const { unreadCount } = useNotificationState();
     return (
       <button
         ref={ref}

@@ -54,7 +54,18 @@ interface NotificationCenterContextValue {
   unsubscribeFromPush: () => Promise<void>;
 }
 
+// Split into two internal contexts so action-only consumers don't re-render on state changes.
+// External API stays 100% backward-compatible via `useNotificationCenter()` which merges both.
+type NotificationActionsValue = Pick<
+  NotificationCenterContextValue,
+  'refreshFeed' | 'loadMore' | 'markRead' | 'markAllRead' | 'updatePreferences' | 'subscribeToPush' | 'unsubscribeFromPush'
+>;
+
+type NotificationStateValue = Omit<NotificationCenterContextValue, keyof NotificationActionsValue>;
+
 const NotificationCenterContext = createContext<NotificationCenterContextValue | null>(null);
+const NotificationStateContext = createContext<NotificationStateValue | null>(null);
+const NotificationActionsContext = createContext<NotificationActionsValue | null>(null);
 
 const PAGE_SIZE = 20;
 const POLL_INTERVAL_MS = 30_000;
@@ -617,16 +628,79 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
     unsubscribeFromPush,
   ]);
 
+  // Split state from actions. Memoizing each half separately means
+  // `useNotificationActions()` never re-renders its consumers on state changes
+  // (actions are stable via useCallback with non-state deps), while
+  // `useNotificationState()` only re-renders on actual state mutations.
+  const stateValue = useMemo<NotificationStateValue>(() => ({
+    notifications,
+    unreadCount,
+    totalCount,
+    hasMore: notifications.length < totalCount,
+    isLoading,
+    isRefreshing,
+    error,
+    connectionStatus,
+    preferences,
+    isPreferencesLoading,
+    preferencesError,
+    isUpdatingPreferences,
+    pushSupported,
+    pushPublicKeyConfigured,
+    pushPermission,
+    pushEnabled,
+    isUpdatingPush,
+  }), [
+    connectionStatus,
+    error,
+    isLoading,
+    isPreferencesLoading,
+    isRefreshing,
+    isUpdatingPreferences,
+    isUpdatingPush,
+    notifications,
+    preferences,
+    preferencesError,
+    pushEnabled,
+    pushPermission,
+    pushPublicKeyConfigured,
+    pushSupported,
+    totalCount,
+    unreadCount,
+  ]);
+
+  const actionsValue = useMemo<NotificationActionsValue>(() => ({
+    refreshFeed,
+    loadMore,
+    markRead,
+    markAllRead,
+    updatePreferences: updatePreferencesHandler,
+    subscribeToPush,
+    unsubscribeFromPush,
+  }), [
+    loadMore,
+    markAllRead,
+    markRead,
+    refreshFeed,
+    subscribeToPush,
+    updatePreferencesHandler,
+    unsubscribeFromPush,
+  ]);
+
   return (
     <NotificationCenterContext.Provider value={contextValue}>
-      {children}
-      {toastState ? (
-        <Toast
-          variant={toastState.variant}
-          message={toastState.message}
-          onClose={() => setToastState(null)}
-        />
-      ) : null}
+      <NotificationStateContext.Provider value={stateValue}>
+        <NotificationActionsContext.Provider value={actionsValue}>
+          {children}
+          {toastState ? (
+            <Toast
+              variant={toastState.variant}
+              message={toastState.message}
+              onClose={() => setToastState(null)}
+            />
+          ) : null}
+        </NotificationActionsContext.Provider>
+      </NotificationStateContext.Provider>
     </NotificationCenterContext.Provider>
   );
 }
@@ -635,6 +709,35 @@ export function useNotificationCenter() {
   const context = useContext(NotificationCenterContext);
   if (!context) {
     throw new Error('useNotificationCenter must be used within NotificationCenterProvider');
+  }
+
+  return context;
+}
+
+/**
+ * Subscribe to notification **state** only (no actions).
+ * Callers that don't need to trigger mutations should prefer this hook —
+ * it skips re-renders caused by stable action reference identity.
+ */
+export function useNotificationState() {
+  const context = useContext(NotificationStateContext);
+  if (!context) {
+    throw new Error('useNotificationState must be used within NotificationCenterProvider');
+  }
+
+  return context;
+}
+
+/**
+ * Subscribe to notification **actions** only (no state).
+ * Components that only need to fire mutations (e.g. a mark-all-read button in
+ * a menu) should prefer this hook — they will **never** re-render on state
+ * changes.
+ */
+export function useNotificationActions() {
+  const context = useContext(NotificationActionsContext);
+  if (!context) {
+    throw new Error('useNotificationActions must be used within NotificationCenterProvider');
   }
 
   return context;
