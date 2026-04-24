@@ -14,10 +14,7 @@ SCHEDULE="${BACKUP_SCHEDULE:-17 2 * * *}"
 env | grep -E '^(POSTGRES|PG|BACKUP|AWS|UPLOAD)_' > /etc/cron.env || true
 
 cat <<EOF > /etc/crontabs/root
-SHELL=/bin/sh
-PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-
-${SCHEDULE} . /etc/cron.env; /usr/local/bin/postgres-backup.sh >> /var/log/backup.log 2>&1
+${SCHEDULE} PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin /bin/sh -lc '. /etc/cron.env; exec /usr/local/bin/postgres-backup.sh' >> /var/log/backup.log 2>&1
 EOF
 
 mkdir -p /var/log
