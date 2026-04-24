@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from 'next';
 import Script from 'next/script';
+import { headers } from 'next/headers';
 import { Fraunces, Manrope } from 'next/font/google';
 import { getRuntimeBootstrapScript } from '@/lib/runtime-signals';
 import { AppProviders } from './providers';
@@ -95,7 +96,8 @@ export const viewport: Viewport = {
   ],
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const nonce = (await headers()).get('x-nonce') ?? undefined;
   return (
     <html lang="en" className={`${bodyFont.variable} ${displayFont.variable}`} suppressHydrationWarning>
       <head>
@@ -110,7 +112,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         />
       </head>
       <body className="font-sans antialiased min-h-[var(--app-viewport-height,100dvh)] bg-background-light text-navy overflow-x-hidden selection:bg-primary/15 selection:text-navy" suppressHydrationWarning>
-        <Script id="runtime-signals" strategy="beforeInteractive" dangerouslySetInnerHTML={{ __html: getRuntimeBootstrapScript() }} />
+        <Script id="runtime-signals" strategy="beforeInteractive" nonce={nonce} dangerouslySetInnerHTML={{ __html: getRuntimeBootstrapScript() }} />
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

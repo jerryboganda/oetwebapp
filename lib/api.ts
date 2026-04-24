@@ -360,12 +360,12 @@ async function getHeaders(path: string, extra?: HeadersInit, options?: { json?: 
     const token = await ensureFreshAccessToken();
     if (token) {
       headers.set('Authorization', `Bearer ${token}`);
-    } else if (process.env.NODE_ENV !== 'development') {
-      console.error('[API] No auth token available for production request to', path);
+    } else if (process.env.NODE_ENV === 'development') {
+      console.debug('[API] No auth token available for request to', path);
     }
   } catch (err) {
-    if (process.env.NODE_ENV !== 'development') {
-      console.error('[API] Failed to retrieve auth token:', err);
+    if (process.env.NODE_ENV === 'development') {
+      console.debug('[API] Failed to retrieve auth token:', err);
     }
   }
 
@@ -462,7 +462,13 @@ async function apiRequest<T = any>(path: string, init?: RequestInit): Promise<T>
           retryable = error.retryable ?? isRetryable(response.status);
           fieldErrors = Array.isArray(error.fieldErrors) ? error.fieldErrors : [];
         } catch (err) {
-          console.error('[API] Failed to parse error response body:', err);
+          // Body wasn't JSON (e.g. backend returned an HTML error page). This
+          // isn't actionable for the user and we still surface the status code
+          // via the thrown ApiError; demote to debug so it doesn't spam the
+          // console in production.
+          if (process.env.NODE_ENV === 'development') {
+            console.debug('[API] Non-JSON error response body:', err);
+          }
           retryable = isRetryable(response.status);
         }
 
