@@ -92,3 +92,28 @@ FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace
 WHERE c.relkind='r' AND n.nspname='public'
   AND NOT EXISTS (SELECT 1 FROM pg_index i WHERE i.indrelid=c.oid AND i.indisprimary)
 ORDER BY 1;
+
+\echo === 12. Top 15 slowest queries (mean time, requires pg_stat_statements) ===
+SELECT
+  round(mean_exec_time::numeric, 1) AS mean_ms,
+  calls,
+  round((total_exec_time/1000)::numeric, 1) AS total_s,
+  round((100*shared_blks_hit::numeric/GREATEST(shared_blks_hit+shared_blks_read,1)),1) AS cache_pct,
+  left(regexp_replace(query, '\s+', ' ', 'g'), 140) AS query
+FROM pg_stat_statements
+WHERE query NOT ILIKE '%pg_stat_statements%'
+  AND query NOT ILIKE 'COMMIT%'
+  AND query NOT ILIKE 'BEGIN%'
+ORDER BY mean_exec_time DESC
+LIMIT 15;
+
+\echo === 13. Top 15 most-called queries ===
+SELECT
+  calls,
+  round(mean_exec_time::numeric, 1) AS mean_ms,
+  round((total_exec_time/1000)::numeric, 1) AS total_s,
+  left(regexp_replace(query, '\s+', ' ', 'g'), 140) AS query
+FROM pg_stat_statements
+WHERE query NOT ILIKE '%pg_stat_statements%'
+ORDER BY calls DESC
+LIMIT 15;
