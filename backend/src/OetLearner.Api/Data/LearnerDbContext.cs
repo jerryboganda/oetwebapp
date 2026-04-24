@@ -434,10 +434,11 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<ExamFamily>().HasIndex(x => new { x.IsActive, x.SortOrder });
         modelBuilder.Entity<ExamType>().HasIndex(x => new { x.Status, x.SortOrder });
         modelBuilder.Entity<TaskType>().HasIndex(x => new { x.ExamTypeCode, x.SubtestCode, x.Status });
-        modelBuilder.Entity<ContentItem>().HasIndex(x => x.ExamFamilyCode);
-        modelBuilder.Entity<ContentItem>().HasIndex(x => x.ExamTypeCode);
-        modelBuilder.Entity<Attempt>().HasIndex(x => x.ExamFamilyCode);
-        modelBuilder.Entity<Attempt>().HasIndex(x => x.ExamTypeCode);
+        // NOTE: dropped single-column indexes on ContentItem.ExamFamilyCode,
+        // ContentItem.ExamTypeCode, Attempt.ExamFamilyCode, Attempt.ExamTypeCode.
+        // Every row currently stores "oet" for both columns, so the indexes
+        // were ~0-selectivity and only added write amplification. Re-introduce
+        // as partial or composite indexes once a second exam family ships.
 
         // Gamification indexes
         modelBuilder.Entity<LearnerAchievement>().HasIndex(x => x.UserId);

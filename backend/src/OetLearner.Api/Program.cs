@@ -622,6 +622,10 @@ builder.Services.AddScoped<OetLearner.Api.Services.Pronunciation.IPronunciationA
     OetLearner.Api.Services.Pronunciation.PronunciationAdminDraftService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Pronunciation.PronunciationAudioRetentionWorker>();
 
+// Retention sweeper for auth-layer rows (expired OTPs, revoked refresh tokens)
+// that would otherwise bloat their tables and indexes forever.
+builder.Services.AddHostedService<OetLearner.Api.Services.Auth.AuthDataRetentionWorker>();
+
 // OET rulebook engine + grounded AI gateway. These services are the single
 // source of truth for rule enforcement and for every AI call: no code path
 // invokes a model without a rulebook-grounded prompt built here.
