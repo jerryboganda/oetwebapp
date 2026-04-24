@@ -633,6 +633,11 @@ builder.Services.Configure<OetLearner.Api.Configuration.DataRetentionOptions>(
     builder.Configuration.GetSection("DataRetention"));
 builder.Services.AddHostedService<OetLearner.Api.Services.DataRetentionWorker>();
 
+// Partition-maintenance worker: keeps next-month range partitions pre-created
+// for candidate time-ordered tables (AnalyticsEvents, AuditEvents, AiUsageRecords).
+// No-op on SQLite and no-op on a Postgres DB whose tables are not yet partitioned.
+builder.Services.AddHostedService<OetLearner.Api.Services.PartitionMaintenanceWorker>();
+
 // OET rulebook engine + grounded AI gateway. These services are the single
 // source of truth for rule enforcement and for every AI call: no code path
 // invokes a model without a rulebook-grounded prompt built here.
