@@ -34,10 +34,10 @@ fi
   # Retention-sweeper validation: counts and oldest row per append-only table.
   echo
   echo "=== 11. Retention sweeper validation ==="
-  docker exec "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" <<'SQL' 2>&1 || true
-SELECT 'AnalyticsEvents'       AS tbl, count(*) rows, min("OccurredAt")   AS oldest FROM "AnalyticsEvents"
-UNION ALL SELECT 'AuditEvents',              count(*), min("OccurredAt")  FROM "AuditEvents"
-UNION ALL SELECT 'PaymentWebhookEvents',     count(*), min("ReceivedAt")  FROM "PaymentWebhookEvents"
+  docker exec -i "$PG_CONTAINER" psql -U "$PG_USER" -d "$PG_DB" -v ON_ERROR_STOP=0 <<'SQL' 2>&1 || true
+SELECT 'AnalyticsEvents'               AS tbl, count(*) AS rows, min("OccurredAt")   AS oldest FROM "AnalyticsEvents"
+UNION ALL SELECT 'AuditEvents',                count(*), min("OccurredAt")   FROM "AuditEvents"
+UNION ALL SELECT 'PaymentWebhookEvents',       count(*), min("ReceivedAt")   FROM "PaymentWebhookEvents"
 UNION ALL SELECT 'NotificationDeliveryAttempts', count(*), min("AttemptedAt") FROM "NotificationDeliveryAttempts";
 SQL
 } > "$REPORT" 2>&1
