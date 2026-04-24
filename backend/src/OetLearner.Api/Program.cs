@@ -851,6 +851,32 @@ app.UseExceptionHandler(handler =>
             return;
         }
 
+        // Optimistic-concurrency conflict (xmin mismatch on Subscription,
+        // Invoice, SubscriptionItem, Evaluation, or any other entity mapped
+        // with a concurrency token). Surface as 409 so the UI / caller can
+        // reload state and retry. DO NOT auto-retry here — that is the
+        // caller's decision and, for idempotent server paths, happens inside
+        // ConcurrencyRetry.ExecuteAsync.
+        if (exception is Microsoft.EntityFrameworkCore.DbUpdateConcurrencyException concurrencyException)
+        {
+            context.Response.StatusCode = StatusCodes.Status409Conflict;
+            app.Logger.LogWarning(
+                concurrencyException,
+                "Concurrency conflict on {Method} {Path}. CorrelationId: {CorrelationId}",
+                context.Request.Method,
+                context.Request.Path,
+                correlationId ?? "missing");
+            var conflictPayload = new
+            {
+                code = "concurrency_conflict",
+                message = "The resource was modified by another request. Reload and try again.",
+                retryable = true,
+                correlationId
+            };
+            await context.Response.WriteAsync(JsonSupport.Serialize(conflictPayload));
+            return;
+        }
+
         app.Logger.LogError(
             exception,
             "Unhandled exception while processing {Method} {Path}. CorrelationId: {CorrelationId}",
