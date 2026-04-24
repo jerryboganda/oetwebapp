@@ -1,6 +1,6 @@
 'use client';
 
-import { useContext, useEffect, useRef, useState } from 'react';
+import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AuthContext } from '@/contexts/auth-context';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { fetchDashboardHome, fetchEngagement, fetchReadiness, fetchStudyPlan, fetchUserProfile } from '@/lib/api';
@@ -125,9 +125,11 @@ export function useDashboardHome() {
   // configurations in our production build, so we use the classic ref-wrapper
   // pattern which has the same stale-closure guarantees.
   const loadRef = useRef<() => void>(() => {});
-  loadRef.current = () => {
-    void load();
-  };
+  useLayoutEffect(() => {
+    loadRef.current = () => {
+      void load();
+    };
+  });
 
   useEffect(() => {
     if (authLoading) {

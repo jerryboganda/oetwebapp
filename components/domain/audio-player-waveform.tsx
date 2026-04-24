@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import { Button } from '@/components/ui/button';
 import { getMicroTap } from '@/lib/motion';
@@ -66,7 +66,9 @@ export function AudioPlayerWaveform({ audioUrl, onTimeUpdate, seekToTime, classN
   // React 19.2 `useEffectEvent` because the latter can be tree-shaken to
   // `undefined` in some production minifier configurations.
   const onTimeUpdateRef = useRef<typeof onTimeUpdate>(onTimeUpdate);
-  onTimeUpdateRef.current = onTimeUpdate;
+  useLayoutEffect(() => {
+    onTimeUpdateRef.current = onTimeUpdate;
+  }, [onTimeUpdate]);
   const handleTimeUpdate = (currentTime: number) => {
     const cb = onTimeUpdateRef.current;
     if (cb) cb(currentTime);
