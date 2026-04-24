@@ -316,6 +316,17 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         ConfigureXminToken<Invoice>(modelBuilder);
         ConfigureXminToken<SubscriptionItem>(modelBuilder);
         ConfigureXminToken<Evaluation>(modelBuilder);
+
+        // Hot JSON columns stored as jsonb for smaller on-disk size, native
+        // validation, and future GIN-index capability. Paired with migration
+        // 20260424170000_ConvertHotJsonColumnsToJsonb.
+        modelBuilder.Entity<AnalyticsEventRecord>().Property(x => x.PayloadJson).HasColumnType("jsonb");
+        modelBuilder.Entity<Attempt>().Property(x => x.AnalysisJson).HasColumnType("jsonb");
+        modelBuilder.Entity<Evaluation>().Property(x => x.StrengthsJson).HasColumnType("jsonb");
+        modelBuilder.Entity<Evaluation>().Property(x => x.IssuesJson).HasColumnType("jsonb");
+        modelBuilder.Entity<Evaluation>().Property(x => x.CriterionScoresJson).HasColumnType("jsonb");
+        modelBuilder.Entity<Evaluation>().Property(x => x.FeedbackItemsJson).HasColumnType("jsonb");
+        modelBuilder.Entity<PaymentWebhookEvent>().Property(x => x.PayloadJson).HasColumnType("jsonb");
         modelBuilder.Entity<Wallet>().HasIndex(x => x.UserId);
         modelBuilder.Entity<ReviewRequest>().Property(x => x.State).IsConcurrencyToken();
         modelBuilder.Entity<StudyPlan>().HasIndex(x => x.UserId);
