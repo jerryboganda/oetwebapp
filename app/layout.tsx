@@ -121,7 +121,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           nonce={nonce}
           dangerouslySetInnerHTML={{ __html: getRuntimeBootstrapScript() }}
         />
-        <AppProviders>{children}</AppProviders>
+        <AppProviders nonce={nonce}>{children}</AppProviders>
       </body>
     </html>
   );

@@ -21,11 +21,11 @@ function useServiceWorkerRegistration() {
   }, []);
 }
 
-export function AppProviders({ children }: { children: ReactNode }) {
+export function AppProviders({ children, nonce }: { children: ReactNode; nonce?: string }) {
   useServiceWorkerRegistration();
 
   return (
-    <ThemeProvider>
+    <ThemeProvider nonce={nonce}>
       <QueryProvider>
         <AuthProvider>
           <RuntimeLifecycleBridge />
