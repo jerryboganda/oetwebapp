@@ -866,6 +866,16 @@ app.UseExceptionHandler(handler =>
                 context.Request.Method,
                 context.Request.Path,
                 correlationId ?? "missing");
+            // Tag in Sentry as a filterable group so we can alert on
+            // concurrency_conflict rate without pulling in a full metrics stack.
+            // No-op when Sentry:Dsn is unset.
+            Sentry.SentrySdk.CaptureException(concurrencyException, scope =>
+            {
+                scope.Level = Sentry.SentryLevel.Warning;
+                scope.SetTag("conflict_kind", "concurrency");
+                scope.SetTag("http_status", "409");
+                scope.SetTag("route", context.Request.Path.Value ?? "unknown");
+            });
             var conflictPayload = new
             {
                 code = "concurrency_conflict",
