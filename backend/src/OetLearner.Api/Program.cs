@@ -626,6 +626,13 @@ builder.Services.AddHostedService<OetLearner.Api.Services.Pronunciation.Pronunci
 // that would otherwise bloat their tables and indexes forever.
 builder.Services.AddHostedService<OetLearner.Api.Services.Auth.AuthDataRetentionWorker>();
 
+// Retention sweeper for append-only event tables (analytics, audit, payment
+// webhooks, notification delivery attempts). Windows are configured via the
+// "DataRetention" section; defaults are conservative (see DataRetentionOptions).
+builder.Services.Configure<OetLearner.Api.Configuration.DataRetentionOptions>(
+    builder.Configuration.GetSection("DataRetention"));
+builder.Services.AddHostedService<OetLearner.Api.Services.DataRetentionWorker>();
+
 // OET rulebook engine + grounded AI gateway. These services are the single
 // source of truth for rule enforcement and for every AI call: no code path
 // invokes a model without a rulebook-grounded prompt built here.

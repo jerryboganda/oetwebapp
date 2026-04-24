@@ -1215,7 +1215,7 @@ public class AuthFlowsTests
         AssertProperty(account, nameof(ApplicationUserAccount.LastLoginAt));
         AssertProperty(account, nameof(ApplicationUserAccount.Role));
         AssertUniqueIndex(account, nameof(ApplicationUserAccount.NormalizedEmail));
-        AssertIndex(account, nameof(ApplicationUserAccount.NormalizedEmail), nameof(ApplicationUserAccount.Role));
+        AssertIndex(account, nameof(ApplicationUserAccount.LastLoginAt));
 
         var refreshToken = AssertEntity<RefreshTokenRecord>(db);
         AssertProperty(refreshToken, nameof(RefreshTokenRecord.Id));
@@ -1223,6 +1223,7 @@ public class AuthFlowsTests
         AssertProperty(refreshToken, nameof(RefreshTokenRecord.TokenHash));
         Assert.Null(refreshToken.FindProperty("Token"));
         AssertIndex(refreshToken, nameof(RefreshTokenRecord.ApplicationUserAccountId), nameof(RefreshTokenRecord.ExpiresAt));
+        AssertIndex(refreshToken, nameof(RefreshTokenRecord.ApplicationUserAccountId));
 
         var emailOtp = AssertEntity<EmailOtpChallenge>(db);
         AssertProperty(emailOtp, nameof(EmailOtpChallenge.Id));
@@ -1230,6 +1231,7 @@ public class AuthFlowsTests
         AssertProperty(emailOtp, nameof(EmailOtpChallenge.CodeHash));
         AssertProperty(emailOtp, nameof(EmailOtpChallenge.ExpiresAt));
         AssertIndex(emailOtp, nameof(EmailOtpChallenge.ApplicationUserAccountId), nameof(EmailOtpChallenge.Purpose), nameof(EmailOtpChallenge.ExpiresAt));
+        AssertIndex(emailOtp, nameof(EmailOtpChallenge.ExpiresAt));
 
         var recoveryCode = AssertEntity<MfaRecoveryCode>(db);
         AssertProperty(recoveryCode, nameof(MfaRecoveryCode.Id));

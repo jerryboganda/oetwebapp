@@ -9,13 +9,13 @@ namespace OetLearner.Api.Services.Auth;
 ///
 ///   * <c>EmailOtpChallenges</c> older than <see cref="OtpRetention"/> past
 ///     their <c>ExpiresAt</c> (they cannot be redeemed after expiry and
-///     retaining them long-term adds no forensic value — the related sign-in
+///     retaining them long-term adds no forensic value; the related sign-in
 ///     event is recorded in <c>AuditEvents</c>).
 ///   * <c>RefreshTokenRecords</c> that have been revoked for longer than
 ///     <see cref="RevokedRefreshRetention"/> (kept briefly so reuse-detection
 ///     still works for the grace period, deleted after).
 ///
-/// Hard deletes only — active tokens and unexpired challenges are never
+/// Hard deletes only: active tokens and unexpired challenges are never
 /// touched. Batch size is capped so a very large backlog is cleared over
 /// several sweeps rather than locking the tables.
 /// </summary>
@@ -65,11 +65,13 @@ public sealed class AuthDataRetentionWorker(
 
         var otpDeleted = await db.EmailOtpChallenges
             .Where(c => c.ExpiresAt < otpCutoff)
+            .OrderBy(c => c.ExpiresAt)
             .Take(BatchSize)
             .ExecuteDeleteAsync(ct);
 
         var refreshDeleted = await db.RefreshTokenRecords
             .Where(r => r.RevokedAt != null && r.RevokedAt < refreshCutoff)
+            .OrderBy(r => r.RevokedAt)
             .Take(BatchSize)
             .ExecuteDeleteAsync(ct);
 
