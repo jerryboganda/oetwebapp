@@ -1,5 +1,4 @@
 import type { Metadata, Viewport } from 'next';
-import Script from 'next/script';
 import { headers } from 'next/headers';
 import { Fraunces, Manrope } from 'next/font/google';
 import { getRuntimeBootstrapScript } from '@/lib/runtime-signals';
@@ -112,7 +111,16 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         />
       </head>
       <body className="font-sans antialiased min-h-[var(--app-viewport-height,100dvh)] bg-background-light text-navy overflow-x-hidden selection:bg-primary/15 selection:text-navy" suppressHydrationWarning>
-        <Script id="runtime-signals" strategy="beforeInteractive" nonce={nonce} dangerouslySetInnerHTML={{ __html: getRuntimeBootstrapScript() }} />
+        {/*
+          Inline bootstrap script. Rendered as a plain <script> rather than
+          next/script so the per-request CSP nonce is guaranteed to reach the
+          DOM attribute — next/script's beforeInteractive strategy hoists and
+          doesn't reliably propagate nonce in production.
+        */}
+        <script
+          nonce={nonce}
+          dangerouslySetInnerHTML={{ __html: getRuntimeBootstrapScript() }}
+        />
         <AppProviders>{children}</AppProviders>
       </body>
     </html>

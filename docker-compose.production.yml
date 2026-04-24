@@ -59,10 +59,12 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
-      # Always include 127.0.0.1 and localhost so the in-container Docker healthcheck
-      # (curl http://127.0.0.1:8080/health/ready) is not rejected by ASP.NET's
+      # Always include 127.0.0.1, localhost, and the Docker service name
+      # (`learner-api`) so the in-container Docker healthcheck
+      # (curl http://127.0.0.1:8080/health/ready) and the web → API proxy
+      # (fetch http://learner-api:8080/...) are not rejected by ASP.NET's
       # HostFilteringMiddleware with HTTP 400 "Invalid Hostname".
-      AllowedHosts: ${API_ALLOWED_HOSTS:?Set API_ALLOWED_HOSTS to the public API host name};127.0.0.1;localhost
+      AllowedHosts: ${API_ALLOWED_HOSTS:?Set API_ALLOWED_HOSTS to the public API host name};127.0.0.1;localhost;learner-api
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
       AUTHTOKENS__ISSUER: ${AUTHTOKENS__ISSUER}
       AUTHTOKENS__AUDIENCE: ${AUTHTOKENS__AUDIENCE}
