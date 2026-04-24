@@ -72,12 +72,34 @@ test('prod — learner journey end-to-end', async ({ page, context }) => {
   await page.goto(`${PROD_URL}/sign-in`, { waitUntil: 'domcontentloaded' });
   await expect(page).toHaveURL(/\/sign-in/);
 
-  await page.getByLabel(/email/i).fill(EMAIL!);
-  await page.getByLabel(/password/i).fill(PASSWORD!);
-  await page.getByRole('button', { name: /sign in/i }).click();
+  // Wait for React hydration so the form uses the JS submit handler, not native GET
+  await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {});
+  const emailInput = page.locator('#email');
+  await emailInput.waitFor({ state: 'visible', timeout: 15_000 });
 
-  // 2. Land on dashboard
-  await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 30_000 });
+  await emailInput.fill(EMAIL!);
+  await page.locator('#password').fill(PASSWORD!);
+
+  // Submit via the POST endpoint by clicking the button; race with possible inline error
+  await Promise.all([
+    page.waitForResponse(
+      (r) => /\/v1\/auth\/(sign[-_]?in|login)/i.test(r.url()) && r.request().method() === 'POST',
+      { timeout: 20_000 },
+    ).catch(() => null),
+    page.getByRole('button', { name: /^sign in$/i }).click(),
+  ]);
+
+  // 2. Land on dashboard (or surface error for diagnosis)
+  try {
+    await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 30_000 });
+  } catch (err) {
+    const errorText = await page.locator('[role="alert"], .auth-error, [data-auth-error]').first()
+      .textContent({ timeout: 1_000 })
+      .catch(() => null);
+    throw new Error(
+      `Sign-in did not navigate off /sign-in within 30s. Error UI: ${errorText ?? '(none visible)'}`,
+    );
+  }
 
   // Cookie sanity — there should be at least one auth cookie set
   const cookies = await context.cookies();
