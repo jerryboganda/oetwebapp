@@ -9,7 +9,7 @@ import { EmptyState } from '@/components/ui/empty-error';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Toast } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/form-controls';
+import { Input, Select } from '@/components/ui/form-controls';
 import { Drawer } from '@/components/ui/modal';
 import { exportAdminAuditLogs } from '@/lib/api';
 import { getAdminAuditLogDetailData, getAdminAuditLogPageData } from '@/lib/admin';
@@ -25,6 +25,9 @@ export default function AuditLogsPage() {
   const [filters, setFilters] = useState<Record<string, string[]>>({ action: [], actor: [] });
   const [searchQuery, setSearchQuery] = useState('');
   const [rows, setRows] = useState<AdminAuditLogRow[]>([]);
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
+  const [total, setTotal] = useState(0);
   const [actionOptions, setActionOptions] = useState<string[]>([]);
   const [actorOptions, setActorOptions] = useState<string[]>([]);
   const [selectedLogId, setSelectedLogId] = useState<string | null>(null);
@@ -52,7 +55,8 @@ export default function AuditLogsPage() {
           action: selectedAction,
           actor: selectedActor,
           search: searchQuery || undefined,
-          pageSize: 100,
+          page,
+          pageSize,
         });
         const base = await basePromise;
 
@@ -64,7 +68,10 @@ export default function AuditLogsPage() {
         }
 
         setRows(result.items);
-        setPageStatus(result.items.length > 0 ? 'success' : 'empty');
+        setTotal(result.total);
+        setPage(result.page);
+        setPageSize(result.pageSize);
+        setPageStatus(result.total > 0 ? 'success' : 'empty');
       } catch (error) {
         console.error(error);
         if (!cancelled) {
@@ -79,7 +86,7 @@ export default function AuditLogsPage() {
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [selectedAction, selectedActor, searchQuery, actionOptions.length, actorOptions.length]);
+  }, [selectedAction, selectedActor, searchQuery, page, pageSize, actionOptions.length, actorOptions.length]);
 
   useEffect(() => {
     if (!selectedLogId) {
@@ -126,6 +133,10 @@ export default function AuditLogsPage() {
       options: actorOptions.map((actor) => ({ id: actor, label: actor })),
     },
   ], [actionOptions, actorOptions]);
+
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const pageStart = total === 0 ? 0 : ((page - 1) * pageSize) + 1;
+  const pageEnd = total === 0 ? 0 : Math.min(total, page * pageSize);
 
   const columns: Column<AdminAuditLogRow>[] = useMemo(
     () => [
@@ -299,10 +310,41 @@ export default function AuditLogsPage() {
           <div className="max-w-md">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-              <Input placeholder="Search actions, actors, resources, or details" value={searchQuery} onChange={(event) => setSearchQuery(event.target.value)} className="pl-9" />
+              <Input placeholder="Search actions, actors, resources, or details" value={searchQuery} onChange={(event) => { setPage(1); setSearchQuery(event.target.value); }} className="pl-9" />
             </div>
           </div>
-          <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => { setFilters({ action: [], actor: [] }); setSearchQuery(''); }} />
+          <FilterBar groups={filterGroups} selected={filters} onChange={(groupId, optionId) => { setPage(1); handleFilterChange(groupId, optionId); }} onClear={() => { setPage(1); setFilters({ action: [], actor: [] }); setSearchQuery(''); }} />
+          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+            <div className="text-sm text-muted">
+              Showing {pageStart}-{pageEnd} of {total} events
+            </div>
+            <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
+              <div className="min-w-36">
+                <Select
+                  label="Rows per page"
+                  value={String(pageSize)}
+                  onChange={(event) => { setPage(1); setPageSize(Number(event.target.value)); }}
+                  options={[
+                    { value: '10', label: '10' },
+                    { value: '20', label: '20' },
+                    { value: '50', label: '50' },
+                    { value: '100', label: '100' },
+                  ]}
+                />
+              </div>
+              <div className="flex items-center gap-2 pt-5 md:pt-0">
+                <Button variant="outline" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>
+                  Previous
+                </Button>
+                <span className="text-sm text-muted">
+                  Page {page} of {totalPages}
+                </span>
+                <Button variant="outline" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>
+                  Next
+                </Button>
+              </div>
+            </div>
+          </div>
           <DataTable columns={columns} data={rows} keyExtractor={(log) => log.id} onRowClick={handleRowClick} mobileCardRender={mobileCardRender} />
         </AdminRoutePanel>
       </AsyncStateWrapper>
