@@ -1,6 +1,6 @@
 # Unused Code Audit — OET Prep Platform
 
-**Date:** 2026-04-23
+**Date:** 2026-04-23 (original audit) · **Closure update:** 2026-04-24
 **Tools used:** `tsc --noUnusedLocals --noUnusedParameters`, `ts-prune`, `depcheck`, manual grep
 
 ---
@@ -9,21 +9,23 @@
 
 | Category | Count | Estimated LoC Removable | Risk |
 |----------|-------|------------------------|------|
-| Unused imports / locals (TS6133) | 127 across 92 files | ~130 lines | Zero |
-| Unused type-only imports (TS6192) | 3 | ~3 lines | Zero |
-| Unused type declarations (TS6196) | 12 | ~60 lines | Zero |
-| Unused exports (ts-prune, excl. framework entries) | 768 total (312 in lib/components) | ~800+ lines | Low–Medium |
-| Unused npm dependencies | 5 prod + 7 dev | n/a (package.json) | Low |
-| Missing npm dependencies | 2 | n/a | Medium |
-| Root orphan artifact files | 19 files | n/a | Zero |
+| Unused imports / locals (TS6133) | ~~127 across 92 files~~ → **0** | ✅ removed (cumulative → commit `59a5a5f`) | Zero |
+| Unused type-only imports (TS6192) | ~~3~~ → **0** | ✅ removed | Zero |
+| Unused type declarations (TS6196) | ~~12~~ → **0** | ✅ removed | Zero |
+| Unused exports (ts-prune, excl. framework entries) | 768 total (312 in lib/components) | ⏳ Not yet triaged — requires public-API vs dead-code judgement | Low–Medium |
+| Unused npm dependencies | 5 prod + 7 dev | ⏳ Pending — requires product/config call | Low |
+| Missing npm dependencies | 2 | ⏳ Pending | Medium |
+| Root orphan artifact files | ~~19 files~~ → **0** | ✅ removed (commit `75efb3f`) | Zero |
 
-**Total estimated removable lines:** ~1,000+ (imports/locals) + potentially thousands from unused mock data exports.
+**Closed so far:** TS unused-locals family (127 → 0) and all 19 root orphan artifacts. **Remaining:** 768 unused ts-prune exports (triage), 12 npm dep questions, 2 missing deps.
 
 ---
 
-## Category 1: Unused Imports & Locals (TSC TS6133/TS6192/TS6196)
+## Category 1: Unused Imports & Locals (TSC TS6133/TS6192/TS6196) ✅ Closed
 
-142 diagnostics across 92 files. These are the highest-confidence, zero-risk removals.
+**Original baseline:** 142 diagnostics across 92 files.
+**Current:** 0 (verified via `npx tsc --noEmit --noUnusedLocals --noUnusedParameters`).
+**Final cleanup:** commit `59a5a5f` removed the last dead local (`lastMockRecorder` in `hooks/usePronunciationRecorder.test.ts`); earlier bulk removals across the session handled the remaining 126. The representative sample list below is retained for historical reference only.
 
 ### Representative Samples
 
@@ -143,7 +145,9 @@ Many `page.tsx` default exports are framework entry points and are **false posit
 
 ## Safe Cleanup Plan
 
-### Phase 1: Zero Risk — Root Artifacts & Unused Imports ✅
+### Phase 1: Zero Risk — Root Artifacts & Unused Imports ✅ Executed
+
+**Outcome:** both sub-phases shipped. Root orphan sweep landed in commit `75efb3f`; unused-import/local removals landed incrementally across the session with the final diagnostic closed in commit `59a5a5f`. Snippets below retained as a how-to reference.
 
 **Effort:** ~30 minutes | **Risk:** None
 
@@ -214,7 +218,9 @@ npm run build                # Must compile 169+ pages
 
 ---
 
-### Phase 2: Low Risk — Unused Type Declarations & Test Locals
+### Phase 2: Low Risk — Unused Type Declarations & Test Locals ✅ Executed
+
+Rolled up into Phase 1 closure. TS6196 count 12 → 0; test-local strays (`lastMockRecorder`, `appendChildSpy`, `removeChildSpy`, `href`, `mockRouter`) all removed. `middleware.test.ts` `vi` was correctly identified as a Vitest global (left untouched).
 
 **Effort:** ~20 minutes | **Risk:** Low
 
@@ -276,10 +282,12 @@ These may be WIP, future-use, or consumed by external systems:
 
 ## Verification Checklist (Run After Each Phase)
 
-- [ ] `npx tsc --noEmit` — 0 errors
-- [ ] `npm run lint` — 0 errors
-- [ ] `npm test` — 77/77 files, 304/304 tests passing
-- [ ] `npm run build` — compiles 169+ pages successfully
+- [x] `npx tsc --noEmit` — 0 errors
+- [x] `npx tsc --noEmit --noUnusedLocals --noUnusedParameters` — 0 TS6133/TS6192/TS6196
+- [x] `npm run lint` — 0 errors (repo-wide `exhaustive-deps` disable count 6 → 0 closes related debt)
+- [x] Unit test suites exercised for touched files (dashboard-home 1/1, pronunciation recorder 6/6)
+- [ ] `npm test` — full 664/664 sweep (spot-checked per-file; full sweep pending next autonomous-safe window)
+- [ ] `npm run build` — compiles 169+ pages successfully (not re-run this session)
 - [ ] `npm run backend:build` — builds without errors
 - [ ] `npm run backend:test` — all backend tests pass
-- [ ] `git diff --stat` — review all changes before commit
+- [x] `git diff --stat` — reviewed before every commit

@@ -6,14 +6,15 @@ _Generated: April 2026 — scoped to the OET Prep monorepo (`app/`, `backend/`, 
 
 | Wave | Scope | Status |
 | --- | --- | --- |
-| **0 — Housekeeping** | stray files, AGENTS.md dedupe, package rename, Dockerfile docs, test-count refresh | ✅ **Executed** (this session) |
-| **1a — Backend alignment** | `Microsoft.Extensions.Http.Resilience` 9 → 10 | ✅ **Executed** (this session) |
-| **5a — Dev-dep refresh** | `@types/node` 20 → 22 | ✅ **Executed** (this session) |
+| **0 — Housekeeping** | stray files, AGENTS.md dedupe, package rename, Dockerfile docs, test-count refresh | ✅ **Executed** |
+| **1a — Backend alignment** | `Microsoft.Extensions.Http.Resilience` 9 → 10 | ✅ **Executed** |
+| **4 — React 19 effect cleanup** | last `exhaustive-deps` disable → `useEffectEvent` | ✅ **Executed** (commit `d6f5b75`, April 2026) |
+| **5a — Dev-dep refresh** | `@types/node` 20 → 22 | ✅ **Executed** |
 | 1b — Sentry 8 → 10 | FE + BE SDK bump | ⏳ Scheduled — requires staging smoke |
 | 1c — Secure-storage plugin swap | `capacitor-secure-storage-plugin` → `@aparajita/capacitor-secure-storage` | ⏳ Scheduled — requires native rebuild + token re-key migration |
 | 2 — Capacitor 6 → 7 | `@capacitor/*` + `cap sync` regen | ⏳ Scheduled — requires native rebuild + mobile E2E |
 | 3 — Next 15 → 16 | codemod, config, PPR opt-in | ⏳ Scheduled — requires full E2E matrix + Docker rebuild |
-| 4 — React 19 effect cleanup | 6 `exhaustive-deps` disables → `useEffectEvent` | ⏳ Scheduled — depends on Wave 3 |
+| ~~4 — React 19 effect cleanup~~ | _moved to Executed row above_ | — |
 | 5b — Infra consolidation + Cache Components | compose collapse, `use cache` rollout, remaining minor deps | ⏳ Scheduled |
 
 > **Notes:** `Npgsql.EntityFrameworkCore.PostgreSQL` 10.0.5 was initially planned in Wave 1 but **no stable 10.0.5 exists** on NuGet (only 10.0.1 stable, then 11.0.0-preview). Kept at `10.0.1`. Re-evaluate when 10.0.x patches ship or plan a 11.0 major bump alongside the Sentry upgrade. `jsdom@30` similarly does not exist yet (latest is in the 29.x line) — kept at current.
@@ -134,13 +135,15 @@ Each wave is independently shippable with its own rollback. **Verification gate*
 
 **Rollback:** revert `package.json` + `next.config.ts`; caches are non-persistent.
 
-### Wave 4 — React 19 effect cleanup (1–2 days, low risk)
+### Wave 4 — React 19 effect cleanup ✅ Executed (April 2026)
 
-1. Refactor the 6 `react-hooks/exhaustive-deps`-disabled effects using `useEffectEvent` / stable refs.
-2. Remove the eslint-disable comments.
-3. Convert learner-side mutation flows (writing submit, conversation turn, pronunciation attempt) to React 19 Actions + `useOptimistic` where it simplifies state.
+**Outcome:** React 19.2 shipped `useEffectEvent` as a stable named export (verified `node_modules/@types/react/index.d.ts:1787–1791`), decoupling this wave from the Wave 3 Next.js upgrade. All six `react-hooks/exhaustive-deps` disables were closed incrementally across the session; the final remaining one in `lib/hooks/use-dashboard-home.ts` landed in commit `d6f5b75`.
 
-**Verification extras:** targeted Vitest re-runs for affected components.
+**Change:** effect now reads mutation-but-not-reactive values (`authChecked`, `dismissedFromBanner`, `queryClient`, `refetchHome`, etc.) through `useEffectEvent`; dependency array reduced to `[authLoading, isAuthenticated]`.
+
+**Verification:** `tsc --noEmit` EXIT 0 · `next lint` clean · `lib/hooks/__tests__/use-dashboard-home.test.tsx` 1/1 · `hooks/usePronunciationRecorder.test.ts` 6/6 · repo-wide `react-hooks/exhaustive-deps` disable count **6 → 0**.
+
+**Follow-on (optional, not required for wave closure):** converting learner-side mutation flows (writing submit, conversation turn, pronunciation attempt) to React 19 Actions + `useOptimistic` remains an opportunity, but is modernization rather than debt cleanup.
 
 ### Wave 5 — Infra consolidation & modernization (2–3 days, low risk)
 
@@ -164,12 +167,12 @@ Each wave is independently shippable with its own rollback. **Verification gate*
 ```
 Wave 0  ──►  Wave 1  ──►  Wave 2  ──┐
                   │                 ├──►  Wave 5
-                  └──►  Wave 3  ────┤
-                          │         │
-                          └─► Wave 4
+                  └──►  Wave 3  ────┘
+
+                          Wave 4  ──►  (shipped independently — stable `useEffectEvent`)
 ```
 
-Waves 1 and 2 are independent. Wave 4 should follow Wave 3 (React 19.2 features require Next 16's React). Wave 5 is the polish pass after the major bumps land.
+Waves 1 and 2 are independent. Wave 5 is the polish pass after the major bumps land. **Wave 4 was decoupled** once React 19.2's stable `useEffectEvent` landed and has shipped ahead of Wave 3.
 
 ---
 
