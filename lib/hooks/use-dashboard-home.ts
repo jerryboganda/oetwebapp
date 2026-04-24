@@ -1,6 +1,6 @@
 'use client';
 
-import { useContext, useEffect, useState } from 'react';
+import { useContext, useEffect, useEffectEvent, useState } from 'react';
 import { AuthContext } from '@/contexts/auth-context';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { fetchDashboardHome, fetchEngagement, fetchReadiness, fetchStudyPlan, fetchUserProfile } from '@/lib/api';
@@ -120,6 +120,10 @@ export function useDashboardHome() {
     }
   }
 
+  const runLoad = useEffectEvent(() => {
+    void load();
+  });
+
   useEffect(() => {
     if (authLoading) {
       return;
@@ -134,8 +138,7 @@ export function useDashboardHome() {
       return;
     }
 
-    void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- load is intentionally excluded; effect reacts to auth state only, not function identity
+    runLoad();
   }, [authLoading, isAuthenticated]);
 
   return {
