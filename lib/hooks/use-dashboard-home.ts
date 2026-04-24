@@ -1,6 +1,6 @@
 'use client';
 
-import { useContext, useEffect, useEffectEvent, useState } from 'react';
+import { useContext, useEffect, useRef, useState } from 'react';
 import { AuthContext } from '@/contexts/auth-context';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { fetchDashboardHome, fetchEngagement, fetchReadiness, fetchStudyPlan, fetchUserProfile } from '@/lib/api';
@@ -120,9 +120,14 @@ export function useDashboardHome() {
     }
   }
 
-  const runLoad = useEffectEvent(() => {
+  // NOTE: Stable-callback pattern via useRef instead of React 19.2 `useEffectEvent`.
+  // `useEffectEvent` resolves to `undefined` in certain bundler/minifier
+  // configurations in our production build, so we use the classic ref-wrapper
+  // pattern which has the same stale-closure guarantees.
+  const loadRef = useRef<() => void>(() => {});
+  loadRef.current = () => {
     void load();
-  });
+  };
 
   useEffect(() => {
     if (authLoading) {
@@ -138,7 +143,7 @@ export function useDashboardHome() {
       return;
     }
 
-    runLoad();
+    loadRef.current();
   }, [authLoading, isAuthenticated]);
 
   return {
