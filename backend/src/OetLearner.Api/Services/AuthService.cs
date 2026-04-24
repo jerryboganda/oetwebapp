@@ -856,9 +856,15 @@ public sealed class AuthService(
     //  Cookie invariants:
     //   * HttpOnly  — hard block on JS access, which is the entire point
     //   * Secure    — refuse to send on http (except localhost dev)
-    //   * SameSite  — Strict because the refresh endpoint is same-origin via
-    //                  the Next.js /api/backend proxy. Cross-origin flows use
-    //                  the body path (legacy) until they move off that model.
+    //   * SameSite  — None in prod because the SPA at app.oetwithdrhesham.co.uk
+    //                  calls the API at api.oetwithdrhesham.co.uk (cross-origin
+    //                  even though same-site registrable domain). SameSite=None
+    //                  + Secure is the documented pattern for SPA/API splits.
+    //                  CSRF is mitigated by (a) the double-submit cookie check
+    //                  on the /api/backend/* Next.js proxy, and (b) the
+    //                  AuthBruteforce rate limiter on /v1/auth/refresh itself.
+    //                  Lax is used when Secure can't be set (http localhost dev)
+    //                  since browsers reject SameSite=None without Secure.
     //   * Path=/       - allows same-site proxied web refresh/sign-out calls
     //                  to carry the cookie across deployment topologies.
     // ═══════════════════════════════════════════════════════════════════════
@@ -890,11 +896,14 @@ public sealed class AuthService(
         var httpContext = httpContextAccessor.HttpContext;
         if (httpContext is null) return;
 
+        var isLocalDev = IsLocalhostDevelopmentRequest(httpContext);
         httpContext.Response.Cookies.Append(RefreshCookieName, refreshToken, new CookieOptions
         {
             HttpOnly = true,
-            Secure = !IsLocalhostDevelopmentRequest(httpContext),
-            SameSite = SameSiteMode.Strict,
+            Secure = !isLocalDev,
+            // SameSite=None requires Secure; in http localhost dev we fall back
+            // to Lax which still allows same-site subresource requests.
+            SameSite = isLocalDev ? SameSiteMode.Lax : SameSiteMode.None,
             Path = RefreshCookiePath,
             Expires = expires,
             IsEssential = true,
@@ -905,11 +914,12 @@ public sealed class AuthService(
     {
         var httpContext = httpContextAccessor.HttpContext;
         if (httpContext is null) return;
+        var isLocalDev = IsLocalhostDevelopmentRequest(httpContext);
         httpContext.Response.Cookies.Delete(RefreshCookieName, new CookieOptions
         {
             HttpOnly = true,
-            Secure = !IsLocalhostDevelopmentRequest(httpContext),
-            SameSite = SameSiteMode.Strict,
+            Secure = !isLocalDev,
+            SameSite = isLocalDev ? SameSiteMode.Lax : SameSiteMode.None,
             Path = RefreshCookiePath,
         });
     }
