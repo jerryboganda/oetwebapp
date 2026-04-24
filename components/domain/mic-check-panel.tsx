@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { Mic, Volume2, CheckCircle2, AlertCircle, Loader2 } from 'lucide-react';
+import { Mic, Volume2, CheckCircle2, AlertCircle } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
 import { useState } from 'react';
@@ -21,7 +21,7 @@ export function MicCheckPanel({ onComplete, className }: MicCheckPanelProps) {
     playback: 'pending',
     noise: 'pending',
   });
-  const [error, setError] = useState<string>();
+  const [error] = useState<string>();
 
   const stepLabels: Record<CheckStep, { label: string; icon: typeof Mic }> = {
     permission: { label: 'Microphone Permission', icon: Mic },

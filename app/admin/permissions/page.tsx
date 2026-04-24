@@ -54,7 +54,7 @@ function permLabel(key: string) {
 }
 
 export default function PermissionsPage() {
-  const { isAuthenticated, role } = useAdminAuth();
+  useAdminAuth();
   const [tab, setTab] = useState<Tab>('templates');
   const [toast, setToast] = useState<ToastState>(null);
 

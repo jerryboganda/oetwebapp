@@ -1,8 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import { motion, useReducedMotion } from 'motion/react';
-import { motionTokens, prefersReducedMotion } from '@/lib/motion';
+import { motion } from 'motion/react';
 
 /* ─── Linear Progress Bar ─── */
 interface ProgressBarProps {

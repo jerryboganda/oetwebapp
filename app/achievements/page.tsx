@@ -8,7 +8,7 @@ import { Card } from '@/components/ui/card';
 import { ProgressBar } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { Button } from '@/components/ui/button';
 import { fetchXP, fetchStreak, fetchAchievements, applyStreakFreeze } from '@/lib/api';
 import { analytics } from '@/lib/analytics';

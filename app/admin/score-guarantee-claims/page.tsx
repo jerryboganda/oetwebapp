@@ -29,12 +29,12 @@ const statusBadge: Record<string, { label: string; variant: 'default' | 'success
 };
 
 export default function ScoreGuaranteeClaimsPage() {
-  const { isAuthenticated } = useAdminAuth();
+  useAdminAuth();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
   const [filters, setFilters] = useState<Record<string, string[]>>({ status: [] });
   const [claims, setClaims] = useState<AdminScoreGuaranteeClaim[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  const [page] = useState(1);
   const [reviewTarget, setReviewTarget] = useState<AdminScoreGuaranteeClaim | null>(null);
   const [reviewNote, setReviewNote] = useState('');
   const [isMutating, setIsMutating] = useState(false);

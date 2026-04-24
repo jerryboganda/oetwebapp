@@ -34,7 +34,6 @@ import type {
   ExpertOnboardingProfile,
   ExpertOnboardingQualifications,
   ExpertOnboardingRates,
-  ExpertOnboardingStatus,
   ExpertSchedule,
   ExpertScheduleDay,
 } from '@/lib/types/expert';

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { MotionItem } from '@/components/ui/motion-primitives';
-import { BookOpen, Search } from 'lucide-react';
+import { BookOpen } from 'lucide-react';
 import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { TaskCard } from '@/components/domain/task-card';

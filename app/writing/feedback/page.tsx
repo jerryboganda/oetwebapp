@@ -13,8 +13,7 @@ import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { AppShell } from '@/components/layout/app-shell';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { CriterionBreakdownCard } from '@/components/domain/criterion-breakdown-card';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { WritingIssueList, type IssueType } from '@/components/domain/writing-issue-list';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -22,7 +21,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchWritingResult } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
-import type { WritingResult, CriterionFeedback, AnchoredComment } from '@/lib/mock-data';
+import type { WritingResult, AnchoredComment } from '@/lib/mock-data';
 
 /* --- Inline Highlight helper (needs activeComment state) --- */
 function Highlight({ id, children, active, onToggle }: { id: string; children: React.ReactNode; active: boolean; onToggle: (id: string | null) => void }) {

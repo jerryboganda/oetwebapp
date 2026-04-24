@@ -39,6 +39,7 @@ export default function ExternalAuthCallbackPage() {
   // it from the URL the same way. This can be removed after one deploy cycle.
   useEffect(() => {
     if (typeof window === 'undefined') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- SSR guard only; runs once before hydration
       setTokenReady(true);
       return;
     }

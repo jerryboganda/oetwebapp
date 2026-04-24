@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { FileEdit, Plus, Pencil, Trash2, Users2 } from 'lucide-react';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain/learner-surface';
+import { LearnerPageHero } from '@/components/domain/learner-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';

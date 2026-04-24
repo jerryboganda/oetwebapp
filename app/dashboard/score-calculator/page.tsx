@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Calculator, Globe, GraduationCap, ArrowLeftRight, Search, Info } from 'lucide-react';
+import { Calculator, Globe, GraduationCap, ArrowLeftRight, Info } from 'lucide-react';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';

@@ -12,7 +12,6 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { BetterPhraseCard } from '@/components/domain/better-phrase-card';
 import { fetchPhrasingData } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { PhrasingSegment } from '@/lib/mock-data';
@@ -23,7 +22,7 @@ function BetterPhrasingContent() {
   const id = params?.id as string;
 
   // --- Data State ---
-  const [title, setTitle] = useState('');
+  const [, setTitle] = useState('');
   const [segments, setSegments] = useState<PhrasingSegment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(false);

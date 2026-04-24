@@ -50,7 +50,7 @@ describe('sidebarPermissionMap', () => {
 
   it('maps every sidebar entry to a known permission value', () => {
     const allPerms = Object.values(AdminPermission);
-    for (const [href, perms] of Object.entries(sidebarPermissionMap)) {
+    for (const [, perms] of Object.entries(sidebarPermissionMap)) {
       for (const p of perms) {
         expect(allPerms).toContain(p);
       }

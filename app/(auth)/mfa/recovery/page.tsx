@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { IconArrowRight, IconKey } from '@tabler/icons-react';
+import { IconArrowRight } from '@tabler/icons-react';
 import { useAuth } from '@/contexts/auth-context';
 import { resolvePostAuthDestination } from '@/lib/auth-routes';
 import { AuthScreenShell } from '@/components/auth/auth-screen-shell';

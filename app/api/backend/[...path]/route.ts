@@ -1,7 +1,13 @@
 export const dynamic = 'force-dynamic';
 export const runtime = 'nodejs';
 
-import { resolveProxyTarget, sanitizeProxyHeaders, sanitizeProxyResponseHeaders, validateRequestOrigin } from '../../../../lib/backend-proxy';
+import {
+  resolveProxyTarget,
+  sanitizeProxyHeaders,
+  sanitizeProxyResponseHeaders,
+  validateProxyCsrf,
+  validateRequestOrigin,
+} from '../../../../lib/backend-proxy';
 
 function isAnalyticsEventPath(path: string[]) {
   return path.length === 3 && path[0] === 'v1' && path[1] === 'analytics' && path[2] === 'events';
@@ -11,6 +17,9 @@ async function proxyRequest(request: Request, context: { params: Promise<{ path:
   // CSRF origin validation for state-changing methods
   if (!validateRequestOrigin(request)) {
     return new Response('Forbidden: invalid request origin', { status: 403 });
+  }
+  if (!validateProxyCsrf(request)) {
+    return new Response('Forbidden: missing or invalid CSRF token', { status: 403 });
   }
 
   const { path } = await context.params;

@@ -418,7 +418,6 @@ function TextAnswerEditor({ exercise, onUpdate }: { exercise: ExerciseDraft; onU
 
 function MatchingPairsEditor({ exercise, onUpdate }: { exercise: ExerciseDraft; onUpdate: (p: Partial<ExerciseDraft>) => void }) {
   const options = Array.isArray(exercise.options) ? (exercise.options as Array<{ left: string; right: string }>) : [];
-  const correct = Array.isArray(exercise.correctAnswer) ? (exercise.correctAnswer as Array<{ left: string; right: string }>) : options;
 
   function setPair(i: number, patch: { left?: string; right?: string }) {
     const next = options.slice();

@@ -83,8 +83,6 @@ describe('formatDateForExport', () => {
 describe('exportToCsv', () => {
   let createObjectURLMock: ReturnType<typeof vi.fn>;
   let revokeObjectURLMock: ReturnType<typeof vi.fn>;
-  let appendChildSpy: ReturnType<typeof vi.spyOn>;
-  let removeChildSpy: ReturnType<typeof vi.spyOn>;
   let clickSpy: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -109,11 +107,11 @@ describe('exportToCsv', () => {
       writable: true,
     });
 
-    appendChildSpy = vi.spyOn(document.body, 'appendChild').mockImplementation((node) => {
+    vi.spyOn(document.body, 'appendChild').mockImplementation((node) => {
       // Trigger click when appended
       return node;
     });
-    removeChildSpy = vi.spyOn(document.body, 'removeChild').mockImplementation((node) => node);
+    vi.spyOn(document.body, 'removeChild').mockImplementation((node) => node);
 
     vi.spyOn(document, 'createElement').mockImplementation(((tag: string): HTMLElement => {
       if (tag === 'a') {

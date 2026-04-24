@@ -542,6 +542,40 @@ export function pronunciationProjectedBand(overall0To100: number): PassFailResul
 }
 
 // ---------------------------------------------------------------------------
+// Pronunciation score tiers (advisory UI bucketing)
+// ---------------------------------------------------------------------------
+// Centralised tier buckets for per-word and per-criterion 0-100 scores so
+// UI components never hard-code 85/70 thresholds inline. The 70 boundary
+// mirrors the canonical pronunciation pass anchor (70 ≡ 350 scaled).
+
+/** Advisory tier for a pronunciation 0-100 score. */
+export type PronunciationScoreTier = 'excellent' | 'passing' | 'below' | 'empty';
+
+/** Canonical thresholds for {@link pronunciationScoreTier}. */
+export const PRONUNCIATION_TIER_THRESHOLDS = Object.freeze({
+  /** ≥ this is 'excellent'. */
+  excellent: 85,
+  /** ≥ this (and < excellent) is 'passing' — aligned to the 70 anchor. */
+  passing: 70,
+  /** ≥ this (and < passing) is 'below'; under it is 'empty' (no data). */
+  below: 1,
+});
+
+/**
+ * Map a pronunciation 0-100 score (per-word accuracy or per-criterion
+ * composite) to an advisory tier. UI components translate the tier into
+ * their own styling; the numeric thresholds live here, not in components.
+ */
+export function pronunciationScoreTier(score0To100: number): PronunciationScoreTier {
+  if (!Number.isFinite(score0To100)) return 'empty';
+  const s = Math.max(0, Math.min(100, score0To100));
+  if (s >= PRONUNCIATION_TIER_THRESHOLDS.excellent) return 'excellent';
+  if (s >= PRONUNCIATION_TIER_THRESHOLDS.passing) return 'passing';
+  if (s >= PRONUNCIATION_TIER_THRESHOLDS.below) return 'below';
+  return 'empty';
+}
+
+// ---------------------------------------------------------------------------
 // Conversation projection (advisory) — OET Speaking practice rubric
 // ---------------------------------------------------------------------------
 // 4 criteria (Intelligibility, Fluency, Appropriateness, Grammar & Expression)

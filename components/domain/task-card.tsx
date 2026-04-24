@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
 import { Badge, StatusBadge, type StatusType } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { ArrowRight, Clock, User } from 'lucide-react';
+import { ArrowRight, Clock } from 'lucide-react';
 
 /* ─── Task Card ─── */
 interface TaskCardProps {
@@ -20,7 +20,7 @@ interface TaskCardProps {
   className?: string;
 }
 
-export function TaskCard({ id, title, subtest, profession, duration, difficulty, description, tags, onStart, className }: TaskCardProps) {
+export function TaskCard({ title, subtest, profession, duration, difficulty, description, onStart, className }: TaskCardProps) {
   return (
     <Card hoverable className={cn('', className)}>
       <div className="flex flex-col gap-2">
@@ -62,7 +62,7 @@ interface SubmissionCardProps {
 }
 
 export function SubmissionCard({
-  id, title, subtest, date, status, score, grade, reviewStatus,
+  title, subtest, date, status, score, grade, reviewStatus,
   onViewFeedback, onRequestReview, className,
 }: SubmissionCardProps) {
   return (

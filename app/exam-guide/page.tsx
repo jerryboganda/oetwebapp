@@ -1,6 +1,6 @@
 'use client';
 
-import { BookOpen, Clock, FileText, Award, Headphones, PenLine, Mic } from 'lucide-react';
+import { BookOpen, Clock, Headphones, PenLine, Mic } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';

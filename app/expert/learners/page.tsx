@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { useRouter } from 'next/navigation';
 import { CheckCircle2, Clock3, Search, Sparkles, Users } from 'lucide-react';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Button } from '@/components/ui/button';
@@ -30,7 +29,6 @@ const RELEVANCE_OPTIONS = [
 ];
 
 export default function LearnersIndexPage() {
-  const router = useRouter();
   const [directory, setDirectory] = useState<ExpertLearnerDirectoryResponse | null>(null);
   const [metadata, setMetadata] = useState<ExpertQueueFilterMetadata | null>(null);
   const [status, setStatus] = useState<AsyncStatus>('loading');

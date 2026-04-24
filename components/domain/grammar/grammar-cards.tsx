@@ -3,7 +3,6 @@
 import Link from 'next/link';
 import { ArrowRight, CheckCircle2, Clock3, LayoutGrid, Sparkles, Target, Trophy, XCircle } from 'lucide-react';
 import { useMemo, type ElementType } from 'react';import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { ProgressBar } from '@/components/ui/progress';
 import { RadioGroup, Select, Textarea } from '@/components/ui/form-controls';

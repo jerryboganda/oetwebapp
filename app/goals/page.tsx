@@ -15,8 +15,6 @@ import { useEffect, useMemo, useState } from 'react';
 
 const SUB_TESTS: SubTest[] = ['Writing', 'Speaking', 'Reading', 'Listening'];
 const SCORE_FIELD_KEYS = ['targetWriting', 'targetSpeaking', 'targetReading', 'targetListening'] as const;
-type ScoreFieldKey = typeof SCORE_FIELD_KEYS[number];
-
 const EXAM_FAMILY_OPTIONS: Array<{ value: ExamFamilyCode; label: string }> = [
   { value: 'oet', label: 'OET' },
   { value: 'ielts', label: 'IELTS' },

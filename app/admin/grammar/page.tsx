@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import { BookMarked, Plus, Sparkles, Library, Wand2 } from 'lucide-react';
+import { BookMarked, Plus, Library, Wand2 } from 'lucide-react';
 import {
   adminListGrammarTopics,
   adminListGrammarLessonsV2,

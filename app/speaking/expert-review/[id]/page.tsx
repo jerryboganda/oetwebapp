@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, Suspense } from 'react';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import {
   Clock, CreditCard, MessageSquare, CheckCircle2,
   Target, Loader2, ArrowRight, Sparkles,
@@ -19,7 +19,6 @@ import type { TurnaroundOption } from '@/lib/mock-data';
 
 function ExpertReviewRequestContent() {
   const params = useParams();
-  const router = useRouter();
   const id = params?.id as string;
 
   // --- Data State ---

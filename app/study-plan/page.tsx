@@ -18,9 +18,8 @@ import {
   ChevronDown,
   ChevronUp,
   Target,
-  Flame,
 } from 'lucide-react';
-import { Button, Badge } from '@/components/ui';
+import { Button } from '@/components/ui';
 import { LearnerDashboardShell } from '@/components/layout';
 import { AsyncStateWrapper } from '@/components/state';
 import { useAnalytics } from '@/hooks/use-analytics';
@@ -100,7 +99,7 @@ export default function StudyPlanPage() {
     }
   };
 
-  const handleReschedule = (id: string) => {
+  const handleReschedule = (_id: string) => {
     track('plan_item_rescheduled');
   };
 

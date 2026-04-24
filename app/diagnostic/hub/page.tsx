@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { AsyncStateWrapper } from '@/components/state';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { StatusBadge, type StatusType } from '@/components/ui/badge';

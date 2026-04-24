@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Sparkles, CheckCircle2, X, RefreshCcw } from 'lucide-react';
+import { ArrowLeft, Sparkles, RefreshCcw } from 'lucide-react';
 import { AdminDashboardShell } from '@/components/layout';
 import {
   AdminRouteWorkspace,

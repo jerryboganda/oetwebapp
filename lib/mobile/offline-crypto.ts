@@ -13,7 +13,6 @@
  */
 
 const ALGORITHM = 'AES-GCM' as const;
-const KEY_LENGTH = 256 as const;
 const IV_LENGTH = 12; // 96-bit IV for AES-GCM
 const SALT_LENGTH = 16;
 

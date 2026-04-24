@@ -27,13 +27,13 @@ const statusBadge: Record<string, { label: string; variant: 'default' | 'success
 };
 
 export default function EscalationsPage() {
-  const { isAuthenticated, role } = useAdminAuth();
+  useAdminAuth();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
   const [filters, setFilters] = useState<Record<string, string[]>>({ status: [] });
   const [escalations, setEscalations] = useState<AdminReviewEscalation[]>([]);
   const [experts, setExperts] = useState<AdminUserRow[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  const [page] = useState(1);
   const [assignTarget, setAssignTarget] = useState<AdminReviewEscalation | null>(null);
   const [selectedExpertId, setSelectedExpertId] = useState('');
   const [resolveTarget, setResolveTarget] = useState<AdminReviewEscalation | null>(null);

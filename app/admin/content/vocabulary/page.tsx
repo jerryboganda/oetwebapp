@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { BookOpen, Plus, Upload, Sparkles, Trash2, Edit3, Download } from 'lucide-react';
+import { BookOpen, Plus, Upload, Sparkles, Trash2, Edit3 } from 'lucide-react';
 import { AdminDashboardShell } from '@/components/layout';
 import { AdminRouteWorkspace, AdminRoutePanel, AdminRouteSectionHeader } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';

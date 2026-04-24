@@ -68,7 +68,7 @@ export default function MobileQuickSessionPage() {
   const [revealed, setRevealed] = useState(false);
   const [elapsed, setElapsed] = useState(0);
   const [loading, setLoading] = useState(false);
-  const [usingFallback, setUsingFallback] = useState(false);
+  const [, setUsingFallback] = useState(false);
 
   /* timer */
   useEffect(() => {

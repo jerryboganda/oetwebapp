@@ -1,7 +1,6 @@
 import { cn } from '@/lib/utils';
 import { Card } from '@/components/ui/card';
 import { ScoreRangeBadge, Badge, StatusBadge, type StatusType } from '@/components/ui/badge';
-import { ProgressBar } from '@/components/ui/progress';
 import { type SubTest } from './subtest-switcher';
 
 interface SubtestResult {

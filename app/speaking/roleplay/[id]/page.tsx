@@ -4,7 +4,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
-  FileText, Edit3, Play, MessageCircle, User, ShieldCheck, AlertTriangle,
+  FileText, Play, MessageCircle, User, ShieldCheck, AlertTriangle,
 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';

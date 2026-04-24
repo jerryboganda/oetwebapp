@@ -23,7 +23,6 @@ import {
   Mail,
   MessageSquareMore,
   Mic,
-  MonitorSmartphone,
   NotebookText,
   Save,
   Settings2,

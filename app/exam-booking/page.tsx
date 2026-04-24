@@ -189,7 +189,7 @@ export default function ExamBookingPage() {
             <>
               <LearnerSurfaceSectionHeader title="Past" />
               <div className="space-y-2">
-                {past.map((booking, i) => (
+                {past.map((booking, _i) => (
                   <div key={booking.id} className="bg-background-light rounded-xl border border-border px-4 py-3 flex items-center gap-3 opacity-70">
                     <span className="font-medium text-navy text-sm">{booking.examTypeCode.toUpperCase()}</span>
                     <span className="text-sm text-muted/60">{booking.examDate}</span>

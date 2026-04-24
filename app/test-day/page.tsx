@@ -6,7 +6,6 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { analytics } from '@/lib/analytics';
 
 interface ChecklistItem {

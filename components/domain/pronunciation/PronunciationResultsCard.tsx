@@ -3,6 +3,7 @@
 import { useMemo } from 'react';
 import { CheckCircle2, ChevronRight, Info } from 'lucide-react';
 import Link from 'next/link';
+import { pronunciationScoreTier } from '@/lib/scoring';
 import { PhonemeHeatmap } from './PhonemeHeatmap';
 
 type ProblematicPhoneme = {
@@ -231,16 +232,22 @@ function StatTile({ label, value, hint }: { label: string; value: string; hint: 
   );
 }
 
+// Advisory colour bucketing delegates the numeric thresholds (85 / 70) to
+// `pronunciationScoreTier` in `lib/scoring.ts` so the 70 anchor lives in one place.
 function tintForScore(score: number) {
-  if (score >= 85) return 'text-emerald-600 dark:text-emerald-400';
-  if (score >= 70) return 'text-amber-600 dark:text-amber-400';
-  return 'text-rose-600 dark:text-rose-400';
+  switch (pronunciationScoreTier(score)) {
+    case 'excellent': return 'text-emerald-600 dark:text-emerald-400';
+    case 'passing':   return 'text-amber-600 dark:text-amber-400';
+    default:          return 'text-rose-600 dark:text-rose-400';
+  }
 }
 
 function barClass(score: number) {
-  if (score >= 85) return 'bg-emerald-500';
-  if (score >= 70) return 'bg-amber-500';
-  return 'bg-rose-500';
+  switch (pronunciationScoreTier(score)) {
+    case 'excellent': return 'bg-emerald-500';
+    case 'passing':   return 'bg-amber-500';
+    default:          return 'bg-rose-500';
+  }
 }
 
 function safeJsonArray<T = unknown>(value: string | null | undefined): T[] {

@@ -1,5 +1,4 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react';
-const routerPush = vi.fn();
 const fetchWritingTaskMock = vi.fn();
 const fetchWritingChecklistMock = vi.fn();
 const submitWritingDraftMock = vi.fn();

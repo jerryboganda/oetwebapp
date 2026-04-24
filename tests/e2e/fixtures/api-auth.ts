@@ -17,15 +17,6 @@ type AuthSessionResponse = {
   };
 };
 
-type WritingAttemptResponse = {
-  attemptId: string;
-  draftVersion?: number;
-};
-
-type WritingSubmitResponse = {
-  evaluationId: string;
-};
-
 type ReviewRequestResponse = {
   reviewRequestId: string;
 };

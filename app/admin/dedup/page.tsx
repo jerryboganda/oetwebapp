@@ -19,7 +19,7 @@ export default function AdminDedupPage() {
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
   const [groups, setGroups] = useState<DuplicateGroupSummary[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  const [page] = useState(1);
   const [scanning, setScanning] = useState(false);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);

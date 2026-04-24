@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Coins, RefreshCw, ShieldCheck, Info } from 'lucide-react';
+import { Coins, ShieldCheck, Info } from 'lucide-react';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';

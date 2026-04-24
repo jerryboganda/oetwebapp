@@ -16,7 +16,6 @@ import {
   Mic,
   TrendingUp,
   Info,
-  Search
 } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -95,7 +94,6 @@ export default function ReadinessCenter() {
 
   interface RiskFactor { label: string; severity: 'high' | 'medium' | 'low'; impact: number; description: string }
   const weakest = data.subTests.find((t) => t.isWeakest);
-  const avgReadiness = data.subTests.reduce((sum, t) => sum + t.readiness, 0) / (data.subTests.length || 1);
 
   const localRiskFactors: RiskFactor[] = [
     { label: 'Practice Consistency', severity: data.overallRisk === 'High' ? 'high' : data.overallRisk === 'Moderate' ? 'medium' : 'low', impact: data.overallRisk === 'High' ? 85 : data.overallRisk === 'Moderate' ? 55 : 25, description: 'Steady daily practice reduces overall risk substantially.' },

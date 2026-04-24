@@ -8,6 +8,24 @@ This repository now ships with a production Docker stack for:
 
 It is designed for a Linux VPS where Nginx Proxy Manager runs in Docker and proxies to the app over a shared Docker network.
 
+## Dockerfile & compose-file matrix
+
+The repo intentionally ships multiple Docker build + compose files. Pick the
+right pair for the scenario:
+
+| File | Purpose |
+| --- | --- |
+| `Dockerfile` | Primary multi-stage image — builds Next.js (`output: 'standalone'`) + .NET API from source. Used by every `docker-compose.production*.yml`. |
+| `Dockerfile.prebuilt` | Thin image that copies an already-built `.next/standalone` tree. Pair with `docker-compose.production.prebuilt-web.yml` when CI builds the web app and the VPS only needs to run it. |
+| `docker-compose.production.yml` | Default VPS stack (web + learner-api + postgres) joined to the external `npm_proxy` network for Nginx Proxy Manager. This is the one deployed at `app.oetwithdrhesham.co.uk`. |
+| `docker-compose.production.hostports.yml` | Same as above but exposes ports on the host (no reverse proxy) — use for bare-metal / single-host installs without NPM. |
+| `docker-compose.production.prebuilt-web.yml` | Production variant that pulls the prebuilt web image instead of building on the VPS. Use when VPS CPU/RAM is too small to build. |
+| `docker-compose.backend.yml` | Backend API + postgres only — for running the .NET API in Docker while developing the frontend locally via `npm run dev`. |
+| `docker-compose.desktop.yml` | Local full-stack with demo accounts for Electron/Playwright E2E. Not production-safe. |
+
+Rule of thumb: anything under `production.*.yml` must be launched with
+`--env-file .env.production`; other files read from `.env` or defaults.
+
 ## 0. Local production smoke test
 
 Before deploying, you can verify that the backend release build boots in `Production` mode with safe local overrides:

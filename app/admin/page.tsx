@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, ArrowRight, BarChart3, CreditCard, FileText, Flag, Inbox, Sparkles } from 'lucide-react';
+import { AlertTriangle, ArrowRight, BarChart3, CreditCard, FileText, Inbox, Sparkles } from 'lucide-react';
 import { AdminRouteFreshnessBadge, AdminRouteHero, AdminRoutePanel, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';

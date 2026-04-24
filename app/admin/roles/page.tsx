@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { Shield, ShieldCheck, ShieldAlert, Users, Search, Save, ChevronRight, CheckCircle2 } from 'lucide-react';
+import { Shield, ShieldCheck, Users, Search, Save, ChevronRight, CheckCircle2 } from 'lucide-react';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';

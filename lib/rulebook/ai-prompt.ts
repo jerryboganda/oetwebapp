@@ -24,7 +24,7 @@ import {
   OET_SCALED_PASS_C_PLUS,
   getWritingPassThreshold,
 } from '../scoring';
-import { criticalRules, loadRulebook } from './loader';
+import { loadRulebook } from './loader';
 import type {
   AiGroundingContext,
   AiGroundedPrompt,

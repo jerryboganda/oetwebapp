@@ -23,7 +23,7 @@ interface StudyPlanItemProps {
 }
 
 export function StudyPlanItem({
-  id, title, subtest, type, duration, rationale, status,
+  title, subtest, type, duration, rationale, status,
   scheduledDate, onStart, onMarkDone, onReschedule, onSwap, className,
 }: StudyPlanItemProps) {
   const isActionable = status === 'not_started' || status === 'in_progress';

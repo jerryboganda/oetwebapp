@@ -83,7 +83,7 @@ export async function clearSecureStorage(): Promise<boolean> {
 
 export async function storeAuthTokens(
   accessToken: string,
-  refreshToken: string,
+  refreshToken: string | null | undefined,
   expiresAt: string,
 ): Promise<boolean> {
   if (!Capacitor.isNativePlatform()) {
@@ -91,11 +91,18 @@ export async function storeAuthTokens(
   }
 
   try {
-    await Promise.all([
+    const writes: Promise<boolean>[] = [
       setSecureItem('auth_access_token', accessToken),
-      setSecureItem('auth_refresh_token', refreshToken),
       setSecureItem('auth_token_expiry', expiresAt),
-    ]);
+    ];
+
+    if (refreshToken) {
+      writes.push(setSecureItem('auth_refresh_token', refreshToken));
+    } else {
+      writes.push(removeSecureItem('auth_refresh_token'));
+    }
+
+    await Promise.all(writes);
     return true;
   } catch {
     return false;

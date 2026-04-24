@@ -3,7 +3,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { AnimatePresence } from 'motion/react';
 import { Store, Search, Upload, ChevronRight, Filter, BookOpen, Mic, Pen, Headphones, Clock, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
-import Link from 'next/link';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, ExamTypeBadge } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';

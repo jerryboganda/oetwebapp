@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, act } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 
 const { mockPush, mockReplace, mockTrack } = vi.hoisted(() => ({

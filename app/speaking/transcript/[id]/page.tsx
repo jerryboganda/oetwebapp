@@ -35,7 +35,7 @@ export default function SpeakingTranscriptPage() {
   const [currentTime, setCurrentTime] = useState(0);
   const [lowBandwidthMode, setLowBandwidthMode] = useState(false);
   const [selectedMarker, setSelectedMarker] = useState<TranscriptMarker | null>(null);
-  const [seekToTime, setSeekToTime] = useState<number | null>(null);
+  const [seekToTime] = useState<number | null>(null);
 
   useEffect(() => {
     if (!resultId) return;

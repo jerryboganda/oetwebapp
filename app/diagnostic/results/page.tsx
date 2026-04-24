@@ -4,7 +4,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { AsyncStateWrapper } from '@/components/state';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { ReadinessMeter } from '@/components/domain/readiness-meter';
 import { WeakestLinkCard } from '@/components/domain/weakest-link-card';
 import { CriterionBreakdownCard } from '@/components/domain/criterion-breakdown-card';

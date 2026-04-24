@@ -28,8 +28,6 @@ import { Button } from '@/components/ui/button';
 import { Input, Select, Textarea } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import {
-  fetchAdminUsers,
-  fetchAdminUserDetail,
   inviteAdminUser,
   updateAdminUserStatus,
   deleteAdminUser,
@@ -40,7 +38,7 @@ import {
 } from '@/lib/api';
 import { getAdminUsersPageData, getAdminUserDetailData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
-import type { AdminUserRow, AdminUserDetail, AdminUsersPageData } from '@/lib/types/admin';
+import type { AdminUserRow, AdminUserDetail } from '@/lib/types/admin';
 
 /* ─────────────────────── types ─────────────────────── */
 

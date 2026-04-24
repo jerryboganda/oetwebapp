@@ -1,5 +1,4 @@
 import { cn } from '@/lib/utils';
-import { Badge } from '@/components/ui/badge';
 
 export type FlagType = 'pronunciation' | 'fluency' | 'grammar' | 'vocabulary' | 'empathy' | 'structure';
 

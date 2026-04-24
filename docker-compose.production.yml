@@ -51,6 +51,7 @@ services:
     environment:
       ASPNETCORE_ENVIRONMENT: Production
       ASPNETCORE_URLS: http://+:8080
+      AllowedHosts: ${API_ALLOWED_HOSTS:?Set API_ALLOWED_HOSTS to the public API host name}
       ConnectionStrings__DefaultConnection: Host=postgres;Port=5432;Database=${POSTGRES_DB};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}
       AUTHTOKENS__ISSUER: ${AUTHTOKENS__ISSUER}
       AUTHTOKENS__AUDIENCE: ${AUTHTOKENS__AUDIENCE}
@@ -76,6 +77,7 @@ services:
       SMTP__ENABLESSL: ${SMTP__ENABLESSL:-true}
       SMTP__FROMEMAIL: ${SMTP__FROMEMAIL}
       SMTP__FROMNAME: ${SMTP__FROMNAME:-OET Learner}
+      Billing__AllowSandboxFallbacks: ${BILLING__ALLOWSANDBOXFALLBACKS:-false}
       Billing__Stripe__SecretKey: ${BILLING__STRIPE__SECRETKEY}
       Billing__Stripe__SuccessUrl: ${BILLING__STRIPE__SUCCESSURL}
       Billing__Stripe__CancelUrl: ${BILLING__STRIPE__CANCELURL}

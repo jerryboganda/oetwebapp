@@ -1,5 +1,5 @@
 import { screen } from '@testing-library/react';
-const { mockFetchSettingsData, mockFetchUserProfile, mockUpdateSettingsSection, mockTrack, mockPush } = vi.hoisted(() => ({
+const { mockFetchSettingsData, mockFetchUserProfile, mockUpdateSettingsSection, mockTrack } = vi.hoisted(() => ({
   mockFetchSettingsData: vi.fn(),
   mockFetchUserProfile: vi.fn(),
   mockUpdateSettingsSection: vi.fn(),

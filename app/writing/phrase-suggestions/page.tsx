@@ -1,12 +1,11 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useState } from 'react';
 import { Sparkles, Check, X, ChevronDown, ChevronUp, BookOpen, RefreshCw, BarChart3 } from 'lucide-react';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
@@ -71,14 +70,6 @@ export default function PhraseSuggestionsPage() {
   const [resolving, setResolving] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [filter, setFilter] = useState<string | null>(null);
-
-  /* load stats for current attempt */
-  const loadStats = useCallback(async (aid: string) => {
-    try {
-      const s = await apiRequest<CoachStats>(`/v1/writing/attempts/${aid}/coach-stats`);
-      setStats(s);
-    } catch { /* */ }
-  }, []);
 
   /* run coach check */
   const runCheck = async () => {

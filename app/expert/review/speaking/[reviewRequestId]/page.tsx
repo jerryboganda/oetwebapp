@@ -56,8 +56,6 @@ const CLINICAL_BAND_OPTIONS = [
   { value: '0', label: '0 (Ineffective use)' },
 ];
 
-const BAND_OPTIONS = LINGUISTIC_BAND_OPTIONS;
-
 type DraftCandidate = {
   reviewId: string;
   scores: Record<string, number>;

@@ -12,14 +12,6 @@ import { analytics } from '@/lib/analytics';
 import { cancelFreeze, confirmFreeze, fetchFreezeStatus, requestFreeze } from '@/lib/api';
 import type { LearnerFreezeStatus, FreezePolicy, FreezeEligibility } from '@/lib/types/freeze';
 
-function toLocalInputValue(value: string | null | undefined): string {
-  if (!value) return '';
-  const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '';
-  const offset = date.getTimezoneOffset() * 60_000;
-  return new Date(date.getTime() - offset).toISOString().slice(0, 16);
-}
-
 function toIsoOrNull(value: string): string | null {
   if (!value) return null;
   const date = new Date(value);

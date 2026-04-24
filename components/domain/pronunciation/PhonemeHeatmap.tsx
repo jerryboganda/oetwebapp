@@ -1,5 +1,7 @@
 'use client';
 
+import { pronunciationScoreTier } from '@/lib/scoring';
+
 type WordScore = {
   word: string;
   accuracyScore: number;
@@ -29,11 +31,19 @@ export function PhonemeHeatmap({ wordScores }: { wordScores: WordScore[] }) {
   );
 }
 
+// Advisory per-word colour bucketing. Numeric thresholds (85 / 70) live in
+// `pronunciationScoreTier` (`lib/scoring.ts`) so the 70 anchor is centralised.
 function bucketClass(score: number) {
-  if (score >= 85) return 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800';
-  if (score >= 70) return 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-800';
-  if (score >= 1) return 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-200 dark:border-rose-800';
-  return 'bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700';
+  switch (pronunciationScoreTier(score)) {
+    case 'excellent':
+      return 'bg-emerald-50 text-emerald-800 border-emerald-200 dark:bg-emerald-900/30 dark:text-emerald-200 dark:border-emerald-800';
+    case 'passing':
+      return 'bg-amber-50 text-amber-800 border-amber-200 dark:bg-amber-900/30 dark:text-amber-200 dark:border-amber-800';
+    case 'below':
+      return 'bg-rose-50 text-rose-800 border-rose-200 dark:bg-rose-900/30 dark:text-rose-200 dark:border-rose-800';
+    default:
+      return 'bg-gray-50 text-gray-600 border-gray-200 dark:bg-gray-800 dark:text-gray-400 dark:border-gray-700';
+  }
 }
 
 function friendlyError(errorType: string) {

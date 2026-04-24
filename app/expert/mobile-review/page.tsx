@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { ChevronLeft, ChevronRight, Star, Send, Save, FileText, Mic, AlertCircle, CheckCircle2, Clock } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Send, Save, FileText, Mic, CheckCircle2, Clock } from 'lucide-react';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -69,7 +69,7 @@ export default function ExpertMobileReviewPage() {
   const [scores, setScores] = useState<Record<string, number | null>>({});
   const [comment, setComment] = useState('');
   const [submitting, setSubmitting] = useState(false);
-  const [submitted, setSubmitted] = useState(false);
+  const [, setSubmitted] = useState(false);
 
   /* load queue */
   useEffect(() => {

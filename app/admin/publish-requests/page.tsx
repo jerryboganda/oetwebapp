@@ -22,14 +22,6 @@ import type { AdminPublishRequest } from '@/lib/types/admin';
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
-const statusBadge: Record<string, { label: string; variant: 'default' | 'success' | 'danger' | 'info' | 'warning' }> = {
-  pending: { label: 'Pending', variant: 'default' },
-  editor_review: { label: 'Editor Review', variant: 'info' },
-  publisher_approval: { label: 'Publisher Approval', variant: 'warning' },
-  approved: { label: 'Published', variant: 'success' },
-  rejected: { label: 'Rejected', variant: 'danger' },
-};
-
 const stageBadge: Record<string, { label: string; variant: 'default' | 'info' }> = {
   editor_review: { label: 'Editor Review', variant: 'info' },
   publisher_approval: { label: 'Publisher Approval', variant: 'default' },
@@ -68,7 +60,7 @@ export default function PublishRequestsPage() {
   const [filters, setFilters] = useState<Record<string, string[]>>({ status: [], stage: [] });
   const [requests, setRequests] = useState<AdminPublishRequest[]>([]);
   const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  const [page] = useState(1);
   const [reviewTarget, setReviewTarget] = useState<AdminPublishRequest | null>(null);
   const [reviewNote, setReviewNote] = useState('');
   const [rejectionReason, setRejectionReason] = useState('');

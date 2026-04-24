@@ -226,7 +226,7 @@ export default function AdminCommunityPage() {
                   data={threads}
                   keyExtractor={(row) => row.id}
                   onRowClick={(row) => router.push(`/community/threads/${row.id}`)}
-                  mobileCardRender={(row, index) => (
+                  mobileCardRender={(row, _index) => (
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-1.5">
                         {row.isPinned && (

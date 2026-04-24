@@ -10,7 +10,6 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert, Toast } from '@/components/ui/alert';
-import { EmptyState } from '@/components/ui/empty-error';
 import { getReferralData } from '@/lib/learner-data';
 import { generateReferralCode } from '@/lib/api';
 import { analytics } from '@/lib/analytics';

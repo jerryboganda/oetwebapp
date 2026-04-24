@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { Shield, ToggleLeft, ToggleRight, Search, Filter, Save, AlertTriangle, CheckCircle2, Percent, Tag, Layers } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Shield, ToggleLeft, ToggleRight, Search, Save, AlertTriangle, CheckCircle2, Percent, Tag, Layers } from 'lucide-react';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -21,13 +21,6 @@ interface FeatureFlag {
   owner: string | null;
   createdAt: string;
   updatedAt: string;
-}
-
-interface TierRule {
-  flagId: string;
-  flagName: string;
-  freeLimit: number | null;   // null = unlimited for free, 0 = blocked
-  premiumLimit: number | null; // null = unlimited
 }
 
 /* ── api helper ───────────────────────────────── */

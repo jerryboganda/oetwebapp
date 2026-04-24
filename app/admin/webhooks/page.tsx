@@ -27,13 +27,13 @@ const statusColors: Record<string, 'default' | 'success' | 'danger' | 'muted'> =
 };
 
 export default function WebhooksPage() {
-  const { isAuthenticated, role } = useAdminAuth();
+  useAdminAuth();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
   const [filters, setFilters] = useState<Record<string, string[]>>({ status: [], gateway: [] });
   const [events, setEvents] = useState<AdminWebhookEvent[]>([]);
   const [summary, setSummary] = useState<AdminWebhookSummary | null>(null);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
+  const [, setTotal] = useState(0);
+  const [page] = useState(1);
   const [isMutating, setIsMutating] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
 

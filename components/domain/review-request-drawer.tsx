@@ -1,6 +1,5 @@
 'use client';
 
-import { cn } from '@/lib/utils';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { Drawer } from '@/components/ui/modal';
 import { Button } from '@/components/ui/button';
@@ -39,7 +38,7 @@ export function ReviewRequestDrawer({
   const [turnaround, setTurnaround] = useState('standard');
   const [focusArea, setFocusArea] = useState('overall');
   const [notes, setNotes] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('credits');
+  const [paymentMethod] = useState('credits');
 
   const creditCost = turnaround === 'express' ? 3 : turnaround === 'priority' ? 2 : 1;
   const hasCredits = availableCredits >= creditCost;

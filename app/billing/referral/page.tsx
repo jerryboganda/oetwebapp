@@ -2,9 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Gift, Copy, CheckCircle2, Users, DollarSign, Share2, RefreshCw } from 'lucide-react';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerDashboardShell } from '@/components/layout';
