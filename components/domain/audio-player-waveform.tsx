@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useEffectEvent, useRef, useState } from 'react';
 import WaveSurfer from 'wavesurfer.js';
 import { Button } from '@/components/ui/button';
 import { getMicroTap } from '@/lib/motion';
@@ -62,10 +62,12 @@ export function AudioPlayerWaveform({ audioUrl, onTimeUpdate, seekToTime, classN
     };
   }, [audioUrl]);
 
+  const handleTimeUpdate = useEffectEvent((currentTime: number) => {
+    if (onTimeUpdate) onTimeUpdate(currentTime);
+  });
+
   useEffect(() => {
     if (!containerRef.current || !resolvedAudioUrl) return;
-    setIsReady(false);
-    setLoadError(null);
 
     const ws = WaveSurfer.create({
       container: containerRef.current,
@@ -95,13 +97,12 @@ export function AudioPlayerWaveform({ audioUrl, onTimeUpdate, seekToTime, classN
     ws.on('play', () => setIsPlaying(true));
     ws.on('pause', () => setIsPlaying(false));
     ws.on('timeupdate', (currentTime) => {
-      if (onTimeUpdate) onTimeUpdate(currentTime);
+      handleTimeUpdate(currentTime);
     });
 
     return () => {
       ws.destroy();
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- WaveSurfer instance lifecycle: re-creating on callback changes would destroy/rebuild the waveform
   }, [resolvedAudioUrl]);
 
   useEffect(() => {
