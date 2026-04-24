@@ -71,18 +71,25 @@ const NEXT_FRAMEWORK_EXPORTS = new Set([
  * normalised (forward-slash) path portion of each ts-prune line.
  */
 const IGNORED_PATH_SUBSTRINGS = [
-  '/app/',               // App Router pages/layouts/route handlers
-  'app/',                // Leading match when ts-prune emits relative paths
-  '/tests/',
-  'tests/',
-  '/__tests__/',
-  '/__mocks__/',
+  // Auto-generated / vendored / build-output paths — checked FIRST so that
+  // e.g. '.next/types/app/**' does not fall into the '/app/' bucket below.
   '/.next/',
+  '.next/',
   '/node_modules/',
+  'node_modules/',
   '/dist/',
   '/coverage/',
   '/playwright-report/',
   '/output/',
+  // Test directories
+  '/tests/',
+  'tests/',
+  '/__tests__/',
+  '/__mocks__/',
+  // Next.js App Router pages/layouts/route handlers (framework-consumed)
+  '/app/',
+  'app/',
+  // Root config files
   'vitest.setup.ts',
   'vitest.config.ts',
   'playwright.config.ts',
@@ -91,6 +98,7 @@ const IGNORED_PATH_SUBSTRINGS = [
   'eslint.config.mjs',
   'postcss.config.mjs',
   'capacitor.config.ts',
+  // Platform shells
   'capacitor-web/',
   'electron/',
 ];
