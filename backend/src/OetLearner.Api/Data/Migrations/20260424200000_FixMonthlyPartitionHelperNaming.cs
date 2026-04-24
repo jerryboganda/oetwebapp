@@ -5,22 +5,12 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace OetLearner.Api.Data.Migrations
 {
     /// <summary>
-    /// Installs the pl/pgsql helper <c>public.ensure_monthly_partition(parent regclass, part_col text, target_month date)</c>.
-    ///
-    /// <para>Given a <em>range-partitioned</em> parent table and a target month,
-    /// the function idempotently creates the month's partition if one does
-    /// not already exist. If the parent is <em>not</em> partitioned (the
-    /// common case until ops run a dedicated conversion during a maintenance
-    /// window), the function returns a warning and does nothing, making it
-    /// safe to call from a scheduler.</para>
-    ///
-    /// <para>This migration does NOT convert any existing table to a partitioned
-    /// layout — that requires a table rewrite and a maintenance window. Once
-    /// ops convert a table (e.g. AnalyticsEvents, AuditEvents, AiUsageRecords),
-    /// <see cref="OetLearner.Api.Services.PartitionMaintenanceWorker"/> will
-    /// automatically keep next-month partitions rolling.</para>
+    /// Replaces public.ensure_monthly_partition with a version that derives
+    /// partition names from pg_class.relname instead of regclass::text. This
+    /// avoids quoted parent names such as "AnalyticsEvents"_p2026_04 and keeps
+    /// the helper idempotent after the partition-conversion migration.
     /// </summary>
-    public partial class AddMonthlyPartitionHelper : Migration
+    public partial class FixMonthlyPartitionHelperNaming : Migration
     {
         private const string HelperFunctionSql = @"
             CREATE OR REPLACE FUNCTION public.ensure_monthly_partition(
@@ -38,22 +28,21 @@ namespace OetLearner.Api.Data.Migrations
                 range_end   date := (date_trunc('month', target_month) + interval '1 month')::date;
                 is_partitioned boolean;
             BEGIN
-                -- Parent partitioning check (only range-partitioned parents are supported).
-                SELECT (c.relkind = 'p')
-                  INTO is_partitioned
+                SELECT n.nspname, c.relname, (c.relkind = 'p')
+                  INTO parent_schema, parent_name, is_partitioned
                   FROM pg_class c
+                  JOIN pg_namespace n ON n.oid = c.relnamespace
                  WHERE c.oid = parent;
+
+                IF parent_name IS NULL THEN
+                    RAISE NOTICE 'ensure_monthly_partition: % does not exist; skipping', parent;
+                    RETURN;
+                END IF;
 
                 IF NOT COALESCE(is_partitioned, false) THEN
                     RAISE NOTICE 'ensure_monthly_partition: % is not partitioned; skipping', parent;
                     RETURN;
                 END IF;
-
-                SELECT n.nspname, c.relname
-                  INTO parent_schema, parent_name
-                  FROM pg_class c
-                  JOIN pg_namespace n ON n.oid = c.relnamespace
-                 WHERE c.oid = parent;
 
                 part_name := format('%s_p%s', parent_name, to_char(range_start, 'YYYY_MM'));
 
