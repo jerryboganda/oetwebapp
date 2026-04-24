@@ -328,6 +328,24 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
             modelBuilder.Entity<Evaluation>().Property(x => x.CriterionScoresJson).HasColumnType("jsonb");
             modelBuilder.Entity<Evaluation>().Property(x => x.FeedbackItemsJson).HasColumnType("jsonb");
             modelBuilder.Entity<PaymentWebhookEvent>().Property(x => x.PayloadJson).HasColumnType("jsonb");
+
+            // Composite primary keys on the range-partitioned append-only
+            // tables. Postgres requires every UNIQUE/PK on a partitioned
+            // table to include the partition key, so the PK is widened from
+            // (Id) to (partitionCol, Id). Id alone remains effectively unique
+            // (ULID), and existing equality-on-Id queries keep working — at
+            // worst they scan across partitions for the handful of audit/lookup
+            // paths that do so. Scoped to Npgsql because the SQLite test
+            // harness keeps these as plain heap tables with a single-col PK.
+            //
+            // Paired with migration 20260424190000_ConvertAppendOnlyTablesToPartitioned.
+            // If the migration's opt-in GUC (oet.enable_partition_conversion)
+            // is left false, the DB retains its single-col PK — the composite
+            // HasKey declaration below is still harmless because inserts and
+            // equality lookups on Id continue to work unchanged.
+            modelBuilder.Entity<AnalyticsEventRecord>().HasKey(x => new { x.OccurredAt, x.Id });
+            modelBuilder.Entity<AuditEvent>().HasKey(x => new { x.OccurredAt, x.Id });
+            modelBuilder.Entity<AiUsageRecord>().HasKey(x => new { x.CreatedAt, x.Id });
         }
         modelBuilder.Entity<Wallet>().HasIndex(x => x.UserId);
         modelBuilder.Entity<ReviewRequest>().Property(x => x.State).IsConcurrencyToken();

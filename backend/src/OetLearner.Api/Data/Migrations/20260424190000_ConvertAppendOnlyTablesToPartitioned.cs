@@ -62,6 +62,7 @@ namespace OetLearner.Api.Data.Migrations
                 v_cur_month date := date_trunc('month', now())::date;
                 v_part_name text;
                 v_part_start date;
+                v_idx record;
             BEGIN
                 -- Opt-in gate: no-op unless explicitly enabled.
                 BEGIN
@@ -97,7 +98,7 @@ namespace OetLearner.Api.Data.Migrations
                 -- include the partition column; we recreate as composite below).
                 -- INCLUDING CONSTRAINTS copies CHECK constraints but not PK.
                 EXECUTE format(
-                    'CREATE TABLE public.""{TABLE}"" (LIKE public.""{TABLE}_legacy"" INCLUDING DEFAULTS INCLUDING STORAGE) PARTITION BY RANGE (""{COL}"")');
+                    'CREATE TABLE public.""{TABLE}"" (LIKE public.""{TABLE}_legacy"" INCLUDING DEFAULTS INCLUDING STORAGE INCLUDING IDENTITY) PARTITION BY RANGE (""{COL}"")');
 
                 -- Composite PK: (partition column, original Id). Postgres
                 -- requires the partition column in every unique constraint.
@@ -128,9 +129,36 @@ namespace OetLearner.Api.Data.Migrations
                 -- Copy rows across.
                 EXECUTE format('INSERT INTO public.""{TABLE}"" SELECT * FROM public.""{TABLE}_legacy""');
 
+                -- Replay every non-PK index from the legacy table onto the
+                -- new partitioned parent. pg_indexes.indexdef is a full
+                -- CREATE INDEX statement including qualified table name; we
+                -- substitute the legacy table name out and give each index
+                -- a fresh name by stripping the legacy suffix from indexrelname.
+                FOR v_idx IN
+                    SELECT indexrelname,
+                           pg_get_indexdef(indexrelid) AS indexdef
+                    FROM pg_stat_all_indexes s
+                    JOIN pg_index i ON i.indexrelid = s.indexrelid
+                    WHERE s.schemaname = 'public'
+                      AND s.relname = '{TABLE}_legacy'
+                      AND NOT i.indisprimary
+                LOOP
+                    -- indexrelname looks like ""IX_{TABLE}_legacy_..."" after rename.
+                    -- Rewrite both the index name and the ON target so the
+                    -- new index lives on the partitioned parent.
+                    EXECUTE replace(
+                        replace(v_idx.indexdef,
+                                '""{TABLE}_legacy""',
+                                '""{TABLE}""'),
+                        '{TABLE}_legacy',
+                        '{TABLE}');
+                END LOOP;
+
                 EXECUTE 'DROP TABLE public.""{TABLE}_legacy""';
 
-                -- Recreate BRIN index from migration 20260424150000.
+                -- Safety net: re-add the BRIN index from migration 20260424150000
+                -- if the loop above somehow missed it (e.g. the legacy table
+                -- pre-dated that migration in a fresh DB).
                 EXECUTE format(
                     'CREATE INDEX IF NOT EXISTS ""IX_{TABLE}_{COL}_brin"" ON public.""{TABLE}"" USING BRIN (""{COL}"")');
 
