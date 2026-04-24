@@ -22,9 +22,9 @@ public record PasswordSignInRequest(
     string Password,
     bool RememberMe);
 
-public record RefreshTokenRequest(string RefreshToken);
+public record RefreshTokenRequest(string? RefreshToken);
 
-public record SignOutRequest(string RefreshToken);
+public record SignOutRequest(string? RefreshToken);
 
 public record SendEmailOtpRequest(
     string Email,

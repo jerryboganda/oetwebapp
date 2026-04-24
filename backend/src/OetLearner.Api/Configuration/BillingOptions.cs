@@ -3,7 +3,7 @@ namespace OetLearner.Api.Configuration;
 public sealed class BillingOptions
 {
     public string? CheckoutBaseUrl { get; set; }
-    public bool AllowSandboxFallbacks { get; set; } = true;
+    public bool AllowSandboxFallbacks { get; set; } = false;
     public StripeBillingOptions Stripe { get; set; } = new();
     public PayPalBillingOptions PayPal { get; set; } = new();
 }

@@ -102,6 +102,20 @@ if (!builder.Environment.IsDevelopment())
     {
         throw new InvalidOperationException("Billing:CheckoutBaseUrl must be configured as an absolute URL outside the Development environment.");
     }
+
+    if (billingOptions.AllowSandboxFallbacks)
+    {
+        throw new InvalidOperationException("Billing:AllowSandboxFallbacks must be false outside the Development environment.");
+    }
+
+    if (string.IsNullOrWhiteSpace(billingOptions.Stripe.SecretKey)
+        || string.IsNullOrWhiteSpace(billingOptions.Stripe.SuccessUrl)
+        || string.IsNullOrWhiteSpace(billingOptions.Stripe.CancelUrl)
+        || string.IsNullOrWhiteSpace(billingOptions.Stripe.WebhookSecret))
+    {
+        throw new InvalidOperationException(
+            "Configure Billing:Stripe:SecretKey, Billing:Stripe:SuccessUrl, Billing:Stripe:CancelUrl, and Billing:Stripe:WebhookSecret outside the Development environment.");
+    }
 }
 
 builder.WebHost.ConfigureKestrel(options =>
@@ -315,6 +329,11 @@ void ConfigureJwtBearer(JwtBearerOptions options)
         ValidAudience = authTokenOptions.Audience,
         NameClaimType = ClaimTypes.NameIdentifier,
         RoleClaimType = ClaimTypes.Role,
+        // L1 (security): default ClockSkew is 5 minutes. Our access tokens are
+        // short-lived (~15m) and the fleet is NTP-synced, so tighten to 60s
+        // to reduce the window in which a revoked/expired token is still
+        // accepted.
+        ClockSkew = TimeSpan.FromSeconds(60),
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(authTokenOptions.AccessTokenSigningKey!))
     };
 
@@ -422,19 +441,25 @@ else
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy("LearnerOnly", policy => policy.RequireAuthenticatedUser().RequireRole("learner"));
+    options.AddPolicy("LearnerOnly", policy => policy.RequireAuthenticatedUser().RequireRole(ApplicationUserRoles.Learner));
     options.AddPolicy("ExpertOnly", policy => policy
         .RequireAuthenticatedUser()
-        .RequireRole("expert")
+        .RequireRole(ApplicationUserRoles.Expert)
         .RequireClaim(AuthTokenService.IsEmailVerifiedClaimType, bool.TrueString.ToLowerInvariant()));
     options.AddPolicy("AdminOnly", policy => policy
         .RequireAuthenticatedUser()
-        .RequireRole("admin")
+        .RequireRole(ApplicationUserRoles.Admin)
         .RequireClaim(AuthTokenService.IsEmailVerifiedClaimType, bool.TrueString.ToLowerInvariant()));
     options.AddPolicy("SponsorOnly", policy => policy
         .RequireAuthenticatedUser()
-        .RequireRole("sponsor")
+        .RequireRole(ApplicationUserRoles.Sponsor)
         .RequireClaim(AuthTokenService.IsEmailVerifiedClaimType, bool.TrueString.ToLowerInvariant()));
+    options.AddPolicy("RulebookReader", policy => policy
+        .RequireAuthenticatedUser()
+        .RequireRole(ApplicationUserRoles.Learner, ApplicationUserRoles.Expert, ApplicationUserRoles.Admin));
+    options.AddPolicy("AiCaller", policy => policy
+        .RequireAuthenticatedUser()
+        .RequireRole(ApplicationUserRoles.Learner, ApplicationUserRoles.Expert, ApplicationUserRoles.Admin));
 
     // Granular admin permission policies
     options.AddPolicy("AdminContentRead", policy => policy
@@ -1004,7 +1029,9 @@ app.MapHub<ConversationHub>("/v1/conversations/hub").RequireAuthorization();
 await using (var scope = app.Services.CreateAsyncScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
-    await DatabaseBootstrapper.InitializeAsync(db, app.Environment, bootstrapOptions, storageOptions);
+    var storage = scope.ServiceProvider
+        .GetRequiredService<OetLearner.Api.Services.Content.IFileStorage>();
+    await DatabaseBootstrapper.InitializeAsync(db, app.Environment, bootstrapOptions, storageOptions, storage);
 
     // Sync AI provider key from env (AI__ApiKey, AI__BaseUrl, AI__DefaultModel)
     // into the AiProviders row so the registry-backed provider resolves it at

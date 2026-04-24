@@ -6,12 +6,20 @@ import {
   saveStoredSession,
   clearStoredSession,
 } from './auth-storage';
+import { persistWebStorageKey } from './mobile/native-storage';
 import type { AuthSession } from './types/auth';
 
 vi.mock('./mobile/native-storage', () => ({
   hydrateWebStorageKeys: vi.fn(),
+  isNativeMobilePlatform: vi.fn(() => false),
   persistWebStorageKey: vi.fn(),
   removeWebStorageKey: vi.fn(),
+}));
+
+vi.mock('./mobile/secure-storage', () => ({
+  clearAuthTokens: vi.fn(async () => undefined),
+  getStoredAuthTokens: vi.fn(),
+  storeAuthTokens: vi.fn(),
 }));
 
 function getCookie(name: string): string | undefined {
@@ -72,11 +80,23 @@ describe('clearAuthIndicatorCookie', () => {
 });
 
 describe('saveStoredSession sets cookie', () => {
-  beforeEach(clearAllCookies);
+  beforeEach(() => {
+    clearAllCookies();
+    vi.mocked(persistWebStorageKey).mockClear();
+  });
 
   it('sets auth indicator cookie when saving session', () => {
     saveStoredSession(fakeSession, 'local');
     expect(getCookie('oet_auth')).toBe('1');
+  });
+
+  it('persists only a sanitized session snapshot to web storage', () => {
+    saveStoredSession(fakeSession, 'local');
+
+    const persistedPayload = JSON.parse(String(vi.mocked(persistWebStorageKey).mock.calls[0]?.[1]));
+    expect(persistedPayload).not.toHaveProperty('accessToken');
+    expect(persistedPayload).not.toHaveProperty('refreshToken');
+    expect(persistedPayload.currentUser.email).toBe(fakeSession.currentUser.email);
   });
 });
 

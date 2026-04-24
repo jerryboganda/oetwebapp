@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.WebUtilities;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Contracts;
@@ -28,9 +29,15 @@ public sealed class AuthService(
     IWebHostEnvironment environment,
     IDataProtectionProvider dataProtectionProvider,
     IHttpContextAccessor httpContextAccessor,
+    IMemoryCache memoryCache,
     TimeProvider timeProvider)
 {
     private const int AllowedAuthenticatorDriftWindows = 1;
+    // H2 (security): cap MFA/recovery attempts per account inside the
+    // challenge lifetime. Stored in the in-process memory cache; on multi-node
+    // deployments this partitions per node which is still a strict tightening
+    // over the previous unbounded behaviour.
+    private const int MaxMfaAttempts = 5;
     private readonly bool _allowLocalDemoWithoutMfa = environment.IsDevelopment() && authOptions.Value.UseDevelopmentAuth;
 
     private readonly string _authenticatorIssuer = string.IsNullOrWhiteSpace(authTokenOptions.Value.AuthenticatorIssuer)
@@ -39,6 +46,15 @@ public sealed class AuthService(
     private readonly TimeSpan _mfaChallengeLifetime = authTokenOptions.Value.OtpLifetime;
     private readonly IDataProtector _authenticatorSecretProtector = dataProtectionProvider.CreateProtector("AuthService.AuthenticatorSecret");
     private readonly IDataProtector _mfaChallengeProtector = dataProtectionProvider.CreateProtector("AuthService.MfaChallenge");
+
+    // M2 (security): a PBKDF2-hashed sentinel password used to normalise
+    // sign-in response timing when the email does not map to any account.
+    // The default password hasher runs the full KDF on Verify, so invoking it
+    // against a pre-baked hash takes the same ~50–200ms as a real miss. We do
+    // this instead of building a throwaway account so the hash format tracks
+    // whatever identity format v3/v4 the hasher is configured to emit.
+    private static readonly string _dummyPasswordHash = new PasswordHasher<ApplicationUserAccount>()
+        .HashPassword(new ApplicationUserAccount(), "enumeration-guard-dummy-password");
 
     public async Task<AuthSessionResponse> RegisterLearnerAsync(RegisterRequest request, CancellationToken cancellationToken = default)
     {
@@ -281,12 +297,43 @@ public sealed class AuthService(
             .SingleOrDefaultAsync(x => x.NormalizedEmail == normalizedEmail, cancellationToken);
         if (account is null)
         {
+            // M2 (security): perform an equivalent-cost password verification
+            // so that the response time does not leak whether the email is
+            // registered. The sentinel hash is a real PBKDF2 output so the
+            // Verify path follows the same code/iteration count as a real
+            // miss.
+            _ = passwordHasher.VerifyHashedPassword(new ApplicationUserAccount(), _dummyPasswordHash, request.Password);
+            throw ApiException.Validation("invalid_credentials", "Invalid email or password.");
+        }
+
+        var nowForLockout = timeProvider.GetUtcNow();
+
+        // H1 (security): per-account soft lockout. The AuthBruteforce IP limiter
+        // blocks volumetric attacks; this blocks credential-stuffing from a
+        // rotating-IP attacker targeting one account. Return the same generic
+        // error to avoid confirming the email exists to an outsider.
+        if (account.LockoutUntil is { } locked && locked > nowForLockout)
+        {
+            _ = passwordHasher.VerifyHashedPassword(account, _dummyPasswordHash, request.Password);
             throw ApiException.Validation("invalid_credentials", "Invalid email or password.");
         }
 
         var verificationResult = passwordHasher.VerifyHashedPassword(account, account.PasswordHash, request.Password);
         if (verificationResult == PasswordVerificationResult.Failed)
         {
+            account.FailedSignInCount += 1;
+            // Threshold: allow 5 free failures, then exponentially back off up
+            // to a 60-minute cap. The counter is NOT reset by the lockout
+            // window — it only resets on a successful sign-in — so repeated
+            // failures grow the penalty.
+            if (account.FailedSignInCount >= 5)
+            {
+                var over = account.FailedSignInCount - 5;
+                var minutes = Math.Min(60, Math.Pow(2, Math.Min(over, 16)));
+                account.LockoutUntil = nowForLockout.AddMinutes(minutes);
+            }
+            account.UpdatedAt = nowForLockout;
+            await db.SaveChangesAsync(cancellationToken);
             throw ApiException.Validation("invalid_credentials", "Invalid email or password.");
         }
 
@@ -305,6 +352,9 @@ public sealed class AuthService(
         }
 
         var now = timeProvider.GetUtcNow();
+        // H1: successful password verification clears lockout state.
+        account.FailedSignInCount = 0;
+        account.LockoutUntil = null;
         account.LastLoginAt = now;
         account.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken);
@@ -360,8 +410,35 @@ public sealed class AuthService(
         var refreshToken = await db.RefreshTokenRecords
             .Include(x => x.ApplicationUserAccount)
             .SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
-        if (refreshToken is null || refreshToken.RevokedAt is not null || refreshToken.ExpiresAt <= now)
+        if (refreshToken is null)
         {
+            throw ApiException.Forbidden("invalid_refresh_token", "Refresh token is invalid or expired.");
+        }
+
+        // H3 (security): refresh-token reuse detection per OAuth 2 BCP §4.13.2.
+        // If the presented token was already rotated (RevokedAt != null) or has
+        // already expired, treat it as a potential compromise: revoke every
+        // still-live sibling in its family so an attacker who stole the token
+        // loses all downstream access. The client's real active session is
+        // collateral damage, which is the desired outcome — it forces a fresh
+        // sign-in and invalidates whichever copy the attacker has.
+        if (refreshToken.RevokedAt is not null || refreshToken.ExpiresAt <= now)
+        {
+            if (refreshToken.RevokedAt is not null)
+            {
+                var familyId = refreshToken.FamilyId;
+                var livingSiblings = await db.RefreshTokenRecords
+                    .Where(t => t.FamilyId == familyId && t.RevokedAt == null)
+                    .ToListAsync(cancellationToken);
+                foreach (var sibling in livingSiblings)
+                {
+                    sibling.RevokedAt = now;
+                }
+                if (livingSiblings.Count > 0)
+                {
+                    await db.SaveChangesAsync(cancellationToken);
+                }
+            }
             throw ApiException.Forbidden("invalid_refresh_token", "Refresh token is invalid or expired.");
         }
 
@@ -371,7 +448,7 @@ public sealed class AuthService(
         var account = refreshToken.ApplicationUserAccount;
         await EnsureAccountCanAuthenticateAsync(account, cancellationToken);
         var subject = await ResolveSubjectAsync(account, cancellationToken);
-        var session = await CreateSessionCoreAsync(account, subject, cancellationToken);
+        var session = await CreateSessionCoreAsync(account, subject, cancellationToken, refreshToken.FamilyId);
 
         await db.SaveChangesAsync(cancellationToken);
         return session;
@@ -517,12 +594,16 @@ public sealed class AuthService(
         }
 
         var account = await ResolveTrackedMfaAccountAsync(request.Email, request.ChallengeToken, cancellationToken);
+        // H2 (security): cap MFA attempts per account per challenge window.
+        EnsureMfaAttemptsAvailable(account.Id);
         var secretKey = ReadAuthenticatorSecretOrThrow(account);
         if (!AuthenticatorTotp.VerifyCode(secretKey, request.Code, timeProvider.GetUtcNow(), AllowedAuthenticatorDriftWindows))
         {
+            RegisterMfaFailure(account.Id);
             throw ApiException.Validation("invalid_authenticator_code", "The authenticator code is invalid.");
         }
 
+        ResetMfaAttempts(account.Id);
         return await CompleteMfaSignInAsync(account, cancellationToken);
     }
 
@@ -536,6 +617,8 @@ public sealed class AuthService(
         }
 
         var account = await ResolveTrackedMfaAccountAsync(request.Email, request.ChallengeToken, cancellationToken);
+        // H2 (security): same attempt cap covers recovery-code attempts.
+        EnsureMfaAttemptsAvailable(account.Id);
         var codeHash = AuthenticatorTotp.HashRecoveryCode(request.RecoveryCode);
         var recoveryCode = await db.MfaRecoveryCodes
             .SingleOrDefaultAsync(
@@ -546,12 +629,39 @@ public sealed class AuthService(
 
         if (recoveryCode is null)
         {
+            RegisterMfaFailure(account.Id);
             throw ApiException.Validation("invalid_mfa_recovery_code", "The recovery code is invalid or already used.");
         }
 
         recoveryCode.RedeemedAt = timeProvider.GetUtcNow();
+        ResetMfaAttempts(account.Id);
         return await CompleteMfaSignInAsync(account, cancellationToken);
     }
+
+    // H2 helpers (security): per-account sliding counter of invalid MFA
+    // attempts. The sliding window matches the MFA challenge lifetime so
+    // legitimate retries reset naturally.
+    private void EnsureMfaAttemptsAvailable(string accountId)
+    {
+        if (memoryCache.TryGetValue(MfaAttemptCacheKey(accountId), out int attempts) && attempts >= MaxMfaAttempts)
+        {
+            throw ApiException.Validation("mfa_attempts_exceeded", "Too many invalid authentication attempts. Try again later.");
+        }
+    }
+
+    private void RegisterMfaFailure(string accountId)
+    {
+        var key = MfaAttemptCacheKey(accountId);
+        var attempts = memoryCache.TryGetValue(key, out int existing) ? existing + 1 : 1;
+        memoryCache.Set(key, attempts, new MemoryCacheEntryOptions
+        {
+            AbsoluteExpirationRelativeToNow = _mfaChallengeLifetime
+        });
+    }
+
+    private void ResetMfaAttempts(string accountId) => memoryCache.Remove(MfaAttemptCacheKey(accountId));
+
+    private static string MfaAttemptCacheKey(string accountId) => $"auth:mfa-attempts:{accountId}";
 
     public async Task SignOutAsync(SignOutRequest request, CancellationToken cancellationToken = default)
     {
@@ -567,21 +677,19 @@ public sealed class AuthService(
 
         if (string.IsNullOrWhiteSpace(presented))
         {
-            // Silent return rather than 4xx: sign-out should be idempotent from
-            // the client's perspective. The cookie has just been cleared.
+            await TryRevokeCurrentBearerSessionAsync(cancellationToken);
             return;
         }
 
         var tokenHash = tokenService.HashRefreshToken(presented);
         var refreshToken = await db.RefreshTokenRecords
             .SingleOrDefaultAsync(x => x.TokenHash == tokenHash, cancellationToken);
-        if (refreshToken is null || refreshToken.RevokedAt is not null)
+        if (refreshToken is null)
         {
             return;
         }
 
-        refreshToken.RevokedAt = timeProvider.GetUtcNow();
-        await db.SaveChangesAsync(cancellationToken);
+        await RevokeRefreshTokenFamilyAsync(refreshToken.FamilyId, cancellationToken);
     }
 
     public async Task<CurrentUserResponse> GetCurrentUserAsync(ClaimsPrincipal principal, CancellationToken cancellationToken = default)
@@ -741,12 +849,9 @@ public sealed class AuthService(
     // ═══════════════════════════════════════════════════════════════════════
     //  Refresh cookie helpers — C1 (HttpOnly refresh cookie migration)
     //
-    //  The refresh token is currently returned BOTH in the response body (legacy)
-    //  AND as an HttpOnly cookie. The body path stays alive one release so that
-    //  existing mobile / desktop shells that persist refreshToken manually keep
-    //  working while the clients migrate to relying on the cookie. New web
-    //  traffic already benefits because middleware forwards the cookie on every
-    //  proxied API call and RefreshAsync below prefers it over the body.
+    //  Web clients receive refresh tokens only in this cookie. Native/mobile
+    //  shells can still request a body refresh token by sending the explicit
+    //  client-platform header because they store it outside web storage.
     //
     //  Cookie invariants:
     //   * HttpOnly  — hard block on JS access, which is the entire point
@@ -754,26 +859,43 @@ public sealed class AuthService(
     //   * SameSite  — Strict because the refresh endpoint is same-origin via
     //                  the Next.js /api/backend proxy. Cross-origin flows use
     //                  the body path (legacy) until they move off that model.
-    //   * Path=/v1/auth — minimise exposure surface so the cookie only rides
-    //                  on auth-endpoint requests, not on every /v1/* call.
+    //   * Path=/       - allows same-site proxied web refresh/sign-out calls
+    //                  to carry the cookie across deployment topologies.
     // ═══════════════════════════════════════════════════════════════════════
     private const string RefreshCookieName = "oet_rt";
+    private const string ClientPlatformHeader = "X-OET-Client-Platform";
+    private const string RefreshCookiePath = "/";
+
+    private bool IsLocalhostDevelopmentRequest(HttpContext httpContext)
+        => environment.IsDevelopment()
+            && (httpContext.Request.Host.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
+                || httpContext.Request.Host.Host.Equals("127.0.0.1", StringComparison.Ordinal));
+
+    private bool ShouldExposeRefreshTokenInResponse()
+    {
+        var httpContext = httpContextAccessor.HttpContext;
+        if (httpContext is null)
+        {
+            return true;
+        }
+
+        var platform = httpContext.Request.Headers[ClientPlatformHeader].ToString();
+        return platform.Equals("capacitor", StringComparison.OrdinalIgnoreCase)
+            || platform.Equals("desktop", StringComparison.OrdinalIgnoreCase)
+            || platform.Equals("native", StringComparison.OrdinalIgnoreCase);
+    }
 
     private void SetRefreshCookie(string refreshToken, DateTimeOffset expires)
     {
         var httpContext = httpContextAccessor.HttpContext;
         if (httpContext is null) return;
 
-        var isLocalhostDev = environment.IsDevelopment()
-            && (httpContext.Request.Host.Host.Equals("localhost", StringComparison.OrdinalIgnoreCase)
-                || httpContext.Request.Host.Host.Equals("127.0.0.1", StringComparison.Ordinal));
-
         httpContext.Response.Cookies.Append(RefreshCookieName, refreshToken, new CookieOptions
         {
             HttpOnly = true,
-            Secure = !isLocalhostDev,
+            Secure = !IsLocalhostDevelopmentRequest(httpContext),
             SameSite = SameSiteMode.Strict,
-            Path = "/v1/auth",
+            Path = RefreshCookiePath,
             Expires = expires,
             IsEssential = true,
         });
@@ -786,10 +908,47 @@ public sealed class AuthService(
         httpContext.Response.Cookies.Delete(RefreshCookieName, new CookieOptions
         {
             HttpOnly = true,
-            Secure = true,
+            Secure = !IsLocalhostDevelopmentRequest(httpContext),
             SameSite = SameSiteMode.Strict,
-            Path = "/v1/auth",
+            Path = RefreshCookiePath,
         });
+    }
+
+    private async Task<bool> TryRevokeCurrentBearerSessionAsync(CancellationToken cancellationToken)
+    {
+        var principal = httpContextAccessor.HttpContext?.User;
+        if (principal?.Identity?.IsAuthenticated != true
+            || !Guid.TryParse(principal.FindFirstValue(AuthTokenService.SessionIdClaimType), out var sessionId))
+        {
+            return false;
+        }
+
+        var refreshToken = await db.RefreshTokenRecords
+            .SingleOrDefaultAsync(t => t.Id == sessionId, cancellationToken);
+        if (refreshToken is null)
+        {
+            return false;
+        }
+
+        await RevokeRefreshTokenFamilyAsync(refreshToken.FamilyId, cancellationToken);
+        return true;
+    }
+
+    private async Task RevokeRefreshTokenFamilyAsync(Guid familyId, CancellationToken cancellationToken)
+    {
+        var now = timeProvider.GetUtcNow();
+        var activeFamilyTokens = await db.RefreshTokenRecords
+            .Where(t => t.FamilyId == familyId && t.RevokedAt == null)
+            .ToListAsync(cancellationToken);
+        foreach (var familyToken in activeFamilyTokens)
+        {
+            familyToken.RevokedAt = now;
+        }
+
+        if (activeFamilyTokens.Count > 0)
+        {
+            await db.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private string? ReadRefreshCookie()
@@ -804,7 +963,8 @@ public sealed class AuthService(
     private async Task<AuthSessionResponse> CreateSessionCoreAsync(
         ApplicationUserAccount account,
         AuthenticatedSessionSubject subject,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Guid? familyId = null)
     {
         var sessionId = Guid.NewGuid();
         var issuedSession = tokenService.IssueSession(subject, sessionId);
@@ -825,6 +985,11 @@ public sealed class AuthService(
             Id = sessionId,
             ApplicationUserAccountId = account.Id,
             TokenHash = issuedSession.RefreshTokenHash,
+            // H3 (security): a new sign-in starts its own refresh-token family.
+            // Rotation paths pass the presented token's FamilyId so the chain is
+            // preserved across refreshes; reuse of a revoked token then burns
+            // the entire family. See RefreshAsync.
+            FamilyId = familyId ?? sessionId,
             ExpiresAt = issuedSession.RefreshTokenExpiresAt,
             CreatedAt = timeProvider.GetUtcNow(),
             DeviceInfo = deviceInfo,
@@ -833,13 +998,13 @@ public sealed class AuthService(
 
         await Task.CompletedTask;
 
-        // C1: also set refresh as an HttpOnly cookie. Body still carries it for
-        // clients that haven't migrated (desktop/mobile shells).
+        // Web transport is the HttpOnly cookie. Native/desktop shells receive
+        // the body token only when they identify themselves explicitly.
         SetRefreshCookie(issuedSession.RefreshToken, issuedSession.RefreshTokenExpiresAt);
 
         return new AuthSessionResponse(
             issuedSession.AccessToken,
-            issuedSession.RefreshToken,
+            ShouldExposeRefreshTokenInResponse() ? issuedSession.RefreshToken : null,
             issuedSession.AccessTokenExpiresAt,
             issuedSession.RefreshTokenExpiresAt,
             BuildCurrentUserResponse(subject));

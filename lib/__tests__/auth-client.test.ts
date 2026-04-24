@@ -118,6 +118,8 @@ describe('auth-client', () => {
     const { ensureFreshAccessToken } = await import('@/lib/auth-client');
 
     await expect(ensureFreshAccessToken()).resolves.toBe('fresh-access-token');
+    expect(JSON.parse(String(vi.mocked(global.fetch).mock.calls[0]?.[1]?.body))).toEqual({});
+    expect(vi.mocked(global.fetch).mock.calls[0]?.[1]?.credentials).toBe('include');
     expect(loadStoredSession()).toEqual(refreshedSession);
   });
 

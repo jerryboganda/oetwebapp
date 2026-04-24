@@ -58,7 +58,11 @@ public sealed class ExternalAuthService(
                 var exchangeToken = ticketService.CreateAuthenticatedExchangeToken(
                     normalizedProvider,
                     linkedAccount.Id,
-                    stateTicket.NextPath);
+                    stateTicket.NextPath,
+                    // H4 (security): propagate the provider's email_verified
+                    // assertion so the eventual session creation only marks
+                    // the local account verified when the provider said so.
+                    profile.EmailVerified);
 
                 return BuildFrontendCallbackRedirect(normalizedProvider, exchangeToken, stateTicket.NextPath, detectedPlatform);
             }
@@ -69,7 +73,8 @@ public sealed class ExternalAuthService(
                 profile.Email,
                 profile.FirstName,
                 profile.LastName,
-                stateTicket.NextPath);
+                stateTicket.NextPath,
+                profile.EmailVerified);
 
             return BuildFrontendCallbackRedirect(normalizedProvider, registrationToken, stateTicket.NextPath, detectedPlatform);
         }
@@ -95,7 +100,10 @@ public sealed class ExternalAuthService(
         {
             var session = await authService.CompleteDirectSignInAsync(
                 exchangeTicket.AccountId ?? throw new InvalidOperationException("Exchange ticket did not include an account id."),
-                markEmailVerified: true,
+                // H4 (security): only mark the local account email-verified
+                // when the upstream provider asserted it. Facebook always
+                // reports false and so never elevates verification state.
+                markEmailVerified: exchangeTicket.EmailVerified,
                 cancellationToken);
 
             return new ExternalAuthExchangeResponse(
@@ -148,6 +156,18 @@ public sealed class ExternalAuthService(
         if (existingAccount is null)
         {
             return null;
+        }
+
+        // H4 (security): never auto-link an external identity to a
+        // pre-existing local account when the provider has not verified the
+        // email address. Otherwise a Facebook (or similar) user could hijack a
+        // local account simply by claiming the victim's email address. The
+        // user must complete the separate email-OTP linking flow instead.
+        if (!profile.EmailVerified)
+        {
+            throw ApiException.Forbidden(
+                "external_auth_email_unverified",
+                "This account already exists. Sign in with your password to link this provider.");
         }
 
         if (!string.Equals(existingAccount.Role, ApplicationUserRoles.Learner, StringComparison.Ordinal))

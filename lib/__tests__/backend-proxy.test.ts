@@ -1,7 +1,11 @@
+import { vi } from 'vitest';
+
 import {
   resolveProxyTarget,
   sanitizeProxyHeaders,
   sanitizeProxyResponseHeaders,
+  validateProxyCsrf,
+  validateRequestOrigin,
   validateProxyPathSegments,
 } from '../backend-proxy';
 
@@ -56,5 +60,53 @@ describe('backend proxy helpers', () => {
     expect(sanitized.get('Content-Length')).toBeNull();
     expect(sanitized.get('Connection')).toBeNull();
     expect(sanitized.get('Transfer-Encoding')).toBeNull();
+  });
+
+  it('rejects unsafe production proxy requests without an origin', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+
+    try {
+      const request = new Request('https://app.example.com/api/backend/v1/auth/refresh', { method: 'POST' });
+
+      expect(validateRequestOrigin(request)).toBe(false);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('allows configured trusted origins for unsafe proxy requests', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    vi.stubEnv('APP_URL', 'https://app.example.com');
+
+    try {
+      const request = new Request('https://app.example.com/api/backend/v1/auth/refresh', {
+        method: 'POST',
+        headers: { Origin: 'https://app.example.com' },
+      });
+
+      expect(validateRequestOrigin(request)).toBe(true);
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
+
+  it('requires a double-submit CSRF token when refresh cookies are proxied', () => {
+    const valid = new Request('https://app.example.com/api/backend/v1/auth/refresh', {
+      method: 'POST',
+      headers: {
+        Cookie: 'oet_rt=refresh; oet_csrf=csrf-token',
+        'x-csrf-token': 'csrf-token',
+      },
+    });
+    const invalid = new Request('https://app.example.com/api/backend/v1/auth/refresh', {
+      method: 'POST',
+      headers: {
+        Cookie: 'oet_rt=refresh; oet_csrf=csrf-token',
+        'x-csrf-token': 'wrong',
+      },
+    });
+
+    expect(validateProxyCsrf(valid)).toBe(true);
+    expect(validateProxyCsrf(invalid)).toBe(false);
   });
 });

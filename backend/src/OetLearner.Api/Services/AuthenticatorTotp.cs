@@ -28,10 +28,13 @@ internal static class AuthenticatorTotp
 
         for (var offset = -allowedDriftWindows; offset <= allowedDriftWindows; offset++)
         {
-            if (string.Equals(
-                    GenerateCode(secretKey, timestamp.AddSeconds(offset * TimeStepSeconds)),
-                    normalizedCode,
-                    StringComparison.Ordinal))
+            // L3 (security): constant-time compare on the generated 6-digit
+            // code. Both operands are identical-length ASCII digits.
+            var candidate = GenerateCode(secretKey, timestamp.AddSeconds(offset * TimeStepSeconds));
+            if (candidate.Length == normalizedCode.Length
+                && CryptographicOperations.FixedTimeEquals(
+                    Encoding.ASCII.GetBytes(candidate),
+                    Encoding.ASCII.GetBytes(normalizedCode)))
             {
                 return true;
             }
@@ -45,8 +48,11 @@ internal static class AuthenticatorTotp
         var codes = new List<string>(RecoveryCodeCount);
         for (var index = 0; index < RecoveryCodeCount; index++)
         {
-            var rawCode = Convert.ToHexString(RandomNumberGenerator.GetBytes(5));
-            codes.Add($"{rawCode[..5]}-{rawCode[5..]}");
+            // M7 (security): 10 bytes → 80 bits of entropy per code (was 40
+            // bits). Rendered as XXXXX-XXXXX-XXXXX-XXXXX (20 hex chars) so
+            // users still have a grouped, typable code.
+            var rawCode = Convert.ToHexString(RandomNumberGenerator.GetBytes(10));
+            codes.Add($"{rawCode[..5]}-{rawCode[5..10]}-{rawCode[10..15]}-{rawCode[15..]}");
         }
 
         return codes;

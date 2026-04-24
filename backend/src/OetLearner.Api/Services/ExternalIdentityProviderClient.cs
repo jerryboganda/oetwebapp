@@ -129,7 +129,11 @@ public sealed class ExternalIdentityProviderClient(
             profile.Email,
             profile.GivenName,
             profile.FamilyName,
-            profile.Name);
+            profile.Name,
+            // H4 (security): trust Google's email_verified flag, which is a
+            // standard OIDC claim. If absent we must treat the email as
+            // unverified rather than defaulting to true.
+            profile.EmailVerified ?? false);
     }
 
     private async Task<ExternalIdentityProfile> LoadFacebookProfileAsync(string accessToken, CancellationToken cancellationToken)
@@ -150,7 +154,11 @@ public sealed class ExternalIdentityProviderClient(
             profile.Email,
             profile.FirstName,
             profile.LastName,
-            profile.Name);
+            profile.Name,
+            // H4 (security): Facebook does not expose a verified-email flag via
+            // the Graph API. Treat Facebook emails as unverified; downstream
+            // flows require an OTP step before linking or marking verified.
+            EmailVerified: false);
     }
 
     private async Task<ExternalIdentityProfile> LoadLinkedInProfileAsync(string accessToken, CancellationToken cancellationToken)
@@ -171,7 +179,10 @@ public sealed class ExternalIdentityProviderClient(
             profile.Email,
             profile.GivenName,
             profile.FamilyName,
-            profile.Name);
+            profile.Name,
+            // H4 (security): LinkedIn OIDC userinfo includes the standard
+            // email_verified claim.
+            profile.EmailVerified ?? false);
     }
 
     private ExternalAuthProviderOptions GetProviderConfiguration(string provider)
@@ -217,7 +228,9 @@ public sealed class ExternalIdentityProviderClient(
         string Email,
         string? GivenName,
         string? FamilyName,
-        string? Name);
+        string? Name,
+        // OIDC claim emitted by Google.
+        [property: System.Text.Json.Serialization.JsonPropertyName("email_verified")] bool? EmailVerified);
 
     private sealed record FacebookUserInfo(
         string Id,
@@ -231,7 +244,8 @@ public sealed class ExternalIdentityProviderClient(
         string Email,
         string? GivenName,
         string? FamilyName,
-        string? Name);
+        string? Name,
+        [property: System.Text.Json.Serialization.JsonPropertyName("email_verified")] bool? EmailVerified);
 }
 
 public sealed record ExternalIdentityProfile(
@@ -240,4 +254,8 @@ public sealed record ExternalIdentityProfile(
     string Email,
     string? FirstName,
     string? LastName,
-    string? DisplayName);
+    string? DisplayName,
+    // H4 (security): whether the upstream provider asserted the email
+    // address is verified. Used to decide whether the local account can be
+    // auto-linked and marked verified on sign-in without an OTP challenge.
+    bool EmailVerified);

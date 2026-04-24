@@ -1,5 +1,11 @@
 import type { AuthSession, CurrentUser, PendingMfaChallenge } from './types/auth';
-import { hydrateWebStorageKeys, persistWebStorageKey, removeWebStorageKey } from './mobile/native-storage';
+import {
+  hydrateWebStorageKeys,
+  isNativeMobilePlatform,
+  persistWebStorageKey,
+  removeWebStorageKey,
+} from './mobile/native-storage';
+import { clearAuthTokens, getStoredAuthTokens, storeAuthTokens } from './mobile/secure-storage';
 
 export type AuthPersistence = 'local' | 'session';
 
@@ -25,6 +31,10 @@ interface StoredSessionRecord {
   session: AuthSession;
 }
 
+type PersistedSessionSnapshot = Omit<AuthSession, 'accessToken' | 'refreshToken'>;
+
+let volatileSessionRecord: StoredSessionRecord | null = null;
+
 function isBrowser() {
   return typeof window !== 'undefined';
 }
@@ -49,10 +59,32 @@ function getStorage(persistence: AuthPersistence): Storage | null {
   return persistence === 'local' ? window.localStorage : window.sessionStorage;
 }
 
+function toPersistedSnapshot(session: AuthSession): PersistedSessionSnapshot {
+  return {
+    accessTokenExpiresAt: session.accessTokenExpiresAt,
+    refreshTokenExpiresAt: session.refreshTokenExpiresAt,
+    currentUser: session.currentUser,
+  };
+}
+
+function fromPersistedSnapshot(snapshot: PersistedSessionSnapshot): AuthSession {
+  return {
+    accessToken: '',
+    refreshToken: null,
+    accessTokenExpiresAt: snapshot.accessTokenExpiresAt,
+    refreshTokenExpiresAt: snapshot.refreshTokenExpiresAt,
+    currentUser: snapshot.currentUser,
+  };
+}
+
 export function saveStoredSession(session: AuthSession, persistence: AuthPersistence): void {
   const key = persistence === 'local' ? LOCAL_SESSION_KEY : SESSION_SESSION_KEY;
-  persistWebStorageKey(key, JSON.stringify(session), persistence);
+  volatileSessionRecord = { persistence, session };
+  persistWebStorageKey(key, JSON.stringify(toPersistedSnapshot(session)), persistence);
   setAuthIndicatorCookie();
+  if (isNativeMobilePlatform() && session.accessToken) {
+    void storeAuthTokens(session.accessToken, session.refreshToken, session.accessTokenExpiresAt).catch(() => undefined);
+  }
 
   if (persistence === 'local') {
     removeWebStorageKey(SESSION_SESSION_KEY);
@@ -62,19 +94,23 @@ export function saveStoredSession(session: AuthSession, persistence: AuthPersist
 }
 
 export function loadStoredSessionRecord(): StoredSessionRecord | null {
-  const sessionSession = parseJson<AuthSession>(getStorage('session')?.getItem(SESSION_SESSION_KEY) ?? null);
+  if (volatileSessionRecord) {
+    return volatileSessionRecord;
+  }
+
+  const sessionSession = parseJson<PersistedSessionSnapshot>(getStorage('session')?.getItem(SESSION_SESSION_KEY) ?? null);
   if (sessionSession) {
-    return { persistence: 'session', session: sessionSession };
+    return { persistence: 'session', session: fromPersistedSnapshot(sessionSession) };
   }
 
-  const sessionSessionFallback = parseJson<AuthSession>(getStorage('local')?.getItem(SESSION_SESSION_KEY) ?? null);
+  const sessionSessionFallback = parseJson<PersistedSessionSnapshot>(getStorage('local')?.getItem(SESSION_SESSION_KEY) ?? null);
   if (sessionSessionFallback) {
-    return { persistence: 'session', session: sessionSessionFallback };
+    return { persistence: 'session', session: fromPersistedSnapshot(sessionSessionFallback) };
   }
 
-  const localSession = parseJson<AuthSession>(getStorage('local')?.getItem(LOCAL_SESSION_KEY) ?? null);
+  const localSession = parseJson<PersistedSessionSnapshot>(getStorage('local')?.getItem(LOCAL_SESSION_KEY) ?? null);
   if (localSession) {
-    return { persistence: 'local', session: localSession };
+    return { persistence: 'local', session: fromPersistedSnapshot(localSession) };
   }
 
   return null;
@@ -96,8 +132,10 @@ export function updateStoredUser(currentUser: CurrentUser): AuthSession | null {
 }
 
 export function clearStoredSession(): void {
+  volatileSessionRecord = null;
   removeWebStorageKey(LOCAL_SESSION_KEY);
   removeWebStorageKey(SESSION_SESSION_KEY);
+  void clearAuthTokens().catch(() => undefined);
   clearAuthIndicatorCookie();
 }
 
@@ -115,4 +153,24 @@ export function clearPendingMfaChallenge(): void {
 
 export async function hydrateAuthStorage(): Promise<void> {
   await hydrateWebStorageKeys([LOCAL_SESSION_KEY, SESSION_SESSION_KEY, MFA_CHALLENGE_KEY]);
+
+  const record = loadStoredSessionRecord();
+  if (!record || !isNativeMobilePlatform()) {
+    return;
+  }
+
+  const tokens = await getStoredAuthTokens();
+  if (!tokens.accessToken) {
+    return;
+  }
+
+  volatileSessionRecord = {
+    persistence: record.persistence,
+    session: {
+      ...record.session,
+      accessToken: tokens.accessToken,
+      refreshToken: tokens.refreshToken,
+      accessTokenExpiresAt: tokens.expiresAt ?? record.session.accessTokenExpiresAt,
+    },
+  };
 }

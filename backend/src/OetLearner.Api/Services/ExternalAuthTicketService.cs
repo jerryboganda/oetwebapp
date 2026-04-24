@@ -35,7 +35,7 @@ public sealed class ExternalAuthTicketService(IDataProtectionProvider dataProtec
         return ticket with { NextPath = NormalizeNextPath(ticket.NextPath) };
     }
 
-    public string CreateAuthenticatedExchangeToken(string provider, string accountId, string? nextPath)
+    public string CreateAuthenticatedExchangeToken(string provider, string accountId, string? nextPath, bool emailVerified)
         => Protect(
             _exchangeProtector,
             new ExternalAuthExchangeTicket(
@@ -46,7 +46,8 @@ public sealed class ExternalAuthTicketService(IDataProtectionProvider dataProtec
                 Email: null,
                 FirstName: null,
                 LastName: null,
-                NextPath: NormalizeNextPath(nextPath)),
+                NextPath: NormalizeNextPath(nextPath),
+                EmailVerified: emailVerified),
             lifetime: TimeSpan.FromMinutes(10));
 
     public string CreateRegistrationExchangeToken(
@@ -55,7 +56,8 @@ public sealed class ExternalAuthTicketService(IDataProtectionProvider dataProtec
         string email,
         string? firstName,
         string? lastName,
-        string? nextPath)
+        string? nextPath,
+        bool emailVerified)
         => Protect(
             _exchangeProtector,
             new ExternalAuthExchangeTicket(
@@ -66,7 +68,8 @@ public sealed class ExternalAuthTicketService(IDataProtectionProvider dataProtec
                 Email: email,
                 FirstName: firstName,
                 LastName: lastName,
-                NextPath: NormalizeNextPath(nextPath)),
+                NextPath: NormalizeNextPath(nextPath),
+                EmailVerified: emailVerified),
             lifetime: TimeSpan.FromMinutes(10));
 
     public ExternalAuthExchangeTicket ReadExchangeToken(string provider, string token)
@@ -166,7 +169,10 @@ public sealed record ExternalAuthExchangeTicket(
     string? Email,
     string? FirstName,
     string? LastName,
-    string? NextPath);
+    string? NextPath,
+    // H4 (security): whether the upstream provider asserted email verification.
+    // Defaults to false on deserialisation of older tokens.
+    bool EmailVerified = false);
 
 public sealed record ExternalRegistrationTicket(
     string Provider,

@@ -1,4 +1,13 @@
 import { ensureFreshAccessToken } from './auth-client';
+import {
+  titleCase as domainTitleCase,
+  minutesToLabel as domainMinutesToLabel,
+  scoreRangeDisplay as domainScoreRangeDisplay,
+  formatCurrency as domainFormatCurrency,
+  normalizeWaveformPeaks as domainNormalizeWaveformPeaks,
+  parseCriterionScore as domainParseCriterionScore,
+  scoreToGrade as domainScoreToGrade,
+} from './domain/format';
 import { env } from './env';
 import { fetchWithTimeout } from './network/fetch-with-timeout';
 import type {
@@ -14,7 +23,6 @@ import type {
   SpeakingTask,
   RoleCard,
   SpeakingResult,
-  TranscriptLine,
   PhrasingSegment,
   ReadingTask,
   ReadingResult,
@@ -65,7 +73,6 @@ import type {
   LearnerProfileExpanded,
   ReviewDraft,
   ReviewQueueResponse,
-  ReviewRequest as ExpertReviewRequest,
   ScheduleException,
   SpeakingReviewDetail,
   WritingReviewDetail,
@@ -105,13 +112,10 @@ import type {
   GrammarContentBlockLearner,
   GrammarExerciseAuthoring,
   GrammarExerciseLearner,
-  GrammarExerciseResult,
   GrammarLessonDocument,
-  GrammarLessonLearner,
   GrammarLessonProgress,
   GrammarLessonSummary,
   GrammarLessonUpsertPayload,
-  GrammarOverview,
   GrammarRecommendation,
   GrammarTopicLearner,
   GrammarTopicUpsertPayload,
@@ -214,18 +218,11 @@ function toSubTest(code: string): SubTest {
 }
 
 function titleCase(value: string | null | undefined): string {
-  if (!value) return '';
-  return value
-    .replace(/[_-]/g, ' ')
-    .split(' ')
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(' ');
+  return domainTitleCase(value);
 }
 
 function minutesToLabel(minutes: number): string {
-  if (minutes >= 180) return `${Math.round(minutes / 60)} hrs`;
-  return `${minutes} mins`;
+  return domainMinutesToLabel(minutes);
 }
 
 function toConfidence(value: string | null | undefined): Confidence {
@@ -263,16 +260,11 @@ function toReviewStatus(value: string | null | undefined) {
 }
 
 function scoreRangeDisplay(value: string | null | undefined): string {
-  return (value ?? '').replace(/\s*-\s*/g, ' to ');
+  return domainScoreRangeDisplay(value);
 }
 
 function formatCurrency(amount: number | string | null | undefined, currency = 'AUD'): string {
-  const numericAmount = Number(amount ?? 0);
-  return new Intl.NumberFormat('en-AU', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 2,
-  }).format(Number.isFinite(numericAmount) ? numericAmount : 0);
+  return domainFormatCurrency(amount, currency);
 }
 
 function toBillingStatus(value: string | null | undefined): Invoice['status'] {
@@ -283,28 +275,15 @@ function toBillingStatus(value: string | null | undefined): Invoice['status'] {
 }
 
 function normalizeWaveformPeaks(value: unknown): number[] {
-  if (!Array.isArray(value)) return [];
-  return value
-    .map((entry) => Number(entry))
-    .filter((entry) => Number.isFinite(entry))
-    .map((entry) => Math.max(6, Math.min(100, Math.round(entry))));
+  return domainNormalizeWaveformPeaks(value);
 }
 
 function parseCriterionScore(scoreRange: string | null | undefined): number {
-  if (!scoreRange) return 0;
-  const match = scoreRange.match(/(\d+)(?:-(\d+))?/);
-  if (!match) return 0;
-  const first = Number(match[1]);
-  const second = match[2] ? Number(match[2]) : first;
-  return Math.round((first + second) / 2);
+  return domainParseCriterionScore(scoreRange);
 }
 
 function scoreToGrade(score: number): string {
-  if (score >= 5) return 'B+';
-  if (score >= 4) return 'B';
-  if (score >= 3) return 'C+';
-  if (score >= 2) return 'C';
-  return 'D';
+  return domainScoreToGrade(score);
 }
 
 function normalizeCriterionName(code: string | null | undefined): string {

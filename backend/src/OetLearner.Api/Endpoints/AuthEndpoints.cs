@@ -108,7 +108,11 @@ public static class AuthEndpoints
                 await service.SignOutAsync(request, ct);
                 return Results.NoContent();
             })
-            .AllowAnonymous();
+            .AllowAnonymous()
+            // M4 (security): even though sign-out is idempotent, it is an
+            // anonymous refresh-token probe without a limit. Reuse the same
+            // bruteforce bucket so attackers cannot mass-probe token hashes.
+            .RequireRateLimiting("AuthBruteforce");
 
         auth.MapPost("/account/delete", async (ClaimsPrincipal user, DeleteAccountRequest request, AuthService service, CancellationToken ct) =>
             {

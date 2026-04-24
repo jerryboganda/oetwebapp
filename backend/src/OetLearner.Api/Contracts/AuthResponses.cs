@@ -15,7 +15,7 @@ public sealed record CurrentUserResponse(
 
 public sealed record AuthSessionResponse(
     string AccessToken,
-    string RefreshToken,
+    string? RefreshToken,
     DateTimeOffset AccessTokenExpiresAt,
     DateTimeOffset RefreshTokenExpiresAt,
     CurrentUserResponse CurrentUser);

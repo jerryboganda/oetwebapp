@@ -5,10 +5,6 @@ const { mockReplace, mockUseCurrentUser, mockFetchExpertMe } = vi.hoisted(() => 
   mockFetchExpertMe: vi.fn(),
 }));
 
-const mockRouter = {
-  replace: mockReplace,
-};
-
 vi.mock('@/lib/hooks/use-current-user', () => ({
   useCurrentUser: () => mockUseCurrentUser(),
 }));

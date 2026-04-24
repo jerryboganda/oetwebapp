@@ -17,7 +17,7 @@ export interface CurrentUser {
 
 export interface AuthSession {
   accessToken: string;
-  refreshToken: string;
+  refreshToken?: string | null;
   accessTokenExpiresAt: string;
   refreshTokenExpiresAt: string;
   currentUser: CurrentUser;

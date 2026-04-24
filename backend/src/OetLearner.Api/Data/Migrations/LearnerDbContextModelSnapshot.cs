@@ -1063,7 +1063,13 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<DateTimeOffset?>("EmailVerifiedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("FailedSignInCount")
+                        .HasColumnType("integer");
+
                     b.Property<DateTimeOffset?>("LastLoginAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset?>("LockoutUntil")
                         .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("NormalizedEmail")
@@ -8348,6 +8354,9 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<DateTimeOffset>("ExpiresAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<Guid>("FamilyId")
+                        .HasColumnType("uuid");
+
                     b.Property<string>("IpAddress")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
@@ -8369,6 +8378,8 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ApplicationUserAccountId", "TokenHash")
                         .IsUnique();
+
+                    b.HasIndex("FamilyId");
 
                     b.ToTable("RefreshTokenRecords");
                 });

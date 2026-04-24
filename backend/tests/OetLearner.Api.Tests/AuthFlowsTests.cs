@@ -135,6 +135,7 @@ public class AuthFlowsTests
         var signInSession = await signInResponse.Content.ReadFromJsonAsync<AuthSessionResponse>(JsonSupport.Options);
         Assert.NotNull(signInSession);
         Assert.True(signInSession!.CurrentUser.RequiresEmailVerification);
+        Assert.Null(signInSession.RefreshToken);
 
         using var meRequest = new HttpRequestMessage(HttpMethod.Get, "/v1/auth/me");
         meRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", signInSession.AccessToken);
@@ -149,21 +150,32 @@ public class AuthFlowsTests
         Assert.Equal(signInSession.CurrentUser.UserId, currentUser!.UserId);
 
         var refreshResponse = await harness.Client.PostAsJsonAsync("/v1/auth/refresh",
-            new RefreshTokenRequest(signInSession.RefreshToken));
+            new RefreshTokenRequest(null));
         refreshResponse.EnsureSuccessStatusCode();
         var refreshedSession = await refreshResponse.Content.ReadFromJsonAsync<AuthSessionResponse>(JsonSupport.Options);
         Assert.NotNull(refreshedSession);
         Assert.NotEqual(signInSession.AccessToken, refreshedSession!.AccessToken);
-        Assert.NotEqual(signInSession.RefreshToken, refreshedSession.RefreshToken);
+        Assert.Null(refreshedSession.RefreshToken);
 
-        var signOutResponse = await harness.Client.PostAsJsonAsync("/v1/auth/sign-out",
-            new SignOutRequest(refreshedSession.RefreshToken));
+        using var signOutRequest = new HttpRequestMessage(HttpMethod.Post, "/v1/auth/sign-out")
+        {
+            Content = JsonContent.Create(new SignOutRequest(null))
+        };
+        signOutRequest.Headers.Authorization = new AuthenticationHeaderValue("Bearer", refreshedSession.AccessToken);
+        var signOutResponse = await harness.Client.SendAsync(signOutRequest);
         Assert.Equal(HttpStatusCode.NoContent, signOutResponse.StatusCode);
 
-        var revokedRefreshResponse = await harness.Client.PostAsJsonAsync("/v1/auth/refresh",
-            new RefreshTokenRequest(refreshedSession.RefreshToken));
-        Assert.Equal(HttpStatusCode.Forbidden, revokedRefreshResponse.StatusCode);
-        Assert.Equal("invalid_refresh_token", await ReadErrorCodeAsync(revokedRefreshResponse));
+        var refreshedJwt = new JwtSecurityTokenHandler().ReadJwtToken(refreshedSession.AccessToken);
+        var refreshedSessionId = Guid.Parse(
+            refreshedJwt.Claims.Single(claim => claim.Type == AuthTokenService.SessionIdClaimType).Value);
+        await using var readDb = new LearnerDbContext(harness.DbOptions);
+        var refreshedRefreshRecord = await readDb.RefreshTokenRecords.SingleAsync(token => token.Id == refreshedSessionId);
+        Assert.NotNull(refreshedRefreshRecord.RevokedAt);
+
+        var missingRefreshResponse = await harness.Client.PostAsJsonAsync("/v1/auth/refresh",
+            new RefreshTokenRequest(null));
+        Assert.Equal(HttpStatusCode.BadRequest, missingRefreshResponse.StatusCode);
+        Assert.Equal("refresh_token_required", await ReadErrorCodeAsync(missingRefreshResponse));
     }
 
     [Fact]
@@ -196,7 +208,7 @@ public class AuthFlowsTests
         Assert.Equal(HttpStatusCode.NoContent, resetPasswordResponse.StatusCode);
 
         var revokedRefreshResponse = await harness.Client.PostAsJsonAsync("/v1/auth/refresh",
-            new RefreshTokenRequest(initialSession!.RefreshToken));
+            new RefreshTokenRequest(null));
         Assert.Equal(HttpStatusCode.Forbidden, revokedRefreshResponse.StatusCode);
         Assert.Equal("invalid_refresh_token", await ReadErrorCodeAsync(revokedRefreshResponse));
 
@@ -340,7 +352,7 @@ public class AuthFlowsTests
 
         var refreshResponse = await harness.Client.PostAsJsonAsync(
             "/v1/auth/refresh",
-            new RefreshTokenRequest(session!.RefreshToken));
+            new RefreshTokenRequest(null));
 
         Assert.Equal(HttpStatusCode.Forbidden, refreshResponse.StatusCode);
         Assert.Equal("account_suspended", await ReadErrorCodeAsync(refreshResponse));
@@ -718,7 +730,8 @@ public class AuthFlowsTests
         var exchangeToken = harness.ExternalAuthTicketService.CreateAuthenticatedExchangeToken(
             ExternalAuthProviders.Google,
             "auth_learner_001",
-            "/");
+            "/",
+            emailVerified: true);
         var service = CreateExternalAuthServiceHarness(harness);
 
         var response = await service.ExchangeAsync(
@@ -741,7 +754,8 @@ public class AuthFlowsTests
             "social@example.com",
             "Social",
             "Learner",
-            "/dashboard");
+            "/dashboard",
+            emailVerified: true);
         var service = CreateExternalAuthServiceHarness(harness);
 
         var response = await service.ExchangeAsync(
@@ -1308,7 +1322,10 @@ public class AuthFlowsTests
         var sender = new RecordingEmailSender();
         var timeProvider = new MutableTimeProvider(TimeProvider.System.GetUtcNow());
         var factory = new JwtAuthApiWebApplicationFactory(sender, timeProvider);
-        var client = factory.CreateClient();
+        var client = factory.CreateClient(new WebApplicationFactoryClientOptions
+        {
+            BaseAddress = new Uri("https://localhost")
+        });
         return new AuthApiHarness(factory, client, sender, timeProvider);
     }
 
@@ -1359,6 +1376,7 @@ public class AuthFlowsTests
             environment,
             dataProtectionProvider,
             new HttpContextAccessor(),
+            new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions()),
             now);
 
         return new AuthServiceHarness(
@@ -1496,6 +1514,9 @@ public class AuthFlowsTests
     {
         public DateTimeOffset Now => TimeProvider.UtcNow;
 
+        public DbContextOptions<LearnerDbContext> DbOptions =>
+            Factory.Services.GetRequiredService<DbContextOptions<LearnerDbContext>>();
+
         public void Advance(TimeSpan amount) => TimeProvider.Advance(amount);
 
         public string ExtractLatestOtpCode()
@@ -1599,6 +1620,11 @@ public class AuthFlowsTests
                 ["Platform:PublicApiBaseUrl"] = "https://api.example.test",
                 ["Platform:FallbackEmailDomain"] = "example.test",
                 ["Billing:CheckoutBaseUrl"] = "https://app.example.test/billing/checkout",
+                ["Billing:AllowSandboxFallbacks"] = "false",
+                ["Billing:Stripe:SecretKey"] = "sk_test_auth_flow_tests",
+                ["Billing:Stripe:SuccessUrl"] = "https://app.example.test/billing/checkout?checkout=success",
+                ["Billing:Stripe:CancelUrl"] = "https://app.example.test/billing/checkout?checkout=cancelled",
+                ["Billing:Stripe:WebhookSecret"] = "whsec_auth_flow_tests",
                 ["Storage:LocalRootPath"] = Path.Combine(Path.GetTempPath(), $"oet-learner-auth-api-storage-{Guid.NewGuid():N}"),
                 ["Proxy:TrustForwardHeaders"] = "false",
                 ["Proxy:EnforceHttps"] = "false",

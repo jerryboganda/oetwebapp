@@ -29,6 +29,13 @@ public class ApplicationUserAccount
     public DateTimeOffset? AuthenticatorEnabledAt { get; set; }
     public DateTimeOffset? LastLoginAt { get; set; }
     public DateTimeOffset? DeletedAt { get; set; }
+    // H1 (security): per-account sign-in failure counter + soft lockout. The
+    // IP-keyed AuthBruteforce limiter protects against volumetric attacks;
+    // these columns protect against credential stuffing where the attacker
+    // rotates IPs but targets a single account. Lockout is time-boxed (see
+    // AuthService.SignInAsync) so support does not need to unlock accounts.
+    public int FailedSignInCount { get; set; }
+    public DateTimeOffset? LockoutUntil { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
@@ -49,6 +56,13 @@ public class RefreshTokenRecord
 
     [MaxLength(512)]
     public string TokenHash { get; set; } = default!;
+
+    // H3 (security): refresh-token family. Every token issued from a
+    // successful sign-in shares a FamilyId; each refresh rotation preserves
+    // it. Presenting a token whose FamilyId has ANY revoked-and-reused member
+    // is treated as compromise → all active tokens in the family are revoked
+    // (see AuthService.RefreshAsync). Initial family = token.Id.
+    public Guid FamilyId { get; set; }
 
     public DateTimeOffset ExpiresAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
@@ -139,6 +153,7 @@ public static class ApplicationUserRoles
     public const string Learner = "learner";
     public const string Expert = "expert";
     public const string Admin = "admin";
+    public const string Sponsor = "sponsor";
 }
 
 /// <summary>Granular permissions for admin users. Stored as comma-separated claim values.</summary>

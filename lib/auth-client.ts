@@ -73,6 +73,54 @@ function withAuthHeader(headers: Headers, accessToken?: string | null): Headers 
   return headers;
 }
 
+function resolveClientPlatform(): 'web' | 'desktop' | 'capacitor' {
+  if (typeof window === 'undefined') {
+    return 'web';
+  }
+
+  const w = window as unknown as Record<string, unknown> & {
+    Capacitor?: { isNativePlatform?: () => boolean };
+    desktopBridge?: unknown;
+  };
+
+  if (w.desktopBridge) {
+    return 'desktop';
+  }
+
+  if (typeof w.Capacitor?.isNativePlatform === 'function' && w.Capacitor.isNativePlatform()) {
+    return 'capacitor';
+  }
+
+  return 'web';
+}
+
+function buildHeaders(contentType?: string, accessToken?: string | null): Headers {
+  const headers = new Headers();
+  if (contentType) {
+    headers.set('Content-Type', contentType);
+  }
+  headers.set('X-OET-Client-Platform', resolveClientPlatform());
+  const csrfToken = readCookie('oet_csrf');
+  if (csrfToken) {
+    headers.set('x-csrf-token', csrfToken);
+  }
+  return withAuthHeader(headers, accessToken);
+}
+
+function readCookie(name: string): string | null {
+  if (typeof document === 'undefined') {
+    return null;
+  }
+
+  const match = document.cookie.match(new RegExp(`(?:^|;\\s*)${name}=([^;]+)`));
+  return match ? decodeURIComponent(match[1]) : null;
+}
+
+function canSendBodyRefreshToken(): boolean {
+  const platform = resolveClientPlatform();
+  return platform === 'capacitor' || platform === 'desktop';
+}
+
 async function parseResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     let payload: AuthErrorPayload = {};
@@ -106,12 +154,13 @@ function isAbortError(error: unknown): boolean {
 }
 
 async function postJson<TResponse>(path: string, body: unknown, accessToken?: string | null): Promise<TResponse> {
-  const headers = withAuthHeader(new Headers({ 'Content-Type': 'application/json' }), accessToken);
+  const headers = buildHeaders('application/json', accessToken);
   try {
     const response = await fetchWithTimeout(resolveUrl(path), {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
+      credentials: 'include',
     });
 
     return parseResponse<TResponse>(response);
@@ -125,11 +174,12 @@ async function postJson<TResponse>(path: string, body: unknown, accessToken?: st
 }
 
 async function getJson<TResponse>(path: string, accessToken?: string | null): Promise<TResponse> {
-  const headers = withAuthHeader(new Headers(), accessToken);
+  const headers = buildHeaders(undefined, accessToken);
   try {
     const response = await fetchWithTimeout(resolveUrl(path), {
       method: 'GET',
       headers,
+      credentials: 'include',
     });
 
     return parseResponse<TResponse>(response);
@@ -151,8 +201,11 @@ function isExpiredOrCloseToExpiry(isoDate: string, skewSeconds = 30): boolean {
   return expiresAt <= Date.now() + skewSeconds * 1000;
 }
 
-async function refreshSessionInternal(refreshToken: string): Promise<AuthSession> {
-  return postJson<AuthSession>('/v1/auth/refresh', { refreshToken });
+async function refreshSessionInternal(refreshToken?: string | null): Promise<AuthSession> {
+  return postJson<AuthSession>(
+    '/v1/auth/refresh',
+    canSendBodyRefreshToken() && refreshToken ? { refreshToken } : {},
+  );
 }
 
 export async function ensureFreshSession(): Promise<AuthSession | null> {
@@ -164,7 +217,7 @@ export async function ensureFreshSession(): Promise<AuthSession | null> {
 
   let session = record.session;
 
-  if (isExpiredOrCloseToExpiry(session.accessTokenExpiresAt)) {
+  if (!session.accessToken || isExpiredOrCloseToExpiry(session.accessTokenExpiresAt)) {
     try {
       session = await refreshSessionInternal(session.refreshToken);
       saveStoredSession(session, record.persistence);
@@ -295,9 +348,11 @@ export async function signOut(): Promise<void> {
   const session = loadStoredSessionRecord()?.session;
 
   try {
-    if (session?.refreshToken) {
-      await postJson<void>('/v1/auth/sign-out', { refreshToken: session.refreshToken });
-    }
+    await postJson<void>(
+      '/v1/auth/sign-out',
+      canSendBodyRefreshToken() && session?.refreshToken ? { refreshToken: session.refreshToken } : {},
+      session?.accessToken,
+    );
   } finally {
     clearStoredSession();
     clearPendingMfaChallenge();
