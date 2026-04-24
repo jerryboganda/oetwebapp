@@ -1,13 +1,10 @@
-'use client';
-
 import { BookOpen, Clock, Headphones, PenLine, Mic } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { analytics } from '@/lib/analytics';
-import { useEffect } from 'react';
+import { PageViewBeacon } from '@/components/analytics/page-view-beacon';
 
 const EXAM_SECTIONS = [
   { icon: Headphones, title: 'Listening', duration: '~42 minutes', parts: 'Part A (consultation extract) + Part B (short workplace extracts)', scoring: '0–500 per subtest', tips: ['Listen for specific information and gist', 'Part A has one long dialogue, Part B has 6 short extracts', 'Read questions before audio plays'] },
@@ -26,10 +23,9 @@ const SCORING_GUIDE = [
 ];
 
 export default function ExamGuidePage() {
-  useEffect(() => { analytics.track('exam_guide_viewed'); }, []);
-
   return (
     <LearnerDashboardShell>
+      <PageViewBeacon event="exam_guide_viewed" />
       <LearnerPageHero title="OET Exam Guide" description="Everything you need to know about the OET exam format, timing, scoring, and strategies." />
 
       <MotionSection className="space-y-8 max-w-4xl mx-auto">

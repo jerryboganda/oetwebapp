@@ -1,11 +1,8 @@
-'use client';
-
-import { useEffect } from 'react';
 import { BookOpen, Scale, Star, AlertTriangle } from 'lucide-react';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { analytics } from '@/lib/analytics';
+import { PageViewBeacon } from '@/components/analytics/page-view-beacon';
 
 const WRITING_RUBRIC = [
   { criterion: 'Overall Task Fulfilment', weight: 'High', bands: [
@@ -109,10 +106,9 @@ const CALIBRATION_TIPS = [
 ];
 
 export default function RubricReferencePage() {
-  useEffect(() => { analytics.track('expert_rubric_reference_viewed'); }, []);
-
   return (
     <div className="min-h-screen bg-background">
+      <PageViewBeacon event="expert_rubric_reference_viewed" />
       <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
         <div>
           <h1 className="text-3xl font-bold flex items-center gap-2"><BookOpen className="w-8 h-8" /> Expert Rubric Quick Reference</h1>
