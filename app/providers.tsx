@@ -6,6 +6,7 @@ import { ThemeProvider } from '@/components/theme-provider';
 import { AuthProvider } from '@/contexts/auth-context';
 import { MobileRuntimeBridge } from '@/components/mobile/mobile-runtime-bridge';
 import { RuntimeLifecycleBridge } from '@/components/runtime/runtime-lifecycle-bridge';
+import { QueryProvider } from '@/components/providers/query-provider';
 
 function useServiceWorkerRegistration() {
   useEffect(() => {
@@ -25,11 +26,13 @@ export function AppProviders({ children }: { children: ReactNode }) {
 
   return (
     <ThemeProvider>
-      <AuthProvider>
-        <RuntimeLifecycleBridge />
-        <MobileRuntimeBridge />
-        {children}
-      </AuthProvider>
+      <QueryProvider>
+        <AuthProvider>
+          <RuntimeLifecycleBridge />
+          <MobileRuntimeBridge />
+          {children}
+        </AuthProvider>
+      </QueryProvider>
     </ThemeProvider>
   );
 }
