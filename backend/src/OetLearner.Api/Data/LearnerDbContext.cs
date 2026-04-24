@@ -251,8 +251,12 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     {
         modelBuilder.Entity<ContentItem>().HasIndex(x => new { x.SubtestCode, x.Status });
         modelBuilder.Entity<Attempt>().HasIndex(x => new { x.UserId, x.SubtestCode, x.State });
+        modelBuilder.Entity<Attempt>().HasIndex(x => x.ContentId);
         modelBuilder.Entity<Evaluation>().HasIndex(x => new { x.AttemptId, x.State });
+        // Worker polls for pending evaluations without filtering by attempt.
+        modelBuilder.Entity<Evaluation>().HasIndex(x => new { x.State, x.LastTransitionAt });
         modelBuilder.Entity<ReviewRequest>().HasIndex(x => new { x.AttemptId, x.State });
+        modelBuilder.Entity<ReviewRequest>().HasIndex(x => new { x.State, x.CreatedAt });
         modelBuilder.Entity<AccountFreezePolicy>().HasIndex(x => x.Version);
         modelBuilder.Entity<AccountFreezeRecord>().HasIndex(x => new { x.UserId, x.Status });
         modelBuilder.Entity<AccountFreezeRecord>().HasIndex(x => x.UserId).IsUnique().HasFilter("\"IsCurrent\" = TRUE");
@@ -263,11 +267,21 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<BackgroundJobItem>().HasIndex(x => new { x.State, x.AvailableAt });
         modelBuilder.Entity<Invoice>().HasIndex(x => new { x.UserId, x.IssuedAt });
         modelBuilder.Entity<AnalyticsEventRecord>().HasIndex(x => new { x.UserId, x.EventName, x.OccurredAt });
+        // Platform-wide funnels (no user filter) need leading EventName.
+        modelBuilder.Entity<AnalyticsEventRecord>().HasIndex(x => new { x.EventName, x.OccurredAt });
         modelBuilder.Entity<IdempotencyRecord>().HasIndex(x => new { x.Scope, x.Key }).IsUnique();
-        modelBuilder.Entity<ApplicationUserAccount>().HasIndex(x => new { x.NormalizedEmail, x.Role });
+        // NOTE: dropped redundant HasIndex(NormalizedEmail, Role) — UNIQUE(NormalizedEmail) from
+        // the entity [Index] attribute already satisfies any filter on NormalizedEmail (max 1 row).
         modelBuilder.Entity<ApplicationUserAccount>().HasIndex(x => x.DeletedAt);
+        modelBuilder.Entity<ApplicationUserAccount>().HasIndex(x => x.LastLoginAt);
         modelBuilder.Entity<RefreshTokenRecord>().HasIndex(x => new { x.ApplicationUserAccountId, x.ExpiresAt });
+        // Active sessions / revocation sweeps use a partial index to skip revoked tokens.
+        modelBuilder.Entity<RefreshTokenRecord>()
+            .HasIndex(x => x.ApplicationUserAccountId)
+            .HasFilter("\"RevokedAt\" IS NULL")
+            .HasDatabaseName("IX_RefreshTokenRecord_Active");
         modelBuilder.Entity<EmailOtpChallenge>().HasIndex(x => new { x.ApplicationUserAccountId, x.Purpose, x.ExpiresAt });
+        modelBuilder.Entity<EmailOtpChallenge>().HasIndex(x => x.ExpiresAt);
         modelBuilder.Entity<MfaRecoveryCode>().HasIndex(x => x.ApplicationUserAccountId);
         modelBuilder.Entity<ExternalIdentityLink>().HasIndex(x => new { x.ApplicationUserAccountId, x.Provider });
         modelBuilder.Entity<LearnerRegistrationProfile>().HasIndex(x => x.ApplicationUserAccountId).IsUnique();
@@ -283,6 +297,9 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<LearnerGoal>().HasIndex(x => x.UserId);
         modelBuilder.Entity<LearnerSettings>().HasIndex(x => x.UserId);
         modelBuilder.Entity<Subscription>().HasIndex(x => x.UserId);
+        modelBuilder.Entity<LearnerUser>().HasIndex(x => x.Email);
+        modelBuilder.Entity<LearnerUser>().HasIndex(x => x.LastActiveAt);
+        modelBuilder.Entity<LearnerUser>().HasIndex(x => x.AccountStatus);
         modelBuilder.Entity<LearnerUser>().Property(x => x.AccountStatus).IsConcurrencyToken();
         modelBuilder.Entity<ExpertUser>().Property(x => x.IsActive).IsConcurrencyToken();
         modelBuilder.Entity<Wallet>().Property(x => x.LastUpdatedAt).IsConcurrencyToken();
@@ -291,7 +308,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<StudyPlan>().HasIndex(x => x.UserId);
         modelBuilder.Entity<ReadinessSnapshot>().HasIndex(x => x.UserId);
         modelBuilder.Entity<DiagnosticSession>().HasIndex(x => new { x.UserId, x.State });
-        modelBuilder.Entity<MockAttempt>().HasIndex(x => x.UserId);
+        // Dropped solo HasIndex(UserId) — strict prefix of the composite (UserId, State) below.
         modelBuilder.Entity<MockAttempt>().HasIndex(x => new { x.UserId, x.State });
         modelBuilder.Entity<MockAttempt>()
             .HasOne(x => x.MockBundle)
@@ -396,8 +413,9 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
             .OnDelete(DeleteBehavior.Restrict);
         modelBuilder.Entity<NotificationPreference>().HasIndex(x => x.AuthAccountId).IsUnique();
         modelBuilder.Entity<NotificationPolicyOverride>().HasIndex(x => new { x.AudienceRole, x.EventKey }).IsUnique();
-        modelBuilder.Entity<NotificationDeliveryAttempt>().HasIndex(x => new { x.NotificationEventId, x.Channel, x.AttemptedAt });
-        modelBuilder.Entity<PushSubscription>().HasIndex(x => x.Endpoint).IsUnique();
+        // NOTE: dropped fluent (NotificationEventId, Channel, AttemptedAt) and Endpoint-unique here
+        // — both are already declared via [Index] attributes on the entities (NotificationEntities.cs).
+        modelBuilder.Entity<NotificationDeliveryAttempt>().HasIndex(x => new { x.Status, x.AttemptedAt });
         modelBuilder.Entity<SubscriptionItem>().HasIndex(x => new { x.SubscriptionId, x.Status });
         modelBuilder.Entity<SubscriptionItem>().HasIndex(x => new { x.ItemCode, x.SubscriptionId });
         modelBuilder.Entity<BillingPlan>().HasIndex(x => x.Code).IsUnique();
@@ -478,7 +496,8 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
 
         // Community indexes
         modelBuilder.Entity<ForumThread>().HasIndex(x => new { x.CategoryId, x.LastActivityAt });
-        modelBuilder.Entity<ForumReply>().HasIndex(x => x.ThreadId);
+        // Paginated thread view orders by CreatedAt; include it so the ORDER BY is indexed.
+        modelBuilder.Entity<ForumReply>().HasIndex(x => new { x.ThreadId, x.CreatedAt });
         modelBuilder.Entity<StudyGroupMember>().HasIndex(x => new { x.GroupId, x.UserId }).IsUnique();
         modelBuilder.Entity<StudyGroupMember>().HasIndex(x => x.UserId);
         modelBuilder.Entity<PeerReviewRequest>().HasIndex(x => x.SubmitterUserId);
@@ -524,6 +543,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
 
         // Payment indexes
         modelBuilder.Entity<PaymentTransaction>().HasIndex(x => new { x.LearnerUserId, x.CreatedAt });
+        modelBuilder.Entity<PaymentTransaction>().HasIndex(x => new { x.Status, x.CreatedAt });
         modelBuilder.Entity<PaymentTransaction>().HasIndex(x => x.GatewayTransactionId).IsUnique();
         modelBuilder.Entity<PaymentWebhookEvent>().HasIndex(x => x.GatewayEventId).IsUnique();
         modelBuilder.Entity<PaymentWebhookEvent>().HasIndex(x => new { x.ProcessingStatus, x.ReceivedAt });
