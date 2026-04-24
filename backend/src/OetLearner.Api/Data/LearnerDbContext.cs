@@ -305,28 +305,30 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<Wallet>().Property(x => x.LastUpdatedAt).IsConcurrencyToken();
 
         // Optimistic concurrency via Postgres system column xmin on high-risk
-        // billing + evaluation entities. Every UPDATE transparently gains a
-        // WHERE xmin = @original clause, so concurrent writers get
-        // DbUpdateConcurrencyException instead of silently clobbering each other.
-        // No DDL change — xmin is an always-present system column. Callers
-        // that do genuinely concurrent read-modify-write (webhook handlers,
-        // background evaluators) use ConcurrencyRetry.ExecuteAsync to refresh
-        // + retry; user-initiated flows surface 409 Conflict to the caller.
-        ConfigureXminToken<Subscription>(modelBuilder);
-        ConfigureXminToken<Invoice>(modelBuilder);
-        ConfigureXminToken<SubscriptionItem>(modelBuilder);
-        ConfigureXminToken<Evaluation>(modelBuilder);
+        // billing + evaluation entities. SQLite/in-memory test providers do
+        // not have that system column, so keep the mapping Npgsql-only.
+        if (Database.IsNpgsql())
+        {
+            ConfigureXminToken<Subscription>(modelBuilder);
+            ConfigureXminToken<Invoice>(modelBuilder);
+            ConfigureXminToken<SubscriptionItem>(modelBuilder);
+            ConfigureXminToken<Evaluation>(modelBuilder);
+        }
 
         // Hot JSON columns stored as jsonb for smaller on-disk size, native
         // validation, and future GIN-index capability. Paired with migration
-        // 20260424170000_ConvertHotJsonColumnsToJsonb.
-        modelBuilder.Entity<AnalyticsEventRecord>().Property(x => x.PayloadJson).HasColumnType("jsonb");
-        modelBuilder.Entity<Attempt>().Property(x => x.AnalysisJson).HasColumnType("jsonb");
-        modelBuilder.Entity<Evaluation>().Property(x => x.StrengthsJson).HasColumnType("jsonb");
-        modelBuilder.Entity<Evaluation>().Property(x => x.IssuesJson).HasColumnType("jsonb");
-        modelBuilder.Entity<Evaluation>().Property(x => x.CriterionScoresJson).HasColumnType("jsonb");
-        modelBuilder.Entity<Evaluation>().Property(x => x.FeedbackItemsJson).HasColumnType("jsonb");
-        modelBuilder.Entity<PaymentWebhookEvent>().Property(x => x.PayloadJson).HasColumnType("jsonb");
+        // 20260424170000_ConvertHotJsonColumnsToJsonb. SQLite/in-memory
+        // providers used by tests do not support jsonb, so scope to Npgsql.
+        if (Database.IsNpgsql())
+        {
+            modelBuilder.Entity<AnalyticsEventRecord>().Property(x => x.PayloadJson).HasColumnType("jsonb");
+            modelBuilder.Entity<Attempt>().Property(x => x.AnalysisJson).HasColumnType("jsonb");
+            modelBuilder.Entity<Evaluation>().Property(x => x.StrengthsJson).HasColumnType("jsonb");
+            modelBuilder.Entity<Evaluation>().Property(x => x.IssuesJson).HasColumnType("jsonb");
+            modelBuilder.Entity<Evaluation>().Property(x => x.CriterionScoresJson).HasColumnType("jsonb");
+            modelBuilder.Entity<Evaluation>().Property(x => x.FeedbackItemsJson).HasColumnType("jsonb");
+            modelBuilder.Entity<PaymentWebhookEvent>().Property(x => x.PayloadJson).HasColumnType("jsonb");
+        }
         modelBuilder.Entity<Wallet>().HasIndex(x => x.UserId);
         modelBuilder.Entity<ReviewRequest>().Property(x => x.State).IsConcurrencyToken();
         modelBuilder.Entity<StudyPlan>().HasIndex(x => x.UserId);
