@@ -20,7 +20,7 @@ class MockMediaRecorder implements MediaRecorderHandlers {
 
   constructor(_stream: MediaStream, options?: { mimeType?: string }) {
     this._mimeType = options?.mimeType ?? 'audio/webm';
-    lastMockRecorder = this;
+
   }
 
   start() {
@@ -35,7 +35,7 @@ class MockMediaRecorder implements MediaRecorderHandlers {
   }
 }
 
-let lastMockRecorder: MockMediaRecorder | null = null;
+
 
 function createStreamMock(): MediaStream {
   return {
@@ -94,7 +94,7 @@ describe('usePronunciationRecorder', () => {
       },
     });
 
-    lastMockRecorder = null;
+
   });
 
   afterEach(() => {
