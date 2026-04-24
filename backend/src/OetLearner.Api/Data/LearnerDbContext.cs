@@ -303,6 +303,19 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<LearnerUser>().Property(x => x.AccountStatus).IsConcurrencyToken();
         modelBuilder.Entity<ExpertUser>().Property(x => x.IsActive).IsConcurrencyToken();
         modelBuilder.Entity<Wallet>().Property(x => x.LastUpdatedAt).IsConcurrencyToken();
+
+        // Optimistic concurrency via Postgres system column xmin on high-risk
+        // billing + evaluation entities. Every UPDATE transparently gains a
+        // WHERE xmin = @original clause, so concurrent writers get
+        // DbUpdateConcurrencyException instead of silently clobbering each other.
+        // No DDL change — xmin is an always-present system column. Callers
+        // that do genuinely concurrent read-modify-write (webhook handlers,
+        // background evaluators) use ConcurrencyRetry.ExecuteAsync to refresh
+        // + retry; user-initiated flows surface 409 Conflict to the caller.
+        ConfigureXminToken<Subscription>(modelBuilder);
+        ConfigureXminToken<Invoice>(modelBuilder);
+        ConfigureXminToken<SubscriptionItem>(modelBuilder);
+        ConfigureXminToken<Evaluation>(modelBuilder);
         modelBuilder.Entity<Wallet>().HasIndex(x => x.UserId);
         modelBuilder.Entity<ReviewRequest>().Property(x => x.State).IsConcurrencyToken();
         modelBuilder.Entity<StudyPlan>().HasIndex(x => x.UserId);
@@ -570,5 +583,21 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         // ── Learner Escalations ──
         modelBuilder.Entity<LearnerEscalation>().HasIndex(x => new { x.UserId, x.Status });
         modelBuilder.Entity<LearnerEscalation>().HasIndex(x => x.SubmissionId);
+    }
+
+    /// <summary>
+    /// Configures the Postgres system column <c>xmin</c> as an optimistic
+    /// concurrency token for <typeparamref name="TEntity"/>. xmin is always
+    /// present on every row, so this is purely a model-level opt-in — no DDL.
+    /// </summary>
+    private static void ConfigureXminToken<TEntity>(ModelBuilder modelBuilder)
+        where TEntity : class
+    {
+        modelBuilder.Entity<TEntity>()
+            .Property<uint>("xmin")
+            .HasColumnName("xmin")
+            .HasColumnType("xid")
+            .ValueGeneratedOnAddOrUpdate()
+            .IsConcurrencyToken();
     }
 }
