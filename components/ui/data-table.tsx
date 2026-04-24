@@ -254,6 +254,10 @@ function VirtualizedDesktopView<T>({
 }: VirtualizedDesktopViewProps<T>) {
   const { rowHeight, containerHeight = 640, overscan = 8 } = options;
   const parentRef = useRef<HTMLDivElement>(null);
+  // `useVirtualizer` is a third-party hook whose dependencies are managed
+  // internally by TanStack Virtual; the eslint react-hooks rule's
+  // incompatible-library check flags it in Next.js strict mode.
+  // eslint-disable-next-line react-hooks/incompatible-library
   const virtualizer = useVirtualizer({
     count: data.length,
     getScrollElement: () => parentRef.current,
