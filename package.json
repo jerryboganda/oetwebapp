@@ -65,6 +65,7 @@
     "@tabler/icons-react": "^3.41.0",
     "autoprefixer": "^10.4.21",
     "capacitor-secure-storage-plugin": "^0.10.0",
+    "capacitor-voice-recorder": "^6.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "country-flag-icons": "^1.6.15",
