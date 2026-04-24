@@ -1,0 +1,18 @@
+error TS6053: File 'C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/app/admin/analytics/quality/_charts.tsx' not found.
+  The file is in the program because:
+    Matched by include pattern '**/*.tsx' in 'C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/tsconfig.json'
+error TS6053: File 'C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/app/exam-guide/_content.tsx' not found.
+  The file is in the program because:
+    Matched by include pattern '**/*.tsx' in 'C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/tsconfig.json'
+error TS6053: File 'C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/app/expert/metrics/_charts.tsx' not found.
+  The file is in the program because:
+    Matched by include pattern '**/*.tsx' in 'C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/tsconfig.json'
+error TS6053: File 'C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/app/expert/scoring-quality/_charts.tsx' not found.
+  The file is in the program because:
+    Matched by include pattern '**/*.tsx' in 'C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/tsconfig.json'
+error TS6053: File 'C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/app/feedback-guide/_content.tsx' not found.
+  The file is in the program because:
+    Matched by include pattern '**/*.tsx' in 'C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/tsconfig.json'
+error TS6053: File 'C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/app/progress/_charts.tsx' not found.
+  The file is in the program because:
+    Matched by include pattern '**/*.tsx' in 'C:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App/tsconfig.json'

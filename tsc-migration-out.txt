@@ -1,0 +1,16 @@
+.next/types/app/exam-guide/page.ts(2,24): error TS2307: Cannot find module '../../../../app/exam-guide/page.js' or its corresponding type declarations.
+.next/types/app/exam-guide/page.ts(5,29): error TS2307: Cannot find module '../../../../app/exam-guide/page.js' or its corresponding type declarations.
+.next/types/validator.ts(1124,39): error TS2307: Cannot find module '../../app/exam-guide/page.js' or its corresponding type declarations.
+components/ui/stepper.tsx(41,16): error TS2552: Cannot find name 'motion'. Did you mean 'Option'?
+components/ui/stepper.tsx(43,29): error TS2304: Cannot find name 'springTransition'.
+components/ui/stepper.tsx(52,18): error TS2304: Cannot find name 'AnimatePresence'.
+components/ui/stepper.tsx(54,22): error TS2552: Cannot find name 'motion'. Did you mean 'Option'?
+components/ui/stepper.tsx(59,35): error TS2304: Cannot find name 'springTransition'.
+components/ui/stepper.tsx(62,23): error TS2552: Cannot find name 'motion'. Did you mean 'Option'?
+components/ui/stepper.tsx(64,22): error TS2304: Cannot find name 'motion'.
+components/ui/stepper.tsx(69,47): error TS2304: Cannot find name 'motionTokens'.
+components/ui/stepper.tsx(72,23): error TS2304: Cannot find name 'motion'.
+components/ui/stepper.tsx(74,19): error TS2304: Cannot find name 'AnimatePresence'.
+components/ui/stepper.tsx(75,17): error TS2552: Cannot find name 'motion'. Did you mean 'Option'?
+components/ui/stepper.tsx(88,18): error TS2552: Cannot find name 'motion'. Did you mean 'Option'?
+components/ui/stepper.tsx(92,31): error TS2304: Cannot find name 'springTransition'.
