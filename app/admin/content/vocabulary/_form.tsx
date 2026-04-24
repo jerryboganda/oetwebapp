@@ -307,5 +307,3 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
     </AdminDashboardShell>
   );
 }
-
-export type { Props as VocabularyFormProps };
