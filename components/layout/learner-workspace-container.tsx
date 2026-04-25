@@ -1,3 +1,5 @@
+'use client';
+
 import { type ComponentPropsWithoutRef } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { cn } from '@/lib/utils';
