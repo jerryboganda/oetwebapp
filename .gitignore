@@ -83,3 +83,5 @@ _check_pdf_libs.py
 
 # oh-my-opencode cross-session task state
 .sisyphus/
+
+ts-prune-survivors.txt
