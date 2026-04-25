@@ -2,8 +2,6 @@
 
 import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
-import { Browser } from '@capacitor/browser';
-import { Device } from '@capacitor/device';
 import { Keyboard } from '@capacitor/keyboard';
 import { Network } from '@capacitor/network';
 import { SplashScreen } from '@capacitor/splash-screen';
@@ -15,15 +13,6 @@ export interface MobileRuntimeHandlers {
   onNetworkChange?: (connected: boolean) => void;
   onBackButton?: () => void;
 }
-
-export interface MobileRuntimeSnapshot {
-  platform: string;
-  isNative: boolean;
-  isAndroid: boolean;
-  isIOS: boolean;
-  isWeb: boolean;
-}
-
 function isBrowser() {
   return typeof window !== 'undefined';
 }
@@ -84,33 +73,6 @@ function syncOnlineState(connected: boolean, onNetworkChange?: (connected: boole
   document.documentElement.dataset.networkConnected = connected ? 'true' : 'false';
   window.dispatchEvent(new Event(connected ? 'online' : 'offline'));
   onNetworkChange?.(connected);
-}
-
-export async function getMobileRuntimeSnapshot(): Promise<MobileRuntimeSnapshot> {
-  const platform = Capacitor.getPlatform();
-  const isNative = Capacitor.isNativePlatform();
-  const device = isNative ? await Device.getInfo().catch(() => null) : null;
-
-  return {
-    platform: device?.platform ?? platform,
-    isNative,
-    isAndroid: (device?.platform ?? platform) === 'android',
-    isIOS: (device?.platform ?? platform) === 'ios',
-    isWeb: !isNative,
-  };
-}
-
-export async function openExternalUrl(url: string): Promise<void> {
-  if (!isBrowser()) {
-    return;
-  }
-
-  if (Capacitor.isNativePlatform()) {
-    await Browser.open({ url });
-    return;
-  }
-
-  window.open(url, '_blank', 'noopener,noreferrer');
 }
 
 export async function initializeMobileRuntime(handlers: MobileRuntimeHandlers = {}): Promise<() => void> {
