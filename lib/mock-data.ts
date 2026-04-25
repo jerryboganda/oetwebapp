@@ -606,17 +606,6 @@ export interface BillingExtra {
   description: string;
 }
 
-export interface BillingChangePreview {
-  currentPlanId: string;
-  targetPlanId: string;
-  direction: 'upgrade' | 'downgrade';
-  proratedAmount: string;
-  effectiveAt: string;
-  summary: string;
-  currentCreditsIncluded: number;
-  targetCreditsIncluded: number;
-}
-
 export interface BillingData {
   currentPlan: string;
   currentPlanId: string;
