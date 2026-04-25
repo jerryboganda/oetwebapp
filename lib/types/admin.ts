@@ -213,18 +213,6 @@ export interface AdminUsersPageData {
   items: AdminUserRow[];
 }
 
-export interface AdminInvitationResult {
-  id: string;
-  email: string;
-  role: string;
-  invitation: {
-    purpose: string;
-    deliveryChannel: string;
-    destinationHint: string;
-    expiresAt: string;
-    retryAfterSeconds: number;
-  };
-}
 
 export interface AdminBillingPlan {
   id: string;
@@ -565,17 +553,6 @@ export interface AdminBIMetric {
   changeLabel: string;
 }
 
-export interface AdminBIDashboardData {
-  revenue: AdminBIMetric;
-  activeUsers: AdminBIMetric;
-  retention: AdminBIMetric;
-  churnRate: AdminBIMetric;
-  avgScoreImprovement: AdminBIMetric;
-  expertUtilization: AdminBIMetric;
-  topSubtests: Array<{ subtest: string; completions: number; avgScore: number }>;
-  revenueByMonth: Array<{ month: string; revenue: number; subscriptions: number }>;
-  userGrowth: Array<{ month: string; newUsers: number; totalUsers: number }>;
-}
 
 export interface AdminSubscriptionHealthRevenuePlan {
   planId: string;
