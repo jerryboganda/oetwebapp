@@ -15,52 +15,6 @@ export type AuthScreenKey = Exclude<
   "terms" | "signUpSuccess" | "passwordResetSuccess"
 >;
 
-function withQuery(
-  path: string,
-  values: Record<string, string | undefined | null>
-): string {
-  const params = new URLSearchParams();
-
-  Object.entries(values).forEach(([key, value]) => {
-    if (value) {
-      params.set(key, value);
-    }
-  });
-
-  const query = params.toString();
-  return query ? `${path}?${query}` : path;
-}
-
-export function buildSignInHref(options?: {
-  status?: string;
-  username?: string;
-  email?: string;
-  next?: string | null;
-  externalError?: string | null;
-}) {
-  return withQuery(AUTH_ROUTES.signIn, {
-    status: options?.status,
-    username: options?.username,
-    email: options?.email,
-    next: options?.next ?? undefined,
-    externalError: options?.externalError ?? undefined,
-  });
-}
-
-export function buildTwoStepVerificationHref(options?: {
-  username?: string;
-  email?: string;
-  error?: string;
-  next?: string | null;
-}) {
-  return withQuery(AUTH_ROUTES.twoStepVerification, {
-    username: options?.username,
-    email: options?.email,
-    error: options?.error,
-    next: options?.next ?? undefined,
-  });
-}
-
 export function getAuthFlowLinks(screen: AuthScreenKey): {
   primary: string;
   secondary: string;
