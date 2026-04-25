@@ -49,6 +49,9 @@ const LEARNER_SURFACES: Array<{ path: string; label: string }> = [
 ];
 
 test('prod — learner journey end-to-end', async ({ page, context }) => {
+  // Walking 12 surfaces with per-page networkidle waits exceeds the global
+  // 60s test timeout when prod CDN is cold.
+  test.setTimeout(180_000);
   const consoleErrors: string[] = [];
   const apiFailures: string[] = [];
   const fourXx: string[] = [];
