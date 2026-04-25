@@ -50,18 +50,6 @@ export async function isBiometricAvailable(): Promise<boolean> {
   }
 }
 
-export async function getBiometryType(): Promise<string> {
-  const plugin = await getBiometricPlugin();
-  if (!plugin) return 'NONE';
-
-  try {
-    const result = await plugin.checkBiometry();
-    return result.biometryType;
-  } catch {
-    return 'NONE';
-  }
-}
-
 export async function authenticateWithBiometrics(
   reason = 'Verify your identity to access OET Prep'
 ): Promise<BiometricResult> {
@@ -85,14 +73,4 @@ export async function authenticateWithBiometrics(
     const message = error instanceof Error ? error.message : 'Biometric verification failed';
     return { verified: false, error: message };
   }
-}
-
-export async function biometricGateForSecureStorage(): Promise<boolean> {
-  const available = await isBiometricAvailable();
-  if (!available) return true; // Allow access if biometrics not available
-
-  const result = await authenticateWithBiometrics(
-    'Authenticate to access your secure credentials'
-  );
-  return result.verified;
 }
