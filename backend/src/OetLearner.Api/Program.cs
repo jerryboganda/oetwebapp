@@ -295,6 +295,23 @@ builder.Services.AddRateLimiter(options =>
             QueueLimit = 0
         });
     });
+    // /v1/auth/refresh is hit by legitimate already-authenticated sessions on
+    // every hard navigation (the SPA does not persist access tokens to
+    // localStorage for security). Sharing the AuthBruteforce bucket with
+    // sign-in/register starves real users behind NAT and trips 429s during
+    // multi-tab use. Single-use refresh-token rotation already provides the
+    // anti-replay guarantee, so a higher limit here is safe.
+    var authRefreshPermit = builder.Environment.IsDevelopment() ? 500 : 120;
+    options.AddPolicy("AuthRefresh", httpContext =>
+    {
+        var key = httpContext.Connection.RemoteIpAddress?.ToString() ?? "unknown";
+        return RateLimitPartition.GetFixedWindowLimiter($"auth-refresh-{key}", _ => new FixedWindowRateLimiterOptions
+        {
+            PermitLimit = authRefreshPermit,
+            Window = TimeSpan.FromMinutes(1),
+            QueueLimit = 0
+        });
+    });
     // Email-scoped OTP throttle. Applied to endpoints that accept a target email
     // in the request body (verification OTP, forgot-password). Key is derived from
     // a header the handler sets; handlers MUST call context.Items["otp_email"] = normalizedEmail

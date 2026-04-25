@@ -101,7 +101,7 @@ public static class AuthEndpoints
         auth.MapPost("/refresh", async (RefreshTokenRequest request, AuthService service, CancellationToken ct)
                 => Results.Ok(await service.RefreshAsync(request, ct)))
             .AllowAnonymous()
-            .RequireRateLimiting("AuthBruteforce");
+            .RequireRateLimiting("AuthRefresh");
 
         auth.MapPost("/sign-out", async (SignOutRequest request, AuthService service, CancellationToken ct) =>
             {
