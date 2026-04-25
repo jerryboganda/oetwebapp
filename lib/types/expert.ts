@@ -115,31 +115,6 @@ export type SpeakingLinguisticCriterionKey = typeof SPEAKING_LINGUISTIC_CRITERIA
 export type SpeakingClinicalCriterionKey = typeof SPEAKING_CLINICAL_CRITERIA[number];
 export type SpeakingCriterionKey = SpeakingLinguisticCriterionKey | SpeakingClinicalCriterionKey;
 
-/** Canonical max score per criterion (linguistic 0–6, clinical 0–3). */
-export const SPEAKING_CRITERION_MAX_SCORES: Record<SpeakingCriterionKey, number> = {
-  intelligibility: 6,
-  fluency: 6,
-  appropriateness: 6,
-  grammar: 6,
-  relationshipBuilding: 3,
-  patientPerspective: 3,
-  providingStructure: 3,
-  informationGathering: 3,
-  informationGiving: 3,
-};
-
-/** Human-readable labels aligned with the official CBLA criterion names. */
-export const SPEAKING_CRITERION_LABELS: Record<SpeakingCriterionKey, string> = {
-  intelligibility: 'Intelligibility',
-  fluency: 'Fluency',
-  appropriateness: 'Appropriateness of Language',
-  grammar: 'Resources of Grammar & Expression',
-  relationshipBuilding: 'Relationship Building',
-  patientPerspective: "Understanding & Incorporating Patient's Perspective",
-  providingStructure: 'Providing Structure',
-  informationGathering: 'Information Gathering',
-  informationGiving: 'Information Giving',
-};
 
 export interface ReviewRequest {
   id: string;
