@@ -324,10 +324,6 @@ export const grantUserCredits = (userId: string, body: {
 }) => aiApi<AiCreditLedgerRow>(`/v1/admin/ai/users/${userId}/credits/grant`, {
   method: 'POST', body: JSON.stringify(body),
 });
-
-export const sweepExpiredCredits = () =>
-  aiApi<{ expired: number }>('/v1/admin/ai/credits/sweep-expired', { method: 'POST' });
-
 // ═════════════════════════════════════════════════════════════════════════
 // Admin — per-user AI quota / policy overrides
 // ═════════════════════════════════════════════════════════════════════════
