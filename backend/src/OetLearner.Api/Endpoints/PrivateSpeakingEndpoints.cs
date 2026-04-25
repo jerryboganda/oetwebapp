@@ -236,7 +236,10 @@ public static class PrivateSpeakingEndpoints
             CancellationToken ct) =>
         {
             var profile = await svc.GetTutorProfileByExpertIdAsync(http.UserId(), ct);
-            if (profile is null) return Results.NotFound(new { error = "NO_PROFILE" });
+            // If the expert has not yet created a tutor profile, there are by
+            // definition no availability rules. Return an empty list (200)
+            // instead of 404 NO_PROFILE to keep the UI quiet on first visit.
+            if (profile is null) return Results.Ok(Array.Empty<object>());
 
             var rules = await svc.GetAvailabilityRulesAsync(profile.Id, ct);
             return Results.Ok(rules.Select(r => new
