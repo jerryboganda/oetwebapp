@@ -167,8 +167,11 @@ public static class PrivateSpeakingEndpoints
             PrivateSpeakingService svc,
             CancellationToken ct) =>
         {
+            // Returns 200 with `null` body when the expert has not yet created a tutor profile.
+            // Previous behaviour was 404 NO_PROFILE, which produced noisy DevTools errors and
+            // forced every caller to handle the error path. Callers should now branch on `=== null`.
             var profile = await svc.GetTutorProfileByExpertIdAsync(http.UserId(), ct);
-            if (profile is null) return Results.NotFound(new { error = "NO_PROFILE" });
+            if (profile is null) return Results.Ok((object?)null);
             return Results.Ok(new
             {
                 profile.Id, profile.DisplayName, profile.Bio, profile.Timezone,

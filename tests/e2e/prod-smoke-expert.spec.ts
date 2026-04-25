@@ -141,3 +141,105 @@ test('prod — expert console journey end-to-end', async ({ page, context }) => 
   expect(consoleErrors, 'no console errors on expert surfaces').toEqual([]);
   expect(apiFailures, 'no API 5xx on expert surfaces').toEqual([]);
 });
+
+/**
+ * Round-16 deepening: exercise the expert onboarding wizard backend end-to-end.
+ * Verifies that the previously frontend-only feature now persists data on prod.
+ *
+ * Flow:
+ *   1. sign-in, capture access token from the auth response or cookies
+ *   2. GET  /v1/expert/onboarding/status                → 200 (was 404)
+ *   3. PUT  /v1/expert/onboarding/profile               → 200, body echoed
+ *   4. PUT  /v1/expert/onboarding/qualifications        → 200
+ *   5. PUT  /v1/expert/onboarding/rates                 → 200
+ *   6. PATCH /v1/expert/onboarding/complete             → 200 { completed: true }
+ *   7. GET  /v1/expert/onboarding/status                → returns the data we just wrote
+ */
+test('prod — expert onboarding wizard persists end-to-end', async ({ page, request }) => {
+  test.setTimeout(120_000);
+
+  await page.goto(`${PROD_URL}/sign-in`, { waitUntil: 'domcontentloaded' });
+  await page.locator('#email').fill(EMAIL!);
+  await page.locator('#password').fill(PASSWORD!);
+
+  const authResp = await Promise.all([
+    page.waitForResponse(
+      (r) => /\/v1\/auth\/(sign[-_]?in|login)/i.test(r.url()) && r.request().method() === 'POST',
+      { timeout: 20_000 },
+    ),
+    page.getByRole('button', { name: /^sign in$/i }).click(),
+  ]).then(([r]) => r);
+
+  const authBody = await authResp.json().catch(() => ({} as Record<string, unknown>));
+  const token =
+    (authBody as Record<string, unknown>).accessToken ??
+    (authBody as Record<string, unknown>).token ??
+    ((authBody as Record<string, unknown>).tokens as Record<string, unknown> | undefined)?.accessToken;
+  expect(typeof token, 'sign-in returned an access token').toBe('string');
+
+  const apiBase = `${PROD_URL}/api/backend`;
+  const authedHeaders = {
+    Authorization: `Bearer ${token as string}`,
+    'Content-Type': 'application/json',
+  };
+
+  // Status before any save: must be 200 (was 404 before backend implementation)
+  const statusBefore = await request.get(`${apiBase}/v1/expert/onboarding/status`, {
+    headers: authedHeaders,
+  });
+  expect(statusBefore.status(), 'GET status before save').toBe(200);
+
+  const profile = {
+    displayName: 'OET Smoke Expert',
+    bio: 'Automated end-to-end smoke verification of the onboarding wizard.',
+    photoUrl: null as string | null,
+  };
+  const profileResp = await request.put(`${apiBase}/v1/expert/onboarding/profile`, {
+    headers: authedHeaders,
+    data: profile,
+  });
+  expect(profileResp.status(), 'PUT profile').toBe(200);
+  expect(await profileResp.json()).toMatchObject({ displayName: profile.displayName });
+
+  const qualifications = {
+    qualifications: 'BDS, MFD RCSI, MJDF RCS — 12 years tutoring OET candidates.',
+    certifications: 'OET Premium Preparation Provider 2025',
+    experienceYears: 12,
+  };
+  const qualResp = await request.put(`${apiBase}/v1/expert/onboarding/qualifications`, {
+    headers: authedHeaders,
+    data: qualifications,
+  });
+  expect(qualResp.status(), 'PUT qualifications').toBe(200);
+
+  const rates = {
+    hourlyRateMinorUnits: 7500,
+    sessionRateMinorUnits: 5000,
+    currency: 'GBP',
+  };
+  const ratesResp = await request.put(`${apiBase}/v1/expert/onboarding/rates`, {
+    headers: authedHeaders,
+    data: rates,
+  });
+  expect(ratesResp.status(), 'PUT rates').toBe(200);
+
+  const completeResp = await request.patch(`${apiBase}/v1/expert/onboarding/complete`, {
+    headers: authedHeaders,
+  });
+  expect(completeResp.status(), 'PATCH complete').toBe(200);
+  expect(await completeResp.json()).toMatchObject({ completed: true });
+
+  const statusAfter = await request.get(`${apiBase}/v1/expert/onboarding/status`, {
+    headers: authedHeaders,
+  });
+  expect(statusAfter.status(), 'GET status after save').toBe(200);
+  const after = (await statusAfter.json()) as {
+    isComplete: boolean;
+    profile: typeof profile | null;
+    rates: typeof rates | null;
+  };
+  expect(after.isComplete, 'isComplete flag').toBe(true);
+  expect(after.profile?.displayName, 'persisted profile.displayName').toBe(profile.displayName);
+  expect(after.rates?.currency, 'persisted rates.currency').toBe('GBP');
+});
+

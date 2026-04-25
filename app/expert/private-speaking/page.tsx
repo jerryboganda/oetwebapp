@@ -77,10 +77,11 @@ export default function ExpertPrivateSpeakingPage() {
         fetchExpertPrivateSpeakingProfile(),
         fetchExpertPrivateSpeakingSessions(),
       ]);
-      setProfile(profileData as TutorProfile);
+      // Backend returns `null` when the expert has not yet created a tutor profile.
+      setProfile(profileData ? (profileData as TutorProfile) : null);
       setSessions(sessionData as ExpertSession[]);
     } catch {
-      setError('Failed to load your private speaking data. You may not have a tutor profile yet.');
+      setError('Failed to load your private speaking data.');
     } finally {
       setLoading(false);
     }
@@ -89,7 +90,7 @@ export default function ExpertPrivateSpeakingPage() {
   async function loadAvailability() {
     try {
       const data = await fetchExpertPrivateSpeakingProfile();
-      setProfile(data as TutorProfile);
+      setProfile(data ? (data as TutorProfile) : null);
       const rules = await fetchExpertPrivateSpeakingAvailability();
       setAvailability(rules as AvailabilityRule[]);
     } catch {
