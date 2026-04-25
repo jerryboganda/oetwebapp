@@ -197,22 +197,3 @@ export interface FoundationLessonDetail {
   prerequisiteKnowledge?: string;
   learningObjectives?: string[];
 }
-
-// ════════════════════════════════════════════════
-// SCHEMA VALIDATION HELPERS
-// ════════════════════════════════════════════════
-
-export type SubtestCode = 'writing' | 'speaking' | 'reading' | 'listening';
-
-export type DetailJsonSchema =
-  | WritingTaskDetail
-  | SpeakingTaskDetail
-  | ReadingTaskDetail
-  | ListeningTaskDetail
-  | FoundationLessonDetail;
-
-export type ModelAnswerJsonSchema =
-  | WritingModelAnswer
-  | SpeakingModelAnswer
-  | ReadingModelAnswer
-  | ListeningModelAnswer;
