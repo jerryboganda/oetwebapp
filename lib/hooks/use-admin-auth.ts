@@ -4,12 +4,6 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCurrentUser } from './use-current-user';
 import { defaultRouteForRole } from '@/lib/auth-routes';
-
-export interface UserRole {
-  role: 'learner' | 'expert' | 'admin';
-  isAuthenticated: boolean;
-}
-
 export function useAdminAuth() {
   const router = useRouter();
   const { role, isAuthenticated, isLoading } = useCurrentUser();
