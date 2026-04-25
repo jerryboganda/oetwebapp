@@ -3,27 +3,6 @@ export type ConversationState =
   | 'evaluating' | 'evaluated' | 'failed';
 
 export type ConversationTurnRole = 'learner' | 'ai' | 'system';
-
-export interface ConversationSession {
-  id: string;
-  userId: string;
-  contentId: string | null;
-  templateId: string | null;
-  examTypeCode: string;
-  subtestCode: string;
-  taskTypeCode: string;
-  profession: string;
-  scenarioJson: string;
-  state: ConversationState;
-  turnCount: number;
-  durationSeconds: number;
-  transcriptJson: string;
-  evaluationId: string | null;
-  createdAt: string;
-  startedAt: string | null;
-  completedAt: string | null;
-}
-
 export interface ConversationPatientVoice {
   gender?: 'male' | 'female' | 'neutral';
   age?: number;
