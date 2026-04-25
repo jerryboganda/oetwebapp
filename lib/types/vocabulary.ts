@@ -118,14 +118,6 @@ export interface VocabularyDailySet {
   cards: VocabularyFlashcard[];
 }
 
-export interface VocabularyTermsPage {
-  total: number;
-  page: number;
-  pageSize: number;
-  terms: VocabularyTerm[];
-  items: VocabularyTerm[];
-}
-
 export interface VocabularyLookupResult {
   found: boolean;
   term: VocabularyTerm | null;
