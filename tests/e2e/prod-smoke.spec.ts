@@ -52,6 +52,7 @@ test('prod — learner journey end-to-end', async ({ page, context }) => {
   const consoleErrors: string[] = [];
   const apiFailures: string[] = [];
   const fourXx: string[] = [];
+  let currentSurface = 'sign-in';
 
   page.on('console', (msg: ConsoleMessage) => {
     if (msg.type() === 'error') {
@@ -72,9 +73,9 @@ test('prod — learner journey end-to-end', async ({ page, context }) => {
     if (!url.includes('/v1/')) return;
     const status = res.status();
     if (status >= 500) {
-      apiFailures.push(`${status} ${url}`);
+      apiFailures.push(`[${currentSurface}] ${status} ${url}`);
     } else if (status >= 400) {
-      fourXx.push(`${status} ${url}`);
+      fourXx.push(`[${currentSurface}] ${status} ${url}`);
     }
   });
 
@@ -117,6 +118,7 @@ test('prod — learner journey end-to-end', async ({ page, context }) => {
 
   // 3. Walk each learner surface; assert the main document responds and no JS error is thrown
   for (const surface of LEARNER_SURFACES) {
+    currentSurface = surface.label;
     const resp = await page.goto(`${PROD_URL}${surface.path}`, {
       waitUntil: 'domcontentloaded',
       timeout: 30_000,

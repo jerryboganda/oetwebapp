@@ -252,6 +252,24 @@ function redirectToSignInAfterSessionLoss(): void {
   window.location.replace(`/sign-in?next=${next}`);
 }
 
+// Dedupe concurrent refresh attempts. Refresh tokens are single-use (rotated
+// on every successful refresh), so two parallel callers each issuing their
+// own POST /v1/auth/refresh would race: whichever lands second sees the now-
+// revoked token and gets 403. We share one in-flight promise across all
+// concurrent callers and reset it once it settles.
+let inflightRefresh: Promise<AuthSession> | null = null;
+
+function refreshSessionDeduped(refreshToken: string | null | undefined): Promise<AuthSession> {
+  if (inflightRefresh) return inflightRefresh;
+  const promise = refreshSessionInternal(refreshToken).finally(() => {
+    if (inflightRefresh === promise) {
+      inflightRefresh = null;
+    }
+  });
+  inflightRefresh = promise;
+  return promise;
+}
+
 export async function ensureFreshSession(): Promise<AuthSession | null> {
   await hydrateAuthStorage();
   const record = loadStoredSessionRecord();
@@ -264,7 +282,7 @@ export async function ensureFreshSession(): Promise<AuthSession | null> {
 
   if (!session.accessToken || isExpiredOrCloseToExpiry(session.accessTokenExpiresAt)) {
     try {
-      session = await refreshSessionInternal(session.refreshToken);
+      session = await refreshSessionDeduped(session.refreshToken);
       saveStoredSession(session, record.persistence);
     } catch {
       clearStoredSession();
