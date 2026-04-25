@@ -1,6 +1,6 @@
 'use client';
 
-import { Capacitor, registerPlugin } from '@capacitor/core';
+import { registerPlugin } from '@capacitor/core';
 
 export interface NativeSpeakingRecorderStartResult {
   mimeType: string;
@@ -24,11 +24,6 @@ export interface NativeSpeakingRecorderPlugin {
 }
 
 export const SpeakingRecorder = registerPlugin<NativeSpeakingRecorderPlugin>('SpeakingRecorder');
-
-export function isNativeSpeakingRecorderPlatform(): boolean {
-  return Capacitor.isNativePlatform();
-}
-
 export function base64ToBlob(base64: string, mimeType: string): Blob {
   const binary = globalThis.atob(base64);
   const bytes = new Uint8Array(binary.length);
