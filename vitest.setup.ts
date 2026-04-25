@@ -4,7 +4,6 @@ import { Children, createElement, Fragment, useEffect, useRef, type ReactNode } 
 
 vi.mock('@/lib/mobile/haptics', () => ({
 	triggerImpactHaptic: vi.fn(),
-	triggerNotificationHaptic: vi.fn(),
 }));
 
 /* ── next/link mock ──
