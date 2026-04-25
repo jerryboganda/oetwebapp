@@ -1,15 +1,12 @@
 import {
   useQuery,
-  useMutation,
   useQueryClient,
   type UseQueryOptions,
-  type UseMutationOptions,
 } from '@tanstack/react-query';
 import {
   fetchDashboardHome,
   fetchEngagement,
   fetchReadiness,
-  fetchUserProfile,
   fetchOnboardingState,
   fetchStudyPlan,
 } from '@/lib/api';
@@ -60,14 +57,6 @@ type QueryOpts<TData> = Omit<UseQueryOptions<TData, Error, TData>, 'queryKey' | 
  *   4. Invalidate after mutations with `queryClient.invalidateQueries`
  */
 
-export function useUserProfile(options: QueryOpts<Awaited<ReturnType<typeof fetchUserProfile>>> = {}) {
-  return useQuery({
-    queryKey: queryKeys.profile.self,
-    queryFn: fetchUserProfile,
-    staleTime: 60_000,
-    ...options,
-  });
-}
 
 export function useOnboardingState(options: QueryOpts<Awaited<ReturnType<typeof fetchOnboardingState>>> = {}) {
   return useQuery({
@@ -114,16 +103,5 @@ export function useStudyPlan(options: QueryOpts<Awaited<ReturnType<typeof fetchS
   });
 }
 
-/**
- * Typed `useMutation` passthrough — keeps all mutations in the same file
- * as the queries they invalidate, so the pattern stays discoverable.
- * Caller is expected to invalidate the right key in `onSuccess`.
- */
-export function useApiMutation<TVars, TResult>(
-  mutationFn: (vars: TVars) => Promise<TResult>,
-  options: Omit<UseMutationOptions<TResult, Error, TVars>, 'mutationFn'> = {},
-) {
-  return useMutation({ mutationFn, ...options });
-}
 
 export { useQueryClient };
