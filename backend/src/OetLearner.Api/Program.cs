@@ -521,6 +521,7 @@ builder.Services.AddScoped<LearnerService>();
 builder.Services.AddScoped<MockService>();
 builder.Services.AddScoped<ISpeakingEvaluationPipeline, SpeakingEvaluationPipeline>();
 builder.Services.AddScoped<ExpertService>();
+builder.Services.AddScoped<ExpertOnboardingService>();
 builder.Services.AddScoped<AdminService>();
 builder.Services.AddScoped<SponsorService>();
 builder.Services.AddScoped<ContentHierarchyService>();

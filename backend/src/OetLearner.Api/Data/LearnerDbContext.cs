@@ -76,6 +76,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<ExpertCalibrationNote> ExpertCalibrationNotes => Set<ExpertCalibrationNote>();
     public DbSet<ExpertAvailability> ExpertAvailabilities => Set<ExpertAvailability>();
     public DbSet<ExpertMetricSnapshot> ExpertMetricSnapshots => Set<ExpertMetricSnapshot>();
+    public DbSet<ExpertOnboardingProgress> ExpertOnboardingProgresses => Set<ExpertOnboardingProgress>();
 
     // Gamification entities
     public DbSet<LearnerStreak> LearnerStreaks => Set<LearnerStreak>();

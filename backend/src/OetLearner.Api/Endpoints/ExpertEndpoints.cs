@@ -20,6 +20,26 @@ public static class ExpertEndpoints
         expert.MapGet("/dashboard", async (HttpContext http, ExpertService service, CancellationToken ct)
             => Results.Ok(await service.GetDashboardAsync(http.ExpertId(), ct)));
 
+        // Onboarding wizard (welcome → profile → qualifications → schedule → rates → review)
+        expert.MapGet("/onboarding/status", async (HttpContext http, ExpertOnboardingService onboarding, CancellationToken ct)
+            => Results.Ok(await onboarding.GetStatusAsync(http.ExpertId(), ct)));
+
+        expert.MapPut("/onboarding/profile", async (HttpContext http, ExpertOnboardingProfileDto data, ExpertOnboardingService onboarding, CancellationToken ct)
+            => Results.Ok(await onboarding.SaveProfileAsync(http.ExpertId(), data, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        expert.MapPut("/onboarding/qualifications", async (HttpContext http, ExpertOnboardingQualificationsDto data, ExpertOnboardingService onboarding, CancellationToken ct)
+            => Results.Ok(await onboarding.SaveQualificationsAsync(http.ExpertId(), data, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        expert.MapPut("/onboarding/rates", async (HttpContext http, ExpertOnboardingRatesDto data, ExpertOnboardingService onboarding, CancellationToken ct)
+            => Results.Ok(await onboarding.SaveRatesAsync(http.ExpertId(), data, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        expert.MapPatch("/onboarding/complete", async (HttpContext http, ExpertOnboardingService onboarding, CancellationToken ct)
+            => Results.Ok(await onboarding.CompleteAsync(http.ExpertId(), ct)))
+            .RequireRateLimiting("PerUserWrite");
+
         // Queue
         expert.MapGet("/queue", async ([AsParameters] ExpertQueueQueryRequest request, HttpContext http, ExpertService service, CancellationToken ct)
             => Results.Ok(await service.GetQueueAsync(http.ExpertId(), request, ct)));

@@ -4192,6 +4192,42 @@ namespace OetLearner.Api.Data.Migrations
                     b.ToTable("ExpertMetricSnapshots");
                 });
 
+            modelBuilder.Entity("OetLearner.Api.Domain.ExpertOnboardingProgress", b =>
+                {
+                    b.Property<string>("ExpertUserId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("CompletedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CompletedStepsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<bool>("IsComplete")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ProfileJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("QualificationsJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<string>("RatesJson")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("ExpertUserId");
+
+                    b.ToTable("ExpertOnboardingProgresses");
+                });
+
             modelBuilder.Entity("OetLearner.Api.Domain.ExpertReviewAssignment", b =>
                 {
                     b.Property<string>("Id")
