@@ -17,8 +17,6 @@ export const AdminPermission = {
   SystemAdmin: 'system_admin',
 } as const;
 
-export type AdminPermissionValue = (typeof AdminPermission)[keyof typeof AdminPermission];
-
 /**
  * Check whether the user has at least one of the required permissions.
  * `system_admin` is an implicit super-permission that satisfies any check.

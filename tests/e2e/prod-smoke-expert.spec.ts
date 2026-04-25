@@ -257,3 +257,93 @@ test('prod — expert onboarding wizard persists end-to-end', async ({ request }
   expect(after.rates?.currency, 'persisted rates.currency').toBe('GBP');
 });
 
+/**
+ * Round-16 deepening (3): drill into detail routes from list pages.
+ * Catches regressions in dynamic-segment pages (`/expert/review/[id]`,
+ * `/expert/calibration/[id]`, `/expert/learners/[id]`) that route-walk smoke
+ * misses entirely. Skips a section if the corresponding list is empty.
+ */
+test('prod — expert detail routes render from list drill-down', async ({ page }) => {
+  test.setTimeout(180_000);
+  const consoleErrors: string[] = [];
+  const apiFailures: string[] = [];
+  let currentSurface = 'sign-in';
+
+  page.on('console', (msg: ConsoleMessage) => {
+    if (msg.type() !== 'error') return;
+    const text = msg.text();
+    if (/favicon|beacon|cancel|Failed to load resource/i.test(text)) return;
+    consoleErrors.push(`[${currentSurface}] ${text}`);
+  });
+  page.on('response', (res: Response) => {
+    if (!res.url().includes('/v1/')) return;
+    if (res.status() >= 500) apiFailures.push(`[${currentSurface}] ${res.status()} ${res.url()}`);
+  });
+
+  // Sign in via the UI so middleware-protected dynamic routes work
+  await page.goto(`${PROD_URL}/sign-in`, { waitUntil: 'domcontentloaded' });
+  await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {});
+  const emailInput = page.locator('#email');
+  await emailInput.waitFor({ state: 'visible', timeout: 15_000 });
+  await emailInput.fill(EMAIL!);
+  await page.locator('#password').fill(PASSWORD!);
+  await Promise.all([
+    page.waitForResponse(
+      (r) => /\/v1\/auth\/(sign[-_]?in|login)/i.test(r.url()) && r.request().method() === 'POST',
+      { timeout: 20_000 },
+    ).catch(() => null),
+    page.getByRole('button', { name: /^sign in$/i }).click(),
+  ]);
+  await page.waitForURL((u) => !u.pathname.startsWith('/sign-in'), { timeout: 30_000 });
+
+  // Helper: from listPath, find a link matching detailHref pattern, click it, assert success
+  const drillInto = async (
+    label: string,
+    listPath: string,
+    detailHrefRegex: RegExp,
+  ): Promise<void> => {
+    currentSurface = `${label} (list)`;
+    const listResp = await page.goto(`${PROD_URL}${listPath}`, {
+      waitUntil: 'domcontentloaded',
+      timeout: 30_000,
+    });
+    expect(listResp!.status(), `${label} list status`).toBeLessThan(400);
+    await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+
+    const link = page.locator(`a[href*="${listPath}/"]`).filter({ hasNot: page.locator('[aria-disabled="true"]') }).first();
+    const matched = page.locator('a').filter({ has: page.locator(':scope') }).filter({
+      hasText: /./,
+    });
+    void matched;
+    const hasLink = await link.count();
+    if (!hasLink) {
+      console.log(`[prod-smoke-expert] ${label}: empty list, skipping detail drill`);
+      return;
+    }
+    const href = await link.getAttribute('href');
+    if (!href || !detailHrefRegex.test(href)) {
+      console.log(`[prod-smoke-expert] ${label}: first link href "${href}" did not match ${detailHrefRegex}, skipping`);
+      return;
+    }
+
+    currentSurface = `${label} (detail)`;
+    const [detailResp] = await Promise.all([
+      page.waitForResponse((r) => r.url().includes(href) || r.request().resourceType() === 'document', { timeout: 20_000 }).catch(() => null),
+      link.click(),
+    ]);
+    void detailResp;
+    await page.waitForLoadState('domcontentloaded', { timeout: 20_000 }).catch(() => {});
+    await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+
+    // Detail page must render some heading/main content
+    await expect(page.locator('main, [role="main"], h1').first(), `${label} detail content`).toBeVisible({ timeout: 10_000 });
+  };
+
+  await drillInto('review queue', '/expert/queue', /^\/expert\/(review|queue)\/[^/]+/);
+  await drillInto('calibration', '/expert/calibration', /^\/expert\/calibration\/[^/]+/);
+  await drillInto('learners', '/expert/learners', /^\/expert\/learners\/[^/]+/);
+
+  expect(consoleErrors, 'no console errors on detail routes').toEqual([]);
+  expect(apiFailures, 'no API 5xx on detail routes').toEqual([]);
+});
+
