@@ -18,7 +18,6 @@ import {
   fetchAdminDashboard,
   fetchAdminFlags,
   fetchAdminExpertEfficiency,
-  fetchAdminPermissions,
   fetchAdminQualityAnalytics,
   fetchAdminReviewFailures,
   fetchAdminReviewOpsQueue,
@@ -55,7 +54,6 @@ import type {
   AdminExpertEfficiencyData,
   AdminEscalationsResponse,
   AdminFlag,
-  AdminPermissionsResponse,
   AdminPublishRequest,
   AdminPublishRequestsResponse,
   AdminQualityAnalytics,
@@ -720,21 +718,6 @@ export async function getAdminQualityAnalyticsData(params?: Parameters<typeof fe
         value: toNumberValue(point.value),
       })),
     },
-  };
-}
-
-// ── Admin Permissions (RBAC) ────────────────────────────
-
-export async function getAdminPermissionsData(userId: string): Promise<AdminPermissionsResponse> {
-  const raw = asRecord(await fetchAdminPermissions(userId));
-  return {
-    userId: toStringValue(raw.userId),
-    permissions: asArray(raw.permissions).map((g) => ({
-      permission: toStringValue(g.permission),
-      grantedBy: toStringValue(g.grantedBy),
-      grantedAt: toStringValue(g.grantedAt),
-    })),
-    allPermissions: asArray(raw.allPermissions).map((p) => toStringValue(p)),
   };
 }
 
