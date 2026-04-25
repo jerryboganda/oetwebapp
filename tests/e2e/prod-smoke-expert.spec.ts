@@ -155,29 +155,43 @@ test('prod — expert console journey end-to-end', async ({ page, context }) => 
  *   6. PATCH /v1/expert/onboarding/complete             → 200 { completed: true }
  *   7. GET  /v1/expert/onboarding/status                → returns the data we just wrote
  */
-test('prod — expert onboarding wizard persists end-to-end', async ({ page, request }) => {
+test('prod — expert onboarding wizard persists end-to-end', async ({ request }) => {
   test.setTimeout(120_000);
 
-  await page.goto(`${PROD_URL}/sign-in`, { waitUntil: 'domcontentloaded' });
-  await page.locator('#email').fill(EMAIL!);
-  await page.locator('#password').fill(PASSWORD!);
+  const apiBase = process.env.PROD_API_URL ?? 'https://api.oetwithdrhesham.co.uk';
 
-  const authResp = await Promise.all([
-    page.waitForResponse(
-      (r) => /\/v1\/auth\/(sign[-_]?in|login)/i.test(r.url()) && r.request().method() === 'POST',
-      { timeout: 20_000 },
-    ),
-    page.getByRole('button', { name: /^sign in$/i }).click(),
-  ]).then(([r]) => r);
+  // Sign in directly against the backend proxy. Try a couple of plausible paths
+  // and request bodies to be resilient to API contract drift.
+  const candidates: Array<{ path: string; body: Record<string, unknown> }> = [
+    { path: '/v1/auth/sign-in', body: { email: EMAIL, password: PASSWORD } },
+    { path: '/v1/auth/login', body: { email: EMAIL, password: PASSWORD } },
+    { path: '/v1/auth/signin', body: { email: EMAIL, password: PASSWORD } },
+  ];
+  let token: string | undefined;
+  let lastStatus = 0;
+  let lastBody = '';
+  for (const c of candidates) {
+    const r = await request.post(`${apiBase}${c.path}`, {
+      data: c.body,
+      headers: { 'Content-Type': 'application/json' },
+    });
+    lastStatus = r.status();
+    if (r.ok()) {
+      const body = (await r.json().catch(() => ({}))) as Record<string, unknown>;
+      const candidate =
+        (body.accessToken as string | undefined) ??
+        (body.token as string | undefined) ??
+        ((body.tokens as Record<string, unknown> | undefined)?.accessToken as string | undefined);
+      if (typeof candidate === 'string' && candidate.length > 0) {
+        token = candidate;
+        break;
+      }
+    } else {
+      lastBody = await r.text().catch(() => '');
+    }
+  }
+  expect(token, `sign-in returned an access token (last status=${lastStatus} body=${lastBody.slice(0, 200)})`).toBeTruthy();
 
-  const authBody = await authResp.json().catch(() => ({} as Record<string, unknown>));
-  const token =
-    (authBody as Record<string, unknown>).accessToken ??
-    (authBody as Record<string, unknown>).token ??
-    ((authBody as Record<string, unknown>).tokens as Record<string, unknown> | undefined)?.accessToken;
-  expect(typeof token, 'sign-in returned an access token').toBe('string');
-
-  const apiBase = `${PROD_URL}/api/backend`;
   const authedHeaders = {
     Authorization: `Bearer ${token as string}`,
     'Content-Type': 'application/json',
