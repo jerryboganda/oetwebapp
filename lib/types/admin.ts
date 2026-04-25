@@ -544,15 +544,6 @@ export interface AdminScoreGuaranteeClaimsResponse {
   pageSize: number;
 }
 
-// ── Business Intelligence (Admin) ────────────────────
-
-export interface AdminBIMetric {
-  label: string;
-  value: number;
-  change: number;
-  changeLabel: string;
-}
-
 
 export interface AdminSubscriptionHealthRevenuePlan {
   planId: string;
