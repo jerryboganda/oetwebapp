@@ -721,18 +721,6 @@ export function useNotificationState() {
   return context;
 }
 
-/**
- * Subscribe to notification actions only. Identity is stable; this hook will
- * not cause re-renders when the notification state changes.
- */
-export function useNotificationActions() {
-  const context = useContext(NotificationActionsContext);
-  if (!context) {
-    throw new Error('useNotificationActions must be used within NotificationCenterProvider');
-  }
-  return context;
-}
-
 export function cloneNotificationPreferences(preferences: NotificationPreferencePayload | null) {
   return preferences ? clonePreferences(preferences) : null;
 }
