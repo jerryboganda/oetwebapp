@@ -213,9 +213,6 @@ export async function uploadPart(uploadId: string, partNumber: number, body: Blo
 export const completeUpload = (uploadId: string) =>
   api<ChunkedUploadCommitResult>(`/v1/admin/uploads/${uploadId}/complete`, { method: 'POST' });
 
-export const abortUpload = (uploadId: string) =>
-  api<void>(`/v1/admin/uploads/${uploadId}`, { method: 'DELETE' });
-
 /**
  * High-level helper: take a File, run the whole chunked upload protocol,
  * return the resulting MediaAsset id. Reports progress 0..1 via callback.
