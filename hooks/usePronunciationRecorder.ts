@@ -12,10 +12,6 @@ import { useCallback, useEffect, useRef, useState } from 'react';
  *   - Automatic mime-type negotiation (prefers WebM/Opus, then MP4/AAC, then OGG)
  *   - Produces a Blob + objectURL + duration when stopped
  *   - Cleanly releases resources on unmount
- *
- * Capacitor native-path is provided via <c>lib/mobile/pronunciation-recorder.ts</c>.
- * The hook itself stays DOM-only so the bundle doesn't pull in Capacitor at all
- * on web — the mobile layer wraps it instead.
  */
 export type RecorderStatus =
   | 'idle'
