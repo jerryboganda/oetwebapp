@@ -1,3 +1,5 @@
+'use client';
+
 import { HelpCircle, CheckCircle2, TrendingUp, Target } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';

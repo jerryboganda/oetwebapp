@@ -1,3 +1,5 @@
+'use client';
+
 import { BookOpen, Clock, Headphones, PenLine, Mic } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';

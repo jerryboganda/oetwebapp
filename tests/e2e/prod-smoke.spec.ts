@@ -67,7 +67,7 @@ test('prod — learner journey end-to-end', async ({ page, context }) => {
       //    the `response` listener below. Treating these as JS errors
       //    conflates routine 4xx API behavior with real runtime failures.
       if (/favicon|beacon|cancel|Failed to load resource/i.test(text)) return;
-      consoleErrors.push(text);
+      consoleErrors.push(`[${currentSurface}] ${text}`);
     }
   });
 
