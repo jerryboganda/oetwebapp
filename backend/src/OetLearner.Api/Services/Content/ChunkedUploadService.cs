@@ -190,13 +190,15 @@ public sealed class ChunkedUploadService(
         string sha;
         {
             await using var output = await storage.OpenWriteAsync(assembledStagingKey, ct);
-            var partStreams = partKeys.Select<string, Stream>(k =>
-            {
-                var stream = storage.OpenReadAsync(k, ct).GetAwaiter().GetResult();
-                return stream;
-            }).ToList();
+            // Open every chunk stream up-front via the async API so we never
+            // block a thread-pool thread on disk I/O during merge.
+            var partStreams = new List<Stream>(partKeys.Count);
             try
             {
+                foreach (var k in partKeys)
+                {
+                    partStreams.Add(await storage.OpenReadAsync(k, ct));
+                }
                 var result = await StreamingSha256.ComputeAsync(partStreams, output, ct);
                 total = result.bytes;
                 sha = result.sha256;

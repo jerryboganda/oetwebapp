@@ -1,12 +1,54 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 
 namespace OetLearner.Api.Services;
 
-public class GamificationService(LearnerDbContext db)
+public class GamificationService(LearnerDbContext db, IMemoryCache cache)
 {
+    // Active achievements are reference data (admin-mutated, learner-read-only).
+    // Caching avoids a query + JSON parse per gamification trigger and per
+    // achievements-page render. TTL is short so admin edits propagate quickly.
+    private const string AchievementsCacheKey = "gam:achievements:active";
+    private static readonly TimeSpan AchievementsCacheTtl = TimeSpan.FromMinutes(5);
+
+    private async Task<IReadOnlyList<CachedAchievement>> GetActiveAchievementsAsync(CancellationToken ct)
+    {
+        if (cache.TryGetValue(AchievementsCacheKey, out IReadOnlyList<CachedAchievement>? cached) && cached is not null)
+            return cached;
+
+        var rows = await db.Achievements.AsNoTracking()
+            .Where(a => a.Status == "active")
+            .OrderBy(a => a.SortOrder)
+            .ToListAsync(ct);
+
+        var built = rows.Select(a => new CachedAchievement(a, ParseCriteria(a.CriteriaJson))).ToList();
+        cache.Set(AchievementsCacheKey, (IReadOnlyList<CachedAchievement>)built, AchievementsCacheTtl);
+        return built;
+    }
+
+    private static AchievementCriterion ParseCriteria(string json)
+    {
+        try
+        {
+            var doc = System.Text.Json.JsonDocument.Parse(json).RootElement;
+            var type = doc.GetProperty("type").GetString() ?? string.Empty;
+            long threshold = type == "total_xp" ? doc.GetProperty("threshold").GetInt64() : doc.GetProperty("threshold").GetInt32();
+            return new AchievementCriterion(type, threshold);
+        }
+        catch
+        {
+            return new AchievementCriterion(string.Empty, 0);
+        }
+    }
+
+    /// <summary>Invalidate the active-achievements cache after an admin write.</summary>
+    public void InvalidateAchievementsCache() => cache.Remove(AchievementsCacheKey);
+
+    private sealed record CachedAchievement(Achievement Source, AchievementCriterion Criterion);
+    private sealed record AchievementCriterion(string Type, long Threshold);
     // ── XP ──────────────────────────────────────────────────────────────
 
     public async Task<object> GetXpAsync(string userId, CancellationToken ct)
@@ -107,38 +149,41 @@ public class GamificationService(LearnerDbContext db)
 
     public async Task<object> GetAchievementsAsync(string userId, CancellationToken ct)
     {
-        var all = await db.Achievements.Where(a => a.Status == "active")
-            .OrderBy(a => a.SortOrder).ToListAsync(ct);
+        var all = await GetActiveAchievementsAsync(ct);
 
-        var unlocked = await db.LearnerAchievements
+        var unlocked = await db.LearnerAchievements.AsNoTracking()
             .Where(la => la.UserId == userId)
             .ToDictionaryAsync(la => la.AchievementId, ct);
 
-        return all.Select(a => new
+        return all.Select(c =>
         {
-            id = a.Id,
-            code = a.Code,
-            label = a.Label,
-            description = a.Description,
-            category = a.Category,
-            iconUrl = a.IconUrl,
-            xpReward = a.XPReward,
-            sortOrder = a.SortOrder,
-            unlocked = unlocked.TryGetValue(a.Id, out var la),
-            unlockedAt = unlocked.TryGetValue(a.Id, out var la2) ? la2.UnlockedAt : (DateTimeOffset?)null
+            var a = c.Source;
+            return new
+            {
+                id = a.Id,
+                code = a.Code,
+                label = a.Label,
+                description = a.Description,
+                category = a.Category,
+                iconUrl = a.IconUrl,
+                xpReward = a.XPReward,
+                sortOrder = a.SortOrder,
+                unlocked = unlocked.TryGetValue(a.Id, out var la),
+                unlockedAt = unlocked.TryGetValue(a.Id, out var la2) ? la2.UnlockedAt : (DateTimeOffset?)null
+            };
         });
     }
 
     public async Task CheckAndAwardAchievementsAsync(string userId, string trigger, CancellationToken ct)
     {
-        var already = await db.LearnerAchievements
+        var already = await db.LearnerAchievements.AsNoTracking()
             .Where(la => la.UserId == userId)
             .Select(la => la.AchievementId)
             .ToHashSetAsync(ct);
 
-        var candidates = await db.Achievements
-            .Where(a => a.Status == "active" && !already.Contains(a.Id))
-            .ToListAsync(ct);
+        var allActive = await GetActiveAchievementsAsync(ct);
+        var candidates = allActive.Where(c => !already.Contains(c.Source.Id)).ToList();
+        if (candidates.Count == 0) return;
 
         var xp = await db.LearnerXPs.FindAsync([userId], ct);
         var streak = await db.LearnerStreaks.FindAsync([userId], ct);
@@ -147,10 +192,10 @@ public class GamificationService(LearnerDbContext db)
         var vocabMastered = await db.LearnerVocabularies.CountAsync(v => v.UserId == userId && v.Mastery == "mastered", ct);
 
         var toAward = new List<Achievement>();
-        foreach (var ach in candidates)
+        foreach (var c in candidates)
         {
-            if (await MeetsCriteriaAsync(ach, userId, xp, streak, attemptCount, vocabAdded, vocabMastered, ct))
-                toAward.Add(ach);
+            if (MeetsCriteria(c.Criterion, xp, streak, attemptCount, vocabAdded, vocabMastered))
+                toAward.Add(c.Source);
         }
 
         if (toAward.Count == 0) return;
@@ -180,7 +225,7 @@ public class GamificationService(LearnerDbContext db)
 
     public async Task<object> GetLeaderboardAsync(string? examTypeCode, string period, CancellationToken ct)
     {
-        var query = db.LeaderboardEntries
+        var query = db.LeaderboardEntries.AsNoTracking()
             .Where(e => e.Period == period && e.OptedIn);
         if (!string.IsNullOrEmpty(examTypeCode))
             query = query.Where(e => e.ExamTypeCode == examTypeCode);
@@ -199,7 +244,7 @@ public class GamificationService(LearnerDbContext db)
 
     public async Task<object> GetLeaderboardPositionAsync(string userId, string? examTypeCode, string period, CancellationToken ct)
     {
-        var query = db.LeaderboardEntries.Where(e => e.UserId == userId && e.Period == period);
+        var query = db.LeaderboardEntries.AsNoTracking().Where(e => e.UserId == userId && e.Period == period);
         if (!string.IsNullOrEmpty(examTypeCode))
             query = query.Where(e => e.ExamTypeCode == examTypeCode);
 
@@ -214,7 +259,7 @@ public class GamificationService(LearnerDbContext db)
         foreach (var e in entries) e.OptedIn = optedIn;
         if (entries.Count == 0)
         {
-            var user = await db.Users.FindAsync([userId], ct);
+            var user = await db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.Id == userId, ct);
             db.LeaderboardEntries.Add(new LeaderboardEntry
             {
                 Id = Guid.NewGuid(),
@@ -307,28 +352,19 @@ public class GamificationService(LearnerDbContext db)
         streakFreezesAvailable = s.StreakFreezeCount - s.StreakFreezeUsedCount
     };
 
-    private static async Task<bool> MeetsCriteriaAsync(
-        Achievement ach, string userId, LearnerXP? xp, LearnerStreak? streak,
-        int attemptCount, int vocabAdded, int vocabMastered, CancellationToken ct)
+    private static bool MeetsCriteria(
+        AchievementCriterion criterion, LearnerXP? xp, LearnerStreak? streak,
+        int attemptCount, int vocabAdded, int vocabMastered)
     {
-        try
+        return criterion.Type switch
         {
-            var criteria = System.Text.Json.JsonDocument.Parse(ach.CriteriaJson).RootElement;
-            var type = criteria.GetProperty("type").GetString();
-            return type switch
-            {
-                "attempt_count" => attemptCount >= criteria.GetProperty("threshold").GetInt32(),
-                "streak_days" => (streak?.CurrentStreak ?? 0) >= criteria.GetProperty("threshold").GetInt32(),
-                "total_xp" => (xp?.TotalXP ?? 0) >= criteria.GetProperty("threshold").GetInt64(),
-                "vocab_added" => vocabAdded >= criteria.GetProperty("threshold").GetInt32(),
-                "vocab_mastered" => vocabMastered >= criteria.GetProperty("threshold").GetInt32(),
-                _ => false
-            };
-        }
-        catch
-        {
-            return false;
-        }
+            "attempt_count" => attemptCount >= criterion.Threshold,
+            "streak_days" => (streak?.CurrentStreak ?? 0) >= criterion.Threshold,
+            "total_xp" => (xp?.TotalXP ?? 0) >= criterion.Threshold,
+            "vocab_added" => vocabAdded >= criterion.Threshold,
+            "vocab_mastered" => vocabMastered >= criterion.Threshold,
+            _ => false
+        };
     }
 
     // ════════════════════════════════════════════

@@ -87,12 +87,10 @@ public static class LearnerWorkflowCoordinator
 
     public static async Task QueueStudyPlanRegenerationAsync(LearnerDbContext db, string userId, CancellationToken cancellationToken)
     {
-        var plans = await db.StudyPlans
+        var plan = await db.StudyPlans
             .Where(x => x.UserId == userId)
-            .ToListAsync(cancellationToken);
-        var plan = plans
             .OrderByDescending(x => x.GeneratedAt)
-            .FirstOrDefault();
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (plan is null)
         {
@@ -158,12 +156,10 @@ public static class LearnerWorkflowCoordinator
             }
         }
 
-        var sessions = await db.DiagnosticSessions
+        var session = await db.DiagnosticSessions
             .Where(x => x.UserId == attempt.UserId && x.State != AttemptState.Completed)
-            .ToListAsync(cancellationToken);
-        var session = sessions
             .OrderByDescending(x => x.StartedAt)
-            .FirstOrDefault();
+            .FirstOrDefaultAsync(cancellationToken);
 
         if (session is null)
         {

@@ -140,17 +140,30 @@ public sealed class VocabularyDraftService(
             throw ApiException.Validation("VOCAB_DRAFT_EMPTY", "No drafts to accept.");
 
         var createdIds = new List<string>();
+
+        // Pre-fetch existing terms in one query, then dedupe in-memory.
+        var candidateTerms = request.Drafts
+            .Where(d => !string.IsNullOrWhiteSpace(d.Term) && !string.IsNullOrWhiteSpace(d.Definition))
+            .Select(d => d.Term)
+            .Distinct()
+            .ToList();
+        var existingTerms = candidateTerms.Count == 0
+            ? new HashSet<string>()
+            : (await db.VocabularyTerms.AsNoTracking()
+                .Where(t => candidateTerms.Contains(t.Term)
+                    && t.ExamTypeCode == request.ExamTypeCode
+                    && t.ProfessionId == request.ProfessionId)
+                .Select(t => t.Term)
+                .ToListAsync(ct))
+                .ToHashSet();
+        var addedInBatch = new HashSet<string>();
+
         foreach (var draft in request.Drafts)
         {
             if (string.IsNullOrWhiteSpace(draft.Term) || string.IsNullOrWhiteSpace(draft.Definition))
                 continue;
 
-            var dup = await db.VocabularyTerms.FirstOrDefaultAsync(
-                t => t.Term == draft.Term
-                  && t.ExamTypeCode == request.ExamTypeCode
-                  && t.ProfessionId == request.ProfessionId,
-                ct);
-            if (dup is not null) continue;
+            if (existingTerms.Contains(draft.Term) || !addedInBatch.Add(draft.Term)) continue;
 
             var id = $"VOC-{Guid.NewGuid():N}"[..12];
             db.VocabularyTerms.Add(new VocabularyTerm

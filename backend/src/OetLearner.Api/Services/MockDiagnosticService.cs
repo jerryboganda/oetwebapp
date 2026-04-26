@@ -16,18 +16,19 @@ public class MockDiagnosticService(LearnerDbContext db)
     /// </summary>
     public async Task<MockExamTemplate> AssembleMockExamAsync(string? professionId, string language, CancellationToken ct)
     {
-        var eligibleItems = await db.ContentItems
+        // Push profession filter into SQL so we don't materialise the entire
+        // eligible-items table just to drop most of it client-side.
+        var query = db.ContentItems.AsNoTracking()
             .Where(c => c.IsMockEligible && c.Status == ContentStatus.Published
                         && c.InstructionLanguage == language
-                        && c.FreshnessConfidence != "superseded")
-            .ToListAsync(ct);
+                        && c.FreshnessConfidence != "superseded");
 
         if (!string.IsNullOrEmpty(professionId))
         {
-            eligibleItems = eligibleItems
-                .Where(c => c.ProfessionId == professionId || c.ProfessionId == null)
-                .ToList();
+            query = query.Where(c => c.ProfessionId == professionId || c.ProfessionId == null);
         }
+
+        var eligibleItems = await query.ToListAsync(ct);
 
         var subtests = new[] { "writing", "speaking", "reading", "listening" };
         var sections = new List<MockExamSection>();
@@ -75,17 +76,16 @@ public class MockDiagnosticService(LearnerDbContext db)
     /// </summary>
     public async Task<DiagnosticTemplate> GenerateDiagnosticAsync(string? professionId, CancellationToken ct)
     {
-        var eligibleItems = await db.ContentItems
+        var query = db.ContentItems.AsNoTracking()
             .Where(c => c.IsDiagnosticEligible && c.Status == ContentStatus.Published
-                        && c.FreshnessConfidence != "superseded")
-            .ToListAsync(ct);
+                        && c.FreshnessConfidence != "superseded");
 
         if (!string.IsNullOrEmpty(professionId))
         {
-            eligibleItems = eligibleItems
-                .Where(c => c.ProfessionId == professionId || c.ProfessionId == null)
-                .ToList();
+            query = query.Where(c => c.ProfessionId == professionId || c.ProfessionId == null);
         }
+
+        var eligibleItems = await query.ToListAsync(ct);
 
         var subtests = new[] { "writing", "speaking", "reading", "listening" };
         var sections = new List<DiagnosticSection>();
@@ -136,14 +136,14 @@ public class MockDiagnosticService(LearnerDbContext db)
     /// </summary>
     public async Task<ReadinessScore> CalculateReadinessAsync(string userId, CancellationToken ct)
     {
-        var attempts = await db.Attempts
+        var attempts = await db.Attempts.AsNoTracking()
             .Where(a => a.UserId == userId && a.State == AttemptState.Completed)
             .OrderByDescending(a => a.StartedAt)
             .Take(100)
             .ToListAsync(ct);
 
         var attemptIds = attempts.Select(a => a.Id).ToHashSet();
-        var evaluations = await db.Evaluations
+        var evaluations = await db.Evaluations.AsNoTracking()
             .Where(e => attemptIds.Contains(e.AttemptId))
             .ToListAsync(ct);
 

@@ -357,12 +357,8 @@ public static class ReadingLearnerEndpoints
         string paperId,
         CancellationToken ct)
     {
-        var partIds = await db.ReadingParts.AsNoTracking()
-            .Where(p => p.PaperId == paperId)
-            .Select(p => p.Id)
-            .ToListAsync(ct);
         return await db.ReadingQuestions.AsNoTracking()
-            .CountAsync(q => partIds.Contains(q.ReadingPartId), ct);
+            .CountAsync(q => db.ReadingParts.Any(p => p.PaperId == paperId && p.Id == q.ReadingPartId), ct);
     }
 
     private static ReadingResolvedPolicy ResolvePolicySnapshot(string json)

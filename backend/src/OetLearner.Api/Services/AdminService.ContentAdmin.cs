@@ -432,6 +432,8 @@ public partial class AdminService
         var imported = 0; var skipped = 0; var duplicates = 0; var failed = 0;
         var errors = new List<string>();
 
+        // Pre-fetch existing terms in a single query, then dedupe in-memory.
+        var validRows = new List<CsvVocabRow>(rows.Count);
         foreach (var r in rows)
         {
             var (ok, err) = ValidateCsvRow(r);
@@ -441,10 +443,31 @@ public partial class AdminService
                 if (errors.Count < 20) errors.Add($"Row {r.LineNumber}: {err}");
                 continue;
             }
+            validRows.Add(r);
+        }
 
-            var existing = await db.VocabularyTerms.FirstOrDefaultAsync(
-                t => t.Term == r.Term && t.ExamTypeCode == (r.ExamTypeCode ?? "oet") && t.ProfessionId == r.ProfessionId, ct);
-            if (existing is not null)
+        var lookupKeys = validRows
+            .Select(r => new { Term = r.Term!, Exam = r.ExamTypeCode ?? "oet", r.ProfessionId })
+            .Distinct()
+            .ToList();
+        var terms = lookupKeys.Select(k => k.Term).Distinct().ToList();
+        var profIds = lookupKeys.Select(k => k.ProfessionId).Distinct().ToList();
+        var existingSet = lookupKeys.Count == 0
+            ? new HashSet<(string Term, string Exam, string? Prof)>()
+            : new HashSet<(string Term, string Exam, string? Prof)>(
+                (await db.VocabularyTerms.AsNoTracking()
+                    .Where(t => terms.Contains(t.Term) && profIds.Contains(t.ProfessionId))
+                    .Select(t => new { t.Term, t.ExamTypeCode, t.ProfessionId })
+                    .ToListAsync(ct))
+                    .Select(t => (t.Term, t.ExamTypeCode, (string?)t.ProfessionId)));
+
+        // Track new keys added in this batch so duplicates within the CSV itself are caught too.
+        var addedInBatch = new HashSet<(string Term, string Exam, string? Prof)>();
+
+        foreach (var r in validRows)
+        {
+            var key = (r.Term!, r.ExamTypeCode ?? "oet", (string?)r.ProfessionId);
+            if (existingSet.Contains(key) || !addedInBatch.Add(key))
             {
                 duplicates++;
                 continue;

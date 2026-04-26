@@ -15,15 +15,21 @@ public static class SocialEndpoints
         // ── Certificates ──────────────────────────────────────────────────
         var certs = v1.MapGroup("/certificates");
 
-        certs.MapGet("/", async (HttpContext http, LearnerDbContext db, CancellationToken ct) =>
+        certs.MapGet("/", async (HttpContext http, LearnerDbContext db, [FromQuery] int? skip, [FromQuery] int? take, CancellationToken ct) =>
         {
-            var list = await db.Certificates.Where(c => c.UserId == http.UserId()).OrderByDescending(c => c.IssuedAt).ToListAsync(ct);
+            var s = Math.Max(0, skip ?? 0);
+            var t = Math.Clamp(take ?? 50, 1, 200);
+            var list = await db.Certificates.AsNoTracking()
+                .Where(c => c.UserId == http.UserId())
+                .OrderByDescending(c => c.IssuedAt)
+                .Skip(s).Take(t)
+                .ToListAsync(ct);
             return Results.Ok(list.Select(c => new { id = c.Id, type = c.Type, title = c.Title, description = c.Description, pdfUrl = c.PdfUrl, verificationCode = c.VerificationCode, issuedAt = c.IssuedAt }));
         });
 
         certs.MapGet("/verify/{code}", async (string code, LearnerDbContext db, CancellationToken ct) =>
         {
-            var cert = await db.Certificates.FirstOrDefaultAsync(c => c.VerificationCode == code, ct);
+            var cert = await db.Certificates.AsNoTracking().FirstOrDefaultAsync(c => c.VerificationCode == code, ct);
             if (cert == null) return Results.NotFound(new { valid = false });
             return Results.Ok(new { valid = true, userDisplayName = cert.UserDisplayName, type = cert.Type, title = cert.Title, issuedAt = cert.IssuedAt });
         });
@@ -54,10 +60,15 @@ public static class SocialEndpoints
             return Results.Ok(MapReferralCode(rc));
         });
 
-        referrals.MapGet("/my-referrals", async (HttpContext http, LearnerDbContext db, CancellationToken ct) =>
+        referrals.MapGet("/my-referrals", async (HttpContext http, LearnerDbContext db, [FromQuery] int? skip, [FromQuery] int? take, CancellationToken ct) =>
         {
-            var refs = await db.Referrals.Where(r => r.ReferrerUserId == http.UserId())
-                .OrderByDescending(r => r.CreatedAt).ToListAsync(ct);
+            var s = Math.Max(0, skip ?? 0);
+            var t = Math.Clamp(take ?? 50, 1, 200);
+            var refs = await db.Referrals.AsNoTracking()
+                .Where(r => r.ReferrerUserId == http.UserId())
+                .OrderByDescending(r => r.CreatedAt)
+                .Skip(s).Take(t)
+                .ToListAsync(ct);
             return Results.Ok(refs.Select(r => new { id = r.Id, referredEmail = r.ReferredEmail, status = r.Status, creditAmount = r.CreditAmount, createdAt = r.CreatedAt, convertedAt = r.ConvertedAt }));
         });
 
@@ -88,9 +99,15 @@ public static class SocialEndpoints
         // ── Exam Booking ──────────────────────────────────────────────────
         var bookings = v1.MapGroup("/exam-bookings");
 
-        bookings.MapGet("/", async (HttpContext http, LearnerDbContext db, CancellationToken ct) =>
+        bookings.MapGet("/", async (HttpContext http, LearnerDbContext db, [FromQuery] int? skip, [FromQuery] int? take, CancellationToken ct) =>
         {
-            var list = await db.ExamBookings.Where(b => b.UserId == http.UserId()).OrderByDescending(b => b.ExamDate).ToListAsync(ct);
+            var s = Math.Max(0, skip ?? 0);
+            var t = Math.Clamp(take ?? 50, 1, 200);
+            var list = await db.ExamBookings.AsNoTracking()
+                .Where(b => b.UserId == http.UserId())
+                .OrderByDescending(b => b.ExamDate)
+                .Skip(s).Take(t)
+                .ToListAsync(ct);
             return Results.Ok(list.Select(b => new { id = b.Id, examTypeCode = b.ExamTypeCode, examDate = b.ExamDate, status = b.Status, testCenter = b.TestCenter, bookingReference = b.BookingReference, externalUrl = b.ExternalUrl, createdAt = b.CreatedAt }));
         });
 
@@ -125,10 +142,16 @@ public static class SocialEndpoints
         // ── Tutoring ──────────────────────────────────────────────────────
         var tutoring = v1.MapGroup("/tutoring");
 
-        tutoring.MapGet("/sessions", async (HttpContext http, LearnerDbContext db, CancellationToken ct) =>
+        tutoring.MapGet("/sessions", async (HttpContext http, LearnerDbContext db, [FromQuery] int? skip, [FromQuery] int? take, CancellationToken ct) =>
         {
-            var sessions = await db.TutoringSessions.Where(s => s.LearnerUserId == http.UserId()).OrderByDescending(s => s.ScheduledAt).ToListAsync(ct);
-            return Results.Ok(sessions.Select(s => new { id = s.Id, expertUserId = s.ExpertUserId, examTypeCode = s.ExamTypeCode, subtestFocus = s.SubtestFocus, scheduledAt = s.ScheduledAt, durationMinutes = s.DurationMinutes, state = s.State, price = s.Price, learnerRating = s.LearnerRating }));
+            var s = Math.Max(0, skip ?? 0);
+            var t = Math.Clamp(take ?? 50, 1, 200);
+            var sessions = await db.TutoringSessions.AsNoTracking()
+                .Where(s2 => s2.LearnerUserId == http.UserId())
+                .OrderByDescending(s2 => s2.ScheduledAt)
+                .Skip(s).Take(t)
+                .ToListAsync(ct);
+            return Results.Ok(sessions.Select(s2 => new { id = s2.Id, expertUserId = s2.ExpertUserId, examTypeCode = s2.ExamTypeCode, subtestFocus = s2.SubtestFocus, scheduledAt = s2.ScheduledAt, durationMinutes = s2.DurationMinutes, state = s2.State, price = s2.Price, learnerRating = s2.LearnerRating }));
         });
 
         tutoring.MapPost("/sessions", async (HttpContext http, BookTutoringRequest req, LearnerDbContext db, CancellationToken ct) =>

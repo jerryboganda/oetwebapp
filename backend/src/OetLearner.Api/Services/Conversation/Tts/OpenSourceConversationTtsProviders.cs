@@ -12,7 +12,7 @@ public sealed class CosyVoiceConversationTtsProvider(
     IConversationOptionsProvider optionsProvider,
     ILogger<CosyVoiceConversationTtsProvider> logger) : IConversationTtsProvider
 {
-    private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
+    private ConversationOptions ReadOptions() => optionsProvider.Snapshot();
     public string Name => "cosyvoice";
     public bool IsConfigured => !string.IsNullOrWhiteSpace(ReadOptions().CosyVoiceBaseUrl);
 
@@ -54,7 +54,7 @@ public sealed class ChatTtsConversationTtsProvider(
     IConversationOptionsProvider optionsProvider,
     ILogger<ChatTtsConversationTtsProvider> logger) : IConversationTtsProvider
 {
-    private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
+    private ConversationOptions ReadOptions() => optionsProvider.Snapshot();
     public string Name => "chattts";
     public bool IsConfigured => !string.IsNullOrWhiteSpace(ReadOptions().ChatTtsBaseUrl);
 
@@ -96,7 +96,7 @@ public sealed class GptSoVitsConversationTtsProvider(
     IConversationOptionsProvider optionsProvider,
     ILogger<GptSoVitsConversationTtsProvider> logger) : IConversationTtsProvider
 {
-    private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
+    private ConversationOptions ReadOptions() => optionsProvider.Snapshot();
     public string Name => "gptsovits";
     public bool IsConfigured => !string.IsNullOrWhiteSpace(ReadOptions().GptSoVitsBaseUrl);
 

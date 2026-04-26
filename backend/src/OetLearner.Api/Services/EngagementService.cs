@@ -122,12 +122,9 @@ public class EngagementService(LearnerDbContext db)
 
         // Calculate study velocity (minutes per week over last 4 weeks)
         var fourWeeksAgo = DateTimeOffset.UtcNow.AddDays(-28);
-        var recentAttemptDates = await db.Attempts.AsNoTracking()
-            .Where(a => a.UserId == userId)
-            .Select(a => a.SubmittedAt)
-            .ToListAsync(ct);
-        var recentAttempts = recentAttemptDates.Count(submittedAt =>
-            submittedAt.HasValue && submittedAt.Value >= fourWeeksAgo);
+        var recentAttempts = await db.Attempts.AsNoTracking()
+            .Where(a => a.UserId == userId && a.SubmittedAt.HasValue && a.SubmittedAt.Value >= fourWeeksAgo)
+            .CountAsync(ct);
 
         var weeklyPaceMinutes = user.TotalPracticeSessions > 0
             ? user.TotalPracticeMinutes / Math.Max(1, (int)Math.Ceiling((DateTimeOffset.UtcNow - (user.LastPracticeDate ?? DateTimeOffset.UtcNow)).TotalDays / 7.0))

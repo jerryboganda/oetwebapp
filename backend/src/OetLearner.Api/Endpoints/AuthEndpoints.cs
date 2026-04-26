@@ -17,7 +17,8 @@ public static class AuthEndpoints
 
         auth.MapGet("/catalog/signup", async (AuthService service, CancellationToken ct)
                 => Results.Ok(await service.GetSignupCatalogAsync(ct)))
-            .AllowAnonymous();
+            .AllowAnonymous()
+            .CacheOutput("Reference");
 
         auth.MapPost("/sign-in", async (PasswordSignInRequest request, AuthService service, CancellationToken ct)
                 => Results.Ok(await service.SignInAsync(request, ct)))

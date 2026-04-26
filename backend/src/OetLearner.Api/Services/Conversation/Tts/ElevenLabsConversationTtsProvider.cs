@@ -11,7 +11,7 @@ public sealed class ElevenLabsConversationTtsProvider(
     IConversationOptionsProvider optionsProvider,
     ILogger<ElevenLabsConversationTtsProvider> logger) : IConversationTtsProvider
 {
-    private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
+    private ConversationOptions ReadOptions() => optionsProvider.Snapshot();
 
     public string Name => "elevenlabs";
     public bool IsConfigured => !string.IsNullOrWhiteSpace(ReadOptions().ElevenLabsApiKey);

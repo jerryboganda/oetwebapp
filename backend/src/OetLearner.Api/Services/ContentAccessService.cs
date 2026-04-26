@@ -18,6 +18,7 @@ public class ContentAccessService(LearnerDbContext db, ContentHierarchyService h
         var accessibleIds = await hierarchy.ResolveAccessibleContentIdsAsync(userId, ct);
 
         var query = db.ContentItems
+            .AsNoTracking()
             .Where(c => c.Status == ContentStatus.Published && c.FreshnessConfidence != "superseded");
 
         if (!string.IsNullOrEmpty(subtestCode))
@@ -97,7 +98,7 @@ public class ContentAccessService(LearnerDbContext db, ContentHierarchyService h
         var accessibleIds = await hierarchy.ResolveAccessibleContentIdsAsync(userId, ct);
         var hasSubscription = accessibleIds.Count > 0;
 
-        var query = db.ContentPrograms.Where(p => p.Status == ContentStatus.Published);
+        var query = db.ContentPrograms.AsNoTracking().Where(p => p.Status == ContentStatus.Published);
         if (!string.IsNullOrEmpty(type)) query = query.Where(p => p.ProgramType == type);
         if (!string.IsNullOrEmpty(language)) query = query.Where(p => p.InstructionLanguage == language);
 
@@ -109,6 +110,7 @@ public class ContentAccessService(LearnerDbContext db, ContentHierarchyService h
         // Check which programs the user has access to via package rules
         var packageRules = hasSubscription
             ? await db.PackageContentRules
+                .AsNoTracking()
                 .Where(r => r.RuleType == "include_program")
                 .ToListAsync(ct)
             : [];

@@ -14,7 +14,7 @@ public sealed class AzureConversationAsrProvider(
     {
         get
         {
-            var o = optionsProvider.GetAsync().GetAwaiter().GetResult();
+            var o = optionsProvider.Snapshot();
             return !string.IsNullOrWhiteSpace(o.AzureSpeechKey) && !string.IsNullOrWhiteSpace(o.AzureSpeechRegion);
         }
     }

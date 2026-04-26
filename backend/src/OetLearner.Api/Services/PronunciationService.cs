@@ -44,17 +44,16 @@ public class PronunciationService(
     public async Task<object> GetProfileAsync(string userId, CancellationToken ct)
     {
         var progress = await db.LearnerPronunciationProgress
+            .AsNoTracking()
             .Where(p => p.UserId == userId)
             .ToListAsync(ct);
 
         var assessments = await db.PronunciationAssessments
+            .AsNoTracking()
             .Where(a => a.UserId == userId)
-            .ToListAsync(ct);
-
-        assessments = assessments
             .OrderByDescending(a => a.CreatedAt)
             .Take(10)
-            .ToList();
+            .ToListAsync(ct);
 
         var overallScore = assessments.Count > 0
             ? Math.Round(assessments.Average(a => a.OverallScore), 1)
@@ -108,11 +107,12 @@ public class PronunciationService(
     public async Task<object> GetMyProgressAsync(string userId, CancellationToken ct)
     {
         var progress = await db.LearnerPronunciationProgress
+            .AsNoTracking()
             .Where(p => p.UserId == userId && p.PhonemeCode != "_speech_overall")
+            .OrderByDescending(p => p.LastPracticedAt)
             .ToListAsync(ct);
 
         return progress
-            .OrderByDescending(p => p.LastPracticedAt)
             .Select(p => new
         {
             phonemeCode = p.PhonemeCode,
@@ -126,7 +126,7 @@ public class PronunciationService(
 
     public async Task<object> GetDrillsAsync(string? profession, string? difficulty, string? focus, CancellationToken ct)
     {
-        var q = db.PronunciationDrills.Where(d => d.Status == "active");
+        var q = db.PronunciationDrills.AsNoTracking().Where(d => d.Status == "active");
         if (!string.IsNullOrWhiteSpace(profession))
         {
             q = q.Where(d => d.Profession == profession || d.Profession == "all");
@@ -157,7 +157,7 @@ public class PronunciationService(
 
     public async Task<object> GetDrillAsync(string drillId, CancellationToken ct)
     {
-        var drill = await db.PronunciationDrills.FindAsync([drillId], ct)
+        var drill = await db.PronunciationDrills.AsNoTracking().FirstOrDefaultAsync(d => d.Id == drillId, ct)
             ?? throw ApiException.NotFound("DRILL_NOT_FOUND", "Pronunciation drill not found.");
         return ToDrillDto(drill);
     }
@@ -512,13 +512,13 @@ public class PronunciationService(
     public async Task<object> GetSpeakingLinkedAssessmentsAsync(string userId, int limit, CancellationToken ct)
     {
         limit = Math.Clamp(limit, 1, 50);
-        var list = await db.PronunciationAssessments
+        var list = await db.PronunciationAssessments.AsNoTracking()
             .Where(a => a.UserId == userId && a.AttemptId != null && a.Provider == "speaking-review")
+            .OrderByDescending(a => a.CreatedAt)
+            .Take(limit)
             .ToListAsync(ct);
 
         return list
-            .OrderByDescending(a => a.CreatedAt)
-            .Take(limit)
             .Select(a => new
         {
             id = a.Id,
@@ -543,7 +543,7 @@ public class PronunciationService(
         int roundsCorrect,
         CancellationToken ct)
     {
-        var drill = await db.PronunciationDrills.FindAsync([drillId], ct)
+        var drill = await db.PronunciationDrills.AsNoTracking().FirstOrDefaultAsync(d => d.Id == drillId, ct)
             ?? throw ApiException.NotFound("DRILL_NOT_FOUND", "Pronunciation drill not found.");
 
         if (roundsTotal <= 0)

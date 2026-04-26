@@ -96,7 +96,7 @@ public class MarketplaceService(LearnerDbContext db)
             return new { items = Array.Empty<object>(), total = 0, page, pageSize };
         }
 
-        var query = db.ContentSubmissions
+        var query = db.ContentSubmissions.AsNoTracking()
             .Where(s => s.ContributorId == contributor.Id);
 
         var total = await query.CountAsync(ct);
@@ -136,6 +136,7 @@ public class MarketplaceService(LearnerDbContext db)
     public async Task<object> BrowseContentAsync(string? examTypeCode, string? subtest, string? search, int page, int pageSize, CancellationToken ct)
     {
         var query = db.ContentSubmissions
+            .AsNoTracking()
             .Where(s => s.Status == "approved");
 
         if (!string.IsNullOrWhiteSpace(examTypeCode))
@@ -170,7 +171,7 @@ public class MarketplaceService(LearnerDbContext db)
 
     public async Task<object> GetPendingSubmissionsAsync(int page, int pageSize, CancellationToken ct)
     {
-        var query = db.ContentSubmissions
+        var query = db.ContentSubmissions.AsNoTracking()
             .Where(s => s.Status == "pending" || s.Status == "in_review");
 
         var total = await query.CountAsync(ct);

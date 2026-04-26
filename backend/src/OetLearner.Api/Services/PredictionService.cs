@@ -8,7 +8,7 @@ public class PredictionService(LearnerDbContext db)
 {
     public async Task<object> GetPredictionsAsync(string userId, string? examTypeCode, CancellationToken ct)
     {
-        var query = db.PredictionSnapshots.Where(p => p.UserId == userId);
+        var query = db.PredictionSnapshots.AsNoTracking().Where(p => p.UserId == userId);
         if (!string.IsNullOrEmpty(examTypeCode))
             query = query.Where(p => p.ExamTypeCode == examTypeCode);
 

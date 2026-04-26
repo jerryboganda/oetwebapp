@@ -574,9 +574,22 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
 
   useEffect(() => {
     setPushPermission(getPushPermission());
-    void syncPushRegistration().catch(() => {
-      setPushEnabled(false);
+    // Defer push registration sync past first paint — it touches localStorage,
+    // service worker APIs and makes a network request, none of which are critical
+    // for initial render. Use requestIdleCallback when available, fall back to setTimeout.
+    const win = typeof window !== 'undefined' ? window : null;
+    const idleCb = win && 'requestIdleCallback' in win
+      ? (cb: () => void) => (win as unknown as { requestIdleCallback: (cb: () => void, opts?: { timeout: number }) => number }).requestIdleCallback(cb, { timeout: 2000 })
+      : (cb: () => void) => window.setTimeout(cb, 0);
+    const cancelIdle = win && 'cancelIdleCallback' in win
+      ? (id: number) => (win as unknown as { cancelIdleCallback: (id: number) => void }).cancelIdleCallback(id)
+      : (id: number) => window.clearTimeout(id);
+    const handle = idleCb(() => {
+      void syncPushRegistration().catch(() => {
+        setPushEnabled(false);
+      });
     });
+    return () => cancelIdle(handle as number);
   }, [syncPushRegistration]);
 
   const contextValue = useMemo<NotificationCenterContextValue>(() => ({

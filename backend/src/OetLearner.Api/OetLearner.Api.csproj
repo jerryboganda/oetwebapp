@@ -47,4 +47,8 @@
     </EmbeddedResource>
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="OetLearner.Api.Tests" />
+  </ItemGroup>
+
 </Project>

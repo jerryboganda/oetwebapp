@@ -55,7 +55,7 @@ public sealed class PrivateSpeakingService(
 
     public async Task<PrivateSpeakingTutorProfile?> GetTutorProfileAsync(
         string profileId, CancellationToken ct)
-        => await db.PrivateSpeakingTutorProfiles.FindAsync([profileId], ct);
+        => await db.PrivateSpeakingTutorProfiles.AsNoTracking().FirstOrDefaultAsync(x => x.Id == profileId, ct);
 
     public async Task<PrivateSpeakingTutorProfile?> GetTutorProfileByExpertIdAsync(
         string expertUserId, CancellationToken ct)
@@ -899,6 +899,7 @@ public sealed class PrivateSpeakingService(
         string learnerUserId, string? statusFilter, CancellationToken ct)
     {
         var query = db.PrivateSpeakingBookings
+            .AsNoTracking()
             .Include(b => b.TutorProfile)
             .Where(b => b.LearnerUserId == learnerUserId);
 
@@ -908,13 +909,15 @@ public sealed class PrivateSpeakingService(
                 query = query.Where(b => b.Status == status);
         }
 
-        var bookings = await query.ToListAsync(ct);
-        return bookings.OrderByDescending(b => b.SessionStartUtc).ToList();
+        return await query
+            .OrderByDescending(b => b.SessionStartUtc)
+            .ToListAsync(ct);
     }
 
     public async Task<PrivateSpeakingBooking?> GetBookingAsync(
         string bookingId, CancellationToken ct)
         => await db.PrivateSpeakingBookings
+            .AsNoTracking()
             .Include(b => b.TutorProfile)
             .FirstOrDefaultAsync(b => b.Id == bookingId, ct);
 
@@ -923,11 +926,12 @@ public sealed class PrivateSpeakingService(
     public async Task<List<PrivateSpeakingBooking>> GetExpertBookingsAsync(
         string expertUserId, string? statusFilter, CancellationToken ct)
     {
-        var profile = await db.PrivateSpeakingTutorProfiles
+        var profile = await db.PrivateSpeakingTutorProfiles.AsNoTracking()
             .FirstOrDefaultAsync(p => p.ExpertUserId == expertUserId, ct);
         if (profile is null) return [];
 
         var query = db.PrivateSpeakingBookings
+            .AsNoTracking()
             .Include(b => b.TutorProfile)
             .Where(b => b.TutorProfileId == profile.Id);
 
@@ -937,8 +941,9 @@ public sealed class PrivateSpeakingService(
                 query = query.Where(b => b.Status == status);
         }
 
-        var bookings = await query.ToListAsync(ct);
-        return bookings.OrderByDescending(b => b.SessionStartUtc).ToList();
+        return await query
+            .OrderByDescending(b => b.SessionStartUtc)
+            .ToListAsync(ct);
     }
 
     // ── Admin Queries ───────────────────────────────────────────────────
@@ -949,6 +954,7 @@ public sealed class PrivateSpeakingService(
         int page, int pageSize, CancellationToken ct)
     {
         var query = db.PrivateSpeakingBookings
+            .AsNoTracking()
             .Include(b => b.TutorProfile)
             .AsQueryable();
 

@@ -23,10 +23,10 @@ public static class LearnerEndpoints
         v1.MapPost("/freeze/{freezeId}/confirm", async (HttpContext http, string freezeId, LearnerService service, CancellationToken ct) => Results.Ok(await service.ConfirmFreezeAsync(http.UserId(), freezeId, ct)));
         v1.MapPost("/freeze/{freezeId}/cancel", async (HttpContext http, string freezeId, LearnerService service, CancellationToken ct) => Results.Ok(await service.CancelFreezeAsync(http.UserId(), freezeId, ct)));
 
-        v1.MapGet("/reference/professions", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetProfessionsAsync(ct)));
-        v1.MapGet("/reference/subtests", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSubtestsAsync(ct)));
-        v1.MapGet("/reference/criteria", async ([FromQuery] string? subtest, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetCriteriaAsync(subtest, ct)));
-        v1.MapGet("/reference/filters/{surface}", (string surface, LearnerService service) => Results.Ok(service.GetFilters(surface)));
+        v1.MapGet("/reference/professions", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetProfessionsAsync(ct))).CacheOutput("Reference");
+        v1.MapGet("/reference/subtests", async (LearnerService service, CancellationToken ct) => Results.Ok(await service.GetSubtestsAsync(ct))).CacheOutput("Reference");
+        v1.MapGet("/reference/criteria", async ([FromQuery] string? subtest, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetCriteriaAsync(subtest, ct))).CacheOutput("Reference");
+        v1.MapGet("/reference/filters/{surface}", (string surface, LearnerService service) => Results.Ok(service.GetFilters(surface))).CacheOutput("Reference");
 
         var onboarding = v1.MapGroup("/learner/onboarding");
         onboarding.MapGet("/state", async (HttpContext http, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetOnboardingStateAsync(http.UserId(), ct)));
@@ -109,8 +109,9 @@ public static class LearnerEndpoints
             HttpContext http,
             LearnerDbContext db,
             IReadingPolicyService policy,
+            IReadingStructureService structureService,
             CancellationToken ct) =>
-            Results.Ok(await GetStructuredReadingHomeAsync(http.UserId(), db, policy, ct)));
+            Results.Ok(await GetStructuredReadingHomeAsync(http.UserId(), db, policy, structureService, ct)));
         reading.MapGet("/tasks/{contentId}", async (string contentId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReadingTaskAsync(contentId, ct)));
         reading.MapPost("/attempts", async (HttpContext http, CreateAttemptRequest request, LearnerService service, CancellationToken ct) => Results.Ok(await service.CreateReadingAttemptAsync(http.UserId(), request, ct)));
         reading.MapGet("/attempts/{attemptId}", async (HttpContext http, string attemptId, LearnerService service, CancellationToken ct) => Results.Ok(await service.GetReadingAttemptAsync(http.UserId(), attemptId, ct)));
@@ -374,6 +375,7 @@ public static class LearnerEndpoints
         string userId,
         LearnerDbContext db,
         IReadingPolicyService policyService,
+        IReadingStructureService structureService,
         CancellationToken ct)
     {
         var policy = await policyService.ResolveForUserAsync(userId, ct);
@@ -385,13 +387,11 @@ public static class LearnerEndpoints
             .ThenBy(p => p.Title)
             .ToListAsync(ct);
 
-        var readyPapers = new List<ContentPaper>();
-        var structureService = new ReadingStructureService(db);
-        foreach (var paper in publishedReadingPapers)
-        {
-            var validation = await structureService.ValidatePaperAsync(paper.Id, ct);
-            if (validation.IsPublishReady) readyPapers.Add(paper);
-        }
+        // Bulk-validate in 2 round-trips total instead of (1 + 5N) per request.
+        var validations = await structureService.BulkValidatePapersAsync(publishedReadingPapers, ct);
+        var readyPapers = publishedReadingPapers
+            .Where(p => validations.TryGetValue(p.Id, out var v) && v.IsPublishReady)
+            .ToList();
 
         var paperIds = readyPapers.Select(p => p.Id).ToList();
         var parts = await db.ReadingParts.AsNoTracking()

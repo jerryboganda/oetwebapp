@@ -115,14 +115,96 @@ public sealed class NotificationService(
             .Select(account => account.Id)
             .ToListAsync(ct);
 
-        var createdIds = new List<string>();
-        foreach (var adminId in adminIds)
+        if (adminIds.Count == 0)
         {
-            var createdId = await CreateForAuthAccountAsync(eventKey, adminId, ApplicationUserRoles.Admin, entityType, entityId, versionOrDateBucket, payload, enqueueFanoutJob: true, ct);
-            if (!string.IsNullOrWhiteSpace(createdId))
+            return Array.Empty<string>();
+        }
+
+        // Validate audience match once.
+        var catalog = NotificationCatalog.Get(eventKey);
+        if (!string.Equals(catalog.AudienceRole, ApplicationUserRoles.Admin, StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Validation(
+                "notification_audience_mismatch",
+                $"Event {eventKey} is not valid for audience {ApplicationUserRoles.Admin}.",
+                [new ApiFieldError("audienceRole", "invalid", "The notification event does not match the audience role.")]);
+        }
+
+        // Batched dedupe: compute keys, query existing in one round trip.
+        var dedupeKeys = adminIds
+            .Select(id => (AuthId: id, Key: NotificationScheduling.BuildDedupeKey(eventKey, id, entityType, entityId, versionOrDateBucket)))
+            .ToList();
+        var keySet = dedupeKeys.Select(p => p.Key).ToList();
+        var existingByKey = await db.NotificationEvents
+            .AsNoTracking()
+            .Where(n => keySet.Contains(n.DedupeKey))
+            .Select(n => new { n.Id, n.DedupeKey })
+            .ToDictionaryAsync(n => n.DedupeKey, n => n.Id, ct);
+
+        var normalizedPayload = NormalizePayload(payload);
+        var title = NotificationCatalog.BuildTitle(eventKey, normalizedPayload);
+        var body = NotificationCatalog.BuildBody(eventKey, normalizedPayload);
+        var actionUrl = NormalizeActionUrl(NotificationCatalog.BuildActionUrl(eventKey, normalizedPayload));
+        var payloadJson = JsonSupport.Serialize(normalizedPayload);
+        var eventKeyString = NotificationCatalog.GetKey(eventKey);
+        var now = timeProvider.GetUtcNow();
+        var nowPlus1 = now.AddSeconds(1);
+
+        var newEvents = new List<NotificationEvent>(adminIds.Count);
+        var newJobs = new List<BackgroundJobItem>(adminIds.Count);
+        var createdIds = new List<string>(adminIds.Count);
+
+        foreach (var (authId, dedupeKey) in dedupeKeys)
+        {
+            if (existingByKey.TryGetValue(dedupeKey, out var existingId))
             {
-                createdIds.Add(createdId);
+                createdIds.Add(existingId);
+                continue;
             }
+
+            var notificationEvent = new NotificationEvent
+            {
+                Id = $"nev-{Guid.NewGuid():N}",
+                RecipientAuthAccountId = authId,
+                RecipientRole = ApplicationUserRoles.Admin,
+                EventKey = eventKeyString,
+                Category = catalog.Category,
+                Title = title,
+                Body = body,
+                ActionUrl = actionUrl,
+                Severity = catalog.DefaultSeverity,
+                State = AsyncState.Queued,
+                EntityType = entityType,
+                EntityId = entityId,
+                VersionOrDateBucket = versionOrDateBucket,
+                DedupeKey = dedupeKey,
+                PayloadJson = payloadJson,
+                CreatedAt = now
+            };
+            newEvents.Add(notificationEvent);
+            newJobs.Add(new BackgroundJobItem
+            {
+                Id = $"job-{Guid.NewGuid():N}",
+                Type = JobType.NotificationFanout,
+                State = AsyncState.Queued,
+                ResourceId = notificationEvent.Id,
+                PayloadJson = JsonSupport.Serialize(new { notificationEventId = notificationEvent.Id }),
+                CreatedAt = now,
+                AvailableAt = nowPlus1,
+                LastTransitionAt = now,
+                StatusReasonCode = "queued",
+                StatusMessage = "Notification fan-out queued.",
+                Retryable = true,
+                RetryAfterMs = 2000
+            });
+            createdIds.Add(notificationEvent.Id);
+        }
+
+        if (newEvents.Count > 0)
+        {
+            db.NotificationEvents.AddRange(newEvents);
+            db.BackgroundJobs.AddRange(newJobs);
+            await db.SaveChangesAsync(ct);
         }
 
         return createdIds;
@@ -212,12 +294,12 @@ public sealed class NotificationService(
             .Where(item => item.AuthAccountId == authAccountId);
 
         var unreadCount = await baseQuery.CountAsync(item => !item.IsRead, ct);
-        var items = await GetFeedItemsAsync(baseQuery, ct);
 
-        if (query.UnreadOnly)
-        {
-            items = items.Where(item => !item.IsRead).ToList();
-        }
+        // Push UnreadOnly into SQL so noisy accounts still return pageSize unread items.
+        var filteredQuery = query.UnreadOnly
+            ? baseQuery.Where(item => !item.IsRead)
+            : baseQuery;
+        var items = await GetFeedItemsAsync(filteredQuery, ct);
 
         if (!string.IsNullOrWhiteSpace(query.Category))
         {
@@ -2100,17 +2182,25 @@ public sealed class NotificationService(
 
         var pushFailures = 0;
 
+        // Pre-load all subscription IDs already marked Sent for this notification + Push channel.
+        var subscriptionIdStrings = subscriptions.Select(s => s.Id.ToString()).ToList();
+        var alreadySentSet = subscriptionIdStrings.Count == 0
+            ? new HashSet<string>()
+            : (await db.NotificationDeliveryAttempts
+                .AsNoTracking()
+                .Where(attempt =>
+                    attempt.NotificationEventId == notificationEvent.Id
+                    && attempt.Channel == NotificationChannel.Push
+                    && attempt.Status == NotificationDeliveryStatus.Sent
+                    && subscriptionIdStrings.Contains(attempt.SubscriptionId!))
+                .Select(a => a.SubscriptionId!)
+                .ToListAsync(ct))
+                .ToHashSet();
+
         foreach (var subscription in subscriptions)
         {
             var subscriptionId = subscription.Id.ToString();
-            var subscriptionAlreadySent = await db.NotificationDeliveryAttempts
-                .AsNoTracking()
-                .AnyAsync(attempt =>
-                    attempt.NotificationEventId == notificationEvent.Id
-                    && attempt.Channel == NotificationChannel.Push
-                    && attempt.SubscriptionId == subscriptionId
-                    && attempt.Status == NotificationDeliveryStatus.Sent, ct);
-            if (subscriptionAlreadySent)
+            if (alreadySentSet.Contains(subscriptionId))
             {
                 continue;
             }

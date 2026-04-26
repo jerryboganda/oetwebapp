@@ -13,13 +13,11 @@ public sealed class VideoLessonService(LearnerDbContext db, MediaNormalizationSe
 
     public async Task<bool> IsEnabledAsync(CancellationToken ct)
     {
-        var flags = await db.FeatureFlags
+        var flag = await db.FeatureFlags
             .AsNoTracking()
             .Where(f => f.Key == FeatureFlagKey || f.Key == "video-lessons")
-            .ToListAsync(ct);
-        var flag = flags
             .OrderByDescending(f => f.UpdatedAt)
-            .FirstOrDefault();
+            .FirstOrDefaultAsync(ct);
 
         return flag?.Enabled ?? true;
     }
