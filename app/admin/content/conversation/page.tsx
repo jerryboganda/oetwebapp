@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-error';
+import { Pagination } from '@/components/ui/pagination';
 import {
   fetchAdminConversationTemplates,
   publishAdminConversationTemplate,
@@ -35,7 +36,6 @@ type TemplateRow = {
   updatedAt: string;
 };
 
-const PAGE_SIZE = 25;
 
 export default function AdminConversationTemplatesPage() {
   const router = useRouter();
@@ -43,6 +43,7 @@ export default function AdminConversationTemplatesPage() {
   const [rows, setRows] = useState<TemplateRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
   const [profession, setProfession] = useState('');
   const [status, setStatus] = useState('');
@@ -55,7 +56,7 @@ export default function AdminConversationTemplatesPage() {
         profession: profession || undefined,
         status: status || undefined,
         search: search || undefined,
-        page, pageSize: PAGE_SIZE,
+        page, pageSize,
       })) as { total: number; items: TemplateRow[] };
       setRows(res.items ?? []);
       setTotal(res.total ?? 0);
@@ -64,7 +65,7 @@ export default function AdminConversationTemplatesPage() {
     } finally {
       setLoading(false);
     }
-  }, [profession, status, search, page]);
+  }, [profession, status, search, page, pageSize]);
 
   useEffect(() => {
     const t = setTimeout(load, 250);
@@ -91,7 +92,6 @@ export default function AdminConversationTemplatesPage() {
     }
   }
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   return (
     <AdminDashboardShell>
@@ -188,13 +188,17 @@ export default function AdminConversationTemplatesPage() {
             </div>
           )}
 
-          {!loading && total > PAGE_SIZE && (
-            <div className="mt-4 flex items-center justify-between">
-              <span className="text-xs text-muted">Page {page} of {totalPages} · {total} total</span>
-              <div className="flex gap-2">
-                <Button variant="secondary" onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1}>Previous</Button>
-                <Button variant="secondary" onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page >= totalPages}>Next</Button>
-              </div>
+          {!loading && (
+            <div className="mt-4">
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                itemLabel="template"
+                itemLabelPlural="templates"
+              />
             </div>
           )}
         </AdminRoutePanel>
