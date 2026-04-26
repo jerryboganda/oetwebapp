@@ -1,3 +1,10 @@
+# Pin project name to `oetwebsite` so docker compose uses the live volumes
+# (oetwebsite_oet_postgres_data, oetwebsite_oet_learner_storage) regardless
+# of the working-directory the deploy is executed from. Without this, a CI
+# deploy from /opt/oetwebapp creates parallel `oetwebapp_*` volumes (empty
+# DB) and fails STEP 4 with container-name conflict against the live stack.
+name: oetwebsite
+
 services:
   postgres:
     image: postgres:17-alpine
