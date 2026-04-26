@@ -2,10 +2,11 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { MessageSquareText, Plus, Filter, ChevronLeft, ChevronRight, MessageCircle, Eye, ThumbsUp, Pin, Lock, Clock } from 'lucide-react';
+import { MessageSquareText, Plus, Filter, MessageCircle, Eye, ThumbsUp, Pin, Lock, Clock } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { Pagination } from '@/components/ui/pagination';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -44,7 +45,6 @@ interface ThreadsResponse {
   threads: ForumThreadSummary[];
 }
 
-const PAGE_SIZE = 20;
 
 function formatRelativeDate(dateStr: string) {
   const d = new Date(dateStr);
@@ -68,6 +68,7 @@ export default function CommunityPage() {
   const [threads, setThreads] = useState<ForumThreadSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [selectedCategory, setSelectedCategory] = useState('');
   const [showMyThreads, setShowMyThreads] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -86,7 +87,7 @@ export default function CommunityPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchForumThreads(catId || undefined, p, PAGE_SIZE) as ThreadsResponse;
+      const res = await fetchForumThreads(catId || undefined, p, pageSize) as ThreadsResponse;
       setThreads(res.threads ?? []);
       setTotal(res.total ?? 0);
     } catch (e) {
@@ -94,7 +95,7 @@ export default function CommunityPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [pageSize]);
 
   useEffect(() => {
     loadCategories();
@@ -111,7 +112,7 @@ export default function CommunityPage() {
     loadThreads(newPage, selectedCategory);
   };
 
-  const totalPages = Math.ceil(total / PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(total / pageSize));
   const categoryMap = new Map(categories.map(c => [c.id, c.name]));
 
   const displayedThreads = showMyThreads && user
@@ -224,28 +225,17 @@ export default function CommunityPage() {
           </div>
         )}
 
-        {/* Pagination */}
-        {totalPages > 1 && !loading && (
-          <div className="flex items-center justify-center gap-2 pt-2">
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page <= 1}
-              onClick={() => handlePageChange(page - 1)}
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="text-sm text-muted">
-              Page {page} of {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={page >= totalPages}
-              onClick={() => handlePageChange(page + 1)}
-            >
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+        {!loading && (
+          <div className="pt-2">
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={(next) => { setPage(next); loadThreads(next, selectedCategory); }}
+              onPageSizeChange={(next) => { setPageSize(next); }}
+              itemLabel="thread"
+              itemLabelPlural="threads"
+            />
           </div>
         )}
       </MotionSection>
