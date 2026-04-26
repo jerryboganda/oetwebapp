@@ -12,9 +12,7 @@ import { Input, Textarea, Select } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui';
 import { useAuth } from '@/contexts/auth-context';
-import { fetchForumThread, fetchForumCategories } from '@/lib/api';
-import { ensureFreshAccessToken } from '@/lib/auth-client';
-import { env } from '@/lib/env';
+import { apiClient, fetchForumThread, fetchForumCategories } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
 interface ForumThread {
@@ -96,13 +94,11 @@ export default function EditThreadPage() {
     setSubmitting(true);
     setError(null);
     try {
-      const token = await ensureFreshAccessToken();
-      const res = await fetch(`${env.apiBaseUrl}/v1/community/threads/${encodeURIComponent(threadId)}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ categoryId, title: title.trim(), body: body.trim() }),
+      await apiClient.put(`/v1/community/threads/${encodeURIComponent(threadId)}`, {
+        categoryId,
+        title: title.trim(),
+        body: body.trim(),
       });
-      if (!res.ok) throw new Error(`Update failed (${res.status})`);
       analytics.track('community_thread_updated', { threadId });
       router.push(`/community/threads/${threadId}`);
     } catch (err) {

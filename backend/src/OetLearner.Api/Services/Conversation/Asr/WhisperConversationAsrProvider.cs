@@ -48,17 +48,36 @@ public sealed class WhisperConversationAsrProvider(
         var text = root.TryGetProperty("text", out var t) ? (t.GetString() ?? "").Trim() : "";
         double? duration = root.TryGetProperty("duration", out var d) && d.ValueKind == JsonValueKind.Number ? d.GetDouble() : null;
         double confidence = 0.85;
+        var speakerSegments = new List<ConversationSpeakerSegment>();
         if (root.TryGetProperty("segments", out var segs) && segs.ValueKind == JsonValueKind.Array)
         {
             var probs = new List<double>();
             foreach (var s in segs.EnumerateArray())
+            {
                 if (s.TryGetProperty("avg_logprob", out var lp) && lp.ValueKind == JsonValueKind.Number)
                     probs.Add(Math.Exp(lp.GetDouble()));
+                if (request.EnableDiarization)
+                {
+                    var segmentText = s.TryGetProperty("text", out var st) ? (st.GetString() ?? "").Trim() : "";
+                    if (!string.IsNullOrWhiteSpace(segmentText))
+                    {
+                        var startMs = s.TryGetProperty("start", out var start) && start.ValueKind == JsonValueKind.Number
+                            ? (int)(start.GetDouble() * 1000)
+                            : 0;
+                        var endMs = s.TryGetProperty("end", out var end) && end.ValueKind == JsonValueKind.Number
+                            ? (int)(end.GetDouble() * 1000)
+                            : startMs;
+                        var speaker = s.TryGetProperty("speaker", out var sp) ? sp.GetRawText().Trim('"') : "learner";
+                        speakerSegments.Add(new ConversationSpeakerSegment(speaker, segmentText, startMs, endMs, null));
+                    }
+                }
+            }
             if (probs.Count > 0) confidence = Math.Clamp(probs.Average(), 0.0, 1.0);
         }
         return new ConversationAsrResult(
             text, confidence, duration.HasValue ? (int)(duration.Value * 1000) : 0,
-            lang, Name, $"whisper {text.Length} chars");
+            lang, Name, $"whisper {text.Length} chars",
+            request.EnableDiarization ? speakerSegments : null);
     }
 
     private static string GuessFileName(string mime) => mime switch

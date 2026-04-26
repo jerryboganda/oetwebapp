@@ -1,3 +1,5 @@
+using System.Security.Cryptography;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
@@ -66,7 +68,85 @@ public class ConversationService(
         var session = await db.ConversationSessions
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct)
             ?? throw ApiException.NotFound("SESSION_NOT_FOUND", "Conversation session not found.");
-        return MapSession(session);
+        var turns = await GetTurnsAsync(sessionId, ct);
+        return MapSession(session, turns);
+    }
+
+    public async Task<object> ResumeSessionAsync(
+        string userId,
+        string sessionId,
+        ConversationResumeSessionRequest request,
+        CancellationToken ct)
+    {
+        var session = await db.ConversationSessions
+            .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct)
+            ?? throw ApiException.NotFound("SESSION_NOT_FOUND", "Conversation session not found.");
+
+        var turns = await GetTurnsAsync(sessionId, ct);
+        if (session.State is "completed" or "evaluated" or "evaluating" or "failed" or "abandoned")
+        {
+            return new
+            {
+                resumeAllowed = false,
+                redirectTo = $"/conversation/{sessionId}/results",
+                session = MapSession(session, turns),
+                turns = MapTurns(turns),
+            };
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        if (!string.IsNullOrWhiteSpace(request.ResumeToken))
+        {
+            var suppliedHash = HashToken(request.ResumeToken);
+            var existing = await db.ConversationSessionResumeTokens
+                .FirstOrDefaultAsync(t =>
+                    t.SessionId == sessionId &&
+                    t.UserId == userId &&
+                    t.TokenHash == suppliedHash,
+                    ct);
+            if (existing is null || existing.ExpiresAt <= now || existing.RevokedAt is not null)
+                throw ApiException.Validation("RESUME_TOKEN_INVALID", "The conversation resume token is invalid or expired.");
+            existing.LastUsedAt = now;
+        }
+
+        var token = CreateResumeToken();
+        var expiresAt = now.AddMinutes(30);
+        db.ConversationSessionResumeTokens.Add(new ConversationSessionResumeToken
+        {
+            Id = $"crt-{Guid.NewGuid():N}",
+            SessionId = sessionId,
+            UserId = userId,
+            TokenHash = HashToken(token),
+            CreatedAt = now,
+            ExpiresAt = expiresAt,
+        });
+
+        await db.SaveChangesAsync(ct);
+        return new
+        {
+            resumeAllowed = true,
+            resumeToken = token,
+            resumeTokenExpiresAt = expiresAt,
+            session = MapSession(session, turns),
+            turns = MapTurns(turns),
+        };
+    }
+
+    public async Task<Conversation.ConversationTranscriptExportResult> ExportTranscriptAsync(
+        string userId,
+        string sessionId,
+        string format,
+        Conversation.IConversationTranscriptExportService exporter,
+        CancellationToken ct)
+    {
+        var session = await db.ConversationSessions
+            .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct)
+            ?? throw ApiException.NotFound("SESSION_NOT_FOUND", "Conversation session not found.");
+
+        var turns = await GetTurnsAsync(sessionId, ct);
+        var evaluation = await db.ConversationEvaluations.AsNoTracking()
+            .FirstOrDefaultAsync(e => e.SessionId == sessionId && e.UserId == userId, ct);
+        return await exporter.ExportAsync(session, turns, evaluation, format, ct);
     }
 
     public async Task<object> CompleteSessionAsync(string userId, string sessionId, CancellationToken ct)
@@ -305,7 +385,13 @@ public class ConversationService(
         });
     }
 
-    private static object MapSession(ConversationSession s) => new
+    private async Task<List<ConversationTurn>> GetTurnsAsync(string sessionId, CancellationToken ct)
+        => await db.ConversationTurns.AsNoTracking()
+            .Where(t => t.SessionId == sessionId)
+            .OrderBy(t => t.TurnNumber)
+            .ToListAsync(ct);
+
+    private static object MapSession(ConversationSession s, IEnumerable<ConversationTurn>? turns = null) => new
     {
         id = s.Id, userId = s.UserId, contentId = s.ContentId, templateId = s.TemplateId,
         examTypeCode = s.ExamTypeCode, subtestCode = s.SubtestCode, taskTypeCode = s.TaskTypeCode,
@@ -313,9 +399,35 @@ public class ConversationService(
         turnCount = s.TurnCount, durationSeconds = s.DurationSeconds,
         transcriptJson = s.TranscriptJson, evaluationId = s.EvaluationId,
         createdAt = s.CreatedAt, startedAt = s.StartedAt, completedAt = s.CompletedAt,
+        turns = turns is null ? Array.Empty<object>() : MapTurns(turns),
     };
+
+    private static IEnumerable<object> MapTurns(IEnumerable<ConversationTurn> turns)
+        => turns.Select(t => new
+        {
+            turnNumber = t.TurnNumber,
+            role = t.Role,
+            content = t.Content,
+            audioUrl = t.AudioUrl,
+            durationMs = t.DurationMs,
+            timestampMs = t.TimestampMs,
+            confidence = t.ConfidenceScore,
+            analysis = JsonSupport.Deserialize<object>(t.AnalysisJson, new { }),
+            createdAt = t.CreatedAt,
+        });
+
+    private static string CreateResumeToken()
+        => Convert.ToBase64String(RandomNumberGenerator.GetBytes(32))
+            .Replace('+', '-')
+            .Replace('/', '_')
+            .TrimEnd('=');
+
+    private static string HashToken(string token)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token))).ToLowerInvariant();
 }
 
 public record ConversationCreateSessionRequest(
     string? ContentId, string? ExamFamilyCode, string? TaskTypeCode,
     string? Profession = null, string? Difficulty = null);
+
+public record ConversationResumeSessionRequest(string? ResumeToken = null);

@@ -28,9 +28,7 @@ import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Modal } from '@/components/ui/modal';
 import { Skeleton, EmptyState } from '@/components/ui';
 import { useAuth } from '@/contexts/auth-context';
-import { fetchForumThread, fetchThreadReplies, createReply, pinCommunityThread, lockCommunityThread, adminDeleteCommunityThread, adminDeleteCommunityReply } from '@/lib/api';
-import { ensureFreshAccessToken } from '@/lib/auth-client';
-import { env } from '@/lib/env';
+import { apiClient, fetchForumThread, fetchThreadReplies, createReply, pinCommunityThread, lockCommunityThread, adminDeleteCommunityThread, adminDeleteCommunityReply } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
 interface ForumThread {
@@ -241,12 +239,7 @@ export default function ThreadPage() {
     if (!threadId || !confirm('Are you sure you want to delete this thread?')) return;
     setDeleting(true);
     try {
-      const token = await ensureFreshAccessToken();
-      const res = await fetch(`${env.apiBaseUrl}/v1/community/threads/${encodeURIComponent(threadId)}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(`Delete failed (${res.status})`);
+      await apiClient.delete(`/v1/community/threads/${encodeURIComponent(threadId)}`);
       analytics.track('community_thread_deleted', { threadId });
       router.push('/community');
     } catch (err) {

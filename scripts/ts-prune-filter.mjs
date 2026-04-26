@@ -98,6 +98,8 @@ const IGNORED_PATH_SUBSTRINGS = [
   'eslint.config.mjs',
   'postcss.config.mjs',
   'capacitor.config.ts',
+  '/instrumentation.ts',
+  '/middleware.ts',
   // Platform shells
   'capacitor-web/',
   'electron/',

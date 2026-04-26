@@ -600,6 +600,8 @@ builder.Services.AddScoped<OetLearner.Api.Services.Conversation.Tts.IConversatio
 
 builder.Services.AddScoped<OetLearner.Api.Services.Conversation.IConversationAudioService,
     OetLearner.Api.Services.Conversation.ConversationAudioService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Conversation.IConversationTranscriptExportService,
+    OetLearner.Api.Services.Conversation.ConversationTranscriptExportService>();
 builder.Services.AddSingleton<OetLearner.Api.Services.Conversation.IConversationOptionsProvider,
     OetLearner.Api.Services.Conversation.ConversationOptionsProvider>();
 builder.Services.AddScoped<OetLearner.Api.Services.Conversation.IConversationEntitlementService,

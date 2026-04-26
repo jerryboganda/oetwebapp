@@ -8,7 +8,7 @@ import { MotionSection } from '@/components/ui/motion-primitives';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
-import { getConversation, completeConversation } from '@/lib/api';
+import { completeConversation, resumeConversation } from '@/lib/api';
 import { resolveApiMediaUrl } from '@/lib/media-url';
 import {
   ConversationPrepCard,
@@ -22,11 +22,26 @@ import type {
   ConversationScenario,
   ConversationAiMeta,
   ConversationTranscriptMeta,
+  ConversationResumeResponse,
+  ConversationSessionTurn,
 } from '@/lib/types/conversation';
 
 const PREP_DURATION_DEFAULT = 120;
 const DEFAULT_TIME_LIMIT = 300;
 const MAX_TURN_MS = 60_000;
+
+function normalizeTurns(turns?: ConversationSessionTurn[]): ChatTurn[] {
+  if (!Array.isArray(turns)) return [];
+  return turns
+    .filter((turn) => typeof turn.content === 'string' && typeof turn.turnNumber === 'number')
+    .map((turn) => ({
+      turnNumber: turn.turnNumber,
+      role: turn.role,
+      content: turn.content,
+      timestamp: turn.createdAt ? new Date(turn.createdAt).getTime() : Date.now(),
+      audioUrl: turn.audioUrl ?? null,
+    }));
+}
 
 export default function ConversationSessionPage() {
   const params = useParams<{ sessionId: string }>();
@@ -52,23 +67,33 @@ export default function ConversationSessionPage() {
   const audioChunksRef = useRef<Blob[]>([]);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
   const hasStartedRef = useRef(false);
+  const resumeTokenRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
-    getConversation(sessionId)
-      .then((data: Record<string, unknown>) => {
+    resumeConversation(sessionId, resumeTokenRef.current ?? undefined)
+      .then((data: ConversationResumeResponse | Record<string, unknown>) => {
         if (cancelled) return;
+        const payload = 'session' in data && data.session ? data.session as Record<string, unknown> : data as Record<string, unknown>;
+        if ('resumeToken' in data && typeof data.resumeToken === 'string') {
+          resumeTokenRef.current = data.resumeToken;
+        }
         try {
           const scenarioData =
-            typeof data.scenarioJson === 'string' && data.scenarioJson.length > 0
-              ? (JSON.parse(data.scenarioJson as string) as ConversationScenario)
+            typeof payload.scenarioJson === 'string' && payload.scenarioJson.length > 0
+              ? (JSON.parse(payload.scenarioJson as string) as ConversationScenario)
               : null;
           setScenario(scenarioData);
         } catch { /* noop */ }
-        const s = (data.state as ConversationState) ?? 'preparing';
+        const hydratedTurns = normalizeTurns(
+          (Array.isArray((data as ConversationResumeResponse).turns) ? (data as ConversationResumeResponse).turns : payload.turns) as ConversationSessionTurn[] | undefined,
+        );
+        if (hydratedTurns.length > 0) setTurns(hydratedTurns);
+        const s = (payload.state as ConversationState) ?? 'preparing';
         setState(s);
-        if (s === 'evaluated' || s === 'completed' || s === 'evaluating') {
+        if (('resumeAllowed' in data && data.resumeAllowed === false && typeof data.redirectTo === 'string') ||
+            s === 'evaluated' || s === 'completed' || s === 'evaluating') {
           router.replace(`/conversation/${sessionId}/results`);
         }
       })

@@ -1,5 +1,4 @@
-import { ensureFreshAccessToken } from './auth-client';
-import { env } from './env';
+import { ApiError, apiClient } from './api';
 import type {
   AdminNotificationCatalogEntry,
   AdminNotificationHealthSnapshot,
@@ -26,46 +25,15 @@ class NotificationApiError extends Error {
   }
 }
 
-function resolveUrl(path: string): string {
-  return `${env.apiBaseUrl}${path.startsWith('/') ? path : `/${path}`}`;
-}
-
 async function requestJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const token = await ensureFreshAccessToken();
-  if (!token) {
-    throw new NotificationApiError(401, 'not_authenticated', 'A valid session is required.');
-  }
-
-  const headers = new Headers(init?.headers);
-  if (!(init?.body instanceof FormData)) {
-    headers.set('Content-Type', 'application/json');
-  }
-  headers.set('Authorization', `Bearer ${token}`);
-
-  const response = await fetch(resolveUrl(path), {
-    ...init,
-    headers,
-  });
-
-  if (!response.ok) {
-    let errorCode = 'notification_request_failed';
-    let message = `Notification request failed with status ${response.status}.`;
-    try {
-      const payload = await response.json();
-      errorCode = payload.code ?? errorCode;
-      message = payload.message ?? payload.title ?? message;
-    } catch {
-      // Keep the fallback message when the response body is not JSON.
+  try {
+    return await apiClient.request<T>(path, init);
+  } catch (error) {
+    if (error instanceof ApiError) {
+      throw new NotificationApiError(error.status, error.code, error.message);
     }
-
-    throw new NotificationApiError(response.status, errorCode, message);
+    throw error;
   }
-
-  if (response.status === 204) {
-    return undefined as T;
-  }
-
-  return response.json() as Promise<T>;
 }
 
 export async function fetchNotifications(params?: {

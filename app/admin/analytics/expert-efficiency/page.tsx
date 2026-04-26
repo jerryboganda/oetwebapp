@@ -9,18 +9,12 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import { apiClient } from '@/lib/api';
 
 interface ExpertReport { expertId: string; expertName: string; period: number; assignmentsReceived: number; reviewsCompleted: number; averageReviewTimeMinutes: number | null; reviewsPerDay: number; aiAlignmentScore: number | null; efficiency: string }
 interface EfficiencyData { period: number; experts: ExpertReport[]; summary: { totalExperts: number; activeExperts: number; totalReviewsCompleted: number; averageReviewsPerExpertPerDay: number }; generatedAt: string }
 
-async function apiRequest<T = unknown>(path: string, init?: RequestInit): Promise<T> {
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const { env } = await import('@/lib/env');
-  const token = await ensureFreshAccessToken();
-  const res = await fetch(`${env.apiBaseUrl}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...init?.headers } });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
+const apiRequest = apiClient.request;
 
 const EFF_BADGE: Record<string, { label: string; color: string }> = { high: { label: 'High', color: 'bg-emerald-100 text-emerald-700' }, medium: { label: 'Medium', color: 'bg-amber-100 text-amber-700' }, low: { label: 'Low', color: 'bg-danger/15 text-danger' }, 'no-data': { label: 'No Data', color: 'bg-muted text-muted' } };
 

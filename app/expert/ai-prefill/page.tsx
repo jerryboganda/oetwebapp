@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import { apiClient } from '@/lib/api';
 
 interface AiCriterion {
   criterionCode: string; aiScore: number; aiConfidence: string; note: string;
@@ -24,14 +25,7 @@ interface PreFillData {
   instructions?: { guidance: string; actions: string[]; note: string };
 }
 
-async function apiRequest<T = unknown>(path: string, init?: RequestInit): Promise<T> {
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const { env } = await import('@/lib/env');
-  const token = await ensureFreshAccessToken();
-  const res = await fetch(`${env.apiBaseUrl}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...init?.headers } });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
+const apiRequest = apiClient.request;
 
 const CONFIDENCE_COLOR: Record<string, string> = { high: 'bg-emerald-100 text-emerald-700', medium: 'bg-amber-100 text-amber-700', low: 'bg-red-100 text-red-700' };
 

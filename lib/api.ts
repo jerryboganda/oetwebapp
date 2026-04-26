@@ -440,14 +440,14 @@ function isRetryable(status: number): boolean {
   return status >= 500 || status === 408 || status === 429;
 }
 
-async function apiRequest<T = any>(path: string, init?: RequestInit): Promise<T> {
+async function apiRequest<T = any>(path: string, init?: RequestInit, options?: { json?: boolean }): Promise<T> {
   let lastError: Error | null = null;
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
       const response = await fetchWithTimeout(resolveApiUrl(path), {
         ...init,
-        headers: await getHeaders(path, init?.headers),
+        headers: await getHeaders(path, init?.headers, options),
       });
 
       if (!response.ok) {
@@ -516,6 +516,70 @@ async function apiRequest<T = any>(path: string, init?: RequestInit): Promise<T>
 
   throw lastError ?? new Error('Request failed');
 }
+
+type ApiClientInit = Omit<RequestInit, 'body' | 'method'>;
+type ApiClientBody = unknown;
+
+function isRequestBody(value: unknown): value is BodyInit {
+  return (
+    typeof value === 'string'
+    || (typeof FormData !== 'undefined' && value instanceof FormData)
+    || (typeof URLSearchParams !== 'undefined' && value instanceof URLSearchParams)
+    || (typeof Blob !== 'undefined' && value instanceof Blob)
+    || (typeof ArrayBuffer !== 'undefined' && value instanceof ArrayBuffer)
+    || (typeof ReadableStream !== 'undefined' && value instanceof ReadableStream)
+  );
+}
+
+function toRequestBody(body: ApiClientBody): { body?: BodyInit; json: boolean } {
+  if (body === undefined) {
+    return { json: true };
+  }
+
+  if (isRequestBody(body)) {
+    return {
+      body,
+      json: !(typeof FormData !== 'undefined' && body instanceof FormData),
+    };
+  }
+
+  return {
+    body: JSON.stringify(body),
+    json: true,
+  };
+}
+
+/**
+ * Central API client for application code.
+ *
+ * All backend calls from app/components/hooks/lib code should use this client
+ * (or the typed helpers in this file) so retries, auth headers, CSRF, timeout
+ * handling and normalized `ApiError` behavior stay consistent.
+ */
+export const apiClient = {
+  request: apiRequest,
+  get<T = any>(path: string, init?: ApiClientInit): Promise<T> {
+    return apiRequest<T>(path, { ...init, method: 'GET' });
+  },
+  post<T = any>(path: string, body?: ApiClientBody, init?: ApiClientInit): Promise<T> {
+    const payload = toRequestBody(body);
+    return apiRequest<T>(path, { ...init, method: 'POST', body: payload.body }, { json: payload.json });
+  },
+  put<T = any>(path: string, body?: ApiClientBody, init?: ApiClientInit): Promise<T> {
+    const payload = toRequestBody(body);
+    return apiRequest<T>(path, { ...init, method: 'PUT', body: payload.body }, { json: payload.json });
+  },
+  patch<T = any>(path: string, body?: ApiClientBody, init?: ApiClientInit): Promise<T> {
+    const payload = toRequestBody(body);
+    return apiRequest<T>(path, { ...init, method: 'PATCH', body: payload.body }, { json: payload.json });
+  },
+  delete<T = any>(path: string, init?: ApiClientInit): Promise<T> {
+    return apiRequest<T>(path, { ...init, method: 'DELETE' });
+  },
+  postForm<T = any>(path: string, body: FormData, init?: ApiClientInit): Promise<T> {
+    return apiRequest<T>(path, { ...init, method: 'POST', body }, { json: false });
+  },
+};
 
 async function uploadBinary(pathOrUrl: string, blob: Blob): Promise<void> {
   const response = await fetchWithTimeout(resolveApiUrl(pathOrUrl), {
@@ -5586,6 +5650,26 @@ export async function createConversation(params: {
 
 export async function getConversation(sessionId: string) {
   return apiRequest(`/v1/conversations/${encodeURIComponent(sessionId)}`);
+}
+
+export async function resumeConversation(sessionId: string, resumeToken?: string) {
+  return apiClient.post(`/v1/conversations/${encodeURIComponent(sessionId)}/resume`, resumeToken ? { resumeToken } : {});
+}
+
+export function conversationTranscriptExportUrl(sessionId: string, format: 'txt' | 'pdf' = 'txt') {
+  return resolveApiUrl(`/v1/conversations/${encodeURIComponent(sessionId)}/transcript/export?format=${encodeURIComponent(format)}`);
+}
+
+export async function downloadConversationTranscript(sessionId: string, format: 'txt' | 'pdf' = 'txt'): Promise<Blob> {
+  const path = `/v1/conversations/${encodeURIComponent(sessionId)}/transcript/export?format=${encodeURIComponent(format)}`;
+  const response = await fetchWithTimeout(resolveApiUrl(path), {
+    method: 'GET',
+    headers: await getHeaders(path, undefined, { json: false }),
+  });
+  if (!response.ok) {
+    throw new ApiError(response.status, 'transcript_export_failed', `Transcript export failed: ${response.status}`, isRetryable(response.status));
+  }
+  return response.blob();
 }
 
 export async function completeConversation(sessionId: string) {

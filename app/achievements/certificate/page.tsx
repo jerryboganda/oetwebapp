@@ -10,6 +10,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
+import { apiClient } from '@/lib/api';
 
 /* ── types ─────────────────────────────────────── */
 interface Certificate {
@@ -22,14 +23,7 @@ interface Certificate {
 }
 
 /* ── api helper ───────────────────────────────── */
-async function apiRequest<T = unknown>(path: string): Promise<T> {
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const { env } = await import('@/lib/env');
-  const token = await ensureFreshAccessToken();
-  const res = await fetch(`${env.apiBaseUrl}${path}`, { headers: { Authorization: `Bearer ${token}` } });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
+const apiRequest = apiClient.request;
 
 /* ── certificate type config ──────────────────── */
 const TYPE_CONFIG: Record<string, { icon: typeof Award; color: string; bg: string }> = {

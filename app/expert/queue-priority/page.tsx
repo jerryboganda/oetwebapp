@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import { apiClient } from '@/lib/api';
 
 interface QueueItem {
   assignmentId: string; reviewRequestId: string; attemptId: string; subtestCode: string;
@@ -19,14 +20,7 @@ interface QueueData {
   summary: { total: number; critical: number; high: number; normal: number };
 }
 
-async function apiRequest<T = unknown>(path: string, init?: RequestInit): Promise<T> {
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const { env } = await import('@/lib/env');
-  const token = await ensureFreshAccessToken();
-  const res = await fetch(`${env.apiBaseUrl}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...init?.headers } });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
+const apiRequest = apiClient.request;
 
 const PRIORITY_CONFIG: Record<string, { icon: typeof AlertOctagon; color: string; bg: string }> = {
   critical: { icon: AlertOctagon, color: 'text-red-600', bg: 'bg-red-50 dark:bg-red-950 border-red-200 dark:border-red-800' },

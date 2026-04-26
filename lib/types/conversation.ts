@@ -47,6 +47,29 @@ export interface ConversationEvaluationTurn {
   confidence: number | null;
 }
 
+export interface ConversationSpeakerSegment {
+  speaker: string;
+  text: string;
+  startMs: number;
+  endMs: number;
+  confidence?: number | null;
+}
+
+export interface ConversationSessionTurn extends ConversationEvaluationTurn {
+  timestampMs?: number;
+  speakerSegments?: ConversationSpeakerSegment[];
+  createdAt?: string;
+}
+
+export interface ConversationResumeResponse {
+  resumeAllowed: boolean;
+  resumeToken?: string;
+  resumeTokenExpiresAt?: string;
+  redirectTo?: string;
+  session?: Record<string, unknown>;
+  turns?: ConversationSessionTurn[];
+}
+
 export interface ConversationEvaluationAnnotation {
   id: string;
   turnNumber: number;

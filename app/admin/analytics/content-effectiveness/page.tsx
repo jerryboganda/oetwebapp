@@ -9,18 +9,12 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import { apiClient } from '@/lib/api';
 
 interface ContentItem { contentId: string; title: string; subtestCode: string; difficulty: string; totalAttempts: number; completionRate: number; averageScore: number | null; avgTimeSeconds: number | null; effectivenessScore: number | null }
 interface EffectivenessData { subtestFilter: string | null; items: ContentItem[]; generatedAt: string }
 
-async function apiRequest<T = unknown>(path: string, init?: RequestInit): Promise<T> {
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const { env } = await import('@/lib/env');
-  const token = await ensureFreshAccessToken();
-  const res = await fetch(`${env.apiBaseUrl}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...init?.headers } });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
+const apiRequest = apiClient.request;
 
 export default function ContentEffectivenessPage() {
   const [data, setData] = useState<EffectivenessData | null>(null);

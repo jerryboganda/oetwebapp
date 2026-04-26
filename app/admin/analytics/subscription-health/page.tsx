@@ -9,6 +9,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import { apiClient } from '@/lib/api';
 
 interface RevenuePlan { planId: string; planName: string; subscribers: number; monthlyRevenue: number }
 interface MonthlyTrend { month: string; newSubscriptions: number; cancellations: number }
@@ -17,14 +18,7 @@ interface SubHealthData {
   trialConversionRate: number; arpu: number; revenueByPlan: RevenuePlan[]; monthlyTrend: MonthlyTrend[]; generatedAt: string;
 }
 
-async function apiRequest<T = unknown>(path: string, init?: RequestInit): Promise<T> {
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const { env } = await import('@/lib/env');
-  const token = await ensureFreshAccessToken();
-  const res = await fetch(`${env.apiBaseUrl}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...init?.headers } });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
+const apiRequest = apiClient.request;
 
 export default function SubscriptionHealthPage() {
   const [data, setData] = useState<SubHealthData | null>(null);

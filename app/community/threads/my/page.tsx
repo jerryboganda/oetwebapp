@@ -13,9 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton, EmptyState } from '@/components/ui';
 import { useAuth } from '@/contexts/auth-context';
-import { fetchForumThreads, fetchForumCategories } from '@/lib/api';
-import { ensureFreshAccessToken } from '@/lib/auth-client';
-import { env } from '@/lib/env';
+import { apiClient, fetchForumThreads, fetchForumCategories } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
 interface ForumCategory {
@@ -110,12 +108,7 @@ export default function MyThreadsPage() {
     if (!confirm('Are you sure you want to delete this thread?')) return;
     setDeleting(threadId);
     try {
-      const token = await ensureFreshAccessToken();
-      const res = await fetch(`${env.apiBaseUrl}/v1/community/threads/${encodeURIComponent(threadId)}`, {
-        method: 'DELETE',
-        headers: { Authorization: `Bearer ${token}` },
-      });
-      if (!res.ok) throw new Error(`Delete failed (${res.status})`);
+      await apiClient.delete(`/v1/community/threads/${encodeURIComponent(threadId)}`);
       analytics.track('community_thread_deleted', { threadId });
       setThreads(prev => prev.filter(t => t.id !== threadId));
     } catch (err) {

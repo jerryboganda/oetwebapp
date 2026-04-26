@@ -62,7 +62,17 @@ public sealed class AzureConversationAsrProvider(
         if (root.TryGetProperty("Duration", out var dur) && dur.ValueKind == JsonValueKind.Number)
             durationMs = (int)(dur.GetInt64() / 10000);
 
-        return new ConversationAsrResult(text.Trim(), confidence, durationMs, locale, Name, $"azure {text.Length} chars");
+        var trimmed = text.Trim();
+        return new ConversationAsrResult(
+            trimmed,
+            confidence,
+            durationMs,
+            locale,
+            Name,
+            request.EnableDiarization ? $"azure {text.Length} chars; diarization requested" : $"azure {text.Length} chars",
+            request.EnableDiarization && !string.IsNullOrWhiteSpace(trimmed)
+                ? [new ConversationSpeakerSegment("learner", trimmed, 0, durationMs, confidence)]
+                : null);
     }
 
     private static string MapContentType(string mime) => mime switch

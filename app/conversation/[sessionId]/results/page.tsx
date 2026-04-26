@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import {
   MessageSquare, BarChart3, Target, ChevronRight, RotateCcw, ArrowLeft,
-  Star, AlertTriangle, CheckCircle2, Volume2,
+  Star, AlertTriangle, CheckCircle2, Volume2, Download,
 } from 'lucide-react';
 import Link from 'next/link';
 import { useParams } from 'next/navigation';
@@ -12,8 +12,9 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { analytics } from '@/lib/analytics';
-import { getConversationEvaluation } from '@/lib/api';
+import { downloadConversationTranscript, getConversationEvaluation } from '@/lib/api';
 import { resolveApiMediaUrl } from '@/lib/media-url';
 import type { ConversationEvaluationResponse } from '@/lib/types/conversation';
 import { formatScaledScore, oetGradeLabel, type OetGrade } from '@/lib/scoring';
@@ -34,6 +35,7 @@ export default function ConversationResultsPage() {
   const [evaluation, setEvaluation] = useState<ConversationEvaluationResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exporting, setExporting] = useState<'txt' | 'pdf' | null>(null);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -58,6 +60,26 @@ export default function ConversationResultsPage() {
   }, [sessionId]);
 
   const formatDuration = (s: number) => (s >= 60 ? `${Math.floor(s / 60)}m ${s % 60}s` : `${s}s`);
+
+  const handleExport = async (format: 'txt' | 'pdf') => {
+    setExporting(format);
+    try {
+      const blob = await downloadConversationTranscript(sessionId, format);
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = `conversation-${sessionId}-transcript.${format}`;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      URL.revokeObjectURL(url);
+      analytics.track('conversation_transcript_exported', { sessionId, format });
+    } catch {
+      setError('Failed to export transcript.');
+    } finally {
+      setExporting(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -207,9 +229,19 @@ export default function ConversationResultsPage() {
 
         {turns.length > 0 && (
           <MotionSection delayIndex={4} className="mb-6 rounded-2xl border border-border bg-surface p-6">
-            <h2 className="mb-4 flex items-center gap-2 text-lg font-bold text-navy">
-              <MessageSquare className="h-5 w-5 text-primary" /> Transcript
-            </h2>
+            <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+              <h2 className="flex items-center gap-2 text-lg font-bold text-navy">
+                <MessageSquare className="h-5 w-5 text-primary" /> Transcript
+              </h2>
+              <div className="flex items-center gap-2">
+                <Button variant="outline" size="sm" onClick={() => void handleExport('txt')} disabled={exporting !== null}>
+                  <Download className="mr-1.5 h-4 w-4" /> TXT
+                </Button>
+                <Button variant="outline" size="sm" onClick={() => void handleExport('pdf')} disabled={exporting !== null}>
+                  <Download className="mr-1.5 h-4 w-4" /> PDF
+                </Button>
+              </div>
+            </div>
             <div className="space-y-3">
               {turns.map((t) => {
                 const turnAnnotations = annotations.filter((a) => a.turnNumber === t.turnNumber);

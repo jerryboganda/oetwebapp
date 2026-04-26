@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
+import { apiClient } from '@/lib/api';
 
 interface PathItem {
   id: string;
@@ -39,16 +40,7 @@ interface LearningPathData {
   nextRecommended: { id: string; title: string; subtestCode: string; difficulty: string }[];
 }
 
-async function apiRequest<T = unknown>(path: string): Promise<T> {
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const { env } = await import('@/lib/env');
-  const token = await ensureFreshAccessToken();
-  const res = await fetch(`${env.apiBaseUrl}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
+const apiRequest = apiClient.request;
 
 const DIFFICULTY_COLORS: Record<string, string> = {
   easy: 'text-success bg-success/10',

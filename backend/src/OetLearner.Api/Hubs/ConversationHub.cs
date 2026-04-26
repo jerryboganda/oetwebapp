@@ -59,6 +59,14 @@ public class ConversationHub(
         await Groups.AddToGroupAsync(Context.ConnectionId, sessionId);
         await Clients.Caller.SendAsync("SessionStateChanged", "active");
 
+        var existingTurnCount = await db.ConversationTurns
+            .CountAsync(t => t.SessionId == sessionId, Context.ConnectionAborted);
+        if (existingTurnCount > 0)
+        {
+            await Clients.Caller.SendAsync("ConversationResumed", existingTurnCount);
+            return;
+        }
+
         try
         {
             var ctx = BuildAiContext(session, turnIndex: 0, elapsed: 0);
@@ -177,7 +185,7 @@ public class ConversationHub(
             using var ms = new MemoryStream(audioBytes);
             var provider = await asrSelector.SelectAsync(Context.ConnectionAborted);
             asr = await provider.TranscribeAsync(new ConversationAsrRequest(
-                ms, audioMime, "en-GB", audioBytes.LongLength), Context.ConnectionAborted);
+                ms, audioMime, "en-GB", audioBytes.LongLength, EnableDiarization: true), Context.ConnectionAborted);
         }
         catch (Exception ex)
         {
@@ -200,13 +208,19 @@ public class ConversationHub(
             Id = Guid.NewGuid(), SessionId = sessionId, TurnNumber = learnerTurnNumber,
             Role = "learner", Content = asr.Text, AudioUrl = learnerAudioRef.Url,
             DurationMs = asr.DurationMs, TimestampMs = elapsedMs,
-            ConfidenceScore = asr.Confidence, AnalysisJson = "{}",
+            ConfidenceScore = asr.Confidence,
+            AnalysisJson = JsonSupport.Serialize(new
+            {
+                asr.ProviderName,
+                asr.ProviderResponseSummary,
+                speakerSegments = asr.SpeakerSegments ?? Array.Empty<ConversationSpeakerSegment>(),
+            }),
             CreatedAt = DateTimeOffset.UtcNow,
         });
         await db.SaveChangesAsync(Context.ConnectionAborted);
 
         await Clients.Caller.SendAsync("ReceiveTranscript", learnerTurnNumber, asr.Text, asr.Confidence,
-            new { audioUrl = learnerAudioRef.Url });
+            new { audioUrl = learnerAudioRef.Url, speakerSegments = asr.SpeakerSegments ?? Array.Empty<ConversationSpeakerSegment>() });
 
         var elapsedSeconds = session.StartedAt.HasValue
             ? (int)(DateTimeOffset.UtcNow - session.StartedAt.Value).TotalSeconds : 0;

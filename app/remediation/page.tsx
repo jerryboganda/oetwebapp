@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
+import { apiClient } from '@/lib/api';
 
 interface WeakArea {
   subtestCode: string;
@@ -37,17 +38,7 @@ interface RemediationData {
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
-async function apiRequest<T = unknown>(path: string, init?: RequestInit): Promise<T> {
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const { env } = await import('@/lib/env');
-  const token = await ensureFreshAccessToken();
-  const res = await fetch(`${env.apiBaseUrl}${path}`, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...init?.headers },
-  });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
+const apiRequest = apiClient.request;
 
 export default function RemediationPage() {
   const [data, setData] = useState<RemediationData | null>(null);

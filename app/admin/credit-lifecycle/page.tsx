@@ -7,6 +7,7 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import { apiClient } from '@/lib/api';
 
 interface CreditPolicy {
   policy: { expiryDays: number; expiryEnabled: boolean; rolloverEnabled: boolean; rolloverPercentage: number; refundOnFailedReview: boolean; refundOnCancelledReview: boolean; proRataOnDowngrade: boolean; minimumCreditPurchase: number; maximumCreditBalance: number };
@@ -14,14 +15,7 @@ interface CreditPolicy {
   notes: string[];
 }
 
-async function apiRequest<T = unknown>(path: string, init?: RequestInit): Promise<T> {
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const { env } = await import('@/lib/env');
-  const token = await ensureFreshAccessToken();
-  const res = await fetch(`${env.apiBaseUrl}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...init?.headers } });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
+const apiRequest = apiClient.request;
 
 export default function CreditLifecyclePage() {
   const [data, setData] = useState<CreditPolicy | null>(null);

@@ -33,9 +33,13 @@ public sealed class MockConversationAsrProvider : IConversationAsrProvider
         }
         var rng = new Random((int)(bytes % int.MaxValue));
         var text = Samples[rng.Next(Samples.Length)];
+        var durationMs = (int)(text.Split(' ').Length * 320 + rng.Next(100, 400));
         return new ConversationAsrResult(
             text, 0.82 + rng.NextDouble() * 0.14,
-            (int)(text.Split(' ').Length * 320 + rng.Next(100, 400)),
-            request.Locale, Name, $"mock ({bytes} bytes)");
+            durationMs,
+            request.Locale, Name, $"mock ({bytes} bytes)",
+            request.EnableDiarization
+                ? [new ConversationSpeakerSegment("learner", text, 0, durationMs, 0.9)]
+                : null);
     }
 }

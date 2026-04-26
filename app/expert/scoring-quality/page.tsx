@@ -13,6 +13,7 @@ import {
   ExpertRouteWorkspace,
 } from '@/components/domain/expert-route-surface';
 import { analytics } from '@/lib/analytics';
+import { apiClient } from '@/lib/api';
 
 type AsyncStatus = 'loading' | 'error' | 'success';
 
@@ -47,14 +48,7 @@ interface ScoringQualityData {
 }
 
 async function fetchScoringQuality(days: number): Promise<ScoringQualityData> {
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const { env } = await import('@/lib/env');
-  const token = await ensureFreshAccessToken();
-  const res = await fetch(`${env.apiBaseUrl}/v1/expert/scoring-quality?days=${days}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
+  return apiClient.get<ScoringQualityData>(`/v1/expert/scoring-quality?days=${days}`);
 }
 
 export default function ScoringQualityPage() {

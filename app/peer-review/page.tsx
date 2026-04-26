@@ -11,17 +11,13 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
+import { apiClient } from '@/lib/api';
 
 interface PeerItem { id: string; subtestCode: string; attemptId?: string; status?: string; createdAt?: string; claimedAt?: string; completedAt?: string; feedback?: { rating: number; comments: string; strengths?: string; improvements?: string }[] }
 interface PoolData { availableToReview: PeerItem[]; mySubmissions: PeerItem[]; myReviews: PeerItem[]; stats: { reviewsGiven: number; reviewsReceived: number; averageHelpfulness: number } }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const { env } = await import('@/lib/env');
-  const token = await ensureFreshAccessToken();
-  const res = await fetch(`${env.apiBaseUrl}${path}`, { ...init, headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json', ...init?.headers } });
-  if (!res.ok) throw new Error(`API ${res.status}`);
-  return res.json();
+  return apiClient.request<T>(path, init);
 }
 
 export default function PeerReviewPage() {

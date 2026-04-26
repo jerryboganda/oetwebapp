@@ -24,6 +24,15 @@ public static class ConversationEndpoints
         conv.MapGet("/{sessionId}", async (string sessionId, HttpContext http, ConversationService svc, CancellationToken ct) =>
             Results.Ok(await svc.GetSessionAsync(http.UserId(), sessionId, ct)));
 
+        conv.MapPost("/{sessionId}/resume", async (string sessionId, ConversationResumeSessionRequest request, HttpContext http, ConversationService svc, CancellationToken ct) =>
+            Results.Ok(await svc.ResumeSessionAsync(http.UserId(), sessionId, request, ct)));
+
+        conv.MapGet("/{sessionId}/transcript/export", async (string sessionId, [FromQuery] string? format, HttpContext http, ConversationService svc, IConversationTranscriptExportService exporter, CancellationToken ct) =>
+        {
+            var export = await svc.ExportTranscriptAsync(http.UserId(), sessionId, format ?? "txt", exporter, ct);
+            return Results.File(export.Content, export.ContentType, export.FileName);
+        });
+
         conv.MapPost("/{sessionId}/complete", async (string sessionId, HttpContext http, ConversationService svc, CancellationToken ct) =>
             Results.Ok(await svc.CompleteSessionAsync(http.UserId(), sessionId, ct)));
 
@@ -52,6 +61,11 @@ public static class ConversationEndpoints
             };
             return Results.Stream(stream, mime);
         });
+
+        // Backwards-compatibility alias kept for clients that shipped the singular
+        // route during the phase-2 rollout planning window.
+        v1.MapPost("/conversation/sessions/{sessionId}/resume", async (string sessionId, ConversationResumeSessionRequest request, HttpContext http, ConversationService svc, CancellationToken ct) =>
+            Results.Ok(await svc.ResumeSessionAsync(http.UserId(), sessionId, request, ct)));
 
         return app;
     }

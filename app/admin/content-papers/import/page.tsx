@@ -9,8 +9,7 @@ import { Button } from '@/components/ui/button';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
-import { env } from '@/lib/env';
-import { ensureFreshAccessToken } from '@/lib/auth-client';
+import { apiClient } from '@/lib/api';
 import { DEFAULT_CONTENT_SOURCE_PROVENANCE } from '@/lib/content-upload-defaults';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -58,16 +57,9 @@ export default function BulkImportPage() {
   const doUpload = async (file: File) => {
     setUploading(true);
     try {
-      const token = await ensureFreshAccessToken();
       const form = new FormData();
       form.set('file', file);
-      const res = await fetch(`${env.apiBaseUrl}/v1/admin/imports/zip`, {
-        method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-        body: form,
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const data = (await res.json()) as StagedResponse;
+      const data = await apiClient.postForm<StagedResponse>('/v1/admin/imports/zip', form);
       setStaged(data);
       setApproved(Object.fromEntries(data.papers.map((p) => [p.proposalId, true])));
       setToast({
@@ -86,22 +78,16 @@ export default function BulkImportPage() {
     if (!staged) return;
     setCommitting(true);
     try {
-      const token = await ensureFreshAccessToken();
       const approvals = staged.papers.map((p) => ({
         proposalId: p.proposalId,
         approve: Boolean(approved[p.proposalId]),
         overrideSourceProvenance: provenance.trim() || DEFAULT_CONTENT_SOURCE_PROVENANCE,
       }));
-      const res = await fetch(`${env.apiBaseUrl}/v1/admin/imports/zip/${staged.sessionId}/commit`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify(approvals),
-      });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      const result = await res.json();
+      const result = await apiClient.post<{
+        createdPaperCount: number;
+        createdAssetCount: number;
+        deduplicatedAssetCount: number;
+      }>(`/v1/admin/imports/zip/${staged.sessionId}/commit`, approvals);
       setToast({
         variant: 'success',
         message: `Created ${result.createdPaperCount} papers and ${result.createdAssetCount} assets (${result.deduplicatedAssetCount} deduplicated).`,

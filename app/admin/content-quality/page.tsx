@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { analytics } from '@/lib/analytics';
+import { apiClient } from '@/lib/api';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -35,16 +36,8 @@ const QA_BADGE: Record<string, { label: string; variant: 'default' | 'success' |
   rejected: { label: 'Rejected', variant: 'danger' },
 };
 
-async function adminRequest<T = unknown>(path: string, init?: RequestInit): Promise<T> {
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const { env } = await import('@/lib/env');
-  const token = await ensureFreshAccessToken();
-  const res = await fetch(`${env.apiBaseUrl}${path}`, {
-    ...init,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...init?.headers },
-  });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
+function adminRequest<T = unknown>(path: string, init?: RequestInit): Promise<T> {
+  return apiClient.request<T>(path, init);
 }
 
 export default function ContentQualityPage() {

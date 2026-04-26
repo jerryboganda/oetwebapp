@@ -101,6 +101,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<ConversationTurn> ConversationTurns => Set<ConversationTurn>();
     public DbSet<ConversationEvaluation> ConversationEvaluations => Set<ConversationEvaluation>();
     public DbSet<ConversationTurnAnnotation> ConversationTurnAnnotations => Set<ConversationTurnAnnotation>();
+    public DbSet<ConversationSessionResumeToken> ConversationSessionResumeTokens => Set<ConversationSessionResumeToken>();
     public DbSet<ConversationSettingsRow> ConversationSettings => Set<ConversationSettingsRow>();
     public DbSet<WritingCoachSession> WritingCoachSessions => Set<WritingCoachSession>();
     public DbSet<WritingCoachSuggestion> WritingCoachSuggestions => Set<WritingCoachSuggestion>();
@@ -516,6 +517,9 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<ConversationEvaluation>().HasIndex(x => new { x.UserId, x.CreatedAt });
         modelBuilder.Entity<ConversationTurnAnnotation>().HasIndex(x => new { x.SessionId, x.TurnNumber });
         modelBuilder.Entity<ConversationTurnAnnotation>().HasIndex(x => x.EvaluationId);
+        modelBuilder.Entity<ConversationSessionResumeToken>().HasIndex(x => x.TokenHash).IsUnique();
+        modelBuilder.Entity<ConversationSessionResumeToken>().HasIndex(x => new { x.UserId, x.SessionId });
+        modelBuilder.Entity<ConversationSessionResumeToken>().HasIndex(x => x.ExpiresAt);
         modelBuilder.Entity<ConversationTemplate>().HasIndex(x => new { x.Status, x.TaskTypeCode, x.ProfessionId });
         modelBuilder.Entity<ConversationTemplate>().HasIndex(x => new { x.Status, x.Difficulty });
 

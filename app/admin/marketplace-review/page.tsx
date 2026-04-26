@@ -1,12 +1,14 @@
 'use client';
 
 import { useEffect, useState, useCallback } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
+import { AnimatePresence } from 'motion/react';
 import { Shield, CheckCircle2, XCircle, Clock, Loader2, ChevronDown, BookOpen, Mic, Pen, Headphones } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, ExamTypeBadge } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionCollapse, MotionItem } from '@/components/ui/motion-primitives';
+import { apiClient } from '@/lib/api';
 
 type Submission = {
   id: string;
@@ -32,17 +34,7 @@ const SUBTEST_ICONS: Record<string, typeof BookOpen> = {
   listening: Headphones,
 };
 
-async function apiFetch(path: string, options?: RequestInit) {
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const token = await ensureFreshAccessToken();
-  const { env } = await import('@/lib/env');
-  const res = await fetch(`${env.apiBaseUrl}${path}`, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...options?.headers },
-  });
-  if (!res.ok) throw new Error(`API ${res.status}`);
-  return res.json();
-}
+const apiFetch = apiClient.request;
 
 export default function AdminMarketplaceReviewPage() {
   const [items, setItems] = useState<Submission[]>([]);
@@ -119,13 +111,9 @@ export default function AdminMarketplaceReviewPage() {
               const isExpanded = expandedId === item.id;
 
               return (
-                <motion.div
+                <MotionItem
                   key={item.id}
-                  layout
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, x: -50 }}
-                  transition={{ delay: i * 0.04 }}
+                  delayIndex={i}
                   className="bg-surface dark:bg-surface rounded-xl border border-border dark:border-border overflow-hidden"
                 >
                   <button
@@ -150,9 +138,7 @@ export default function AdminMarketplaceReviewPage() {
                     <ChevronDown className={`w-4 h-4 text-muted transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                   </button>
 
-                  {isExpanded && (
-                    <motion.div initial={{ height: 0, opacity: 0 }} animate={{ height: 'auto', opacity: 1 }} exit={{ height: 0, opacity: 0 }}
-                      className="border-t border-border dark:border-border">
+                  <MotionCollapse open={isExpanded} className="border-t border-border dark:border-border">
                       <div className="p-4 space-y-4">
                         {item.description && (
                           <div>
@@ -200,9 +186,8 @@ export default function AdminMarketplaceReviewPage() {
                           </button>
                         </div>
                       </div>
-                    </motion.div>
-                  )}
-                </motion.div>
+                  </MotionCollapse>
+                </MotionItem>
               );
             })}
           </AnimatePresence>

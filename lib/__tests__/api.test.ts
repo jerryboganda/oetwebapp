@@ -245,6 +245,87 @@ describe('API retry logic', () => {
   });
 });
 
+describe('apiClient', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.resetModules();
+  });
+
+  it('routes GET requests through the centralized client', async () => {
+    let url = '';
+    let method = '';
+    globalThis.fetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      url = String(input);
+      method = String(init?.method);
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const { apiClient } = await import('../api');
+    const payload = await apiClient.get<{ ok: boolean }>('/v1/admin/example');
+
+    expect(payload.ok).toBe(true);
+    expect(url).toContain('/v1/admin/example');
+    expect(method).toBe('GET');
+  });
+
+  it('serializes JSON bodies for POST, PUT and PATCH helpers', async () => {
+    const calls: Array<{ method: string | undefined; body: unknown }> = [];
+    globalThis.fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      calls.push({ method: init?.method, body: init?.body });
+      return new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const { apiClient } = await import('../api');
+    await apiClient.post('/v1/example', { a: 1 });
+    await apiClient.put('/v1/example/1', { b: 2 });
+    await apiClient.patch('/v1/example/1', { c: 3 });
+
+    expect(calls.map((call) => call.method)).toEqual(['POST', 'PUT', 'PATCH']);
+    expect(calls.map((call) => JSON.parse(String(call.body)))).toEqual([{ a: 1 }, { b: 2 }, { c: 3 }]);
+  });
+
+  it('does not force JSON content type for form uploads', async () => {
+    let headers: Headers | null = null;
+    globalThis.fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      headers = new Headers(init?.headers);
+      return new Response(JSON.stringify({ stagedImportId: 'imp-1' }), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const form = new FormData();
+    form.set('file', new Blob(['zip']), 'import.zip');
+
+    const { apiClient } = await import('../api');
+    await apiClient.postForm('/v1/admin/imports/zip', form);
+
+    expect(headers).not.toBeNull();
+    expect(headers!.get('Content-Type')).toBeNull();
+  });
+
+  it('sends DELETE requests through the centralized client', async () => {
+    let method = '';
+    globalThis.fetch = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+      method = String(init?.method);
+      return new Response(null, { status: 204 });
+    });
+
+    const { apiClient } = await import('../api');
+    await apiClient.delete('/v1/example/1');
+
+    expect(method).toBe('DELETE');
+  });
+});
+
 describe('error logging in catch blocks', () => {
   const originalFetch = globalThis.fetch;
 
@@ -255,19 +336,28 @@ describe('error logging in catch blocks', () => {
   });
 
   it('logs console.error when apiRequest cannot parse error response body', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // The catch block in apiRequest demotes non-JSON error bodies to
+    // console.debug under NODE_ENV=development, and stays silent in
+    // production. We assert the development-mode debug log here so the
+    // test pins the intentional log channel rather than expecting error.
+    vi.stubEnv('NODE_ENV', 'development');
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
     globalThis.fetch = vi.fn(async () => new Response('not json', {
       status: 400,
       headers: { 'content-type': 'text/plain' },
     }));
 
-    const { fetchUserProfile } = await import('../api');
-    await expect(fetchUserProfile()).rejects.toThrow();
+    try {
+      const { fetchUserProfile } = await import('../api');
+      await expect(fetchUserProfile()).rejects.toThrow();
 
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[API]'),
-      expect.anything(),
-    );
+      expect(debugSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[API]'),
+        expect.anything(),
+      );
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('logs console.error when fetchAuthorizedObjectUrl cannot parse error response', async () => {

@@ -9,21 +9,13 @@ import { Input, Textarea, Select } from '@/components/ui/form-controls';
 import { Toast, InlineAlert } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { analytics } from '@/lib/analytics';
+import { apiClient } from '@/lib/api';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 type ActiveTab = 'credits' | 'notifications' | 'status';
 
-async function adminRequest<T = unknown>(path: string, body: object): Promise<T> {
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const { env } = await import('@/lib/env');
-  const token = await ensureFreshAccessToken();
-  const res = await fetch(`${env.apiBaseUrl}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-    body: JSON.stringify(body),
-  });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
+function adminRequest<T = unknown>(path: string, body: object): Promise<T> {
+  return apiClient.post<T>(path, body);
 }
 
 function parseUserIds(text: string): string[] {

@@ -115,6 +115,7 @@ const TRACKED_EVENTS = [
   'conversation_active',
   'conversation_ended',
   'conversation_results_viewed',
+  'conversation_transcript_exported',
   // Writing Coach events
   'writing_coach_enabled',
   'writing_coach_suggestion_accepted',

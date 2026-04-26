@@ -10,6 +10,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
+import { apiClient } from '@/lib/api';
 
 interface NextAction {
   type: string;
@@ -25,16 +26,7 @@ interface NextActionsData {
   generatedAt: string;
 }
 
-async function apiRequest<T = unknown>(path: string): Promise<T> {
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const { env } = await import('@/lib/env');
-  const token = await ensureFreshAccessToken();
-  const res = await fetch(`${env.apiBaseUrl}${path}`, {
-    headers: { Authorization: `Bearer ${token}` },
-  });
-  if (!res.ok) throw new Error(`API error ${res.status}`);
-  return res.json();
-}
+const apiRequest = apiClient.request;
 
 const PRIORITY_STYLES: Record<string, { border: string; bg: string; icon: React.ReactNode }> = {
   high: { border: 'border-danger/30', bg: 'bg-danger/10', icon: <AlertTriangle className="w-5 h-5 text-danger" /> },

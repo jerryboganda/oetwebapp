@@ -103,14 +103,26 @@ IAiGatewayService.BuildGroundedPrompt (rulebook + scoring + scenario + transcrip
 | GET  | `/v1/conversations/entitlement` | Tier + remaining |
 | POST | `/v1/conversations` | Create session |
 | GET  | `/v1/conversations/{id}` | Session detail |
+| POST | `/v1/conversations/{id}/resume` | Resume an active/preparing session and issue a short-lived resume token |
+| POST | `/v1/conversation/sessions/{id}/resume` | Compatibility alias for resume |
 | POST | `/v1/conversations/{id}/complete` | Mark complete |
 | GET  | `/v1/conversations/{id}/evaluation` | Poll evaluation |
+| GET  | `/v1/conversations/{id}/transcript/export?format=txt\|pdf` | Export transcript through `IFileStorage` |
 | GET  | `/v1/conversations/history?page&pageSize` | Paged history |
 | GET  | `/v1/conversations/media/{sha}.{ext}` | Stream audio |
 
 ### SignalR hub `/v1/conversations/hub`
 C→S: `StartSession` · `SendAudio(id, base64, mime?)` · `EndSession`
 S→C: `ReceiveTranscript` · `ReceiveAIResponse` · `SessionStateChanged` · `SessionShouldEnd` · `ConversationError`
+
+
+Phase-2 resume/export details:
+
+- `ConversationSessionResumeToken` stores SHA-256 hashes of short-lived resume tokens; raw tokens are returned only to the authenticated learner.
+- Session detail and resume responses include persisted turns so the learner UI can hydrate an active transcript before reconnecting to SignalR.
+- `StartSession` does not replay the AI opening when persisted turns already exist.
+- Transcript exports support `txt` and `pdf`; both are generated from persisted session/turn/evaluation data and written via `IFileStorage` under `conversation/transcripts/{sha[0..2]}/{sha[2..4]}/{sha}.{ext}`.
+- ASR requests can enable diarization. Deepgram requests `diarize=true&utterances=true`; Whisper-compatible providers parse segment speaker metadata when present; Azure currently returns a single learner segment fallback when diarization is requested.
 
 ### Admin
 | Verb | Path |
@@ -165,6 +177,7 @@ Conversation:
 | `ConversationTemplate` | CMS scenario (draft/published/archived) |
 | `ConversationEvaluation` | AI-graded evaluation (4 criteria + meta) |
 | `ConversationTurnAnnotation` | Per-turn finding (strength/error/improvement) |
+| `ConversationSessionResumeToken` | Short-lived hashed resume token for reconnect/session-resume flow |
 
 ---
 

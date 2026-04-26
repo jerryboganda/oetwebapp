@@ -9,6 +9,7 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { analytics } from '@/lib/analytics';
+import { apiClient } from '@/lib/api';
 
 type Submission = {
   id: string;
@@ -49,17 +50,7 @@ const STATUS_CONFIG: Record<string, { label: string; icon: typeof CheckCircle2; 
   rejected: { label: 'Rejected', icon: XCircle, color: 'bg-danger/10 text-danger' },
 };
 
-async function apiFetch(path: string, options?: RequestInit) {
-  const { ensureFreshAccessToken } = await import('@/lib/auth-client');
-  const token = await ensureFreshAccessToken();
-  const { env } = await import('@/lib/env');
-  const res = await fetch(`${env.apiBaseUrl}${path}`, {
-    ...options,
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}`, ...options?.headers },
-  });
-  if (!res.ok) throw new Error(`API ${res.status}`);
-  return res.json();
-}
+const apiFetch = apiClient.request;
 
 export default function MarketplacePage() {
   const [tab, setTab] = useState<'browse' | 'submit' | 'my'>('browse');
