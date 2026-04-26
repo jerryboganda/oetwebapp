@@ -2,7 +2,7 @@
 
 import { useDeferredValue, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChevronLeft, ChevronRight, FileText, History, Plus, Search } from 'lucide-react';
+import { FileText, History, Plus, Search } from 'lucide-react';
 import { AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -11,13 +11,13 @@ import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Pagination } from '@/components/ui/pagination';
 import { Input } from '@/components/ui/form-controls';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { getAdminContentLibraryData } from '@/lib/admin';
 import type { AdminContentRow } from '@/lib/types/admin';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
-const PAGE_SIZE = 25;
 
 export default function AdminContentLibraryPage() {
   const router = useRouter();
@@ -26,6 +26,7 @@ export default function AdminContentLibraryPage() {
   const [rows, setRows] = useState<AdminContentRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [searchQuery, setSearchQuery] = useState('');
   const [filters, setFilters] = useState<Record<string, string[]>>({});
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -44,7 +45,7 @@ export default function AdminContentLibraryPage() {
       try {
         const result = await getAdminContentLibraryData({
           page,
-          pageSize: PAGE_SIZE,
+          pageSize,
           search: deferredSearchQuery || undefined,
           type: selectedType,
           profession: selectedProfession,
@@ -71,7 +72,7 @@ export default function AdminContentLibraryPage() {
     return () => {
       cancelled = true;
     };
-  }, [deferredSearchQuery, page, reloadNonce, selectedProfession, selectedStatus, selectedType]);
+  }, [deferredSearchQuery, page, pageSize, reloadNonce, selectedProfession, selectedStatus, selectedType]);
 
   const filterGroups: FilterGroup[] = [
     {
@@ -200,10 +201,6 @@ export default function AdminContentLibraryPage() {
     });
   }
 
-  const hasPreviousPage = page > 1;
-  const hasNextPage = page * PAGE_SIZE < total;
-  const visibleStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1;
-  const visibleEnd = total === 0 ? 0 : Math.min(page * PAGE_SIZE, total);
 
   if (!isAuthenticated || role !== 'admin') return null;
 
@@ -262,7 +259,7 @@ export default function AdminContentLibraryPage() {
 
         <AdminRoutePanel
           title="Content Items"
-          description={`Every visible row is backed by the live admin content endpoint. Showing ${visibleStart}-${visibleEnd} of ${total}.`}
+          description="Every visible row is backed by the live admin content endpoint."
         >
           {rows.length === 0 ? (
             <EmptyState
@@ -281,19 +278,15 @@ export default function AdminContentLibraryPage() {
           ) : (
             <div className="space-y-4">
               <DataTable columns={columns} data={rows} keyExtractor={(row) => row.id} mobileCardRender={mobileCardRender} />
-              <div className="flex flex-col gap-3 border-t border-border pt-4 text-sm text-muted sm:flex-row sm:items-center sm:justify-between">
-                <p>
-                  Page {page} of {Math.max(1, Math.ceil(total / PAGE_SIZE))}
-                </p>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={!hasPreviousPage}>
-                    <ChevronLeft className="h-4 w-4" /> Previous
-                  </Button>
-                  <Button variant="outline" size="sm" onClick={() => setPage((current) => current + 1)} disabled={!hasNextPage}>
-                    Next <ChevronRight className="h-4 w-4" />
-                  </Button>
-                </div>
-              </div>
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                itemLabel="item"
+                itemLabelPlural="items"
+              />
             </div>
           )}
         </AdminRoutePanel>
