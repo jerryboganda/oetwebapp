@@ -1,0 +1,58 @@
+﻿# Mission-Critical Execution Ledger
+
+Date: 2026-04-26  
+Branch: `codex/mission-critical-a-z-cleanup`  
+Mode: local/GitHub-only. No production VPS deployment, no production Docker commands, no Nginx Proxy Manager changes.
+
+## Safety Baseline
+
+- Preserved pre-existing dirty worktree on branch `wip/pre-mission-critical-2026-04-26`.
+- Preservation commit: `9e5a76e chore(wip): preserve pre mission-critical dirty tree`.
+- Clean implementation branch created from `main`: `codex/mission-critical-a-z-cleanup` at `cce5ab2`.
+- All pre-existing stashes were converted to `wip/stash-*` branches or dropped if empty; `git stash list` now reports no stashes.
+
+## Baseline / Tool Outputs
+
+- Initial `npx ts-prune -p tsconfig.json | node scripts/ts-prune-filter.mjs`: 409 actionable / 1117 reported.
+- Post-filter-tuning `npx ts-prune -p tsconfig.json | node scripts/ts-prune-filter.mjs`: still actionable; root Next framework files are now filtered, but broad product-source cleanup remains too large for a safe single commit.
+- Initial `npx --yes knip --reporter compact`: reports unused files, dependencies, exports, exported types, and duplicate exports; many are tooling/native/build artifacts and require config triage rather than blind deletion.
+
+## Task Status
+
+| # | Task | Status | Notes |
+|---|---|---|---|
+| 1 | Tech-debt cleanup wave 1b | Partially complete | Captured tool output; tuned ts-prune filter for root framework files. Large remaining source-export cleanup remains queued for separate safe batches. |
+| 2 | Barrel file consolidation | Policy documented | `AGENTS.md` now requires direct imports by default and no new re-export-only barrels. Existing broad barrel codemod is deferred to avoid unsafe churn in this combined branch. |
+| 3 | Replace ad-hoc fetch | Substantially complete | Added `apiClient.get/post/put/patch/delete/postForm`; migrated backend API fetch callsites found in app/components/lib/hook scan; documented exceptions. |
+| 4 | Motion presets | Partially complete | Loaded motion-system; replaced admin marketplace inline item/collapse motion with shared primitives; reduced-motion helpers already covered by `lib/motion.test.ts`. |
+| 5 | Backend service-layer audit | Deferred/bounded | No Copilot landed split source was present on this branch. Conversation work was kept bounded; full >400 LOC split should be a separate backend-only series. |
+| 6 | Auth audit M3 | Blocked | No repo-backed title/repro found. Not invented. |
+| 7 | Auth audit M5 | Blocked | No repo-backed title/repro found. Not invented. |
+| 8 | Auth audit L2 | Blocked | No repo-backed title/repro found. Not invented. |
+| 9-14 | Sprint-2 H1/H4/H5/H6/H7/H14 | Blocked | No canonical title/acceptance criteria found in `docs/SPRINT-STATUS.md`; not invented. |
+| 15 | Conversation module phase-2 | Implemented | Added resume token entity/migration, canonical + compatibility resume endpoints, txt/pdf transcript export through `IFileStorage`, ASR diarization contracts/provider flags, UI resume/export, and E2E spec. |
+| 16 | Sprint-3 planning | Complete pending sign-off | Added `docs/SPRINT-3-STATUS.md` with roadmap scoring and acceptance criteria. |
+| 17 | Sprint-4 planning | Placeholder complete | Added `docs/SPRINT-4-STATUS.md`; real planning waits until Sprint 3 ships. |
+| 18 | Staging environment stand-up | Local artifacts complete | Added `docker-compose.staging.yml`, `.env.staging.example`, guarded workflow skeleton, and `docs/STAGING-LOCAL-GITHUB-PLAN.md`. |
+| 19-21 | PR triage #2/#3/#4 | Complete locally | Added `docs/PR-TRIAGE-2026-04-26.md` with request-changes decisions. |
+| 22 | Stash prune | Complete | Non-empty stashes preserved as `wip/stash-*` branches; empty stash dropped; zero stashes remain. |
+| 23 | AGENTS.md doc-sync | Complete | Updated routes/test/backend endpoint/admin permission counts plus direct-import/API/staging rules. |
+| 24 | SoR card lock check | Complete | No card diff; SoR tests passed. |
+| 25 | DigitalOcean key rotation | User-only | Documented as user-only; no secret rotation attempted. |
+| 26 | OpenCode Desktop restart | User/local-interactive | Not automated; desktop restart/provider validation remains user-owned. |
+
+## Verification Log
+
+- `npx tsc --noEmit` - passed.
+- `cmd /c npm test -- lib/__tests__/api.test.ts app/conversation/page.test.tsx` - 2 files / 23 tests passed.
+- `cmd /c npm test -- components/domain/OetStatementOfResultsCard.test.tsx lib/adapters/oet-sor-adapter.test.ts` - 2 files / 29 tests passed.
+- `cmd /c npm test` - 113 files / 675 tests passed.
+- `cmd /c npm run backend:test` - 601 backend tests passed.
+
+## Final Count Evidence
+
+- Routes: 241 (`app/**/page.tsx`).
+- Vitest unit test result: 113 files / 675 tests.
+- E2E spec files: 33 (`tests/e2e/**/*.spec.ts`).
+- Backend endpoint map calls: 686 (`MapGet/MapPost/MapPut/MapDelete` in backend endpoint files).
+- Admin permissions: 16 (`AdminPermissions.All`).

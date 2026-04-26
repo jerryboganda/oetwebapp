@@ -1,0 +1,47 @@
+﻿name: Deploy staging
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: true
+
+jobs:
+  deploy-staging:
+    name: Deploy main to staging
+    runs-on: ubuntu-latest
+    if: ${{ vars.ENABLE_STAGING_DEPLOY == 'true' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate required staging secrets
+        run: |
+          test -n "${{ secrets.STAGING_SSH_HOST }}"
+          test -n "${{ secrets.STAGING_SSH_USER }}"
+          test -n "${{ secrets.STAGING_SSH_KEY }}"
+          test -n "${{ secrets.STAGING_DEPLOY_PATH }}"
+
+      - name: Install SSH key
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s' "${{ secrets.STAGING_SSH_KEY }}" > ~/.ssh/staging_key
+          chmod 600 ~/.ssh/staging_key
+          ssh-keyscan -H "${{ secrets.STAGING_SSH_HOST }}" >> ~/.ssh/known_hosts
+
+      - name: Sync repository and restart staging compose
+        run: |
+          ssh -i ~/.ssh/staging_key "${{ secrets.STAGING_SSH_USER }}@${{ secrets.STAGING_SSH_HOST }}" <<'EOF'
+          set -euo pipefail
+          cd "${{ secrets.STAGING_DEPLOY_PATH }}"
+          git fetch origin main
+          git reset --hard origin/main
+          docker compose --env-file .env.staging -f docker-compose.staging.yml up -d --build
+          docker compose --env-file .env.staging -f docker-compose.staging.yml ps
+          EOF

@@ -41,6 +41,7 @@ dev-output.txt
 tsconfig.tsbuildinfo
 .env*
 !.env.example
+!.env.staging.example
 
 # Local/temp artifacts
 Contactppp.png

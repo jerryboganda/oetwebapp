@@ -14,10 +14,10 @@
 
 ### Key Stats
 
-- **217 routes** across 4 portals (learner, expert, admin, sponsor)
-- **112 unit test files, 664 tests** (Vitest + React Testing Library)
+- **241 routes** across 4 portals (learner, expert, admin, sponsor)
+- **113 Vitest unit test files, 675 tests** (Vitest + React Testing Library)
 - **13 Playwright E2E test projects** (Chromium/Firefox/WebKit × roles)
-- **195+ backend API endpoints** with 16 granular admin permissions
+- **686 backend endpoint map calls** with 16 granular admin permissions
 
 ---
 
@@ -57,7 +57,7 @@ npx tsc --noEmit
 # Lint (must return 0 errors/warnings)
 npm run lint
 
-# Unit tests (must be 112/112 files, 664/664 tests)
+# Unit tests (must be 113/113 files, 675/675 tests)
 npm test
 
 # Production build (must compile 169+ pages)
@@ -111,6 +111,18 @@ npm run test:e2e:report
 - `useParams()` returns `Record<string, string | string[]> | null` — always null-check.
 - `usePathname()` returns `string | null` — always null-check.
 
+### Imports / Barrels
+
+- Prefer direct file imports (for example `@/components/ui/button`) over folder barrels for new code.
+- Do not add new `components/**/index.ts` or `lib/**/index.ts` barrels unless the file contains real implementation logic; re-export-only barrels are legacy compatibility and should be removed opportunistically with a codemod.
+- When touching a legacy barrel import, migrate that callsite to the direct file path rather than expanding the barrel.
+
+### API Client
+
+- Frontend/backend HTTP calls from `app/`, `components/`, `hooks/`, and `lib/` must use `apiClient` or a typed helper in `lib/api.ts`.
+- Direct `fetch()` is allowed only for documented exceptions: Next.js route handlers, service-worker/runtime bridge code, external third-party URLs, analytics beacons, raw streaming/progress uploads, and the lower-level network implementation in `lib/network/**`.
+- If a callsite needs a missing capability, extend `lib/api.ts` first and add a focused unit test for the client behavior.
+
 ### Component APIs (Critical)
 
 - `Badge` uses variant `'danger'`, NOT `'destructive'`.
@@ -143,7 +155,7 @@ npm run test:e2e:report
 ## Project Structure
 
 ```text
-app/                          # Next.js App Router pages (217 routes)
+app/                          # Next.js App Router pages (241 routes)
 ├── (auth)/                   # Auth pages: sign-in, register, MFA, password reset
 ├── admin/                    # Admin CMS portal (40+ pages)
 ├── expert/                   # Expert console (review, calibration, onboarding)
@@ -218,6 +230,13 @@ cd /root/oetwebsite
 git fetch origin && git reset --hard origin/main
 docker compose --env-file .env.production -f docker-compose.production.yml up -d --build
 ```
+
+### Staging / GitHub-only flow
+
+- Local staging artifacts live in `docker-compose.staging.yml`, `.env.staging.example`, and `docs/STAGING-LOCAL-GITHUB-PLAN.md`.
+- `.env.staging` must be created on the staging host with non-production secrets and is never committed.
+- `.github/workflows/deploy-staging.yml` is guarded by repository variable `ENABLE_STAGING_DEPLOY=true`; without that variable, pushes to `main` do not deploy.
+- Production deploys remain tag/manual controlled. Do not run production VPS, production Docker, or Nginx Proxy Manager commands from cleanup/planning branches.
 
 ### Docker Architecture
 
