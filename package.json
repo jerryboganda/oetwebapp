@@ -65,11 +65,16 @@
     "@tabler/icons-react": "^3.41.0",
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
     "@tanstack/react-query": "^5.100.1",
     "@tanstack/react-query-devtools": "^5.100.1",
 =======
 >>>>>>> Stashed changes
 =======
+>>>>>>> Stashed changes
+=======
+    "@tanstack/react-query": "^5.100.1",
+    "@tanstack/react-query-devtools": "^5.100.1",
 >>>>>>> Stashed changes
     "@tanstack/react-virtual": "^3.13.24",
     "autoprefixer": "^10.4.21",

@@ -1,4 +1,12 @@
 import { cn } from '@/lib/utils';
+<<<<<<< Updated upstream
+=======
+
+// Skeletons are pure loading placeholders. No motion library required:
+// `motion-safe:animate-pulse` is a plain Tailwind utility. This keeps the
+// file server-renderable (no `'use client'`) and avoids shipping motion runtime
+// for a component that only renders static shapes while content loads.
+>>>>>>> Stashed changes
 
 /* Skeleton Loader */
 interface SkeletonProps {

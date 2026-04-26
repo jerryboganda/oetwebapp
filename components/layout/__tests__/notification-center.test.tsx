@@ -28,6 +28,10 @@ const mockNotificationContext = {
 vi.mock('@/contexts/notification-center-context', () => ({
   useNotificationCenter: () => mockNotificationContext,
   useNotificationState: () => mockNotificationContext,
+<<<<<<< Updated upstream
+=======
+  useNotificationActions: () => mockNotificationContext,
+>>>>>>> Stashed changes
   cloneNotificationPreferences: () => null,
 }));
 

@@ -54,15 +54,24 @@ interface NotificationCenterContextValue {
   unsubscribeFromPush: () => Promise<void>;
 }
 
+<<<<<<< Updated upstream
 /**
  * Split contexts so consumers can subscribe to just state OR just actions.
  * Action identities are stable (wrapped in useCallback), so components that
  * only need actions never re-render on state updates.
  */
+=======
+// Split into two internal contexts so action-only consumers don't re-render on state changes.
+// External API stays 100% backward-compatible via `useNotificationCenter()` which merges both.
+>>>>>>> Stashed changes
 type NotificationActionsValue = Pick<
   NotificationCenterContextValue,
   'refreshFeed' | 'loadMore' | 'markRead' | 'markAllRead' | 'updatePreferences' | 'subscribeToPush' | 'unsubscribeFromPush'
 >;
+<<<<<<< Updated upstream
+=======
+
+>>>>>>> Stashed changes
 type NotificationStateValue = Omit<NotificationCenterContextValue, keyof NotificationActionsValue>;
 
 const NotificationCenterContext = createContext<NotificationCenterContextValue | null>(null);
@@ -646,8 +655,15 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
     unsubscribeFromPush,
   ]);
 
+<<<<<<< Updated upstream
   // State-only value: excludes actions, so consumers that only read state
   // (e.g. the bell badge) don't re-render when action refs are reconstructed.
+=======
+  // Split state from actions. Memoizing each half separately means
+  // `useNotificationActions()` never re-renders its consumers on state changes
+  // (actions are stable via useCallback with non-state deps), while
+  // `useNotificationState()` only re-renders on actual state mutations.
+>>>>>>> Stashed changes
   const stateValue = useMemo<NotificationStateValue>(() => ({
     notifications,
     unreadCount,
@@ -685,9 +701,12 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
     unreadCount,
   ]);
 
+<<<<<<< Updated upstream
   // Actions-only value: all fields are useCallback-stable, so this memo
   // effectively never changes identity during a session — components that
   // only fire actions will never re-render.
+=======
+>>>>>>> Stashed changes
   const actionsValue = useMemo<NotificationActionsValue>(() => ({
     refreshFeed,
     loadMore,
@@ -696,7 +715,19 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
     updatePreferences: updatePreferencesHandler,
     subscribeToPush,
     unsubscribeFromPush,
+<<<<<<< Updated upstream
   }), [refreshFeed, loadMore, markRead, markAllRead, updatePreferencesHandler, subscribeToPush, unsubscribeFromPush]);
+=======
+  }), [
+    loadMore,
+    markAllRead,
+    markRead,
+    refreshFeed,
+    subscribeToPush,
+    updatePreferencesHandler,
+    unsubscribeFromPush,
+  ]);
+>>>>>>> Stashed changes
 
   return (
     <NotificationCenterContext.Provider value={contextValue}>
@@ -726,14 +757,39 @@ export function useNotificationCenter() {
 }
 
 /**
+<<<<<<< Updated upstream
  * Subscribe to notification state only (no actions). Prefer this in components
  * that do not call any mutation — the bell badge, small state chips, etc.
+=======
+ * Subscribe to notification **state** only (no actions).
+ * Callers that don't need to trigger mutations should prefer this hook —
+ * it skips re-renders caused by stable action reference identity.
+>>>>>>> Stashed changes
  */
 export function useNotificationState() {
   const context = useContext(NotificationStateContext);
   if (!context) {
     throw new Error('useNotificationState must be used within NotificationCenterProvider');
   }
+<<<<<<< Updated upstream
+=======
+
+  return context;
+}
+
+/**
+ * Subscribe to notification **actions** only (no state).
+ * Components that only need to fire mutations (e.g. a mark-all-read button in
+ * a menu) should prefer this hook — they will **never** re-render on state
+ * changes.
+ */
+export function useNotificationActions() {
+  const context = useContext(NotificationActionsContext);
+  if (!context) {
+    throw new Error('useNotificationActions must be used within NotificationCenterProvider');
+  }
+
+>>>>>>> Stashed changes
   return context;
 }
 

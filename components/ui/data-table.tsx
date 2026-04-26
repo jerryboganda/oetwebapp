@@ -1,6 +1,7 @@
 'use client';
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 import { useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual';
 =======
@@ -8,6 +9,10 @@ import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouse
 <<<<<<< Updated upstream
 >>>>>>> Stashed changes
 =======
+>>>>>>> Stashed changes
+=======
+import { useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual';
 >>>>>>> Stashed changes
 
 import { cn } from '@/lib/utils';
@@ -171,6 +176,9 @@ export function DataTable<T>({
 
       <div className="hidden md:block">
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
+>>>>>>> Stashed changes
         {virtualize ? (
           <VirtualizedDesktopView
             columns={columns}
@@ -185,6 +193,7 @@ export function DataTable<T>({
             <table className="w-full min-w-full text-sm" aria-label={ariaLabel}>
               <thead className="bg-background-light">
                 <tr className="border-b border-gray-200/60">
+<<<<<<< Updated upstream
 =======
         <div className="overflow-x-auto">
           <table className="w-full min-w-full text-sm" aria-label={ariaLabel}>
@@ -226,6 +235,8 @@ export function DataTable<T>({
                   )}
                 >
 >>>>>>> Stashed changes
+=======
+>>>>>>> Stashed changes
                   {columns.map((column) => (
                     <th
                       key={column.key}
@@ -242,6 +253,9 @@ export function DataTable<T>({
                 </tr>
 <<<<<<< Updated upstream
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
+>>>>>>> Stashed changes
               </thead>
 
               <tbody className="divide-y divide-gray-100/90 bg-surface">
@@ -305,10 +319,13 @@ function VirtualizedDesktopView<T>({
 }: VirtualizedDesktopViewProps<T>) {
   const { rowHeight, containerHeight = 640, overscan = 8 } = options;
   const parentRef = useRef<HTMLDivElement>(null);
+<<<<<<< Updated upstream
   // `useVirtualizer` is a third-party hook whose dependencies are managed
   // internally by TanStack Virtual; the eslint react-hooks rule's
   // incompatible-library check flags it in Next.js strict mode.
   // eslint-disable-next-line react-hooks/incompatible-library
+=======
+>>>>>>> Stashed changes
   const virtualizer = useVirtualizer({
     count: data.length,
     getScrollElement: () => parentRef.current,
@@ -316,6 +333,10 @@ function VirtualizedDesktopView<T>({
     overscan,
   });
 
+<<<<<<< Updated upstream
+=======
+  // Column template so rows line up with the sticky header grid.
+>>>>>>> Stashed changes
   const columnCount = columns.length;
   const gridTemplate = `repeat(${columnCount}, minmax(0, 1fr))`;
 
@@ -326,7 +347,11 @@ function VirtualizedDesktopView<T>({
       style={{ maxHeight: containerHeight }}
       role="table"
       aria-label={ariaLabel}
+<<<<<<< Updated upstream
       aria-rowcount={data.length + 1}
+=======
+      aria-rowcount={data.length + 1 /* header */}
+>>>>>>> Stashed changes
     >
       <div
         role="rowgroup"
@@ -348,7 +373,14 @@ function VirtualizedDesktopView<T>({
         </div>
       </div>
 
+<<<<<<< Updated upstream
       <div role="rowgroup" style={{ height: virtualizer.getTotalSize(), position: 'relative' }}>
+=======
+      <div
+        role="rowgroup"
+        style={{ height: virtualizer.getTotalSize(), position: 'relative' }}
+      >
+>>>>>>> Stashed changes
         {virtualizer.getVirtualItems().map((virtualRow: VirtualItem) => {
           const row = data[virtualRow.index];
           if (!row) return null;
@@ -357,7 +389,11 @@ function VirtualizedDesktopView<T>({
             <div
               key={rowKey}
               role="row"
+<<<<<<< Updated upstream
               aria-rowindex={virtualRow.index + 2}
+=======
+              aria-rowindex={virtualRow.index + 2 /* header is row 1 */}
+>>>>>>> Stashed changes
               data-row-key={rowKey}
               onClick={(event) => onRowClick?.(row, event)}
               onKeyDown={(event) => {
@@ -393,6 +429,7 @@ function VirtualizedDesktopView<T>({
             </div>
           );
         })}
+<<<<<<< Updated upstream
 =======
 =======
 >>>>>>> Stashed changes
@@ -401,6 +438,8 @@ function VirtualizedDesktopView<T>({
           </table>
         </div>
 <<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 =======
 >>>>>>> Stashed changes
