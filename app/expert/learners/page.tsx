@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-error';
 import { Select } from '@/components/ui/form-controls';
+import { Pagination } from '@/components/ui/pagination';
 import {
   ExpertRouteFreshnessBadge,
   ExpertRouteHero,
@@ -38,6 +39,7 @@ export default function LearnersIndexPage() {
   const [subTest, setSubTest] = useState('');
   const [relevance, setRelevance] = useState('');
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(12);
   const [reloadToken, setReloadToken] = useState(0);
 
   useEffect(() => {
@@ -47,7 +49,7 @@ export default function LearnersIndexPage() {
         setStatus('loading');
         setErrorMessage(null);
         const [directoryData, metadataData] = await Promise.all([
-          fetchExpertLearners({ search, profession, subTest, relevance, page, pageSize: 12 }),
+          fetchExpertLearners({ search, profession, subTest, relevance, page, pageSize }),
           metadata ? Promise.resolve(metadata) : fetchExpertQueueFilterMetadata(),
         ]);
 
@@ -72,7 +74,7 @@ export default function LearnersIndexPage() {
     return () => {
       cancelled = true;
     };
-  }, [metadata, page, profession, relevance, reloadToken, search, subTest]);
+  }, [metadata, page, pageSize, profession, relevance, reloadToken, search, subTest]);
 
   const professionOptions = useMemo(() => {
     const values = metadata?.professions ?? [];
@@ -218,26 +220,17 @@ export default function LearnersIndexPage() {
               ))}
             </div>
 
-            {(directory?.totalCount ?? 0) > (directory?.pageSize ?? 0) ? (
-              <div className="flex items-center justify-between gap-3 pt-2 text-sm text-muted">
-                <span>
-                  Page {directory?.page ?? 1} of {Math.max(1, Math.ceil((directory?.totalCount ?? 1) / (directory?.pageSize ?? 1)))}
-                </span>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={(directory?.page ?? 1) <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
-                    Previous
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    disabled={(directory?.page ?? 1) >= Math.ceil((directory?.totalCount ?? 1) / (directory?.pageSize ?? 1))}
-                    onClick={() => setPage((current) => current + 1)}
-                  >
-                    Next
-                  </Button>
-                </div>
-              </div>
-            ) : null}
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={directory?.totalCount ?? 0}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              pageSizeOptions={[12, 24, 48]}
+              itemLabel="learner"
+              itemLabelPlural="learners"
+              className="pt-2"
+            />
           </section>
         </div>
       </AsyncStateWrapper>
