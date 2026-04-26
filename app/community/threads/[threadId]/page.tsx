@@ -1,35 +1,24 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter, useParams } from 'next/navigation';
-import {
-  ArrowLeft,
-  MessageCircle,
-  Eye,
-  ThumbsUp,
-  Clock,
-  Pin,
-  Lock,
-  Send,
-  ChevronLeft,
-  ChevronRight,
-  ShieldCheck,
-  User,
-  PenLine,
-  Trash2,
-} from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert, Toast } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { EmptyState } from "@/components/ui/empty-error";
 import { Textarea } from '@/components/ui/form-controls';
-import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Modal } from '@/components/ui/modal';
-import { Skeleton, EmptyState } from '@/components/ui';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from '@/contexts/auth-context';
-import { apiClient, fetchForumThread, fetchThreadReplies, createReply, pinCommunityThread, lockCommunityThread, adminDeleteCommunityThread, adminDeleteCommunityReply } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { adminDeleteCommunityReply, adminDeleteCommunityThread, apiClient, createReply, fetchForumThread, fetchThreadReplies, lockCommunityThread, pinCommunityThread } from '@/lib/api';
+import {
+    ArrowLeft, ChevronLeft,
+    ChevronRight, Clock, Eye, Lock, MessageCircle, PenLine, Pin, Send, ShieldCheck, ThumbsUp, Trash2, User
+} from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 
 interface ForumThread {
   id: string;

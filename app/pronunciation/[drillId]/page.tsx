@@ -1,28 +1,21 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { MotionItem } from '@/components/ui/motion-primitives';
-import { Mic, ArrowLeft, Volume2, Play, AlertTriangle } from 'lucide-react';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Skeleton } from '@/components/ui/skeleton';
+import { PronunciationRecorderPanel } from "@/components/domain/pronunciation/PronunciationRecorderPanel";
+import { PronunciationResultsCard } from "@/components/domain/pronunciation/PronunciationResultsCard";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
-import {
-  fetchPronunciationDrill,
-  fetchMyPronunciationProgress,
-  pronunciationInitAttempt,
-  pronunciationUploadAudio,
-  fetchPronunciationEntitlement,
-  type PronunciationEntitlement,
-  type PronunciationProgressItem,
-} from '@/lib/api';
+import { MotionItem } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import {
-  PronunciationRecorderPanel,
-  PronunciationResultsCard,
-} from '@/components/domain/pronunciation';
-
+    fetchMyPronunciationProgress, fetchPronunciationDrill, fetchPronunciationEntitlement, pronunciationInitAttempt,
+    pronunciationUploadAudio, type PronunciationEntitlement,
+    type PronunciationProgressItem
+} from '@/lib/api';
+import { AlertTriangle, ArrowLeft, Mic, Play, Volume2 } from 'lucide-react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 type PronunciationDrill = {
   id: string;
   targetPhoneme: string;

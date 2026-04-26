@@ -11,12 +11,121 @@ const {
 vi.mock('next/link', () => ({
   default: ({ children, href }: { children: React.ReactNode; href?: string }) => <a href={href}>{children}</a>,
 }));
-
-vi.mock('@/components/layout', () => ({
+vi.mock('@/components/layout/app-shell', () => ({
   LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
 }));
 
-vi.mock('@/components/domain', () => ({
+vi.mock('@/components/layout/admin-dashboard-shell', () => ({
+  LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock('@/components/layout/expert-dashboard-shell', () => ({
+  LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock('@/components/layout/learner-dashboard-shell', () => ({
+  LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock('@/components/layout/sponsor-dashboard-shell', () => ({
+  LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock('@/components/layout/learner-workspace-container', () => ({
+  LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock('@/components/layout/notification-center', () => ({
+  LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock('@/components/layout/notification-preferences-panel', () => ({
+  LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock('@/components/layout/top-nav', () => ({
+  LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+
+vi.mock('@/components/layout/sidebar', () => ({
+  LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+}));
+vi.mock('@/components/domain/learner-surface', () => ({
+  LearnerPageHero: ({ title }: { title: string }) => <h1>{title}</h1>,
+  LearnerSurfaceSectionHeader: ({ title }: { title: string }) => <h2>{title}</h2>,
+}));
+
+vi.mock('@/components/domain/profession-selector', () => ({
+  LearnerPageHero: ({ title }: { title: string }) => <h1>{title}</h1>,
+  LearnerSurfaceSectionHeader: ({ title }: { title: string }) => <h2>{title}</h2>,
+}));
+
+vi.mock('@/components/domain/readiness-meter', () => ({
+  LearnerPageHero: ({ title }: { title: string }) => <h1>{title}</h1>,
+  LearnerSurfaceSectionHeader: ({ title }: { title: string }) => <h2>{title}</h2>,
+}));
+
+vi.mock('@/components/domain/weakest-link-card', () => ({
+  LearnerPageHero: ({ title }: { title: string }) => <h1>{title}</h1>,
+  LearnerSurfaceSectionHeader: ({ title }: { title: string }) => <h2>{title}</h2>,
+}));
+
+vi.mock('@/components/domain/criterion-breakdown-card', () => ({
+  LearnerPageHero: ({ title }: { title: string }) => <h1>{title}</h1>,
+  LearnerSurfaceSectionHeader: ({ title }: { title: string }) => <h2>{title}</h2>,
+}));
+
+vi.mock('@/components/domain/task-card', () => ({
+  LearnerPageHero: ({ title }: { title: string }) => <h1>{title}</h1>,
+  LearnerSurfaceSectionHeader: ({ title }: { title: string }) => <h2>{title}</h2>,
+}));
+
+vi.mock('@/components/domain/writing-case-notes-panel', () => ({
+  LearnerPageHero: ({ title }: { title: string }) => <h1>{title}</h1>,
+  LearnerSurfaceSectionHeader: ({ title }: { title: string }) => <h2>{title}</h2>,
+}));
+
+vi.mock('@/components/domain/writing-editor', () => ({
+  LearnerPageHero: ({ title }: { title: string }) => <h1>{title}</h1>,
+  LearnerSurfaceSectionHeader: ({ title }: { title: string }) => <h2>{title}</h2>,
+}));
+
+vi.mock('@/components/domain/writing-issue-list', () => ({
+  LearnerPageHero: ({ title }: { title: string }) => <h1>{title}</h1>,
+  LearnerSurfaceSectionHeader: ({ title }: { title: string }) => <h2>{title}</h2>,
+}));
+
+vi.mock('@/components/domain/revision-diff-viewer', () => ({
+  LearnerPageHero: ({ title }: { title: string }) => <h1>{title}</h1>,
+  LearnerSurfaceSectionHeader: ({ title }: { title: string }) => <h2>{title}</h2>,
+}));
+
+vi.mock('@/components/domain/speaking-role-card', () => ({
+  LearnerPageHero: ({ title }: { title: string }) => <h1>{title}</h1>,
+  LearnerSurfaceSectionHeader: ({ title }: { title: string }) => <h2>{title}</h2>,
+}));
+
+vi.mock('@/components/domain/mic-check-panel', () => ({
+  LearnerPageHero: ({ title }: { title: string }) => <h1>{title}</h1>,
+  LearnerSurfaceSectionHeader: ({ title }: { title: string }) => <h2>{title}</h2>,
+}));
+
+vi.mock('@/components/domain/audio-player-waveform', () => ({
+  LearnerPageHero: ({ title }: { title: string }) => <h1>{title}</h1>,
+  LearnerSurfaceSectionHeader: ({ title }: { title: string }) => <h2>{title}</h2>,
+}));
+
+vi.mock('@/components/domain/rulebook-findings-panel', () => ({
+  LearnerPageHero: ({ title }: { title: string }) => <h1>{title}</h1>,
+  LearnerSurfaceSectionHeader: ({ title }: { title: string }) => <h2>{title}</h2>,
+}));
+
+vi.mock('@/components/domain/exam-type-badge', () => ({
+  LearnerPageHero: ({ title }: { title: string }) => <h1>{title}</h1>,
+  LearnerSurfaceSectionHeader: ({ title }: { title: string }) => <h2>{title}</h2>,
+}));
+
+vi.mock('@/components/domain/OetStatementOfResultsCard', () => ({
   LearnerPageHero: ({ title }: { title: string }) => <h1>{title}</h1>,
   LearnerSurfaceSectionHeader: ({ title }: { title: string }) => <h2>{title}</h2>,
 }));

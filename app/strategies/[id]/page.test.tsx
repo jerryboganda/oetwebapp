@@ -12,8 +12,61 @@ const { mockFetchStrategyGuide, mockSetBookmark, mockTrack, mockUpdateProgress, 
 vi.mock('next/navigation', () => ({
   useParams: mockUseParams,
 }));
+vi.mock('@/components/layout/app-shell', () => ({
+  LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="learner-dashboard-shell">{children}</div>
+  ),
+}));
 
-vi.mock('@/components/layout', () => ({
+vi.mock('@/components/layout/admin-dashboard-shell', () => ({
+  LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="learner-dashboard-shell">{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/expert-dashboard-shell', () => ({
+  LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="learner-dashboard-shell">{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/learner-dashboard-shell', () => ({
+  LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="learner-dashboard-shell">{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/sponsor-dashboard-shell', () => ({
+  LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="learner-dashboard-shell">{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/learner-workspace-container', () => ({
+  LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="learner-dashboard-shell">{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/notification-center', () => ({
+  LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="learner-dashboard-shell">{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/notification-preferences-panel', () => ({
+  LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="learner-dashboard-shell">{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/top-nav', () => ({
+  LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => (
+    <div data-testid="learner-dashboard-shell">{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/sidebar', () => ({
   LearnerDashboardShell: ({ children }: { children: React.ReactNode }) => (
     <div data-testid="learner-dashboard-shell">{children}</div>
   ),

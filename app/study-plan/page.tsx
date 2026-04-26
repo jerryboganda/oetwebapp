@@ -1,32 +1,20 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'motion/react';
-import {
-  PlayCircle,
-  Calendar,
-  RefreshCw,
-  CheckCircle2,
-  Info,
-  Clock,
-  AlertTriangle,
-  BookOpen,
-  Headphones,
-  FilePenLine,
-  Mic,
-  ChevronDown,
-  ChevronUp,
-  Target,
-} from 'lucide-react';
-import { Button } from '@/components/ui';
-import { LearnerDashboardShell } from '@/components/layout';
-import { AsyncStateWrapper } from '@/components/state';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { AsyncStateWrapper } from "@/components/state/async-state-wrapper";
+import { Button } from "@/components/ui/button";
 import { useAnalytics } from '@/hooks/use-analytics';
 import { fetchStudyPlan, updateStudyPlanTask } from '@/lib/api';
 import type { StudyPlanTask, SubTest } from '@/lib/mock-data';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-
+import {
+    AlertTriangle,
+    BookOpen, Calendar, CheckCircle2, ChevronDown,
+    ChevronUp, Clock, FilePenLine, Headphones, Info, Mic, PlayCircle, RefreshCw, Target
+} from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 const SUBTEST_ICONS: Record<SubTest, React.ElementType> = {
   Reading: BookOpen,
   Listening: Headphones,

@@ -26,8 +26,313 @@ vi.mock('@/contexts/auth-context', () => ({
 vi.mock('@/components/auth/privileged-mfa-banner', () => ({
   PrivilegedMfaBanner: () => <div data-testid="mfa-banner">MFA banner</div>,
 }));
+vi.mock('@/components/layout/app-shell', () => ({
+  AppShell: ({
+    children,
+    pageTitle,
+    distractionFree,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+    distractionFree?: boolean;
+  }) => (
+    <div
+      data-testid="app-shell"
+      data-page-title={pageTitle ?? ''}
+      data-distraction-free={String(Boolean(distractionFree))}
+    >
+      {children}
+    </div>
+  ),
+  AdminDashboardShell: ({
+    children,
+    pageTitle,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+  }) => (
+    <div data-testid="admin-dashboard-shell" data-page-title={pageTitle ?? ''}>
+      {children}
+    </div>
+  ),
+  LearnerWorkspaceContainer: ({ children }: { children: ReactNode }) => (
+    <div data-testid="learner-workspace">{children}</div>
+  ),
+}));
 
-vi.mock('@/components/layout', () => ({
+vi.mock('@/components/layout/admin-dashboard-shell', () => ({
+  AppShell: ({
+    children,
+    pageTitle,
+    distractionFree,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+    distractionFree?: boolean;
+  }) => (
+    <div
+      data-testid="app-shell"
+      data-page-title={pageTitle ?? ''}
+      data-distraction-free={String(Boolean(distractionFree))}
+    >
+      {children}
+    </div>
+  ),
+  AdminDashboardShell: ({
+    children,
+    pageTitle,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+  }) => (
+    <div data-testid="admin-dashboard-shell" data-page-title={pageTitle ?? ''}>
+      {children}
+    </div>
+  ),
+  LearnerWorkspaceContainer: ({ children }: { children: ReactNode }) => (
+    <div data-testid="learner-workspace">{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/expert-dashboard-shell', () => ({
+  AppShell: ({
+    children,
+    pageTitle,
+    distractionFree,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+    distractionFree?: boolean;
+  }) => (
+    <div
+      data-testid="app-shell"
+      data-page-title={pageTitle ?? ''}
+      data-distraction-free={String(Boolean(distractionFree))}
+    >
+      {children}
+    </div>
+  ),
+  AdminDashboardShell: ({
+    children,
+    pageTitle,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+  }) => (
+    <div data-testid="admin-dashboard-shell" data-page-title={pageTitle ?? ''}>
+      {children}
+    </div>
+  ),
+  LearnerWorkspaceContainer: ({ children }: { children: ReactNode }) => (
+    <div data-testid="learner-workspace">{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/learner-dashboard-shell', () => ({
+  AppShell: ({
+    children,
+    pageTitle,
+    distractionFree,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+    distractionFree?: boolean;
+  }) => (
+    <div
+      data-testid="app-shell"
+      data-page-title={pageTitle ?? ''}
+      data-distraction-free={String(Boolean(distractionFree))}
+    >
+      {children}
+    </div>
+  ),
+  AdminDashboardShell: ({
+    children,
+    pageTitle,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+  }) => (
+    <div data-testid="admin-dashboard-shell" data-page-title={pageTitle ?? ''}>
+      {children}
+    </div>
+  ),
+  LearnerWorkspaceContainer: ({ children }: { children: ReactNode }) => (
+    <div data-testid="learner-workspace">{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/sponsor-dashboard-shell', () => ({
+  AppShell: ({
+    children,
+    pageTitle,
+    distractionFree,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+    distractionFree?: boolean;
+  }) => (
+    <div
+      data-testid="app-shell"
+      data-page-title={pageTitle ?? ''}
+      data-distraction-free={String(Boolean(distractionFree))}
+    >
+      {children}
+    </div>
+  ),
+  AdminDashboardShell: ({
+    children,
+    pageTitle,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+  }) => (
+    <div data-testid="admin-dashboard-shell" data-page-title={pageTitle ?? ''}>
+      {children}
+    </div>
+  ),
+  LearnerWorkspaceContainer: ({ children }: { children: ReactNode }) => (
+    <div data-testid="learner-workspace">{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/learner-workspace-container', () => ({
+  AppShell: ({
+    children,
+    pageTitle,
+    distractionFree,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+    distractionFree?: boolean;
+  }) => (
+    <div
+      data-testid="app-shell"
+      data-page-title={pageTitle ?? ''}
+      data-distraction-free={String(Boolean(distractionFree))}
+    >
+      {children}
+    </div>
+  ),
+  AdminDashboardShell: ({
+    children,
+    pageTitle,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+  }) => (
+    <div data-testid="admin-dashboard-shell" data-page-title={pageTitle ?? ''}>
+      {children}
+    </div>
+  ),
+  LearnerWorkspaceContainer: ({ children }: { children: ReactNode }) => (
+    <div data-testid="learner-workspace">{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/notification-center', () => ({
+  AppShell: ({
+    children,
+    pageTitle,
+    distractionFree,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+    distractionFree?: boolean;
+  }) => (
+    <div
+      data-testid="app-shell"
+      data-page-title={pageTitle ?? ''}
+      data-distraction-free={String(Boolean(distractionFree))}
+    >
+      {children}
+    </div>
+  ),
+  AdminDashboardShell: ({
+    children,
+    pageTitle,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+  }) => (
+    <div data-testid="admin-dashboard-shell" data-page-title={pageTitle ?? ''}>
+      {children}
+    </div>
+  ),
+  LearnerWorkspaceContainer: ({ children }: { children: ReactNode }) => (
+    <div data-testid="learner-workspace">{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/notification-preferences-panel', () => ({
+  AppShell: ({
+    children,
+    pageTitle,
+    distractionFree,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+    distractionFree?: boolean;
+  }) => (
+    <div
+      data-testid="app-shell"
+      data-page-title={pageTitle ?? ''}
+      data-distraction-free={String(Boolean(distractionFree))}
+    >
+      {children}
+    </div>
+  ),
+  AdminDashboardShell: ({
+    children,
+    pageTitle,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+  }) => (
+    <div data-testid="admin-dashboard-shell" data-page-title={pageTitle ?? ''}>
+      {children}
+    </div>
+  ),
+  LearnerWorkspaceContainer: ({ children }: { children: ReactNode }) => (
+    <div data-testid="learner-workspace">{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/top-nav', () => ({
+  AppShell: ({
+    children,
+    pageTitle,
+    distractionFree,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+    distractionFree?: boolean;
+  }) => (
+    <div
+      data-testid="app-shell"
+      data-page-title={pageTitle ?? ''}
+      data-distraction-free={String(Boolean(distractionFree))}
+    >
+      {children}
+    </div>
+  ),
+  AdminDashboardShell: ({
+    children,
+    pageTitle,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+  }) => (
+    <div data-testid="admin-dashboard-shell" data-page-title={pageTitle ?? ''}>
+      {children}
+    </div>
+  ),
+  LearnerWorkspaceContainer: ({ children }: { children: ReactNode }) => (
+    <div data-testid="learner-workspace">{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/sidebar', () => ({
   AppShell: ({
     children,
     pageTitle,

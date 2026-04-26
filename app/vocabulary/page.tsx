@@ -1,23 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
-import { MotionItem } from '@/components/ui/motion-primitives';
-import { BookOpen, Layers, HelpCircle, Plus, Trash2, History, Flame, Sparkles } from 'lucide-react';
-import Link from 'next/link';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
-import {
-  fetchMyVocabulary,
-  fetchVocabularyStats,
-  fetchVocabularyDailySet,
-  removeFromMyVocabulary,
-} from '@/lib/api';
+import { MotionItem } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
-import type { LearnerVocabulary, VocabularyStats, VocabularyDailySet } from '@/lib/types/vocabulary';
+import {
+    fetchMyVocabulary, fetchVocabularyDailySet, fetchVocabularyStats, removeFromMyVocabulary
+} from '@/lib/api';
+import type { LearnerVocabulary, VocabularyDailySet, VocabularyStats } from '@/lib/types/vocabulary';
+import { BookOpen, Flame, HelpCircle, History, Layers, Plus, Sparkles, Trash2 } from 'lucide-react';
+import { motion } from 'motion/react';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
 
 type MyVocabItem = Pick<LearnerVocabulary, 'termId' | 'term' | 'mastery' | 'dueAt'>;
 

@@ -1,7 +1,7 @@
 'use client';
 
+import { SelectionToVocab } from "@/components/domain/vocabulary/SelectionToVocab";
 import { cn } from '@/lib/utils';
-import { SelectionToVocab } from '@/components/domain/vocabulary';
 
 interface WritingCaseNotesPanelProps {
   caseNotes: string;

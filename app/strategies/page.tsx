@@ -1,27 +1,29 @@
 'use client';
 
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
+import { MotionItem, MotionSection } from "@/components/ui/motion-primitives";
+import { ProgressBar } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
+import { analytics } from '@/lib/analytics';
+import { fetchStrategyGuides, isApiError } from '@/lib/api';
+import type { StrategyGuideLibrary, StrategyGuideListItem } from '@/lib/types/strategies';
+import { cn } from '@/lib/utils';
+import {
+    ArrowRight, Bookmark, BookOpenCheck, CheckCircle2,
+    ChevronRight,
+    Clock,
+    Lightbulb,
+    Lock,
+    Search,
+    Sparkles,
+    Target
+} from 'lucide-react';
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import {
-  ArrowRight,
-  BookOpenCheck,
-  Bookmark,
-  CheckCircle2,
-  ChevronRight,
-  Clock,
-  Lightbulb,
-  Lock,
-  Search,
-  Sparkles,
-  Target,
-} from 'lucide-react';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Badge, Card, InlineAlert, MotionItem, MotionSection, ProgressBar, Skeleton } from '@/components/ui';
-import { fetchStrategyGuides, isApiError } from '@/lib/api';
-import { analytics } from '@/lib/analytics';
-import { cn } from '@/lib/utils';
-import type { StrategyGuideLibrary, StrategyGuideListItem } from '@/lib/types/strategies';
 
 const SUBTEST_FILTERS = [
   { value: '', label: 'All subtests' },

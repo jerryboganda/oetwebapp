@@ -1,43 +1,36 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { motion } from 'motion/react';
-import {
-  ArrowDownCircle,
-  ArrowUpCircle,
-  CheckCircle2,
-  CreditCard,
-  Download,
-  FileText,
-  Receipt,
-  ShoppingCart,
-  Sparkles,
-  Wallet,
-  Check,
-  X,
-  Clock,
-} from 'lucide-react';
-import { useSearchParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Button } from '@/components/ui/button';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/form-controls';
-import { Skeleton } from '@/components/ui/skeleton';
 import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import {
-  fetchFreezeStatus,
-  createBillingCheckoutSession,
-  createWalletTopUp,
-  downloadInvoice,
-  fetchBilling,
-  fetchBillingChangePreview,
-  fetchBillingQuote,
-  fetchWalletTransactions,
+    createBillingCheckoutSession,
+    createWalletTopUp,
+    downloadInvoice,
+    fetchBilling,
+    fetchBillingChangePreview,
+    fetchBillingQuote, fetchFreezeStatus, fetchWalletTransactions
 } from '@/lib/api';
-import type { BillingChangePreview, BillingData, BillingQuote, BillingProductType } from '@/lib/billing-types';
+import type { BillingChangePreview, BillingData, BillingProductType, BillingQuote } from '@/lib/billing-types';
 import type { LearnerFreezeStatus } from '@/lib/types/freeze';
+import {
+    ArrowDownCircle,
+    ArrowUpCircle, Check, CheckCircle2, Clock, CreditCard,
+    Download,
+    FileText,
+    Receipt,
+    ShoppingCart,
+    Sparkles,
+    Wallet, X
+} from 'lucide-react';
+import { motion } from 'motion/react';
+import { useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 function formatCurrency(amount: number, currency = 'AUD') {
   return new Intl.NumberFormat('en-AU', {

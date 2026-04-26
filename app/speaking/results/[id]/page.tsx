@@ -1,21 +1,19 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { motion } from 'motion/react';
-import {
-  CheckCircle2, AlertCircle, TrendingUp, Zap, Target, Loader2, FileText, Mic, UserCheck, ChevronRight, Headphones,
-} from 'lucide-react';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Card } from '@/components/ui/card';
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { InlineAlert } from '@/components/ui/alert';
+import { Card } from '@/components/ui/card';
 import { MotionSection } from '@/components/ui/motion-primitives';
-import { fetchPronunciationSpeakingLinked, fetchSpeakingResult } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { fetchPronunciationSpeakingLinked, fetchSpeakingResult } from '@/lib/api';
 import type { SpeakingResult } from '@/lib/mock-data';
+import { AlertCircle, CheckCircle2, ChevronRight, FileText, Headphones, Loader2, Mic, Target, TrendingUp, UserCheck, Zap } from 'lucide-react';
+import { motion } from 'motion/react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 type PronunciationLinkedAssessment = {
   id: string;

@@ -1,26 +1,22 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { AppShell } from '@/components/layout';
-import { AsyncStateWrapper } from '@/components/state';
+import { AppShell } from "@/components/layout/app-shell";
+import { AsyncStateWrapper } from "@/components/state/async-state-wrapper";
+import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Timer } from '@/components/ui/timer';
 import { Modal } from '@/components/ui/modal';
-import { InlineAlert } from '@/components/ui/alert';
+import { Timer } from '@/components/ui/timer';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { fetchReadingTask, submitReadingAnswers } from '@/lib/api';
-import type { ReadingTask, Question } from '@/lib/mock-data';
+import type { Question, ReadingTask } from '@/lib/mock-data';
 import { cn } from '@/lib/utils';
 import {
-  LogOut,
-  ChevronLeft,
-  ChevronRight,
-  Send,
-  CheckCircle2,
-  BookOpen,
+    BookOpen, CheckCircle2, ChevronLeft,
+    ChevronRight, LogOut, Send
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 
 const DIAGNOSTIC_READING_TASK_ID = 'rt-001';
 const LOCAL_STORAGE_KEY = `diag-reading-answers-${DIAGNOSTIC_READING_TASK_ID}`;

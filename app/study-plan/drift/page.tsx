@@ -1,16 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { AlertTriangle, CheckCircle2, RefreshCw, Calendar } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Card } from '@/components/ui/card';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { fetchStudyPlanDrift } from '@/lib/api';
+import { AlertTriangle, Calendar, CheckCircle2, RefreshCw } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 interface DriftData {
   hasPlan: boolean;

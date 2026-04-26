@@ -1,21 +1,19 @@
 'use client';
 
-import { useState, useRef } from 'react';
-import Link from 'next/link';
-import { ArrowLeft, Upload, FileSpreadsheet, AlertTriangle, CheckCircle2, Download } from 'lucide-react';
-import { AdminDashboardShell } from '@/components/layout';
 import {
-  AdminRouteWorkspace,
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
+    AdminRoutePanel,
+    AdminRouteSectionHeader, AdminRouteWorkspace
 } from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
+import { AdminDashboardShell } from "@/components/layout/admin-dashboard-shell";
 import { InlineAlert, Toast } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import {
-  previewAdminVocabularyImport,
-  bulkImportAdminVocabulary,
+    bulkImportAdminVocabulary, previewAdminVocabularyImport
 } from '@/lib/api';
+import { AlertTriangle, ArrowLeft, CheckCircle2, Download, FileSpreadsheet, Upload } from 'lucide-react';
+import Link from 'next/link';
+import { useRef, useState } from 'react';
 
 type PreviewRow = {
   lineNumber: number;

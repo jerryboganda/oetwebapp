@@ -1,9 +1,9 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
-import { XCircle } from 'lucide-react';
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { Button } from '@/components/ui/button';
+import { XCircle } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 
 export default function PrivateSpeakingCancelPage() {
   const router = useRouter();

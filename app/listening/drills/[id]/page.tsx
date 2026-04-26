@@ -1,15 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, Headphones, Target } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Button } from '@/components/ui/button';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import { getListeningDrill, type ListeningDrillDto } from '@/lib/listening-api';
+import { ArrowLeft, Headphones, Target } from 'lucide-react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;

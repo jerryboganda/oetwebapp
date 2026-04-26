@@ -1,30 +1,22 @@
 'use client';
 
-import { useEffect, useRef, useState, useCallback } from 'react';
-import { AlertCircle, Loader2 } from 'lucide-react';
-import { useParams, useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
-import { MotionSection } from '@/components/ui/motion-primitives';
+import { ChatTurn, ConversationChatView } from "@/components/domain/conversation/ConversationChatView";
+import { ConversationMicControl } from "@/components/domain/conversation/ConversationMicControl";
+import { ConversationPrepCard } from "@/components/domain/conversation/ConversationPrepCard";
+import { ConversationTimerBar } from "@/components/domain/conversation/ConversationTimerBar";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { completeConversation, resumeConversation } from '@/lib/api';
 import { resolveApiMediaUrl } from '@/lib/media-url';
-import {
-  ConversationPrepCard,
-  ConversationChatView,
-  ConversationMicControl,
-  ConversationTimerBar,
-  type ChatTurn,
-} from '@/components/domain/conversation';
 import type {
-  ConversationState,
-  ConversationScenario,
-  ConversationAiMeta,
-  ConversationTranscriptMeta,
-  ConversationResumeResponse,
-  ConversationSessionTurn,
+    ConversationAiMeta, ConversationResumeResponse, ConversationScenario, ConversationSessionTurn, ConversationState, ConversationTranscriptMeta
 } from '@/lib/types/conversation';
+import { AlertCircle, Loader2 } from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const PREP_DURATION_DEFAULT = 120;
 const DEFAULT_TIME_LIMIT = 300;

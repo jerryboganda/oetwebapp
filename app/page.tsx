@@ -1,40 +1,36 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { motion, useReducedMotion } from 'motion/react';
-import { MotionItem } from '@/components/ui/motion-primitives';
-import {
-  ArrowRight,
-  BookOpen,
-  Calendar,
-  CheckCircle2,
-  FilePenLine,
-  Flag,
-  Flame,
-  Headphones,
-  Mic,
-  Sparkles,
-  Shield,
-  Star,
-  Timer,
-  TrendingUp,
-  Trophy,
-} from 'lucide-react';
-import { Button, Card, CardContent, CardHeader, CardLink, CardTitle, ProgressBar } from '@/components/ui';
-import { LearnerDashboardShell } from '@/components/layout';
-import {
-  LearnerPageHero,
-  LearnerSurfaceCard,
-  LearnerSurfaceSectionHeader,
-  ReadinessMeter,
-  WeakestLinkCard,
-} from '@/components/domain';
 import { AiUsageWidget } from '@/components/domain/AiUsageWidget';
-import { PronunciationDashboardTile } from '@/components/domain/pronunciation';
-import { AsyncStateWrapper } from '@/components/state';
+import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { PronunciationDashboardTile } from "@/components/domain/pronunciation/PronunciationDashboardTile";
+import { ReadinessMeter } from "@/components/domain/readiness-meter";
+import { WeakestLinkCard } from "@/components/domain/weakest-link-card";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { AsyncStateWrapper } from "@/components/state/async-state-wrapper";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { CardLink } from "@/components/ui/card-link";
+import { MotionItem } from '@/components/ui/motion-primitives';
+import { ProgressBar } from "@/components/ui/progress";
 import { useDashboardHome } from '@/lib/hooks/use-dashboard-home';
-import type { SubTest } from '@/lib/mock-data';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
+import type { SubTest } from '@/lib/mock-data';
+import {
+    ArrowRight,
+    BookOpen,
+    Calendar,
+    CheckCircle2,
+    FilePenLine,
+    Flag,
+    Flame,
+    Headphones,
+    Mic, Shield, Sparkles, Star,
+    Timer,
+    TrendingUp,
+    Trophy
+} from 'lucide-react';
+import { motion, useReducedMotion } from 'motion/react';
+import { useRouter } from 'next/navigation';
 
 const SUBTEST_ICONS: Record<SubTest, React.ElementType> = {
   Writing: FilePenLine,

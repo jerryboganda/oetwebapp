@@ -1,19 +1,19 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { ArrowRight, CheckCircle2, Clock, FileText, Headphones, History, Sparkles, Target, Volume2 } from 'lucide-react';
-import { MotionItem } from '@/components/ui/motion-primitives';
-import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
 import { fetchMockReports } from '@/lib/api';
+import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 import { getListeningHome, type ListeningHomeDto, type ListeningHomePaperDto, type ListeningHomeTaskDto } from '@/lib/listening-api';
 import type { MockReport } from '@/lib/mock-data';
-import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
-import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
+import { ArrowRight, CheckCircle2, Clock, FileText, Headphones, History, Sparkles, Target, Volume2 } from 'lucide-react';
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 
 function titleCase(value: string | null | undefined) {
   if (!value) return 'Standard';

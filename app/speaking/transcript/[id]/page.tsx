@@ -1,19 +1,20 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { Headphones, Quote, RefreshCw, Volume2 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Button } from '@/components/ui/button';
-import { InlineAlert } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
-import { LearnerPageHero, LearnerSurfaceSectionHeader, RulebookFindingsPanel } from '@/components/domain';
-import { SelectionToVocab } from '@/components/domain/vocabulary';
 import { AudioPlayerWaveform } from '@/components/domain/audio-player-waveform';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { RulebookFindingsPanel } from "@/components/domain/rulebook-findings-panel";
+import { SelectionToVocab } from "@/components/domain/vocabulary/SelectionToVocab";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { fetchSettingsSection, fetchTranscript } from '@/lib/api';
 import type { MarkerType, SpeakingTranscriptReview, TranscriptMarker } from '@/lib/mock-data';
 import { auditSpeakingTranscript, inferSpeakingCardType } from '@/lib/rulebook';
+import { Headphones, Quote, RefreshCw, Volume2 } from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 const markerLabel: Record<MarkerType, string> = {
   pronunciation: 'Pronunciation',

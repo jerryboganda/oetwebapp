@@ -1,27 +1,24 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { WritingIssueList, type IssueType } from '@/components/domain/writing-issue-list';
+import { AppShell } from '@/components/layout/app-shell';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { MotionItem } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
+import { analytics } from '@/lib/analytics';
+import { fetchWritingResult } from '@/lib/api';
+import type { AnchoredComment, WritingResult } from '@/lib/mock-data';
 import {
-  ChevronLeft,
-  MessageSquare,
-  MinusCircle,
-  XCircle,
-  Lightbulb,
-  ArrowRight,
+    ArrowRight, ChevronLeft, Lightbulb, MessageSquare,
+    MinusCircle,
+    XCircle
 } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { AppShell } from '@/components/layout/app-shell';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { MotionItem } from '@/components/ui/motion-primitives';
-import { WritingIssueList, type IssueType } from '@/components/domain/writing-issue-list';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
-import { fetchWritingResult } from '@/lib/api';
-import { analytics } from '@/lib/analytics';
-import type { WritingResult, AnchoredComment } from '@/lib/mock-data';
+import { useEffect, useMemo, useState } from 'react';
 
 /* --- Inline Highlight helper (needs activeComment state) --- */
 function Highlight({ id, children, active, onToggle }: { id: string; children: React.ReactNode; active: boolean; onToggle: (id: string | null) => void }) {

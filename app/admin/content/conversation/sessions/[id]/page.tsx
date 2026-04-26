@@ -1,19 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Radio } from 'lucide-react';
-import { AdminDashboardShell } from '@/components/layout';
 import {
-  AdminRouteWorkspace,
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
+    AdminRoutePanel,
+    AdminRouteSectionHeader, AdminRouteWorkspace
 } from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
+import { AdminDashboardShell } from "@/components/layout/admin-dashboard-shell";
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchAdminConversationSessionDetail } from '@/lib/api';
+import { ArrowLeft, Radio } from 'lucide-react';
+import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 interface SessionDetail {
   session: {

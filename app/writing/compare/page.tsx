@@ -1,20 +1,20 @@
 'use client';
 
-import { useState, useEffect, useMemo } from 'react';
-import { FileText, BookOpen, ArrowLeftRight, ChevronLeft } from 'lucide-react';
-import Link from 'next/link';
-import { useSearchParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Card } from '@/components/ui/card';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
-import { InlineAlert } from '@/components/ui/alert';
-import { fetchWritingResult, fetchModelAnswer } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
-import type { WritingResult, ModelAnswer } from '@/lib/mock-data';
+import { fetchModelAnswer, fetchWritingResult } from '@/lib/api';
+import type { ModelAnswer, WritingResult } from '@/lib/mock-data';
+import { ArrowLeftRight, BookOpen, ChevronLeft, FileText } from 'lucide-react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 
 type ViewMode = 'side-by-side' | 'overlay';
 

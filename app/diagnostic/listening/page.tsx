@@ -1,28 +1,21 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import { AppShell } from '@/components/layout';
-import { AsyncStateWrapper } from '@/components/state';
+import { AppShell } from "@/components/layout/app-shell";
+import { AsyncStateWrapper } from "@/components/state/async-state-wrapper";
+import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Modal } from '@/components/ui/modal';
-import { InlineAlert } from '@/components/ui/alert';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { fetchListeningTask, submitListeningAnswers } from '@/lib/api';
 import type { ListeningTask, Question } from '@/lib/mock-data';
 import { cn } from '@/lib/utils';
 import {
-  LogOut,
-  Play,
-  Pause,
-  ChevronLeft,
-  ChevronRight,
-  Send,
-  CheckCircle2,
-  Headphones,
-  Volume2,
+    CheckCircle2, ChevronLeft,
+    ChevronRight, Headphones, LogOut, Pause, Play, Send, Volume2
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const DIAGNOSTIC_LISTENING_TASK_ID = 'lt-001';
 const LOCAL_STORAGE_KEY = `diag-listening-answers-${DIAGNOSTIC_LISTENING_TASK_ID}`;

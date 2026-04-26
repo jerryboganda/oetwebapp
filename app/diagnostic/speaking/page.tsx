@@ -1,31 +1,26 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { Capacitor } from '@capacitor/core';
-import { useRouter } from 'next/navigation';
-import { AppShell } from '@/components/layout';
-import { AsyncStateWrapper } from '@/components/state';
 import { MicCheckPanel } from '@/components/domain/mic-check-panel';
 import { SpeakingRoleCard } from '@/components/domain/speaking-role-card';
+import { AppShell } from "@/components/layout/app-shell";
+import { AsyncStateWrapper } from "@/components/state/async-state-wrapper";
+import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Timer } from '@/components/ui/timer';
 import { Modal } from '@/components/ui/modal';
-import { InlineAlert } from '@/components/ui/alert';
+import { Timer } from '@/components/ui/timer';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { fetchRoleCard, submitSpeakingRecording } from '@/lib/api';
-import { SpeakingRecorder, base64ToBlob } from '@/lib/mobile/speaking-recorder';
+import { base64ToBlob, SpeakingRecorder } from '@/lib/mobile/speaking-recorder';
 import type { RoleCard } from '@/lib/mock-data';
+import { Capacitor } from '@capacitor/core';
 import {
-  Mic,
-  MicOff,
-  Upload,
-  LogOut,
-  CheckCircle2,
-  Square,
-  Send,
-  ShieldCheck,
+    CheckCircle2, LogOut, Mic,
+    MicOff, Send,
+    ShieldCheck, Square, Upload
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const DIAGNOSTIC_SPEAKING_TASK_ID = 'st-001';
 

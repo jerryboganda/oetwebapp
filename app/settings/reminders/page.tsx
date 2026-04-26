@@ -1,14 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Bell, Clock, Sun, Moon, Sunset, Volume2, VolumeX, Smartphone, Mail } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { Toast } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { analytics } from '@/lib/analytics';
+import { Bell, Clock, Mail, Moon, Smartphone, Sun, Sunset, Volume2, VolumeX } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 interface ReminderPreference {
   id: string;

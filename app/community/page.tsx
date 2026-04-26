@@ -1,21 +1,22 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { MessageSquareText, Plus, Filter, MessageCircle, Eye, ThumbsUp, Pin, Lock, Clock } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero } from '@/components/domain';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Pagination } from '@/components/ui/pagination';
+import { LearnerPageHero } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { EmptyState } from "@/components/ui/empty-error";
 import { Select } from '@/components/ui/form-controls';
-import { InlineAlert } from '@/components/ui/alert';
-import { Skeleton, EmptyState } from '@/components/ui';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { Pagination } from '@/components/ui/pagination';
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from '@/contexts/auth-context';
-import { fetchForumCategories, fetchForumThreads } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { fetchForumCategories, fetchForumThreads } from '@/lib/api';
+import { Clock, Eye, Filter, Lock, MessageCircle, MessageSquareText, Pin, Plus, ThumbsUp } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 
 interface ForumCategory {
   id: string;

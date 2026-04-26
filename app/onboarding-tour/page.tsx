@@ -1,14 +1,14 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { Sparkles, BookOpen, Target, BarChart3, MessageSquare, ChevronRight, ChevronLeft, Check } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { analytics } from '@/lib/analytics';
+import { BarChart3, BookOpen, Check, ChevronLeft, ChevronRight, MessageSquare, Sparkles, Target } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 
 const TOUR_STEPS = [
   {

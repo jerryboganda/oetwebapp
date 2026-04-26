@@ -1,18 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { MotionSection } from '@/components/ui/motion-primitives';
-import { Layers, CheckCircle2, RotateCcw, ArrowLeft, Volume2 } from 'lucide-react';
-import Link from 'next/link';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { Card } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
-import { fetchDueFlashcards, submitFlashcardReview } from '@/lib/api';
+import { Card } from '@/components/ui/card';
+import { MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import { fetchDueFlashcards, submitFlashcardReview } from '@/lib/api';
 import type { VocabularyFlashcard } from '@/lib/types/vocabulary';
+import { ArrowLeft, CheckCircle2, Layers, RotateCcw, Volume2 } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
 
 const QUALITY_OPTIONS = [
   { q: 0, key: '1', label: 'Forgot', color: 'bg-danger hover:bg-danger/90 text-white' },

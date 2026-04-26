@@ -1,41 +1,21 @@
 'use client';
 
 import { PrivilegedMfaBanner } from '@/components/auth/privileged-mfa-banner';
-import { AdminDashboardShell, AppShell, LearnerWorkspaceContainer, type MobileMenuSection } from '@/components/layout';
+import { AdminDashboardShell } from "@/components/layout/admin-dashboard-shell";
+import { AppShell } from "@/components/layout/app-shell";
+import { LearnerWorkspaceContainer } from "@/components/layout/learner-workspace-container";
 import type { NavItem } from '@/components/layout/sidebar';
-import { hasPermission, sidebarPermissionMap } from '@/lib/admin-permissions';
+import { MobileMenuSection } from "@/components/layout/top-nav";
 import { useAuth } from '@/contexts/auth-context';
-import { useMemo } from 'react';
-import { 
-  LayoutDashboard,
-  Library, 
-  ListTree, 
-  Target, 
-  Cpu, 
-  Activity, 
-  PieChart, 
-  Users, 
-  CreditCard, 
-  Bell,
-  Flag, 
-  ShieldCheck,
-  Upload,
-  Copy,
-  Image as ImageIcon,
-  Sparkles,
-  Store,
-  Snowflake,
-  GitBranch,
-  KeyRound,
-  FileCheck2,
-  Webhook,
-  Scale,
-  Mic,
-  GraduationCap,
-  MessageSquareText,
-  BookOpenText,
+import { hasPermission, sidebarPermissionMap } from '@/lib/admin-permissions';
+import {
+    Activity, Bell, BookOpenText, Copy, Cpu, CreditCard, FileCheck2, Flag, GitBranch, GraduationCap, Image as ImageIcon, KeyRound, LayoutDashboard,
+    Library,
+    ListTree, MessageSquareText, Mic, PieChart, Scale, ShieldCheck, Snowflake, Sparkles,
+    Store, Target, Upload, Users, Webhook
 } from 'lucide-react';
 import { usePathname } from 'next/navigation';
+import { useMemo } from 'react';
 
 const adminNavItems: NavItem[] = [
   { href: '/admin', label: 'Operations', icon: <LayoutDashboard className="w-5 h-5" />, exact: true },

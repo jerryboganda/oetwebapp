@@ -1,21 +1,21 @@
 'use client';
 
-import { useState, useEffect, useRef, Suspense } from 'react';
-import { Capacitor } from '@capacitor/core';
-import { motion, AnimatePresence } from 'motion/react';
-import {
-  Mic, Volume2, Play, Square, AlertTriangle, CheckCircle2,
-  ChevronRight, RefreshCw, BarChart3, Home, ShieldCheck,
-} from 'lucide-react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { InlineAlert } from '@/components/ui/alert';
 import { analytics } from '@/lib/analytics';
 import { postSpeakingDeviceCheck } from '@/lib/api';
-import { SpeakingRecorder, base64ToBlob } from '@/lib/mobile/speaking-recorder';
+import { base64ToBlob, SpeakingRecorder } from '@/lib/mobile/speaking-recorder';
+import { Capacitor } from '@capacitor/core';
+import {
+    AlertTriangle, BarChart3, CheckCircle2,
+    ChevronRight, Home, Mic, Play, RefreshCw, ShieldCheck, Square, Volume2
+} from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useRef, useState } from 'react';
 
 declare global {
   interface Window {

@@ -1,21 +1,19 @@
 'use client';
 
-import { useState } from 'react';
-import Link from 'next/link';
-import { ArrowLeft, Sparkles, RefreshCcw } from 'lucide-react';
-import { AdminDashboardShell } from '@/components/layout';
 import {
-  AdminRouteWorkspace,
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
+    AdminRoutePanel,
+    AdminRouteSectionHeader, AdminRouteWorkspace
 } from '@/components/domain/admin-route-surface';
+import { AdminDashboardShell } from "@/components/layout/admin-dashboard-shell";
+import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/form-controls';
-import { InlineAlert, Toast } from '@/components/ui/alert';
 import {
-  requestAdminVocabularyAiDraft,
-  acceptAdminVocabularyAiDrafts,
+    acceptAdminVocabularyAiDrafts, requestAdminVocabularyAiDraft
 } from '@/lib/api';
+import { ArrowLeft, RefreshCcw, Sparkles } from 'lucide-react';
+import Link from 'next/link';
+import { useState } from 'react';
 
 type DraftTerm = {
   term: string;

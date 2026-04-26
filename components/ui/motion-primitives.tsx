@@ -72,10 +72,6 @@ export function MotionSection(props: Omit<MotionRevealProps, 'surface'>) {
   return <MotionReveal surface="section" {...props} />;
 }
 
-export function MotionList(props: Omit<MotionRevealProps, 'surface'>) {
-  return <MotionReveal surface="list" {...props} />;
-}
-
 export function MotionItem(props: Omit<MotionRevealProps, 'surface'>) {
   return <MotionReveal surface="item" {...props} />;
 }

@@ -1,14 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { GraduationCap, Calendar, Star, Plus } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
-import { fetchTutoringSessions, bookTutoringSession, rateTutoringSession } from '@/lib/api';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import { bookTutoringSession, fetchTutoringSessions, rateTutoringSession } from '@/lib/api';
+import { Calendar, GraduationCap, Plus, Star } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 type TutoringSession = {
   id: string; expertUserId: string; examTypeCode: string; subtestFocus: string | null;

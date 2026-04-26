@@ -1,25 +1,21 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
+import { analytics } from '@/lib/analytics';
+import { fetchModelAnswer } from '@/lib/api';
+import type { ModelAnswer } from '@/lib/mock-data';
 import {
-  CheckCircle2,
-  XCircle,
-  BookOpen,
-  Stethoscope,
-  Target,
-  FileCheck,
+    BookOpen, CheckCircle2, FileCheck, Stethoscope,
+    Target, XCircle
 } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { fetchModelAnswer } from '@/lib/api';
-import { analytics } from '@/lib/analytics';
-import type { ModelAnswer } from '@/lib/mock-data';
+import { useEffect, useState } from 'react';
 
 export default function ModelAnswerExplainer() {
   const searchParams = useSearchParams();

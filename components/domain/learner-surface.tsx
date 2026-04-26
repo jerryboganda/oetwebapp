@@ -1,18 +1,17 @@
 'use client';
 
-import Link from 'next/link';
-import { ArrowRight } from 'lucide-react';
-import { isValidElement, type ElementType, type ReactNode } from 'react';
-import { Badge, Button, Card } from '@/components/ui';
-import { cn } from '@/lib/utils';
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import {
-  type LearnerPageHeroModel,
-  type LearnerPageHeroHighlight,
-  type LearnerSurfaceCardModel,
-  type LearnerSurfaceMetaItem,
-  sanitizeLearnerPageHeroHighlights,
-  sanitizeLearnerSurfaceMetaItems,
+    sanitizeLearnerPageHeroHighlights,
+    sanitizeLearnerSurfaceMetaItems, type LearnerPageHeroHighlight, type LearnerPageHeroModel, type LearnerSurfaceCardModel,
+    type LearnerSurfaceMetaItem
 } from '@/lib/learner-surface';
+import { cn } from '@/lib/utils';
+import { ArrowRight } from 'lucide-react';
+import Link from 'next/link';
+import { isValidElement, type ElementType, type ReactNode } from 'react';
 
 const accentTokens = {
   primary: {

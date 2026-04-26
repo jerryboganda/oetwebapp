@@ -1,15 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Calculator, Globe, GraduationCap, ArrowLeftRight, Info } from 'lucide-react';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Card } from '@/components/ui/card';
+import { LearnerPageHero } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
+import { ArrowLeftRight, Calculator, Globe, GraduationCap, Info } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 /* ── types ─────────────────────────────────────── */
 interface ScoreEquivalence {

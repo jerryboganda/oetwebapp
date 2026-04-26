@@ -1,16 +1,17 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { CalendarClock, CheckCircle2, Shield, Timer } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Button, Card, CardContent, CardHeader, CardTitle } from '@/components/ui';
-import { Input } from '@/components/ui/form-controls';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from '@/components/ui/form-controls';
 import { analytics } from '@/lib/analytics';
 import { cancelFreeze, confirmFreeze, fetchFreezeStatus, requestFreeze } from '@/lib/api';
-import type { LearnerFreezeStatus, FreezePolicy, FreezeEligibility } from '@/lib/types/freeze';
+import type { FreezeEligibility, FreezePolicy, LearnerFreezeStatus } from '@/lib/types/freeze';
+import { CalendarClock, CheckCircle2, Shield, Timer } from 'lucide-react';
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 
 function toIsoOrNull(value: string): string | null {
   if (!value) return null;

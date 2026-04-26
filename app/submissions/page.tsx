@@ -1,32 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { MotionItem } from '@/components/ui/motion-primitives';
-import {
-  FileText,
-  Headphones,
-  PenTool,
-  Mic,
-  MessageSquare,
-  GitCompare,
-  Send,
-  Clock,
-  CheckCircle2,
-  AlertCircle,
-  History,
-} from 'lucide-react';
-import React from 'react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState } from '@/components/ui/empty-error';
-import { Button } from '@/components/ui/button';
-import { fetchSubmissions } from '@/lib/api';
-import type { Submission, SubTest, ReviewStatus } from '@/lib/mock-data';
-import { analytics } from '@/lib/analytics';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-error';
+import { MotionItem } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
+import { analytics } from '@/lib/analytics';
+import { fetchSubmissions } from '@/lib/api';
+import type { ReviewStatus, Submission, SubTest } from '@/lib/mock-data';
+import {
+    AlertCircle, CheckCircle2, Clock, FileText, GitCompare, Headphones, History, MessageSquare, Mic, PenTool, Send
+} from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import React, { useEffect, useState } from 'react';
 const SUBTEST_STYLE: Record<SubTest, { icon: React.ElementType; badge: string }> = {
   Reading:   { icon: FileText,   badge: 'bg-blue-100 text-blue-700' },
   Listening: { icon: Headphones, badge: 'bg-indigo-100 text-indigo-700' },

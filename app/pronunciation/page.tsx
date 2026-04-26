@@ -1,24 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Mic, ChevronRight, Clock } from 'lucide-react';
-import Link from 'next/link';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
-import { MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
-import {
-  fetchPronunciationDrills,
-  fetchMyPronunciationProgress,
-  fetchPronunciationDueDrills,
-  fetchPronunciationEntitlement,
-  type PronunciationDrillSummary,
-  type PronunciationProgressItem,
-  type PronunciationEntitlement,
-} from '@/lib/api';
+import { MotionItem } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import {
+    fetchMyPronunciationProgress, fetchPronunciationDrills, fetchPronunciationDueDrills,
+    fetchPronunciationEntitlement,
+    type PronunciationDrillSummary, type PronunciationEntitlement, type PronunciationProgressItem
+} from '@/lib/api';
+import { ChevronRight, Clock, Mic } from 'lucide-react';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
 
 const DIFFICULTY_COLORS: Record<string, string> = {
   easy: 'bg-success/10 text-success border border-success/20',

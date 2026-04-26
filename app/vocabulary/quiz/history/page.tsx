@@ -1,15 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import Link from 'next/link';
-import { ArrowLeft, History, TrendingUp } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from '@/components/ui/alert';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { InlineAlert } from '@/components/ui/alert';
-import { fetchVocabularyQuizHistory } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { fetchVocabularyQuizHistory } from '@/lib/api';
+import { ArrowLeft, History, TrendingUp } from 'lucide-react';
+import Link from 'next/link';
+import { useEffect, useState } from 'react';
 
 type HistoryItem = {
   id: string;

@@ -1,20 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import Link from 'next/link';
-import { ArrowLeft, BookMarked, CheckCircle2, LayoutGrid, Sparkles, Trophy } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { GrammarLessonCard } from "@/components/domain/grammar/grammar-cards";
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { GrammarLessonCard } from '@/components/domain/grammar';
-import { fetchGrammarTopicDetail } from '@/lib/api';
+import { Card } from '@/components/ui/card';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import { fetchGrammarTopicDetail } from '@/lib/api';
 import type { GrammarLessonSummary } from '@/lib/grammar/types';
+import { ArrowLeft, BookMarked, CheckCircle2, LayoutGrid, Sparkles, Trophy } from 'lucide-react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 interface TopicMeta {
   id: string;

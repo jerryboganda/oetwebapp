@@ -1,17 +1,17 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { TaskCard } from '@/components/domain/task-card';
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { EmptyState, ErrorState } from '@/components/ui/empty-error';
+import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
+import { MotionItem } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
+import { analytics } from '@/lib/analytics';
+import { fetchWritingTasks } from '@/lib/api';
+import type { WritingTask } from '@/lib/mock-data';
 import { BookOpen } from 'lucide-react';
 import { useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
-import { TaskCard } from '@/components/domain/task-card';
-import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
-import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState, ErrorState } from '@/components/ui/empty-error';
-import { MotionItem } from '@/components/ui/motion-primitives';
-import { fetchWritingTasks } from '@/lib/api';
-import { analytics } from '@/lib/analytics';
-import type { WritingTask } from '@/lib/mock-data';
+import { useCallback, useEffect, useState } from 'react';
 
 const filterGroups: FilterGroup[] = [
   { id: 'profession', label: 'Profession', options: [

@@ -1,10 +1,10 @@
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { loadRulebook } from '@/lib/rulebook';
+import { ArrowLeft, BookOpen, ShieldAlert } from 'lucide-react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
-import { ArrowLeft, BookOpen, ShieldAlert } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { loadRulebook } from '@/lib/rulebook';
 
 const severityVariant = {
   critical: 'danger',

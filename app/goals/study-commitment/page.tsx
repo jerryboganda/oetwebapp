@@ -1,19 +1,19 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Target, Clock, Shield, Flame } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Card } from '@/components/ui/card';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
-import { InlineAlert, Toast } from '@/components/ui/alert';
-import { getStudyCommitmentData } from '@/lib/learner-data';
-import { setStudyCommitment } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { setStudyCommitment } from '@/lib/api';
+import { getStudyCommitmentData } from '@/lib/learner-data';
 import type { StudyCommitment } from '@/lib/types/learner';
+import { Clock, Flame, Shield, Target } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 

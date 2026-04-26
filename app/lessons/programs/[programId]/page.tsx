@@ -1,18 +1,18 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, BookOpenCheck, ChevronRight, Clock, LockKeyhole, PlayCircle, Video } from 'lucide-react';
-import Link from 'next/link';
-import Image from 'next/image';
-import { useParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero } from '@/components/domain';
+import { LearnerPageHero } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { fetchVideoLessonProgram } from '@/lib/api';
 import type { VideoLessonListItem, VideoLessonProgram } from '@/lib/types/video-lessons';
+import { ArrowLeft, BookOpenCheck, ChevronRight, Clock, LockKeyhole, PlayCircle, Video } from 'lucide-react';
+import Image from 'next/image';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 
 const SUBTEST_LABELS: Record<string, string> = {
   writing: 'Writing',

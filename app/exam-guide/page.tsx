@@ -1,12 +1,12 @@
 'use client';
 
-import { BookOpen, Clock, Headphones, PenLine, Mic } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { PageViewBeacon } from '@/components/analytics/page-view-beacon';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { BookOpen, Clock, Headphones, Mic, PenLine } from 'lucide-react';
 
 const EXAM_SECTIONS = [
   { icon: Headphones, title: 'Listening', duration: '~42 minutes', parts: 'Part A (consultation extract) + Part B (short workplace extracts)', scoring: '0–500 per subtest', tips: ['Listen for specific information and gist', 'Part A has one long dialogue, Part B has 6 short extracts', 'Read questions before audio plays'] },

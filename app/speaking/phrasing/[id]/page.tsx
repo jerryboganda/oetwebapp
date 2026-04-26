@@ -1,20 +1,19 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'motion/react';
-import {
-  ChevronLeft, ChevronRight, Mic, Play, RotateCcw,
-  AlertCircle, Zap, MessageSquare, Loader2, Volume2,
-} from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
-import { fetchPhrasingData } from '@/lib/api';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import { fetchPhrasingData } from '@/lib/api';
 import type { PhrasingSegment } from '@/lib/mock-data';
+import {
+    AlertCircle, ChevronLeft, ChevronRight, Loader2, MessageSquare, Mic, Play, RotateCcw, Volume2, Zap
+} from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { useParams, useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
 
 function BetterPhrasingContent() {
   const params = useParams();

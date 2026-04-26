@@ -1,14 +1,14 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { MotionItem } from '@/components/ui/motion-primitives';
-import { Trophy, Medal, Crown } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero } from '@/components/domain';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerPageHero } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
-import { fetchLeaderboard, fetchMyLeaderboardPosition, setLeaderboardOptIn } from '@/lib/api';
+import { MotionItem } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import { fetchLeaderboard, fetchMyLeaderboardPosition, setLeaderboardOptIn } from '@/lib/api';
+import { Crown, Medal, Trophy } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 
 type LeaderboardEntry = { rank: number; displayName: string; totalXp: number; level: number; isCurrentUser?: boolean };
 type MyPosition = { rank: number | null; totalXp: number; level: number; optedIn: boolean };

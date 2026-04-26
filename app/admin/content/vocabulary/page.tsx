@@ -1,24 +1,23 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { BookOpen, Plus, Upload, Sparkles, Trash2, Edit3 } from 'lucide-react';
-import { AdminDashboardShell } from '@/components/layout';
-import { AdminRouteWorkspace, AdminRoutePanel, AdminRouteSectionHeader } from '@/components/domain/admin-route-surface';
+import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminDashboardShell } from "@/components/layout/admin-dashboard-shell";
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { DataTable, type Column } from '@/components/ui/data-table';
+import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/form-controls';
-import { Toast } from '@/components/ui/alert';
+import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
+import { Input } from '@/components/ui/form-controls';
 import { Pagination } from '@/components/ui/pagination';
 import {
-  fetchAdminVocabularyItems,
-  deleteAdminVocabularyItem,
-  fetchAdminVocabularyCategories,
+    deleteAdminVocabularyItem,
+    fetchAdminVocabularyCategories, fetchAdminVocabularyItems
 } from '@/lib/api';
+import { BookOpen, Edit3, Plus, Sparkles, Trash2, Upload } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 
 type VocabRow = {
   id: string;

@@ -1,12 +1,12 @@
 'use client';
 
-import { HelpCircle, CheckCircle2, TrendingUp, Target } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
 import { PageViewBeacon } from '@/components/analytics/page-view-beacon';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { CheckCircle2, HelpCircle, Target, TrendingUp } from 'lucide-react';
 
 const WRITING_CRITERIA = [
   { code: 'overall_task_fulfilment', label: 'Overall Task Fulfilment', bands: '0–7', description: 'How well the letter addresses all information from the case notes, with appropriate prioritisation.', improve: 'Identify ALL relevant case note points. Organise by clinical importance, not chronological order.' },

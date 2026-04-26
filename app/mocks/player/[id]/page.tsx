@@ -1,16 +1,16 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, CheckCircle2, Clock, FileText, PlayCircle } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Button } from '@/components/ui/button';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import { completeMockSection, fetchMockSession, startMockSection, submitMockSession } from '@/lib/api';
 import type { MockSession } from '@/lib/mock-data';
+import { ArrowLeft, CheckCircle2, Clock, FileText, PlayCircle } from 'lucide-react';
+import { useParams, useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 
 export default function MockPlayerPage() {
   const params = useParams<{ id: string }>();

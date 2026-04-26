@@ -1,21 +1,20 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { MotionItem } from '@/components/ui/motion-primitives';
-import { Search, Plus, CheckCircle2, BookOpen, ArrowLeft, Volume2 } from 'lucide-react';
-import Link from 'next/link';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { Card } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
-import {
-  fetchVocabularyTerms,
-  addToMyVocabulary,
-  fetchVocabularyCategories,
-} from '@/lib/api';
+import { Card } from '@/components/ui/card';
+import { MotionItem } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
-import type { VocabularyTerm, VocabularyCategoriesResponse } from '@/lib/types/vocabulary';
+import {
+    addToMyVocabulary,
+    fetchVocabularyCategories, fetchVocabularyTerms
+} from '@/lib/api';
+import type { VocabularyCategoriesResponse, VocabularyTerm } from '@/lib/types/vocabulary';
+import { ArrowLeft, BookOpen, CheckCircle2, Plus, Search, Volume2 } from 'lucide-react';
+import Link from 'next/link';
+import { useCallback, useEffect, useState } from 'react';
 
 // Mobile offline cache — lazy, best-effort; skipped in SSR and when IndexedDB is unavailable.
 async function cacheVocabularyToIndexedDb(terms: unknown[]) {

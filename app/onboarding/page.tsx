@@ -1,13 +1,14 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { motion, AnimatePresence } from 'motion/react';
-import { BookOpen, BarChart3, Target, ArrowRight, ArrowLeft, CheckCircle2 } from 'lucide-react';
-import { Button, Stepper } from '@/components/ui';
-import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { Button } from "@/components/ui/button";
+import { Stepper } from "@/components/ui/stepper";
 import { useAnalytics } from '@/hooks/use-analytics';
 import { completeOnboarding, fetchOnboardingState, startOnboarding } from '@/lib/api';
+import { ArrowLeft, ArrowRight, BarChart3, BookOpen, CheckCircle2, Target } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 
 const STEPS = [
   {

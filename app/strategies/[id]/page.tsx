@@ -1,31 +1,37 @@
 'use client';
 
-import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
-import { useParams } from 'next/navigation';
-import {
-  ArrowLeft,
-  ArrowRight,
-  Bookmark,
-  CheckCircle2,
-  ChevronLeft,
-  ChevronRight,
-  Clock,
-  Lightbulb,
-  Lock,
-  Sparkles,
-} from 'lucide-react';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Badge, Button, Card, InlineAlert, MotionItem, MotionSection, ProgressBar, Skeleton } from '@/components/ui';
-import { fetchStrategyGuide, isApiError, setStrategyGuideBookmark, updateStrategyGuideProgress } from '@/lib/api';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
+import { MotionItem, MotionSection } from "@/components/ui/motion-primitives";
+import { ProgressBar } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { analytics } from '@/lib/analytics';
-import { cn } from '@/lib/utils';
+import { fetchStrategyGuide, isApiError, setStrategyGuideBookmark, updateStrategyGuideProgress } from '@/lib/api';
 import type {
-  StrategyGuideDetail,
-  StrategyGuideStructuredContent,
-  StrategyGuideStructuredSection,
+    StrategyGuideDetail,
+    StrategyGuideStructuredContent,
+    StrategyGuideStructuredSection
 } from '@/lib/types/strategies';
+import { cn } from '@/lib/utils';
+import {
+    ArrowLeft,
+    ArrowRight,
+    Bookmark,
+    CheckCircle2,
+    ChevronLeft,
+    ChevronRight,
+    Clock,
+    Lightbulb,
+    Lock,
+    Sparkles
+} from 'lucide-react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 
 function formatLabel(value: string | null | undefined) {
   if (!value) return 'General';

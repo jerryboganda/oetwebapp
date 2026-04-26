@@ -1,27 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import {
-  ChevronLeft,
-  Clock,
-  Target,
-  MessageSquare,
-  CreditCard,
-  ShieldCheck,
-  Zap,
-  Info,
-  CheckCircle2,
-} from 'lucide-react';
-import { MotionPage } from '@/components/ui/motion-primitives';
-import Link from 'next/link';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { MotionPage } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchTurnaroundOptions, fetchFocusAreas, fetchBilling, submitReviewRequest } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
-import type { TurnaroundOption, FocusArea } from '@/lib/mock-data';
+import { fetchBilling, fetchFocusAreas, fetchTurnaroundOptions, submitReviewRequest } from '@/lib/api';
+import type { FocusArea, TurnaroundOption } from '@/lib/mock-data';
+import {
+    CheckCircle2, ChevronLeft,
+    Clock, CreditCard, Info, MessageSquare, ShieldCheck, Target, Zap
+} from 'lucide-react';
+import Link from 'next/link';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 export default function WritingExpertReviewRequest() {
   const router = useRouter();

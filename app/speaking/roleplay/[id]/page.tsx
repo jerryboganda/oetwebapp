@@ -1,22 +1,20 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import Link from 'next/link';
-import {
-  FileText, Play, MessageCircle, User, ShieldCheck, AlertTriangle,
-} from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
 import { SpeakingRoleCard } from '@/components/domain/speaking-role-card';
-import { Timer } from '@/components/ui/timer';
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { InlineAlert } from '@/components/ui/alert';
-import { fetchRoleCard } from '@/lib/api';
+import { Timer } from '@/components/ui/timer';
 import { analytics } from '@/lib/analytics';
+import { fetchRoleCard } from '@/lib/api';
 import type { RoleCard } from '@/lib/mock-data';
+import { AlertTriangle, FileText, MessageCircle, Play, ShieldCheck, User } from 'lucide-react';
+import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 type TaskMode = 'self' | 'exam';
 

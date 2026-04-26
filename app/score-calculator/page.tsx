@@ -1,15 +1,15 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Calculator, Building2, Globe } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { getScoreEquivalencesData } from '@/lib/learner-data';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import { getScoreEquivalencesData } from '@/lib/learner-data';
 import type { ScoreEquivalencesData } from '@/lib/types/learner';
+import { Building2, Calculator, Globe } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 export default function ScoreCalculatorPage() {
   const [data, setData] = useState<ScoreEquivalencesData | null>(null);

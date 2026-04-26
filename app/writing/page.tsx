@@ -1,36 +1,25 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import Link from 'next/link';
-import {
-  PenTool,
-  Star,
-  FileText,
-  Clock,
-  Layers,
-  Target,
-  History,
-  Award,
-  ArrowRight,
-  Calendar,
-  BookOpen,
-  RefreshCw,
-} from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Button } from '@/components/ui/button';
-import { MotionSection, MotionItem, MotionCollapse } from '@/components/ui/motion-primitives';
-import { Badge, StatusBadge } from '@/components/ui/badge';
-import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
-import { Skeleton } from '@/components/ui/skeleton';
-import { fetchWritingHome, fetchWritingTasks, fetchWritingSubmissions, fetchMockReports } from '@/lib/api';
-import { analytics } from '@/lib/analytics';
-import { EmptyState } from '@/components/ui/empty-error';
+import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
-import type { WritingTask, WritingSubmission, MockReport } from '@/lib/mock-data';
-import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { Badge, StatusBadge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-error';
+import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
+import { MotionCollapse, MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
+import { analytics } from '@/lib/analytics';
+import { fetchMockReports, fetchWritingHome, fetchWritingSubmissions, fetchWritingTasks } from '@/lib/api';
 import { createLearnerMetaLabel, type LearnerSurfaceCardModel } from '@/lib/learner-surface';
+import type { MockReport, WritingSubmission, WritingTask } from '@/lib/mock-data';
+import {
+    ArrowRight, Award, BookOpen, Calendar, Clock, FileText, History, Layers, PenTool, RefreshCw, Star, Target
+} from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 type TabType = 'practice' | 'drills' | 'past';
 

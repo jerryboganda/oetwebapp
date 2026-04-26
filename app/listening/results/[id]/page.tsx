@@ -1,15 +1,15 @@
 'use client';
 
-import { Suspense, useEffect, useState } from 'react';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { AnimatePresence, motion } from 'motion/react';
-import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, ChevronDown, ChevronUp, FileText, Loader2, Quote, Target, XCircle } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { getListeningResult, type ListeningReviewDto } from '@/lib/listening-api';
+import { AlertCircle, AlertTriangle, ArrowRight, CheckCircle2, ChevronDown, ChevronUp, FileText, Loader2, Quote, Target, XCircle } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
 
 function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value;

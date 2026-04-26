@@ -1,21 +1,18 @@
 'use client';
 
-import { useState, useEffect, Suspense } from 'react';
-import { useParams } from 'next/navigation';
-import {
-  Clock, CreditCard, MessageSquare, CheckCircle2,
-  Target, Loader2, ArrowRight, Sparkles,
-} from 'lucide-react';
-import Link from 'next/link';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { MotionPage } from '@/components/ui/motion-primitives';
-import { fetchFocusAreas, fetchTurnaroundOptions, fetchBilling, submitReviewRequest } from '@/lib/api';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import { fetchBilling, fetchFocusAreas, fetchTurnaroundOptions, submitReviewRequest } from '@/lib/api';
 import type { TurnaroundOption } from '@/lib/mock-data';
+import { ArrowRight, CheckCircle2, Clock, CreditCard, Loader2, MessageSquare, Sparkles, Target } from 'lucide-react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
 
 function ExpertReviewRequestContent() {
   const params = useParams();

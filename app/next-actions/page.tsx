@@ -1,16 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Sparkles, ArrowRight, Clock, AlertTriangle, Trophy, Target, CheckCircle2 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero } from '@/components/domain';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerPageHero } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
+import { AlertTriangle, ArrowRight, CheckCircle2, Clock, Sparkles, Target, Trophy } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 interface NextAction {
   type: string;

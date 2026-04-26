@@ -1,7 +1,6 @@
 'use client';
 
-import { Select } from '@/components/ui';
-
+import { Select } from "@/components/ui/form-controls";
 const professions = [
   { value: 'nursing', label: 'Nursing' },
   { value: 'medicine', label: 'Medicine' },

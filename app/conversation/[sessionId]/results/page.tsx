@@ -1,23 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import {
-  MessageSquare, BarChart3, Target, ChevronRight, RotateCcw, ArrowLeft,
-  Star, AlertTriangle, CheckCircle2, Volume2, Download,
-} from 'lucide-react';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { downloadConversationTranscript, getConversationEvaluation } from '@/lib/api';
 import { resolveApiMediaUrl } from '@/lib/media-url';
-import type { ConversationEvaluationResponse } from '@/lib/types/conversation';
 import { formatScaledScore, oetGradeLabel, type OetGrade } from '@/lib/scoring';
+import type { ConversationEvaluationResponse } from '@/lib/types/conversation';
+import { AlertTriangle, ArrowLeft, BarChart3, CheckCircle2, ChevronRight, Download, MessageSquare, RotateCcw, Star, Target, Volume2 } from 'lucide-react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 const GRADE_COLORS: Record<string, string> = {
   A: 'from-emerald-400 to-green-500',

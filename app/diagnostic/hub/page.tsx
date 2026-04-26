@@ -1,28 +1,21 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
-import { AsyncStateWrapper } from '@/components/state';
-import { MotionSection } from '@/components/ui/motion-primitives';
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { AsyncStateWrapper } from "@/components/state/async-state-wrapper";
+import { InlineAlert } from '@/components/ui/alert';
+import { StatusBadge, type StatusType } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { StatusBadge, type StatusType } from '@/components/ui/badge';
-import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { fetchDiagnosticSession, startDiagnostic } from '@/lib/api';
 import type { DiagnosticSession, DiagnosticSubTest } from '@/lib/mock-data';
 import {
-  PenLine,
-  Mic,
-  BookOpen,
-  Headphones,
-  Clock,
-  CheckCircle2,
-  ArrowRight,
-  Play,
-  RotateCcw,
+    ArrowRight, BookOpen, CheckCircle2, Clock, Headphones, Mic, PenLine, Play,
+    RotateCcw
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 
 const SUBTEST_CONFIG: Record<
   string,

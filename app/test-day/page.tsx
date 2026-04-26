@@ -1,12 +1,12 @@
 'use client';
 
-import { useState } from 'react';
-import { ClipboardCheck, FileText, Clock, MapPin, CheckCircle2, Circle, BookOpen, AlertTriangle } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { Card } from '@/components/ui/card';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { analytics } from '@/lib/analytics';
+import { AlertTriangle, BookOpen, CheckCircle2, Circle, ClipboardCheck, Clock, FileText, MapPin } from 'lucide-react';
+import { useState } from 'react';
 
 interface ChecklistItem {
   id: string;

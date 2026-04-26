@@ -1,30 +1,23 @@
 'use client';
 
-import React, { Suspense, useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import { MotionSection } from '@/components/ui/motion-primitives';
-import {
-  TrendingUp,
-  TrendingDown,
-  Minus,
-  AlertTriangle,
-  RefreshCw,
-  FileText,
-  Headphones,
-  PenTool,
-  Mic
-} from 'lucide-react';
-import Link from 'next/link';
-import { LearnerDashboardShell } from '@/components/layout';
-import { OetStatementOfResultsCard } from '@/components/domain';
-import { MockVocabularyReview } from '@/components/domain/vocabulary';
-import { Skeleton } from '@/components/ui/skeleton';
+import { OetStatementOfResultsCard } from "@/components/domain/OetStatementOfResultsCard";
+import { MockVocabularyReview } from "@/components/domain/vocabulary/MockVocabularyReview";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
+import { mockReportToStatementOfResults } from '@/lib/adapters/oet-sor-adapter';
+import { analytics } from '@/lib/analytics';
 import { fetchMockReport } from '@/lib/api';
 import type { MockReport } from '@/lib/mock-data';
-import { analytics } from '@/lib/analytics';
 import { oetGradeFromScaled } from '@/lib/scoring';
-import { mockReportToStatementOfResults } from '@/lib/adapters/oet-sor-adapter';
+import {
+    AlertTriangle, FileText,
+    Headphones, Mic, Minus, PenTool, RefreshCw, TrendingDown, TrendingUp
+} from 'lucide-react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import React, { Suspense, useEffect, useState } from 'react';
 
 const SUBTEST_META: Record<string, { icon: React.ElementType; color: string; bg: string }> = {
   listening: { icon: Headphones, color: 'text-primary', bg: 'bg-primary/10' },

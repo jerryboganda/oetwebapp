@@ -1,20 +1,20 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { ArrowRight, Award, BookOpen, Clock, FileText, Heart, Mic, RefreshCw, Star, Volume2 } from 'lucide-react';
-import Link from 'next/link';
-import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
-import { InlineAlert } from '@/components/ui/alert';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { fetchSpeakingHome, fetchSubmissions, fetchMockReports, type SpeakingHome } from '@/lib/api';
-import type { Submission, MockReport } from '@/lib/mock-data';
-import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { fetchMockReports, fetchSpeakingHome, fetchSubmissions, type SpeakingHome } from '@/lib/api';
 import { createLearnerMetaLabel, type LearnerSurfaceCardModel } from '@/lib/learner-surface';
+import type { MockReport, Submission } from '@/lib/mock-data';
+import { ArrowRight, Award, BookOpen, Clock, FileText, Heart, Mic, RefreshCw, Star, Volume2 } from 'lucide-react';
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 
 interface SpeakingLatestEvaluationDto {
   evaluationId?: string | null;

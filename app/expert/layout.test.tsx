@@ -16,8 +16,286 @@ vi.mock('@/lib/hooks/use-expert-auth', () => ({
     },
   }),
 }));
+vi.mock('@/components/layout/app-shell', () => ({
+  AppShell: ({
+    children,
+    pageTitle,
+    distractionFree,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+    distractionFree?: boolean;
+  }) => (
+    <div
+      data-testid="app-shell"
+      data-page-title={pageTitle ?? ''}
+      data-distraction-free={String(Boolean(distractionFree))}
+    >
+      {children}
+    </div>
+  ),
+  ExpertDashboardShell: ({
+    children,
+    pageTitle,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+  }) => (
+    <div data-testid="expert-dashboard-shell" data-page-title={pageTitle ?? ''}>
+      {children}
+    </div>
+  ),
+}));
 
-vi.mock('@/components/layout', () => ({
+vi.mock('@/components/layout/admin-dashboard-shell', () => ({
+  AppShell: ({
+    children,
+    pageTitle,
+    distractionFree,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+    distractionFree?: boolean;
+  }) => (
+    <div
+      data-testid="app-shell"
+      data-page-title={pageTitle ?? ''}
+      data-distraction-free={String(Boolean(distractionFree))}
+    >
+      {children}
+    </div>
+  ),
+  ExpertDashboardShell: ({
+    children,
+    pageTitle,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+  }) => (
+    <div data-testid="expert-dashboard-shell" data-page-title={pageTitle ?? ''}>
+      {children}
+    </div>
+  ),
+}));
+
+vi.mock('@/components/layout/expert-dashboard-shell', () => ({
+  AppShell: ({
+    children,
+    pageTitle,
+    distractionFree,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+    distractionFree?: boolean;
+  }) => (
+    <div
+      data-testid="app-shell"
+      data-page-title={pageTitle ?? ''}
+      data-distraction-free={String(Boolean(distractionFree))}
+    >
+      {children}
+    </div>
+  ),
+  ExpertDashboardShell: ({
+    children,
+    pageTitle,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+  }) => (
+    <div data-testid="expert-dashboard-shell" data-page-title={pageTitle ?? ''}>
+      {children}
+    </div>
+  ),
+}));
+
+vi.mock('@/components/layout/learner-dashboard-shell', () => ({
+  AppShell: ({
+    children,
+    pageTitle,
+    distractionFree,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+    distractionFree?: boolean;
+  }) => (
+    <div
+      data-testid="app-shell"
+      data-page-title={pageTitle ?? ''}
+      data-distraction-free={String(Boolean(distractionFree))}
+    >
+      {children}
+    </div>
+  ),
+  ExpertDashboardShell: ({
+    children,
+    pageTitle,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+  }) => (
+    <div data-testid="expert-dashboard-shell" data-page-title={pageTitle ?? ''}>
+      {children}
+    </div>
+  ),
+}));
+
+vi.mock('@/components/layout/sponsor-dashboard-shell', () => ({
+  AppShell: ({
+    children,
+    pageTitle,
+    distractionFree,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+    distractionFree?: boolean;
+  }) => (
+    <div
+      data-testid="app-shell"
+      data-page-title={pageTitle ?? ''}
+      data-distraction-free={String(Boolean(distractionFree))}
+    >
+      {children}
+    </div>
+  ),
+  ExpertDashboardShell: ({
+    children,
+    pageTitle,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+  }) => (
+    <div data-testid="expert-dashboard-shell" data-page-title={pageTitle ?? ''}>
+      {children}
+    </div>
+  ),
+}));
+
+vi.mock('@/components/layout/learner-workspace-container', () => ({
+  AppShell: ({
+    children,
+    pageTitle,
+    distractionFree,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+    distractionFree?: boolean;
+  }) => (
+    <div
+      data-testid="app-shell"
+      data-page-title={pageTitle ?? ''}
+      data-distraction-free={String(Boolean(distractionFree))}
+    >
+      {children}
+    </div>
+  ),
+  ExpertDashboardShell: ({
+    children,
+    pageTitle,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+  }) => (
+    <div data-testid="expert-dashboard-shell" data-page-title={pageTitle ?? ''}>
+      {children}
+    </div>
+  ),
+}));
+
+vi.mock('@/components/layout/notification-center', () => ({
+  AppShell: ({
+    children,
+    pageTitle,
+    distractionFree,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+    distractionFree?: boolean;
+  }) => (
+    <div
+      data-testid="app-shell"
+      data-page-title={pageTitle ?? ''}
+      data-distraction-free={String(Boolean(distractionFree))}
+    >
+      {children}
+    </div>
+  ),
+  ExpertDashboardShell: ({
+    children,
+    pageTitle,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+  }) => (
+    <div data-testid="expert-dashboard-shell" data-page-title={pageTitle ?? ''}>
+      {children}
+    </div>
+  ),
+}));
+
+vi.mock('@/components/layout/notification-preferences-panel', () => ({
+  AppShell: ({
+    children,
+    pageTitle,
+    distractionFree,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+    distractionFree?: boolean;
+  }) => (
+    <div
+      data-testid="app-shell"
+      data-page-title={pageTitle ?? ''}
+      data-distraction-free={String(Boolean(distractionFree))}
+    >
+      {children}
+    </div>
+  ),
+  ExpertDashboardShell: ({
+    children,
+    pageTitle,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+  }) => (
+    <div data-testid="expert-dashboard-shell" data-page-title={pageTitle ?? ''}>
+      {children}
+    </div>
+  ),
+}));
+
+vi.mock('@/components/layout/top-nav', () => ({
+  AppShell: ({
+    children,
+    pageTitle,
+    distractionFree,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+    distractionFree?: boolean;
+  }) => (
+    <div
+      data-testid="app-shell"
+      data-page-title={pageTitle ?? ''}
+      data-distraction-free={String(Boolean(distractionFree))}
+    >
+      {children}
+    </div>
+  ),
+  ExpertDashboardShell: ({
+    children,
+    pageTitle,
+  }: {
+    children: ReactNode;
+    pageTitle?: string;
+  }) => (
+    <div data-testid="expert-dashboard-shell" data-page-title={pageTitle ?? ''}>
+      {children}
+    </div>
+  ),
+}));
+
+vi.mock('@/components/layout/sidebar', () => ({
   AppShell: ({
     children,
     pageTitle,

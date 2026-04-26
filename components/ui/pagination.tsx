@@ -144,16 +144,3 @@ export function Pagination({
     </div>
   );
 }
-
-/**
- * Pure helper exposing the same math the component uses internally. Useful for
- * tests and for callers that want to render `pageStart`/`pageEnd` themselves
- * (e.g. in a custom summary slot).
- */
-export function getPaginationRange(page: number, pageSize: number, total: number) {
-  const safePageSize = Math.max(1, pageSize);
-  const totalPages = Math.max(1, Math.ceil(total / safePageSize));
-  const pageStart = total === 0 ? 0 : (page - 1) * safePageSize + 1;
-  const pageEnd = total === 0 ? 0 : Math.min(total, page * safePageSize);
-  return { pageStart, pageEnd, totalPages };
-}

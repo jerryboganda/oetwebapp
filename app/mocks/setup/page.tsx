@@ -1,30 +1,30 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import type { ElementType } from 'react';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { MotionCollapse, MotionPresence, MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
+import { analytics } from '@/lib/analytics';
+import { createMockSession, fetchMockOptions } from '@/lib/api';
+import type { MockBundleOption, MockConfig, MockOptions } from '@/lib/mock-data';
 import {
-  Award,
-  Check,
-  Clock,
-  FileText,
-  Headphones,
-  Info,
-  Layers,
-  Mic,
-  PenTool,
-  ShieldCheck,
-  Stethoscope,
+    Award,
+    Check,
+    Clock,
+    FileText,
+    Headphones,
+    Info,
+    Layers,
+    Mic,
+    PenTool,
+    ShieldCheck,
+    Stethoscope
 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { Button } from '@/components/ui/button';
-import { InlineAlert } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
-import { MotionCollapse, MotionPresence, MotionSection } from '@/components/ui/motion-primitives';
-import { createMockSession, fetchMockOptions } from '@/lib/api';
-import { analytics } from '@/lib/analytics';
-import type { MockBundleOption, MockConfig, MockOptions } from '@/lib/mock-data';
+import type { ElementType } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 
 type ReviewSelection = MockConfig['reviewSelection'];
 type MockType = 'full' | 'sub';

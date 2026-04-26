@@ -1,36 +1,36 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import {
-  BookOpen,
-  CheckCircle2,
-  Clock,
-  FileText,
-  ListChecks,
-  PlayCircle,
-  Sparkles,
-  Target,
-  TrendingUp,
-} from 'lucide-react';
-import Link from 'next/link';
-import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
 import { MotionItem } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
-import {
-  getReadingHome,
-  type ReadingHomeAttemptDto,
-  type ReadingHomeDto,
-  type ReadingHomePaperDto,
-  type ReadingHomeResultDto,
-} from '@/lib/reading-authoring-api';
 import { fetchMockReports } from '@/lib/api';
-import type { MockReport } from '@/lib/mock-data';
-import { formatListeningReadingDisplay, isListeningReadingPassByRaw } from '@/lib/scoring';
-import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
+import type { MockReport } from '@/lib/mock-data';
+import {
+    getReadingHome,
+    type ReadingHomeAttemptDto,
+    type ReadingHomeDto,
+    type ReadingHomePaperDto,
+    type ReadingHomeResultDto
+} from '@/lib/reading-authoring-api';
+import { formatListeningReadingDisplay, isListeningReadingPassByRaw } from '@/lib/scoring';
+import {
+    BookOpen,
+    CheckCircle2,
+    Clock,
+    FileText,
+    ListChecks,
+    PlayCircle,
+    Sparkles,
+    Target,
+    TrendingUp
+} from 'lucide-react';
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 
 interface SafeDrillDto {
   id?: string;

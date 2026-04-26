@@ -1,25 +1,21 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { RevisionDiffViewer } from '@/components/domain/revision-diff-viewer';
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from '@/components/ui/alert';
+import { Card } from '@/components/ui/card';
+import { MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
+import { analytics } from '@/lib/analytics';
+import { fetchWritingRevisionData } from '@/lib/api';
+import type { CriteriaDelta } from '@/lib/mock-data';
 import {
-  ChevronLeft,
-  ArrowRight,
-  AlertCircle,
-  TrendingUp,
-  Minus,
+    AlertCircle, ArrowRight, ChevronLeft, Minus, TrendingUp
 } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { RevisionDiffViewer } from '@/components/domain/revision-diff-viewer';
-import { MotionSection } from '@/components/ui/motion-primitives';
-import { Card } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import { InlineAlert } from '@/components/ui/alert';
-import { fetchWritingRevisionData } from '@/lib/api';
-import { analytics } from '@/lib/analytics';
-import type { CriteriaDelta } from '@/lib/mock-data';
+import { useEffect, useState } from 'react';
 
 export default function WritingRevisionMode() {
   const searchParams = useSearchParams();
