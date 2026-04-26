@@ -1,5 +1,6 @@
 import { expect, test, devices, type ConsoleMessage, type Response } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
+import { seedProdAuth } from './fixtures/prod-auth';
 
 /**
  * Production mobile + accessibility validation.
@@ -20,7 +21,6 @@ import AxeBuilder from '@axe-core/playwright';
  */
 
 const PROD_URL = process.env.PROD_URL ?? 'https://app.oetwithdrhesham.co.uk';
-const API_URL = process.env.PROD_API_URL ?? 'https://api.oetwithdrhesham.co.uk';
 const EMAIL = process.env.PROD_LEARNER_EMAIL;
 const PASSWORD = process.env.PROD_LEARNER_PASSWORD;
 
@@ -56,41 +56,7 @@ test.describe.configure({ mode: 'serial' });
 test.skip(!EMAIL || !PASSWORD, 'Set PROD_LEARNER_EMAIL and PROD_LEARNER_PASSWORD env vars.');
 
 async function seedAuth(page: import('@playwright/test').Page, context: import('@playwright/test').BrowserContext) {
-  const signInResp = await page.request.post(`${API_URL}/v1/auth/sign-in`, {
-    data: { email: EMAIL!, password: PASSWORD!, rememberMe: true },
-    headers: { 'content-type': 'application/json' },
-  });
-  if (!signInResp.ok()) {
-    const body = await signInResp.text().catch(() => '<no body>');
-    throw new Error(`API sign-in failed: ${signInResp.status()} ${body.slice(0, 200)}`);
-  }
-  const session = await signInResp.json();
-
-  const appHost = new URL(PROD_URL).host;
-  await context.addCookies([
-    {
-      name: 'oet_auth',
-      value: '1',
-      domain: appHost,
-      path: '/',
-      httpOnly: false,
-      secure: PROD_URL.startsWith('https'),
-      sameSite: 'Lax',
-    },
-  ]);
-
-  const sessionSnapshot = {
-    accessTokenExpiresAt: session.accessTokenExpiresAt,
-    refreshTokenExpiresAt: session.refreshTokenExpiresAt,
-    currentUser: session.currentUser,
-  };
-  await context.addInitScript((snapshotJson: string) => {
-    try {
-      window.localStorage.setItem('oet.auth.session.local', snapshotJson);
-    } catch {
-      // ignore
-    }
-  }, JSON.stringify(sessionSnapshot));
+  await seedProdAuth(page, context, { email: EMAIL!, password: PASSWORD! });
 }
 
 test('prod — mobile viewport (iPhone 13) walk', async ({ browser }) => {
@@ -172,9 +138,10 @@ test('prod — accessibility (axe-core) scan of key surfaces', async ({ page, co
     console.log(`  [${f.impact}] ${f.route}  ${f.id} (${f.nodes} nodes) — ${f.help}`);
   }
 
-  // Treat only `critical` violations as blocking. `serious` and below are
-  // surfaced for follow-up but do not fail the build, since prod has not yet
-  // had a full a11y pass.
-  const critical = findings.filter((f) => f.impact === 'critical');
-  expect(critical, `no critical a11y violations: ${JSON.stringify(critical, null, 2)}`).toEqual([]);
+  // Treat both `critical` and `serious` violations as blocking. Earlier prod
+  // runs surfaced 2 nodes/route of color-contrast (serious) — those are now
+  // fixed in d58c446. Lower-impact (`moderate`/`minor`) findings are surfaced
+  // in the log for follow-up but do not fail the build.
+  const blocking = findings.filter((f) => f.impact === 'critical' || f.impact === 'serious');
+  expect(blocking, `no critical or serious a11y violations: ${JSON.stringify(blocking, null, 2)}`).toEqual([]);
 });

@@ -1,6 +1,7 @@
 import { expect, test, type ConsoleMessage, type Response } from '@playwright/test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
+import { seedProdAuth } from './fixtures/prod-auth';
 
 /**
  * Production exhaustive sweep
@@ -124,7 +125,7 @@ test.skip(
   'Set PROD_LEARNER_EMAIL and PROD_LEARNER_PASSWORD env vars.',
 );
 
-test('prod — exhaustive learner route sweep', async ({ page }) => {
+test('prod — exhaustive learner route sweep', async ({ page, context }) => {
   test.setTimeout(900_000); // up to 15 min for 89 routes
 
   const consoleErrors: string[] = [];
@@ -151,19 +152,8 @@ test('prod — exhaustive learner route sweep', async ({ page }) => {
     }
   });
 
-  // Sign in
-  await page.goto(`${PROD_URL}/sign-in`, { waitUntil: 'domcontentloaded' });
-  await page.locator('#email').waitFor({ state: 'visible', timeout: 15_000 });
-  await page.locator('#email').fill(EMAIL!);
-  await page.locator('#password').fill(PASSWORD!);
-  await Promise.all([
-    page.waitForResponse(
-      (r) => /\/v1\/auth\/(sign[-_]?in|login)/i.test(r.url()) && r.request().method() === 'POST',
-      { timeout: 20_000 },
-    ).catch(() => null),
-    page.getByRole('button', { name: /^sign in$/i }).click(),
-  ]);
-  await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 30_000 });
+  // ---- API-based sign-in (rate-limit safe; matches prod browser which uses NEXT_PUBLIC_API_BASE_URL=api.host) ----
+  await seedProdAuth(page, context, { email: EMAIL!, password: PASSWORD! });
 
   // Walk every route
   for (const route of ROUTES) {
@@ -206,4 +196,19 @@ test('prod — exhaustive learner route sweep', async ({ page }) => {
   expect(doc5xx, `documents must not 5xx: ${JSON.stringify(doc5xx)}`).toEqual([]);
   expect(apiFailures, 'no API 5xx').toEqual([]);
   expect(consoleErrors, 'no console errors').toEqual([]);
+
+  // Auth refresh 4xx is logged but not blocking — under heavy navigation
+  // (91 routes in ~2 min) the SPA may issue overlapping refresh calls and
+  // the rate-limiter / single-flight guard will reject the losers. Real
+  // users don't navigate that fast.
+  const refreshFailures: string[] = [];
+  for (const [, list] of fourXx) {
+    for (const l of list) {
+      if (/\/v1\/auth\/refresh/.test(l)) refreshFailures.push(l);
+    }
+  }
+  if (refreshFailures.length) {
+    console.log(`  /v1/auth/refresh 4xx (non-blocking, ${refreshFailures.length} occurrences):`);
+    for (const l of refreshFailures.slice(0, 5)) console.log(`    ${l}`);
+  }
 });

@@ -1,4 +1,5 @@
 import { expect, test, type ConsoleMessage, type Response } from '@playwright/test';
+import { seedProdAuth } from './fixtures/prod-auth';
 
 /**
  * Production drill-down — open practice items in each major module.
@@ -25,7 +26,6 @@ import { expect, test, type ConsoleMessage, type Response } from '@playwright/te
  */
 
 const PROD_URL = process.env.PROD_URL ?? 'https://app.oetwithdrhesham.co.uk';
-const API_URL = process.env.PROD_API_URL ?? 'https://api.oetwithdrhesham.co.uk';
 const EMAIL = process.env.PROD_LEARNER_EMAIL;
 const PASSWORD = process.env.PROD_LEARNER_PASSWORD;
 
@@ -51,50 +51,11 @@ test('prod — module drill-down: open first practice item in each module', asyn
   });
 
   // ---- API-based sign-in (rate-limit safe) ----
-  // 1. POST /v1/auth/sign-in via page.request — Playwright's request context
-  //    shares cookies with the browser context, so the httpOnly oet_rt refresh
-  //    cookie is automatically captured and used for /v1/auth/refresh later.
-  const signInResp = await page.request.post(`${API_URL}/v1/auth/sign-in`, {
-    data: { email: EMAIL!, password: PASSWORD!, rememberMe: true },
-    headers: { 'content-type': 'application/json' },
-  });
-  if (!signInResp.ok()) {
-    const body = await signInResp.text().catch(() => '<no body>');
-    throw new Error(`API sign-in failed: ${signInResp.status()} ${body.slice(0, 200)}`);
-  }
-  const session = await signInResp.json();
-  expect(session.accessToken, 'accessToken in sign-in response').toBeTruthy();
+  await seedProdAuth(page, context, { email: EMAIL!, password: PASSWORD! });
 
-  // 2. Seed app-domain cookies + localStorage so the SPA boots authenticated.
-  const appHost = new URL(PROD_URL).host;
-  await context.addCookies([
-    {
-      name: 'oet_auth',
-      value: '1',
-      domain: appHost,
-      path: '/',
-      httpOnly: false,
-      secure: PROD_URL.startsWith('https'),
-      sameSite: 'Lax',
-    },
-  ]);
-
-  const sessionSnapshot = {
-    accessTokenExpiresAt: session.accessTokenExpiresAt,
-    refreshTokenExpiresAt: session.refreshTokenExpiresAt,
-    currentUser: session.currentUser,
-  };
-  await context.addInitScript((snapshotJson: string) => {
-    try {
-      window.localStorage.setItem('oet.auth.session.local', snapshotJson);
-    } catch {
-      // ignore
-    }
-  }, JSON.stringify(sessionSnapshot));
-
-  // 3. Land on dashboard. The auth provider will call /v1/auth/refresh using
-  //    the oet_rt cookie to obtain a fresh access token, and the app should
-  //    NOT bounce us back to /sign-in.
+  // Land on dashboard. The auth provider will call /v1/auth/refresh using
+  // the oet_rt cookie to obtain a fresh access token, and the app should
+  // NOT bounce us back to /sign-in.
   surface = 'dashboard';
   await page.goto(`${PROD_URL}/dashboard`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
   await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
