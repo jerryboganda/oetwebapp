@@ -1,12 +1,28 @@
 {
   "$schema": "https://opencode.ai/config.json",
-  "plugin": ["oh-my-openagent"],
-  "permission": {
-    "read": {
-      "C:/Users/Admin/Desktop/New OET Web App/oetwebapp/.opencode/get-shit-done/*": "allow"
-    },
-    "external_directory": {
-      "C:/Users/Admin/Desktop/New OET Web App/oetwebapp/.opencode/get-shit-done/*": "allow"
+  "plugin": ["oh-my-opencode"],
+  "provider": {
+    "digitalocean": {
+      "npm": "@ai-sdk/openai-compatible",
+      "name": "DigitalOcean Serverless Inference",
+      "options": {
+        "baseURL": "https://inference.do-ai.run/v1",
+        "apiKey": "{env:DO_INFERENCE_API_KEY}"
+      },
+      "models": {
+        "kimi-k2.5": {
+          "name": "Kimi K2.5 (Moonshot, via DO)",
+          "limit": { "context": 256000, "output": 16384 }
+        },
+        "minimax-m2.5": {
+          "name": "MiniMax M2.5 (thinking, via DO)",
+          "limit": { "context": 200000, "output": 128000 }
+        },
+        "glm-5": {
+          "name": "GLM 5 (Zhipu, via DO)",
+          "limit": { "context": 200000, "output": 16384 }
+        }
+      }
     }
   }
 }

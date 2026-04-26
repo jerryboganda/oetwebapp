@@ -1,44 +1,27 @@
 {
-  // =======================================================================
-  //  Oh My OpenCode — FULL POWER configuration for OET Prep Platform
-  // =======================================================================
+  // ===========================================================================
+  //  Oh My OpenAgent — OET Prep Platform routing
+  // ===========================================================================
   //
-  //  Mode:    Sisyphus-driven autonomous orchestration ("ultrawork")
-  //  Routing: All agents/categories pinned to DigitalOcean Inference models
-  //           (see ~/.config/opencode/opencode.json). No Anthropic/OpenAI
-  //           keys required.
+  //  Locked routing per user mandate:
+  //    Anthropic (Opus 4.7, Sonnet 4.6) → github-copilot subscription ONLY
+  //    OpenAI    (GPT 5.5, 5.5-pro)     → opencode (Zen) subscription ONLY
+  //    Cheap/fast tier                  → digitalocean/kimi-k2.5 (custom provider)
   //
-  //  How it works from the user's point of view:
-  //  ------------------------------------------
-  //    1. User types a requirement (e.g. "add server-side CSV export to
-  //       admin/users").
-  //    2. The `keyword-detector` + `auto-slash-command` + `start-work`
-  //       hooks automatically route the request to Prometheus (planner)
-  //       which interviews just enough to build a Decision-Complete plan.
-  //    3. Sisyphus takes the plan, delegates parallel subtasks via the
-  //       task() tool to Hephaestus (deep worker), Oracle (architecture),
-  //       Librarian (docs), Explore (grep), Atlas (todos), Momus (review).
-  //    4. Ralph-loop + todo-continuation-enforcer keep Sisyphus working
-  //       until 100% of the plan is green (build + tsc + lint + tests).
-  //    5. Runtime-fallback auto-switches models on 429/503/529 errors so
-  //       nothing stalls on rate-limits.
-  //    6. Comment-checker strips AI-slop comments before commits.
-  //    7. Session-recovery auto-heals thinking-block & context-limit
-  //       errors.
-  //
-  //  GSD (.opencode/agents/gsd-*.md) coexists — Sisyphus can delegate to
-  //  GSD subagents by name when a task maps cleanly to an OET-specific
-  //  domain (e.g. goal-backward verification, content-upload audit).
-  // =======================================================================
+  //  Provider definitions live in .opencode/opencode.json (the github-copilot
+  //  and opencode providers are auto-detected by OpenCode from the user's
+  //  subscriptions; digitalocean is a custom OpenAI-compatible provider that
+  //  reads its key from DO_INFERENCE_API_KEY in .env.local).
+  // ===========================================================================
 
   "$schema": "https://raw.githubusercontent.com/code-yeongyu/oh-my-openagent/dev/assets/oh-my-opencode.schema.json",
 
   // === 1. Sisyphus orchestrator: FULLY ENABLED ============================
   "sisyphus_agent": {
     "disabled": false,
-    "default_builder_enabled": true, // enable the builder subagent too
-    "planner_enabled": true,         // Prometheus always available
-    "replace_plan": true             // Sisyphus owns plan mode — Tab cycles into Prometheus
+    "default_builder_enabled": true,
+    "planner_enabled": true,
+    "replace_plan": true
   },
 
   // === 2. Sisyphus Tasks: cross-session state =============================
@@ -50,216 +33,207 @@
     }
   },
 
-  // === 3. Agent routing — every omo agent mapped to DO Inference ==========
-  // Model-family alignment per docs:
-  //   Claude-family (instruction-following): Sisyphus, Metis, Atlas
-  //   GPT-family (principle-driven):         Hephaestus, Oracle, Momus
-  //   Dual-prompt (auto-switch):             Prometheus, Atlas
-  //   Speed-first (cheap+fast):              Librarian, Explore
-  //   Vision/multimodal:                     Multimodal-Looker → GPT-5.4
+  // === 3. Agent routing ===================================================
   "agents": {
-    // -- Main orchestrator (Claude Opus 4.7 is omo's top recommendation) --
+    // -- Main orchestrator: Opus 4.7 via Copilot --
     "sisyphus": {
-      "model": "digitalocean/do-claude-opus-4.7",
-      "variant": "max",
+      "model": "github-copilot/claude-opus-4.7",
       "fallback_models": [
-        { "model": "digitalocean/kimi-k2.5",          "variant": "max"  },
-        { "model": "digitalocean/glm-5",              "variant": "max"  },
-        { "model": "digitalocean/do-claude-opus-4.6", "variant": "max"  },
-        { "model": "digitalocean/openai-gpt-5.4",     "reasoningEffort": "high" }
+        "github-copilot/claude-sonnet-4.6",
+        "opencode/gpt-5.5",
+        "digitalocean/kimi-k2.5"
       ]
     },
 
-    // -- Deep autonomous worker (GPT-native; no Claude fallback per docs) --
+    // -- Deep autonomous worker: GPT-native via Zen --
     "hephaestus": {
-      "model": "digitalocean/openai-gpt-5.4",
+      "model": "opencode/gpt-5.5",
       "reasoningEffort": "high",
       "fallback_models": [
-        { "model": "digitalocean/openai-gpt-5.4-pro", "reasoningEffort": "high" },
-        { "model": "digitalocean/openai-o3" }
+        { "model": "opencode/gpt-5.5-pro", "reasoningEffort": "high" },
+        { "model": "opencode/gpt-5.4-pro", "reasoningEffort": "high" }
       ]
     },
 
-    // -- Strategic planner (dual-prompt — auto-switches Claude↔GPT prompt) --
+    // -- Strategic planner (dual-prompt: Claude↔GPT auto-switch) --
     "prometheus": {
-      "model": "digitalocean/do-claude-opus-4.7",
-      "variant": "max",
+      "model": "github-copilot/claude-opus-4.7",
       "fallback_models": [
-        { "model": "digitalocean/openai-gpt-5.4-pro", "reasoningEffort": "high" },
-        { "model": "digitalocean/openai-gpt-5.4",     "reasoningEffort": "high" },
-        { "model": "digitalocean/kimi-k2.5",          "variant": "max"  }
+        { "model": "opencode/gpt-5.5-pro", "reasoningEffort": "high" },
+        { "model": "opencode/gpt-5.5",     "reasoningEffort": "high" },
+        "github-copilot/claude-sonnet-4.6"
       ],
-      "prompt_append": "This is the OET Prep Platform (Next.js 15 + ASP.NET Core 10 + Capacitor + Electron). ALWAYS consult AGENTS.md at project root before planning — it encodes MISSION-CRITICAL invariants for OET Scoring, Rulebooks, AI Gateway, Content Upload, Reading Authoring, Grammar/Pronunciation/Conversation modules, and the Statement of Results card. Violate any of those invariants and the plan is wrong by definition. Leverage deep & quick agents heavily, always in parallel. Use /init-deep output (hierarchical AGENTS.md) for scoped context."
+      "prompt_append": "This is the OET Prep Platform (Next.js 15 + ASP.NET Core 10 + Capacitor + Electron). ALWAYS consult AGENTS.md at project root before planning — it encodes MISSION-CRITICAL invariants for OET Scoring, Rulebooks, AI Gateway, Content Upload, Reading Authoring, Grammar/Pronunciation/Conversation modules, and the Statement of Results card. Violate any of those invariants and the plan is wrong by definition. Leverage deep & quick agents heavily, always in parallel."
     },
 
     // -- Plan reviewer (Claude-family) --
     "metis": {
-      "model": "digitalocean/do-claude-opus-4.7",
-      "variant": "max",
+      "model": "github-copilot/claude-opus-4.7",
       "fallback_models": [
-        { "model": "digitalocean/openai-gpt-5.4-pro", "reasoningEffort": "high" },
-        { "model": "digitalocean/kimi-k2.5",          "variant": "max"  }
+        { "model": "opencode/gpt-5.5-pro", "reasoningEffort": "high" },
+        "github-copilot/claude-sonnet-4.6"
       ]
     },
 
-    // -- Architecture / debugging (GPT-native, high-reasoning) --
+    // -- Architecture / hard debugging (GPT-native, high-reasoning) --
     "oracle": {
-      "model": "digitalocean/openai-gpt-5.4-pro",
+      "model": "opencode/gpt-5.5-pro",
       "reasoningEffort": "high",
       "fallback_models": [
-        { "model": "digitalocean/openai-gpt-5.4",     "reasoningEffort": "high" },
-        { "model": "digitalocean/do-claude-opus-4.7", "variant": "max" },
-        { "model": "digitalocean/openai-o3" }
+        { "model": "opencode/gpt-5.5", "reasoningEffort": "high" },
+        "github-copilot/claude-opus-4.7"
       ]
     },
 
-    // -- Verification / review (GPT-native, xhigh) --
+    // -- Verification / review --
     "momus": {
-      "model": "digitalocean/openai-gpt-5.4-pro",
+      "model": "opencode/gpt-5.5-pro",
       "reasoningEffort": "xhigh",
       "fallback_models": [
-        { "model": "digitalocean/openai-gpt-5.4",     "reasoningEffort": "high" },
-        { "model": "digitalocean/do-claude-opus-4.7", "variant": "max" }
+        { "model": "opencode/gpt-5.5", "reasoningEffort": "high" },
+        "github-copilot/claude-opus-4.7"
       ]
     },
 
-    // -- Todo orchestrator (Claude Sonnet — dual-prompt) --
+    // -- Todo orchestrator (Sonnet via Copilot) --
     "atlas": {
-      "model": "digitalocean/do-claude-sonnet-4.6",
+      "model": "github-copilot/claude-sonnet-4.6",
       "fallback_models": [
-        { "model": "digitalocean/kimi-k2.5",          "variant": "high" },
-        { "model": "digitalocean/openai-gpt-5.4",     "reasoningEffort": "medium" }
+        { "model": "opencode/gpt-5.5", "reasoningEffort": "medium" },
+        "digitalocean/kimi-k2.5"
       ]
     },
 
     // -- Speed-critical: Librarian (docs/code search) --
     "librarian": {
-      "model": "digitalocean/openai-gpt-5-mini",
+      "model": "digitalocean/kimi-k2.5",
       "fallback_models": [
-        { "model": "digitalocean/alibaba-qwen3-32b" },
-        { "model": "digitalocean/deepseek-r1-distill-llama-70b" }
+        { "model": "opencode/gpt-5.5", "reasoningEffort": "minimal" },
+        "github-copilot/claude-sonnet-4.6"
       ]
     },
 
     // -- Speed-critical: Explore (fast grep) --
     "explore": {
-      "model": "digitalocean/openai-gpt-5-mini",
+      "model": "digitalocean/kimi-k2.5",
       "fallback_models": [
-        { "model": "digitalocean/alibaba-qwen3-32b" },
-        { "model": "digitalocean/openai-gpt-oss-120b" }
+        { "model": "opencode/gpt-5.5", "reasoningEffort": "minimal" },
+        "github-copilot/claude-sonnet-4.6"
       ]
     },
 
-    // -- Vision agent (screenshots, image reasoning) --
-    // DO inference doesn't ship a pure vision model in your current list;
-    // GPT-5.4 handles multimodal adequately. If you later add a Gemini or
-    // Claude-with-vision model, swap it in here.
+    // -- Vision / multimodal --
     "multimodal-looker": {
-      "model": "digitalocean/openai-gpt-5.4",
+      "model": "opencode/gpt-5.5",
       "reasoningEffort": "medium",
       "fallback_models": [
-        { "model": "digitalocean/do-claude-opus-4.7", "variant": "max" }
+        "github-copilot/claude-opus-4.7"
       ]
     },
 
-    // -- Junior Sisyphus (notepad / background chores) --
+    // -- Junior Sisyphus (background chores) --
     "sisyphus-junior": {
-      "model": "digitalocean/openai-gpt-5-mini",
+      "model": "digitalocean/kimi-k2.5",
       "fallback_models": [
-        { "model": "digitalocean/do-claude-sonnet-4.6" }
+        "github-copilot/claude-sonnet-4.6",
+        { "model": "opencode/gpt-5.5", "reasoningEffort": "minimal" }
       ]
     }
   },
 
-  // === 4. Categories — DO-routed so task() delegation always resolves =====
+  // === 4. Categories — task() delegation routing ==========================
   "categories": {
     "quick": {
-      "model": "digitalocean/openai-gpt-5-mini",
+      "model": "digitalocean/kimi-k2.5",
       "description": "Trivial edits, typos, single-file renames",
-      "fallback_models": [ "digitalocean/alibaba-qwen3-32b" ]
+      "fallback_models": [
+        "github-copilot/claude-sonnet-4.6"
+      ]
     },
     "unspecified-low": {
-      "model": "digitalocean/do-claude-sonnet-4.6",
+      "model": "github-copilot/claude-sonnet-4.6",
       "description": "General low-effort tasks",
-      "fallback_models": [ "digitalocean/kimi-k2.5" ]
+      "fallback_models": [
+        "digitalocean/kimi-k2.5"
+      ]
     },
     "unspecified-high": {
-      "model": "digitalocean/do-claude-opus-4.7",
-      "variant": "max",
+      "model": "github-copilot/claude-opus-4.7",
       "description": "General high-effort tasks",
       "fallback_models": [
-        "digitalocean/kimi-k2.5",
-        "digitalocean/glm-5",
-        "digitalocean/openai-gpt-5.4"
+        "opencode/gpt-5.5",
+        "github-copilot/claude-sonnet-4.6"
       ]
     },
     "deep": {
-      "model": "digitalocean/openai-gpt-5.4",
-      "reasoningEffort": "medium",
+      "model": "opencode/gpt-5.5",
+      "reasoningEffort": "high",
       "description": "Autonomous research + execution",
       "fallback_models": [
-        { "model": "digitalocean/openai-gpt-5.4-pro", "reasoningEffort": "high" },
-        { "model": "digitalocean/do-claude-opus-4.7", "variant": "max" }
+        { "model": "opencode/gpt-5.5-pro", "reasoningEffort": "high" },
+        "github-copilot/claude-opus-4.7"
       ]
     },
     "ultrabrain": {
-      "model": "digitalocean/openai-gpt-5.4-pro",
+      "model": "opencode/gpt-5.5-pro",
       "reasoningEffort": "xhigh",
       "description": "Hard logic, architecture, OET scoring invariants, AI-gateway policy",
       "fallback_models": [
-        { "model": "digitalocean/openai-gpt-5.4",     "reasoningEffort": "high" },
-        { "model": "digitalocean/do-claude-opus-4.7", "variant": "max" },
-        { "model": "digitalocean/openai-o3" }
+        { "model": "opencode/gpt-5.5", "reasoningEffort": "high" },
+        "github-copilot/claude-opus-4.7"
       ]
     },
     "visual-engineering": {
-      "model": "digitalocean/do-claude-sonnet-4.6",
+      "model": "github-copilot/claude-sonnet-4.6",
       "description": "Tailwind 4 / Next.js 15 / React 19 / motion v12 UI work — follow DESIGN.md tokens and motion-system skill; never restyle OET Statement of Results card.",
       "fallback_models": [
-        "digitalocean/do-claude-opus-4.7",
+        "github-copilot/claude-opus-4.7",
         "digitalocean/kimi-k2.5"
       ]
     },
     "writing": {
-      "model": "digitalocean/openai-gpt-5-mini",
+      "model": "github-copilot/claude-sonnet-4.6",
       "description": "Docs, prose, release notes, AGENTS.md updates",
-      "fallback_models": [ "digitalocean/do-claude-sonnet-4.6" ]
+      "fallback_models": [
+        "digitalocean/kimi-k2.5"
+      ]
     },
     "artistry": {
-      "model": "digitalocean/do-claude-opus-4.7",
+      "model": "github-copilot/claude-opus-4.7",
       "description": "Creative / unconventional approaches",
-      "fallback_models": [ "digitalocean/kimi-k2.5" ]
+      "fallback_models": [
+        "github-copilot/claude-sonnet-4.6",
+        "digitalocean/kimi-k2.5"
+      ]
     }
   },
 
-  // === 5. Background task concurrency — let DO breathe ====================
-  // DO Inference can handle high concurrency; throttle the most expensive
-  // models a bit to stay friendly.
+  // === 5. Background task concurrency =====================================
   "background_task": {
     "defaultConcurrency": 6,
     "staleTimeoutMs": 240000,
     "providerConcurrency": {
+      "github-copilot": 8,
+      "opencode": 8,
       "digitalocean": 10
     },
     "modelConcurrency": {
-      "digitalocean/do-claude-opus-4.7":    3,
-      "digitalocean/openai-gpt-5.4-pro":    3,
-      "digitalocean/openai-gpt-5.4":        4,
-      "digitalocean/do-claude-sonnet-4.6":  5,
-      "digitalocean/kimi-k2.5":             5,
-      "digitalocean/glm-5":                 5,
-      "digitalocean/openai-gpt-5-mini":     15
+      "github-copilot/claude-opus-4.7":   3,
+      "github-copilot/claude-sonnet-4.6": 5,
+      "opencode/gpt-5.5-pro":             3,
+      "opencode/gpt-5.5":                 5,
+      "opencode/gpt-5.4-pro":             3,
+      "digitalocean/kimi-k2.5":           8
     }
   },
 
   // === 6. MCPs ============================================================
-  // Keep only keyless ones. Exa websearch skipped per user decision.
   "disabled_mcps": ["websearch"],
 
-  // === 7. Hashline edit tool — the real prize =============================
+  // === 7. Hashline edit tool ==============================================
   "hashline_edit": true,
 
-  // === 8. LSP — TypeScript for the Next.js frontend =======================
+  // === 8. LSP — TypeScript ================================================
   "lsp": {
     "typescript-language-server": {
       "command": ["typescript-language-server", "--stdio"],
@@ -271,7 +245,7 @@
     }
   },
 
-  // === 9. Runtime fallback — NEVER stall on 429/503/529 ===================
+  // === 9. Runtime fallback — never stall on rate limits ===================
   "runtime_fallback": {
     "enabled": true,
     "retry_on_errors": [400, 408, 425, 429, 500, 502, 503, 504, 529],
@@ -282,8 +256,6 @@
   },
 
   // === 10. Skills =========================================================
-  // Ship with omo's built-in skills enabled (git-master, frontend-ui-ux,
-  // playwright). They coexist with our .agents/skills/* catalog.
   "skills": {
     "sources": [
       { "path": "./.agents/skills", "recursive": true },
@@ -291,35 +263,31 @@
     ]
   },
 
-  // === 11. Git Master — enforce good commits ==============================
+  // === 11. Git Master =====================================================
   "git_master": {
     "commit_footer": true,
     "include_co_authored_by": false
   },
 
-  // === 12. Comment Checker — strip AI slop ================================
-  // Binary installed via @code-yeongyu/comment-checker. No custom_prompt
-  // override — default behavior is what omo recommends.
-
-  // === 13. Notifications — keep them loud =================================
+  // === 12. Notifications ==================================================
   "notification": { "force_enable": true },
 
-  // === 14. Tmux — OFF (Windows) ===========================================
+  // === 13. Tmux — OFF (Windows) ===========================================
   "tmux": { "enabled": false },
 
-  // === 15. Model capabilities — refresh off; we use DO custom IDs =========
+  // === 14. Model capabilities — refresh off (custom DO IDs) ===============
   "model_capabilities": {
     "enabled": true,
     "auto_refresh_on_start": false
   },
 
-  // === 16. Experimental: turn on the good stuff ===========================
+  // === 15. Experimental ===================================================
   "experimental": {
-    "truncate_all_tool_outputs": false,  // keep outputs verbose for diagnostics
-    "aggressive_truncation": true,        // truncate when the context gets hot
-    "auto_resume": true,                  // auto-retry after thinking-block recovery
-    "disable_omo_env": false,             // we want date/locale injection
-    "task_system": true,                  // Sisyphus task system
+    "truncate_all_tool_outputs": false,
+    "aggressive_truncation": true,
+    "auto_resume": true,
+    "disable_omo_env": false,
+    "task_system": true,
     "dynamic_context_pruning": {
       "enabled": true,
       "notification": "minimal",
@@ -342,24 +310,10 @@
     }
   },
 
-  // === 17. Hooks & commands — keep almost everything ENABLED ==============
-  // Only disable the two that collide with OET invariants:
-  //
-  //   * `init-deep` — would auto-rewrite AGENTS.md which is mission-
-  //     critical and hand-tuned. Disabled.
-  //   * `rules-injector` — AGENTS.md is the single source of truth and is
-  //     already injected by OpenCode's native AGENTS.md support on 1.1.37+.
-  //     Disabling avoids double-injection.
-  //
-  // Everything else — keyword-detector, auto-slash-command, start-work,
-  // ralph-loop, ulw-loop, todo-continuation-enforcer, think-mode,
-  // session-recovery, comment-checker, context-window-monitor,
-  // compaction-context-injector, preemptive-compaction, runtime-fallback,
-  // startup-toast, auto-update-checker — STAYS ON.
+  // === 16. Hooks & commands — keep almost everything enabled ==============
   "disabled_hooks": ["rules-injector"],
   "disabled_commands": ["init-deep"],
 
-  // no `disabled_agents`, no `disabled_skills` — full roster active.
   "disabled_agents": [],
   "disabled_skills": []
 }
