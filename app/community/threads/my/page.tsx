@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { User, MessageCircle, Eye, ThumbsUp, Clock, Pin, Lock, ArrowLeft, ChevronLeft, ChevronRight, Plus, Trash2, PenLine } from 'lucide-react';
+import { User, MessageCircle, Eye, ThumbsUp, Clock, Pin, Lock, ArrowLeft, Plus, Trash2, PenLine } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero } from '@/components/domain';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { Pagination } from '@/components/ui/pagination';
 import { Badge } from '@/components/ui/badge';
 import { InlineAlert } from '@/components/ui/alert';
 import { Skeleton, EmptyState } from '@/components/ui';
@@ -42,7 +43,6 @@ interface ThreadsResponse {
   threads: ForumThreadSummary[];
 }
 
-const PAGE_SIZE = 20;
 
 function formatRelativeDate(dateStr: string) {
   const d = new Date(dateStr);
@@ -66,6 +66,7 @@ export default function MyThreadsPage() {
   const [threads, setThreads] = useState<ForumThreadSummary[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(20);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
@@ -83,7 +84,7 @@ export default function MyThreadsPage() {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetchForumThreads(undefined, p, PAGE_SIZE) as ThreadsResponse;
+      const res = await fetchForumThreads(undefined, p, pageSize) as ThreadsResponse;
       const allThreads = res.threads ?? [];
       // Filter client-side by author display name match
       const myThreads = user?.displayName
@@ -96,7 +97,7 @@ export default function MyThreadsPage() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, pageSize]);
 
   useEffect(() => {
     loadCategories();
@@ -104,10 +105,6 @@ export default function MyThreadsPage() {
     analytics.track('community_my_threads_viewed');
   }, [loadCategories, loadThreads]);
 
-  const handlePageChange = (newPage: number) => {
-    setPage(newPage);
-    loadThreads(newPage);
-  };
 
   async function handleDelete(threadId: string) {
     if (!confirm('Are you sure you want to delete this thread?')) return;
@@ -128,7 +125,6 @@ export default function MyThreadsPage() {
     }
   }
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const categoryMap = new Map(categories.map(c => [c.id, c.name]));
 
   return (
@@ -233,15 +229,17 @@ export default function MyThreadsPage() {
           </div>
         )}
 
-        {totalPages > 1 && !loading && (
-          <div className="flex items-center justify-center gap-2 pt-2">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => handlePageChange(page - 1)}>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="text-sm text-muted">Page {page} of {totalPages}</span>
-            <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => handlePageChange(page + 1)}>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+        {!loading && (
+          <div className="pt-2">
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={(next) => { setPage(next); loadThreads(next); }}
+              onPageSizeChange={(next) => { setPageSize(next); }}
+              itemLabel="thread"
+              itemLabelPlural="threads"
+            />
           </div>
         )}
       </MotionSection>
