@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
-import { MessageSquareText, Pin, Lock, Trash2, Eye, MessageCircle, Clock, ChevronLeft, ChevronRight } from 'lucide-react';
+import { MessageSquareText, Pin, Lock, Trash2, Eye, MessageCircle, Clock } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -11,6 +11,7 @@ import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Modal } from '@/components/ui/modal';
+import { Pagination } from '@/components/ui/pagination';
 import { fetchForumThreads, pinCommunityThread, lockCommunityThread, adminDeleteCommunityThread } from '@/lib/api';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 
@@ -37,7 +38,6 @@ interface ThreadsResponse {
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
-const PAGE_SIZE = 20;
 
 function formatDate(dateStr: string) {
   return new Date(dateStr).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
@@ -49,17 +49,16 @@ export default function AdminCommunityPage() {
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
   const [threads, setThreads] = useState<ForumThreadSummary[]>([]);
   const [total, setTotal] = useState(0);
+  const [pageSize, setPageSize] = useState(20);
   const [page, setPage] = useState(1);
   const [deleteTarget, setDeleteTarget] = useState<ForumThreadSummary | null>(null);
   const [isMutating, setIsMutating] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
 
-  const totalPages = Math.ceil(total / PAGE_SIZE);
-
-  const loadThreads = useCallback(async (p: number) => {
+  const loadThreads = useCallback(async (p: number, size: number) => {
     setPageStatus('loading');
     try {
-      const res = await fetchForumThreads(undefined, p, PAGE_SIZE) as ThreadsResponse;
+      const res = await fetchForumThreads(undefined, p, size) as ThreadsResponse;
       setThreads(res.threads ?? []);
       setTotal(res.total ?? 0);
       setPageStatus((res.threads ?? []).length > 0 ? 'success' : 'empty');
@@ -69,8 +68,8 @@ export default function AdminCommunityPage() {
   }, []);
 
   useEffect(() => {
-    loadThreads(page);
-  }, [loadThreads, page]);
+    loadThreads(page, pageSize);
+  }, [loadThreads, page, pageSize]);
 
   async function handlePin(thread: ForumThreadSummary) {
     const newPinned = !thread.isPinned;
@@ -202,7 +201,7 @@ export default function AdminCommunityPage() {
 
   return (
     <AdminRouteWorkspace role="main" aria-label="Community moderation">
-      <AsyncStateWrapper status={pageStatus} onRetry={() => loadThreads(page)}>
+      <AsyncStateWrapper status={pageStatus} onRetry={() => loadThreads(page, pageSize)}>
         <div className="space-y-6">
           <AdminRouteSectionHeader title="Community Moderation" />
 
@@ -264,17 +263,15 @@ export default function AdminCommunityPage() {
                   aria-label="Community threads"
                 />
 
-                {totalPages > 1 && (
-                  <div className="flex items-center justify-center gap-2 pt-4">
-                    <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                      <ChevronLeft className="h-4 w-4" />
-                    </Button>
-                    <span className="text-sm text-muted">Page {page} of {totalPages}</span>
-                    <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-                      <ChevronRight className="h-4 w-4" />
-                    </Button>
-                  </div>
-                )}
+                <Pagination
+                  page={page}
+                  pageSize={pageSize}
+                  total={total}
+                  onPageChange={setPage}
+                  onPageSizeChange={setPageSize}
+                  itemLabel="thread"
+                  itemLabelPlural="threads"
+                />
               </>
             )}
           </AdminRoutePanel>
