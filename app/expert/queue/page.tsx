@@ -18,13 +18,13 @@ import {
   ExpertRouteWorkspace,
 } from '@/components/domain/expert-route-surface';
 import { claimReview, fetchExpertQueueFilterMetadata, fetchReviewQueue, isApiError, releaseReview } from '@/lib/api';
+import { Pagination } from '@/components/ui/pagination';
 import { analytics } from '@/lib/analytics';
 import { type ExpertQueueFilterMetadata, type ReviewRequest } from '@/lib/types/expert';
 
 type AsyncStatus = 'loading' | 'error' | 'empty' | 'success';
 
 const FILTER_KEYS = ['type', 'profession', 'priority', 'status', 'confidence', 'assignment', 'overdue'] as const;
-const PAGE_SIZE = 25;
 const FLASH_STORAGE_KEY = 'expertReviewQueueFlash';
 const FLASH_MESSAGES: Record<string, { variant: 'success'; message: string }> = {
   'review-submitted': { variant: 'success', message: 'Review submitted successfully.' },
@@ -76,6 +76,7 @@ export default function ReviewQueuePage() {
   const [showStaleWarning, setShowStaleWarning] = useState(false);
   const [totalCount, setTotalCount] = useState(0);
   const [page, setPage] = useState(() => Math.max(1, Number(searchParams?.get('page') ?? '1')));
+  const [pageSize, setPageSize] = useState(25);
   const [metadata, setMetadata] = useState<ExpertQueueFilterMetadata | null>(null);
 
   useEffect(() => {
@@ -163,8 +164,8 @@ export default function ReviewQueuePage() {
     assignment: selectedFilters.assignment,
     overdue: selectedFilters.overdue?.includes('true') || undefined,
     page,
-    pageSize: PAGE_SIZE,
-  }), [page, searchQuery, selectedFilters]);
+    pageSize,
+  }), [page, pageSize, searchQuery, selectedFilters]);
 
   const loadQueue = useCallback(async (showLoadingState = true) => {
     try {
@@ -461,21 +462,15 @@ export default function ReviewQueuePage() {
               </CardContent>
             </Card>
 
-            {totalCount > PAGE_SIZE ? (
-              <div className="flex items-center justify-between gap-3 text-sm text-muted">
-                <span>
-                  Page {page} of {Math.max(1, Math.ceil(totalCount / PAGE_SIZE))}
-                </span>
-                <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage((current) => Math.max(1, current - 1))}>
-                    Previous
-                  </Button>
-                  <Button variant="outline" size="sm" disabled={page >= Math.ceil(totalCount / PAGE_SIZE)} onClick={() => setPage((current) => current + 1)}>
-                    Next
-                  </Button>
-                </div>
-              </div>
-            ) : null}
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={totalCount}
+              onPageChange={(next) => setPage(next)}
+              onPageSizeChange={(next) => setPageSize(next)}
+              itemLabel="review"
+              itemLabelPlural="reviews"
+            />
           </section>
         </div>
       </AsyncStateWrapper>
