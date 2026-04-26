@@ -8,13 +8,13 @@ import { EmptyState } from '@/components/ui/empty-error';
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Pagination } from '@/components/ui/pagination';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { fetchAdminMediaAssets, fetchAdminMediaAudit, adminProcessMediaAsset, uploadMedia, deleteMedia } from '@/lib/api';
 import type { MediaAsset, MediaAuditResult, PaginatedResponse } from '@/lib/types/content-hierarchy';
 import { Film, RefreshCw, AlertTriangle, Upload, Trash2, FileImage, FileText } from 'lucide-react';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
-const PAGE_SIZE = 25;
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const ALLOWED_TYPES = ['image/jpeg', 'image/png', 'image/gif', 'image/webp', 'application/pdf'];
 
@@ -34,6 +34,7 @@ export default function AdminMediaPage() {
   const [assets, setAssets] = useState<MediaAsset[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [audit, setAudit] = useState<MediaAuditResult | null>(null);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
   const [reloadNonce, setReloadNonce] = useState(0);
@@ -47,7 +48,7 @@ export default function AdminMediaPage() {
     async function load() {
       setPageStatus('loading');
       try {
-        const raw = await fetchAdminMediaAssets({ page, pageSize: PAGE_SIZE }) as PaginatedResponse<MediaAsset>;
+        const raw = await fetchAdminMediaAssets({ page, pageSize }) as PaginatedResponse<MediaAsset>;
         if (cancelled) return;
         setAssets(raw.items ?? []);
         setTotal(raw.total ?? 0);
@@ -58,7 +59,7 @@ export default function AdminMediaPage() {
     }
     load();
     return () => { cancelled = true; };
-  }, [page, reloadNonce]);
+  }, [page, pageSize, reloadNonce]);
 
   async function handleAudit() {
     try {
@@ -278,13 +279,17 @@ export default function AdminMediaPage() {
           )}
         </AsyncStateWrapper>
 
-        {total > PAGE_SIZE && (
-          <div className="flex justify-center gap-2 mt-4">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Previous</Button>
-            <span className="text-sm text-muted self-center">Page {page} of {Math.ceil(total / PAGE_SIZE)}</span>
-            <Button variant="outline" size="sm" disabled={page >= Math.ceil(total / PAGE_SIZE)} onClick={() => setPage(p => p + 1)}>Next</Button>
-          </div>
-        )}
+        <div className="mt-4">
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            itemLabel="asset"
+            itemLabelPlural="assets"
+          />
+        </div>
       </AdminRoutePanel>
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
