@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import Link from 'next/link';
 import type { ReactNode } from 'react';
 import styles from './auth-screen-shell.module.scss';
@@ -56,8 +57,15 @@ export function AuthScreenShell({
 
       <div className={styles.content}>
         <div className={`${styles.stack} ${stackClassName ?? ''}`.trim()}>
-          <Link className={styles.brand} href={brandHref}>
-            <span className={styles.brandWordmark}>{brandLabel}</span>
+          <Link className={styles.brand} href={brandHref} aria-label={brandLabel}>
+            <Image
+              src="/brand/oet-with-dr-hesham-logo.png"
+              alt="OET with Dr Ahmed Hesham"
+              width={400}
+              height={140}
+              priority
+              className={styles.brandLogo}
+            />
           </Link>
 
           <div className={`${styles.card} ${cardClassName ?? ''}`.trim()}>

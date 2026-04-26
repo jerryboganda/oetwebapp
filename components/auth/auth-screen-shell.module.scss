@@ -139,6 +139,13 @@
   letter-spacing: -0.04em;
 }
 
+.brandLogo {
+  width: clamp(180px, 28vw, 260px);
+  height: auto;
+  object-fit: contain;
+  display: block;
+}
+
 .switcher {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));

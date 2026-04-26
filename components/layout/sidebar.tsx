@@ -1,6 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
+import Image from 'next/image';
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
@@ -24,7 +25,6 @@ import {
   CreditCard,
   Settings,
   CalendarCheck,
-  BriefcaseMedical,
   LogOut,
   HelpCircle,
   Brain,
@@ -227,15 +227,18 @@ export function Sidebar({
         <Link
           href="/"
           className="pressable flex items-center gap-3 text-navy transition-opacity hover:opacity-90"
+          aria-label="OET with Dr Ahmed Hesham home"
           onClick={() => { void triggerImpactHaptic('LIGHT'); }}
         >
-          <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-white shadow-lg shadow-primary/20">
-            <BriefcaseMedical className="h-5 w-5" />
-          </div>
-          <div className="flex flex-col">
-            <span className="font-display text-lg font-semibold tracking-tight">OET Prep</span>
-            <span className="text-xs font-medium uppercase tracking-[0.24em] text-muted">{workspaceLabel}</span>
-          </div>
+          <Image
+            src="/brand/oet-with-dr-hesham-logo.png"
+            alt="OET with Dr Ahmed Hesham"
+            width={400}
+            height={140}
+            priority
+            className="h-10 w-auto object-contain"
+          />
+          <span className="sr-only">{workspaceLabel}</span>
         </Link>
       </div>
 

@@ -6,7 +6,7 @@ import { buildSupportMailto } from '@/lib/auth/support';
 import { AuthContext } from '@/contexts/auth-context';
 import { collectFeatureFlagKeys, isFeatureFlaggedItemVisible, useFeatureFlagMap } from '@/hooks/use-feature-flag-map';
 import type { UserRole } from '@/lib/types/auth';
-import { BriefcaseMedical, HelpCircle, LogOut, Menu, Settings, X } from 'lucide-react';
+import { HelpCircle, LogOut, Menu, Settings, X } from 'lucide-react';
 import Link from 'next/link';
 import { type ReactNode, useContext, useMemo, useState } from 'react';
 import { mainNavItems, type NavItem, type ShellUserSummary } from './sidebar';
@@ -47,12 +47,6 @@ export function TopNav({
   const reducedMotion = prefersReducedMotion(useReducedMotion());
   const displayName = userSummary?.displayName?.trim() || 'User';
   const initials = displayName.split(' ').map((part) => part[0]).join('').slice(0, 2).toUpperCase();
-  const workspaceLabel =
-    workspaceRole === 'expert'
-      ? 'Expert workspace'
-      : workspaceRole === 'admin'
-        ? 'Admin workspace'
-        : 'Learner workspace';
   const authContext = useContext(AuthContext);
   const signOut = authContext?.signOut;
   const shouldFilterFeatures = workspaceRole === 'learner';
@@ -141,23 +135,6 @@ export function TopNav({
           >
             {mobileMenuOpen ? <X className="w-5 h-5" aria-hidden="true" /> : <Menu className="w-5 h-5" aria-hidden="true" />}
           </button>
-
-          <Link
-            href="/"
-            className="flex items-center gap-3 text-navy"
-            aria-label="OET Prep home"
-            onClick={() => {
-              void triggerImpactHaptic('LIGHT');
-            }}
-          >
-            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary text-white shadow-lg shadow-primary/20">
-              <BriefcaseMedical className="w-5 h-5" aria-hidden="true" />
-            </div>
-            <div className="hidden flex-col sm:flex">
-              <h1 className="font-display text-lg font-semibold tracking-tight">OET Prep</h1>
-              <span className="text-[10px] font-semibold uppercase tracking-[0.24em] text-muted">{workspaceLabel}</span>
-            </div>
-          </Link>
 
           <AnimatePresence mode="wait" initial={false}>
             {pageTitle && (
