@@ -9,31 +9,15 @@ import Select, {
   type SingleValueProps,
 } from "react-select";
 import * as flagComponents from "country-flag-icons/react/1x1";
+import { COUNTRY_OPTIONS, type CountryEntry } from "@/lib/countries";
 
-export interface CountryCodeOption {
-  value: string;
-  label: string;
-  dialCode: string;
-  isoCode: keyof typeof flagComponents;
-}
+export type CountryCodeOption = CountryEntry;
 
-export const countryOptions: CountryCodeOption[] = [
-  { value: "pk", label: "Pakistan", dialCode: "+92", isoCode: "PK" },
-  { value: "in", label: "India", dialCode: "+91", isoCode: "IN" },
-  { value: "bd", label: "Bangladesh", dialCode: "+880", isoCode: "BD" },
-  {
-    value: "ae",
-    label: "United Arab Emirates",
-    dialCode: "+971",
-    isoCode: "AE",
-  },
-  { value: "sa", label: "Saudi Arabia", dialCode: "+966", isoCode: "SA" },
-  { value: "qa", label: "Qatar", dialCode: "+974", isoCode: "QA" },
-  { value: "gb", label: "United Kingdom", dialCode: "+44", isoCode: "GB" },
-  { value: "au", label: "Australia", dialCode: "+61", isoCode: "AU" },
-  { value: "us", label: "United States", dialCode: "+1", isoCode: "US" },
-  { value: "ca", label: "Canada", dialCode: "+1", isoCode: "CA" },
-];
+/**
+ * Backwards-compatible export. The full ISO 3166-1 country list is sourced
+ * from `lib/countries.ts` and shared across web, desktop, and mobile.
+ */
+export const countryOptions: ReadonlyArray<CountryCodeOption> = COUNTRY_OPTIONS;
 
 const fallbackCountryOption = countryOptions[0]!;
 
@@ -44,7 +28,9 @@ function CountryOption({
   option: CountryCodeOption;
   compact?: boolean;
 }) {
-  const Flag = flagComponents[option.isoCode];
+  const Flag = (flagComponents as Record<string, React.ComponentType | undefined>)[
+    option.isoCode
+  ];
 
   return (
     <div
@@ -64,9 +50,14 @@ function CountryOption({
           alignItems: "center",
           justifyContent: "center",
           flexShrink: 0,
+          background: Flag ? "transparent" : "rgba(123, 121, 255, 0.12)",
+          color: "#3f45a5",
+          fontSize: 10,
+          fontWeight: 700,
         }}
+        aria-hidden="true"
       >
-        <Flag />
+        {Flag ? <Flag /> : <span>{option.isoCode}</span>}
       </span>
       <span style={{ fontWeight: 700 }}>{option.dialCode}</span>
       {!compact ? (
@@ -131,6 +122,10 @@ export default function CountryCodeSelect({
         }
       }}
       isSearchable
+      placeholder="Search country or +code"
+      noOptionsMessage={() => "No country matches your search"}
+      maxMenuHeight={320}
+      menuPlacement="auto"
       classNamePrefix="auth-country-select"
       components={{
         IndicatorSeparator: null,
@@ -185,6 +180,11 @@ export default function CountryCodeSelect({
           zIndex: 30,
           borderRadius: 14,
           overflow: "hidden",
+          minWidth: 280,
+        }),
+        menuList: (base) => ({
+          ...base,
+          maxHeight: 320,
         }),
       }}
     />

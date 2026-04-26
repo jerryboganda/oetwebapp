@@ -23,6 +23,7 @@ export function AuthGuard({ children, requiredRole }: AuthGuardProps) {
     nextPath === '/register' ||
     nextPath === '/register/success' ||
     nextPath === '/terms' ||
+    nextPath === '/privacy' ||
     nextPath === '/forgot-password' ||
     nextPath === '/forgot-password/verify' ||
     nextPath === '/reset-password' ||

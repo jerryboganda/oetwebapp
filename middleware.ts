@@ -121,6 +121,7 @@ const PUBLIC_PATHS = new Set([
   '/register',
   '/register/success',
   '/terms',
+  '/privacy',
   '/forgot-password',
   '/forgot-password/verify',
   '/reset-password',

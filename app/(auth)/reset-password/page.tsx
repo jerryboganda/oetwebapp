@@ -143,7 +143,7 @@ export default function ResetPasswordPage() {
         />
 
         {error || errorCopy[initialError] ? (
-          <p className={styles.fieldHint} style={{ color: '#c23d69' }}>
+          <p className={styles.fieldError} role="alert" aria-live="polite">
             {error ?? errorCopy[initialError]}
           </p>
         ) : null}

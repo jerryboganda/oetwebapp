@@ -79,7 +79,7 @@ export default function ForgotPasswordPage() {
         </div>
 
         {errorMessage ? (
-          <p className={styles.fieldHint} style={{ color: '#c23d69' }}>
+          <p className={styles.fieldError} role="alert" aria-live="polite">
             {errorMessage}
           </p>
         ) : null}

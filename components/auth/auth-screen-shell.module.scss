@@ -283,6 +283,23 @@
   font-size: 0.84rem;
 }
 
+.fieldError {
+  margin: 0.15rem 0 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: #d92d20;
+  font-size: 0.84rem;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+.fieldError svg {
+  flex-shrink: 0;
+  width: 0.95rem;
+  height: 0.95rem;
+}
+
 .notice {
   padding: 0.85rem 1rem;
   border-radius: 1rem;
@@ -1187,13 +1204,38 @@
     grid-template-columns: 1fr;
   }
 
+  /* Keep the 3-step wizard horizontal on mobile, just compact it. */
   .wizardProgress {
-    gap: 0.95rem;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 0.4rem;
+    padding: 0.25rem 0 0.1rem;
   }
 
   .wizardProgress::before,
   .wizardProgressBar {
-    left: 1.2rem;
-    right: 1.2rem;
+    top: 0.95rem;
+    left: 1.6rem;
+    right: 1.6rem;
+    height: 0.22rem;
+  }
+
+  .stepNode {
+    gap: 0.35rem;
+  }
+
+  .stepDot {
+    width: 1.9rem;
+    height: 1.9rem;
+    font-size: 0.85rem;
+  }
+
+  .stepText strong {
+    font-size: 0.78rem;
+    line-height: 1.15;
+  }
+
+  .stepText span {
+    font-size: 0.66rem;
+    line-height: 1.25;
   }
 }
