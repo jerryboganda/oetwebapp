@@ -223,10 +223,10 @@ export function Sidebar({
       layout={!reducedMotion}
       {...sidebarMotion}
     >
-      <div className="border-b border-border/60 px-6 py-5">
+      <div className="border-b border-border/60 px-4 py-3">
         <Link
           href="/"
-          className="pressable flex items-center gap-3 text-navy transition-opacity hover:opacity-90"
+          className="pressable flex items-center justify-center text-navy transition-opacity hover:opacity-90"
           aria-label="OET with Dr Ahmed Hesham home"
           onClick={() => { void triggerImpactHaptic('LIGHT'); }}
         >
@@ -236,7 +236,7 @@ export function Sidebar({
             width={400}
             height={140}
             priority
-            className="h-10 w-auto object-contain"
+            className="h-16 w-auto max-w-full object-contain"
           />
           <span className="sr-only">{workspaceLabel}</span>
         </Link>
