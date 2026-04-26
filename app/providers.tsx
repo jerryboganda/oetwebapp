@@ -25,7 +25,11 @@ export function AppProviders({ children, nonce }: { children: ReactNode; nonce?:
   useServiceWorkerRegistration();
 
   return (
+<<<<<<< Updated upstream
     <ThemeProvider nonce={nonce}>
+=======
+    <ThemeProvider>
+>>>>>>> Stashed changes
       <QueryProvider>
         <AuthProvider>
           <RuntimeLifecycleBridge />
