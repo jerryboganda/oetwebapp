@@ -14,18 +14,25 @@ import { expect, test, type ConsoleMessage, type Response } from '@playwright/te
  * Does NOT submit any data (no essay submit, no quiz submit) — read-only deep
  * traversal to surface 5xx that only fire on inner pages.
  *
+ * AUTH STRATEGY: This spec authenticates via direct API POST (page.request) and
+ * seeds the session into the browser context (httpOnly oet_rt cookie + oet_auth
+ * indicator cookie + localStorage snapshot). This avoids the AuthBruteforce
+ * 10/min rate limit on the /sign-in form, so the spec is safe to run repeatedly
+ * back-to-back with prod-smoke / prod-interaction / prod-exhaustive.
+ *
  * Run: $env:PROD_LEARNER_EMAIL=...; $env:PROD_LEARNER_PASSWORD=...;
  *      npx playwright test tests/e2e/prod-drilldown.spec.ts --project=chromium-unauth --workers=1
  */
 
 const PROD_URL = process.env.PROD_URL ?? 'https://app.oetwithdrhesham.co.uk';
+const API_URL = process.env.PROD_API_URL ?? 'https://api.oetwithdrhesham.co.uk';
 const EMAIL = process.env.PROD_LEARNER_EMAIL;
 const PASSWORD = process.env.PROD_LEARNER_PASSWORD;
 
 test.describe.configure({ mode: 'serial' });
 test.skip(!EMAIL || !PASSWORD, 'Set PROD_LEARNER_EMAIL and PROD_LEARNER_PASSWORD env vars.');
 
-test('prod — module drill-down: open first practice item in each module', async ({ page }) => {
+test('prod — module drill-down: open first practice item in each module', async ({ page, context }) => {
   test.setTimeout(360_000);
   const consoleErrors: string[] = [];
   const apiFailures: string[] = [];
@@ -43,19 +50,55 @@ test('prod — module drill-down: open first practice item in each module', asyn
     if (res.status() >= 500) apiFailures.push(`[${surface}] ${res.status()} ${url}`);
   });
 
-  // Sign in
-  await page.goto(`${PROD_URL}/sign-in`, { waitUntil: 'domcontentloaded' });
-  await page.locator('#email').waitFor({ state: 'visible', timeout: 15_000 });
-  await page.locator('#email').fill(EMAIL!);
-  await page.locator('#password').fill(PASSWORD!);
-  await Promise.all([
-    page.waitForResponse(
-      (r) => /\/v1\/auth\/(sign[-_]?in|login)/i.test(r.url()) && r.request().method() === 'POST',
-      { timeout: 20_000 },
-    ).catch(() => null),
-    page.getByRole('button', { name: /^sign in$/i }).click(),
+  // ---- API-based sign-in (rate-limit safe) ----
+  // 1. POST /v1/auth/sign-in via page.request — Playwright's request context
+  //    shares cookies with the browser context, so the httpOnly oet_rt refresh
+  //    cookie is automatically captured and used for /v1/auth/refresh later.
+  const signInResp = await page.request.post(`${API_URL}/v1/auth/sign-in`, {
+    data: { email: EMAIL!, password: PASSWORD!, rememberMe: true },
+    headers: { 'content-type': 'application/json' },
+  });
+  if (!signInResp.ok()) {
+    const body = await signInResp.text().catch(() => '<no body>');
+    throw new Error(`API sign-in failed: ${signInResp.status()} ${body.slice(0, 200)}`);
+  }
+  const session = await signInResp.json();
+  expect(session.accessToken, 'accessToken in sign-in response').toBeTruthy();
+
+  // 2. Seed app-domain cookies + localStorage so the SPA boots authenticated.
+  const appHost = new URL(PROD_URL).host;
+  await context.addCookies([
+    {
+      name: 'oet_auth',
+      value: '1',
+      domain: appHost,
+      path: '/',
+      httpOnly: false,
+      secure: PROD_URL.startsWith('https'),
+      sameSite: 'Lax',
+    },
   ]);
-  await page.waitForURL((url) => !url.pathname.startsWith('/sign-in'), { timeout: 30_000 });
+
+  const sessionSnapshot = {
+    accessTokenExpiresAt: session.accessTokenExpiresAt,
+    refreshTokenExpiresAt: session.refreshTokenExpiresAt,
+    currentUser: session.currentUser,
+  };
+  await context.addInitScript((snapshotJson: string) => {
+    try {
+      window.localStorage.setItem('oet.auth.session.local', snapshotJson);
+    } catch {
+      // ignore
+    }
+  }, JSON.stringify(sessionSnapshot));
+
+  // 3. Land on dashboard. The auth provider will call /v1/auth/refresh using
+  //    the oet_rt cookie to obtain a fresh access token, and the app should
+  //    NOT bounce us back to /sign-in.
+  surface = 'dashboard';
+  await page.goto(`${PROD_URL}/dashboard`, { waitUntil: 'domcontentloaded', timeout: 30_000 });
+  await page.waitForLoadState('networkidle', { timeout: 15_000 }).catch(() => {});
+  await expect(page).not.toHaveURL(/\/sign-in/);
 
   // Helper — click first link/card matching href prefix in current page
   const drillInto = async (route: string, hrefPrefix: RegExp, label: string) => {

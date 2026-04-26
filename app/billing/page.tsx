@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/form-controls';
 import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import { getMicroHover, getMicroTap, prefersReducedMotion } from '@/lib/motion';
 import {
     createBillingCheckoutSession,
     createWalletTopUp,
@@ -28,7 +29,7 @@ import {
     Sparkles,
     Wallet, X
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, useReducedMotion } from 'motion/react';
 import { useSearchParams } from 'next/navigation';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 
@@ -107,6 +108,9 @@ const TOP_UP_TIERS = [
 ] as const;
 
 export default function BillingPage() {
+  const reducedMotion = prefersReducedMotion(useReducedMotion());
+  const microHover = getMicroHover(reducedMotion);
+  const microTap = getMicroTap(reducedMotion);
   const [data, setData] = useState<BillingData | null>(null);
   const [preview, setPreview] = useState<BillingChangePreview | null>(null);
   const [previewPlanId, setPreviewPlanId] = useState<string | null>(null);
@@ -390,7 +394,7 @@ export default function BillingPage() {
                 <p className="text-xs font-black uppercase tracking-widest text-muted">Payment method</p>
                 <div className="flex gap-2">
                   {(['stripe', 'paypal'] as const).map((gw) => (
-                    <button key={gw} type="button" onClick={() => setSelectedGateway(gw)} className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${selectedGateway === gw ? 'bg-success text-white shadow-sm' : 'border border-border bg-background-light text-navy hover:bg-surface'}`}>
+                    <button key={gw} type="button" onClick={() => setSelectedGateway(gw)} className={`rounded-xl px-4 py-2 text-xs font-bold transition-all ${selectedGateway === gw ? 'bg-emerald-700 text-white shadow-sm' : 'border border-border bg-background-light text-navy hover:bg-surface'}`}>
                       {gw === 'stripe' ? 'Stripe' : 'PayPal'}
                     </button>
                   ))}
@@ -398,11 +402,11 @@ export default function BillingPage() {
               </div>
               <div className="mt-6 grid grid-cols-2 gap-3">
                 {TOP_UP_TIERS.map((tier) => (
-                  <motion.button key={tier.amount} type="button" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} disabled={busyKey === `topup:${tier.amount}`} onClick={() => handleTopUp(tier.amount)} className={`relative rounded-2xl border p-4 text-left transition-all ${tier.popular ? 'border-emerald-300 bg-surface shadow-md' : 'border-border bg-background-light hover:border-emerald-200 hover:shadow-sm'}`}>
-                    {tier.popular ? <span className="absolute -top-2 right-3 rounded-full bg-success px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-white">Popular</span> : null}
+                  <motion.button key={tier.amount} type="button" whileHover={microHover} whileTap={microTap} disabled={busyKey === `topup:${tier.amount}`} onClick={() => handleTopUp(tier.amount)} className={`relative rounded-2xl border p-4 text-left transition-all ${tier.popular ? 'border-emerald-300 bg-surface shadow-md' : 'border-border bg-background-light hover:border-emerald-200 hover:shadow-sm'}`}>
+                    {tier.popular ? <span className="absolute -top-2 right-3 rounded-full bg-emerald-700 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-white">Popular</span> : null}
                     <p className="text-lg font-black text-navy">{tier.label}</p>
-                    <p className="text-xs text-muted">{tier.credits} credits{tier.bonus > 0 ? <span className="ml-1 font-bold text-success">+{tier.bonus} bonus</span> : null}</p>
-                    {busyKey === `topup:${tier.amount}` ? <div className="mt-2 text-xs font-bold text-success">Processing...</div> : null}
+                    <p className="text-xs text-muted">{tier.credits} credits{tier.bonus > 0 ? <span className="ml-1 font-bold text-emerald-700">+{tier.bonus} bonus</span> : null}</p>
+                    {busyKey === `topup:${tier.amount}` ? <div className="mt-2 text-xs font-bold text-emerald-700">Processing...</div> : null}
                   </motion.button>
                 ))}
               </div>

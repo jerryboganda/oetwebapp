@@ -253,18 +253,22 @@ export function Sidebar({
         {(visibleStreak !== null || visibleLevel !== null) && (
           <div className="flex items-center gap-2 mb-3 px-1">
             {visibleStreak !== null && (
+              // a11y: bg-orange-700 + white bold = 5.34:1 (>= WCAG AA 4.5:1).
+              // bg-orange-500 (2.88:1) and bg-orange-600 (3.69:1) both fail AA.
               <Link
                 href="/achievements"
-                className="flex items-center gap-1 rounded-full bg-orange-500 px-2.5 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-orange-600 dark:bg-orange-600 dark:text-white dark:hover:bg-orange-500"
+                className="flex items-center gap-1 rounded-full bg-orange-700 px-2.5 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-orange-800 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-600"
               >
                 <Flame className="w-3.5 h-3.5" />
                 {visibleStreak}d
               </Link>
             )}
             {visibleLevel !== null && (
+              // a11y: bg-amber-700 + white bold = 5.14:1 (>= WCAG AA 4.5:1).
+              // The semantic `bg-warning` token (amber-600) only gives 3.18:1.
               <Link
                 href="/achievements"
-                className="flex items-center gap-1 rounded-full bg-warning px-2.5 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-warning/90 dark:bg-warning dark:text-white dark:hover:bg-warning/90"
+                className="flex items-center gap-1 rounded-full bg-amber-700 px-2.5 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-amber-800 dark:bg-amber-700 dark:text-white dark:hover:bg-amber-600"
               >
                 <Zap className="w-3.5 h-3.5" />
                 Lv.{visibleLevel}
