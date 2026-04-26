@@ -94,7 +94,7 @@ public static class DatabaseBootstrapper
         var protector = dpProvider.CreateProtector("AiProvider.PlatformKey.v1");
         var encrypted = protector.Protect(options.ApiKey);
         var model = string.IsNullOrWhiteSpace(options.DefaultModel)
-            ? "anthropic-claude-opus-4.7" : options.DefaultModel;
+            ? "glm-5" : options.DefaultModel;
         var baseUrl = string.IsNullOrWhiteSpace(options.BaseUrl)
             ? "https://inference.do-ai.run/v1" : options.BaseUrl;
 
@@ -109,7 +109,7 @@ public static class DatabaseBootstrapper
             {
                 Id = Guid.NewGuid().ToString("N"),
                 Code = code,
-                Name = "DigitalOcean Serverless Inference (Claude Opus 4.7)",
+                Name = "DigitalOcean Serverless Inference (GLM-5)",
                 Dialect = AiProviderDialect.OpenAiCompatible,
                 BaseUrl = baseUrl,
                 EncryptedApiKey = encrypted,

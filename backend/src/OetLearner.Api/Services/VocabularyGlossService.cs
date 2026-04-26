@@ -82,7 +82,7 @@ public sealed class VocabularyGlossService(
             {
                 Prompt = prompt,
                 UserInput = userMessage,
-                Model = "anthropic-claude-opus-4.7",
+                Model = string.Empty,
                 Temperature = 0.2,
                 FeatureCode = AiFeatureCodes.VocabularyGloss,
                 UserId = userId,

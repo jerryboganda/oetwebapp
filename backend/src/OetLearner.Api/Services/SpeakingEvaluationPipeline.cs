@@ -83,7 +83,7 @@ public sealed class SpeakingEvaluationPipeline(
             {
                 Prompt = prompt,
                 UserInput = BuildEvaluationUserInput(content, attempt, transcript, findings),
-                Model = "anthropic-claude-opus-4.7",
+                Model = string.Empty,
                 Temperature = 0.1,
                 MaxTokens = 4096,
                 FeatureCode = AiFeatureCodes.SpeakingGrade,
