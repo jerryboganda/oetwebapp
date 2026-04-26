@@ -13,7 +13,7 @@ import { Select } from './form-controls';
  * Replaces the inline pattern previously duplicated in app/admin/users/page.tsx,
  * app/admin/audit-logs/page.tsx, and 9 other surfaces. Visual + a11y semantics
  * match those originals exactly:
- * - Left side: "Showing {start}-{end} of {total} {label}".
+ * - Left side: "Showing {start}–{end} of {total} {label}".
  * - Right side: page-size <Select> + Previous / "Page X of Y" / Next.
  *
  * Behavior contract:
@@ -79,6 +79,8 @@ export function Pagination({
   const pageStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
   const pageEnd = total === 0 ? 0 : Math.min(total, page * pageSize);
   const plural = itemLabelPlural ?? `${itemLabel}s`;
+  const smallestPageSize = pageSizeOptions.length > 0 ? Math.min(...pageSizeOptions) : pageSize;
+  const showSizeSelector = total > smallestPageSize;
 
   if (total === 0 && !showWhenEmpty) {
     return null;
@@ -101,22 +103,24 @@ export function Pagination({
       <div className="text-sm text-muted">
         {summary ?? (
           <>
-            Showing {pageStart}-{pageEnd} of {total} {total === 1 ? itemLabel : plural}
+            Showing {pageStart}–{pageEnd} of {total} {total === 1 ? itemLabel : plural}
           </>
         )}
       </div>
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
-        <div className="min-w-36">
-          <Select
-            label="Rows per page"
-            value={String(pageSize)}
-            onChange={(event) => handlePageSizeChange(Number(event.target.value))}
-            options={pageSizeOptions.map((size) => ({
-              value: String(size),
-              label: String(size),
-            }))}
-          />
-        </div>
+        {showSizeSelector ? (
+          <div className="min-w-36">
+            <Select
+              label="Rows per page"
+              value={String(pageSize)}
+              onChange={(event) => handlePageSizeChange(Number(event.target.value))}
+              options={pageSizeOptions.map((size) => ({
+                value: String(size),
+                label: String(size),
+              }))}
+            />
+          </div>
+        ) : null}
         <div className="flex items-center gap-2 pt-5 md:pt-0">
           <Button
             variant="outline"
