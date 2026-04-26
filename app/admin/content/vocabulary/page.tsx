@@ -13,6 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { EmptyState } from '@/components/ui/empty-error';
+import { Pagination } from '@/components/ui/pagination';
 import {
   fetchAdminVocabularyItems,
   deleteAdminVocabularyItem,
@@ -37,7 +38,6 @@ type ListResponse = {
   items: VocabRow[];
 };
 
-const PAGE_SIZE = 25;
 
 export default function AdminVocabularyPage() {
   const router = useRouter();
@@ -45,6 +45,7 @@ export default function AdminVocabularyPage() {
   const [rows, setRows] = useState<VocabRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [search, setSearch] = useState('');
   const [category, setCategory] = useState<string>('');
   const [profession, setProfession] = useState<string>('');
@@ -72,7 +73,7 @@ export default function AdminVocabularyPage() {
           status: status || undefined,
           search: search || undefined,
           page,
-          pageSize: PAGE_SIZE,
+          pageSize,
         });
         if (cancelled) return;
         const data = res as ListResponse;
@@ -85,7 +86,7 @@ export default function AdminVocabularyPage() {
       }
     }, 300);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [search, category, profession, status, page]);
+  }, [search, category, profession, status, page, pageSize]);
 
   async function handleDelete(id: string, term: string) {
     if (!confirm(`Delete "${term}"? Referenced terms will be archived instead.`)) return;
@@ -137,7 +138,6 @@ export default function AdminVocabularyPage() {
     },
   ], []);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
   const pageStatus = loading ? 'loading' : rows.length === 0 ? 'empty' : 'success';
 
   return (
@@ -210,14 +210,15 @@ export default function AdminVocabularyPage() {
 
           <AsyncStateWrapper status={pageStatus}>
             <DataTable columns={columns} data={rows} keyExtractor={(r) => r.id} />
-            <div className="mt-4 flex items-center justify-between text-sm text-muted">
-              <div>{total.toLocaleString()} term{total === 1 ? '' : 's'}</div>
-              <div className="flex items-center gap-2">
-                <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>Prev</Button>
-                <span>{page} / {totalPages}</span>
-                <Button variant="secondary" size="sm" disabled={page >= totalPages} onClick={() => setPage(p => Math.min(totalPages, p + 1))}>Next</Button>
-              </div>
-            </div>
+            <Pagination
+              page={page}
+              pageSize={pageSize}
+              total={total}
+              onPageChange={setPage}
+              onPageSizeChange={setPageSize}
+              itemLabel="term"
+              itemLabelPlural="terms"
+            />
           </AsyncStateWrapper>
 
           {pageStatus === 'empty' && (
