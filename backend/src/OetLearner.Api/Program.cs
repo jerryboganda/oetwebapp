@@ -720,6 +720,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiUsageRecorder,
     OetLearner.Api.Services.Rulebook.AiUsageRecorder>();
 builder.Services.AddMemoryCache();
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 
 // Response compression — large JSON payloads (rulebooks, leaderboards, mock
 // reports) compress dramatically. Brotli + Gzip cover both modern and
@@ -759,6 +760,8 @@ builder.Services.AddOutputCache(o =>
 });
 
 =======
+=======
+>>>>>>> Stashed changes
 builder.Services.AddOutputCache(options =>
 {
     options.AddBasePolicy(b => b.Expire(TimeSpan.FromSeconds(30)));
@@ -771,6 +774,9 @@ builder.Services.AddOutputCache(options =>
         .SetVaryByQuery("*")
         .Tag("rulebook"));
 });
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 builder.Services.AddScoped<OetLearner.Api.Services.AiManagement.IAiQuotaService,
     OetLearner.Api.Services.AiManagement.AiQuotaService>();

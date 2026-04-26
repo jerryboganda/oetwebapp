@@ -2,11 +2,24 @@
 
 import { useEffect, useState } from 'react';
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 import { BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, LineChart, Line } from '@/components/charts/dynamic-recharts';
 =======
 import dynamic from 'next/dynamic';
 >>>>>>> Stashed changes
+=======
+import dynamic from 'next/dynamic';
+>>>>>>> Stashed changes
 import { Shield, Target, TrendingUp, BarChart3 } from 'lucide-react';
+
+const ScoringDistributionChart = dynamic(
+  () => import('./_charts').then((m) => m.ScoringDistributionChart),
+  { ssr: false, loading: () => <div className="h-[280px] w-full animate-pulse rounded bg-slate-100" /> },
+);
+const CalibrationTrendChart = dynamic(
+  () => import('./_charts').then((m) => m.CalibrationTrendChart),
+  { ssr: false, loading: () => <div className="h-[220px] w-full animate-pulse rounded bg-slate-100" /> },
+);
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select } from '@/components/ui/form-controls';

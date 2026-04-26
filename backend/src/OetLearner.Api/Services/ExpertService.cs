@@ -3455,6 +3455,7 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
 
         // AI-Human agreement: compare expert scores to AI evaluation scores
         var aiHumanDifferences = new List<double>();
+<<<<<<< Updated upstream
         var draftRrIds = drafts.Select(d => d.ReviewRequestId).Where(id => id != null).Distinct().ToList();
         var rrLookup = draftRrIds.Count == 0
             ? new Dictionary<string, ReviewRequest>()
@@ -3464,6 +3465,17 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         foreach (var draft in drafts)
         {
             if (draft.ReviewRequestId == null || !rrLookup.TryGetValue(draft.ReviewRequestId, out var rr)) continue;
+=======
+        // Batch-load ReviewRequests once to avoid N+1.
+        var draftRRIds = drafts.Select(d => d.ReviewRequestId).Distinct().ToList();
+        var rrsById = await db.ReviewRequests
+            .AsNoTracking()
+            .Where(r => draftRRIds.Contains(r.Id))
+            .ToDictionaryAsync(r => r.Id, ct);
+        foreach (var draft in drafts)
+        {
+            if (!rrsById.TryGetValue(draft.ReviewRequestId, out var rr)) continue;
+>>>>>>> Stashed changes
 
             var eval = evaluations.FirstOrDefault(e => e.AttemptId == rr.AttemptId);
             if (eval == null) continue;
@@ -3546,6 +3558,7 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
 
     public async Task<object> GetQueueWithPriorityReasonsAsync(string expertId, CancellationToken ct)
     {
+<<<<<<< Updated upstream
         var assignments = await db.ExpertReviewAssignments.AsNoTracking()
             .Where(a => a.AssignedReviewerId == expertId && a.ClaimState == ExpertAssignmentState.Assigned)
             .ToListAsync(ct);
@@ -3580,22 +3593,67 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
             .GroupBy(r => r.AttemptId)
             .Select(g => new { AttemptId = g.Key, Earliest = g.Min(r => r.CreatedAt) })
             .ToDictionaryAsync(x => x.AttemptId, x => x.Earliest, ct);
+=======
+        var assignments = await db.ExpertReviewAssignments
+            .AsNoTracking()
+            .Where(a => a.AssignedReviewerId == expertId && a.ClaimState == ExpertAssignmentState.Assigned)
+            .ToListAsync(ct);
+
+        // Batch-load related entities to avoid N+1 queries over the assignment list.
+        var reviewIds = assignments.Select(a => a.ReviewRequestId).Distinct().ToList();
+        var reviewsById = await db.ReviewRequests
+            .AsNoTracking()
+            .Where(r => reviewIds.Contains(r.Id))
+            .ToDictionaryAsync(r => r.Id, ct);
+        var attemptIds = reviewsById.Values.Select(r => r.AttemptId).Distinct().ToList();
+        var attemptsById = await db.Attempts
+            .AsNoTracking()
+            .Where(a => attemptIds.Contains(a.Id))
+            .ToDictionaryAsync(a => a.Id, ct);
+        var userIds = attemptsById.Values.Select(a => a.UserId).Distinct().ToList();
+        var goalsByUser = await db.Goals
+            .AsNoTracking()
+            .Where(g => userIds.Contains(g.UserId))
+            .GroupBy(g => g.UserId)
+            .Select(g => g.First())
+            .ToDictionaryAsync(g => g.UserId, ct);
+        // Resubmission lookup: for each attemptId in scope, count earlier reviews.
+        var priorReviewCountByAttempt = await db.ReviewRequests
+            .AsNoTracking()
+            .Where(r => attemptIds.Contains(r.AttemptId))
+            .GroupBy(r => r.AttemptId)
+            .Select(g => new { AttemptId = g.Key, Rows = g.Select(x => x.CreatedAt).ToList() })
+            .ToDictionaryAsync(g => g.AttemptId, g => g.Rows, ct);
+>>>>>>> Stashed changes
 
         var items = new List<object>();
         foreach (var assignment in assignments)
         {
+<<<<<<< Updated upstream
             if (!reviewLookup.TryGetValue(assignment.ReviewRequestId, out var review)) continue;
             if (!attemptLookup.TryGetValue(review.AttemptId, out var attempt)) continue;
 
             goalLookup.TryGetValue(attempt.UserId, out var learnerGoal);
+=======
+            if (!reviewsById.TryGetValue(assignment.ReviewRequestId, out var review)) continue;
+            if (!attemptsById.TryGetValue(review.AttemptId, out var attempt)) continue;
+
+            goalsByUser.TryGetValue(attempt.UserId, out var learnerGoal);
+>>>>>>> Stashed changes
             DateOnly? examDate = learnerGoal?.TargetExamDate;
 
             var daysToExam = examDate.HasValue
                 ? (examDate.Value.ToDateTime(TimeOnly.MinValue) - DateTime.UtcNow).Days
                 : (int?)null;
 
+<<<<<<< Updated upstream
             var isResubmission = earliestPerAttempt.TryGetValue(review.AttemptId, out var earliest)
                 && earliest < review.CreatedAt;
+=======
+            // Re-submission when another review for the same attempt was created earlier.
+            var isResubmission = priorReviewCountByAttempt.TryGetValue(review.AttemptId, out var createdAts)
+                && createdAts.Any(ts => ts < review.CreatedAt);
+>>>>>>> Stashed changes
 
             // SLA time remaining
             var hoursWaiting = (DateTimeOffset.UtcNow - review.CreatedAt).TotalHours;

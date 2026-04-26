@@ -1,0 +1,16 @@
+
+[1m[46m RUN [49m[22m [36mv4.1.2 [39m[90mC:/Users/Dr Faisal Maqsood PC/Desktop/New OET Web App[39m
+
+ [32m✓[39m components/ui/__tests__/card-link.test.tsx[2m > [22mCardLink[2m > [22mrenders a semantic link wrapper for card-like navigation[32m 256[2mms[22m[39m
+ [32m✓[39m components/ui/__tests__/progress.test.tsx[2m > [22mProgressBar[2m > [22muses ariaLabel when present without forcing duplicate visible text[32m 254[2mms[22m[39m
+ [32m✓[39m components/ui/__tests__/progress.test.tsx[2m > [22mProgressBar[2m > [22mfalls back to the visible label for the accessible name[32m 30[2mms[22m[39m
+ [32m✓[39m components/ui/__tests__/data-table.test.tsx[2m > [22mDataTable[2m > [22mrenders the mobile card fallback alongside the desktop table markup[32m 296[2mms[22m[39m
+ [32m✓[39m components/ui/__tests__/data-table.test.tsx[2m > [22mDataTable[2m > [22mrenders desktop table content when no custom mobile card is provided[32m 34[2mms[22m[39m
+ [32m✓[39m components/ui/__tests__/modal.test.tsx[2m > [22mModal[2m > [22mrestores focus to the trigger after the dialog closes[33m 444[2mms[22m[39m
+ [32m✓[39m components/ui/__tests__/modal.test.tsx[2m > [22mModal[2m > [22mrestores focus to the trigger after the drawer closes[32m 171[2mms[22m[39m
+
+[2m Test Files [22m [1m[32m4 passed[39m[22m[90m (4)[39m
+[2m      Tests [22m [1m[32m7 passed[39m[22m[90m (7)[39m
+[2m   Start at [22m 22:39:59
+[2m   Duration [22m 3.06s[2m (transform 449ms, setup 884ms, import 1.33s, tests 1.50s, environment 5.83s)[22m
+

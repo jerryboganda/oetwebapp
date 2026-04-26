@@ -5,6 +5,7 @@ import dynamic from 'next/dynamic';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import {
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
   LineChart,
   Line,
   AreaChart,
@@ -21,6 +22,8 @@ import {
 import {
 =======
 >>>>>>> Stashed changes
+=======
+>>>>>>> Stashed changes
   TrendingUp,
   Activity,
   CheckCircle2,
@@ -32,12 +35,19 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { fetchTrendData, fetchCompletionData, fetchSubmissionVolume, fetchProgressEvidenceSummary } from '@/lib/api';
 import type { ProgressEvidenceSummary, TrendPoint } from '@/lib/mock-data';
 import { analytics } from '@/lib/analytics';
+
+const chartLoading = <div className="h-full w-full animate-pulse rounded bg-slate-100" />;
+const TrendChart = dynamic(() => import('./_charts').then((m) => m.TrendChart), { ssr: false, loading: () => chartLoading });
+const CriterionChart = dynamic(() => import('./_charts').then((m) => m.CriterionChart), { ssr: false, loading: () => chartLoading });
+const CompletionChart = dynamic(() => import('./_charts').then((m) => m.CompletionChart), { ssr: false, loading: () => chartLoading });
+const VolumeChart = dynamic(() => import('./_charts').then((m) => m.VolumeChart), { ssr: false, loading: () => chartLoading });
 import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 
 type CompletionPoint = { day: string; completed: number };
 type VolumePoint = { week: string; submissions: number };
 
+<<<<<<< Updated upstream
 const chartSkeleton = <Skeleton className="h-full w-full rounded-2xl" />;
 
 const TrendChart = dynamic(() => import('./_charts').then(m => m.TrendChart), {
@@ -57,6 +67,8 @@ const VolumeChart = dynamic(() => import('./_charts').then(m => m.VolumeChart), 
   loading: () => chartSkeleton,
 });
 
+=======
+>>>>>>> Stashed changes
 export default function ProgressDashboard() {
   const [criterionFilter, setCriterionFilter] = useState('Writing');
   const [trendData, setTrendData] = useState<TrendPoint[]>([]);
@@ -164,7 +176,13 @@ export default function ProgressDashboard() {
                 </div>
               </div>
               <div className="h-[240px] w-full sm:h-[280px] lg:h-[300px]" role="img" aria-label="Sub-test performance trend chart showing reading, listening, writing, and speaking scores over time">
+<<<<<<< Updated upstream
                 {hasTrendData ? <TrendChart data={trendData} /> : trendEmptyState}
+=======
+                {hasTrendData ? (
+                  <TrendChart data={trendData} />
+                ) : trendEmptyState}
+>>>>>>> Stashed changes
               </div>
             </MotionSection>
 
@@ -202,7 +220,13 @@ export default function ProgressDashboard() {
                 </div>
               </div>
               <div className="h-[240px] w-full sm:h-[280px] lg:h-[300px]" role="img" aria-label={`Criterion trend chart for ${criterionFilter} skills`}>
+<<<<<<< Updated upstream
                 {hasTrendData ? <CriterionChart data={trendData} criterionFilter={criterionFilter} /> : trendEmptyState}
+=======
+                {hasTrendData ? (
+                  <CriterionChart data={trendData} criterionFilter={criterionFilter} />
+                ) : trendEmptyState}
+>>>>>>> Stashed changes
               </div>
             </MotionSection>
 

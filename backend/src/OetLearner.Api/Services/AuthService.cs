@@ -509,8 +509,11 @@ public sealed class AuthService(
         account.UpdatedAt = now;
 
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
         if (db.Database.IsInMemory())
 =======
+=======
+>>>>>>> Stashed changes
         memoryCache.Remove($"jwt:validate:{account.Id}");
 
         var activeRefreshTokens = await db.RefreshTokenRecords

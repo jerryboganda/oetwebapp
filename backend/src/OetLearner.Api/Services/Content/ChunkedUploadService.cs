@@ -191,9 +191,15 @@ public sealed class ChunkedUploadService(
         {
             await using var output = await storage.OpenWriteAsync(assembledStagingKey, ct);
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
             // Open every chunk stream up-front via the async API so we never
             // block a thread-pool thread on disk I/O during merge.
             var partStreams = new List<Stream>(partKeys.Count);
+=======
+            var partStreams = new List<Stream>(partKeys.Count);
+            foreach (var k in partKeys)
+                partStreams.Add(await storage.OpenReadAsync(k, ct));
+>>>>>>> Stashed changes
 =======
             var partStreams = new List<Stream>(partKeys.Count);
             foreach (var k in partKeys)

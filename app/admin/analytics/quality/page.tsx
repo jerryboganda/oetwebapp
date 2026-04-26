@@ -6,9 +6,22 @@ import { AlertTriangle, BarChart3, CheckCircle2, Clock, Download, FileText, User
 import { Button } from '@/components/ui/button';
 import { exportToCsv, formatDateForExport } from '@/lib/csv-export';
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from '@/components/charts/dynamic-recharts';
 =======
 import { Skeleton } from '@/components/ui/skeleton';
+>>>>>>> Stashed changes
+=======
+import dynamic from 'next/dynamic';
+
+const RateTrendChart = dynamic(
+  () => import('./_charts').then((m) => m.RateTrendChart),
+  { ssr: false, loading: () => <div className="h-full w-full animate-pulse rounded bg-slate-100" /> },
+);
+const OperationsTrendChart = dynamic(
+  () => import('./_charts').then((m) => m.OperationsTrendChart),
+  { ssr: false, loading: () => <div className="h-full w-full animate-pulse rounded bg-slate-100" /> },
+);
 >>>>>>> Stashed changes
 import { AdminRouteFreshnessBadge, AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { MotionSection } from '@/components/ui/motion-primitives';

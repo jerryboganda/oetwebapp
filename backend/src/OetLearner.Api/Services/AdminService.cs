@@ -19,7 +19,11 @@ public partial class AdminService(
     TimeProvider timeProvider,
     NotificationService notifications,
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
     OetLearner.Api.Services.Caching.IReferenceDataCache referenceCache)
+=======
+    IMemoryCache memoryCache)
+>>>>>>> Stashed changes
 =======
     IMemoryCache memoryCache)
 >>>>>>> Stashed changes
@@ -4858,10 +4862,31 @@ public partial class AdminService(
         if (!string.IsNullOrEmpty(subtestCode)) query = query.Where(c => c.SubtestCode == subtestCode);
 
         var items = await query.Take(top > 0 ? top : 50).ToListAsync(ct);
+<<<<<<< Updated upstream
         if (items.Count == 0)
         {
             return new { subtestFilter = subtestCode, items = new List<object>(), generatedAt = DateTimeOffset.UtcNow };
         }
+=======
+        var contentIds = items.Select(i => i.Id).ToList();
+
+        // Batch-load all attempts + evaluations in two queries instead of 2N.
+        var attemptsByContent = (await db.Attempts
+                .AsNoTracking()
+                .Where(a => contentIds.Contains(a.ContentId))
+                .ToListAsync(ct))
+            .GroupBy(a => a.ContentId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        var allAttemptIds = attemptsByContent.Values.SelectMany(list => list.Select(a => a.Id)).ToList();
+        var evalsByAttempt = (await db.Evaluations
+                .AsNoTracking()
+                .Where(e => allAttemptIds.Contains(e.AttemptId))
+                .ToListAsync(ct))
+            .GroupBy(e => e.AttemptId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        var results = new List<object>();
+>>>>>>> Stashed changes
 
         var contentIds = items.Select(i => i.Id).ToList();
 
@@ -4887,9 +4912,17 @@ public partial class AdminService(
         var results = new List<object>();
         foreach (var item in items)
         {
+<<<<<<< Updated upstream
             var attempts = attemptsByContent[item.Id].ToList();
             var completedCount = attempts.Count(a => a.State == AttemptState.Completed);
             var evals = evalsByContent[item.Id].ToList();
+=======
+            var attempts = attemptsByContent.TryGetValue(item.Id, out var att) ? att : [];
+            var completedCount = attempts.Count(a => a.State == AttemptState.Completed);
+            var evals = attempts
+                .SelectMany(a => evalsByAttempt.TryGetValue(a.Id, out var ev) ? ev : new List<Evaluation>())
+                .ToList();
+>>>>>>> Stashed changes
 
             var scores = evals
                 .Select(e => { var p = e.ScoreRange?.Split('-'); return p?.Length == 2 && int.TryParse(p[0], out var lo) ? lo : (int?)null; })
@@ -4932,6 +4965,7 @@ public partial class AdminService(
     {
         var since = DateTimeOffset.UtcNow.AddDays(-days);
         var experts = await db.ExpertUsers.AsNoTracking().ToListAsync(ct);
+<<<<<<< Updated upstream
         if (experts.Count == 0)
         {
             return new
@@ -4941,6 +4975,42 @@ public partial class AdminService(
                 summary = new { totalExperts = 0, activeExperts = 0, totalReviewsCompleted = 0, averageReviewsPerExpertPerDay = 0.0 }
             };
         }
+=======
+        var expertIds = experts.Select(e => e.Id).ToList();
+
+        // Batch-load assignments + drafts for all experts in two queries (was 2 per expert).
+        var assignmentsByExpert = (await db.ExpertReviewAssignments
+                .AsNoTracking()
+                .Where(a => expertIds.Contains(a.AssignedReviewerId) && a.AssignedAt >= since)
+                .ToListAsync(ct))
+            .GroupBy(a => a.AssignedReviewerId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+        var draftsByExpert = (await db.ExpertReviewDrafts
+                .AsNoTracking()
+                .Where(d => expertIds.Contains(d.ReviewerId) && d.DraftSavedAt >= since)
+                .ToListAsync(ct))
+            .GroupBy(d => d.ReviewerId)
+            .ToDictionary(g => g.Key, g => g.ToList());
+
+        // Batch-load ReviewRequests + Evaluations once across all sampled drafts.
+        var sampledDraftRRIds = draftsByExpert.Values
+            .SelectMany(list => list.Take(20).Select(d => d.ReviewRequestId))
+            .Distinct()
+            .ToList();
+        var reviewRequestsById = await db.ReviewRequests
+            .AsNoTracking()
+            .Where(r => sampledDraftRRIds.Contains(r.Id))
+            .ToDictionaryAsync(r => r.Id, ct);
+        var sampledAttemptIds = reviewRequestsById.Values.Select(r => r.AttemptId).Distinct().ToList();
+        var evaluationsByAttempt = await db.Evaluations
+            .AsNoTracking()
+            .Where(e => sampledAttemptIds.Contains(e.AttemptId))
+            .GroupBy(e => e.AttemptId)
+            .Select(g => g.First())
+            .ToDictionaryAsync(e => e.AttemptId, ct);
+
+        var results = new List<object>();
+>>>>>>> Stashed changes
 
         var expertIds = experts.Select(e => e.Id).ToList();
 
@@ -4979,16 +5049,36 @@ public partial class AdminService(
         var results = new List<object>();
         foreach (var expert in experts)
         {
+<<<<<<< Updated upstream
             var expertAssignments = assignmentsByExpert[expert.Id].ToList();
             var expertDrafts = draftsByExpert[expert.Id].ToList();
             var completedCount = expertDrafts.Count;
 
             // Quality alignment vs AI — sampled to 20 drafts (preserved semantics).
+=======
+            var assignments = assignmentsByExpert.TryGetValue(expert.Id, out var asg) ? asg : [];
+            var drafts = draftsByExpert.TryGetValue(expert.Id, out var drf) ? drf : [];
+
+            var completedCount = drafts.Count;
+var draftTimeEstimates = drafts.Select(d =>
+                {
+                    // Estimate time from draft save patterns — no explicit TimeSpentSeconds field
+                    return 15.0; // Default estimate in minutes per review
+                }).ToList();
+                var avgReviewMinutes = draftTimeEstimates.Count > 0 ? Math.Round(draftTimeEstimates.Average(), 1) : (double?)null;
+
+            // Quality alignment — compare with AI (uses pre-batched lookups)
+>>>>>>> Stashed changes
             var aiDiffs = new List<double>();
             foreach (var draft in expertDrafts.Take(20))
             {
+<<<<<<< Updated upstream
                 if (!requestLookup.TryGetValue(draft.ReviewRequestId, out var request)) continue;
                 if (!evalByAttempt.TryGetValue(request.AttemptId, out var aiEval)) continue;
+=======
+                if (!reviewRequestsById.TryGetValue(draft.ReviewRequestId, out var request)) continue;
+                if (!evaluationsByAttempt.TryGetValue(request.AttemptId, out var aiEval)) continue;
+>>>>>>> Stashed changes
 
                 try
                 {

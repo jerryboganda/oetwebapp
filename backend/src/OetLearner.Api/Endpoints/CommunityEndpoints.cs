@@ -93,6 +93,9 @@ public static class CommunityEndpoints
             var total = await db.ForumReplies.AsNoTracking().CountAsync(r => r.ThreadId == threadId, ct);
 =======
             var total = await db.ForumReplies.CountAsync(r => r.ThreadId == threadId, ct);
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
             var replies = await db.ForumReplies.AsNoTracking().Where(r => r.ThreadId == threadId)
                 .OrderBy(r => r.CreatedAt).Skip((pg - 1) * ps).Take(ps).ToListAsync(ct);

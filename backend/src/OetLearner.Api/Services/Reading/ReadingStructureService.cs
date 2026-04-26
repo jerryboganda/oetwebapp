@@ -355,6 +355,7 @@ public sealed class ReadingStructureService : IReadingStructureService
             .Where(p => p.PaperId == paperId)
             .Include(p => p.Texts.OrderBy(t => t.DisplayOrder))
             .Include(p => p.Questions.OrderBy(q => q.DisplayOrder))
+            .AsSplitQuery()
             .OrderBy(p => p.PartCode)
             .ToListAsync(ct);
         return new ReadingStructure(paperId, parts

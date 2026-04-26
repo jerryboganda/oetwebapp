@@ -2,11 +2,20 @@
 
 import { useEffect, useState } from 'react';
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
 import { BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from '@/components/charts/dynamic-recharts';
 =======
 import dynamic from 'next/dynamic';
 >>>>>>> Stashed changes
+=======
+import dynamic from 'next/dynamic';
+>>>>>>> Stashed changes
 import { AlertTriangle, CheckCircle, Clock, Sparkles, TrendingUp } from 'lucide-react';
+
+const CompletionBarChart = dynamic(
+  () => import('./_charts').then((m) => m.CompletionBarChart),
+  { ssr: false, loading: () => <div className="h-full w-full animate-pulse rounded bg-slate-100" /> },
+);
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select } from '@/components/ui/form-controls';

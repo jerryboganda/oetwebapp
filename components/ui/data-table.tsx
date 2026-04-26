@@ -5,6 +5,9 @@ import { useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as Re
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual';
 =======
 import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
 
 import { cn } from '@/lib/utils';
@@ -238,6 +241,7 @@ export function DataTable<T>({
                   ))}
                 </tr>
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
               </thead>
 
               <tbody className="divide-y divide-gray-100/90 bg-surface">
@@ -390,10 +394,15 @@ function VirtualizedDesktopView<T>({
           );
         })}
 =======
+=======
+>>>>>>> Stashed changes
               ))}
             </tbody>
           </table>
         </div>
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
       </div>
     </div>

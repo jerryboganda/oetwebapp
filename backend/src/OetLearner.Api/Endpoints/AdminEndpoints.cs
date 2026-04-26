@@ -898,7 +898,11 @@ public static class AdminEndpoints
                 if (session is null) return Results.NotFound();
                 var turns = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
                     db.ConversationTurns.AsNoTracking().Where(t => t.SessionId == sessionId).OrderBy(t => t.TurnNumber), ct);
+=======
+                    db.ConversationTurns.Where(t => t.SessionId == sessionId).OrderBy(t => t.TurnNumber).Take(200), ct);
+>>>>>>> Stashed changes
 =======
                     db.ConversationTurns.Where(t => t.SessionId == sessionId).OrderBy(t => t.TurnNumber).Take(200), ct);
 >>>>>>> Stashed changes
@@ -908,7 +912,11 @@ public static class AdminEndpoints
                     ? new List<OetLearner.Api.Domain.ConversationTurnAnnotation>()
                     : await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
                         db.ConversationTurnAnnotations.AsNoTracking().Where(a => a.EvaluationId == evaluation.Id).OrderBy(a => a.TurnNumber), ct);
+=======
+                        db.ConversationTurnAnnotations.Where(a => a.EvaluationId == evaluation.Id).OrderBy(a => a.TurnNumber).Take(200), ct);
+>>>>>>> Stashed changes
 =======
                         db.ConversationTurnAnnotations.Where(a => a.EvaluationId == evaluation.Id).OrderBy(a => a.TurnNumber).Take(200), ct);
 >>>>>>> Stashed changes
@@ -945,6 +953,7 @@ public static class AdminEndpoints
                 CancellationToken ct) =>
             {
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
                 var evals = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
                     db.ConversationEvaluations
                         .AsNoTracking()
@@ -968,6 +977,8 @@ public static class AdminEndpoints
                     csv.AppendLine($"{e.Id},{e.SessionId},{e.UserId},{e.OverallScaled},{e.OverallGrade},{e.Passed},{e.RulebookVersion},{e.CreatedAt:O}");
                 return Results.File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", "conversation-evaluations.csv");
 =======
+=======
+>>>>>>> Stashed changes
                 return Results.Stream(async (stream) =>
                 {
                     await using var writer = new System.IO.StreamWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
@@ -982,6 +993,9 @@ public static class AdminEndpoints
                     }
                     await writer.FlushAsync();
                 }, "text/csv", "conversation-evaluations.csv");
+<<<<<<< Updated upstream
+>>>>>>> Stashed changes
+=======
 >>>>>>> Stashed changes
             })
             .WithAdminRead("AdminContentRead");

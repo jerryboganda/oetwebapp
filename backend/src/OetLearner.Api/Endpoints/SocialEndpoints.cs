@@ -18,6 +18,7 @@ public static class SocialEndpoints
         certs.MapGet("/", async (HttpContext http, LearnerDbContext db, [FromQuery] int? skip, [FromQuery] int? take, CancellationToken ct) =>
         {
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
             var s = Math.Max(0, skip ?? 0);
             var t = Math.Clamp(take ?? 50, 1, 200);
             var list = await db.Certificates.AsNoTracking()
@@ -25,6 +26,9 @@ public static class SocialEndpoints
                 .OrderByDescending(c => c.IssuedAt)
                 .Skip(s).Take(t)
                 .ToListAsync(ct);
+=======
+            var list = await db.Certificates.AsNoTracking().Where(c => c.UserId == http.UserId()).OrderByDescending(c => c.IssuedAt).Take(200).ToListAsync(ct);
+>>>>>>> Stashed changes
 =======
             var list = await db.Certificates.AsNoTracking().Where(c => c.UserId == http.UserId()).OrderByDescending(c => c.IssuedAt).Take(200).ToListAsync(ct);
 >>>>>>> Stashed changes
@@ -67,6 +71,7 @@ public static class SocialEndpoints
         referrals.MapGet("/my-referrals", async (HttpContext http, LearnerDbContext db, [FromQuery] int? skip, [FromQuery] int? take, CancellationToken ct) =>
         {
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
             var s = Math.Max(0, skip ?? 0);
             var t = Math.Clamp(take ?? 50, 1, 200);
             var refs = await db.Referrals.AsNoTracking()
@@ -74,6 +79,10 @@ public static class SocialEndpoints
                 .OrderByDescending(r => r.CreatedAt)
                 .Skip(s).Take(t)
                 .ToListAsync(ct);
+=======
+            var refs = await db.Referrals.AsNoTracking().Where(r => r.ReferrerUserId == http.UserId())
+                .OrderByDescending(r => r.CreatedAt).Take(200).ToListAsync(ct);
+>>>>>>> Stashed changes
 =======
             var refs = await db.Referrals.AsNoTracking().Where(r => r.ReferrerUserId == http.UserId())
                 .OrderByDescending(r => r.CreatedAt).Take(200).ToListAsync(ct);
@@ -111,6 +120,7 @@ public static class SocialEndpoints
         bookings.MapGet("/", async (HttpContext http, LearnerDbContext db, [FromQuery] int? skip, [FromQuery] int? take, CancellationToken ct) =>
         {
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
             var s = Math.Max(0, skip ?? 0);
             var t = Math.Clamp(take ?? 50, 1, 200);
             var list = await db.ExamBookings.AsNoTracking()
@@ -118,6 +128,9 @@ public static class SocialEndpoints
                 .OrderByDescending(b => b.ExamDate)
                 .Skip(s).Take(t)
                 .ToListAsync(ct);
+=======
+            var list = await db.ExamBookings.AsNoTracking().Where(b => b.UserId == http.UserId()).OrderByDescending(b => b.ExamDate).Take(200).ToListAsync(ct);
+>>>>>>> Stashed changes
 =======
             var list = await db.ExamBookings.AsNoTracking().Where(b => b.UserId == http.UserId()).OrderByDescending(b => b.ExamDate).Take(200).ToListAsync(ct);
 >>>>>>> Stashed changes
@@ -158,6 +171,7 @@ public static class SocialEndpoints
         tutoring.MapGet("/sessions", async (HttpContext http, LearnerDbContext db, [FromQuery] int? skip, [FromQuery] int? take, CancellationToken ct) =>
         {
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
             var s = Math.Max(0, skip ?? 0);
             var t = Math.Clamp(take ?? 50, 1, 200);
             var sessions = await db.TutoringSessions.AsNoTracking()
@@ -167,6 +181,8 @@ public static class SocialEndpoints
                 .ToListAsync(ct);
             return Results.Ok(sessions.Select(s2 => new { id = s2.Id, expertUserId = s2.ExpertUserId, examTypeCode = s2.ExamTypeCode, subtestFocus = s2.SubtestFocus, scheduledAt = s2.ScheduledAt, durationMinutes = s2.DurationMinutes, state = s2.State, price = s2.Price, learnerRating = s2.LearnerRating }));
 =======
+=======
+>>>>>>> Stashed changes
             var sessions = await db.TutoringSessions.AsNoTracking().Where(s => s.LearnerUserId == http.UserId()).OrderByDescending(s => s.ScheduledAt).Take(200).ToListAsync(ct);
             return Results.Ok(sessions.Select(s => new { id = s.Id, expertUserId = s.ExpertUserId, examTypeCode = s.ExamTypeCode, subtestFocus = s.SubtestFocus, scheduledAt = s.ScheduledAt, durationMinutes = s.DurationMinutes, state = s.State, price = s.Price, learnerRating = s.LearnerRating }));
 >>>>>>> Stashed changes

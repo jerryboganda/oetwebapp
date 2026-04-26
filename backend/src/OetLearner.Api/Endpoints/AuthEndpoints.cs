@@ -19,7 +19,11 @@ public static class AuthEndpoints
                 => Results.Ok(await service.GetSignupCatalogAsync(ct)))
             .AllowAnonymous()
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
             .CacheOutput("Reference");
+=======
+            .CacheOutput("PublicCatalog");
+>>>>>>> Stashed changes
 =======
             .CacheOutput("PublicCatalog");
 >>>>>>> Stashed changes

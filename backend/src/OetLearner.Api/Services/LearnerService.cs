@@ -899,12 +899,21 @@ public partial class LearnerService(
     public async Task<object> GetProgressAsync(string userId, CancellationToken cancellationToken)
     {
         await EnsureUserAsync(userId, cancellationToken);
+<<<<<<< Updated upstream
         var attemptIds = await db.Attempts.AsNoTracking()
             .Where(x => x.UserId == userId && x.State == AttemptState.Completed)
             .Select(x => x.Id)
             .ToListAsync(cancellationToken);
         var evaluations = await db.Evaluations.AsNoTracking()
             .Where(x => x.State == AsyncState.Completed && attemptIds.Contains(x.AttemptId))
+=======
+        var submissions = await db.Attempts.AsNoTracking().Where(x => x.UserId == userId && x.State == AttemptState.Completed).ToListAsync(cancellationToken);
+        var attemptIds = submissions.Select(x => x.Id).ToList();
+        var evaluations = (await db.Evaluations
+                .AsNoTracking()
+                .Where(x => x.State == AsyncState.Completed && attemptIds.Contains(x.AttemptId))
+                .ToListAsync(cancellationToken))
+>>>>>>> Stashed changes
             .OrderBy(x => x.GeneratedAt)
             .ToListAsync(cancellationToken);
         var criterionTrend = evaluations
@@ -919,7 +928,12 @@ public partial class LearnerService(
                         subtest = evaluation.SubtestCode
                     }))
             .ToList();
+<<<<<<< Updated upstream
         var reviews = await db.ReviewRequests.AsNoTracking()
+=======
+        var reviews = (await db.ReviewRequests
+                .AsNoTracking()
+>>>>>>> Stashed changes
                 .Where(x => attemptIds.Contains(x.AttemptId))
                 .OrderBy(x => x.CreatedAt)
                 .ToListAsync(cancellationToken);
@@ -998,6 +1012,7 @@ public partial class LearnerService(
         var pageAttempts = hasMore ? page.Take(pageSize).ToList() : page;
         var items = new List<object>();
 
+<<<<<<< Updated upstream
         var attemptIds = pageAttempts.Select(a => a.Id).ToList();
         var contentIds = pageAttempts.Select(a => a.ContentId).Distinct().ToList();
         var contentLookup = await db.ContentItems.AsNoTracking()
@@ -1022,6 +1037,33 @@ public partial class LearnerService(
             }
             latestEvalLookup.TryGetValue(attempt.Id, out var eval);
             latestReviewLookup.TryGetValue(attempt.Id, out var review);
+=======
+        // Batch-load content, latest evaluation, latest review in 3 queries to avoid N+1.
+        var attemptIds = pageAttempts.Select(a => a.Id).ToList();
+        var contentIds = pageAttempts.Select(a => a.ContentId).Distinct().ToList();
+        var contents = await db.ContentItems
+            .AsNoTracking()
+            .Where(c => contentIds.Contains(c.Id))
+            .ToDictionaryAsync(c => c.Id, cancellationToken);
+        var latestEvalByAttempt = await db.Evaluations
+            .AsNoTracking()
+            .Where(e => attemptIds.Contains(e.AttemptId))
+            .GroupBy(e => e.AttemptId)
+            .Select(g => g.OrderByDescending(x => x.GeneratedAt).First())
+            .ToDictionaryAsync(e => e.AttemptId, cancellationToken);
+        var latestReviewByAttempt = await db.ReviewRequests
+            .AsNoTracking()
+            .Where(r => attemptIds.Contains(r.AttemptId))
+            .GroupBy(r => r.AttemptId)
+            .Select(g => g.OrderByDescending(x => x.CreatedAt).First())
+            .ToDictionaryAsync(r => r.AttemptId, cancellationToken);
+
+        foreach (var attempt in pageAttempts)
+        {
+            if (!contents.TryGetValue(attempt.ContentId, out var content)) continue;
+            latestEvalByAttempt.TryGetValue(attempt.Id, out var eval);
+            latestReviewByAttempt.TryGetValue(attempt.Id, out var review);
+>>>>>>> Stashed changes
             var canRequestReview = attempt.State == AttemptState.Completed && attempt.SubtestCode is "writing" or "speaking";
             items.Add(new
             {
