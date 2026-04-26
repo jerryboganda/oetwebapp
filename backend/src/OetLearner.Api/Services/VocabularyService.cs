@@ -339,19 +339,21 @@ public class VocabularyService(
     {
         // Consecutive-day streak from today back, where each day has at least one
         // flashcard review OR a completed quiz.
-        var reviewDatesSet = await db.LearnerVocabularies
+        // Note: EF Core (PostgreSQL) cannot translate `.UtcDateTime.Date` on a
+        // DateTimeOffset projection — coercion DateTimeOffset → DateTime? throws.
+        // Project the raw DateTimeOffset values and convert client-side.
+        var reviewTimestamps = await db.LearnerVocabularies
             .Where(lv => lv.UserId == userId && lv.LastReviewedAt != null)
-            .Select(lv => lv.LastReviewedAt!.Value.UtcDateTime.Date)
-            .Distinct()
+            .Select(lv => lv.LastReviewedAt!.Value)
             .ToListAsync(ct);
-        var quizDatesSet = await db.VocabularyQuizResults
+        var quizTimestamps = await db.VocabularyQuizResults
             .Where(r => r.UserId == userId)
-            .Select(r => r.CompletedAt.UtcDateTime.Date)
-            .Distinct()
+            .Select(r => r.CompletedAt)
             .ToListAsync(ct);
 
-        var activeDays = new HashSet<DateTime>(reviewDatesSet);
-        foreach (var d in quizDatesSet) activeDays.Add(d);
+        var activeDays = new HashSet<DateTime>();
+        foreach (var ts in reviewTimestamps) activeDays.Add(ts.UtcDateTime.Date);
+        foreach (var ts in quizTimestamps) activeDays.Add(ts.UtcDateTime.Date);
 
         var streak = 0;
         var cursor = today;
