@@ -8,6 +8,7 @@ import { EmptyState } from '@/components/ui/empty-error';
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Pagination } from '@/components/ui/pagination';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import {
   fetchAdminContentInventory,
@@ -21,7 +22,6 @@ import type {
 import { Upload, RefreshCw, Package } from 'lucide-react';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
-const PAGE_SIZE = 25;
 
 export default function AdminContentImportPage() {
   const { isAuthenticated } = useAdminAuth();
@@ -29,6 +29,7 @@ export default function AdminContentImportPage() {
   const [items, setItems] = useState<ContentInventoryItem[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
@@ -39,7 +40,7 @@ export default function AdminContentImportPage() {
     async function load() {
       setPageStatus('loading');
       try {
-        const raw = await fetchAdminContentInventory({ page, pageSize: PAGE_SIZE }) as PaginatedResponse<ContentInventoryItem>;
+        const raw = await fetchAdminContentInventory({ page, pageSize }) as PaginatedResponse<ContentInventoryItem>;
         if (cancelled) return;
         setItems(raw.items ?? []);
         setTotal(raw.total ?? 0);
@@ -50,7 +51,7 @@ export default function AdminContentImportPage() {
     }
     load();
     return () => { cancelled = true; };
-  }, [page, reloadNonce]);
+  }, [page, pageSize, reloadNonce]);
 
   async function handleFileImport(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -142,13 +143,17 @@ export default function AdminContentImportPage() {
           )}
         </AsyncStateWrapper>
 
-        {total > PAGE_SIZE && (
-          <div className="flex justify-center gap-2 mt-4">
-            <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => setPage(p => p - 1)}>Previous</Button>
-            <span className="text-sm text-muted self-center">Page {page} of {Math.ceil(total / PAGE_SIZE)}</span>
-            <Button variant="outline" size="sm" disabled={page >= Math.ceil(total / PAGE_SIZE)} onClick={() => setPage(p => p + 1)}>Next</Button>
-          </div>
-        )}
+        <div className="mt-4">
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            itemLabel="item"
+            itemLabelPlural="items"
+          />
+        </div>
       </AdminRoutePanel>
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
