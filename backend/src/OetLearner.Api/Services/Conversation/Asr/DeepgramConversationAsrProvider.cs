@@ -11,7 +11,7 @@ public sealed class DeepgramConversationAsrProvider(
     IConversationOptionsProvider optionsProvider,
     ILogger<DeepgramConversationAsrProvider> logger) : IConversationAsrProvider
 {
-    private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
+    private ConversationOptions ReadOptions() => optionsProvider.Snapshot();
 
     public string Name => "deepgram";
     public bool IsConfigured => !string.IsNullOrWhiteSpace(ReadOptions().DeepgramApiKey);

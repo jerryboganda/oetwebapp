@@ -15,7 +15,8 @@ public class MediaNormalizationService(LearnerDbContext db)
     /// </summary>
     public async Task<MediaAccessResult> GetSignedMediaUrlAsync(string mediaAssetId, string userId, CancellationToken ct)
     {
-        var asset = await db.MediaAssets.FindAsync([mediaAssetId], ct);
+        // Read-only path: AsNoTracking avoids the change-tracker entry for a one-shot URL lookup.
+        var asset = await db.MediaAssets.AsNoTracking().FirstOrDefaultAsync(x => x.Id == mediaAssetId, ct);
         if (asset is null)
             return new MediaAccessResult(false, null, "Media asset not found.");
 
@@ -124,20 +125,21 @@ public class MediaNormalizationService(LearnerDbContext db)
     /// </summary>
     public async Task<MediaAuditResult> AuditMediaAssetsAsync(CancellationToken ct)
     {
-        var assets = await db.MediaAssets.ToListAsync(ct);
-
-        var needsProcessing = assets.Count(a => a.Status == MediaAssetStatus.Processing);
-        var failed = assets.Count(a => a.Status == MediaAssetStatus.Failed);
-        var ready = assets.Count(a => a.Status == MediaAssetStatus.Ready);
-        var missingThumbnails = assets.Count(a => a.Status == MediaAssetStatus.Ready
-            && a.MimeType.StartsWith("video/") && string.IsNullOrEmpty(a.ThumbnailPath));
-        var missingTranscripts = assets.Count(a => a.Status == MediaAssetStatus.Ready
+        // SQL aggregations — never materialise the (potentially huge) MediaAssets table.
+        var assets = db.MediaAssets.AsNoTracking();
+        var totalAssets = await assets.CountAsync(ct);
+        var needsProcessing = await assets.CountAsync(a => a.Status == MediaAssetStatus.Processing, ct);
+        var failed = await assets.CountAsync(a => a.Status == MediaAssetStatus.Failed, ct);
+        var ready = await assets.CountAsync(a => a.Status == MediaAssetStatus.Ready, ct);
+        var missingThumbnails = await assets.CountAsync(a => a.Status == MediaAssetStatus.Ready
+            && a.MimeType.StartsWith("video/") && string.IsNullOrEmpty(a.ThumbnailPath), ct);
+        var missingTranscripts = await assets.CountAsync(a => a.Status == MediaAssetStatus.Ready
             && (a.MimeType.StartsWith("video/") || a.MimeType.StartsWith("audio/"))
-            && string.IsNullOrEmpty(a.TranscriptPath));
+            && string.IsNullOrEmpty(a.TranscriptPath), ct);
 
         return new MediaAuditResult
         {
-            TotalAssets = assets.Count,
+            TotalAssets = totalAssets,
             Ready = ready,
             Processing = needsProcessing,
             Failed = failed,

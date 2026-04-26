@@ -103,7 +103,7 @@ public class ConversationService(
 
     public async Task<object> GetEvaluationAsync(string userId, string sessionId, CancellationToken ct)
     {
-        var session = await db.ConversationSessions
+        var session = await db.ConversationSessions.AsNoTracking()
             .FirstOrDefaultAsync(s => s.Id == sessionId && s.UserId == userId, ct)
             ?? throw ApiException.NotFound("SESSION_NOT_FOUND", "Conversation session not found.");
 
@@ -165,7 +165,7 @@ public class ConversationService(
         page = page <= 0 ? 1 : page;
         pageSize = pageSize <= 0 ? 10 : pageSize;
 
-        var query = db.ConversationSessions.Where(s => s.UserId == userId);
+        var query = db.ConversationSessions.AsNoTracking().Where(s => s.UserId == userId);
         var total = await query.CountAsync(ct);
         var items = await query
             .OrderByDescending(s => s.CreatedAt)
@@ -241,7 +241,7 @@ public class ConversationService(
     private async Task<ConversationTemplate?> PickTemplateAsync(
         string userId, string taskType, string profession, CancellationToken ct)
     {
-        var filtered = await db.ConversationTemplates
+        var filtered = await db.ConversationTemplates.AsNoTracking()
             .Where(t => t.Status == "published" && t.TaskTypeCode == taskType
                 && (t.ProfessionId == profession || t.ProfessionId == null))
             .ToListAsync(ct);
@@ -251,7 +251,7 @@ public class ConversationService(
             .OrderByDescending(t => t.ProfessionId == profession)
             .ToList();
 
-        var recent = await db.ConversationSessions
+        var recent = await db.ConversationSessions.AsNoTracking()
             .Where(s => s.UserId == userId && s.TemplateId != null)
             .OrderByDescending(s => s.CreatedAt)
             .Select(s => s.TemplateId!).Take(5).ToListAsync(ct);

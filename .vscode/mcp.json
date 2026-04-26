@@ -1,9 +1,6 @@
 {
+  "_comment": "context-mode MCP server intentionally disabled. It injects <PreToolUse-context> guidance blocks into tool results, which is a prompt-injection channel into the agent. Re-enable only after the upstream tool stops mutating tool output.",
   "servers": {
-    "context-mode": {
-      "command": "cmd",
-      "args": ["/c", "context-mode"]
-    },
     "jcodemunch": {
       "command": "C:\\Users\\Dr Faisal Maqsood PC\\AppData\\Local\\Programs\\Python\\Python310\\Scripts\\jcodemunch-mcp.exe"
     },

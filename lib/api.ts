@@ -434,7 +434,15 @@ function mapErrorCodeToUserMessage(code: string, fallback: string): string {
 }
 
 const MAX_RETRIES = 2;
-const RETRY_DELAYS = [1000, 3000];
+
+/**
+ * Exponential backoff with jitter — prevents the "thundering herd" pattern
+ * where every client retries in lock-step after a 429/503. Capped at 8s.
+ */
+function computeBackoffMs(attempt: number): number {
+  const base = Math.min(8000, 500 * 2 ** attempt);
+  return Math.round(base * (0.5 + Math.random()));
+}
 
 function isRetryable(status: number): boolean {
   return status >= 500 || status === 408 || status === 429;
@@ -477,7 +485,7 @@ async function apiRequest<T = any>(path: string, init?: RequestInit): Promise<T>
         // Retry on 5xx/408/429, but not on 4xx client errors
         if (retryable && attempt < MAX_RETRIES) {
           lastError = apiError;
-          await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
+          await new Promise(resolve => setTimeout(resolve, computeBackoffMs(attempt)));
           continue;
         }
 
@@ -498,7 +506,7 @@ async function apiRequest<T = any>(path: string, init?: RequestInit): Promise<T>
         const timeoutError = new ApiError(408, 'request_timeout', 'The request timed out. Please try again.', true);
         lastError = timeoutError;
         if (attempt < MAX_RETRIES) {
-          await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS[attempt]));
+          await new Promise((resolve) => setTimeout(resolve, computeBackoffMs(attempt)));
           continue;
         }
         throw timeoutError;
@@ -507,7 +515,7 @@ async function apiRequest<T = any>(path: string, init?: RequestInit): Promise<T>
       // Network errors (TypeError from fetch) are retryable
       lastError = err instanceof Error ? err : new Error(String(err));
       if (attempt < MAX_RETRIES) {
-        await new Promise(resolve => setTimeout(resolve, RETRY_DELAYS[attempt]));
+        await new Promise(resolve => setTimeout(resolve, computeBackoffMs(attempt)));
         continue;
       }
       throw new ApiError(0, 'network_error', 'Unable to connect to the server. Please check your internet connection.', true);

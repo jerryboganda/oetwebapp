@@ -10,7 +10,7 @@ public sealed class AzureConversationTtsProvider(
     IConversationOptionsProvider optionsProvider,
     ILogger<AzureConversationTtsProvider> logger) : IConversationTtsProvider
 {
-    private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
+    private ConversationOptions ReadOptions() => optionsProvider.Snapshot();
 
     public string Name => "azure";
     public bool IsConfigured =>

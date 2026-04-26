@@ -91,7 +91,8 @@ public static class NotificationEndpoints
             .RequireRateLimiting("PerUser");
 
         admin.MapGet("/catalog", async (NotificationService service, CancellationToken ct)
-            => Results.Ok(await service.GetAdminCatalogAsync(ct)));
+            => Results.Ok(await service.GetAdminCatalogAsync(ct)))
+            .CacheOutput("AdminReference");
 
         admin.MapGet("/policies", async (NotificationService service, CancellationToken ct)
             => Results.Ok(await service.GetAdminPoliciesAsync(ct)));

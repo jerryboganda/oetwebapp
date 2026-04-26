@@ -19,12 +19,12 @@ public static class CommunityEndpoints
             [FromQuery] string? examTypeCode,
             LearnerDbContext db, CancellationToken ct) =>
         {
-            var query = db.ForumCategories.Where(c => c.Status == "active");
+            var query = db.ForumCategories.AsNoTracking().Where(c => c.Status == "active");
             if (!string.IsNullOrEmpty(examTypeCode))
                 query = query.Where(c => c.ExamTypeCode == null || c.ExamTypeCode == examTypeCode);
             var cats = await query.OrderBy(c => c.SortOrder).ToListAsync(ct);
             return Results.Ok(cats.Select(c => new { id = c.Id, examTypeCode = c.ExamTypeCode, name = c.Name, description = c.Description, sortOrder = c.SortOrder }));
-        });
+        }).CacheOutput("Reference");
 
         // ── Forum threads ────────────────────────────────────────────────
         community.MapGet("/threads", async (
@@ -33,7 +33,7 @@ public static class CommunityEndpoints
             [FromQuery] int pageSize,
             LearnerDbContext db, CancellationToken ct) =>
         {
-            var query = db.ForumThreads.AsQueryable();
+            var query = db.ForumThreads.AsNoTracking().AsQueryable();
             if (!string.IsNullOrEmpty(categoryId)) query = query.Where(t => t.CategoryId == categoryId);
             var total = await query.CountAsync(ct);
             var threads = await query.OrderByDescending(t => t.IsPinned).ThenByDescending(t => t.LastActivityAt)
@@ -81,8 +81,8 @@ public static class CommunityEndpoints
         {
             var ps = pageSize <= 0 ? 20 : pageSize;
             var pg = page <= 0 ? 1 : page;
-            var total = await db.ForumReplies.CountAsync(r => r.ThreadId == threadId, ct);
-            var replies = await db.ForumReplies.Where(r => r.ThreadId == threadId)
+            var total = await db.ForumReplies.AsNoTracking().CountAsync(r => r.ThreadId == threadId, ct);
+            var replies = await db.ForumReplies.AsNoTracking().Where(r => r.ThreadId == threadId)
                 .OrderBy(r => r.CreatedAt).Skip((pg - 1) * ps).Take(ps).ToListAsync(ct);
             return Results.Ok(new { total, replies = replies.Select(r => new { id = r.Id, authorDisplayName = r.AuthorDisplayName, authorRole = r.AuthorRole, body = r.Body, isExpertVerified = r.IsExpertVerified, likeCount = r.LikeCount, createdAt = r.CreatedAt, editedAt = r.EditedAt }) });
         });
@@ -120,7 +120,7 @@ public static class CommunityEndpoints
         {
             var ps = pageSize <= 0 ? 20 : pageSize;
             var pg = page <= 0 ? 1 : page;
-            var query = db.StudyGroups.Where(g => g.IsPublic && g.Status == "active");
+            var query = db.StudyGroups.AsNoTracking().Where(g => g.IsPublic && g.Status == "active");
             if (!string.IsNullOrEmpty(examTypeCode)) query = query.Where(g => g.ExamTypeCode == examTypeCode);
             var total = await query.CountAsync(ct);
             var groups = await query.OrderByDescending(g => g.MemberCount).Skip((pg - 1) * ps).Take(ps).ToListAsync(ct);

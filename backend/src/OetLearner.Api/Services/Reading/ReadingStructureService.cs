@@ -40,6 +40,15 @@ public interface IReadingStructureService
     /// that admin UI can surface row-by-row.</summary>
     Task<ReadingValidationReport> ValidatePaperAsync(string paperId, CancellationToken ct);
 
+    /// <summary>
+    /// Bulk variant: validate a set of papers in 2 round-trips total
+    /// (parts+questions, then texts) instead of N � 3 in a per-paper loop.
+    /// Used by the learner reading-home dashboard to filter publish-ready
+    /// papers without an N+1 storm.
+    /// </summary>
+    Task<IReadOnlyDictionary<string, ReadingValidationReport>> BulkValidatePapersAsync(
+        IReadOnlyList<ContentPaper> papers, CancellationToken ct);
+
     /// <summary>Ensure the three canonical parts (A/B/C) exist with default
     /// item caps. Idempotent; safe to call after paper creation.</summary>
     Task EnsureCanonicalPartsAsync(string paperId, CancellationToken ct);
@@ -359,24 +368,84 @@ public sealed class ReadingStructureService : IReadingStructureService
 
     public async Task<ReadingValidationReport> ValidatePaperAsync(string paperId, CancellationToken ct)
     {
-        var issues = new List<ReadingValidationIssue>();
-        var paper = await db.ContentPapers.FirstOrDefaultAsync(p => p.Id == paperId, ct);
+        var paper = await db.ContentPapers.AsNoTracking().FirstOrDefaultAsync(p => p.Id == paperId, ct);
         if (paper is null)
         {
             return new(false,
                 new[] { new ReadingValidationIssue("paper_missing", "error", "Paper not found.", null) },
                 new(0, 0, 0, 0));
         }
+
+        var parts = await db.ReadingParts.AsNoTracking()
+            .Where(p => p.PaperId == paperId)
+            .Include(p => p.Questions)
+            .ToListAsync(ct);
+
+        var partIds = parts.Select(p => p.Id).ToList();
+        var texts = await db.ReadingTexts.AsNoTracking()
+            .Where(t => partIds.Contains(t.ReadingPartId))
+            .ToListAsync(ct);
+
+        return ValidatePreloaded(paper, parts, texts);
+    }
+
+    public async Task<IReadOnlyDictionary<string, ReadingValidationReport>> BulkValidatePapersAsync(
+        IReadOnlyList<ContentPaper> papers, CancellationToken ct)
+    {
+        var result = new Dictionary<string, ReadingValidationReport>(papers.Count);
+        if (papers.Count == 0) return result;
+
+        var paperIds = papers.Select(p => p.Id).ToList();
+
+        // Two round-trips total, regardless of N.
+        var parts = await db.ReadingParts.AsNoTracking()
+            .Where(p => paperIds.Contains(p.PaperId))
+            .Include(p => p.Questions)
+            .ToListAsync(ct);
+
+        var partIds = parts.Select(p => p.Id).ToList();
+        var texts = partIds.Count == 0
+            ? new List<ReadingText>()
+            : await db.ReadingTexts.AsNoTracking()
+                .Where(t => partIds.Contains(t.ReadingPartId))
+                .ToListAsync(ct);
+
+        var partsByPaper = parts.GroupBy(p => p.PaperId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<ReadingPart>)g.ToList());
+        var textsByPart = texts.GroupBy(t => t.ReadingPartId)
+            .ToDictionary(g => g.Key, g => (IReadOnlyList<ReadingText>)g.ToList());
+
+        foreach (var paper in papers)
+        {
+            var paperParts = partsByPaper.TryGetValue(paper.Id, out var pp) ? pp : Array.Empty<ReadingPart>();
+            var paperTexts = paperParts
+                .SelectMany(p => textsByPart.TryGetValue(p.Id, out var tt) ? tt : Array.Empty<ReadingText>())
+                .ToList();
+            result[paper.Id] = ValidatePreloaded(paper, paperParts, paperTexts);
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Pure validation over preloaded data. Shared by both the per-paper
+    /// (<see cref="ValidatePaperAsync"/>) and bulk
+    /// (<see cref="BulkValidatePapersAsync"/>) entry points so the rules
+    /// stay in one place.
+    /// </summary>
+    private static ReadingValidationReport ValidatePreloaded(
+        ContentPaper paper,
+        IReadOnlyList<ReadingPart> parts,
+        IReadOnlyList<ReadingText> texts)
+    {
+        var issues = new List<ReadingValidationIssue>();
         if (!string.Equals(paper.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
         {
             issues.Add(new("wrong_subtest", "error",
                 $"Paper subtest is '{paper.SubtestCode}', expected 'reading'.", null));
         }
 
-        var parts = await db.ReadingParts.AsNoTracking()
-            .Where(p => p.PaperId == paperId)
-            .Include(p => p.Questions)
-            .ToListAsync(ct);
+        var textsByPart = texts.GroupBy(t => t.ReadingPartId)
+            .ToDictionary(g => g.Key, g => g.ToList());
 
         int partA = 0, partB = 0, partC = 0, totalPoints = 0;
         foreach (var part in parts)
@@ -413,15 +482,13 @@ public sealed class ReadingStructureService : IReadingStructureService
             if (questionCount > 0 && part.Questions.All(q => q.ReadingTextId is null))
             {
                 issues.Add(new($"part_{part.PartCode}_no_texts", "warning",
-                    $"No questions in Part {part.PartCode} reference a text — OK for matching, suspicious for MCQ.",
+                    $"No questions in Part {part.PartCode} reference a text � OK for matching, suspicious for MCQ.",
                     part.Id));
             }
 
             // Every text must have a source for copyright
-            var texts = await db.ReadingTexts.AsNoTracking()
-                .Where(t => t.ReadingPartId == part.Id)
-                .ToListAsync(ct);
-            foreach (var t in texts.Where(x => string.IsNullOrWhiteSpace(x.Source)))
+            var partTexts = textsByPart.TryGetValue(part.Id, out var tt) ? tt : new List<ReadingText>();
+            foreach (var t in partTexts.Where(x => string.IsNullOrWhiteSpace(x.Source)))
             {
                 issues.Add(new("text_missing_source", "error",
                     $"Text '{t.Title}' is missing a Source attribution.", t.Id));

@@ -166,14 +166,15 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
             PageSize = 5
         }, ct);
 
-        var draftRows = await ToOrderedListDescendingAsync(
-            db.ExpertReviewDrafts
-                .AsNoTracking()
-                .Where(draft => draft.ReviewerId == reviewerId && (draft.State == null || draft.State != "submitted")),
-            draft => draft.DraftSavedAt,
-            ct);
+        // Slim projection: only ReviewRequestId is consumed downstream (Distinct hashset + Count).
+        // Avoids loading full ExpertReviewDraft rows.
+        var draftReviewRequestIds = await db.ExpertReviewDrafts
+            .AsNoTracking()
+            .Where(draft => draft.ReviewerId == reviewerId && (draft.State == null || draft.State != "submitted"))
+            .Select(draft => draft.ReviewRequestId)
+            .ToListAsync(ct);
 
-        var draftReviewIds = draftRows.Select(draft => draft.ReviewRequestId).Distinct().ToHashSet(StringComparer.Ordinal);
+        var draftReviewIds = draftReviewRequestIds.Distinct().ToHashSet(StringComparer.Ordinal);
         var resumeDrafts = assignedQueue.Items
             .Where(item => draftReviewIds.Contains(item.Id))
             .OrderBy(item => item.IsOverdue ? 0 : 1)
@@ -232,7 +233,7 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
             metrics.Metrics,
             assignedQueue.TotalCount,
             overdueAssignedQueue.TotalCount,
-            draftRows.Count,
+            draftReviewRequestIds.Count,
             pendingCalibrationCount,
             assignedLearnerCount,
             now,
@@ -3454,10 +3455,15 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
 
         // AI-Human agreement: compare expert scores to AI evaluation scores
         var aiHumanDifferences = new List<double>();
+        var draftRrIds = drafts.Select(d => d.ReviewRequestId).Where(id => id != null).Distinct().ToList();
+        var rrLookup = draftRrIds.Count == 0
+            ? new Dictionary<string, ReviewRequest>()
+            : await db.ReviewRequests.AsNoTracking()
+                .Where(r => draftRrIds.Contains(r.Id))
+                .ToDictionaryAsync(r => r.Id, ct);
         foreach (var draft in drafts)
         {
-            var rr = await db.ReviewRequests.FirstOrDefaultAsync(r => r.Id == draft.ReviewRequestId, ct);
-            if (rr == null) continue;
+            if (draft.ReviewRequestId == null || !rrLookup.TryGetValue(draft.ReviewRequestId, out var rr)) continue;
 
             var eval = evaluations.FirstOrDefault(e => e.AttemptId == rr.AttemptId);
             if (eval == null) continue;
@@ -3540,30 +3546,56 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
 
     public async Task<object> GetQueueWithPriorityReasonsAsync(string expertId, CancellationToken ct)
     {
-        var assignments = await db.ExpertReviewAssignments
+        var assignments = await db.ExpertReviewAssignments.AsNoTracking()
             .Where(a => a.AssignedReviewerId == expertId && a.ClaimState == ExpertAssignmentState.Assigned)
             .ToListAsync(ct);
+
+        if (assignments.Count == 0)
+        {
+            return new { items = new List<object>(), summary = new { total = 0, critical = 0, high = 0, normal = 0 } };
+        }
+
+        // Batched prefetch: 1 query each for reviews, attempts, goals, and resubmission counts.
+        var reviewIds = assignments.Select(a => a.ReviewRequestId).Distinct().ToList();
+        var reviewLookup = await db.ReviewRequests.AsNoTracking()
+            .Where(r => reviewIds.Contains(r.Id))
+            .ToDictionaryAsync(r => r.Id, ct);
+
+        var attemptIds = reviewLookup.Values.Select(r => r.AttemptId).Distinct().ToList();
+        var attemptLookup = await db.Attempts.AsNoTracking()
+            .Where(a => attemptIds.Contains(a.Id))
+            .ToDictionaryAsync(a => a.Id, ct);
+
+        var userIds = attemptLookup.Values.Select(a => a.UserId).Distinct().ToList();
+        var goalLookup = (await db.Goals.AsNoTracking()
+                .Where(g => userIds.Contains(g.UserId))
+                .ToListAsync(ct))
+            .GroupBy(g => g.UserId)
+            .ToDictionary(g => g.Key, g => g.First());
+
+        // For each attempt, find the earliest ReviewRequest CreatedAt;
+        // a review is a re-submission iff its CreatedAt > earliest.
+        var earliestPerAttempt = await db.ReviewRequests.AsNoTracking()
+            .Where(r => attemptIds.Contains(r.AttemptId))
+            .GroupBy(r => r.AttemptId)
+            .Select(g => new { AttemptId = g.Key, Earliest = g.Min(r => r.CreatedAt) })
+            .ToDictionaryAsync(x => x.AttemptId, x => x.Earliest, ct);
 
         var items = new List<object>();
         foreach (var assignment in assignments)
         {
-            var review = await db.ReviewRequests.FindAsync([assignment.ReviewRequestId], ct);
-            if (review is null) continue;
+            if (!reviewLookup.TryGetValue(assignment.ReviewRequestId, out var review)) continue;
+            if (!attemptLookup.TryGetValue(review.AttemptId, out var attempt)) continue;
 
-            var attempt = await db.Attempts.FindAsync([review.AttemptId], ct);
-            if (attempt is null) continue;
-
-            // Check learner's exam date for urgency
-            var learnerGoal = await db.Goals.FirstOrDefaultAsync(g => g.UserId == attempt.UserId, ct);
+            goalLookup.TryGetValue(attempt.UserId, out var learnerGoal);
             DateOnly? examDate = learnerGoal?.TargetExamDate;
 
             var daysToExam = examDate.HasValue
                 ? (examDate.Value.ToDateTime(TimeOnly.MinValue) - DateTime.UtcNow).Days
                 : (int?)null;
 
-            // Check if re-submission
-            var isResubmission = await db.ReviewRequests
-                .CountAsync(r => r.AttemptId == review.AttemptId && r.CreatedAt < review.CreatedAt, ct) > 0;
+            var isResubmission = earliestPerAttempt.TryGetValue(review.AttemptId, out var earliest)
+                && earliest < review.CreatedAt;
 
             // SLA time remaining
             var hoursWaiting = (DateTimeOffset.UtcNow - review.CreatedAt).TotalHours;
@@ -3623,18 +3655,18 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
 
     public async Task<object> GetAiPreFillForReviewAsync(string expertId, string reviewRequestId, CancellationToken ct)
     {
-        var review = await db.ReviewRequests.FindAsync([reviewRequestId], ct)
+        var review = await db.ReviewRequests.AsNoTracking().FirstOrDefaultAsync(r => r.Id == reviewRequestId, ct)
             ?? throw ApiException.NotFound("REVIEW_NOT_FOUND", "Review request not found.");
 
         // Verify expert is assigned
-        var assignment = await db.ExpertReviewAssignments
+        var assignment = await db.ExpertReviewAssignments.AsNoTracking()
             .FirstOrDefaultAsync(a => a.ReviewRequestId == reviewRequestId && a.AssignedReviewerId == expertId, ct)
             ?? throw ApiException.Forbidden("NOT_ASSIGNED", "You are not assigned to this review.");
 
-        var attempt = await db.Attempts.FindAsync([review.AttemptId], ct);
+        var attempt = await db.Attempts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == review.AttemptId, ct);
 
         // Get AI evaluation if available
-        var aiEval = await db.Evaluations
+        var aiEval = await db.Evaluations.AsNoTracking()
             .Where(e => e.AttemptId == review.AttemptId)
             .OrderByDescending(e => e.GeneratedAt)
             .FirstOrDefaultAsync(ct);
@@ -3765,7 +3797,7 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         if (thread.IsLocked)
             throw new InvalidOperationException("Thread is locked.");
 
-        var expert = await db.ExpertUsers.FindAsync([expertId], ct);
+        var expert = await db.ExpertUsers.AsNoTracking().FirstOrDefaultAsync(e => e.Id == expertId, ct);
 
         var reply = new ForumReply
         {

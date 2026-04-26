@@ -254,20 +254,29 @@ describe('error logging in catch blocks', () => {
     vi.restoreAllMocks();
   });
 
-  it('logs console.error when apiRequest cannot parse error response body', async () => {
-    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  it('logs console.debug when apiRequest cannot parse error response body in development', async () => {
+    // The non-JSON error parse path is intentionally demoted to console.debug
+    // (gated on NODE_ENV === 'development') so it doesn't spam the console in
+    // production. The status code is still surfaced via the thrown ApiError.
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    const debugSpy = vi.spyOn(console, 'debug').mockImplementation(() => {});
     globalThis.fetch = vi.fn(async () => new Response('not json', {
       status: 400,
       headers: { 'content-type': 'text/plain' },
     }));
 
-    const { fetchUserProfile } = await import('../api');
-    await expect(fetchUserProfile()).rejects.toThrow();
+    try {
+      const { fetchUserProfile } = await import('../api');
+      await expect(fetchUserProfile()).rejects.toThrow();
 
-    expect(errorSpy).toHaveBeenCalledWith(
-      expect.stringContaining('[API]'),
-      expect.anything(),
-    );
+      expect(debugSpy).toHaveBeenCalledWith(
+        expect.stringContaining('[API]'),
+        expect.anything(),
+      );
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
   });
 
   it('logs console.error when fetchAuthorizedObjectUrl cannot parse error response', async () => {

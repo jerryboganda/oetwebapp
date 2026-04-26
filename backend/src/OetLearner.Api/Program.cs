@@ -517,6 +517,8 @@ builder.Services.AddAuthorization(options =>
         .RequireAssertion(ctx => HasAdminPermission(ctx, "system_admin")));
 });
 
+builder.Services.AddScoped<OetLearner.Api.Services.Caching.IReferenceDataCache,
+    OetLearner.Api.Services.Caching.ReferenceDataCache>();
 builder.Services.AddScoped<LearnerService>();
 builder.Services.AddScoped<MockService>();
 builder.Services.AddScoped<ISpeakingEvaluationPipeline, SpeakingEvaluationPipeline>();
@@ -684,6 +686,44 @@ builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiModelProvider,
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiUsageRecorder,
     OetLearner.Api.Services.Rulebook.AiUsageRecorder>();
 builder.Services.AddMemoryCache();
+
+// Response compression — large JSON payloads (rulebooks, leaderboards, mock
+// reports) compress dramatically. Brotli + Gzip cover both modern and
+// legacy clients; HTTPS compression is enabled because the API is fronted
+// by Nginx Proxy Manager and clients are not re-using TLS records on
+// uncompressed body payloads (no BREACH risk surface for these endpoints).
+builder.Services.AddResponseCompression(o =>
+{
+    o.EnableForHttps = true;
+    o.Providers.Add<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProvider>();
+    o.Providers.Add<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProvider>();
+});
+builder.Services.Configure<Microsoft.AspNetCore.ResponseCompression.BrotliCompressionProviderOptions>(
+    o => o.Level = System.IO.Compression.CompressionLevel.Fastest);
+builder.Services.Configure<Microsoft.AspNetCore.ResponseCompression.GzipCompressionProviderOptions>(
+    o => o.Level = System.IO.Compression.CompressionLevel.Fastest);
+
+// Output cache — used selectively on read-heavy, low-mutation endpoints
+// (rulebooks, leaderboards). Per-policy TTLs are configured at the route
+// level via .CacheOutput(...).
+builder.Services.AddOutputCache(o =>
+{
+    o.AddPolicy("Rulebooks", b => b
+        .Expire(TimeSpan.FromMinutes(5))
+        .SetVaryByRouteValue("profession", "kind", "ruleId"));
+    o.AddPolicy("Leaderboard", b => b
+        .Expire(TimeSpan.FromSeconds(30))
+        .SetVaryByQuery("examTypeCode", "period"));
+    o.AddPolicy("Reference", b => b
+        .Expire(TimeSpan.FromMinutes(10))
+        .SetVaryByRouteValue("surface")
+        .SetVaryByQuery("subtest"));
+    o.AddPolicy("AdminReference", b => b
+        .Expire(TimeSpan.FromSeconds(60))
+        .SetVaryByQuery("scope", "examTypeCode")
+        .SetVaryByHeader("Authorization"));
+});
+
 builder.Services.AddScoped<OetLearner.Api.Services.AiManagement.IAiQuotaService,
     OetLearner.Api.Services.AiManagement.AiQuotaService>();
 builder.Services.AddHttpClient("AiCredentialValidator");
@@ -959,9 +999,12 @@ if (corsOrigins.Length > 0)
     app.UseCors("Frontend");
 }
 
+app.UseResponseCompression();
+
 app.UseAuthentication();
 app.UseRateLimiter();
 app.UseAuthorization();
+app.UseOutputCache();
 
 app.MapGet("/health/live", () => Results.Ok(new { status = "ok", service = "OET Learner API", timestamp = DateTimeOffset.UtcNow, check = "live" }))
     .AllowAnonymous();
@@ -1002,7 +1045,9 @@ app.MapGet("/health/ready", async (LearnerDbContext db, IOptions<StorageOptions>
             checks["stuck_jobs"] = stuckJobs > 0 ? $"warning:{stuckJobs}" : "ok";
         }
 
-        // Storage path writable
+        // Storage path readable & writable directory exists.
+        // Avoid per-probe write+delete: under k8s/Docker readiness probing every
+        // 5–10s this is sustained, pointless I/O on the storage volume.
         var storagePath = storageOptions.Value.LocalRootPath;
         if (!string.IsNullOrEmpty(storagePath))
         {
@@ -1010,10 +1055,8 @@ app.MapGet("/health/ready", async (LearnerDbContext db, IOptions<StorageOptions>
             {
                 var resolvedPath = Path.GetFullPath(storagePath);
                 Directory.CreateDirectory(resolvedPath);
-                var testFile = Path.Combine(resolvedPath, ".health-check");
-                await File.WriteAllTextAsync(testFile, "ok", ct);
-                File.Delete(testFile);
-                checks["storage"] = "ok";
+                checks["storage"] = Directory.Exists(resolvedPath) ? "ok" : "unavailable";
+                if (!Directory.Exists(resolvedPath)) healthy = false;
             }
             catch
             {

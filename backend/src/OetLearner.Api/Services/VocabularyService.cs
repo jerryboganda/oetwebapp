@@ -29,7 +29,7 @@ public class VocabularyService(
         int pageSize,
         CancellationToken ct)
     {
-        var query = db.VocabularyTerms.Where(t => t.Status == "active");
+        var query = db.VocabularyTerms.AsNoTracking().Where(t => t.Status == "active");
         if (!string.IsNullOrEmpty(examTypeCode)) query = query.Where(t => t.ExamTypeCode == examTypeCode);
         if (!string.IsNullOrEmpty(category)) query = query.Where(t => t.Category == category);
         if (!string.IsNullOrEmpty(profession)) query = query.Where(t => t.ProfessionId == profession);
@@ -49,7 +49,7 @@ public class VocabularyService(
 
     public async Task<VocabularyTermResponse> GetTermAsync(string termId, CancellationToken ct)
     {
-        var term = await db.VocabularyTerms.FindAsync([termId], ct)
+        var term = await db.VocabularyTerms.AsNoTracking().FirstOrDefaultAsync(t => t.Id == termId, ct)
             ?? throw ApiException.NotFound("TERM_NOT_FOUND", "Vocabulary term not found.");
         return Map(term);
     }
@@ -60,7 +60,7 @@ public class VocabularyService(
             return new VocabularyLookupResult(false, null, Array.Empty<VocabularyTermSummary>());
 
         var normalised = query.Trim().ToLowerInvariant();
-        var baseQuery = db.VocabularyTerms.Where(t => t.Status == "active");
+        var baseQuery = db.VocabularyTerms.AsNoTracking().Where(t => t.Status == "active");
         if (!string.IsNullOrEmpty(examTypeCode)) baseQuery = baseQuery.Where(t => t.ExamTypeCode == examTypeCode);
 
         // Exact match first (case-insensitive).
@@ -86,7 +86,7 @@ public class VocabularyService(
         string? profession,
         CancellationToken ct)
     {
-        var query = db.VocabularyTerms.Where(t => t.Status == "active");
+        var query = db.VocabularyTerms.AsNoTracking().Where(t => t.Status == "active");
         if (!string.IsNullOrEmpty(examTypeCode)) query = query.Where(t => t.ExamTypeCode == examTypeCode);
         if (!string.IsNullOrEmpty(profession)) query = query.Where(t => t.ProfessionId == profession);
 
@@ -113,8 +113,9 @@ public class VocabularyService(
         CancellationToken ct)
     {
         var query = db.LearnerVocabularies
+            .AsNoTracking()
             .Where(lv => lv.UserId == userId)
-            .Join(db.VocabularyTerms, lv => lv.TermId, t => t.Id, (lv, t) => new { lv, t });
+            .Join(db.VocabularyTerms.AsNoTracking(), lv => lv.TermId, t => t.Id, (lv, t) => new { lv, t });
 
         if (!string.IsNullOrEmpty(mastery))
             query = query.Where(x => x.lv.Mastery == mastery);
@@ -202,10 +203,11 @@ public class VocabularyService(
     {
         var today = DateOnly.FromDateTime(DateTime.UtcNow);
         var due = await db.LearnerVocabularies
+            .AsNoTracking()
             .Where(lv => lv.UserId == userId
                 && lv.Mastery != "mastered"
                 && (lv.NextReviewDate == null || lv.NextReviewDate <= today))
-            .Join(db.VocabularyTerms, lv => lv.TermId, t => t.Id, (lv, t) => new { lv, t })
+            .Join(db.VocabularyTerms.AsNoTracking(), lv => lv.TermId, t => t.Id, (lv, t) => new { lv, t })
             .OrderBy(x => x.lv.NextReviewDate)
             .Take(limit)
             .ToListAsync(ct);
@@ -262,10 +264,11 @@ public class VocabularyService(
 
         // Due cards first.
         var due = await db.LearnerVocabularies
+            .AsNoTracking()
             .Where(lv => lv.UserId == userId
                 && lv.Mastery != "mastered"
                 && (lv.NextReviewDate == null || lv.NextReviewDate <= today))
-            .Join(db.VocabularyTerms, lv => lv.TermId, t => t.Id, (lv, t) => new { lv, t })
+            .Join(db.VocabularyTerms.AsNoTracking(), lv => lv.TermId, t => t.Id, (lv, t) => new { lv, t })
             .OrderBy(x => x.lv.NextReviewDate)
             .Take(count)
             .ToListAsync(ct);
@@ -277,8 +280,9 @@ public class VocabularyService(
         {
             var remainder = count - cards.Count;
             var newCards = await db.LearnerVocabularies
+                .AsNoTracking()
                 .Where(lv => lv.UserId == userId && lv.ReviewCount == 0 && lv.Mastery == "new")
-                .Join(db.VocabularyTerms, lv => lv.TermId, t => t.Id, (lv, t) => new { lv, t })
+                .Join(db.VocabularyTerms.AsNoTracking(), lv => lv.TermId, t => t.Id, (lv, t) => new { lv, t })
                 .Where(x => !due.Select(d => d.lv.Id).Contains(x.lv.Id))
                 .OrderBy(x => x.lv.AddedAt)
                 .Take(remainder)
@@ -578,11 +582,14 @@ public class VocabularyService(
         db.VocabularyQuizResults.Add(result);
 
         var newlyMastered = new List<string>();
+        var termIds = submission.Answers.Select(a => a.TermId).Distinct().ToList();
+        var existingLv = await db.LearnerVocabularies
+            .Where(x => x.UserId == userId && termIds.Contains(x.TermId))
+            .ToListAsync(ct);
+        var lvByTerm = existingLv.ToDictionary(x => x.TermId);
         foreach (var ans in submission.Answers)
         {
-            var lv = await db.LearnerVocabularies.FirstOrDefaultAsync(
-                x => x.UserId == userId && x.TermId == ans.TermId, ct);
-            if (lv == null) continue;
+            if (!lvByTerm.TryGetValue(ans.TermId, out var lv)) continue;
 
             var quality = ans.Correct ? 4 : 2;
             var prevMastery = lv.Mastery;

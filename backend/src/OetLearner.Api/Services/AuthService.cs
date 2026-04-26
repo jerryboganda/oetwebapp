@@ -427,16 +427,25 @@ public sealed class AuthService(
             if (refreshToken.RevokedAt is not null)
             {
                 var familyId = refreshToken.FamilyId;
-                var livingSiblings = await db.RefreshTokenRecords
-                    .Where(t => t.FamilyId == familyId && t.RevokedAt == null)
-                    .ToListAsync(cancellationToken);
-                foreach (var sibling in livingSiblings)
+                if (db.Database.IsInMemory())
                 {
-                    sibling.RevokedAt = now;
+                    var livingSiblings = await db.RefreshTokenRecords
+                        .Where(t => t.FamilyId == familyId && t.RevokedAt == null)
+                        .ToListAsync(cancellationToken);
+                    foreach (var sibling in livingSiblings)
+                    {
+                        sibling.RevokedAt = now;
+                    }
+                    if (livingSiblings.Count > 0)
+                    {
+                        await db.SaveChangesAsync(cancellationToken);
+                    }
                 }
-                if (livingSiblings.Count > 0)
+                else
                 {
-                    await db.SaveChangesAsync(cancellationToken);
+                    await db.RefreshTokenRecords
+                        .Where(t => t.FamilyId == familyId && t.RevokedAt == null)
+                        .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, now), cancellationToken);
                 }
             }
             throw ApiException.Forbidden("invalid_refresh_token", "Refresh token is invalid or expired.");
@@ -499,16 +508,26 @@ public sealed class AuthService(
         account.PasswordHash = passwordHasher.HashPassword(account, request.NewPassword);
         account.UpdatedAt = now;
 
-        var activeRefreshTokens = await db.RefreshTokenRecords
-            .Where(x => x.ApplicationUserAccountId == account.Id && x.RevokedAt == null)
-            .ToListAsync(cancellationToken);
-
-        foreach (var refreshToken in activeRefreshTokens)
+        if (db.Database.IsInMemory())
         {
-            refreshToken.RevokedAt = now;
-        }
+            var activeRefreshTokens = await db.RefreshTokenRecords
+                .Where(x => x.ApplicationUserAccountId == account.Id && x.RevokedAt == null)
+                .ToListAsync(cancellationToken);
 
-        await db.SaveChangesAsync(cancellationToken);
+            foreach (var refreshToken in activeRefreshTokens)
+            {
+                refreshToken.RevokedAt = now;
+            }
+
+            await db.SaveChangesAsync(cancellationToken);
+        }
+        else
+        {
+            await db.RefreshTokenRecords
+                .Where(x => x.ApplicationUserAccountId == account.Id && x.RevokedAt == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, now), cancellationToken);
+            await db.SaveChangesAsync(cancellationToken);
+        }
     }
 
     public async Task<AuthenticatorSetupResponse> BeginAuthenticatorSetupAsync(
@@ -729,13 +748,22 @@ public sealed class AuthService(
             account.UpdatedAt = now;
             learner.AccountStatus = "deleted";
 
-            var activeRefreshTokens = await db.RefreshTokenRecords
-                .Where(t => t.ApplicationUserAccountId == account.Id && t.RevokedAt == null)
-                .ToListAsync(cancellationToken);
-
-            foreach (var token in activeRefreshTokens)
+            if (db.Database.IsInMemory())
             {
-                token.RevokedAt = now;
+                var activeRefreshTokens = await db.RefreshTokenRecords
+                    .Where(t => t.ApplicationUserAccountId == account.Id && t.RevokedAt == null)
+                    .ToListAsync(cancellationToken);
+
+                foreach (var token in activeRefreshTokens)
+                {
+                    token.RevokedAt = now;
+                }
+            }
+            else
+            {
+                await db.RefreshTokenRecords
+                    .Where(t => t.ApplicationUserAccountId == account.Id && t.RevokedAt == null)
+                    .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, now), cancellationToken);
             }
 
             await db.SaveChangesAsync(cancellationToken);
@@ -947,17 +975,26 @@ public sealed class AuthService(
     private async Task RevokeRefreshTokenFamilyAsync(Guid familyId, CancellationToken cancellationToken)
     {
         var now = timeProvider.GetUtcNow();
-        var activeFamilyTokens = await db.RefreshTokenRecords
-            .Where(t => t.FamilyId == familyId && t.RevokedAt == null)
-            .ToListAsync(cancellationToken);
-        foreach (var familyToken in activeFamilyTokens)
+        if (db.Database.IsInMemory())
         {
-            familyToken.RevokedAt = now;
-        }
+            var activeFamilyTokens = await db.RefreshTokenRecords
+                .Where(t => t.FamilyId == familyId && t.RevokedAt == null)
+                .ToListAsync(cancellationToken);
+            foreach (var familyToken in activeFamilyTokens)
+            {
+                familyToken.RevokedAt = now;
+            }
 
-        if (activeFamilyTokens.Count > 0)
+            if (activeFamilyTokens.Count > 0)
+            {
+                await db.SaveChangesAsync(cancellationToken);
+            }
+        }
+        else
         {
-            await db.SaveChangesAsync(cancellationToken);
+            await db.RefreshTokenRecords
+                .Where(t => t.FamilyId == familyId && t.RevokedAt == null)
+                .ExecuteUpdateAsync(s => s.SetProperty(t => t.RevokedAt, now), cancellationToken);
         }
     }
 
@@ -1067,11 +1104,13 @@ public sealed class AuthService(
             .Distinct(StringComparer.Ordinal)
             .ToArray();
 
-        foreach (var candidateId in candidateIds)
+        if (candidateIds.Length > 0)
         {
+            // Single round-trip instead of N FirstOrDefaultAsync calls (auth hot path).
             var directMatch = await db.ApplicationUserAccounts
                 .AsNoTracking()
-                .SingleOrDefaultAsync(x => x.Id == candidateId, cancellationToken);
+                .Where(x => candidateIds.Contains(x.Id))
+                .FirstOrDefaultAsync(cancellationToken);
 
             if (directMatch is not null)
             {

@@ -11,7 +11,7 @@ public sealed class WhisperConversationAsrProvider(
     IConversationOptionsProvider optionsProvider,
     ILogger<WhisperConversationAsrProvider> logger) : IConversationAsrProvider
 {
-    private ConversationOptions ReadOptions() => optionsProvider.GetAsync().GetAwaiter().GetResult();
+    private ConversationOptions ReadOptions() => optionsProvider.Snapshot();
 
     public string Name => "whisper";
     public bool IsConfigured =>

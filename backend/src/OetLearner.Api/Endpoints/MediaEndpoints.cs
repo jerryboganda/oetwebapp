@@ -128,7 +128,7 @@ public static class MediaEndpoints
         LearnerDbContext db,
         CancellationToken ct)
     {
-        var asset = await db.MediaAssets.FindAsync([id], ct);
+        var asset = await db.MediaAssets.AsNoTracking().FirstOrDefaultAsync(m => m.Id == id, ct);
         if (asset is null)
             return Results.NotFound(new { code = "media_not_found", message = "Media asset not found." });
         if (!await CanAccessMediaAsync(http, db, asset, ct))
@@ -187,6 +187,7 @@ public static class MediaEndpoints
         var effectivePageSize = Math.Clamp(pageSize ?? 20, 1, 100);
 
         var query = db.MediaAssets
+            .AsNoTracking()
             .Where(m => m.UploadedBy == userId)
             .OrderByDescending(m => m.UploadedAt);
 

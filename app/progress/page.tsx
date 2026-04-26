@@ -15,7 +15,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   Legend
-} from 'recharts';
+} from '@/components/charts/dynamic-recharts';
 import {
   TrendingUp,
   Activity,

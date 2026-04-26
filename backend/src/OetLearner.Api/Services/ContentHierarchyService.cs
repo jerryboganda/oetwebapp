@@ -23,7 +23,7 @@ public class ContentHierarchyService(LearnerDbContext db)
     }
 
     public async Task<ContentProgram?> GetProgramAsync(string programId, CancellationToken ct)
-        => await db.ContentPrograms.FindAsync([programId], ct);
+        => await db.ContentPrograms.AsNoTracking().FirstOrDefaultAsync(x => x.Id == programId, ct);
 
     public async Task<ContentProgram> CreateProgramAsync(string adminId, ContentProgram program, CancellationToken ct)
     {
@@ -56,7 +56,7 @@ public class ContentHierarchyService(LearnerDbContext db)
     // ── Tracks ──
 
     public async Task<List<ContentTrack>> GetTracksAsync(string programId, CancellationToken ct)
-        => await db.ContentTracks.Where(t => t.ProgramId == programId).OrderBy(t => t.DisplayOrder).ToListAsync(ct);
+        => await db.ContentTracks.AsNoTracking().Where(t => t.ProgramId == programId).OrderBy(t => t.DisplayOrder).ToListAsync(ct);
 
     public async Task<ContentTrack> CreateTrackAsync(ContentTrack track, CancellationToken ct)
     {
@@ -109,7 +109,7 @@ public class ContentHierarchyService(LearnerDbContext db)
     // ── Lessons ──
 
     public async Task<List<ContentLesson>> GetLessonsAsync(string moduleId, CancellationToken ct)
-        => await db.ContentLessons.Where(l => l.ModuleId == moduleId).OrderBy(l => l.DisplayOrder).ToListAsync(ct);
+        => await db.ContentLessons.AsNoTracking().Where(l => l.ModuleId == moduleId).OrderBy(l => l.DisplayOrder).ToListAsync(ct);
 
     public async Task<ContentLesson> CreateLessonAsync(ContentLesson lesson, CancellationToken ct)
     {
@@ -150,7 +150,7 @@ public class ContentHierarchyService(LearnerDbContext db)
     }
 
     public async Task<ContentPackage?> GetPackageAsync(string packageId, CancellationToken ct)
-        => await db.ContentPackages.FindAsync([packageId], ct);
+        => await db.ContentPackages.AsNoTracking().FirstOrDefaultAsync(x => x.Id == packageId, ct);
 
     public async Task<ContentPackage> CreatePackageAsync(ContentPackage package, CancellationToken ct)
     {
@@ -206,21 +206,17 @@ public class ContentHierarchyService(LearnerDbContext db)
 
     public async Task<HashSet<string>> ResolveAccessibleContentIdsAsync(string userId, CancellationToken ct)
     {
-        // Get user's active subscription → plan → package(s) → rules → content IDs
-        var subscription = await db.Subscriptions
-            .Where(s => s.UserId == userId && s.Status == SubscriptionStatus.Active)
-            .FirstOrDefaultAsync(ct);
-
-        if (subscription is null) return [];
-
-        var packages = await db.ContentPackages
-            .Where(p => p.BillingPlanId == subscription.PlanId && p.Status == ContentStatus.Published)
+        // Resolve packages directly via subquery: user's active subscription plan → published packages.
+        // Collapses the prior subscription+packages 2 round-trips into 1.
+        var packages = await db.ContentPackages.AsNoTracking()
+            .Where(p => p.Status == ContentStatus.Published
+                && db.Subscriptions.Any(s => s.UserId == userId && s.Status == SubscriptionStatus.Active && s.PlanId == p.BillingPlanId))
             .Select(p => p.Id)
             .ToListAsync(ct);
 
         if (packages.Count == 0) return [];
 
-        var rules = await db.PackageContentRules
+        var rules = await db.PackageContentRules.AsNoTracking()
             .Where(r => packages.Contains(r.PackageId))
             .ToListAsync(ct);
 
@@ -262,8 +258,15 @@ public class ContentHierarchyService(LearnerDbContext db)
 
     private async Task<List<string>> GetContentIdsForProgramAsync(string programId, CancellationToken ct)
     {
-        var trackIds = await db.ContentTracks.Where(t => t.ProgramId == programId).Select(t => t.Id).ToListAsync(ct);
-        return await GetContentIdsForTracksAsync(trackIds, ct);
+        // Single round-trip: EF translates the inner Where + Select to an IN-subquery.
+        return await db.ContentLessons
+            .Where(l => l.ContentItemId != null
+                && db.ContentModules.Where(m =>
+                    db.ContentTracks.Where(t => t.ProgramId == programId).Select(t => t.Id).Contains(m.TrackId))
+                    .Select(m => m.Id).Contains(l.ModuleId))
+            .Select(l => l.ContentItemId!)
+            .Distinct()
+            .ToListAsync(ct);
     }
 
     private async Task<List<string>> GetContentIdsForTrackAsync(string trackId, CancellationToken ct)
@@ -271,8 +274,13 @@ public class ContentHierarchyService(LearnerDbContext db)
 
     private async Task<List<string>> GetContentIdsForTracksAsync(List<string> trackIds, CancellationToken ct)
     {
-        var moduleIds = await db.ContentModules.Where(m => trackIds.Contains(m.TrackId)).Select(m => m.Id).ToListAsync(ct);
-        return await GetContentIdsForModulesAsync(moduleIds, ct);
+        // Single round-trip via IN-subquery instead of two sequential queries.
+        return await db.ContentLessons
+            .Where(l => l.ContentItemId != null
+                && db.ContentModules.Where(m => trackIds.Contains(m.TrackId)).Select(m => m.Id).Contains(l.ModuleId))
+            .Select(l => l.ContentItemId!)
+            .Distinct()
+            .ToListAsync(ct);
     }
 
     private async Task<List<string>> GetContentIdsForModuleAsync(string moduleId, CancellationToken ct)
@@ -329,7 +337,7 @@ public class ContentHierarchyService(LearnerDbContext db)
     // ── Free Preview Assets ──
 
     public async Task<List<FreePreviewAsset>> GetFreePreviewAssetsAsync(CancellationToken ct)
-        => await db.FreePreviewAssets.OrderBy(a => a.DisplayOrder).ToListAsync(ct);
+        => await db.FreePreviewAssets.AsNoTracking().OrderBy(a => a.DisplayOrder).ToListAsync(ct);
 
     // ── Testimonials ──
 

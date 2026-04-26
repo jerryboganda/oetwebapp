@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, LineChart, Line } from 'recharts';
+import { BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, LineChart, Line } from '@/components/charts/dynamic-recharts';
 import { Shield, Target, TrendingUp, BarChart3 } from 'lucide-react';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Card, CardContent } from '@/components/ui/card';

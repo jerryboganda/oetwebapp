@@ -29,23 +29,21 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         var now = DateTimeOffset.UtcNow;
         var queuedJobQuery = db.BackgroundJobs
-            .Where(x => x.State == AsyncState.Queued);
+            .Where(x => x.State == AsyncState.Queued && x.AvailableAt <= now);
 
-        var queuedJobs = db.Database.IsSqlite()
-            ? await queuedJobQuery
+        var jobs = db.Database.IsSqlite()
+            ? (await queuedJobQuery
                 .Take(200)
-                .ToListAsync(cancellationToken)
+                .ToListAsync(cancellationToken))
+                .OrderBy(x => x.AvailableAt)
+                .ThenBy(x => x.CreatedAt)
+                .Take(50)
+                .ToList()
             : await queuedJobQuery
-                .OrderBy(x => x.CreatedAt)
+                .OrderBy(x => x.AvailableAt)
+                .ThenBy(x => x.CreatedAt)
                 .Take(50)
                 .ToListAsync(cancellationToken);
-
-        var jobs = queuedJobs
-            .Where(x => x.AvailableAt <= now)
-            .OrderBy(x => x.AvailableAt)
-            .ThenBy(x => x.CreatedAt)
-            .Take(50)
-            .ToList();
 
         foreach (var job in jobs)
         {
@@ -484,10 +482,24 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         plan.Checkpoint = "Regenerated after your latest evaluated attempt.";
         plan.WeakSkillFocus = "Writing conciseness and speaking fluency remain top priority.";
 
-        var items = await db.StudyPlanItems.Where(x => x.StudyPlanId == plan.Id).ToListAsync(cancellationToken);
-        foreach (var item in items.Where(x => x.Status == StudyPlanItemStatus.NotStarted))
+        var newDueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+        if (db.Database.IsInMemory())
         {
-            item.DueDate = DateOnly.FromDateTime(DateTime.UtcNow.AddDays(1));
+            // EF InMemory provider does not support ExecuteUpdateAsync — fall back to load+mutate.
+            var notStartedItems = await db.StudyPlanItems
+                .Where(x => x.StudyPlanId == plan.Id && x.Status == StudyPlanItemStatus.NotStarted)
+                .ToListAsync(cancellationToken);
+            foreach (var item in notStartedItems)
+            {
+                item.DueDate = newDueDate;
+            }
+        }
+        else
+        {
+            // Pushdown: single UPDATE … WHERE … in SQL, no row materialization.
+            await db.StudyPlanItems
+                .Where(x => x.StudyPlanId == plan.Id && x.Status == StudyPlanItemStatus.NotStarted)
+                .ExecuteUpdateAsync(s => s.SetProperty(x => x.DueDate, newDueDate), cancellationToken);
         }
 
         await notifications.CreateForLearnerAsync(

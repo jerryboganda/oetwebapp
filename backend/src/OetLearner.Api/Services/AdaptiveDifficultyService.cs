@@ -14,7 +14,7 @@ public class AdaptiveDifficultyService(LearnerDbContext db)
 
     public async Task<object> GetSkillProfileAsync(string userId, string? examTypeCode, CancellationToken ct)
     {
-        var query = db.LearnerSkillProfiles.Where(p => p.UserId == userId);
+        var query = db.LearnerSkillProfiles.AsNoTracking().Where(p => p.UserId == userId);
         if (!string.IsNullOrEmpty(examTypeCode))
             query = query.Where(p => p.ExamTypeCode == examTypeCode);
 
@@ -56,7 +56,7 @@ public class AdaptiveDifficultyService(LearnerDbContext db)
         var targetRating = profile?.CurrentRating ?? DefaultRating;
         var tolerance = 200;
 
-        var items = await db.ContentItems
+        var items = await db.ContentItems.AsNoTracking()
             .Where(c => c.ExamTypeCode == examTypeCode && c.SubtestCode == subtestCode && c.Status == ContentStatus.Published)
             .Where(c => c.DifficultyRating >= targetRating - tolerance && c.DifficultyRating <= targetRating + tolerance)
             .OrderBy(_ => Guid.NewGuid())
@@ -66,7 +66,7 @@ public class AdaptiveDifficultyService(LearnerDbContext db)
         // Fall back to any content if not enough in range
         if (items.Count < count)
         {
-            var fallback = await db.ContentItems
+            var fallback = await db.ContentItems.AsNoTracking()
                 .Where(c => c.ExamTypeCode == examTypeCode && c.SubtestCode == subtestCode && c.Status == ContentStatus.Published)
                 .OrderBy(_ => Guid.NewGuid())
                 .Take(count - items.Count)

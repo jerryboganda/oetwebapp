@@ -16,7 +16,8 @@ public partial class AdminService(
     EmailOtpService emailOtpService,
     IPasswordHasher<ApplicationUserAccount> passwordHasher,
     TimeProvider timeProvider,
-    NotificationService notifications)
+    NotificationService notifications,
+    OetLearner.Api.Services.Caching.IReferenceDataCache referenceCache)
 {
     private const string ActiveUserStatus = "active";
     private const string SuspendedUserStatus = "suspended";
@@ -820,6 +821,7 @@ public partial class AdminService(
             SortOrder = maxSort + 1
         });
         await db.SaveChangesAsync(ct);
+        referenceCache.InvalidateProfessions();
 
         await LogAuditAsync(adminId, adminName, "Created", "Taxonomy", id, $"Created profession: {request.Label}", ct);
         return new { id, status = "active" };
@@ -835,6 +837,7 @@ public partial class AdminService(
         if (request.Code is not null) p.Code = request.Code;
         if (request.Status is not null) p.Status = request.Status;
         await db.SaveChangesAsync(ct);
+        referenceCache.InvalidateProfessions();
 
         await LogAuditAsync(adminId, adminName, "Updated", "Taxonomy", professionId, $"Updated profession: {p.Label}", ct);
         return new { id = professionId, status = p.Status };
@@ -848,6 +851,7 @@ public partial class AdminService(
 
         p.Status = "archived";
         await db.SaveChangesAsync(ct);
+        referenceCache.InvalidateProfessions();
 
         await LogAuditAsync(adminId, adminName, "Archived", "Taxonomy", professionId, $"Archived profession: {p.Label}", ct);
         return new { id = professionId, status = "archived" };
@@ -2183,6 +2187,7 @@ public partial class AdminService(
 
         db.BillingPlans.Add(plan);
         await db.SaveChangesAsync(ct);
+        referenceCache.InvalidateBillingPlans();
 
         await LogAuditAsync(adminId, adminName, "Created", "BillingPlan", id, $"Created plan: {request.Name}", ct);
         return MapBillingPlan(plan);
@@ -2213,6 +2218,7 @@ public partial class AdminService(
         plan.UpdatedAt = now;
 
         await db.SaveChangesAsync(ct);
+        referenceCache.InvalidateBillingPlans();
         await LogAuditAsync(adminId, adminName, "Updated", "BillingPlan", plan.Id, $"Updated plan: {request.Name}", ct);
         return MapBillingPlan(plan);
     }
@@ -2282,6 +2288,7 @@ public partial class AdminService(
 
         db.BillingAddOns.Add(addOn);
         await db.SaveChangesAsync(ct);
+        referenceCache.InvalidateBillingAddOns();
         await LogAuditAsync(adminId, adminName, "Created", "BillingAddOn", addOn.Id, $"Created add-on: {request.Name}", ct);
         return MapBillingAddOn(addOn);
     }
@@ -2312,6 +2319,7 @@ public partial class AdminService(
         addOn.UpdatedAt = now;
 
         await db.SaveChangesAsync(ct);
+        referenceCache.InvalidateBillingAddOns();
         await LogAuditAsync(adminId, adminName, "Updated", "BillingAddOn", addOn.Id, $"Updated add-on: {request.Name}", ct);
         return MapBillingAddOn(addOn);
     }
@@ -4514,20 +4522,28 @@ public partial class AdminService(
 
     public async Task<object> GetContentItemAnalyticsAsync(string contentId, CancellationToken ct)
     {
-        var content = await db.ContentItems.FindAsync([contentId], ct)
+        var content = await db.ContentItems.AsNoTracking().FirstOrDefaultAsync(c => c.Id == contentId, ct)
             ?? throw ApiException.NotFound("CONTENT_NOT_FOUND", "Content item not found.");
 
-        var attempts = await db.Attempts.Where(a => a.ContentId == contentId).ToListAsync(ct);
-        var completedAttempts = attempts.Where(a => a.State == AttemptState.Completed).ToList();
-        var evaluations = await db.Evaluations
-            .Where(e => attempts.Select(a => a.Id).Contains(e.AttemptId))
+        // Slim projection (UserId/State/StartedAt/ElapsedSeconds + Id) avoids loading wide Attempt rows.
+        var attempts = await db.Attempts.AsNoTracking()
+            .Where(a => a.ContentId == contentId)
+            .Select(a => new { a.Id, a.UserId, a.State, a.StartedAt, a.ElapsedSeconds })
             .ToListAsync(ct);
+        var completedAttempts = attempts.Where(a => a.State == AttemptState.Completed).ToList();
+        var attemptIds = attempts.Select(a => a.Id).ToList();
+        var evaluations = attemptIds.Count == 0
+            ? new List<string?>()
+            : await db.Evaluations.AsNoTracking()
+                .Where(e => attemptIds.Contains(e.AttemptId))
+                .Select(e => e.ScoreRange)
+                .ToListAsync(ct);
 
         // Score distribution
         var scores = evaluations
-            .Select(e =>
+            .Select(scoreRange =>
             {
-                var parts = e.ScoreRange?.Split('-');
+                var parts = scoreRange?.Split('-');
                 return parts?.Length == 2 && int.TryParse(parts[0], out var lo) && int.TryParse(parts[1], out var hi)
                     ? (lo + hi) / 2.0 : (double?)null;
             })
@@ -4715,25 +4731,46 @@ public partial class AdminService(
     public async Task<object> GetLearnerCohortAnalysisAsync(string? groupBy, CancellationToken ct)
     {
         var groupKey = groupBy ?? "profession";
-        var users = await db.Users.ToListAsync(ct);
-        var goals = await db.Goals.ToListAsync(ct);
-        var goalsByUser = goals.ToDictionary(g => g.UserId, g => g);
+        var thirtyDaysAgo = DateTimeOffset.UtcNow.AddDays(-30);
+
+        // Aggregate users to (UserId, IsActiveLastMonth, TotalUsers) without hydrating full rows.
+        var totalUsers = await db.Users.AsNoTracking().CountAsync(ct);
+        var activeUserIds = await db.Users.AsNoTracking()
+            .Where(u => u.LastActiveAt >= thirtyDaysAgo)
+            .Select(u => u.Id)
+            .ToListAsync(ct);
+        var activeUserSet = new HashSet<string>(activeUserIds, StringComparer.Ordinal);
 
         var cohorts = new List<object>();
 
         if (groupKey == "profession")
         {
-            var professions = await db.Professions.ToListAsync(ct);
+            // 1 query: goals (UserId, ProfessionId)
+            var goals = await db.Goals.AsNoTracking()
+                .Select(g => new { g.UserId, g.ProfessionId })
+                .ToListAsync(ct);
+            if (goals.Count == 0)
+            {
+                return new { groupBy = groupKey, cohorts, totalLearners = totalUsers, generatedAt = DateTimeOffset.UtcNow };
+            }
+            // 1 query: professions
+            var professions = await db.Professions.AsNoTracking().ToListAsync(ct);
+            // 1 query: all eval rows joined to attempt -> (UserId, ScoreRange)
+            var relevantUserIds = goals.Select(g => g.UserId).Distinct().ToList();
+            var evalRows = await (
+                from e in db.Evaluations.AsNoTracking()
+                join a in db.Attempts.AsNoTracking() on e.AttemptId equals a.Id
+                where relevantUserIds.Contains(a.UserId)
+                select new { a.UserId, e.ScoreRange }
+            ).ToListAsync(ct);
+            var evalsByUser = evalRows.ToLookup(r => r.UserId);
+
             foreach (var prof in professions)
             {
-                var learners = goals.Where(g => g.ProfessionId == prof.Id).Select(g => g.UserId).ToList();
-                if (learners.Count == 0) continue;
-
-                var evals = await db.Evaluations
-                    .Where(e => db.Attempts.Any(a => a.Id == e.AttemptId && learners.Contains(a.UserId)))
-                    .ToListAsync(ct);
-
-                var avgScores = evals
+                var learnerIds = goals.Where(g => g.ProfessionId == prof.Id).Select(g => g.UserId).ToList();
+                if (learnerIds.Count == 0) continue;
+                var cohortEvals = learnerIds.SelectMany(uid => evalsByUser[uid]).ToList();
+                var avgScores = cohortEvals
                     .Select(e => { var p = e.ScoreRange?.Split('-'); return p?.Length == 2 && int.TryParse(p[0], out var lo) ? lo : (int?)null; })
                     .Where(s => s.HasValue).Select(s => (double)s!.Value).ToList();
 
@@ -4741,29 +4778,40 @@ public partial class AdminService(
                 {
                     cohortKey = prof.Id,
                     cohortName = prof.Label,
-                    learnerCount = learners.Count,
+                    learnerCount = learnerIds.Count,
                     averageScore = avgScores.Count > 0 ? Math.Round(avgScores.Average(), 1) : (double?)null,
-                    evaluationCount = evals.Count,
-                    activeLastMonth = users.Count(u => learners.Contains(u.Id) && u.LastActiveAt >= DateTimeOffset.UtcNow.AddDays(-30))
+                    evaluationCount = cohortEvals.Count,
+                    activeLastMonth = learnerIds.Count(uid => activeUserSet.Contains(uid))
                 });
             }
         }
         else
         {
-            // Group by subscription tier
-            var subs = await db.Subscriptions.Where(s => s.Status == SubscriptionStatus.Active).ToListAsync(ct);
-            var plans = await db.BillingPlans.ToListAsync(ct);
+            // 1 query: active subscriptions (UserId, PlanId)
+            var subs = await db.Subscriptions.AsNoTracking()
+                .Where(s => s.Status == SubscriptionStatus.Active)
+                .Select(s => new { s.UserId, s.PlanId })
+                .ToListAsync(ct);
+            if (subs.Count == 0)
+            {
+                return new { groupBy = groupKey, cohorts, totalLearners = totalUsers, generatedAt = DateTimeOffset.UtcNow };
+            }
+            var plans = await referenceCache.GetBillingPlansAsync(ct);
+            var relevantUserIds = subs.Select(s => s.UserId).Distinct().ToList();
+            var evalRows = await (
+                from e in db.Evaluations.AsNoTracking()
+                join a in db.Attempts.AsNoTracking() on e.AttemptId equals a.Id
+                where relevantUserIds.Contains(a.UserId)
+                select new { a.UserId, e.ScoreRange }
+            ).ToListAsync(ct);
+            var evalsByUser = evalRows.ToLookup(r => r.UserId);
+
             foreach (var plan in plans)
             {
-                var planSubs = subs.Where(s => s.PlanId == plan.Id).ToList();
-                var learnerIds = planSubs.Select(s => s.UserId).ToList();
+                var learnerIds = subs.Where(s => s.PlanId == plan.Id).Select(s => s.UserId).ToList();
                 if (learnerIds.Count == 0) continue;
-
-                var evals = await db.Evaluations
-                    .Where(e => db.Attempts.Any(a => a.Id == e.AttemptId && learnerIds.Contains(a.UserId)))
-                    .ToListAsync(ct);
-
-                var avgScores = evals
+                var cohortEvals = learnerIds.SelectMany(uid => evalsByUser[uid]).ToList();
+                var avgScores = cohortEvals
                     .Select(e => { var p = e.ScoreRange?.Split('-'); return p?.Length == 2 && int.TryParse(p[0], out var lo) ? lo : (int?)null; })
                     .Where(s => s.HasValue).Select(s => (double)s!.Value).ToList();
 
@@ -4773,8 +4821,8 @@ public partial class AdminService(
                     cohortName = plan.Name,
                     learnerCount = learnerIds.Count,
                     averageScore = avgScores.Count > 0 ? Math.Round(avgScores.Average(), 1) : (double?)null,
-                    evaluationCount = evals.Count,
-                    activeLastMonth = users.Count(u => learnerIds.Contains(u.Id) && u.LastActiveAt >= DateTimeOffset.UtcNow.AddDays(-30))
+                    evaluationCount = cohortEvals.Count,
+                    activeLastMonth = learnerIds.Count(uid => activeUserSet.Contains(uid))
                 });
             }
         }
@@ -4783,7 +4831,7 @@ public partial class AdminService(
         {
             groupBy = groupKey,
             cohorts = cohorts.OrderByDescending(c => ((dynamic)c).learnerCount).ToList(),
-            totalLearners = users.Count,
+            totalLearners = totalUsers,
             generatedAt = DateTimeOffset.UtcNow
         };
     }
@@ -4794,19 +4842,42 @@ public partial class AdminService(
 
     public async Task<object> GetContentEffectivenessAsync(string? subtestCode, int top, CancellationToken ct)
     {
-        var query = db.ContentItems.Where(c => c.Status == ContentStatus.Published);
+        var query = db.ContentItems.AsNoTracking().Where(c => c.Status == ContentStatus.Published);
         if (!string.IsNullOrEmpty(subtestCode)) query = query.Where(c => c.SubtestCode == subtestCode);
 
         var items = await query.Take(top > 0 ? top : 50).ToListAsync(ct);
-        var results = new List<object>();
+        if (items.Count == 0)
+        {
+            return new { subtestFilter = subtestCode, items = new List<object>(), generatedAt = DateTimeOffset.UtcNow };
+        }
 
+        var contentIds = items.Select(i => i.Id).ToList();
+
+        // 1 query: all attempts for these papers, projected to lightweight rows
+        var attemptRows = await db.Attempts.AsNoTracking()
+            .Where(a => contentIds.Contains(a.ContentId))
+            .Select(a => new { a.Id, a.ContentId, a.State, a.ElapsedSeconds })
+            .ToListAsync(ct);
+        var attemptsByContent = attemptRows.ToLookup(a => a.ContentId);
+
+        // 1 query: all evaluations across those attempts, joined to content id
+        var attemptIds = attemptRows.Select(a => a.Id).ToList();
+        var evalRows = attemptIds.Count == 0
+            ? new List<EvalProjection>()
+            : await (
+                from e in db.Evaluations.AsNoTracking()
+                join a in db.Attempts.AsNoTracking() on e.AttemptId equals a.Id
+                where contentIds.Contains(a.ContentId)
+                select new EvalProjection { ContentId = a.ContentId, ScoreRange = e.ScoreRange }
+            ).ToListAsync(ct);
+        var evalsByContent = evalRows.ToLookup(e => e.ContentId);
+
+        var results = new List<object>();
         foreach (var item in items)
         {
-            var attempts = await db.Attempts.Where(a => a.ContentId == item.Id).ToListAsync(ct);
+            var attempts = attemptsByContent[item.Id].ToList();
             var completedCount = attempts.Count(a => a.State == AttemptState.Completed);
-            var evals = await db.Evaluations
-                .Where(e => attempts.Select(a => a.Id).Contains(e.AttemptId))
-                .ToListAsync(ct);
+            var evals = evalsByContent[item.Id].ToList();
 
             var scores = evals
                 .Select(e => { var p = e.ScoreRange?.Split('-'); return p?.Length == 2 && int.TryParse(p[0], out var lo) ? lo : (int?)null; })
@@ -4835,6 +4906,12 @@ public partial class AdminService(
         };
     }
 
+    private sealed class EvalProjection
+    {
+        public string ContentId { get; set; } = string.Empty;
+        public string? ScoreRange { get; set; }
+    }
+
     // ═══════════════════════════════════════════════════════════════
     // R3: Expert Efficiency Report
     // ═══════════════════════════════════════════════════════════════
@@ -4842,36 +4919,64 @@ public partial class AdminService(
     public async Task<object> GetExpertEfficiencyReportAsync(int days, CancellationToken ct)
     {
         var since = DateTimeOffset.UtcNow.AddDays(-days);
-        var experts = await db.ExpertUsers.ToListAsync(ct);
-        var results = new List<object>();
+        var experts = await db.ExpertUsers.AsNoTracking().ToListAsync(ct);
+        if (experts.Count == 0)
+        {
+            return new
+            {
+                period = days,
+                experts = new List<object>(),
+                summary = new { totalExperts = 0, activeExperts = 0, totalReviewsCompleted = 0, averageReviewsPerExpertPerDay = 0.0 }
+            };
+        }
 
+        var expertIds = experts.Select(e => e.Id).ToList();
+
+        // 1 query: all assignments in the period for these experts
+        var assignments = await db.ExpertReviewAssignments.AsNoTracking()
+            .Where(a => expertIds.Contains(a.AssignedReviewerId) && a.AssignedAt >= since)
+            .ToListAsync(ct);
+        var assignmentsByExpert = assignments.ToLookup(a => a.AssignedReviewerId);
+
+        // 1 query: all drafts in the period for these experts
+        var drafts = await db.ExpertReviewDrafts.AsNoTracking()
+            .Where(d => expertIds.Contains(d.ReviewerId) && d.DraftSavedAt >= since)
+            .ToListAsync(ct);
+        var draftsByExpert = drafts.ToLookup(d => d.ReviewerId);
+
+        // For AI alignment, we sample up to 20 drafts per expert (preserve original semantics).
+        // Batch-load all needed ReviewRequests + Evaluations across the sampled draft set.
+        var sampledDrafts = experts
+            .SelectMany(e => draftsByExpert[e.Id].Take(20))
+            .ToList();
+        var sampledReviewIds = sampledDrafts.Select(d => d.ReviewRequestId).Distinct().ToList();
+        var requestLookup = sampledReviewIds.Count == 0
+            ? new Dictionary<string, ReviewRequest>()
+            : await db.ReviewRequests.AsNoTracking()
+                .Where(r => sampledReviewIds.Contains(r.Id))
+                .ToDictionaryAsync(r => r.Id, ct);
+        var sampledAttemptIds = requestLookup.Values.Select(r => r.AttemptId).Distinct().ToList();
+        var evalByAttempt = sampledAttemptIds.Count == 0
+            ? new Dictionary<string, Evaluation>()
+            : (await db.Evaluations.AsNoTracking()
+                    .Where(e => sampledAttemptIds.Contains(e.AttemptId))
+                    .ToListAsync(ct))
+                .GroupBy(e => e.AttemptId)
+                .ToDictionary(g => g.Key, g => g.First());
+
+        var results = new List<object>();
         foreach (var expert in experts)
         {
-            var assignments = await db.ExpertReviewAssignments
-                .Where(a => a.AssignedReviewerId == expert.Id && a.AssignedAt >= since)
-                .ToListAsync(ct);
+            var expertAssignments = assignmentsByExpert[expert.Id].ToList();
+            var expertDrafts = draftsByExpert[expert.Id].ToList();
+            var completedCount = expertDrafts.Count;
 
-            var drafts = await db.ExpertReviewDrafts
-                .Where(d => d.ReviewerId == expert.Id && d.DraftSavedAt >= since)
-                .ToListAsync(ct);
-
-            var completedCount = drafts.Count;
-var draftTimeEstimates = drafts.Select(d =>
-                {
-                    // Estimate time from draft save patterns — no explicit TimeSpentSeconds field
-                    return 15.0; // Default estimate in minutes per review
-                }).ToList();
-                var avgReviewMinutes = draftTimeEstimates.Count > 0 ? Math.Round(draftTimeEstimates.Average(), 1) : (double?)null;
-
-            // Quality alignment — compare with AI
+            // Quality alignment vs AI — sampled to 20 drafts (preserved semantics).
             var aiDiffs = new List<double>();
-            foreach (var draft in drafts.Take(20))
+            foreach (var draft in expertDrafts.Take(20))
             {
-                var request = await db.ReviewRequests.FindAsync([draft.ReviewRequestId], ct);
-                if (request is null) continue;
-                var aiEval = await db.Evaluations
-                    .FirstOrDefaultAsync(e => e.AttemptId == request.AttemptId, ct);
-                if (aiEval is null) continue;
+                if (!requestLookup.TryGetValue(draft.ReviewRequestId, out var request)) continue;
+                if (!evalByAttempt.TryGetValue(request.AttemptId, out var aiEval)) continue;
 
                 try
                 {
@@ -4897,14 +5002,12 @@ var draftTimeEstimates = drafts.Select(d =>
                 expertId = expert.Id,
                 expertName = expert.DisplayName,
                 period = days,
-                assignmentsReceived = assignments.Count,
+                assignmentsReceived = expertAssignments.Count,
                 reviewsCompleted = completedCount,
-                averageReviewTimeMinutes = avgReviewMinutes,
+                averageReviewTimeMinutes = (double?)null, // No TimeSpentSeconds field — populate when telemetry is added.
                 reviewsPerDay = Math.Round(completedCount / (double)Math.Max(days, 1), 1),
                 aiAlignmentScore = aiDiffs.Count > 0 ? Math.Round(100 - aiDiffs.Average() * 10, 1) : (double?)null,
-                efficiency = completedCount > 0 && avgReviewMinutes.HasValue
-                    ? avgReviewMinutes.Value <= 15 ? "high" : avgReviewMinutes.Value <= 25 ? "medium" : "low"
-                    : "no-data"
+                efficiency = completedCount > 0 ? "no-data" : "no-data"
             });
         }
 
@@ -4931,9 +5034,14 @@ var draftTimeEstimates = drafts.Select(d =>
     public async Task<object> GetSubscriptionHealthAsync(CancellationToken ct)
     {
         var now = DateTimeOffset.UtcNow;
-        var activeSubs = await db.Subscriptions.Where(s => s.Status == SubscriptionStatus.Active).ToListAsync(ct);
-        var allSubs = await db.Subscriptions.ToListAsync(ct);
-        var plans = await db.BillingPlans.ToDictionaryAsync(p => p.Id, ct);
+        // Slim projection (Id/Name/Price/TrialDays/PlanId/Status/StartedAt/ChangedAt) keeps memory + bandwidth bounded.
+        var plans = await db.BillingPlans.AsNoTracking()
+            .Select(p => new { p.Id, p.Name, p.Price, p.TrialDays })
+            .ToDictionaryAsync(p => p.Id, ct);
+        var allSubs = await db.Subscriptions.AsNoTracking()
+            .Select(s => new { s.PlanId, s.Status, s.StartedAt, s.ChangedAt })
+            .ToListAsync(ct);
+        var activeSubs = allSubs.Where(s => s.Status == SubscriptionStatus.Active).ToList();
 
         // MRR calculation
         var mrr = activeSubs.Sum(s => plans.TryGetValue(s.PlanId, out var p) ? p.Price : 0);

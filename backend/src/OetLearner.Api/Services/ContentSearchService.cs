@@ -14,7 +14,7 @@ public class ContentSearchService(LearnerDbContext db)
     /// </summary>
     public async Task<object> SearchContentAsync(ContentSearchQuery query, CancellationToken ct)
     {
-        var q = db.ContentItems
+        var q = db.ContentItems.AsNoTracking()
             .Where(c => c.Status == ContentStatus.Published && c.FreshnessConfidence != "superseded");
 
         if (!string.IsNullOrEmpty(query.Text))
@@ -66,7 +66,7 @@ public class ContentSearchService(LearnerDbContext db)
     /// </summary>
     public async Task<object> GetSearchFacetsAsync(CancellationToken ct)
     {
-        var published = db.ContentItems
+        var published = db.ContentItems.AsNoTracking()
             .Where(c => c.Status == ContentStatus.Published && c.FreshnessConfidence != "superseded");
 
         var subtestFacets = await published
@@ -111,7 +111,7 @@ public class ContentSearchService(LearnerDbContext db)
     public async Task<object> GetRecommendationsAsync(string userId, int count, CancellationToken ct)
     {
         // Get user's attempt history to find gaps
-        var recentAttempts = await db.Attempts
+        var recentAttempts = await db.Attempts.AsNoTracking()
             .Where(a => a.UserId == userId)
             .OrderByDescending(a => a.StartedAt)
             .Take(50)
@@ -129,7 +129,7 @@ public class ContentSearchService(LearnerDbContext db)
             .First();
 
         // Get content items not yet attempted, prioritizing weakest subtest
-        var recommendations = await db.ContentItems
+        var recommendations = await db.ContentItems.AsNoTracking()
             .Where(c => c.Status == ContentStatus.Published
                         && c.FreshnessConfidence != "superseded"
                         && !attemptedContentIds.Contains(c.Id))
@@ -147,16 +147,16 @@ public class ContentSearchService(LearnerDbContext db)
             .ToListAsync(ct);
 
         // Quick-access sections
-        var officialSamples = await db.ContentItems
+        var officialSamples = await db.ContentItems.AsNoTracking()
             .Where(c => c.SourceProvenance == "official_sample" && c.Status == ContentStatus.Published)
             .Take(5).Select(c => new { c.Id, c.Title, c.SubtestCode }).ToListAsync(ct);
 
-        var recentRecalls = await db.ContentItems
+        var recentRecalls = await db.ContentItems.AsNoTracking()
             .Where(c => c.SourceProvenance == "recall" && c.Status == ContentStatus.Published)
             .OrderByDescending(c => c.CreatedAt).Take(5)
             .Select(c => new { c.Id, c.Title, c.SubtestCode }).ToListAsync(ct);
 
-        var freeWebinars = await db.FreePreviewAssets
+        var freeWebinars = await db.FreePreviewAssets.AsNoTracking()
             .Where(a => a.PreviewType == "webinar_replay" && a.Status == ContentStatus.Published)
             .Take(5).Select(a => new { a.Id, a.Title }).ToListAsync(ct);
 

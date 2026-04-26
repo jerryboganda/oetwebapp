@@ -66,12 +66,13 @@ public static class LearningContentEndpoints
             [FromQuery] string? level,
             LearnerDbContext db, CancellationToken ct) =>
         {
-            var query = db.GrammarLessons.Where(l => l.Status == "active");
+            var query = db.GrammarLessons.AsNoTracking().Where(l => l.Status == "active");
             if (!string.IsNullOrEmpty(examTypeCode)) query = query.Where(l => l.ExamTypeCode == examTypeCode);
             if (!string.IsNullOrEmpty(category)) query = query.Where(l => l.Category == category);
             if (!string.IsNullOrEmpty(level)) query = query.Where(l => l.Level == level);
 
             var progressByLessonId = await db.LearnerGrammarProgress
+                .AsNoTracking()
                 .Where(p => p.UserId == http.UserId())
                 .ToDictionaryAsync(p => p.LessonId, ct);
 
@@ -91,10 +92,10 @@ public static class LearningContentEndpoints
 
         grammar.MapGet("/lessons/{lessonId}", async (HttpContext http, string lessonId, LearnerDbContext db, CancellationToken ct) =>
         {
-            var lesson = await db.GrammarLessons.FindAsync([lessonId], ct);
+            var lesson = await db.GrammarLessons.AsNoTracking().FirstOrDefaultAsync(x => x.Id == lessonId, ct);
             if (lesson == null || lesson.Status != "active") return Results.NotFound(new { error = "NOT_FOUND" });
 
-            var progress = await db.LearnerGrammarProgress.FirstOrDefaultAsync(p => p.UserId == http.UserId() && p.LessonId == lessonId, ct);
+            var progress = await db.LearnerGrammarProgress.AsNoTracking().FirstOrDefaultAsync(p => p.UserId == http.UserId() && p.LessonId == lessonId, ct);
             return Results.Ok(new
             {
                 id = lesson.Id, title = lesson.Title, description = lesson.Description, category = lesson.Category,

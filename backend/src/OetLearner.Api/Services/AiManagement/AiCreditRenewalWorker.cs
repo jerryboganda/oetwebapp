@@ -62,21 +62,40 @@ public sealed class AiCreditRenewalWorker(
             .Where(s => s.Status == SubscriptionStatus.Active)
             .ToListAsync(ct);
 
+        // Pre-load reference data once instead of N+1 queries per subscription.
+        var planIds = subs.Select(s => s.PlanId).Distinct().ToList();
+        var billingPlans = planIds.Count == 0
+            ? new Dictionary<string, BillingPlan>()
+            : await db.BillingPlans.AsNoTracking()
+                .Where(p => planIds.Contains(p.Id))
+                .ToDictionaryAsync(p => p.Id, ct);
+
+        var planCodes = billingPlans.Values.Select(p => p.Code).Distinct().ToList();
+        var aiPlans = planCodes.Count == 0
+            ? new Dictionary<string, AiQuotaPlan>()
+            : await db.AiQuotaPlans.AsNoTracking()
+                .Where(p => planCodes.Contains(p.Code) && p.IsActive)
+                .ToDictionaryAsync(p => p.Code, ct);
+
+        // Pre-load already-granted reference ids for this period in one query.
+        var periodSuffix = $":{periodKey}";
+        var grantedRefs = (await db.AiCreditLedger.AsNoTracking()
+            .Where(x => x.ReferenceId != null
+                && x.ReferenceId.StartsWith("renewal:")
+                && x.ReferenceId.EndsWith(periodSuffix))
+            .Select(x => x.ReferenceId!)
+            .ToListAsync(ct))
+            .ToHashSet();
+
         int renewedCount = 0;
         foreach (var sub in subs)
         {
-            var billingPlan = await db.BillingPlans.AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Id == sub.PlanId, ct);
-            if (billingPlan is null) continue;
-
-            var aiPlan = await db.AiQuotaPlans.AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Code == billingPlan.Code && p.IsActive, ct);
-            if (aiPlan is null || aiPlan.MonthlyTokenCap <= 0) continue;
+            if (!billingPlans.TryGetValue(sub.PlanId, out var billingPlan)) continue;
+            if (!aiPlans.TryGetValue(billingPlan.Code, out var aiPlan)) continue;
+            if (aiPlan.MonthlyTokenCap <= 0) continue;
 
             var referenceId = $"renewal:{sub.UserId}:{periodKey}";
-            var alreadyGranted = await db.AiCreditLedger.AsNoTracking()
-                .AnyAsync(x => x.ReferenceId == referenceId, ct);
-            if (alreadyGranted) continue;
+            if (grantedRefs.Contains(referenceId)) continue;
 
             DateTimeOffset? expiresAt = aiPlan.RolloverPolicy switch
             {

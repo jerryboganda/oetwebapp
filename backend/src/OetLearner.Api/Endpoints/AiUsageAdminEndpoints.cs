@@ -190,7 +190,7 @@ public static class AiUsageAdminEndpoints
                 .OrderBy(p => p.DisplayOrder).ThenBy(p => p.Code)
                 .ToListAsync(ct);
             return Results.Ok(plans);
-        });
+        }).CacheOutput("AdminReference");
 
         group.MapPost("/plans", async (AiQuotaPlanUpsertDto dto, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
         {
@@ -385,7 +385,7 @@ public static class AiUsageAdminEndpoints
                 })
                 .ToListAsync(ct);
             return Results.Ok(rows);
-        });
+        }).CacheOutput("AdminReference");
 
         group.MapPost("/providers", async (
             AiProviderUpsertDto dto,

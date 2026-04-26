@@ -873,7 +873,7 @@ public static class AdminEndpoints
             {
                 var p = page is null or < 1 ? 1 : page.Value;
                 var ps = pageSize is null or < 1 or > 100 ? 25 : pageSize.Value;
-                var q = db.ConversationSessions.AsQueryable();
+                var q = db.ConversationSessions.AsNoTracking().AsQueryable();
                 if (!string.IsNullOrWhiteSpace(userId)) q = q.Where(s => s.UserId == userId);
                 if (!string.IsNullOrWhiteSpace(state)) q = q.Where(s => s.State == state);
                 if (!string.IsNullOrWhiteSpace(taskTypeCode)) q = q.Where(s => s.TaskTypeCode == taskTypeCode);
@@ -894,16 +894,16 @@ public static class AdminEndpoints
                 CancellationToken ct) =>
             {
                 var session = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
-                    .FirstOrDefaultAsync(db.ConversationSessions.AsQueryable(), s => s.Id == sessionId, ct);
+                    .FirstOrDefaultAsync(db.ConversationSessions.AsNoTracking(), s => s.Id == sessionId, ct);
                 if (session is null) return Results.NotFound();
                 var turns = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
-                    db.ConversationTurns.Where(t => t.SessionId == sessionId).OrderBy(t => t.TurnNumber), ct);
+                    db.ConversationTurns.AsNoTracking().Where(t => t.SessionId == sessionId).OrderBy(t => t.TurnNumber), ct);
                 var evaluation = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
-                    .FirstOrDefaultAsync(db.ConversationEvaluations.AsQueryable(), e => e.SessionId == sessionId, ct);
+                    .FirstOrDefaultAsync(db.ConversationEvaluations.AsNoTracking(), e => e.SessionId == sessionId, ct);
                 var annotations = evaluation is null
                     ? new List<OetLearner.Api.Domain.ConversationTurnAnnotation>()
                     : await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
-                        db.ConversationTurnAnnotations.Where(a => a.EvaluationId == evaluation.Id).OrderBy(a => a.TurnNumber), ct);
+                        db.ConversationTurnAnnotations.AsNoTracking().Where(a => a.EvaluationId == evaluation.Id).OrderBy(a => a.TurnNumber), ct);
                 return Results.Ok(new
                 {
                     session = new
@@ -937,8 +937,23 @@ public static class AdminEndpoints
                 CancellationToken ct) =>
             {
                 var evals = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
-                    db.ConversationEvaluations.OrderByDescending(e => e.CreatedAt).Take(10000), ct);
-                var csv = new System.Text.StringBuilder();
+                    db.ConversationEvaluations
+                        .AsNoTracking()
+                        .OrderByDescending(e => e.CreatedAt)
+                        .Take(10000)
+                        .Select(e => new
+                        {
+                            e.Id,
+                            e.SessionId,
+                            e.UserId,
+                            e.OverallScaled,
+                            e.OverallGrade,
+                            e.Passed,
+                            e.RulebookVersion,
+                            e.CreatedAt
+                        }),
+                    ct);
+                var csv = new System.Text.StringBuilder(evals.Count * 80);
                 csv.AppendLine("Id,SessionId,UserId,OverallScaled,OverallGrade,Passed,RulebookVersion,CreatedAt");
                 foreach (var e in evals)
                     csv.AppendLine($"{e.Id},{e.SessionId},{e.UserId},{e.OverallScaled},{e.OverallGrade},{e.Passed},{e.RulebookVersion},{e.CreatedAt:O}");
@@ -1068,8 +1083,7 @@ public static class AdminEndpoints
         {
             var thread = await db.ForumThreads.FindAsync([threadId], ct);
             if (thread == null) return Results.NotFound(new { error = "THREAD_NOT_FOUND" });
-            var replies = await db.ForumReplies.Where(r => r.ThreadId == threadId).ToListAsync(ct);
-            db.ForumReplies.RemoveRange(replies);
+            await db.ForumReplies.Where(r => r.ThreadId == threadId).ExecuteDeleteAsync(ct);
             db.ForumThreads.Remove(thread);
             await db.SaveChangesAsync(ct);
             return Results.Ok(new { deleted = true });
@@ -1144,6 +1158,7 @@ public static class AdminEndpoints
         admin.MapGet("/roles/{roleId}/users", async (string roleId, LearnerDbContext db, CancellationToken ct) =>
         {
             var users = await db.AdminUsers
+                .AsNoTracking()
                 .Where(u => u.Role == roleId)
                 .Select(u => new { u.Id, u.DisplayName, u.Email, u.Role, u.IsActive })
                 .ToListAsync(ct);

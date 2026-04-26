@@ -64,7 +64,8 @@ public class ProfileAccessGuardTests
         var paymentGateways = CreatePaymentGatewayService(billingOptions);
         var walletService = new WalletService(db, paymentGateways, platformLinks);
 
-        return new LearnerService(db, mediaStorage, platformLinks, null!, walletService, paymentGateways);
+        return new LearnerService(db, mediaStorage, platformLinks, null!, walletService, paymentGateways,
+            new OetLearner.Api.Services.Caching.ReferenceDataCache(db, new Microsoft.Extensions.Caching.Memory.MemoryCache(new Microsoft.Extensions.Caching.Memory.MemoryCacheOptions())));
     }
 
     private static ExpertService CreateExpertService(LearnerDbContext db)

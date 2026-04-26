@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, BarChart3, CheckCircle2, Clock, Download, FileText, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { exportToCsv, formatDateForExport } from '@/lib/csv-export';
-import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
+import { CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis, YAxis } from '@/components/charts/dynamic-recharts';
 import { AdminRouteFreshnessBadge, AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';

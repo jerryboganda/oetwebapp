@@ -21,6 +21,17 @@ namespace OetLearner.Api.Services.Conversation;
 public interface IConversationOptionsProvider
 {
     Task<ConversationOptions> GetAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Synchronous read of the most recently cached merged options.
+    /// Returns the in-memory cached snapshot when present (the common
+    /// case under the 30 s TTL); otherwise falls back to the env-var /
+    /// appsettings base options. Used by ASR/TTS providers' synchronous
+    /// <c>IsConfigured</c> property and HttpClient header construction
+    /// where awaiting is not idiomatic. Never blocks a thread on the DB.
+    /// </summary>
+    ConversationOptions Snapshot();
+
     void Invalidate();
 }
 
@@ -50,6 +61,15 @@ public sealed class ConversationOptionsProvider(
     }
 
     public void Invalidate() => cache.Remove(CacheKey);
+
+    public ConversationOptions Snapshot()
+    {
+        if (cache.TryGetValue<ConversationOptions>(CacheKey, out var cached) && cached is not null)
+            return cached;
+        // Cache cold: return the env-var/appsettings base options without
+        // DB overrides. The next async caller will warm the cache.
+        return Clone(baseOptions.Value);
+    }
 
     private string? Unprotect(string? cipher)
     {

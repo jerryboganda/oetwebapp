@@ -14,7 +14,11 @@ public static class RulebookEndpoints
 {
     public static void MapRulebookEndpoints(this IEndpointRouteBuilder app)
     {
-        var group = app.MapGroup("/v1/rulebooks").RequireAuthorization("RulebookReader");
+        // Rulebook reads are immutable per deploy and authenticated only by
+        // role membership (not per-user data) \u2014 safe to OutputCache for 5 min.
+        var group = app.MapGroup("/v1/rulebooks")
+            .RequireAuthorization("RulebookReader")
+            .CacheOutput("Rulebooks");
 
         group.MapGet("/", (IRulebookLoader loader) =>
             Results.Ok(loader.All().Select(b => new
