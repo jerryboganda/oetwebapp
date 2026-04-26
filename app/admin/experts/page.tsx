@@ -27,6 +27,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input, Select, Textarea } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
+import { Pagination } from '@/components/ui/pagination';
 import {
   inviteAdminUser,
   updateAdminUserStatus,
@@ -165,9 +166,6 @@ export default function ExpertManagementPage() {
     return { total, active, suspended, psTutors };
   }, [experts, total, tutorByExpert]);
 
-  const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const pageStart = total === 0 ? 0 : (page - 1) * pageSize + 1;
-  const pageEnd = total === 0 ? 0 : Math.min(total, page * pageSize);
 
   const filterGroups: FilterGroup[] = [
     {
@@ -469,39 +467,15 @@ export default function ExpertManagementPage() {
               setSearchQuery('');
             }}
           />
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <p className="text-sm text-muted">
-              Showing {pageStart}&ndash;{pageEnd} of {total} experts
-            </p>
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
-              <div className="min-w-36">
-                <Select
-                  label="Rows per page"
-                  value={String(pageSize)}
-                  onChange={(e) => {
-                    setPage(1);
-                    setPageSize(Number(e.target.value));
-                  }}
-                  options={[
-                    { label: '10', value: '10' },
-                    { label: '20', value: '20' },
-                    { label: '50', value: '50' },
-                  ]}
-                />
-              </div>
-              <div className="flex gap-2">
-                <Button variant="secondary" size="sm" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
-                  Previous
-                </Button>
-                <span className="flex items-center px-2 text-sm text-muted">
-                  {page}/{totalPages}
-                </span>
-                <Button variant="secondary" size="sm" disabled={page >= totalPages} onClick={() => setPage((p) => p + 1)}>
-                  Next
-                </Button>
-              </div>
-            </div>
-          </div>
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            itemLabel="expert"
+            itemLabelPlural="experts"
+          />
           <DataTable columns={columns} data={experts} keyExtractor={(e) => e.id} mobileCardRender={mobileCardRender} />
         </AdminRoutePanel>
       </AsyncStateWrapper>
