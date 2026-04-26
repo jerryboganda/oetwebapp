@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
+import { Pagination } from '@/components/ui/pagination';
 import { inviteAdminUser } from '@/lib/api';
 import { getAdminUsersPageData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
@@ -117,8 +118,6 @@ export default function UsersPage() {
   }), [users]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const pageStart = total === 0 ? 0 : ((page - 1) * pageSize) + 1;
-  const pageEnd = total === 0 ? 0 : Math.min(total, page * pageSize);
 
   const columns: Column<AdminUserRow>[] = useMemo(
     () => [
@@ -297,36 +296,15 @@ export default function UsersPage() {
             </div>
           </div>
           <FilterBar groups={filterGroups} selected={filters} onChange={handleFilterChange} onClear={() => { setPage(1); setFilters({ role: [], status: [] }); setSearchQuery(''); }} />
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="text-sm text-muted">
-              Showing {pageStart}-{pageEnd} of {total} users
-            </div>
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
-              <div className="min-w-36">
-                <Select
-                  label="Rows per page"
-                  value={String(pageSize)}
-                  onChange={(event) => { setPage(1); setPageSize(Number(event.target.value)); }}
-                  options={[
-                    { value: '10', label: '10' },
-                    { value: '20', label: '20' },
-                    { value: '50', label: '50' },
-                  ]}
-                />
-              </div>
-              <div className="flex items-center gap-2 pt-5 md:pt-0">
-                <Button variant="outline" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>
-                  Previous
-                </Button>
-                <span className="text-sm text-muted">
-                  Page {page} of {totalPages}
-                </span>
-                <Button variant="outline" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>
-                  Next
-                </Button>
-              </div>
-            </div>
-          </div>
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            itemLabel="user"
+            itemLabelPlural="users"
+          />
           <DataTable columns={columns} data={users} keyExtractor={(user) => user.id} mobileCardRender={mobileCardRender} />
         </AdminRoutePanel>
       </AsyncStateWrapper>
