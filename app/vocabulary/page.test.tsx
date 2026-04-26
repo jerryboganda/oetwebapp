@@ -93,14 +93,14 @@ describe('Vocabulary hub page', () => {
 
   it('renders hero, stats, and word list', async () => {
     render(<VocabularyPage />);
-    expect(await screen.findByText('Vocabulary')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: /clinical vocabulary/i })).toBeInTheDocument();
     expect(await screen.findByText('dyspnoea')).toBeInTheDocument();
     expect(await screen.findByText('tachycardia')).toBeInTheDocument();
   });
 
   it('tracks vocabulary_home_viewed on mount', async () => {
     render(<VocabularyPage />);
-    await screen.findByText('Vocabulary');
+    await screen.findByRole('heading', { level: 1, name: /clinical vocabulary/i });
     expect(mockTrack).toHaveBeenCalledWith('vocabulary_home_viewed');
   });
 

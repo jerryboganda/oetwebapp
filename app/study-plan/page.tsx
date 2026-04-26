@@ -44,11 +44,11 @@ const SUBTEST_COLORS: Record<SubTest, string> = {
 
 type SectionType = 'today' | 'thisWeek' | 'nextCheckpoint' | 'weakSkillFocus';
 
-const SECTIONS: { type: SectionType; title: string; icon: React.ElementType; iconColor: string }[] = [
-  { type: 'today', title: 'Today', icon: Calendar, iconColor: 'text-primary' },
-  { type: 'thisWeek', title: 'This Week', icon: Calendar, iconColor: 'text-navy/60' },
-  { type: 'nextCheckpoint', title: 'Next Checkpoint', icon: Target, iconColor: 'text-purple-500' },
-  { type: 'weakSkillFocus', title: 'Weak-Skill Focus', icon: AlertTriangle, iconColor: 'text-amber-500' },
+const SECTIONS: { type: SectionType; title: string; icon: React.ElementType; eyebrow: string; description: string }[] = [
+  { type: 'today', title: 'Today', icon: Calendar, eyebrow: 'Today', description: 'These are the tasks scheduled for today. Complete them in the order shown to keep momentum.' },
+  { type: 'thisWeek', title: 'This Week', icon: Calendar, eyebrow: 'This Week', description: 'Upcoming work for the rest of this week. Start any of these early if today is light.' },
+  { type: 'nextCheckpoint', title: 'Next Checkpoint', icon: Target, eyebrow: 'Next Checkpoint', description: 'Work that leads into your next progress checkpoint or mock attempt.' },
+  { type: 'weakSkillFocus', title: 'Weak-Skill Focus', icon: AlertTriangle, eyebrow: 'Weak-Skill Focus', description: 'Targeted drills on the skills your recent attempts show need the most work.' },
 ];
 
 export default function StudyPlanPage() {
@@ -241,22 +241,19 @@ export default function StudyPlanPage() {
           />
 
           {/* Sections */}
-          {SECTIONS.map(({ type, title, icon: SectionIcon, iconColor }) => {
+          {SECTIONS.map(({ type, title, icon: SectionIcon, eyebrow, description }) => {
             const sectionTasks = tasks.filter((t) => t.section === type);
             if (sectionTasks.length === 0) return null;
 
             return (
               <section key={type}>
                 <LearnerSurfaceSectionHeader
-                  eyebrow="Plan Section"
+                  eyebrow={eyebrow}
                   title={`${title} (${sectionTasks.length})`}
-                  description="Each section groups work by timing or purpose so the learner can see why these tasks belong together."
-                  className="mb-3"
+                  description={description}
+                  icon={SectionIcon}
+                  className="mb-4"
                 />
-                <div className="flex items-center gap-2 text-sm font-semibold text-muted mb-3">
-                  <SectionIcon className={`w-5 h-5 ${iconColor}`} />
-                  {title}
-                </div>
                 <div className="space-y-3">
                   <AnimatePresence mode="popLayout">
                     {sectionTasks.map(renderTaskCard)}

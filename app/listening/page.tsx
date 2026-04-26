@@ -44,8 +44,8 @@ function taskToCard(task: ListeningHomeTaskDto, index: number) {
     description: 'Use the compatibility task while published Listening papers are being prepared.',
     metaItems: [
       { icon: Clock, label: `${task.estimatedDurationMinutes} mins` },
-      { label: titleCase(task.difficulty) },
-      { label: `${task.questionCount} items` },
+      { icon: Target, label: titleCase(task.difficulty) },
+      { icon: FileText, label: `${task.questionCount} items` },
     ],
     primaryAction: {
       label: 'Start Task',
@@ -197,7 +197,7 @@ export default function ListeningHome() {
               <LearnerSurfaceSectionHeader
                 eyebrow="Resume"
                 title="Continue without losing your saved answers"
-                description="Listening attempts autosave on the server so audio reloads and page refreshes do not wipe learner work."
+                description="Your progress is saved automatically — refresh or come back later, your work stays intact."
                 className="mb-5"
               />
               {activeAttempts.length > 0 ? (
@@ -239,7 +239,7 @@ export default function ListeningHome() {
               <LearnerSurfaceSectionHeader
                 eyebrow="Practice Papers"
                 title="Open a listening task with a clear outcome"
-                description="Published papers use server-side attempts, controlled transcript reveal, and OET raw-to-scaled scoring."
+                description="Full-length papers with timed playback, transcript reveal, and official OET scoring."
                 className="mb-5"
               />
 
@@ -258,8 +258,8 @@ export default function ListeningHome() {
                         : 'Media is published, but graded practice waits for the structured question map.',
                       metaItems: [
                         { icon: Clock, label: `${paper.estimatedDurationMinutes} mins` },
-                        { label: titleCase(paper.difficulty) },
-                        { label: paperMeta(paper) },
+                        { icon: Target, label: titleCase(paper.difficulty) },
+                        { icon: FileText, label: paperMeta(paper) },
                       ],
                       primaryAction: {
                         label: paper.objectiveReady ? 'Start Practice' : 'Open Paper',
@@ -366,9 +366,9 @@ export default function ListeningHome() {
                       title: result.paperTitle,
                       description: result.scoreDisplay,
                       metaItems: [
-                        { label: `${result.rawScore}/${result.maxRawScore} raw` },
-                        { label: `${result.scaledScore}/500` },
-                        { label: `Grade ${result.grade}` },
+                        { icon: FileText, label: `${result.rawScore}/${result.maxRawScore} raw` },
+                        { icon: Target, label: `${result.scaledScore}/500` },
+                        { icon: Sparkles, label: `Grade ${result.grade}` },
                       ],
                       primaryAction: { label: 'View Result', href: result.route, variant: 'outline' },
                     };
@@ -446,8 +446,8 @@ export default function ListeningHome() {
                       title: report.title,
                       description: report.summary,
                       metaItems: [
-                        { label: report.date },
-                        { label: report.overallScore },
+                        { icon: Clock, label: report.date },
+                        { icon: Target, label: report.overallScore },
                       ],
                       primaryAction: {
                         label: 'View Report',

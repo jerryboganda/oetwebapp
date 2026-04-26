@@ -18,12 +18,12 @@ export function ConversationTimerBar({ elapsed, timeLimit, turns, scenarioTitle 
   return (
     <>
       <div className="mb-3 flex items-center justify-between px-1">
-        <div className="flex items-center gap-2 text-sm text-gray-500">
+        <div className="flex items-center gap-2 text-sm text-muted">
           <Clock className="h-4 w-4" />
           <span className="tabular-nums font-semibold">{formatTime(elapsed)} / {formatTime(timeLimit)}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-xs text-gray-400">{turns} turns</span>
+          <span className="text-xs text-muted/60">{turns} turns</span>
           {scenarioTitle && <span className="text-xs font-semibold text-purple-500">{scenarioTitle}</span>}
         </div>
       </div>

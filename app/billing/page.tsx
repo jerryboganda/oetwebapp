@@ -424,7 +424,7 @@ export default function BillingPage() {
                 <div className="mt-4 space-y-3">{[1, 2, 3].map((i) => <Skeleton key={i} className="h-12 rounded-xl" />)}</div>
               ) : !wallet || wallet.transactions.length === 0 ? (
                 <div className="mt-6 flex flex-col items-center gap-3 py-8 text-center">
-                  <Clock className="h-8 w-8 text-gray-300" />
+                  <Clock className="h-8 w-8 text-muted/40" />
                   <p className="text-sm text-muted">No transactions yet. Your credit history will appear here.</p>
                 </div>
               ) : (
@@ -465,7 +465,7 @@ export default function BillingPage() {
             </div>
             <div className="mt-6 grid gap-4 md:grid-cols-[1fr_auto] md:items-end">
               <Input label="Coupon code" value={couponCode} onChange={(event) => setCouponCode(event.target.value.toUpperCase())} placeholder="WELCOME10" hint="Apply a coupon to the next quote you generate." />
-              <div className="rounded-2xl border border-border bg-background-light px-4 py-3 text-sm text-muted">Coupons are validated on the server.</div>
+              <div className="rounded-2xl border border-border bg-background-light px-4 py-3 text-sm text-muted">Coupons are checked at checkout.</div>
             </div>
             <div className="mt-6 rounded-2xl border border-dashed border-border bg-background-light p-5">
               {quote ? (
@@ -520,7 +520,7 @@ export default function BillingPage() {
                 <span className="rounded-full border border-border bg-background-light px-3 py-1 text-xs font-black uppercase tracking-widest text-muted">No active add-ons</span>
               )}
             </div>
-            <div className="mt-6 rounded-2xl border border-border bg-background-light p-4 text-sm leading-6 text-muted">Add-on purchases are routed through the same quote workflow as plan changes, which keeps coupon validation and totals in sync with the backend.</div>
+            <div className="mt-6 rounded-2xl border border-border bg-background-light p-4 text-sm leading-6 text-muted">Add-on purchases use the same checkout flow as plan changes, so any coupons and totals stay consistent.</div>
           </MotionSection>
         </section>
 
@@ -597,7 +597,7 @@ export default function BillingPage() {
         {/* ── Add-ons + Invoices ── */}
         <section className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
           <div>
-            <LearnerSurfaceSectionHeader eyebrow="Extras" title="Purchase review credits with clear product boundaries" description="Extras only increase productive-skill review capacity. They do not affect Reading or Listening scoring." className="mb-4" />
+            <LearnerSurfaceSectionHeader eyebrow="Extras" title="Top up expert review credits" description="Extras only add expert review capacity for Writing and Speaking. They don't affect Listening or Reading scoring." className="mb-4" />
             {addOns.length > 0 ? (
               <div className="space-y-4">
                 {addOns.map((addOn) => (
@@ -633,7 +633,7 @@ export default function BillingPage() {
               {invoices.length === 0 ? (
                 <div className="p-8 text-center text-sm text-muted">No invoices yet. Billing history will appear here after the first paid plan or credit purchase.</div>
               ) : (
-                <div className="divide-y divide-gray-100">
+                <div className="divide-y divide-border">
                   {invoices.map((invoice) => (
                     <div key={invoice.id} className="flex flex-col gap-4 p-5 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-4">
@@ -693,7 +693,7 @@ export default function BillingPage() {
                             <span className="text-[10px] font-black uppercase tracking-[0.18em] text-muted">{row.feature}</span>
                             <span className="text-right text-sm font-semibold text-navy">
                               {typeof value === 'boolean' ? (
-                                value ? <Check className="inline-block h-4 w-4 text-emerald-600" /> : <X className="inline-block h-4 w-4 text-gray-300" />
+                                value ? <Check className="inline-block h-4 w-4 text-emerald-600" /> : <X className="inline-block h-4 w-4 text-muted/40" />
                               ) : (
                                 value
                               )}
@@ -729,9 +729,9 @@ export default function BillingPage() {
                         ))}
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-gray-50">
+                    <tbody className="divide-y divide-border">
                       {planComparisonRows.map((row) => (
-                        <tr key={row.feature} className="transition-colors hover:bg-gray-50/50">
+                        <tr key={row.feature} className="transition-colors hover:bg-background-light/50">
                           <td className="px-6 py-3.5 font-semibold text-navy">{row.feature}</td>
                           {row.values.map((value, index) => {
                             const plan = plans[index];
@@ -748,7 +748,7 @@ export default function BillingPage() {
                                   value ? (
                                     <Check className="mx-auto h-4.5 w-4.5 text-emerald-600" />
                                   ) : (
-                                    <X className="mx-auto h-4.5 w-4.5 text-gray-300" />
+                                    <X className="mx-auto h-4.5 w-4.5 text-muted/40" />
                                   )
                                 ) : (
                                   <span className="text-xs font-bold text-navy">{value}</span>

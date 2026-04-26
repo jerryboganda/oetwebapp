@@ -66,13 +66,13 @@ describe('Conversation page', () => {
 
   it('renders through the shared learner dashboard shell', async () => {
     renderWithRouter(<ConversationPage />, { router: { push: mockPush } });
-    expect(await screen.findByText('AI Conversation Practice')).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { level: 1, name: /OET roleplay/i })).toBeInTheDocument();
     expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
   });
 
   it('tracks conversation_page_viewed analytics on mount', async () => {
     renderWithRouter(<ConversationPage />, { router: { push: mockPush } });
-    await screen.findByText('AI Conversation Practice');
+    await screen.findByRole('heading', { level: 1, name: /OET roleplay/i });
     expect(mockTrack).toHaveBeenCalledWith('conversation_page_viewed');
   });
 

@@ -44,7 +44,9 @@ describe('Speaking selection page', () => {
   it('shows speaking rulebook entry points on the selection surface', async () => {
     render(<SpeakingTaskSelection />);
 
-    expect(await screen.findByText(/See the exact speaking rules behind the transcript audit/i)).toBeInTheDocument();
+    // Wait for the LearnerSurfaceCard heading to render. Use a heading role
+    // matcher so we don't catch substrings inside meta items / description.
+    await screen.findByRole('heading', { level: 3, name: /speaking feedback/i });
     expect(screen.getByRole('link', { name: /Speaking rules/i })).toHaveAttribute('href', '/speaking/rulebook/RULE_22');
     expect(screen.getByRole('link', { name: /Breaking bad news/i })).toHaveAttribute('href', '/speaking/rulebook/RULE_44');
   });

@@ -281,7 +281,7 @@ function PlayerContent() {
         <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8 text-center">
           <Loader2 className="h-12 w-12 animate-spin text-primary" />
           <h2 className="text-xl font-black text-navy">Grading Listening Answers</h2>
-          <p className="text-sm text-muted">Your score and transcript policy are being resolved on the server.</p>
+          <p className="text-sm text-muted">Calculating your score and preparing your transcript…</p>
         </div>
       </AppShell>
     );

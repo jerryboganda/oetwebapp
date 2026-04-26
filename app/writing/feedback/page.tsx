@@ -94,7 +94,7 @@ export default function WritingDetailedFeedback() {
         eyebrow="Writing"
         icon={MessageSquare}
         title="Detailed Feedback"
-        description="Review the submission, score explanation, and revision prompts in the same visual system as the dashboard."
+        description="Review your submission, score breakdown, and revision prompts in one place."
         highlights={heroHighlights}
       />
 
@@ -152,7 +152,7 @@ export default function WritingDetailedFeedback() {
             <LearnerSurfaceSectionHeader
               eyebrow="Feedback breakdown"
               title="Score details and revision guidance"
-              description="Keep the score explanation readable at a glance, then let the detailed cards carry the nuance."
+              description="A quick summary first, then the detailed breakdown below."
             />
             {result.criteria.map((criterion, index) => (
               <MotionItem key={criterion.name} delayIndex={index}>

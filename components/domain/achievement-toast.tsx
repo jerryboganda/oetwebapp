@@ -66,10 +66,10 @@ export function AchievementToast({
                 <div className="mb-0.5 text-xs font-bold uppercase tracking-widest text-amber-600 dark:text-amber-400">
                   Achievement Unlocked
                 </div>
-                <h3 className="text-sm font-bold text-gray-900 dark:text-white">
+                <h3 className="text-sm font-bold text-navy dark:text-white">
                   {achievement.label}
                 </h3>
-                <p className="mt-0.5 text-xs text-gray-600 dark:text-gray-300 line-clamp-2">
+                <p className="mt-0.5 text-xs text-muted dark:text-muted/40 line-clamp-2">
                   {achievement.description}
                 </p>
                 {(xpAwarded ?? achievement.xpReward) > 0 && (
@@ -83,7 +83,7 @@ export function AchievementToast({
               <button
                 type="button"
                 onClick={handleDismiss}
-                className="shrink-0 rounded-lg p-2.5 -m-1 text-gray-400 transition-colors hover:bg-yellow-100 hover:text-gray-600 dark:hover:bg-yellow-900/30"
+                className="shrink-0 rounded-lg p-2.5 -m-1 text-muted/60 transition-colors hover:bg-yellow-100 hover:text-muted dark:hover:bg-yellow-900/30"
                 aria-label="Dismiss achievement notification"
               >
                 <X className="h-4 w-4" />

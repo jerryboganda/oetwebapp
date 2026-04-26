@@ -149,7 +149,7 @@ export default function RoleCardPreview() {
           <LearnerSurfaceSectionHeader
             eyebrow="Preparation"
             title="Plan, then enter the recorder"
-            description="Self-practice records for transcript review; simulation keeps the stricter exam rhythm."
+            description="Self-practice mode lets you review the transcript afterwards. Simulation mode follows strict exam timing."
             className="mb-4"
           />
 

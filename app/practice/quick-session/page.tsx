@@ -148,7 +148,7 @@ export default function MobileQuickSessionPage() {
               <LearnerSurfaceSectionHeader
                 eyebrow="Choose a drill"
                 title="Start with a focused micro-session"
-                description="Each card below uses the same surface language as the dashboard, just in a denser format."
+                description="Pick a focused micro-session designed for short, high-impact practice."
               />
               {[
                 { mode: 'vocab', icon: BookOpen, label: 'Medical Vocabulary', desc: '8 questions · Fill-in and multiple choice', color: 'bg-info/10 text-info border-info/30' },
@@ -186,7 +186,7 @@ export default function MobileQuickSessionPage() {
               <LearnerSurfaceSectionHeader
                 eyebrow="Live session"
                 title="Answer, check, and move on"
-                description="The session keeps the same calm surface language as the rest of the learner workspace."
+                description="Answer each question, check the result, and keep moving."
               />
 
               <Card className="p-5 shadow-sm">

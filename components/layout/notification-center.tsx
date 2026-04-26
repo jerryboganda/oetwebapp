@@ -152,7 +152,7 @@ function NotificationItem({
       className={cn(
         'group relative flex w-full items-start gap-3 rounded-xl px-3 py-3 text-left transition-all duration-200',
         item.isRead
-          ? 'hover:bg-gray-50/80'
+          ? 'hover:bg-background-light/80'
           : 'bg-primary/[0.03] hover:bg-primary/[0.05]',
       )}
     >
@@ -230,7 +230,7 @@ function NotificationCenterContent({ onNavigate }: { onNavigate?: () => void }) 
     <div className="flex h-full max-h-[min(34rem,80vh)] flex-col">
 
       {/* ━━ Header ━━ */}
-      <div className="flex items-center justify-between border-b border-gray-100/80 pb-3">
+      <div className="flex items-center justify-between border-b border-border/80 pb-3">
         <div>
           <h2 className="text-[15px] font-semibold tracking-tight text-navy">Notifications</h2>
           <p className="mt-0.5 text-[11px] text-muted/70">
@@ -242,7 +242,7 @@ function NotificationCenterContent({ onNavigate }: { onNavigate?: () => void }) 
           <button
             type="button"
             onClick={() => void refreshFeed({ reset: true })}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted/60 transition-colors hover:bg-gray-100 hover:text-navy"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted/60 transition-colors hover:bg-background-light hover:text-navy"
             aria-label="Refresh"
           >
             <RefreshCw className={cn('h-3.5 w-3.5', isRefreshing && 'animate-spin')} />
@@ -251,7 +251,7 @@ function NotificationCenterContent({ onNavigate }: { onNavigate?: () => void }) 
           <Link
             href="/settings/notifications"
             onClick={() => { onNavigate?.(); }}
-            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted/60 transition-colors hover:bg-gray-100 hover:text-navy"
+            className="inline-flex h-10 w-10 items-center justify-center rounded-lg text-muted/60 transition-colors hover:bg-background-light hover:text-navy"
             aria-label="Notification settings"
           >
             <Settings className="h-3.5 w-3.5" />
@@ -261,7 +261,7 @@ function NotificationCenterContent({ onNavigate }: { onNavigate?: () => void }) 
 
       {/* ━━ Tabs + Mark all read ━━ */}
       <div className="flex items-center justify-between px-1 py-2">
-        <div className="flex rounded-lg bg-gray-100/70 p-0.5">
+        <div className="flex rounded-lg bg-background-light/70 p-0.5">
           {(['all', 'unread'] as const).map((value) => (
             <button
               key={value}
@@ -360,7 +360,7 @@ function NotificationCenterContent({ onNavigate }: { onNavigate?: () => void }) 
 
       {/* ━━ Load more ━━ */}
       {hasMore && (
-        <div className="flex justify-center border-t border-gray-100/80 py-2.5">
+        <div className="flex justify-center border-t border-border/80 py-2.5">
           <Button
             type="button"
             variant="ghost"
@@ -432,7 +432,7 @@ export function NotificationCenter() {
             <Popover.Content
               align="end"
               sideOffset={12}
-              className="z-50 w-[24rem] rounded-2xl border border-gray-200/80 bg-surface p-4 shadow-2xl shadow-black/[0.08] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=open]:slide-in-from-top-3 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] duration-200"
+              className="z-50 w-[24rem] rounded-2xl border border-border/80 bg-surface p-4 shadow-2xl shadow-black/[0.08] data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-[0.97] data-[state=open]:slide-in-from-top-3 data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-[0.97] duration-200"
             >
               <NotificationCenterContent onNavigate={() => setDesktopOpen(false)} />
             </Popover.Content>

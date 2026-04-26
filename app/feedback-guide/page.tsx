@@ -46,7 +46,7 @@ export default function FeedbackGuidePage() {
         <LearnerSurfaceSectionHeader
           eyebrow="Writing criteria"
           title="How writing feedback is scored"
-          description="The writing rubric should feel like an extension of the dashboard: clear, calm, and easy to scan."
+          description="Understand each Writing criterion and what it scores."
         />
         <div className="space-y-3">
           {WRITING_CRITERIA.map(c => (
@@ -65,7 +65,7 @@ export default function FeedbackGuidePage() {
         <LearnerSurfaceSectionHeader
           eyebrow="Speaking criteria"
           title="How speaking feedback is scored"
-          description="Speaking feedback should feel like a guided review, not a separate design language."
+          description="A guided walkthrough of your Speaking feedback."
         />
         <div className="space-y-3">
           {SPEAKING_CRITERIA.map(c => (
@@ -84,7 +84,7 @@ export default function FeedbackGuidePage() {
         <LearnerSurfaceSectionHeader
           eyebrow="Score guide"
           title="How to read the bands"
-          description="Keep the interpretation simple so learners can act on the score immediately."
+          description="Quick interpretation tips so you know exactly what to do next."
         />
         <Card className="p-5 space-y-3 shadow-sm">
           <div className="flex items-start gap-2"><CheckCircle2 className="w-5 h-5 text-success flex-shrink-0 mt-0.5" /><p className="text-sm"><strong>Score 5-7 (Writing) / 5-6 (Speaking):</strong> Strong performance. Focus on consistency and refinement.</p></div>

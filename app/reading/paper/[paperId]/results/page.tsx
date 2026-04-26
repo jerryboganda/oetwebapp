@@ -126,7 +126,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               <LearnerSurfaceSectionHeader
                 eyebrow="Item Review"
                 title="Question-by-question review"
-                description="Correct answers and explanations appear only when allowed by the policy snapshot from this attempt."
+                description="Correct answers and explanations appear once review is unlocked for this attempt."
                 className="mb-5"
               />
               <div className="space-y-3">
@@ -209,7 +209,7 @@ function policyCard(review: ReadingAttemptReviewDto): LearnerSurfaceCardModel {
       ? 'Explanations are available according to the policy snapshot for this attempt.'
       : 'Explanations are hidden for this attempt by policy.',
     metaItems: [
-      { label: review.policy.showExplanationsOnlyIfWrong ? 'Wrong-only explanations' : 'Policy-redacted review' },
+      { icon: Target, label: review.policy.showExplanationsOnlyIfWrong ? 'Wrong-only explanations' : 'Policy-redacted review' },
     ],
   };
 }

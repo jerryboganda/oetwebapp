@@ -123,8 +123,9 @@ export default function GrammarPage() {
 
         {/* ── Hero ── */}
         <LearnerPageHero
-          title="Grammar Lessons"
-          description="Strengthen the grammar patterns that matter for OET, IELTS, and PTE — every lesson graded server-side."
+          eyebrow="Grammar Foundations"
+          title="Fix the grammar mistakes that cost you marks"
+          description="Targeted lessons on the patterns OET examiners flag most — every completed lesson is graded and feeds into your readiness score."
           icon={BookMarked}
           highlights={heroHighlights}
         />
@@ -149,7 +150,7 @@ export default function GrammarPage() {
             <LearnerSurfaceSectionHeader
               eyebrow="Topic path"
               title={`Browse ${selectedExamLabel} grammar topics`}
-              description="Build mastery topic by topic. Every lesson is graded server-side and drives your readiness score."
+              description="Build mastery topic by topic. Every completed lesson improves your readiness score."
               action={
                 <div className="flex flex-wrap gap-2">
                   {EXAM_TYPES.map((item) => (

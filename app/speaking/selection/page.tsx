@@ -1,16 +1,14 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { MotionItem } from '@/components/ui/motion-primitives';
-import { BookOpen } from 'lucide-react';
-import Link from 'next/link';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { BookOpen, FileText, Heart } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { TaskCard } from '@/components/domain/task-card';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-error';
-import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
+import { LearnerSurfaceCard } from '@/components/domain';
 import { fetchSpeakingTasks } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { SpeakingTask } from '@/lib/mock-data';
@@ -69,30 +67,32 @@ export default function SpeakingTaskSelection() {
   return (
     <LearnerDashboardShell pageTitle="Select Speaking Task">
       <div className="space-y-6">
-        <Card className="border-border bg-surface p-5 shadow-sm">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-xs font-black uppercase tracking-widest text-muted">Rulebook Source of Truth</p>
-              <h2 className="mt-2 text-lg font-black text-navy">See the exact speaking rules behind the transcript audit</h2>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
-                Every speaking audit is grounded in Dr. Hesham&apos;s rulebook, from plain-English explanations to the Breaking Bad News protocol and the ping-pong conversation rule.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <Link href="/speaking/rulebook/RULE_22">
-                <Button variant="outline" className="whitespace-nowrap">
-                  <BookOpen className="h-4 w-4" /> Speaking rules
-                </Button>
-              </Link>
-              <Link href="/speaking/rulebook/RULE_44">
-                <Button variant="ghost" className="whitespace-nowrap">
-                  Breaking bad news
-                </Button>
-              </Link>
-            </div>
-          </div>
-        </Card>
+        <MotionSection>
+          <LearnerSurfaceCard
+            card={{
+              kind: 'navigation',
+              sourceType: 'frontend_navigation',
+              accent: 'indigo',
+              eyebrow: 'Rulebook',
+              eyebrowIcon: BookOpen,
+              title: 'See the exact rules behind your speaking feedback',
+              description: 'Open the criteria that shape every audit — from conversational flow to the protocol for breaking bad news.',
+              metaItems: [
+                { icon: FileText, label: 'Speaking criteria' },
+                { icon: Heart, label: 'Breaking bad news' },
+              ],
+              primaryAction: {
+                label: 'Open Speaking Rules',
+                href: '/speaking/rulebook/RULE_22',
+              },
+              secondaryAction: {
+                label: 'Breaking Bad News',
+                href: '/speaking/rulebook/RULE_44',
+                variant: 'outline',
+              },
+            }}
+          />
+        </MotionSection>
 
         <FilterBar
           groups={FILTER_GROUPS}

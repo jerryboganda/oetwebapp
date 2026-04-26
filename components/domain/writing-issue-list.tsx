@@ -38,7 +38,7 @@ export function WritingIssueList({ issues, activeIssueId, onIssueClick, classNam
             onClick={() => onIssueClick?.(issue)}
             className={cn(
               'flex items-start gap-3 p-3 rounded border text-left transition-all',
-              isActive ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-gray-200 hover:border-gray-300',
+              isActive ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-border',
             )}
           >
             <div className={cn('w-8 h-8 rounded-full flex items-center justify-center shrink-0', config.color)}>

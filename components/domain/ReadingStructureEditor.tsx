@@ -223,7 +223,7 @@ function PartEditor({
   const short = Math.max(0, expected.items - part.questions.length);
 
   return (
-    <div className="bg-surface border border-gray-200 rounded-2xl p-5 space-y-4">
+    <div className="bg-surface border border-border rounded-2xl p-5 space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h3 className="font-black text-lg text-navy">{expected.label}</h3>

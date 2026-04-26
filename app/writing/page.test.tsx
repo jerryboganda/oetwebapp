@@ -69,7 +69,7 @@ describe('Writing home page', () => {
   it('shows rulebook entry points on the writing home surface', async () => {
     render(<WritingHome />);
 
-    expect(await screen.findByText(/Study the exact rules your writing is judged against/i)).toBeInTheDocument();
+    expect(await screen.findByText(/Know exactly how your writing is judged/i)).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /Open Rulebook/i })).toHaveAttribute('href', '/writing/rulebook');
     expect(screen.getByRole('link', { name: /Model Answers/i })).toHaveAttribute('href', '/writing/model');
   });

@@ -99,7 +99,7 @@ export default function MockPlayerPage() {
   };
 
   return (
-    <LearnerDashboardShell pageTitle="Mock Orchestrator" subtitle="Run, resume, and submit the learner mock from one real route." backHref="/mocks">
+    <LearnerDashboardShell pageTitle="Run Your Mock" subtitle="Start, resume, and submit your mock from one place." backHref="/mocks">
       <div className="space-y-8">
         <Button variant="ghost" className="gap-2" onClick={() => router.push('/mocks')}>
           <ArrowLeft className="h-4 w-4" />
@@ -122,7 +122,7 @@ export default function MockPlayerPage() {
               icon={FileText}
               accent="navy"
               title={session.config.title}
-              description="This route honors the learner's mock configuration, keeps review selection explicit, and prevents setup choices from being ignored."
+              description="Your mock setup — exam mode, timer, and review selection — stays in effect throughout."
               highlights={[
                 { icon: FileText, label: 'Profession', value: session.config.profession },
                 { icon: Clock, label: 'Mode', value: session.config.mode === 'exam' ? 'Exam simulation' : 'Practice simulation' },
@@ -144,7 +144,7 @@ export default function MockPlayerPage() {
                 <LearnerSurfaceSectionHeader
                   eyebrow="Section States"
                   title="Every mock section now has a real launch path"
-                  description="The learner can see the section order, whether review is attached, and where each section actually starts."
+                  description="See the section order, whether expert review is attached, and where each section starts."
                   className="mb-4"
                 />
 
@@ -177,7 +177,7 @@ export default function MockPlayerPage() {
                 <LearnerSurfaceSectionHeader
                   eyebrow="Current Launch"
                   title={selectedSection?.title ?? 'Select a section'}
-                  description="The orchestrator keeps the learner in a clear mock flow before handing off to the actual section workspace."
+                  description="Track your mock progress before launching each section."
                   className="mb-4"
                 />
 
@@ -226,7 +226,7 @@ export default function MockPlayerPage() {
               <LearnerSurfaceSectionHeader
                 eyebrow="Why this matters"
                 title="The mock setup is now honored end to end"
-                description="Mode, strict timer, and productive-skill review selection all stay visible after the learner starts the mock."
+                description="Your exam mode, timer, and review selection stay visible throughout the mock."
                 className="mb-4"
               />
               <div className="grid gap-4 md:grid-cols-3">

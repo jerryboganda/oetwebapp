@@ -69,7 +69,7 @@ function ReviewBadge({ status }: { status: ReviewStatus }) {
     </span>
   );
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-gray-100 text-gray-600">
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold bg-background-light text-muted">
       <AlertCircle className="w-3.5 h-3.5" /> Not Requested
     </span>
   );
@@ -114,7 +114,7 @@ export default function SubmissionHistory() {
         {loading ? (
           <div className="space-y-4">
             {[1, 2, 3].map((i) => (
-              <Skeleton key={i} className="h-36 rounded-2xl" />
+              <Skeleton key={i} className="h-36 rounded-[24px]" />
             ))}
           </div>
         ) : null}
@@ -145,7 +145,7 @@ export default function SubmissionHistory() {
                   <MotionItem
                     key={sub.id}
                     delayIndex={idx}
-                    className="bg-surface rounded-[24px] border border-border p-5 sm:p-6 shadow-sm flex flex-col md:flex-row gap-6 justify-between hover:border-gray-300 transition-colors"
+                    className="bg-surface rounded-[24px] border border-border p-5 sm:p-6 shadow-sm flex flex-col md:flex-row gap-6 justify-between hover:border-border transition-colors"
                   >
                     <div className="flex-1 space-y-4">
                       <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
@@ -159,7 +159,7 @@ export default function SubmissionHistory() {
                           </div>
                           <h2 className="text-lg font-bold text-navy leading-tight">{sub.taskName}</h2>
                         </div>
-                        <div className="sm:text-right bg-background-light sm:bg-transparent p-3 sm:p-0 rounded-xl border border-gray-100 sm:border-none">
+                        <div className="sm:text-right bg-background-light sm:bg-transparent p-3 sm:p-0 rounded-xl border border-border sm:border-none">
                           <div className="text-xs font-bold text-muted uppercase tracking-widest mb-1">Score Estimate</div>
                           <div className={`text-xl font-black ${sub.scoreEstimate === 'Pending' ? 'text-muted' : 'text-navy'}`}>
                             {sub.scoreEstimate}
@@ -172,7 +172,7 @@ export default function SubmissionHistory() {
                       </div>
                     </div>
 
-                    <div className="flex flex-col gap-2 md:w-48 shrink-0 border-t md:border-t-0 md:border-l border-gray-100 pt-5 md:pt-0 md:pl-6 justify-center">
+                    <div className="flex flex-col gap-2 md:w-48 shrink-0 border-t md:border-t-0 md:border-l border-border pt-5 md:pt-0 md:pl-6 justify-center">
                       <Button
                         variant="outline"
                         fullWidth

@@ -83,7 +83,7 @@ export function GrammarTopicCard({ topic }: { topic: GrammarTopicLearner }) {
             </div>
           ) : null}
 
-          <div className="mt-4 flex items-center justify-end border-t border-gray-200/60 pt-3 text-sm font-semibold text-primary">
+          <div className="mt-4 flex items-center justify-end border-t border-border/60 pt-3 text-sm font-semibold text-primary">
             Explore topic <ArrowRight className="ml-1 h-4 w-4" />
           </div>
         </div>
@@ -154,7 +154,7 @@ export function GrammarLessonCard({ lesson }: { lesson: GrammarLessonSummary }) 
             </div>
           ) : null}
 
-          <div className="mt-4 flex items-center justify-end border-t border-gray-200/60 pt-3 text-sm font-semibold text-primary">
+          <div className="mt-4 flex items-center justify-end border-t border-border/60 pt-3 text-sm font-semibold text-primary">
             Open lesson <ArrowRight className="ml-1 h-4 w-4" />
           </div>
         </div>
@@ -216,7 +216,7 @@ export function GrammarRecommendationStrip({
                     <p className="mt-3 line-clamp-2 text-sm leading-6 text-muted">{rec.reason}</p>
                   ) : null}
 
-                  <div className="mt-auto flex items-center justify-between gap-2 border-t border-gray-200/60 pt-3 text-xs text-muted">
+                  <div className="mt-auto flex items-center justify-between gap-2 border-t border-border/60 pt-3 text-xs text-muted">
                     <span className="inline-flex items-center gap-1.5 font-semibold">
                       <Clock3 className="h-3.5 w-3.5" /> {rec.estimatedMinutes} min
                     </span>
@@ -289,7 +289,7 @@ export function GrammarExerciseRunner({
       <ExerciseInput exercise={exercise} answer={answer} disabled={disabled || isResultMode} onAnswer={onAnswer} result={result} />
 
       {result ? (
-        <div className="space-y-3 rounded-xl border border-gray-200/60 bg-surface p-4 text-sm shadow-sm">
+        <div className="space-y-3 rounded-xl border border-border/60 bg-surface p-4 text-sm shadow-sm">
           <div className="flex flex-wrap gap-2">
             <Badge variant={result.isCorrect ? 'success' : 'danger'}>
               {result.pointsAwarded}/{result.pointsPossible} points
@@ -346,7 +346,7 @@ function ExerciseInput({
         <div className="space-y-3">
           {pairs.map((pair, index) => (
             <div key={`${pair.left}-${index}`} className="grid gap-3 md:grid-cols-[1fr_auto_1fr] md:items-center">
-              <div className="rounded-lg border border-gray-200/60 bg-surface px-4 py-3 text-sm text-navy shadow-sm">
+              <div className="rounded-lg border border-border/60 bg-surface px-4 py-3 text-sm text-navy shadow-sm">
                 {pair.left}
               </div>
               <div className="hidden justify-center text-muted md:flex">→</div>
@@ -393,7 +393,7 @@ function ResultPanel({ title, value, accent = 'default' }: { title: string; valu
         'rounded-lg border px-4 py-3 text-sm shadow-sm',
         accent === 'success'
           ? 'border-emerald-200 bg-emerald-50/80 text-emerald-900'
-          : 'border-gray-200/70 bg-surface text-navy',
+          : 'border-border/70 bg-surface text-navy',
       )}
     >
       <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">{title}</p>
@@ -404,7 +404,7 @@ function ResultPanel({ title, value, accent = 'default' }: { title: string; valu
 
 function StatPill({ icon: Icon, label, value }: { icon: ElementType; label: string; value: number }) {
   return (
-    <div className="rounded-lg border border-gray-200/60 bg-surface px-3 py-2 shadow-sm">
+    <div className="rounded-lg border border-border/60 bg-surface px-3 py-2 shadow-sm">
       <div className="flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-[0.14em] text-muted">
         <Icon className="h-3.5 w-3.5" /> {label}
       </div>

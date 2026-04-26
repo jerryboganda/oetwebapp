@@ -114,9 +114,9 @@ export default function LessonsPage() {
     <LearnerDashboardShell>
       <div className="space-y-6">
         <LearnerPageHero
-          eyebrow="Learn"
-          title="Video Lessons"
-          description="Watch expert-led OET preparation lessons with resume progress, previews, and clear next steps."
+          eyebrow="Video Library"
+          title="Watch the lesson that unblocks your next score"
+          description="Expert-led video lessons with resume progress, previews, and clear next steps tied to your study plan."
           icon={Video}
           highlights={heroHighlights}
         />
@@ -240,7 +240,7 @@ export default function LessonsPage() {
                             ) : lesson.progress?.completed ? (
                               <Badge variant="success">Completed</Badge>
                             ) : (
-                              <Badge variant="default">Available</Badge>
+                              <Badge variant="muted">Available</Badge>
                             )}
                           </div>
                           <div className="absolute bottom-3 right-3 flex items-center gap-1 rounded-full bg-navy/70 px-2 py-1 text-xs text-white">

@@ -20,21 +20,21 @@ export function ConversationPrepCard({ scenario, prepCountdown, onStart }: Props
       <div className="mb-2 text-xs font-bold uppercase tracking-[0.2em] text-purple-600 dark:text-purple-400">
         Preparation phase
       </div>
-      <h1 className="mb-2 text-2xl font-bold text-gray-900 dark:text-white">{scenario.title}</h1>
-      {scenario.context && <p className="mb-4 text-gray-600 dark:text-gray-300">{scenario.context}</p>}
+      <h1 className="mb-2 text-2xl font-bold text-navy dark:text-white">{scenario.title}</h1>
+      {scenario.context && <p className="mb-4 text-muted dark:text-muted/40">{scenario.context}</p>}
 
       <div className="mb-4 grid grid-cols-1 gap-3 md:grid-cols-2">
         <div className="rounded-2xl bg-white/70 p-3 dark:bg-gray-800/70">
-          <div className="mb-1 text-xs font-semibold uppercase text-gray-500">Your role</div>
-          <div className="text-sm font-bold text-gray-900 dark:text-white">
+          <div className="mb-1 text-xs font-semibold uppercase text-muted">Your role</div>
+          <div className="text-sm font-bold text-navy dark:text-white">
             {scenario.clinicianRole ?? 'Clinician'}
           </div>
         </div>
         <div className="rounded-2xl bg-white/70 p-3 dark:bg-gray-800/70">
-          <div className="mb-1 text-xs font-semibold uppercase text-gray-500">
+          <div className="mb-1 text-xs font-semibold uppercase text-muted">
             {scenario.taskTypeCode === 'oet-handover' ? 'Colleague' : 'Patient'}
           </div>
-          <div className="text-sm font-bold text-gray-900 dark:text-white">
+          <div className="text-sm font-bold text-navy dark:text-white">
             {scenario.patientRole ?? 'Patient'}
           </div>
         </div>
@@ -42,10 +42,10 @@ export function ConversationPrepCard({ scenario, prepCountdown, onStart }: Props
 
       {objectives.length > 0 && (
         <div className="mb-4 rounded-2xl bg-white/70 p-3 dark:bg-gray-800/70">
-          <div className="mb-2 text-xs font-semibold uppercase text-gray-500">Objectives</div>
+          <div className="mb-2 text-xs font-semibold uppercase text-muted">Objectives</div>
           <ul className="space-y-1">
             {objectives.map((objective, i) => (
-              <li key={i} className="flex items-start gap-2 text-sm text-gray-700 dark:text-gray-300">
+              <li key={i} className="flex items-start gap-2 text-sm text-navy/80 dark:text-muted/40">
                 <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-purple-100 text-xs font-bold text-purple-600 dark:bg-purple-900/40 dark:text-purple-400">
                   {i + 1}
                 </span>

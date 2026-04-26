@@ -331,7 +331,7 @@ function MicEnvironmentCheckContent() {
         <LearnerSurfaceSectionHeader
           eyebrow="System checks"
           title="Complete each readiness step"
-          description="Each stage uses the same card rhythm and border language as the dashboard."
+          description="Complete each step before you start your speaking attempt."
         />
 
           {/* Step 0: Computer-based exam environment acknowledgement (at-home rule + paper rule) */}

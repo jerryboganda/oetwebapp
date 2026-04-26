@@ -125,7 +125,7 @@ export default function SpeakingHome() {
     title: recommended.title,
     description: `Start with the role play that best matches ${recommended.criteriaFocus || 'your current speaking priorities'}, then use the result to decide whether drills or review matter next.`,
     metaItems: [
-      { label: recommendedRoleLabel },
+      { icon: Mic, label: recommendedRoleLabel },
       { icon: Clock, label: recommendedDurationLabel },
     ],
     primaryAction: {
@@ -144,7 +144,7 @@ export default function SpeakingHome() {
     description: 'Open one drill path to tighten the issues most likely to weaken your next speaking attempt, then return to a full scenario.',
     metaItems: [
       { icon: Mic, label: 'Role-play support' },
-      { label: `${drillGroups.length || 0} groups ready` },
+      { icon: Volume2, label: `${drillGroups.length || 0} groups ready` },
     ],
     primaryAction: {
       label: 'Open Drill Group',
@@ -165,7 +165,7 @@ export default function SpeakingHome() {
           icon={Mic}
           accent="purple"
           title="Keep the next speaking move and recent evidence in view"
-          description="Use this workspace to choose the right role play, open drill support when it helps, and keep recent speaking evidence visible before you spend review credits."
+          description="Choose your next role play, drill targeted weaknesses, and review recent recordings before requesting expert feedback."
           highlights={[
             { icon: Star, label: 'Review credits', value: `${credits} available` },
             { icon: Mic, label: 'Role plays', value: featuredTasks.length > 0 ? `${featuredTasks.length} ready` : 'Browse library' },
@@ -185,10 +185,10 @@ export default function SpeakingHome() {
               eyebrow: 'Resume Attempt',
               eyebrowIcon: RefreshCw,
               title: 'Continue your in-progress role play',
-              description: 'Your speaking attempt is paused on the server — pick it up exactly where you stopped. No credits are spent until you submit for evaluation.',
+              description: 'Your speaking attempt is saved — pick up exactly where you stopped. No credits are spent until you submit for review.',
               metaItems: [
                 { icon: Clock, label: 'Paused' },
-                { label: 'In progress' },
+                { icon: RefreshCw, label: 'In progress' },
               ],
               primaryAction: { label: 'Resume Role Play', href: resumeAttempt.route },
               secondaryAction: { label: 'Pick a Different Scenario', href: '/speaking/selection', variant: 'outline' },
@@ -196,30 +196,32 @@ export default function SpeakingHome() {
           </MotionSection>
         ) : null}
 
-        {/* Rulebook Source-of-Truth band — parity with Writing / Reading / Selection. */}
-        <MotionSection delayIndex={1} className="rounded-[24px] border border-border bg-surface p-5 shadow-sm">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-xs font-black uppercase tracking-widest text-muted">Rulebook Source of Truth</p>
-              <h2 className="mt-2 text-lg font-black text-navy">Study the exact rules your speaking is judged against</h2>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
-                Every speaking audit is grounded in Dr. Hesham&apos;s rulebook — including the ping-pong conversation rule and the Breaking Bad News protocol. Open the rulebook to understand the real standard behind the feedback.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <Link href="/speaking/rulebook/RULE_22">
-                <Button variant="outline" className="whitespace-nowrap">
-                  <BookOpen className="h-4 w-4" /> Speaking rules
-                </Button>
-              </Link>
-              <Link href="/speaking/rulebook/RULE_44">
-                <Button variant="ghost" className="whitespace-nowrap">
-                  Breaking bad news
-                </Button>
-              </Link>
-            </div>
-          </div>
+        {/* Rulebook entry point — parity with Writing / Reading / Selection. */}
+        <MotionSection delayIndex={1}>
+          <LearnerSurfaceCard
+            card={{
+              kind: 'navigation',
+              sourceType: 'frontend_navigation',
+              accent: 'indigo',
+              eyebrow: 'Rulebook',
+              eyebrowIcon: BookOpen,
+              title: 'Know exactly how your speaking is judged',
+              description: 'See the criteria your role-play feedback is built on — from conversational flow to the protocol for breaking bad news.',
+              metaItems: [
+                { icon: FileText, label: 'Speaking criteria' },
+                { icon: Heart, label: 'Breaking bad news' },
+              ],
+              primaryAction: {
+                label: 'Open Speaking Rules',
+                href: '/speaking/rulebook/RULE_22',
+              },
+              secondaryAction: {
+                label: 'Breaking Bad News',
+                href: '/speaking/rulebook/RULE_44',
+                variant: 'outline',
+              },
+            }}
+          />
         </MotionSection>
 
         {recommendedCard ? (
@@ -247,7 +249,7 @@ export default function SpeakingHome() {
             <LearnerSurfaceSectionHeader
               eyebrow="Latest Result"
               title="Read your most recent rubric-graded speaking evaluation"
-              description="Open the full card to see strengths, issues, and the rulebook-grounded audit route."
+              description="Open the full card to see strengths, issues, and the detailed feedback breakdown."
               className="mb-4"
             />
             <LearnerSurfaceCard card={{
@@ -276,7 +278,7 @@ export default function SpeakingHome() {
               <LearnerSurfaceSectionHeader
                 eyebrow="More Role Plays"
                 title="Keep role plays visible after the next recommendation"
-                description="These scenarios keep the profession, timing, and start action visible so the page stays easy to scan."
+                description="Each scenario shows the profession, timing, and a quick-start link."
                 action={<Link href="/speaking/selection" className="text-sm font-bold text-primary hover:underline">View Full Library</Link>}
                 className="mb-4"
               />
@@ -299,7 +301,7 @@ export default function SpeakingHome() {
                         key={taskId}
                         delayIndex={index}
                       >
-                        <Card className="border-gray-200/70">
+                        <Card className="border-border/70">
                           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                             <div className="flex items-start gap-4">
                               <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
@@ -348,7 +350,7 @@ export default function SpeakingHome() {
               <LearnerSurfaceSectionHeader
                 eyebrow="Drill Groups"
                 title="Fix one speaking behavior before you return to a full scenario"
-                description="Each drill group narrows the problem so the learner knows exactly why the drill is worth opening."
+                description="Each drill targets a specific speaking weakness so you know exactly why it's worth your time."
                 className="mb-4"
               />
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -362,8 +364,8 @@ export default function SpeakingHome() {
                     title: group.title,
                     description: 'Open a focused support path, then return to the next role play with one weaker behavior already tightened.',
                     metaItems: [
-                      { label: (() => { const count = (group.items ?? []).length || 1; return `${count} ${count === 1 ? 'exercise' : 'exercises'}`; })() },
-                      { label: 'Speaking support' },
+                      { icon: FileText, label: (() => { const count = (group.items ?? []).length || 1; return `${count} ${count === 1 ? 'exercise' : 'exercises'}`; })() },
+                      { icon: Volume2, label: 'Speaking support' },
                     ],
                     primaryAction: {
                       label: 'Open Drill Group',
@@ -382,7 +384,7 @@ export default function SpeakingHome() {
                 <LearnerSurfaceSectionHeader
                   eyebrow="Support Paths"
                   title="Use the right speaking support for the job"
-                  description="Interactive AI practice, pronunciation work, and private speaking support live in their dedicated platform modules."
+                  description="Interactive AI practice, pronunciation training, and private tutoring are available in their own dedicated sections."
                   className="mb-4"
                 />
                 <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
@@ -390,7 +392,7 @@ export default function SpeakingHome() {
                     <Link
                       key={entry.id}
                       href={entry.route}
-                      className="rounded-2xl border border-gray-200/80 bg-surface p-4 shadow-sm transition-all duration-200 hover:border-primary/30 hover:bg-primary/5"
+                      className="rounded-2xl border border-border/80 bg-surface p-4 shadow-sm transition-all duration-200 hover:border-primary/30 hover:bg-primary/5"
                     >
                       <p className="text-sm font-bold text-navy">{entry.title}</p>
                       <p className="mt-2 text-xs leading-relaxed text-muted">{entry.description}</p>
@@ -406,7 +408,7 @@ export default function SpeakingHome() {
               <LearnerSurfaceSectionHeader
                 eyebrow="Evidence"
                 title="Recent Speaking Evidence"
-                description="Check the latest attempts before you decide between another role play, a drill, or a review follow-up."
+                description="Review your latest attempts to decide your next step — another role play, a focused drill, or expert feedback."
                 action={<Link href="/submissions" className="text-sm font-bold text-primary hover:underline">View Full History</Link>}
                 className="mb-4"
               />
@@ -458,7 +460,7 @@ export default function SpeakingHome() {
           <LearnerSurfaceSectionHeader
             eyebrow="Recent Mock Reports"
             title="Track speaking impact inside full mocks"
-            description="Confirm whether gains from isolated role plays and drills are transferring under full-exam pressure."
+            description="See whether your role-play and drill gains hold up under real exam pressure."
             action={<Link href="/mocks" className="text-sm font-bold text-primary hover:underline">Open Mock Center</Link>}
             className="mb-4"
           />
@@ -475,8 +477,8 @@ export default function SpeakingHome() {
                     title: report.title,
                     description: report.summary,
                     metaItems: [
-                      { label: report.date },
-                      { label: report.overallScore },
+                      { icon: Clock, label: report.date },
+                      { icon: Award, label: report.overallScore },
                     ],
                     primaryAction: { label: 'View Report', href: `/mocks/report/${report.id}`, variant: 'outline' },
                   }} />
@@ -484,7 +486,7 @@ export default function SpeakingHome() {
               ))}
             </div>
           ) : (
-            <div className="rounded-[24px] border border-dashed border-gray-200 bg-surface/80 p-6 text-sm text-muted">
+            <div className="rounded-[24px] border border-dashed border-border bg-surface/80 p-6 text-sm text-muted">
               <p>Complete a mock to see speaking transfer evidence here.</p>
               <div className="mt-3 flex flex-wrap gap-4">
                 <Link href="/mocks" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Open Mock Center <ArrowRight className="h-4 w-4" /></Link>

@@ -105,9 +105,9 @@
   min-height: 100vh;
   min-height: 100dvh;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
-  padding: 2rem 1.25rem;
+  padding: 1.5rem 1.25rem 2rem;
 }
 
 .stack {
@@ -121,14 +121,14 @@
 }
 
 .successStackWide .brand {
-  margin-bottom: 1rem;
+  margin-bottom: 0.75rem;
 }
 
 .brand {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
   text-decoration: none;
 }
 

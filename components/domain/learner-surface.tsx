@@ -115,7 +115,17 @@ export function LearnerSurfaceMetaRow({ items, className }: { items?: LearnerSur
         const Icon = item.icon;
         return (
           <span key={item.label} className="flex items-center gap-1.5">
-            {Icon ? <Icon className="w-4 h-4" /> : null}
+            {Icon ? (
+              <Icon className="w-4 h-4" />
+            ) : (
+              // Visual-parity fallback: callers that omit `icon` would otherwise
+              // render a bare label and look mis-aligned next to sibling cards
+              // whose meta items have icons. A small filled bullet keeps the
+              // icon-column footprint identical without inventing semantics.
+              <span aria-hidden="true" className="flex h-4 w-4 items-center justify-center">
+                <span className="block h-1.5 w-1.5 rounded-full bg-current opacity-60" />
+              </span>
+            )}
             {item.label}
           </span>
         );

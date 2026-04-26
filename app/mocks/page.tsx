@@ -181,14 +181,14 @@ function SectionProgressDots({ mock }: { mock: FullMockCard }) {
         const active = included.includes(subtest);
         const state = progress[subtest];
         const palette = !active
-          ? 'bg-gray-100 text-gray-300'
+          ? 'bg-background-light text-muted/40'
           : state === 'completed'
             ? 'bg-emerald-100 text-emerald-600'
             : state === 'in-progress'
               ? 'bg-amber-100 text-amber-600'
               : state === 'locked'
                 ? 'bg-slate-100 text-slate-400'
-                : 'bg-gray-100 text-gray-400';
+                : 'bg-background-light text-muted/60';
         const Icon = SUBTEST_ICON[subtest];
         const label = `${SUBTEST_COLOR[subtest].label}: ${active ? (state ?? 'not started') : 'not included'}`;
         return (
@@ -330,11 +330,11 @@ export default function MockCenter() {
         ? `Use review credits to add expert feedback after high-value mock attempts. Credits are reserved when you start and consumed only after the review is delivered. ${reviewSlaLabel}.`
         : 'Use review credits to add expert feedback after high-value mock attempts. Credits are reserved when you start and consumed only after the review is delivered.',
     metaItems: [
-      { label: `${availableCredits} available` },
-      { label: `${reservedCredits} reserved` },
-      { label: `${consumedCredits} consumed` },
-      { label: `${pendingReviews} pending` },
-      { label: `${completedReviews} completed` },
+      { icon: Star, label: `${availableCredits} available` },
+      { icon: Hourglass, label: `${reservedCredits} reserved` },
+      { icon: CheckCircle2, label: `${consumedCredits} consumed` },
+      { icon: RefreshCw, label: `${pendingReviews} pending` },
+      { icon: Award, label: `${completedReviews} completed` },
       ...(reviewSlaLabel ? [{ icon: Clock, label: reviewSlaLabel }] : []),
     ],
     primaryAction: {
@@ -361,13 +361,13 @@ export default function MockCenter() {
         description: scoreGuarantee.message ?? 'Open billing to review your Score Guarantee pledge.',
         metaItems: [
           ...(typeof scoreGuarantee.baselineScore === 'number'
-            ? [{ label: `Baseline ${scoreGuarantee.baselineScore}/500` }]
+            ? [{ icon: BarChart3, label: `Baseline ${scoreGuarantee.baselineScore}/500` }]
             : []),
           ...(typeof scoreGuarantee.guaranteedScore === 'number'
-            ? [{ label: `Guaranteed ${scoreGuarantee.guaranteedScore}/500` }]
+            ? [{ icon: Award, label: `Guaranteed ${scoreGuarantee.guaranteedScore}/500` }]
             : []),
           ...(typeof scoreGuarantee.latestOverallScore === 'number'
-            ? [{ label: `Latest ${scoreGuarantee.latestOverallScore}/500` }]
+            ? [{ icon: Star, label: `Latest ${scoreGuarantee.latestOverallScore}/500` }]
             : []),
           ...(scoreGuarantee.isActive && typeof scoreGuarantee.daysRemaining === 'number'
             ? [
@@ -405,13 +405,13 @@ export default function MockCenter() {
             : 'Complete a full mock to compare your overall score against the recent cohort.',
         metaItems: [
           ...(typeof cohortPercentile.percentile === 'number'
-            ? [{ label: `${cohortPercentile.percentile}th percentile` }]
+            ? [{ icon: BarChart3, label: `${cohortPercentile.percentile}th percentile` }]
             : []),
           ...(typeof cohortPercentile.cohortSize === 'number'
-            ? [{ label: `Cohort of ${cohortPercentile.cohortSize}` }]
+            ? [{ icon: Layers, label: `Cohort of ${cohortPercentile.cohortSize}` }]
             : []),
           ...(typeof cohortPercentile.learnerScore === 'number'
-            ? [{ label: `Your score ${cohortPercentile.learnerScore}/500` }]
+            ? [{ icon: Star, label: `Your score ${cohortPercentile.learnerScore}/500` }]
             : []),
         ],
       }
@@ -433,7 +433,7 @@ export default function MockCenter() {
           icon={Layers}
           accent="navy"
           title="Choose the mock that proves whether practice is transferring"
-          description="Use this center to pick the right simulation depth, keep progression visible, and follow mock evidence into the next decision."
+          description="Pick the right mock depth, track your progress, and let your results guide your next move."
           highlights={heroHighlights}
         />
 
@@ -463,7 +463,7 @@ export default function MockCenter() {
                 </Button>
                 <Link
                   href="/help"
-                  className="pressable inline-flex items-center justify-center gap-2 rounded-[16px] px-4 py-2 text-sm font-semibold text-navy transition-colors hover:bg-gray-100"
+                  className="pressable inline-flex items-center justify-center gap-2 rounded-[16px] px-4 py-2 text-sm font-semibold text-navy transition-colors hover:bg-background-light"
                 >
                   Contact support
                 </Link>
@@ -495,7 +495,7 @@ export default function MockCenter() {
                             attempt.startedAt
                               ? `Started ${new Date(attempt.startedAt).toLocaleString()}`
                               : 'Resume to continue from your last saved section.',
-                          metaItems: [{ label: attempt.mockType === 'full' ? 'Full mock' : 'Sub-test mock' }],
+                          metaItems: [{ icon: Layers, label: attempt.mockType === 'full' ? 'Full mock' : 'Sub-test mock' }],
                           primaryAction: {
                             label: 'Resume mock',
                             href: attempt.resumeRoute,
@@ -549,7 +549,7 @@ export default function MockCenter() {
                           className={`pressable touch-target rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors ${
                             professionFilter === null
                               ? 'border-primary bg-primary text-white'
-                              : 'border-gray-200 bg-surface text-navy hover:border-gray-300'
+                              : 'border-border bg-surface text-navy hover:border-border'
                           }`}
                         >
                           All professions
@@ -564,7 +564,7 @@ export default function MockCenter() {
                             className={`pressable touch-target rounded-full border px-4 py-1.5 text-xs font-semibold transition-colors ${
                               professionFilter === p.id
                                 ? 'border-primary bg-primary text-white'
-                                : 'border-gray-200 bg-surface text-navy hover:border-gray-300'
+                                : 'border-border bg-surface text-navy hover:border-border'
                             }`}
                           >
                             {p.label}
@@ -578,11 +578,11 @@ export default function MockCenter() {
                     <LearnerSurfaceSectionHeader
                       eyebrow="Sub-test Mocks"
                       title="Choose the simulation scope you need"
-                      description="Each entry explains whether you are entering a sub-test path or a full mock route."
+                      description="Each entry tells you whether it's a single sub-test or a full mock."
                       className="mb-4"
                     />
                     {filteredSubTestMocks.length === 0 ? (
-                      <div className="rounded-[24px] border border-gray-200 bg-surface p-6 text-sm text-muted">
+                      <div className="rounded-[24px] border border-border bg-surface p-6 text-sm text-muted">
                         {subTestMocks.length === 0
                           ? 'No published sub-test mock bundles are available yet.'
                           : 'No sub-test mocks match the selected profession. Try \u201cAll professions\u201d to widen your view.'}
@@ -599,7 +599,7 @@ export default function MockCenter() {
                             <MotionItem key={mock.id} delayIndex={idx}>
                               <Link
                                 href={href}
-                                className="group flex items-center gap-4 rounded-[24px] border border-gray-200 bg-surface p-5 transition-all hover:border-gray-300 hover:shadow-md"
+                                className="group flex items-center gap-4 rounded-[24px] border border-border bg-surface p-5 transition-all hover:border-border hover:shadow-md"
                               >
                                 <div
                                   className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${palette.bg} transition-transform group-hover:scale-105`}
@@ -612,7 +612,7 @@ export default function MockCenter() {
                                     {count} section{count === 1 ? '' : 's'} available
                                   </p>
                                 </div>
-                                <ArrowRight className="h-5 w-5 text-gray-300 transition-colors group-hover:text-navy" />
+                                <ArrowRight className="h-5 w-5 text-muted/40 transition-colors group-hover:text-navy" />
                               </Link>
                             </MotionItem>
                           );
@@ -629,14 +629,14 @@ export default function MockCenter() {
                       className="mb-4"
                     />
                     {filteredFullMocks.length === 0 ? (
-                      <div className="rounded-[24px] border border-gray-200 bg-surface p-6 text-sm text-muted">
+                      <div className="rounded-[24px] border border-border bg-surface p-6 text-sm text-muted">
                         {fullMocks.length === 0
                           ? 'No full mock bundles are published yet. Once an admin publishes a bundle, it will appear here with its real section order.'
                           : 'No full mocks match the selected profession. Try \u201cAll professions\u201d to widen your view.'}
                       </div>
                     ) : (
-                      <div className="overflow-hidden rounded-[24px] border border-gray-200 bg-surface shadow-sm">
-                        <div className="divide-y divide-gray-100">
+                      <div className="overflow-hidden rounded-[24px] border border-border bg-surface shadow-sm">
+                        <div className="divide-y divide-border">
                           {filteredFullMocks.map((mock, idx) => {
                             const locked = mock.status === 'locked';
                             return (
@@ -645,7 +645,7 @@ export default function MockCenter() {
                                   href={locked ? '/mocks' : mock.route ?? '/mocks/setup'}
                                   aria-disabled={locked}
                                   className={`flex items-center justify-between gap-4 p-5 transition-colors ${
-                                    locked ? 'pointer-events-none bg-gray-50 opacity-75' : 'hover:bg-gray-50'
+                                    locked ? 'pointer-events-none bg-background-light opacity-75' : 'hover:bg-background-light'
                                   }`}
                                 >
                                   <div className="flex min-w-0 items-center gap-4">
@@ -653,7 +653,7 @@ export default function MockCenter() {
                                       {mock.status === 'completed' ? (
                                         <CheckCircle2 className="h-6 w-6 text-emerald-500" />
                                       ) : locked ? (
-                                        <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-gray-300">
+                                        <div className="flex h-6 w-6 items-center justify-center rounded-full border-2 border-border">
                                           <div className="h-2 w-2 rounded-full bg-gray-300" />
                                         </div>
                                       ) : (
@@ -693,7 +693,7 @@ export default function MockCenter() {
                                     </div>
                                   </div>
                                   {!locked ? (
-                                    <ArrowRight className="hidden h-5 w-5 text-gray-300 sm:block" />
+                                    <ArrowRight className="hidden h-5 w-5 text-muted/40 sm:block" />
                                   ) : null}
                                 </Link>
                               </MotionItem>
@@ -710,7 +710,7 @@ export default function MockCenter() {
                     <LearnerSurfaceSectionHeader
                       eyebrow="Expert Reviews"
                       title="Keep review readiness explicit"
-                      description="Mock review status should be visible as part of the same learner system, not as a separate hidden flow."
+                      description="Track the status of any expert reviews attached to your mocks."
                       className="mb-4"
                     />
                     <LearnerSurfaceCard card={reviewCard} />
@@ -733,7 +733,7 @@ export default function MockCenter() {
                       <LearnerSurfaceSectionHeader
                         eyebrow="Benchmark"
                         title="Recent learner cohort"
-                        description="Anonymised position against the last 90 days of learner mocks."
+                        description="See where you stand against learners who took a mock in the last 90 days. All comparisons are private."
                         className="mb-4"
                       />
                       <LearnerSurfaceCard card={cohortCard} />
@@ -744,7 +744,7 @@ export default function MockCenter() {
                     <LearnerSurfaceSectionHeader
                       eyebrow="Previous Reports"
                       title="Keep the latest evidence visible"
-                      description="Reports should feel like an integral part of the mock flow, not an afterthought."
+                      description="Detailed reports for every completed mock attempt."
                       className="mb-4"
                     />
                     {reports.length === 0 ? (
@@ -752,16 +752,16 @@ export default function MockCenter() {
                         No reports yet. Complete a mock to see your results here.
                       </div>
                     ) : (
-                      <div className="overflow-hidden rounded-[24px] border border-gray-200 bg-surface shadow-sm">
-                        <div className="divide-y divide-gray-100">
+                      <div className="overflow-hidden rounded-[24px] border border-border bg-surface shadow-sm">
+                        <div className="divide-y divide-border">
                           {reports.slice(0, 4).map((report, idx) => (
                             <MotionItem key={report.id} delayIndex={idx}>
                               <Link
                                 href={`/mocks/report/${report.id}`}
-                                className="group flex items-center justify-between p-4 transition-colors hover:bg-gray-50"
+                                className="group flex items-center justify-between p-4 transition-colors hover:bg-background-light"
                               >
                                 <div className="flex items-center gap-3">
-                                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-gray-100">
+                                  <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-background-light">
                                     <BarChart3 className="h-4 w-4 text-muted" />
                                   </div>
                                   <div>

@@ -266,7 +266,8 @@ export default function StrategiesPage() {
     <LearnerDashboardShell>
       <div className="space-y-7">
         <LearnerPageHero
-          title="OET Strategy Guides"
+          eyebrow="Strategy Library"
+          title="Use the right strategy at the right moment"
           description="Practical reading, listening, writing, and speaking strategy articles matched to your weak subtests and study progress."
           icon={Lightbulb}
           accent="amber"

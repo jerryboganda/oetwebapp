@@ -48,7 +48,7 @@ export function ReviewRequestDrawer({
       <div className="flex flex-col gap-5">
         {submissionTitle && (
           <MotionSection delayIndex={0}>
-          <div className="p-3 bg-gray-50 rounded">
+          <div className="p-3 bg-background-light rounded">
             <p className="text-xs text-muted">Reviewing</p>
             <p className="text-sm font-semibold text-navy">{submissionTitle}</p>
             <p className="text-xs text-muted mt-0.5">{subtest}</p>
@@ -83,7 +83,7 @@ export function ReviewRequestDrawer({
           hint="Max 500 characters"
         />
 
-        <div className="p-3 bg-gray-50 rounded">
+        <div className="p-3 bg-background-light rounded">
           <div className="flex justify-between text-sm mb-1">
             <span className="font-semibold text-navy">Cost</span>
             <span className="font-bold text-navy">{creditCost} credit{creditCost > 1 ? 's' : ''}</span>

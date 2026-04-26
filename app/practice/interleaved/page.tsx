@@ -64,7 +64,7 @@ export default function InterleavedPracticePage() {
             <LearnerSurfaceSectionHeader
               eyebrow="Session builder"
               title="Generate a mixed practice set"
-              description="Use the same dashboard cards and spacing so this page feels like part of the platform rather than a side tool."
+              description="Mix sub-tests in one session to build flexibility and stamina."
               className="mb-4"
             />
             <div className="flex flex-col gap-4 lg:flex-row lg:items-end">

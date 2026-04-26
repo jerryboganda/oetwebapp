@@ -108,9 +108,9 @@ export default function ConversationPage() {
     <LearnerDashboardShell>
       <div className="space-y-6">
         <LearnerPageHero
-          eyebrow="Practice"
-          title="AI Conversation Practice"
-          description="Practise speaking with an AI partner. Every session is scored against the OET Speaking rubric, projected to the 0–500 scale (pass = 350). Advisory only."
+          eyebrow="AI Conversation"
+          title="Rehearse a real OET roleplay before exam day"
+          description="Speak with an AI patient partner — every session is graded against the OET Speaking rubric and projected to the 0–500 scale (pass = 350). Advisory only."
           icon={MessageSquare}
           accent="purple"
           highlights={heroHighlights}
@@ -141,7 +141,7 @@ export default function ConversationPage() {
 
           {loading && !catalog ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-              {Array.from({ length: 2 }).map((_, i) => (<Skeleton key={i} className="h-24 rounded-3xl" />))}
+              {Array.from({ length: 2 }).map((_, i) => (<Skeleton key={i} className="h-24 rounded-[24px]" />))}
             </div>
           ) : catalog && catalog.taskTypes.length > 0 ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
@@ -152,7 +152,7 @@ export default function ConversationPage() {
                 return (
                   <MotionItem key={task.code} delayIndex={i}>
                     <button onClick={() => handleStart(task.code)} disabled={disabled}
-                      className="group w-full rounded-3xl border border-border bg-surface p-5 text-left shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical disabled:opacity-50">
+                      className="group w-full rounded-[24px] border border-border bg-surface p-5 text-left shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical disabled:opacity-50">
                       <div className="flex items-start gap-3">
                         <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-primary/10 text-primary transition-colors group-hover:bg-primary/15">
                           <Icon className="w-5 h-5" />
@@ -190,7 +190,7 @@ export default function ConversationPage() {
 
           {loading ? (
             <div className="space-y-3">
-              {Array.from({ length: 3 }).map((_, i) => (<Skeleton key={i} className="h-20 rounded-3xl" />))}
+              {Array.from({ length: 3 }).map((_, i) => (<Skeleton key={i} className="h-20 rounded-[24px]" />))}
             </div>
           ) : history.length === 0 ? (
             <Card className="border-dashed border-border p-8 text-center shadow-sm">
@@ -207,7 +207,7 @@ export default function ConversationPage() {
                   return (
                     <MotionItem key={session.id} delayIndex={i}>
                       <Link href={isViewable ? `/conversation/${session.id}/results` : `/conversation/${session.id}`}
-                        className="block rounded-3xl border border-border bg-surface p-4 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical">
+                        className="block rounded-[24px] border border-border bg-surface p-4 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical">
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex items-center gap-3 min-w-0">
                             <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-primary/10 text-primary">

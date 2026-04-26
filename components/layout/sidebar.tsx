@@ -6,8 +6,7 @@ import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
 import { useAuth } from '@/contexts/auth-context';
 import { triggerImpactHaptic } from '@/lib/mobile/haptics';
-import { useEffect, useMemo, useState } from 'react';
-import { fetchXP, fetchStreak } from '@/lib/api';
+import { useMemo } from 'react';
 import { motion, useReducedMotion } from 'motion/react';
 import { getSharedLayoutId, getSurfaceMotion, getSurfaceTransition, prefersReducedMotion } from '@/lib/motion';
 import type { UserRole } from '@/lib/types/auth';
@@ -32,8 +31,6 @@ import {
   Video,
   Lightbulb,
   BookMarked,
-  Flame,
-  Zap,
   MessageSquare,
   AlertTriangle,
 } from 'lucide-react';
@@ -172,43 +169,12 @@ export function Sidebar({
   const displayName = userSummary?.displayName ?? user?.displayName ?? 'User';
   const initials = displayName.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase();
   const email = userSummary?.email ?? user?.email ?? '';
-  const [streak, setStreak] = useState<number | null>(null);
-  const [level, setLevel] = useState<number | null>(null);
-  const visibleStreak = isLearnerWorkspace ? streak : null;
-  const visibleLevel = isLearnerWorkspace ? level : null;
   const learnFeatureKeys = useMemo(() => collectFeatureFlagKeys(learnNavItems), []);
   const learnerFeatureFlags = useFeatureFlagMap(learnFeatureKeys, isLearnerWorkspace);
   const visibleLearnNavItems = useMemo(
     () => learnNavItems.filter((item) => isFeatureFlaggedItemVisible(item, learnerFeatureFlags, isLearnerWorkspace)),
     [isLearnerWorkspace, learnerFeatureFlags],
   );
-
-  useEffect(() => {
-    if (!isLearnerWorkspace) {
-      return;
-    }
-
-    let cancelled = false;
-    let hydrationTimer: ReturnType<typeof setTimeout> | undefined;
-
-    Promise.allSettled([fetchStreak(), fetchXP()]).then(([streakR, xpR]) => {
-      hydrationTimer = setTimeout(() => {
-        if (cancelled) {
-          return;
-        }
-
-        if (streakR.status === 'fulfilled') setStreak((streakR.value as { currentStreak: number }).currentStreak);
-        if (xpR.status === 'fulfilled') setLevel((xpR.value as { level: number }).level);
-      }, 0);
-    });
-
-    return () => {
-      cancelled = true;
-      if (hydrationTimer) {
-        clearTimeout(hydrationTimer);
-      }
-    };
-  }, [isLearnerWorkspace]);
 
   const handleSignOut = async () => {
     await signOut();
@@ -223,7 +189,7 @@ export function Sidebar({
       layout={!reducedMotion}
       {...sidebarMotion}
     >
-      <div className="border-b border-border/60 px-4 py-3">
+      <div className="border-b border-border/60 px-2 py-2">
         <Link
           href="/"
           className="pressable flex items-center justify-center text-navy transition-opacity hover:opacity-90"
@@ -236,7 +202,7 @@ export function Sidebar({
             width={400}
             height={140}
             priority
-            className="h-16 w-auto max-w-full object-contain"
+            className="h-auto w-full max-w-[240px] object-contain"
           />
           <span className="sr-only">{workspaceLabel}</span>
         </Link>
@@ -252,34 +218,6 @@ export function Sidebar({
       </nav>
 
       <div className="mt-auto border-t border-border/60 bg-white/35 p-4 dark:bg-white/5">
-        {/* Streak + Level badges */}
-        {(visibleStreak !== null || visibleLevel !== null) && (
-          <div className="flex items-center gap-2 mb-3 px-1">
-            {visibleStreak !== null && (
-              // a11y: bg-orange-700 + white bold = 5.34:1 (>= WCAG AA 4.5:1).
-              // bg-orange-500 (2.88:1) and bg-orange-600 (3.69:1) both fail AA.
-              <Link
-                href="/achievements"
-                className="flex items-center gap-1 rounded-full bg-orange-700 px-2.5 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-orange-800 dark:bg-orange-700 dark:text-white dark:hover:bg-orange-600"
-              >
-                <Flame className="w-3.5 h-3.5" />
-                {visibleStreak}d
-              </Link>
-            )}
-            {visibleLevel !== null && (
-              // a11y: bg-amber-700 + white bold = 5.14:1 (>= WCAG AA 4.5:1).
-              // The semantic `bg-warning` token (amber-600) only gives 3.18:1.
-              <Link
-                href="/achievements"
-                className="flex items-center gap-1 rounded-full bg-amber-700 px-2.5 py-1.5 text-xs font-bold text-white shadow-sm transition-colors hover:bg-amber-800 dark:bg-amber-700 dark:text-white dark:hover:bg-amber-600"
-              >
-                <Zap className="w-3.5 h-3.5" />
-                Lv.{visibleLevel}
-              </Link>
-            )}
-          </div>
-        )}
-
         <ul className="mb-4 flex flex-col gap-1.5">
           <li>
             <Link

@@ -60,14 +60,14 @@ export function MicCheckPanel({ onComplete, className }: MicCheckPanelProps) {
               s === 'active' && 'border-primary bg-primary/5',
               s === 'passed' && 'border-emerald-200 bg-emerald-50/50',
               s === 'failed' && 'border-red-200 bg-red-50/50',
-              s === 'pending' && 'border-gray-200 bg-gray-50 opacity-50',
+              s === 'pending' && 'border-border bg-background-light opacity-50',
             )}>
               <div className={cn(
                 'w-10 h-10 rounded-full flex items-center justify-center shrink-0',
                 s === 'passed' && 'bg-emerald-100 text-emerald-600',
                 s === 'failed' && 'bg-red-100 text-red-600',
                 s === 'active' && 'bg-primary/10 text-primary',
-                s === 'pending' && 'bg-gray-100 text-muted',
+                s === 'pending' && 'bg-background-light text-muted',
               )}>
                 {s === 'passed' ? <CheckCircle2 className="w-5 h-5" /> :
                  s === 'failed' ? <AlertCircle className="w-5 h-5" /> :

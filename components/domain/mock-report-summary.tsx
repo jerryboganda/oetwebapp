@@ -50,7 +50,7 @@ export function MockReportSummary({
       {subtests && subtests.length > 0 && (
         <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
           {subtests.map((st) => (
-            <div key={st.subtest} className="text-center p-3 bg-gray-50 rounded">
+            <div key={st.subtest} className="text-center p-3 bg-background-light rounded">
               <p className="text-xs font-semibold text-muted capitalize mb-1">{st.subtest}</p>
               <p className="text-sm font-bold text-navy">{st.scoreLow}–{st.scoreHigh}</p>
               <Badge size="sm" variant={st.confidence === 'high' ? 'success' : st.confidence === 'low' ? 'danger' : 'warning'}>{st.grade}</Badge>

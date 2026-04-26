@@ -198,7 +198,7 @@ export default function ConversationResultsPage() {
 
         <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2">
           {strengths.length > 0 && (
-            <MotionSection delayIndex={2} className="rounded-2xl border border-border bg-surface p-5">
+            <MotionSection delayIndex={2} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
               <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-success">
                 <CheckCircle2 className="h-4 w-4" /> Strengths
               </h3>
@@ -212,7 +212,7 @@ export default function ConversationResultsPage() {
             </MotionSection>
           )}
           {improvements.length > 0 && (
-            <MotionSection delayIndex={3} className="rounded-2xl border border-border bg-surface p-5">
+            <MotionSection delayIndex={3} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
               <h3 className="mb-3 flex items-center gap-2 text-sm font-bold text-warning">
                 <AlertTriangle className="h-4 w-4" /> Areas to improve
               </h3>

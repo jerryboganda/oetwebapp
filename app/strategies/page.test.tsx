@@ -121,7 +121,7 @@ describe('StrategiesPage', () => {
   it('renders recommended, continue-reading, and bookmarked strategy buckets', async () => {
     render(<StrategiesPage />);
 
-    expect(await screen.findByRole('heading', { name: 'OET Strategy Guides' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /strategy at the right moment/i })).toBeInTheDocument();
     expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: 'Recommended Next' })).toBeInTheDocument();
     expect(screen.getAllByText('Writing case notes strategy')).toHaveLength(2);

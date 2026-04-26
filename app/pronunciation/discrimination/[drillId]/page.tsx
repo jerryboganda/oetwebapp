@@ -199,7 +199,7 @@ export default function PronunciationDiscriminationPage() {
         />
 
         {!done && currentRound && (
-          <section aria-labelledby="round-heading" className="rounded-3xl border border-border bg-surface p-6 shadow-sm text-center">
+          <section aria-labelledby="round-heading" className="rounded-[24px] border border-border bg-surface p-6 shadow-sm text-center">
             <h2 id="round-heading" className="mb-4 text-sm uppercase tracking-[0.18em] text-muted">
               Round {currentIndex + 1} of {rounds.length}
             </h2>
@@ -233,7 +233,7 @@ export default function PronunciationDiscriminationPage() {
         )}
 
         {done && (
-          <section aria-labelledby="results-heading" className="rounded-3xl border border-border bg-surface p-6 shadow-sm text-center">
+          <section aria-labelledby="results-heading" className="rounded-[24px] border border-border bg-surface p-6 shadow-sm text-center">
             <h2 id="results-heading" className="mb-2 text-lg font-semibold text-navy">
               You got {stats.correct} / {stats.total} correct
             </h2>
@@ -281,7 +281,7 @@ function DiscriminationChoice({
   selected: boolean;
   correct: boolean;
 }) {
-  const base = 'rounded-3xl border-2 p-6 transition focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2';
+  const base = 'rounded-[24px] border-2 p-6 transition focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2';
   const state = !disabled
     ? 'border-border bg-surface hover:border-primary'
     : selected

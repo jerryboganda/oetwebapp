@@ -51,7 +51,7 @@ export function RulebookFindingsPanel({
   );
 
   return (
-    <Card className={cn('border-gray-200 bg-surface p-4', className)}>
+    <Card className={cn('border-border bg-surface p-4', className)}>
       <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
         <div>
           <div className="flex items-center gap-2">
@@ -122,7 +122,7 @@ export function RulebookFindingsPanel({
             );
 
             return (
-              <div key={`${finding.ruleId}-${finding.message}-${finding.quote ?? ''}`} className="rounded-2xl border border-gray-100 bg-background-light p-4">
+              <div key={`${finding.ruleId}-${finding.message}-${finding.quote ?? ''}`} className="rounded-2xl border border-border bg-background-light p-4">
                 <div className="flex items-start gap-3">
                   <Icon className="mt-0.5 h-5 w-5 shrink-0 text-primary" />
                   <div className="min-w-0 flex-1">
@@ -132,7 +132,7 @@ export function RulebookFindingsPanel({
                     </div>
                     <p className="mt-2 text-sm font-medium leading-6 text-navy">{finding.message}</p>
                     {finding.quote ? (
-                      <div className="mt-3 rounded-xl border border-gray-200 bg-white px-3 py-2 text-sm text-muted">
+                      <div className="mt-3 rounded-xl border border-border bg-white px-3 py-2 text-sm text-muted">
                         “{finding.quote}”
                       </div>
                     ) : null}

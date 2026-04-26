@@ -116,7 +116,7 @@ export default function GrammarTopicPage() {
           icon={BookMarked}
           accent="primary"
           title={topic.name}
-          description={topic.description ?? `Build mastery on ${topic.name} patterns. Every lesson is graded server-side.`}
+          description={topic.description ?? `Build mastery on ${topic.name} patterns through guided practice.`}
           highlights={heroHighlights}
         />
 
@@ -125,7 +125,7 @@ export default function GrammarTopicPage() {
           <LearnerSurfaceSectionHeader
             eyebrow="Lessons"
             title={`${topic.name} lessons`}
-            description={`${lessons.length} ${lessons.length === 1 ? 'lesson' : 'lessons'} — graded server-side, drives your readiness score.`}
+            description={`${lessons.length} ${lessons.length === 1 ? 'lesson' : 'lessons'} — every completed lesson improves your readiness score.`}
           />
 
           {lessons.length === 0 ? (

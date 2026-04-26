@@ -37,12 +37,12 @@ export function AiUsageWidget() {
   return (
     <Link
       href="/settings/ai"
-      className="block rounded-[20px] border border-gray-200 bg-surface p-4 hover:border-primary transition-colors"
+      className="block rounded-[20px] border border-border bg-surface p-4 hover:border-primary transition-colors"
     >
       <div className="flex items-center gap-2 text-sm font-medium text-navy mb-2">
         <Cpu className="w-4 h-4" /> AI credits · {snap.planName}
       </div>
-      <div className="w-full h-1.5 bg-gray-100 rounded-full overflow-hidden mb-2">
+      <div className="w-full h-1.5 bg-background-light rounded-full overflow-hidden mb-2">
         <div className={`h-full transition-all ${barClass}`} style={{ width: `${pct}%` }} />
       </div>
       <div className="flex items-center justify-between text-xs text-muted">

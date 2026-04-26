@@ -108,9 +108,9 @@ export default function VocabularyPage() {
     <LearnerDashboardShell>
       <div className="space-y-6">
       <LearnerPageHero
-        eyebrow="Learn"
-        title="Vocabulary"
-        description="Build your medical English vocabulary with spaced repetition."
+        eyebrow="Vocabulary Builder"
+        title="Grow your clinical vocabulary one term at a time"
+        description="Spaced repetition surfaces the medical and academic words you are weakest on, exactly when you are about to forget them."
         icon={BookOpen}
         highlights={heroHighlights}
       />
@@ -146,7 +146,7 @@ export default function VocabularyPage() {
       {/* Stats */}
       {loading && !stats ? (
         <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
-          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-3xl" />)}
+          {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-[24px]" />)}
         </div>
       ) : (
         <div className="mb-8 grid grid-cols-2 gap-4 md:grid-cols-4">
@@ -156,7 +156,7 @@ export default function VocabularyPage() {
             { label: 'Learning', value: displayStats.learning, color: 'text-blue-600 dark:text-blue-400' },
             { label: 'New', value: displayStats.new, color: 'text-muted' },
           ].map(s => (
-            <Card key={s.label} className="rounded-3xl p-4 text-center shadow-sm">
+            <Card key={s.label} className="rounded-[24px] p-4 text-center shadow-sm">
               <div className={`text-3xl font-bold ${s.color}`}>{s.value}</div>
               <div className="text-xs text-muted mt-1">{s.label}</div>
             </Card>
@@ -166,7 +166,7 @@ export default function VocabularyPage() {
 
       {/* Daily set CTA — surfaces due + new cards for today */}
       {dailySet && dailySet.cards.length > 0 && (
-        <Card className="rounded-3xl border-primary/30 bg-lavender/40 p-5 shadow-sm">
+        <Card className="rounded-[24px] border-primary/30 bg-lavender/40 p-5 shadow-sm">
           <div className="flex flex-wrap items-center justify-between gap-4">
             <div className="min-w-0">
               <div className="mb-1 flex items-center gap-2 text-xs font-semibold uppercase text-primary">
@@ -199,7 +199,7 @@ export default function VocabularyPage() {
       />
       {loading ? (
         <div className="space-y-2">
-          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-3xl" />)}
+          {Array.from({ length: 8 }).map((_, i) => <Skeleton key={i} className="h-12 rounded-[24px]" />)}
         </div>
       ) : myList.length === 0 ? (
         <Card className="border-dashed border-border p-8 text-center shadow-sm">
@@ -210,7 +210,7 @@ export default function VocabularyPage() {
           </Link>
         </Card>
       ) : (
-        <div className="overflow-hidden rounded-3xl border border-border bg-surface shadow-sm">
+        <div className="overflow-hidden rounded-[24px] border border-border bg-surface shadow-sm">
           {myList.slice(0, 20).map((item, i) => (
             <MotionItem
               key={item.termId}

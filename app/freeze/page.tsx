@@ -140,7 +140,7 @@ export default function FreezePage() {
           icon={Shield}
           accent="primary"
           title="Pause learner access without touching billing history"
-          description="Use this area to request, confirm, or review freezes while keeping subscription records intact and the learner workspace in a clear read-only state."
+          description="Pause your subscription temporarily. Your study records stay safe and your progress is preserved."
           highlights={highlights}
         />
 
@@ -161,8 +161,8 @@ export default function FreezePage() {
             <CardContent className="space-y-4">
               <p className="text-sm text-muted">
                 {canRequest
-                  ? 'Create a one-time self-service freeze request. The backend will validate duration and policy eligibility.'
-                  : 'Self-service freeze request is unavailable for the current account state or policy settings.'}
+                  ? 'Request a one-time pause to your subscription. We will check eligibility and confirm the duration before it starts.'
+                  : 'A subscription pause is not available for your account right now.'}
               </p>
 
               <div className="grid gap-4 sm:grid-cols-2">
@@ -261,7 +261,7 @@ export default function FreezePage() {
           <LearnerSurfaceSectionHeader
             eyebrow="History"
             title="Freeze history remains immutable"
-            description="Previous freeze requests, approvals, cancellations, and endings stay visible as a permanent audit trail."
+            description="A permanent record of your past pause requests, approvals, and cancellations."
             className="mb-4"
           />
           <div className="grid gap-4">

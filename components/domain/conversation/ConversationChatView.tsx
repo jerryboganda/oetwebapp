@@ -36,7 +36,7 @@ export function ConversationChatView({ turns, aiThinking, aiSpeakingTurn, onRepl
               <div className={`max-w-[75%] rounded-2xl px-4 py-3 ${
                 isLearner
                   ? 'bg-purple-600 text-white rounded-br-sm'
-                  : 'bg-gray-100 dark:bg-gray-800 text-gray-900 dark:text-white rounded-bl-sm border border-gray-200 dark:border-gray-700'
+                  : 'bg-background-light dark:bg-gray-800 text-navy dark:text-white rounded-bl-sm border border-border dark:border-gray-700'
               }`}>
                 <div className="mb-1 flex items-center justify-between gap-2 text-xs font-semibold opacity-70">
                   <span>{isLearner ? 'You' : 'AI Partner'}</span>
@@ -62,8 +62,8 @@ export function ConversationChatView({ turns, aiThinking, aiSpeakingTurn, onRepl
         })}
         {aiThinking && (
           <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} className="flex justify-start" aria-hidden="true">
-            <div className="rounded-2xl rounded-bl-sm border border-gray-200 bg-gray-100 px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
-              <div className="flex items-center gap-2 text-sm text-gray-500">
+            <div className="rounded-2xl rounded-bl-sm border border-border bg-background-light px-4 py-3 dark:border-gray-700 dark:bg-gray-800">
+              <div className="flex items-center gap-2 text-sm text-muted">
                 <Loader2 className="h-4 w-4 animate-spin" />AI is thinking…
               </div>
             </div>

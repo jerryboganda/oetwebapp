@@ -157,7 +157,7 @@ export function VocabLookupPopover({
         role="dialog"
         aria-modal="false"
         aria-label={`Vocabulary lookup for ${word}`}
-        className="w-[340px] max-w-[92vw] rounded-2xl border border-gray-200 bg-surface p-4 shadow-xl"
+        className="w-[340px] max-w-[92vw] rounded-2xl border border-border bg-surface p-4 shadow-xl"
         style={style}
       >
         <div className="flex items-start justify-between gap-3">
@@ -295,7 +295,7 @@ function TermPanel({
   footer?: ReactNode;
 }) {
   return (
-    <div className="rounded-xl border border-gray-100 bg-background-light p-3">
+    <div className="rounded-xl border border-border bg-background-light p-3">
       <div className="mb-1 flex items-center justify-between gap-2">
         <div className="text-xs font-semibold uppercase text-muted">{heading}</div>
         {cta}

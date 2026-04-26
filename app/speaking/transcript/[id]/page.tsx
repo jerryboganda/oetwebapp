@@ -122,7 +122,7 @@ export default function SpeakingTranscriptPage() {
   }
 
   return (
-    <LearnerDashboardShell pageTitle={review.title} subtitle="Transcript-backed speaking evidence with real audio-derived review data.">
+    <LearnerDashboardShell pageTitle={review.title} subtitle="Review your speaking transcript alongside the original recording.">
       <div className="mx-auto max-w-6xl space-y-8 px-4 py-8 sm:px-6 lg:px-8">
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
@@ -131,7 +131,7 @@ export default function SpeakingTranscriptPage() {
           icon={Quote}
           accent="purple"
           title="Review speaking evidence with the real transcript and waveform"
-          description="Use this page to connect transcript markers, waveform evidence, and playback state before you revisit the recording."
+          description="Review your transcript, waveform, and playback together to see exactly where to focus."
           highlights={[
             { icon: Headphones, label: 'Audio', value: review.audioAvailable ? 'Available' : 'Transcript only' },
             { icon: Volume2, label: 'Duration', value: `${Math.round(review.duration)} sec` },
@@ -144,7 +144,7 @@ export default function SpeakingTranscriptPage() {
             <LearnerSurfaceSectionHeader
               eyebrow="Transcript"
               title="Review the real conversation flow"
-              description="Each marker stays attached to the line where the issue occurred so the learner can revisit the actual evidence."
+              description="Each marker stays on the line where the issue happened, so you can hear it for yourself."
               className="mb-4"
             />
 
@@ -181,7 +181,7 @@ export default function SpeakingTranscriptPage() {
               <LearnerSurfaceSectionHeader
                 eyebrow="Audio Review"
                 title="Real waveform from the learner’s recording"
-                description="The waveform is rendered from the actual audio file using wavesurfer.js so the visual review surface matches the learner’s real recording."
+                description="The waveform reflects your actual recording, so what you see matches what you hear."
                 className="mb-4"
               />
             
@@ -214,7 +214,7 @@ export default function SpeakingTranscriptPage() {
               <LearnerSurfaceSectionHeader
                 eyebrow="Marker Detail"
                 title={selectedMarker ? markerLabel[selectedMarker.type] : 'Choose a transcript marker'}
-                description="Selected markers explain what happened in that moment and why it matters for OET speaking performance."
+                description="Selected markers explain what happened and why it matters for your OET Speaking score."
                 className="mb-4"
               />
 
@@ -248,7 +248,7 @@ export default function SpeakingTranscriptPage() {
               <LearnerSurfaceSectionHeader
                 eyebrow="Review Summary"
                 title="Keep the next speaking actions close"
-                description="Once the learner understands the transcript evidence, the next step should still be nearby."
+                description="Ready for the next step? Your options stay close at hand."
                 className="mb-4"
               />
               <div className="space-y-3">

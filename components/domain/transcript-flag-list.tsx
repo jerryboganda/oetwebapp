@@ -39,7 +39,7 @@ export function TranscriptFlagList({ flags, activeFlagId, onFlagClick, className
             onClick={() => onFlagClick?.(flag)}
             className={cn(
               'flex items-start gap-3 p-3 rounded border text-left transition-all',
-              isActive ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-gray-200 hover:border-gray-300',
+              isActive ? 'border-primary bg-primary/5 ring-1 ring-primary' : 'border-border hover:border-border',
             )}
           >
             <div className="flex-1 min-w-0">

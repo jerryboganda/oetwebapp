@@ -146,7 +146,7 @@ export function AudioPlayerWaveform({ audioUrl, onTimeUpdate, seekToTime, classN
   };
 
   return (
-    <div className={cn('p-4 bg-white border border-gray-200 rounded-lg flex flex-col gap-3', className)} role="region" aria-label="Audio player">
+    <div className={cn('p-4 bg-white border border-border rounded-lg flex flex-col gap-3', className)} role="region" aria-label="Audio player">
       {!isReady && !loadError && (
         <p className="text-xs text-muted">Loading audio waveform...</p>
       )}

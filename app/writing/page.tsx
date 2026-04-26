@@ -202,7 +202,7 @@ export default function WritingHome() {
           icon={PenTool}
           accent="amber"
           title="Choose the next writing task that moves your score"
-          description="Use this workspace to pick the right letter, stay on criterion focus, and decide when expert review is worth spending."
+          description="Pick the right letter task, focus on the criteria that matter, and request expert review when it counts."
           highlights={[
             { icon: Star, label: 'Recommended next', value: recommended ? 'Task ready' : 'Choose a task' },
             { icon: Award, label: 'Review credits', value: `${credits} available` },
@@ -225,7 +225,7 @@ export default function WritingHome() {
               description: 'Your draft is autosaved to the server — pick up exactly where you stopped. The 45-minute timer resumes from its last synced value.',
               metaItems: [
                 { icon: Clock, label: 'Autosaved' },
-                { label: 'In progress' },
+                { icon: RefreshCw, label: 'In progress' },
               ],
               primaryAction: { label: 'Resume Draft', href: resumeAction.route },
               secondaryAction: { label: 'Start a Fresh Task', href: '/writing/library', variant: 'outline' },
@@ -233,29 +233,31 @@ export default function WritingHome() {
           </MotionSection>
         ) : null}
 
-        <MotionSection delayIndex={1} className="rounded-[24px] border border-border bg-surface p-5 shadow-sm">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-xs font-black uppercase tracking-widest text-muted">Rulebook Source of Truth</p>
-              <h2 className="mt-2 text-lg font-black text-navy">Study the exact rules your writing is judged against</h2>
-              <p className="mt-2 max-w-3xl text-sm leading-6 text-muted">
-                The live checker in the writing player uses Dr. Hesham&apos;s rulebook rules directly. Open the rulebook to understand the real standard behind the feedback.
-              </p>
-            </div>
-
-            <div className="flex flex-wrap gap-3">
-              <Link href="/writing/rulebook">
-                <Button variant="outline" className="whitespace-nowrap">
-                  <BookOpen className="h-4 w-4" /> Open Rulebook
-                </Button>
-              </Link>
-              <Link href="/writing/model">
-                <Button variant="ghost" className="whitespace-nowrap">
-                  Model Answers
-                </Button>
-              </Link>
-            </div>
-          </div>
+        <MotionSection delayIndex={1}>
+          <LearnerSurfaceCard
+            card={{
+              kind: 'navigation',
+              sourceType: 'frontend_navigation',
+              accent: 'indigo',
+              eyebrow: 'Rulebook',
+              eyebrowIcon: BookOpen,
+              title: 'Know exactly how your writing is judged',
+              description: 'The same rules the live checker applies to your draft. Open the rulebook to see the criteria behind every score and tip.',
+              metaItems: [
+                { icon: FileText, label: 'Full criteria' },
+                { icon: Star, label: 'Model answers' },
+              ],
+              primaryAction: {
+                label: 'Open Rulebook',
+                href: '/writing/rulebook',
+              },
+              secondaryAction: {
+                label: 'Model Answers',
+                href: '/writing/model',
+                variant: 'outline',
+              },
+            }}
+          />
         </MotionSection>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -276,7 +278,7 @@ export default function WritingHome() {
             <LearnerSurfaceSectionHeader
               eyebrow="Latest Result"
               title="Read your most recent rubric-graded evaluation"
-              description="Open the full card to see per-criterion bands, rule-cited feedback, and the revision route."
+              description="Open the full card to see per-criterion bands, detailed feedback, and your revision options."
               className="mb-4"
             />
             <LearnerSurfaceCard card={{
@@ -304,11 +306,11 @@ export default function WritingHome() {
           <LearnerSurfaceSectionHeader
             eyebrow="Writing Workspace"
             title="Choose practice, drills, or past evidence"
-            description="The top cards show what to do next. The sections below let you expand into library work, criterion drills, or submission history."
+            description="The cards above show your next move. Below you'll find the full task library, targeted drills, and your submission history."
             className="mb-4"
           />
 
-          <div className="flex overflow-x-auto border-b border-gray-200 mb-6 scrollbar-hide -mx-1">
+          <div className="flex overflow-x-auto border-b border-border mb-6 scrollbar-hide -mx-1">
             {([
               { key: 'practice' as TabType, label: 'Practice Library', icon: FileText },
               { key: 'drills' as TabType, label: 'Criterion Drills', icon: Target },
@@ -437,7 +439,7 @@ export default function WritingHome() {
           <LearnerSurfaceSectionHeader
             eyebrow="Recent Mock Reports"
             title="Track writing impact inside full mocks"
-            description="Confirm whether criterion gains from isolated practice are transferring under full-exam pressure."
+            description="See whether your practice gains hold up under real exam pressure."
             action={<Link href="/mocks" className="text-sm font-bold text-primary hover:underline">Open Mock Center</Link>}
             className="mb-4"
           />
@@ -454,8 +456,8 @@ export default function WritingHome() {
                     title: report.title,
                     description: report.summary,
                     metaItems: [
-                      { label: report.date },
-                      { label: report.overallScore },
+                      { icon: Calendar, label: report.date },
+                      { icon: Target, label: report.overallScore },
                     ],
                     primaryAction: { label: 'View Report', href: `/mocks/report/${report.id}`, variant: 'outline' },
                   }} />
@@ -463,7 +465,7 @@ export default function WritingHome() {
               ))}
             </div>
           ) : (
-            <div className="rounded-[24px] border border-dashed border-gray-200 bg-surface/80 p-6 text-sm text-muted">
+            <div className="rounded-[24px] border border-dashed border-border bg-surface/80 p-6 text-sm text-muted">
               <p>Complete a mock to see writing transfer evidence here.</p>
               <div className="mt-3 flex flex-wrap gap-4">
                 <Link href="/mocks" className="inline-flex items-center gap-1 font-bold text-primary hover:underline">Open Mock Center <ArrowRight className="h-4 w-4" /></Link>

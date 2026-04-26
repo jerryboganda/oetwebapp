@@ -177,7 +177,7 @@ export default function GrammarLessonPage() {
           icon={BookMarked}
           accent="primary"
           title={lesson.title}
-          description={lesson.description ?? `Strengthen ${lesson.topicName ?? lesson.category} patterns graded server-side.`}
+          description={lesson.description ?? `Strengthen ${lesson.topicName ?? lesson.category} patterns through guided practice.`}
           highlights={heroHighlights}
         />
 

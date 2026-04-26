@@ -49,7 +49,7 @@ function PreferenceToggle({
         'flex items-start justify-between gap-4 rounded-2xl border px-4 py-3 text-left transition-colors',
         checked
           ? 'border-primary/25 bg-primary/5 text-navy'
-          : 'border-gray-200 bg-white text-navy hover:border-gray-300',
+          : 'border-border bg-white text-navy hover:border-border',
       )}
     >
       <div className="space-y-1">
@@ -59,7 +59,7 @@ function PreferenceToggle({
       <span
         className={cn(
           'inline-flex min-w-14 items-center justify-center rounded-full px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em]',
-          checked ? 'bg-primary text-white' : 'bg-gray-100 text-gray-500',
+          checked ? 'bg-primary text-white' : 'bg-background-light text-muted',
         )}
       >
         {checked ? 'On' : 'Off'}
@@ -206,7 +206,7 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
         />
       </div>
 
-      <div className="rounded-2xl border border-gray-200 bg-white p-4">
+      <div className="rounded-2xl border border-border bg-white p-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div className="space-y-1">
             <div className="flex items-center gap-2">
@@ -256,9 +256,9 @@ function NotificationPreferencesInner({ compact = false }: Pick<NotificationPref
           ) : null}
         </div>
 
-        <div className={cn('space-y-3 rounded-2xl border border-gray-200 bg-gray-50/60 p-3', compact && 'max-h-80 overflow-y-auto')}>
+        <div className={cn('space-y-3 rounded-2xl border border-border bg-background-light/60 p-3', compact && 'max-h-80 overflow-y-auto')}>
           {visibleEventEntries.map(([eventKey, eventPreference]) => (
-            <div key={eventKey} className="rounded-2xl border border-gray-200 bg-white p-3">
+            <div key={eventKey} className="rounded-2xl border border-border bg-white p-3">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
                 <div className="space-y-2">
                   <p className="text-sm font-semibold text-navy">{formatEventLabel(eventKey)}</p>

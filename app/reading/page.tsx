@@ -237,7 +237,7 @@ export default function ReadingHome() {
             <section>
               <LearnerSurfaceSectionHeader
                 eyebrow="Part Guidance"
-                title="Keep the exam rhythm visible"
+                title="Practice under exam conditions"
                 description={`Part A is ${home?.policy.partATimerMinutes ?? 15} minutes, followed by ${home?.policy.partBCTimerMinutes ?? 45} shared minutes for Parts B and C.`}
                 className="mb-5"
               />
@@ -297,9 +297,9 @@ export default function ReadingHome() {
                       title: report.title,
                       description: report.summary,
                       metaItems: [
-                        { label: report.date },
-                        { label: `Overall ${report.overallScore}` },
-                        ...(reading ? [{ label: `Reading ${(reading as unknown as { score?: number | string }).score ?? '—'}` }] : []),
+                        { icon: Clock, label: report.date },
+                        { icon: Target, label: `Overall ${report.overallScore}` },
+                        ...(reading ? [{ icon: BookOpen, label: `Reading ${(reading as unknown as { score?: number | string }).score ?? '—'}` }] : []),
                       ],
                       primaryAction: {
                         label: 'View Report',

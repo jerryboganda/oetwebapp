@@ -29,8 +29,8 @@ export function ExamTypeBadge({ examType, size = 'sm', className }: ExamTypeBadg
   const normalized = (examType ?? '').toLowerCase().trim();
   const config = EXAM_CONFIG[normalized] ?? {
     label: 'OET',
-    bg: 'bg-gray-100 dark:bg-gray-800',
-    text: 'text-gray-600 dark:text-gray-400',
+    bg: 'bg-background-light dark:bg-gray-800',
+    text: 'text-muted dark:text-muted/60',
     ring: 'ring-gray-200/60 dark:ring-gray-700/50',
   };
 

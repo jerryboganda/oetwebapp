@@ -41,9 +41,9 @@ export function WritingCaseNotesPanel({
     : {};
 
   return (
-    <div className={cn('flex flex-col h-full bg-surface border-r border-gray-200', className)}>
+    <div className={cn('flex flex-col h-full bg-surface border-r border-border', className)}>
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 shrink-0" role="tablist" aria-label="Case notes tabs">
+      <div className="flex border-b border-border shrink-0" role="tablist" aria-label="Case notes tabs">
         {(['notes', 'scratchpad', 'checklist'] as const).map((tab) => (
           <button
             key={tab}
@@ -89,7 +89,7 @@ export function WritingCaseNotesPanel({
             disabled={readingWindowLocked}
             className={cn(
               'w-full h-full min-h-[200px] text-sm border-0 resize-none focus:outline-none text-navy placeholder:text-muted/50',
-              readingWindowLocked && 'opacity-60 cursor-not-allowed bg-gray-50',
+              readingWindowLocked && 'opacity-60 cursor-not-allowed bg-background-light',
             )}
           />
         )}
@@ -103,7 +103,7 @@ export function WritingCaseNotesPanel({
                     checked={item.checked}
                     disabled={readingWindowLocked}
                     onChange={(e) => onChecklistChange?.(item.id, e.target.checked)}
-                    className="mt-0.5 w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary disabled:opacity-60"
+                    className="mt-0.5 w-4 h-4 rounded border-border text-primary focus:ring-primary disabled:opacity-60"
                   />
                   <span className={cn('text-sm', item.checked && 'line-through text-muted')}>{item.label}</span>
                 </label>

@@ -96,9 +96,9 @@ export default function PronunciationPage() {
     <LearnerDashboardShell>
       <div className="space-y-6">
         <LearnerPageHero
-          eyebrow="Learn"
-          title="Pronunciation Drills"
-          description="Record yourself, get phoneme-level AI feedback, and track your projected Speaking band."
+          eyebrow="Pronunciation Practice"
+          title="Sharpen the sounds that lift your Speaking band"
+          description="Record yourself, get phoneme-level AI feedback, and track your projected Speaking score with every drill."
           icon={Mic}
           highlights={heroHighlights}
         />
@@ -190,7 +190,7 @@ export default function PronunciationPage() {
         {loading ? (
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
             {Array.from({ length: 6 }).map((_, i) => (
-              <Skeleton key={i} className="h-28 rounded-3xl" />
+              <Skeleton key={i} className="h-28 rounded-[24px]" />
             ))}
           </div>
         ) : drills.length === 0 ? (
@@ -215,7 +215,7 @@ export default function PronunciationPage() {
                       href={`/pronunciation/${drill.id}`}
                       aria-label={`Open pronunciation drill ${drill.label}`}
                     >
-                      <div className="group cursor-pointer rounded-3xl border border-border bg-surface p-5 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical active:scale-[0.99]">
+                      <div className="group cursor-pointer rounded-[24px] border border-border bg-surface p-5 shadow-sm transition-[border-color,box-shadow,transform] duration-200 hover:border-border-hover hover:shadow-clinical active:scale-[0.99]">
                         <div className="flex items-start gap-3">
                           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-rose-50 text-rose-600">
                             <Mic className="h-5 w-5" aria-hidden />

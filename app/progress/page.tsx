@@ -90,7 +90,7 @@ export default function ProgressDashboard() {
   const hasTrendData = trendData.length > 0;
 
   const trendEmptyState = (
-    <div className="flex h-full min-h-[240px] items-center justify-center rounded-3xl border border-dashed border-border bg-background-light/60 px-6 text-center">
+    <div className="flex h-full min-h-[240px] items-center justify-center rounded-[24px] border border-dashed border-border bg-background-light/60 px-6 text-center">
       <div className="max-w-sm space-y-2">
         <p className="text-sm font-black uppercase tracking-widest text-muted">No trend data yet</p>
         <p className="text-sm text-muted">
@@ -112,7 +112,7 @@ export default function ProgressDashboard() {
           icon={TrendingUp}
           accent="primary"
           title="See whether recent effort is turning into better evidence"
-          description="Use this page to connect score movement, completed work, and review throughput before you choose the next focus."
+          description="Track your score trends, completed work, and review activity to choose your next priority."
           highlights={[
             { icon: Activity, label: 'Trend coverage', value: trendData.length ? `${trendData.length} checkpoints` : 'Loading...' },
             { icon: CheckCircle2, label: 'Completed work', value: completionData.length ? `${completedLast7} tasks` : 'Loading...' },
@@ -142,7 +142,7 @@ export default function ProgressDashboard() {
               <LearnerSurfaceSectionHeader
                 eyebrow="Sub-test Performance Trend"
                 title="See score movement across all skills"
-                description="This chart should make the learner’s cross-subtest trajectory easy to read before they drill into detail."
+                description="Compare your trajectory across all four sub-tests at a glance."
                 className="mb-6"
               />
               <div className="flex items-center gap-3 mb-6">
@@ -181,7 +181,7 @@ export default function ProgressDashboard() {
               <LearnerSurfaceSectionHeader
                 eyebrow="Criterion Trend"
                 title="Filter deeper without losing the main story"
-                description="Writing and speaking criterion filters should feel like a detailed continuation of the learner’s progress narrative."
+                description="Filter Writing and Speaking by individual criterion to see exactly where you're improving."
                 className="mb-6"
               />
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -235,7 +235,7 @@ export default function ProgressDashboard() {
                 <LearnerSurfaceSectionHeader
                   eyebrow="Completion Trend"
                   title="Keep task completion visible"
-                  description="Progress is not only score movement; it is also whether the learner is actually completing planned work."
+                  description="Progress isn't just score movement — it's also how consistently you're completing planned work."
                   className="mb-6"
                 />
                 <div className="flex items-center gap-3 mb-6">
@@ -274,7 +274,7 @@ export default function ProgressDashboard() {
                 <LearnerSurfaceSectionHeader
                   eyebrow="Submission Volume"
                   title="Make writing and speaking effort visible"
-                  description="Submission volume should reinforce how much evidence the learner has created, not sit as an isolated stat."
+                  description="Your submission volume shows how much practice you've banked."
                   className="mb-6"
                 />
                 <div className="flex items-center gap-3 mb-6">

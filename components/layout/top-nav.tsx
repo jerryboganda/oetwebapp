@@ -12,6 +12,7 @@ import { type ReactNode, useContext, useMemo, useState } from 'react';
 import { mainNavItems, type NavItem, type ShellUserSummary } from './sidebar';
 import { usePathname, useRouter } from 'next/navigation';
 import { NotificationCenter } from './notification-center';
+import { LearnerStreakBadges } from './learner-streak-badges';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { triggerImpactHaptic } from '@/lib/mobile/haptics';
 import { getSurfaceTransition } from '@/lib/motion';
@@ -66,6 +67,9 @@ export function TopNav({
     [learnerFeatureFlags, sectionedItems, shouldFilterFeatures],
   );
   const hasSectionedMenu = Boolean(sectionedItems?.length);
+  const pathnameLower = pathname.toLowerCase();
+  const isPrivilegedPath = pathnameLower.startsWith('/expert') || pathnameLower.startsWith('/admin');
+  const showStreakBadges = workspaceRole === 'learner' && !isPrivilegedPath;
 
   const menuMotionProps = reducedMotion
     ? {
@@ -143,7 +147,7 @@ export function TopNav({
                 className="hidden items-center gap-2 sm:flex"
                 {...getSurfaceMotion('state', reducedMotion)}
               >
-                <span className="text-gray-300">/</span>
+                <span className="text-muted/40">/</span>
                 <span className="text-sm font-semibold text-navy">{pageTitle}</span>
               </motion.div>
             )}
@@ -152,6 +156,7 @@ export function TopNav({
 
         <motion.div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3" layout={!reducedMotion}>
           {actions}
+          {showStreakBadges && <LearnerStreakBadges />}
           <ThemeToggle />
           <NotificationCenter />
           <div className="flex h-9 w-9 items-center justify-center rounded-full bg-primary/10 text-sm font-bold text-primary ring-1 ring-primary/10">

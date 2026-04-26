@@ -89,9 +89,9 @@ export default function ReviewPage() {
     return (
       <LearnerDashboardShell>
         <div className="space-y-6">
-        <LearnerPageHero eyebrow="Learn" title="Spaced Repetition Review" description="Review your weak areas with smart scheduling." icon={Brain} highlights={heroHighlights} />
+        <LearnerPageHero eyebrow="Daily Review" title="Lock in what you've already learned" description="Each card comes back exactly when you're about to forget it — the fastest way to keep weak areas from slipping back." icon={Brain} highlights={heroHighlights} />
         <div className="space-y-4">
-          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-3xl" />)}
+          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-[24px]" />)}
         </div>
         </div>
       </LearnerDashboardShell>
@@ -102,9 +102,9 @@ export default function ReviewPage() {
     <LearnerDashboardShell>
       <div className="space-y-6">
       <LearnerPageHero
-        eyebrow="Learn"
-        title="Spaced Repetition Review"
-        description="Review your weak areas with smart scheduling."
+        eyebrow="Daily Review"
+        title="Lock in what you've already learned"
+        description="Each card comes back exactly when you're about to forget it — the fastest way to keep weak areas from slipping back."
         icon={Brain}
         highlights={heroHighlights}
       />
@@ -114,7 +114,7 @@ export default function ReviewPage() {
       {/* Summary cards */}
       {!started && (
         <div>
-          <LearnerSurfaceSectionHeader eyebrow="Session overview" title="Review at a glance" description="The overview should feel like the dashboard summary row." className="mb-4" />
+          <LearnerSurfaceSectionHeader eyebrow="Session overview" title="Review at a glance" description="Your review session at a glance." className="mb-4" />
           <div className="grid grid-cols-2 gap-4 md:grid-cols-4 mb-8">
           {[
             { label: 'Due Today', value: summary?.dueToday ?? 0, color: 'text-danger' },
@@ -122,7 +122,7 @@ export default function ReviewPage() {
             { label: 'Total Items', value: summary?.total ?? 0, color: 'text-info' },
             { label: 'Mastered', value: summary?.mastered ?? 0, color: 'text-success' },
           ].map(stat => (
-            <Card key={stat.label} className="rounded-3xl p-4 text-center shadow-sm">
+            <Card key={stat.label} className="rounded-[24px] p-4 text-center shadow-sm">
               <div className={`text-3xl font-bold ${stat.color}`}>{stat.value}</div>
               <div className="mt-1 text-sm text-muted">{stat.label}</div>
             </Card>
@@ -160,7 +160,7 @@ export default function ReviewPage() {
 
       {started && !done && currentItem && (
         <div className="mx-auto max-w-3xl">
-          <LearnerSurfaceSectionHeader eyebrow="Active session" title="Review one item at a time" description="The active card should feel like a focused surface within the same dashboard system." className="mb-4" />
+          <LearnerSurfaceSectionHeader eyebrow="Active session" title="Review one item at a time" description="Tackle one item at a time for focused recall." className="mb-4" />
           {/* Progress */}
           <div className="mb-4 flex items-center justify-between text-sm text-muted">
             <span>{current + 1} / {items.length}</span>
@@ -179,7 +179,7 @@ export default function ReviewPage() {
               initial={{ opacity: 0, x: 30 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -30 }}
-              className="mb-6 rounded-3xl border border-border bg-surface p-6 shadow-sm"
+              className="mb-6 rounded-[24px] border border-border bg-surface p-6 shadow-sm"
             >
               <div className="mb-3 text-xs font-medium uppercase text-primary">{currentItem.examTypeCode} · {currentItem.subtestCode || 'General'}</div>
               <div className="mb-4 text-lg font-medium text-navy">

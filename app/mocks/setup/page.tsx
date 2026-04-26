@@ -50,7 +50,7 @@ function reviewCost(selection: ReviewSelection) {
 function buildReviewOptions(mockType: MockType, subType: MockSubType) {
   if (mockType === 'full') {
     return [
-      { id: 'none' as const, label: 'No Review', description: 'Run the mock without productive-skill review add-ons.', cost: 0 },
+      { id: 'none' as const, label: 'No Review', description: 'Run the mock without expert review.', cost: 0 },
       { id: 'writing' as const, label: 'Writing Only', description: 'Reserve one credit for Writing expert review.', cost: 1 },
       { id: 'speaking' as const, label: 'Speaking Only', description: 'Reserve one credit for Speaking expert review.', cost: 1 },
       { id: 'writing_and_speaking' as const, label: 'Writing + Speaking', description: 'Reserve two credits for both productive sections.', cost: 2 },
@@ -60,7 +60,7 @@ function buildReviewOptions(mockType: MockType, subType: MockSubType) {
   if (subType === 'writing' || subType === 'speaking') {
     return [
       { id: 'none' as const, label: 'No Review', description: 'Keep this sub-test mock platform-evaluated only.', cost: 0 },
-      { id: 'current_subtest' as const, label: 'Review Current Sub-test', description: 'Reserve one credit for this productive-skill mock.', cost: 1 },
+      { id: 'current_subtest' as const, label: 'Review Current Sub-test', description: 'Reserve one credit for expert review of this Writing or Speaking mock.', cost: 1 },
     ];
   }
 
@@ -192,7 +192,7 @@ export default function MockSetup() {
           icon={Layers}
           accent="navy"
           title="Start from a published mock bundle"
-          description="Choose the authored bundle, exam mode, timing, and productive-skill review reservation before entering the section workspace."
+          description="Choose your mock paper, exam mode, timing, and whether to reserve expert review before you start."
           highlights={[
             { icon: Award, label: 'Credits', value: `${availableCredits} available` },
             { icon: Layers, label: 'Bundles', value: `${options?.availableBundles.length ?? 0} published` },
@@ -215,7 +215,7 @@ export default function MockSetup() {
               <LearnerSurfaceSectionHeader
                 eyebrow="1. Mock Type"
                 title="Choose full simulation or focused sub-test"
-                description="Sub-test links from the mock center preselect the correct route here."
+                description="Coming from the Mocks page? Your selection is already preset."
                 className="mb-4"
               />
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
@@ -271,8 +271,8 @@ export default function MockSetup() {
                 <MotionSection className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8">
                   <LearnerSurfaceSectionHeader
                     eyebrow="2. Profession"
-                    title="Match profession-scoped content"
-                    description="Full mocks can include profession-specific productive sections, while Listening and Reading can remain shared."
+                    title="Match your profession"
+                    description="Full mocks include Writing and Speaking tailored to your profession. Listening and Reading are shared across all professions."
                     icon={Stethoscope}
                     className="mb-4"
                   />
@@ -301,7 +301,7 @@ export default function MockSetup() {
               <LearnerSurfaceSectionHeader
                 eyebrow={showProfession ? '3. Bundle' : '2. Bundle'}
                 title="Pick the authored mock route"
-                description="Every card below is backed by an admin-published mock bundle and uses section launch routes from the API."
+                description="Every mock here is officially published and ready to start."
                 className="mb-4"
               />
               {availableBundles.length === 0 ? (
@@ -345,7 +345,7 @@ export default function MockSetup() {
               <LearnerSurfaceSectionHeader
                 eyebrow={showProfession ? '4. Environment' : '3. Environment'}
                 title="Set timing and exam behavior"
-                description="Exam mode keeps strict timers enabled; practice mode can relax timing when needed."
+                description="Exam mode enforces strict timing. Practice mode lets you pause and take breaks."
                 className="mb-4"
               />
               <div className="grid gap-4 sm:grid-cols-2">
@@ -371,7 +371,7 @@ export default function MockSetup() {
               <div className="mt-6 flex items-center justify-between border-t border-border pt-6">
                 <div className="pr-4">
                   <p className="flex items-center gap-2 text-sm font-bold text-navy"><Clock className="h-4 w-4 text-muted" /> Strict Timer</p>
-                  <p className="mt-1 text-xs text-muted">Auto-enforce each section limit from the authored bundle.</p>
+                  <p className="mt-1 text-xs text-muted">Use the official timing for each section automatically.</p>
                   {mode === 'exam' ? (
                     <p className="mt-2 flex items-center gap-1 text-[10px] font-black uppercase tracking-widest text-danger">
                       <Info className="h-3 w-3" /> Required in exam mode
@@ -396,7 +396,7 @@ export default function MockSetup() {
               <LearnerSurfaceSectionHeader
                 eyebrow={showProfession ? '5. Review Credits' : '4. Review Credits'}
                 title="Reserve expert review at mock start"
-                description="Credits are reserved immediately, consumed when eligible Writing/Speaking evidence is submitted, and released if the attempt is cancelled."
+                description="Credits are reserved when you start, used when you submit Writing or Speaking, and refunded if you cancel."
                 className="mb-4"
               />
               <div className="mb-4 inline-flex rounded-md bg-warning/10 px-2 py-1 text-[10px] font-black uppercase tracking-widest text-warning">

@@ -104,7 +104,7 @@ function ListeningResultsContent() {
               <p className="text-xs font-black uppercase tracking-widest text-muted">Canonical OET Listening Score</p>
               <h2 className="mt-2 text-3xl font-black text-navy">{result.scoreDisplay}</h2>
               <p className="mt-3 max-w-2xl text-sm text-muted">
-                This is graded on the server from the authored answer key. The Listening pass anchor is 30/42 raw = 350/500 = Grade B.
+                This is graded against the official answer key. A pass on Listening is 30/42 (350/500, Grade B).
               </p>
             </div>
             <div className={`rounded-2xl border p-5 text-center ${result.passed ? 'border-success/20 bg-success/10 text-success' : 'border-danger/20 bg-danger/10 text-danger'}`}>

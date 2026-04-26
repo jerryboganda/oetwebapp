@@ -13,7 +13,7 @@ interface Props {
 
 export function ConversationMicControl({ recording, disabled, ending, canEnd, onRecord, onEnd }: Props) {
   return (
-    <div className="flex items-center justify-center gap-4 border-t border-gray-200 pt-4 dark:border-gray-700">
+    <div className="flex items-center justify-center gap-4 border-t border-border pt-4 dark:border-gray-700">
       <button onClick={onRecord} disabled={disabled} type="button"
         className={`group relative flex h-16 w-16 items-center justify-center rounded-full transition-all ${
           recording
