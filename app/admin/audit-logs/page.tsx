@@ -11,6 +11,7 @@ import { Toast } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Drawer } from '@/components/ui/modal';
+import { Pagination } from '@/components/ui/pagination';
 import { exportAdminAuditLogs } from '@/lib/api';
 import { getAdminAuditLogDetailData, getAdminAuditLogPageData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
@@ -135,8 +136,6 @@ export default function AuditLogsPage() {
   ], [actionOptions, actorOptions]);
 
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
-  const pageStart = total === 0 ? 0 : ((page - 1) * pageSize) + 1;
-  const pageEnd = total === 0 ? 0 : Math.min(total, page * pageSize);
 
   const columns: Column<AdminAuditLogRow>[] = useMemo(
     () => [
@@ -314,37 +313,16 @@ export default function AuditLogsPage() {
             </div>
           </div>
           <FilterBar groups={filterGroups} selected={filters} onChange={(groupId, optionId) => { setPage(1); handleFilterChange(groupId, optionId); }} onClear={() => { setPage(1); setFilters({ action: [], actor: [] }); setSearchQuery(''); }} />
-          <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-            <div className="text-sm text-muted">
-              Showing {pageStart}-{pageEnd} of {total} events
-            </div>
-            <div className="flex flex-col gap-3 md:flex-row md:items-center md:gap-4">
-              <div className="min-w-36">
-                <Select
-                  label="Rows per page"
-                  value={String(pageSize)}
-                  onChange={(event) => { setPage(1); setPageSize(Number(event.target.value)); }}
-                  options={[
-                    { value: '10', label: '10' },
-                    { value: '20', label: '20' },
-                    { value: '50', label: '50' },
-                    { value: '100', label: '100' },
-                  ]}
-                />
-              </div>
-              <div className="flex items-center gap-2 pt-5 md:pt-0">
-                <Button variant="outline" onClick={() => setPage((current) => Math.max(1, current - 1))} disabled={page <= 1}>
-                  Previous
-                </Button>
-                <span className="text-sm text-muted">
-                  Page {page} of {totalPages}
-                </span>
-                <Button variant="outline" onClick={() => setPage((current) => Math.min(totalPages, current + 1))} disabled={page >= totalPages}>
-                  Next
-                </Button>
-              </div>
-            </div>
-          </div>
+          <Pagination
+            page={page}
+            pageSize={pageSize}
+            total={total}
+            onPageChange={setPage}
+            onPageSizeChange={setPageSize}
+            pageSizeOptions={[10, 20, 50, 100]}
+            itemLabel="event"
+            itemLabelPlural="events"
+          />
           <DataTable columns={columns} data={rows} keyExtractor={(log) => log.id} onRowClick={handleRowClick} mobileCardRender={mobileCardRender} />
         </AdminRoutePanel>
       </AsyncStateWrapper>
