@@ -40,8 +40,21 @@ export default function SpeakingResultSummary() {
 
   useEffect(() => {
     let cancelled = false;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const MAX_ATTEMPTS = 30;
+    let attempt = 0;
+
+    const schedule = (fn: () => void, ms: number) => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(fn, ms);
+    };
 
     const poll = async () => {
+      if (cancelled) return;
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        schedule(() => { void poll(); }, 2000);
+        return;
+      }
       try {
         const response = await fetchSpeakingResult(id);
         if (cancelled) return;
@@ -62,8 +75,14 @@ export default function SpeakingResultSummary() {
           setAnalysing(false);
           return;
         }
-
-        setTimeout(() => { void poll(); }, 2000);
+        attempt += 1;
+        if (attempt >= MAX_ATTEMPTS) {
+          setError(true);
+          setAnalysing(false);
+          return;
+        }
+        const delay = Math.min(15000, 2000 * Math.pow(1.3, attempt));
+        schedule(() => { void poll(); }, delay);
       } catch {
         if (!cancelled) {
           setError(true);
@@ -72,10 +91,10 @@ export default function SpeakingResultSummary() {
       }
     };
 
-    const timer = setTimeout(() => { void poll(); }, 800);
+    schedule(() => { void poll(); }, 800);
     return () => {
       cancelled = true;
-      clearTimeout(timer);
+      if (timer) clearTimeout(timer);
     };
   }, [id]);
 

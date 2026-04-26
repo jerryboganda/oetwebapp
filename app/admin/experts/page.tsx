@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useMemo, useState, useCallback } from 'react';
+import { useMemo, useState, useCallback } from 'react';
+import { useDebouncedEffect } from '@/hooks/use-debounced-effect';
 import Link from 'next/link';
 import {
   GraduationCap,
@@ -138,17 +139,9 @@ export default function ExpertManagementPage() {
     }
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    const run = async () => {
-      await loadExperts();
-      if (!cancelled) await loadTutorProfiles();
-    };
-    const handle = window.setTimeout(run, 200);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(handle);
-    };
+  useDebouncedEffect(async ({ cancelled }) => {
+    await loadExperts();
+    if (!cancelled) await loadTutorProfiles();
   }, [loadExperts, loadTutorProfiles]);
 
   /* ─── computed ─── */

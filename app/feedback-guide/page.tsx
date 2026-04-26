@@ -1,5 +1,6 @@
-'use client';
+import FeedbackGuideContent, { type RubricCriterion } from './_content';
 
+<<<<<<< Updated upstream
 import { HelpCircle, CheckCircle2, TrendingUp, Target } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
@@ -9,6 +10,9 @@ import { Badge } from '@/components/ui/badge';
 import { PageViewBeacon } from '@/components/analytics/page-view-beacon';
 
 const WRITING_CRITERIA = [
+=======
+const WRITING_CRITERIA: RubricCriterion[] = [
+>>>>>>> Stashed changes
   { code: 'overall_task_fulfilment', label: 'Overall Task Fulfilment', bands: '0–7', description: 'How well the letter addresses all information from the case notes, with appropriate prioritisation.', improve: 'Identify ALL relevant case note points. Organise by clinical importance, not chronological order.' },
   { code: 'appropriateness_of_language', label: 'Appropriateness of Language', bands: '0–7', description: 'Register, tone, and formality suited to the healthcare communication purpose.', improve: 'Use formal clinical register. Avoid colloquialisms. Match tone to the recipient (GP, specialist, patient).' },
   { code: 'comprehension_of_stimulus', label: 'Comprehension of Stimulus', bands: '0–7', description: 'Accurate understanding and representation of the case note information.', improve: 'Read case notes twice. Don\'t misinterpret abbreviations. Distinguish relevant from irrelevant details.' },
@@ -17,7 +21,7 @@ const WRITING_CRITERIA = [
   { code: 'conciseness', label: 'Conciseness', bands: '0–7', description: 'Appropriate length and absence of unnecessary repetition or irrelevant information.', improve: 'Remove filler phrases. Don\'t repeat information. Keep to approximately 180-200 words.' },
 ];
 
-const SPEAKING_CRITERIA = [
+const SPEAKING_CRITERIA: RubricCriterion[] = [
   { code: 'intelligibility', label: 'Intelligibility', bands: '0–6', description: 'How clearly and easily understood your speech is.', improve: 'Focus on clear word endings and stress patterns. Slow down at key information points.' },
   { code: 'fluency', label: 'Fluency', bands: '0–6', description: 'Smooth delivery with natural pace and minimal hesitation.', improve: 'Reduce filler words (um, uh). Practice connected speech. Allow natural pauses at sentence boundaries.' },
   { code: 'appropriateness', label: 'Appropriateness of Language', bands: '0–6', description: 'Using language suited to the clinical context and patient relationship.', improve: 'Avoid jargon with patients. Use empathetic language. Adapt formality to the role-play scenario.' },
@@ -26,6 +30,7 @@ const SPEAKING_CRITERIA = [
 ];
 
 export default function FeedbackGuidePage() {
+<<<<<<< Updated upstream
   const heroHighlights = [
     { icon: CheckCircle2, label: 'Writing criteria', value: `${WRITING_CRITERIA.length}` },
     { icon: Target, label: 'Speaking criteria', value: `${SPEAKING_CRITERIA.length}` },
@@ -94,4 +99,7 @@ export default function FeedbackGuidePage() {
       </MotionSection>
     </LearnerDashboardShell>
   );
+=======
+  return <FeedbackGuideContent writingCriteria={WRITING_CRITERIA} speakingCriteria={SPEAKING_CRITERIA} />;
+>>>>>>> Stashed changes
 }

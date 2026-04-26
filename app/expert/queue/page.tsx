@@ -190,7 +190,12 @@ export default function ReviewQueuePage() {
   useEffect(() => {
     void loadQueue();
     analytics.track('review_queue_viewed', { search: requestParams.search ?? null });
-    const interval = window.setInterval(() => { void loadQueue(false); }, 2 * 60 * 1000);
+    const interval = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
+      void loadQueue(false);
+    }, 2 * 60 * 1000);
     return () => window.clearInterval(interval);
   }, [loadQueue, requestParams.search]);
 

@@ -1,8 +1,10 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import dynamic from 'next/dynamic';
 import { MotionSection } from '@/components/ui/motion-primitives';
 import {
+<<<<<<< Updated upstream
   LineChart,
   Line,
   AreaChart,
@@ -17,6 +19,8 @@ import {
   Legend
 } from '@/components/charts/dynamic-recharts';
 import {
+=======
+>>>>>>> Stashed changes
   TrendingUp,
   Activity,
   CheckCircle2,
@@ -34,19 +38,24 @@ import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domai
 type CompletionPoint = { day: string; completed: number };
 type VolumePoint = { week: string; submissions: number };
 
-const CHART_COLORS = {
-  primary: '#7c3aed',
-  info: '#2563eb',
-  success: '#10b981',
-  warning: '#d97706',
-  danger: '#ef4444',
-  navy: '#0f172a',
-  muted: '#526072',
-  border: '#d8e0e8',
-} as const;
+const chartSkeleton = <Skeleton className="h-full w-full rounded-2xl" />;
 
-const CHART_TICK = { fontSize: 12, fill: CHART_COLORS.muted } as const;
-const CHART_TOOLTIP_STYLE = { borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgba(0,0,0,0.1)' } as const;
+const TrendChart = dynamic(() => import('./_charts').then(m => m.TrendChart), {
+  ssr: false,
+  loading: () => chartSkeleton,
+});
+const CriterionChart = dynamic(() => import('./_charts').then(m => m.CriterionChart), {
+  ssr: false,
+  loading: () => chartSkeleton,
+});
+const CompletionChart = dynamic(() => import('./_charts').then(m => m.CompletionChart), {
+  ssr: false,
+  loading: () => chartSkeleton,
+});
+const VolumeChart = dynamic(() => import('./_charts').then(m => m.VolumeChart), {
+  ssr: false,
+  loading: () => chartSkeleton,
+});
 
 export default function ProgressDashboard() {
   const [criterionFilter, setCriterionFilter] = useState('Writing');
@@ -155,21 +164,7 @@ export default function ProgressDashboard() {
                 </div>
               </div>
               <div className="h-[240px] w-full sm:h-[280px] lg:h-[300px]" role="img" aria-label="Sub-test performance trend chart showing reading, listening, writing, and speaking scores over time">
-                {hasTrendData ? (
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                    <LineChart data={trendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.border} />
-                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={CHART_TICK} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={CHART_TICK} />
-                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                      <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
-                      <Line type="monotone" dataKey="reading" name="Reading" stroke={CHART_COLORS.info} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      <Line type="monotone" dataKey="listening" name="Listening" stroke={CHART_COLORS.primary} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      <Line type="monotone" dataKey="writing" name="Writing" stroke={CHART_COLORS.danger} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      <Line type="monotone" dataKey="speaking" name="Speaking" stroke={CHART_COLORS.navy} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : trendEmptyState}
+                {hasTrendData ? <TrendChart data={trendData} /> : trendEmptyState}
               </div>
             </MotionSection>
 
@@ -207,22 +202,7 @@ export default function ProgressDashboard() {
                 </div>
               </div>
               <div className="h-[240px] w-full sm:h-[280px] lg:h-[300px]" role="img" aria-label={`Criterion trend chart for ${criterionFilter} skills`}>
-                {hasTrendData ? (
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                    <LineChart data={trendData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.border} />
-                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={CHART_TICK} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={CHART_TICK} />
-                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                      <Legend iconType="circle" wrapperStyle={{ fontSize: '12px', paddingTop: '20px' }} />
-                      {criterionFilter === 'Writing' ? (
-                        <Line type="monotone" dataKey="writing" name="Writing Score" stroke={CHART_COLORS.danger} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      ) : (
-                        <Line type="monotone" dataKey="speaking" name="Speaking Score" stroke={CHART_COLORS.primary} strokeWidth={3} dot={{ r: 4, strokeWidth: 2 }} activeDot={{ r: 6 }} />
-                      )}
-                    </LineChart>
-                  </ResponsiveContainer>
-                ) : trendEmptyState}
+                {hasTrendData ? <CriterionChart data={trendData} criterionFilter={criterionFilter} /> : trendEmptyState}
               </div>
             </MotionSection>
 
@@ -248,21 +228,7 @@ export default function ProgressDashboard() {
                   </div>
                 </div>
                 <div className="h-[220px] w-full sm:h-[240px] lg:h-[250px]">
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                    <AreaChart data={completionData} margin={{ top: 5, right: 0, bottom: 5, left: -20 }}>
-                      <defs>
-                        <linearGradient id="colorCompleted" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="5%" stopColor={CHART_COLORS.success} stopOpacity={0.3} />
-                          <stop offset="95%" stopColor={CHART_COLORS.success} stopOpacity={0} />
-                        </linearGradient>
-                      </defs>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.border} />
-                      <XAxis dataKey="day" axisLine={false} tickLine={false} tick={CHART_TICK} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={CHART_TICK} />
-                      <Tooltip contentStyle={CHART_TOOLTIP_STYLE} />
-                      <Area type="monotone" dataKey="completed" name="Tasks Completed" stroke={CHART_COLORS.success} strokeWidth={3} fillOpacity={1} fill="url(#colorCompleted)" />
-                    </AreaChart>
-                  </ResponsiveContainer>
+                  <CompletionChart data={completionData} />
                 </div>
               </MotionSection>
 
@@ -287,15 +253,7 @@ export default function ProgressDashboard() {
                   </div>
                 </div>
                 <div className="h-[220px] w-full sm:h-[240px] lg:h-[250px]">
-                  <ResponsiveContainer width="100%" height="100%" minWidth={0}>
-                    <BarChart data={volumeData} margin={{ top: 5, right: 0, bottom: 5, left: -20 }}>
-                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke={CHART_COLORS.border} />
-                      <XAxis dataKey="week" axisLine={false} tickLine={false} tick={CHART_TICK} dy={10} />
-                      <YAxis axisLine={false} tickLine={false} tick={CHART_TICK} />
-                      <Tooltip cursor={{ fill: CHART_COLORS.border }} contentStyle={CHART_TOOLTIP_STYLE} />
-                      <Bar dataKey="submissions" name="Submissions" fill={CHART_COLORS.warning} radius={[6, 6, 0, 0]} barSize={32} />
-                    </BarChart>
-                  </ResponsiveContainer>
+                  <VolumeChart data={volumeData} />
                 </div>
               </MotionSection>
             </div>

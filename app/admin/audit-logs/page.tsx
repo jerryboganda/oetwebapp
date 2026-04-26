@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useDebouncedEffect } from '@/hooks/use-debounced-effect';
 import { Download, FileText, Search } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
@@ -42,51 +43,41 @@ export default function AuditLogsPage() {
   const selectedAction = filters.action?.[0];
   const selectedActor = filters.actor?.[0];
 
-  useEffect(() => {
-    let cancelled = false;
+  useDebouncedEffect(async ({ cancelled }) => {
+    setPageStatus('loading');
+    try {
+      const basePromise = actionOptions.length === 0 && actorOptions.length === 0
+        ? getAdminAuditLogPageData({ pageSize: 100 })
+        : Promise.resolve(null);
 
-    async function loadAuditLogs() {
-      setPageStatus('loading');
-      try {
-        const basePromise = actionOptions.length === 0 && actorOptions.length === 0
-          ? getAdminAuditLogPageData({ pageSize: 100 })
-          : Promise.resolve(null);
+      const result = await getAdminAuditLogPageData({
+        action: selectedAction,
+        actor: selectedActor,
+        search: searchQuery || undefined,
+        page,
+        pageSize,
+      });
+      const base = await basePromise;
 
-        const result = await getAdminAuditLogPageData({
-          action: selectedAction,
-          actor: selectedActor,
-          search: searchQuery || undefined,
-          page,
-          pageSize,
-        });
-        const base = await basePromise;
+      if (cancelled) return;
 
-        if (cancelled) return;
+      if (base) {
+        setActionOptions([...new Set(base.items.map((item) => item.action))].filter(Boolean));
+        setActorOptions([...new Set(base.items.map((item) => item.actor))].filter(Boolean));
+      }
 
-        if (base) {
-          setActionOptions([...new Set(base.items.map((item) => item.action))].filter(Boolean));
-          setActorOptions([...new Set(base.items.map((item) => item.actor))].filter(Boolean));
-        }
-
-        setRows(result.items);
-        setTotal(result.total);
-        setPage(result.page);
-        setPageSize(result.pageSize);
-        setPageStatus(result.total > 0 ? 'success' : 'empty');
-      } catch (error) {
-        console.error(error);
-        if (!cancelled) {
-          setPageStatus('error');
-          setToast({ variant: 'error', message: 'Unable to load audit logs.' });
-        }
+      setRows(result.items);
+      setTotal(result.total);
+      setPage(result.page);
+      setPageSize(result.pageSize);
+      setPageStatus(result.total > 0 ? 'success' : 'empty');
+    } catch (error) {
+      console.error(error);
+      if (!cancelled) {
+        setPageStatus('error');
+        setToast({ variant: 'error', message: 'Unable to load audit logs.' });
       }
     }
-
-    const handle = window.setTimeout(loadAuditLogs, 200);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(handle);
-    };
   }, [selectedAction, selectedActor, searchQuery, page, pageSize, actionOptions.length, actorOptions.length]);
 
   useEffect(() => {

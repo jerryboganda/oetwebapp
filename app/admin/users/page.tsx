@@ -1,7 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
+import { useDebouncedEffect } from '@/hooks/use-debounced-effect';
 import { MailPlus, Search, Upload, Users } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
@@ -53,41 +54,31 @@ export default function UsersPage() {
   const selectedRole = filters.role?.[0];
   const selectedStatus = filters.status?.[0];
 
-  useEffect(() => {
-    let cancelled = false;
+  useDebouncedEffect(async ({ cancelled }) => {
+    setPageStatus('loading');
+    try {
+      const result = await getAdminUsersPageData({
+        role: selectedRole,
+        status: selectedStatus,
+        search: searchQuery || undefined,
+        page,
+        pageSize,
+      });
 
-    async function loadUsers() {
-      setPageStatus('loading');
-      try {
-        const result = await getAdminUsersPageData({
-          role: selectedRole,
-          status: selectedStatus,
-          search: searchQuery || undefined,
-          page,
-          pageSize,
-        });
+      if (cancelled) return;
 
-        if (cancelled) return;
-
-        setUsers(result.items);
-        setTotal(result.total);
-        setPage(result.page);
-        setPageSize(result.pageSize);
-        setPageStatus(result.total > 0 ? 'success' : 'empty');
-      } catch (error) {
-        console.error(error);
-        if (!cancelled) {
-          setPageStatus('error');
-          setToast({ variant: 'error', message: 'Unable to load users right now.' });
-        }
+      setUsers(result.items);
+      setTotal(result.total);
+      setPage(result.page);
+      setPageSize(result.pageSize);
+      setPageStatus(result.total > 0 ? 'success' : 'empty');
+    } catch (error) {
+      console.error(error);
+      if (!cancelled) {
+        setPageStatus('error');
+        setToast({ variant: 'error', message: 'Unable to load users right now.' });
       }
     }
-
-    const handle = window.setTimeout(loadUsers, 200);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(handle);
-    };
   }, [page, pageSize, selectedRole, selectedStatus, searchQuery]);
 
   const filterGroups: FilterGroup[] = [

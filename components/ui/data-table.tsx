@@ -1,7 +1,11 @@
 'use client';
 
+<<<<<<< Updated upstream
 import { useRef, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import { useVirtualizer, type VirtualItem } from '@tanstack/react-virtual';
+=======
+import { type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
+>>>>>>> Stashed changes
 
 import { cn } from '@/lib/utils';
 
@@ -163,6 +167,7 @@ export function DataTable<T>({
       </div>
 
       <div className="hidden md:block">
+<<<<<<< Updated upstream
         {virtualize ? (
           <VirtualizedDesktopView
             columns={columns}
@@ -177,6 +182,47 @@ export function DataTable<T>({
             <table className="w-full min-w-full text-sm" aria-label={ariaLabel}>
               <thead className="bg-background-light">
                 <tr className="border-b border-gray-200/60">
+=======
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-full text-sm" aria-label={ariaLabel}>
+            <thead className="bg-background-light">
+              <tr className="border-b border-gray-200/60">
+                {columns.map((column) => (
+                  <th
+                    key={column.key}
+                    scope="col"
+                    className={cn(
+                      'px-5 py-3.5 text-left text-[11px] font-semibold uppercase tracking-[0.16em] text-muted',
+                      column.hideOnMobile && 'hidden md:table-cell',
+                      column.className,
+                    )}
+                  >
+                    {column.header}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+
+            <tbody className="divide-y divide-gray-100/90 bg-surface">
+              {data.map((row, idx) => (
+                <tr
+                  key={keyExtractor(row, idx)}
+                  data-row-key={keyExtractor(row, idx)}
+                  onClick={(event) => onRowClick?.(row, event)}
+                  onKeyDown={(event) => {
+                    if (onRowClick && (event.key === 'Enter' || event.key === ' ')) {
+                      event.preventDefault();
+                      onRowClick(row, event);
+                    }
+                  }}
+                  tabIndex={onRowClick ? 0 : undefined}
+                  role={onRowClick ? 'button' : undefined}
+                  className={cn(
+                    'transition-colors duration-200',
+                    onRowClick && 'cursor-pointer hover:bg-primary/[0.03] focus-visible:bg-primary/[0.03] focus-visible:outline-none',
+                  )}
+                >
+>>>>>>> Stashed changes
                   {columns.map((column) => (
                     <th
                       key={column.key}
@@ -191,6 +237,7 @@ export function DataTable<T>({
                     </th>
                   ))}
                 </tr>
+<<<<<<< Updated upstream
               </thead>
 
               <tbody className="divide-y divide-gray-100/90 bg-surface">
@@ -342,6 +389,12 @@ function VirtualizedDesktopView<T>({
             </div>
           );
         })}
+=======
+              ))}
+            </tbody>
+          </table>
+        </div>
+>>>>>>> Stashed changes
       </div>
     </div>
   );

@@ -3,8 +3,6 @@
 import { cn } from '@/lib/utils';
 import { ChevronDown } from 'lucide-react';
 import { useState, type ReactNode } from 'react';
-import { motion, useReducedMotion } from 'motion/react';
-import { motionTokens, prefersReducedMotion } from '@/lib/motion';
 import { MotionCollapse } from './motion-primitives';
 
 interface AccordionItem {
@@ -24,7 +22,6 @@ export function Accordion({ items, allowMultiple = false, className }: Accordion
   const [openIds, setOpenIds] = useState<Set<string>>(
     new Set(items.filter((i) => i.defaultOpen).map((i) => i.id)),
   );
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
 
   const toggle = (id: string) => {
     setOpenIds((prev) => {
@@ -53,17 +50,12 @@ export function Accordion({ items, allowMultiple = false, className }: Accordion
               className="flex items-center justify-between w-full px-5 py-4 text-left font-semibold text-navy hover:bg-gray-50 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset"
             >
               <span>{item.title}</span>
-              <motion.span
-                animate={{ rotate: isOpen ? 180 : 0 }}
-                transition={
-                  reducedMotion
-                    ? { duration: motionTokens.duration.instant }
-                    : { type: 'spring', stiffness: 500, damping: 30 }
-                }
-                className="inline-flex"
+              <span
+                data-state={isOpen ? 'open' : 'closed'}
+                className="inline-flex motion-safe:transition-transform motion-safe:duration-200 motion-safe:ease-out data-[state=open]:rotate-180"
               >
                 <ChevronDown className="w-4 h-4 text-muted" />
-              </motion.span>
+              </span>
             </button>
             <MotionCollapse
               open={isOpen}

@@ -564,6 +564,9 @@ export function NotificationCenterProvider({ children }: { children: ReactNode }
     }
 
     const interval = window.setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+        return;
+      }
       void refreshFeed({ silent: true });
     }, POLL_INTERVAL_MS);
 

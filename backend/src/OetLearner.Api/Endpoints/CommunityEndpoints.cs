@@ -45,11 +45,19 @@ public static class CommunityEndpoints
 
         community.MapGet("/threads/{threadId}", async (string threadId, LearnerDbContext db, CancellationToken ct) =>
         {
-            var thread = await db.ForumThreads.FindAsync([threadId], ct);
+            var thread = await db.ForumThreads.AsNoTracking().FirstOrDefaultAsync(t => t.Id == threadId, ct);
             if (thread == null) return Results.NotFound(new { error = "THREAD_NOT_FOUND" });
-            thread.ViewCount++;
-            await db.SaveChangesAsync(ct);
-            return Results.Ok(new { id = thread.Id, categoryId = thread.CategoryId, authorUserId = thread.AuthorUserId, authorDisplayName = thread.AuthorDisplayName, authorRole = thread.AuthorRole, title = thread.Title, body = thread.Body, isPinned = thread.IsPinned, isLocked = thread.IsLocked, replyCount = thread.ReplyCount, viewCount = thread.ViewCount, likeCount = thread.LikeCount, createdAt = thread.CreatedAt, lastActivityAt = thread.LastActivityAt });
+            _ = db.ForumThreads.Where(t => t.Id == threadId)
+                .ExecuteUpdateAsync(s => s.SetProperty(t => t.ViewCount, t => t.ViewCount + 1), CancellationToken.None)
+                .ContinueWith(task =>
+                {
+                    if (task.Exception is not null)
+                    {
+                        // Swallow — view-count bump is best-effort telemetry.
+                        _ = task.Exception;
+                    }
+                }, TaskScheduler.Default);
+            return Results.Ok(new { id = thread.Id, categoryId = thread.CategoryId, authorUserId = thread.AuthorUserId, authorDisplayName = thread.AuthorDisplayName, authorRole = thread.AuthorRole, title = thread.Title, body = thread.Body, isPinned = thread.IsPinned, isLocked = thread.IsLocked, replyCount = thread.ReplyCount, viewCount = thread.ViewCount + 1, likeCount = thread.LikeCount, createdAt = thread.CreatedAt, lastActivityAt = thread.LastActivityAt });
         });
 
         community.MapPost("/threads", async (HttpContext http, CreateThreadRequest req, LearnerDbContext db, CancellationToken ct) =>
@@ -81,7 +89,11 @@ public static class CommunityEndpoints
         {
             var ps = pageSize <= 0 ? 20 : pageSize;
             var pg = page <= 0 ? 1 : page;
+<<<<<<< Updated upstream
             var total = await db.ForumReplies.AsNoTracking().CountAsync(r => r.ThreadId == threadId, ct);
+=======
+            var total = await db.ForumReplies.CountAsync(r => r.ThreadId == threadId, ct);
+>>>>>>> Stashed changes
             var replies = await db.ForumReplies.AsNoTracking().Where(r => r.ThreadId == threadId)
                 .OrderBy(r => r.CreatedAt).Skip((pg - 1) * ps).Take(ps).ToListAsync(ct);
             return Results.Ok(new { total, replies = replies.Select(r => new { id = r.Id, authorDisplayName = r.AuthorDisplayName, authorRole = r.AuthorRole, body = r.Body, isExpertVerified = r.IsExpertVerified, likeCount = r.LikeCount, createdAt = r.CreatedAt, editedAt = r.EditedAt }) });

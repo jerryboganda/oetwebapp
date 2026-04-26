@@ -508,7 +508,17 @@ public sealed class AuthService(
         account.PasswordHash = passwordHasher.HashPassword(account, request.NewPassword);
         account.UpdatedAt = now;
 
+<<<<<<< Updated upstream
         if (db.Database.IsInMemory())
+=======
+        memoryCache.Remove($"jwt:validate:{account.Id}");
+
+        var activeRefreshTokens = await db.RefreshTokenRecords
+            .Where(x => x.ApplicationUserAccountId == account.Id && x.RevokedAt == null)
+            .ToListAsync(cancellationToken);
+
+        foreach (var refreshToken in activeRefreshTokens)
+>>>>>>> Stashed changes
         {
             var activeRefreshTokens = await db.RefreshTokenRecords
                 .Where(x => x.ApplicationUserAccountId == account.Id && x.RevokedAt == null)

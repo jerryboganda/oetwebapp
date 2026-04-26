@@ -897,13 +897,21 @@ public static class AdminEndpoints
                     .FirstOrDefaultAsync(db.ConversationSessions.AsNoTracking(), s => s.Id == sessionId, ct);
                 if (session is null) return Results.NotFound();
                 var turns = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
+<<<<<<< Updated upstream
                     db.ConversationTurns.AsNoTracking().Where(t => t.SessionId == sessionId).OrderBy(t => t.TurnNumber), ct);
+=======
+                    db.ConversationTurns.Where(t => t.SessionId == sessionId).OrderBy(t => t.TurnNumber).Take(200), ct);
+>>>>>>> Stashed changes
                 var evaluation = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions
                     .FirstOrDefaultAsync(db.ConversationEvaluations.AsNoTracking(), e => e.SessionId == sessionId, ct);
                 var annotations = evaluation is null
                     ? new List<OetLearner.Api.Domain.ConversationTurnAnnotation>()
                     : await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
+<<<<<<< Updated upstream
                         db.ConversationTurnAnnotations.AsNoTracking().Where(a => a.EvaluationId == evaluation.Id).OrderBy(a => a.TurnNumber), ct);
+=======
+                        db.ConversationTurnAnnotations.Where(a => a.EvaluationId == evaluation.Id).OrderBy(a => a.TurnNumber).Take(200), ct);
+>>>>>>> Stashed changes
                 return Results.Ok(new
                 {
                     session = new
@@ -932,10 +940,11 @@ public static class AdminEndpoints
             })
             .WithAdminRead("AdminContentRead");
 
-        admin.MapGet("/conversation/evaluations.csv", async (
+        admin.MapGet("/conversation/evaluations.csv", (
                 OetLearner.Api.Data.LearnerDbContext db,
                 CancellationToken ct) =>
             {
+<<<<<<< Updated upstream
                 var evals = await Microsoft.EntityFrameworkCore.EntityFrameworkQueryableExtensions.ToListAsync(
                     db.ConversationEvaluations
                         .AsNoTracking()
@@ -958,6 +967,22 @@ public static class AdminEndpoints
                 foreach (var e in evals)
                     csv.AppendLine($"{e.Id},{e.SessionId},{e.UserId},{e.OverallScaled},{e.OverallGrade},{e.Passed},{e.RulebookVersion},{e.CreatedAt:O}");
                 return Results.File(System.Text.Encoding.UTF8.GetBytes(csv.ToString()), "text/csv", "conversation-evaluations.csv");
+=======
+                return Results.Stream(async (stream) =>
+                {
+                    await using var writer = new System.IO.StreamWriter(stream, System.Text.Encoding.UTF8, leaveOpen: true);
+                    await writer.WriteLineAsync("Id,SessionId,UserId,OverallScaled,OverallGrade,Passed,RulebookVersion,CreatedAt");
+                    var query = db.ConversationEvaluations
+                        .AsNoTracking()
+                        .OrderByDescending(e => e.CreatedAt)
+                        .Take(10000);
+                    await foreach (var e in query.AsAsyncEnumerable().WithCancellation(ct))
+                    {
+                        await writer.WriteLineAsync($"{e.Id},{e.SessionId},{e.UserId},{e.OverallScaled},{e.OverallGrade},{e.Passed},{e.RulebookVersion},{e.CreatedAt:O}");
+                    }
+                    await writer.FlushAsync();
+                }, "text/csv", "conversation-evaluations.csv");
+>>>>>>> Stashed changes
             })
             .WithAdminRead("AdminContentRead");
 

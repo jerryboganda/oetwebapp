@@ -10,6 +10,7 @@ import { Timer } from '@/components/ui/timer';
 import { Modal } from '@/components/ui/modal';
 import { InlineAlert } from '@/components/ui/alert';
 import { useAnalytics } from '@/hooks/use-analytics';
+import { useDebouncedLocalStorage } from '@/hooks/use-debounced-local-storage';
 import { fetchReadingTask, submitReadingAnswers } from '@/lib/api';
 import type { ReadingTask, Question } from '@/lib/mock-data';
 import { cn } from '@/lib/utils';
@@ -61,12 +62,7 @@ export default function DiagnosticReadingPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Persist answers on every change
-  useEffect(() => {
-    if (Object.keys(answers).length > 0) {
-      localStorage.setItem(LOCAL_STORAGE_KEY, JSON.stringify(answers));
-    }
-  }, [answers]);
+  useDebouncedLocalStorage(LOCAL_STORAGE_KEY, answers);
 
   const questions = task?.questions ?? [];
   const question = questions[currentQ] as Question | undefined;

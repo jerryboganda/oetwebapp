@@ -1,11 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+<<<<<<< Updated upstream
 import { BarChart, Bar, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis, LineChart, Line } from '@/components/charts/dynamic-recharts';
+=======
+import dynamic from 'next/dynamic';
+>>>>>>> Stashed changes
 import { Shield, Target, TrendingUp, BarChart3 } from 'lucide-react';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
 import { Select } from '@/components/ui/form-controls';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
   ExpertRouteHero,
   ExpertRouteSectionHeader,
@@ -13,6 +18,15 @@ import {
   ExpertRouteWorkspace,
 } from '@/components/domain/expert-route-surface';
 import { analytics } from '@/lib/analytics';
+
+const ScoringDistributionChart = dynamic(() => import('./_charts').then(m => m.ScoringDistributionChart), {
+  ssr: false,
+  loading: () => <Skeleton className="h-[280px] w-full rounded-2xl" />,
+});
+const CalibrationTrendChart = dynamic(() => import('./_charts').then(m => m.CalibrationTrendChart), {
+  ssr: false,
+  loading: () => <Skeleton className="h-[220px] w-full rounded-2xl" />,
+});
 
 type AsyncStatus = 'loading' | 'error' | 'success';
 
@@ -113,15 +127,7 @@ export default function ScoringQualityPage() {
                 <ExpertRouteSectionHeader title="Scoring Distribution by Criterion" />
                 <Card className="mb-6">
                   <CardContent className="pt-4">
-                    <ResponsiveContainer width="100%" height={280}>
-                      <BarChart data={data.scoringDistribution}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="criterion" fontSize={12} />
-                        <YAxis domain={[0, 6]} />
-                        <Tooltip />
-                        <Bar dataKey="mean" fill="#6366f1" name="Mean Score" radius={[4, 4, 0, 0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
+                    <ScoringDistributionChart data={data.scoringDistribution} />
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
                       {data.scoringDistribution.map((sd) => (
                         <div key={sd.criterion} className="text-xs p-2 rounded-lg bg-gray-50 dark:bg-gray-800">
@@ -142,15 +148,7 @@ export default function ScoringQualityPage() {
                 <ExpertRouteSectionHeader title="Calibration Trend Over Time" />
                 <Card className="mb-6">
                   <CardContent className="pt-4">
-                    <ResponsiveContainer width="100%" height={220}>
-                      <LineChart data={data.calibrationTrend}>
-                        <CartesianGrid strokeDasharray="3 3" />
-                        <XAxis dataKey="date" tickFormatter={(v: string) => new Date(v).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} fontSize={11} />
-                        <YAxis domain={[0, 6]} />
-                        <Tooltip labelFormatter={(v) => new Date(String(v)).toLocaleDateString()} />
-                        <Line type="monotone" dataKey="averageScore" stroke="#6366f1" strokeWidth={2} dot={false} />
-                      </LineChart>
-                    </ResponsiveContainer>
+                    <CalibrationTrendChart data={data.calibrationTrend} />
                   </CardContent>
                 </Card>
               </>

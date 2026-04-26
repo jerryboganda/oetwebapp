@@ -11,6 +11,7 @@ import { Timer } from '@/components/ui/timer';
 import { Modal } from '@/components/ui/modal';
 import { InlineAlert } from '@/components/ui/alert';
 import { useAnalytics } from '@/hooks/use-analytics';
+import { useDebouncedLocalStorage } from '@/hooks/use-debounced-local-storage';
 import { fetchWritingTask, fetchWritingChecklist, submitWritingDraft, submitWritingTask } from '@/lib/api';
 import type { WritingTask, ChecklistItem } from '@/lib/mock-data';
 import { Send, LogOut, Save, CheckCircle2 } from 'lucide-react';
@@ -73,20 +74,22 @@ export default function DiagnosticWritingPage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Auto-save with debounce
+  useDebouncedLocalStorage(
+    `diag-writing-draft-${DIAGNOSTIC_WRITING_TASK_ID}`,
+    content,
+    { serialize: (v) => v as string },
+  );
+
+  // Auto-save with debounce (server)
   useEffect(() => {
     if (!content || loading) return;
     if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current);
     autoSaveTimer.current = setTimeout(async () => {
       try {
         setSaveStatus('saving');
-        // Save locally first
-        localStorage.setItem(`diag-writing-draft-${DIAGNOSTIC_WRITING_TASK_ID}`, content);
-        // Then attempt server save
         await submitWritingDraft(DIAGNOSTIC_WRITING_TASK_ID, content);
         setSaveStatus('saved');
       } catch {
-        // If server fails, we still have the local save
         setSaveStatus('offline-saved');
       }
     }, AUTO_SAVE_DELAY);
