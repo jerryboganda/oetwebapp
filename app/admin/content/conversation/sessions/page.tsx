@@ -16,6 +16,7 @@ import { Input } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/ui/empty-error';
+import { Pagination } from '@/components/ui/pagination';
 import { fetchAdminConversationSessions } from '@/lib/api';
 
 type SessionRow = {
@@ -33,7 +34,6 @@ type SessionRow = {
   completedAt: string | null;
 };
 
-const PAGE_SIZE = 25;
 
 export default function AdminConversationSessionsPage() {
   const router = useRouter();
@@ -41,6 +41,7 @@ export default function AdminConversationSessionsPage() {
   const [rows, setRows] = useState<SessionRow[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const [userId, setUserId] = useState('');
   const [state, setState] = useState('');
   const [taskTypeCode, setTaskTypeCode] = useState('');
@@ -54,7 +55,7 @@ export default function AdminConversationSessionsPage() {
         state: state || undefined,
         taskTypeCode: taskTypeCode || undefined,
         page,
-        pageSize: PAGE_SIZE,
+        pageSize,
       })) as { total: number; items: SessionRow[] };
       setRows(res.items ?? []);
       setTotal(res.total ?? 0);
@@ -63,14 +64,13 @@ export default function AdminConversationSessionsPage() {
     } finally {
       setLoading(false);
     }
-  }, [userId, state, taskTypeCode, page]);
+  }, [userId, state, taskTypeCode, page, pageSize]);
 
   useEffect(() => {
     const t = setTimeout(load, 250);
     return () => clearTimeout(t);
   }, [load]);
 
-  const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   function stateBadge(s: string) {
     const variant =
@@ -161,13 +161,17 @@ export default function AdminConversationSessionsPage() {
             </div>
           )}
 
-          {!loading && total > PAGE_SIZE && (
-            <div className="mt-4 flex items-center justify-between">
-              <span className="text-xs text-muted">Page {page} of {totalPages} · {total} total</span>
-              <div className="flex gap-2">
-                <Button variant="secondary" onClick={() => setPage(Math.max(1, page - 1))} disabled={page === 1}>Previous</Button>
-                <Button variant="secondary" onClick={() => setPage(Math.min(totalPages, page + 1))} disabled={page >= totalPages}>Next</Button>
-              </div>
+          {!loading && (
+            <div className="mt-4">
+              <Pagination
+                page={page}
+                pageSize={pageSize}
+                total={total}
+                onPageChange={setPage}
+                onPageSizeChange={setPageSize}
+                itemLabel="session"
+                itemLabelPlural="sessions"
+              />
             </div>
           )}
         </AdminRoutePanel>
