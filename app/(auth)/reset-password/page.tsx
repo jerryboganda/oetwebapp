@@ -13,7 +13,7 @@ import { AUTH_ROUTES, getAuthFlowLinks } from '@/lib/auth/routes';
 
 const errorCopy: Record<string, string> = {
   'password-mismatch': 'Your passwords must match before you continue.',
-  'password-too-short': 'Your new password must be at least 8 characters long.',
+  'password-too-short': 'Your new password must be at least 10 characters long.',
 };
 
 function readErrorMessage(error: unknown): string {
@@ -45,7 +45,7 @@ export default function ResetPasswordPage() {
       return;
     }
 
-    if (newPassword.length < 8) {
+    if (newPassword.length < 10) {
       setError(errorCopy['password-too-short']);
       return;
     }

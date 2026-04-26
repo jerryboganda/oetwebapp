@@ -483,17 +483,22 @@ public sealed class AuthService(
 
     public async Task ResetPasswordAsync(ResetPasswordRequest request, CancellationToken cancellationToken = default)
     {
-        // Defer policy enforcement until after OTP verification: the OTP both proves
-        // the user owns the email and gives us the account record used for the
-        // email-similarity checks inside the policy service. Policy also rejects the
-        // null/empty case, so the explicit guard is kept only for a clear early error.
+        // Run password-policy validation BEFORE consuming the OTP. Verifying the OTP
+        // marks the challenge as VerifiedAt = now (single-use); if we then rejected
+        // the password as too short / breached / similar-to-email, the user would
+        // be left with a burned OTP and "invalid_reset_token" on retry. Validating
+        // first means a bad password is a recoverable error and the OTP is only
+        // consumed when the password is acceptable. The policy's email-similarity
+        // check uses the request email (it's just UX, not a security boundary —
+        // the OTP is what proves email ownership, and that still runs next).
         if (request.NewPassword is null)
         {
             throw ApiException.Validation("new_password_required", "A new password is required.");
         }
 
+        await passwordPolicy.EnsurePasswordAcceptableAsync(request.NewPassword, request.Email, cancellationToken);
+
         var account = await emailOtpService.VerifyPasswordResetOtpAsync(request.Email, request.ResetToken, cancellationToken);
-        await passwordPolicy.EnsurePasswordAcceptableAsync(request.NewPassword, account.Email, cancellationToken);
 
         var now = timeProvider.GetUtcNow();
         account.PasswordHash = passwordHasher.HashPassword(account, request.NewPassword);
