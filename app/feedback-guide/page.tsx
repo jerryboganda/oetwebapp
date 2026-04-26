@@ -1,6 +1,9 @@
+<<<<<<< Updated upstream
 import FeedbackGuideContent, { type RubricCriterion } from './_content';
 
 <<<<<<< Updated upstream
+=======
+>>>>>>> Stashed changes
 import { HelpCircle, CheckCircle2, TrendingUp, Target } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
@@ -31,6 +34,9 @@ const SPEAKING_CRITERIA: RubricCriterion[] = [
 
 export default function FeedbackGuidePage() {
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
+>>>>>>> Stashed changes
   const heroHighlights = [
     { icon: CheckCircle2, label: 'Writing criteria', value: `${WRITING_CRITERIA.length}` },
     { icon: Target, label: 'Speaking criteria', value: `${SPEAKING_CRITERIA.length}` },

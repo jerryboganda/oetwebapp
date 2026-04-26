@@ -1,7 +1,10 @@
+<<<<<<< Updated upstream
 import { BookOpen, Headphones, PenLine, Mic } from 'lucide-react';
 import ExamGuideContent, { type ExamSection, type ScoringGuideEntry } from './_content';
 
 <<<<<<< Updated upstream
+=======
+>>>>>>> Stashed changes
 import { BookOpen, Clock, Headphones, PenLine, Mic } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
@@ -35,6 +38,9 @@ const SCORING_GUIDE: ScoringGuideEntry[] = [
 
 export default function ExamGuidePage() {
 <<<<<<< Updated upstream
+<<<<<<< Updated upstream
+=======
+>>>>>>> Stashed changes
   return (
     <LearnerDashboardShell>
       <PageViewBeacon event="exam_guide_viewed" />
