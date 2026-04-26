@@ -1,17 +1,17 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { Play, CheckCircle2, XCircle, ChevronRight, RotateCcw, Timer, Volume2, BookOpen, Headphones, Trophy } from 'lucide-react';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Card } from '@/components/ui/card';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Card } from '@/components/ui/card';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { ProgressBar } from '@/components/ui/progress';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
+import { BookOpen, CheckCircle2, ChevronRight, Headphones, Play, RotateCcw, Timer, Trophy, Volume2, XCircle } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 
 /* ── types ─────────────────────────────────────── */
 interface QuickQuestion {

@@ -1,35 +1,29 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import {
-  Award,
-  ArrowRight,
-  BarChart3,
-  CheckCircle2,
-  Clock,
-  FileText,
-  Headphones,
-  Layers,
-  Mic,
-  PenTool,
-  PlayCircle,
-  RefreshCw,
-  Star,
-  Hourglass,
-  Sparkles,
-} from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-import Link from 'next/link';
-import { LearnerDashboardShell } from '@/components/layout';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Skeleton } from '@/components/ui/skeleton';
-import { Button } from '@/components/ui/button';
+import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
-import type { MockReport } from '@/lib/mock-data';
 import { fetchMocksHome } from '@/lib/api';
-import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
+import type { MockReport } from '@/lib/mock-data';
+import type { LucideIcon } from 'lucide-react';
+import {
+    ArrowRight, Award, BarChart3,
+    CheckCircle2,
+    Clock,
+    FileText,
+    Headphones, Hourglass, Layers,
+    Mic,
+    PenTool,
+    PlayCircle,
+    RefreshCw, Sparkles, Star
+} from 'lucide-react';
+import Link from 'next/link';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 type SubtestCode = 'listening' | 'reading' | 'writing' | 'speaking';
 

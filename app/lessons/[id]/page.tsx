@@ -1,17 +1,17 @@
 'use client';
 
-import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
-import { ArrowLeft, BookOpen, CheckCircle2, ChevronLeft, ChevronRight, Clock, Download, FileText, LockKeyhole, Video } from 'lucide-react';
-import Link from 'next/link';
-import { useParams, useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
-import { fetchVideoLesson, updateVideoProgress } from '@/lib/api';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import { fetchVideoLesson, updateVideoProgress } from '@/lib/api';
 import type { VideoLessonDetail, VideoLessonProgress } from '@/lib/types/video-lessons';
+import { ArrowLeft, BookOpen, CheckCircle2, ChevronLeft, ChevronRight, Clock, Download, FileText, LockKeyhole, Video } from 'lucide-react';
+import Link from 'next/link';
+import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useRef, useState, type SyntheticEvent } from 'react';
 
 const CATEGORY_REDIRECTS: Record<string, string> = {
   grammar: '/grammar',

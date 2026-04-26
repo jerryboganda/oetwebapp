@@ -439,5 +439,3 @@ function formatAnswer(answer: unknown, exerciseType: GrammarExerciseLearner['typ
   if (answer == null) return '—';
   return JSON.stringify(answer);
 }
-
-export { SafeRichText } from './grammar-content-renderer';

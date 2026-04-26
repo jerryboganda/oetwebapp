@@ -1,32 +1,24 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
-import { AsyncStateWrapper } from '@/components/state';
-import { MotionSection } from '@/components/ui/motion-primitives';
+import { CriterionBreakdownCard } from '@/components/domain/criterion-breakdown-card';
 import { ReadinessMeter } from '@/components/domain/readiness-meter';
 import { WeakestLinkCard } from '@/components/domain/weakest-link-card';
-import { CriterionBreakdownCard } from '@/components/domain/criterion-breakdown-card';
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { AsyncStateWrapper } from "@/components/state/async-state-wrapper";
+import { InlineAlert } from '@/components/ui/alert';
+import { Badge, ConfidenceBadge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Badge, ConfidenceBadge } from '@/components/ui/badge';
-import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { ProgressBar } from '@/components/ui/progress';
 import { useAnalytics } from '@/hooks/use-analytics';
 import { fetchDiagnosticResults, fetchDiagnosticSession } from '@/lib/api';
 import type { DiagnosticResult, DiagnosticSession } from '@/lib/mock-data';
 import {
-  PenLine,
-  Mic,
-  BookOpen,
-  Headphones,
-  ShieldCheck,
-  ArrowRight,
-  TrendingUp,
-  AlertTriangle,
-  CheckCircle2,
+    AlertTriangle, ArrowRight, BookOpen, CheckCircle2, Headphones, Mic, PenLine, ShieldCheck, TrendingUp
 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 
 const SUBTEST_CONFIG: Record<
   string,

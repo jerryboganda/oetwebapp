@@ -91,26 +91,3 @@ export function AsyncStateWrapper({
     </motion.div>
   );
 }
-
-/* Loading Page */
-export function LoadingPage() {
-  return (
-    <div className="flex flex-1 items-center justify-center p-8" aria-live="polite" aria-busy="true">
-      <PageSkeleton />
-    </div>
-  );
-}
-
-/* Partial Data Warning */
-export function PartialDataWarning({ message, className }: { message?: string; className?: string }) {
-  const reducedMotion = prefersReducedMotion(useReducedMotion());
-  const motionProps = getSurfaceMotion('state', reducedMotion);
-
-  return (
-    <motion.div layout {...motionProps} className={cn('w-full min-w-0', className)}>
-      <InlineAlert variant="warning" dismissible>
-        {message ?? 'Some data may be outdated or still loading. Results shown may be partial.'}
-      </InlineAlert>
-    </motion.div>
-  );
-}

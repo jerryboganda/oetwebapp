@@ -1,15 +1,16 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { AnimatePresence } from 'motion/react';
-import { Store, Search, Upload, ChevronRight, Filter, BookOpen, Mic, Pen, Headphones, Clock, CheckCircle2, XCircle, Loader2 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, ExamTypeBadge } from '@/components/domain';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ExamTypeBadge } from "@/components/domain/exam-type-badge";
+import { LearnerPageHero } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionItem } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
+import { BookOpen, CheckCircle2, ChevronRight, Clock, Filter, Headphones, Loader2, Mic, Pen, Search, Store, Upload, XCircle } from 'lucide-react';
+import { AnimatePresence } from 'motion/react';
+import { useCallback, useEffect, useState } from 'react';
 
 type Submission = {
   id: string;

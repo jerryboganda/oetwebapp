@@ -1,29 +1,24 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { ArrowLeft, Cpu, KeyRound, Loader2, Shield, Trash2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero } from '@/components/domain';
+import { LearnerPageHero } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/form-controls';
-import { InlineAlert } from '@/components/ui/alert';
 import { Modal } from '@/components/ui/modal';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
-  fetchMyAiCredentials,
-  fetchMyAiPreferences,
-  fetchMyAiUsage,
-  fetchMyAiCredits,
-  revokeMyAiCredential,
-  saveMyAiCredential,
-  updateMyAiPreferences,
-  type AiCredentialItem,
-  type AiCredentialMode,
-  type AiUserPolicySnapshot,
-  type AiCreditBalance,
+    fetchMyAiCredentials, fetchMyAiCredits, fetchMyAiPreferences,
+    fetchMyAiUsage, revokeMyAiCredential,
+    saveMyAiCredential,
+    updateMyAiPreferences,
+    type AiCredentialItem,
+    type AiCredentialMode, type AiCreditBalance, type AiUserPolicySnapshot
 } from '@/lib/ai-management-api';
+import { ArrowLeft, Cpu, KeyRound, Loader2, Shield, Trash2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 
 const PROVIDER_PRESETS: { code: string; name: string; hint: string }[] = [
   { code: 'openai-platform', name: 'OpenAI Platform', hint: 'platform.openai.com · keys starting sk-…' },

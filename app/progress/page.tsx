@@ -1,36 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { MotionSection } from '@/components/ui/motion-primitives';
-import {
-  LineChart,
-  Line,
-  AreaChart,
-  Area,
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend
-} from 'recharts';
-import {
-  TrendingUp,
-  Activity,
-  CheckCircle2,
-  Send,
-  Clock
-} from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Skeleton } from '@/components/ui/skeleton';
-import { fetchTrendData, fetchCompletionData, fetchSubmissionVolume, fetchProgressEvidenceSummary } from '@/lib/api';
-import type { ProgressEvidenceSummary, TrendPoint } from '@/lib/mock-data';
-import { analytics } from '@/lib/analytics';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-
+import { MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
+import { analytics } from '@/lib/analytics';
+import { fetchCompletionData, fetchProgressEvidenceSummary, fetchSubmissionVolume, fetchTrendData } from '@/lib/api';
+import type { ProgressEvidenceSummary, TrendPoint } from '@/lib/mock-data';
+import {
+    Activity,
+    CheckCircle2, Clock, Send, TrendingUp
+} from 'lucide-react';
+import { useEffect, useState } from 'react';
+import {
+    Area, AreaChart, Bar, BarChart, CartesianGrid, Legend, Line, LineChart, ResponsiveContainer, Tooltip, XAxis,
+    YAxis
+} from 'recharts';
 type CompletionPoint = { day: string; completed: number };
 type VolumePoint = { week: string; submissions: number };
 

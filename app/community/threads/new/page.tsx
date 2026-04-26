@@ -1,17 +1,17 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { PenLine, ArrowLeft } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero } from '@/components/domain';
-import { MotionSection } from '@/components/ui/motion-primitives';
+import { LearnerPageHero } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Input, Textarea, Select } from '@/components/ui/form-controls';
-import { InlineAlert } from '@/components/ui/alert';
-import { fetchForumCategories, createForumThread } from '@/lib/api';
+import { Input, Select, Textarea } from '@/components/ui/form-controls';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { analytics } from '@/lib/analytics';
+import { createForumThread, fetchForumCategories } from '@/lib/api';
+import { ArrowLeft, PenLine } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 
 interface ForumCategory {
   id: string;

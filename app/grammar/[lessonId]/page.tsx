@@ -1,37 +1,34 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useParams } from 'next/navigation';
-import Link from 'next/link';
-import { ArrowLeft, BookMarked, CheckCircle2, Clock, Sparkles, Target, Trophy } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero } from '@/components/domain';
-import { MotionPage, MotionItem } from '@/components/ui/motion-primitives';
-import { Skeleton } from '@/components/ui/skeleton';
+import { GrammarExerciseRunner } from "@/components/domain/grammar/grammar-cards";
+import { GrammarContentRenderer, SafeRichText } from "@/components/domain/grammar/grammar-content-renderer";
+import { GrammarEntitlementBanner } from "@/components/domain/grammar/grammar-entitlement-banner";
+import { LearnerPageHero } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Badge } from '@/components/ui/badge';
+import { MotionItem, MotionPage } from '@/components/ui/motion-primitives';
 import { ProgressBar } from '@/components/ui/progress';
-import {
-  GrammarContentRenderer,
-  GrammarEntitlementBanner,
-  GrammarExerciseRunner,
-  SafeRichText,
-} from '@/components/domain/grammar';
-import {
-  fetchGrammarEntitlement,
-  fetchGrammarLesson,
-  startGrammarLesson,
-  submitGrammarAttempt,
-  type GrammarEntitlement,
-} from '@/lib/api';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import {
+    fetchGrammarEntitlement,
+    fetchGrammarLesson,
+    startGrammarLesson,
+    submitGrammarAttempt,
+    type GrammarEntitlement
+} from '@/lib/api';
 import type {
-  GrammarAttemptResult,
-  GrammarExerciseResult,
-  GrammarLessonLearner,
+    GrammarAttemptResult,
+    GrammarExerciseResult,
+    GrammarLessonLearner
 } from '@/lib/grammar/types';
+import { ArrowLeft, BookMarked, CheckCircle2, Clock, Sparkles, Target, Trophy } from 'lucide-react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 
 type View = 'intro' | 'study' | 'practice' | 'result';
 

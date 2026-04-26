@@ -1,17 +1,18 @@
 'use client';
 
-import { useRouter } from 'next/navigation';
-import { useForm, Controller, type Resolver } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { z } from 'zod';
-import { Save, ArrowRight } from 'lucide-react';
-import { Button, Input, Select, Checkbox } from '@/components/ui';
-import { ProfessionSelector } from '@/components/domain';
-import { LearnerDashboardShell } from '@/components/layout';
+import { ProfessionSelector } from "@/components/domain/profession-selector";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { Button } from "@/components/ui/button";
+import { Checkbox, Input, Select } from "@/components/ui/form-controls";
 import { useAnalytics } from '@/hooks/use-analytics';
-import { type ExamFamilyCode, type SubTest } from '@/lib/mock-data';
 import { fetchExamFamilies, fetchUserProfile, updateUserProfile } from '@/lib/api';
+import { type ExamFamilyCode, type SubTest } from '@/lib/mock-data';
+import { zodResolver } from '@hookform/resolvers/zod';
+import { ArrowRight, Save } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
+import { Controller, useForm, type Resolver } from 'react-hook-form';
+import { z } from 'zod';
 
 const SUB_TESTS: SubTest[] = ['Writing', 'Speaking', 'Reading', 'Listening'];
 const SCORE_FIELD_KEYS = ['targetWriting', 'targetSpeaking', 'targetReading', 'targetListening'] as const;

@@ -1,20 +1,21 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import { User, MessageCircle, Eye, ThumbsUp, Clock, Pin, Lock, ArrowLeft, Plus, Trash2, PenLine } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero } from '@/components/domain';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { LearnerPageHero } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { EmptyState } from "@/components/ui/empty-error";
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { Pagination } from '@/components/ui/pagination';
-import { Badge } from '@/components/ui/badge';
-import { InlineAlert } from '@/components/ui/alert';
-import { Skeleton, EmptyState } from '@/components/ui';
+import { Skeleton } from "@/components/ui/skeleton";
 import { useAuth } from '@/contexts/auth-context';
-import { apiClient, fetchForumThreads, fetchForumCategories } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { apiClient, fetchForumCategories, fetchForumThreads } from '@/lib/api';
+import { ArrowLeft, Clock, Eye, Lock, MessageCircle, PenLine, Pin, Plus, ThumbsUp, Trash2, User } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 
 interface ForumCategory {
   id: string;

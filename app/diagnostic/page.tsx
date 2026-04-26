@@ -1,25 +1,18 @@
 'use client';
 
-import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { InlineAlert } from '@/components/ui/alert';
+import { MotionSection } from '@/components/ui/motion-primitives';
 import { useAnalytics } from '@/hooks/use-analytics';
-import { useRouter } from 'next/navigation';
-import { useEffect, useMemo, useState } from 'react';
 import { fetchDiagnosticOverview, startDiagnostic } from '@/lib/api';
 import {
-  PenLine,
-  Mic,
-  BookOpen,
-  Headphones,
-  Clock,
-  ArrowRight,
-  ShieldCheck,
-  Activity,
+    Activity, ArrowRight, BookOpen, Clock, Headphones, Mic, PenLine, ShieldCheck
 } from 'lucide-react';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { MotionSection } from '@/components/ui/motion-primitives';
+import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 
 const SUB_TESTS = [
   {

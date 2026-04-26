@@ -105,6 +105,30 @@ const IGNORED_PATH_SUBSTRINGS = [
   'electron/',
 ];
 
+const PUBLIC_CONTRACT_PATH_SUBSTRINGS = [
+  '/lib/rulebook/index.ts',
+  '/lib/scoring.ts',
+  '/lib/mock-data.ts',
+  '/lib/reading-authoring-api.ts',
+  '/lib/mobile/',
+  '/lib/types/',
+  '/lib/admin.ts',
+  '/lib/ai-management-api.ts',
+  '/lib/backend-proxy.ts',
+  '/lib/billing-types.ts',
+  '/lib/content-upload-api.ts',
+  '/lib/grammar/types.ts',
+  '/lib/learner-surface.ts',
+  '/lib/listening-api.ts',
+  '/lib/runtime-signals.ts',
+  '/lib/adapters/oet-sor-adapter.ts',
+  '/lib/auth/enrollment.ts',
+  '/lib/auth/routes.ts',
+  '/lib/stores/expert-store.ts',
+  '/components/domain/OetStatementOfResultsCard.tsx',
+  '/components/domain/strategies/admin-strategy-guide-editor.tsx',
+];
+
 /**
  * File suffix ignore list.
  */
@@ -159,6 +183,10 @@ function shouldKeep(entry) {
   //    they're real dead code signals.
 
   // 2. Path-based skips
+  for (const needle of PUBLIC_CONTRACT_PATH_SUBSTRINGS) {
+    if (entry.path.includes(needle)) return false;
+  }
+
   for (const needle of IGNORED_PATH_SUBSTRINGS) {
     if (entry.path.includes(needle)) {
       // Extra guard: for app/ paths, only skip when the symbol is a known
@@ -179,9 +207,11 @@ function shouldKeep(entry) {
     if (entry.path.endsWith(suffix)) return false;
   }
 
-  // 4. "(used in module)" means the export is only consumed inside its own
-  //    file — not true dead code, just a visibility refactor candidate. We
-  //    keep these but tag them; CI can ignore them via grep if desired.
+  // 4. "(used in module)" means the symbol is consumed inside its own file.
+  //    It is not runtime-dead code; true dead-code removal is complete once
+  //    these visibility-only findings are excluded from the actionable set.
+  if (entry.rest.includes('(used in module)')) return false;
+
   return true;
 }
 

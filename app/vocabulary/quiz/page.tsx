@@ -1,18 +1,18 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from '@/components/ui/alert';
+import { Card } from '@/components/ui/card';
 import { MotionSection } from '@/components/ui/motion-primitives';
-import { HelpCircle, CheckCircle2, XCircle, ArrowLeft, RotateCcw, Volume2 } from 'lucide-react';
+import { Skeleton } from '@/components/ui/skeleton';
+import { analytics } from '@/lib/analytics';
+import { fetchVocabQuiz, submitVocabQuiz } from '@/lib/api';
+import type { VocabularyQuizQuestion, VocabularyQuizResult } from '@/lib/types/vocabulary';
+import { ArrowLeft, CheckCircle2, HelpCircle, RotateCcw, Volume2, XCircle } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { Card } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import { InlineAlert } from '@/components/ui/alert';
-import { fetchVocabQuiz, submitVocabQuiz } from '@/lib/api';
-import { analytics } from '@/lib/analytics';
-import type { VocabularyQuizQuestion, VocabularyQuizResult } from '@/lib/types/vocabulary';
+import { useEffect, useRef, useState } from 'react';
 
 const QUIZ_FORMATS = [
   { id: 'definition_match', label: 'Definition Match', free: true },

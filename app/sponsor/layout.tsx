@@ -1,10 +1,11 @@
 'use client';
 
-import { SponsorDashboardShell, type MobileMenuSection } from '@/components/layout';
 import type { NavItem } from '@/components/layout/sidebar';
-import { LayoutDashboard, Users, CreditCard } from 'lucide-react';
-import { usePathname } from 'next/navigation';
+import { SponsorDashboardShell } from "@/components/layout/sponsor-dashboard-shell";
+import { MobileMenuSection } from "@/components/layout/top-nav";
 import { useSponsorAuth } from '@/lib/hooks/use-sponsor-auth';
+import { CreditCard, LayoutDashboard, Users } from 'lucide-react';
+import { usePathname } from 'next/navigation';
 
 const sponsorNavItems: NavItem[] = [
   { href: '/sponsor', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, matchPrefix: '/sponsor', exact: true },

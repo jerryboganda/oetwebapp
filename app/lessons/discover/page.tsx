@@ -1,17 +1,17 @@
 'use client';
 
-import { useDeferredValue, useEffect, useMemo, useState } from 'react';
-import { Clock, Filter, LockKeyhole, PlayCircle, Search as SearchIcon, Sparkles } from 'lucide-react';
-import Link from 'next/link';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero } from '@/components/domain';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerPageHero } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { fetchVideoLessons } from '@/lib/api';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import { fetchVideoLessons } from '@/lib/api';
 import type { VideoLessonListItem } from '@/lib/types/video-lessons';
+import { Clock, Filter, LockKeyhole, PlayCircle, Search as SearchIcon, Sparkles } from 'lucide-react';
+import Link from 'next/link';
+import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 
 const SUBTEST_LABELS: Record<string, string> = {
   writing: 'Writing',

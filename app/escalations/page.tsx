@@ -1,26 +1,22 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import {
-  AlertTriangle,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  Search,
-  Plus,
-  Send,
-  X,
-} from 'lucide-react';
-import { MotionItem } from '@/components/ui/motion-primitives';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from "@/components/ui/alert";
+import { Button } from "@/components/ui/button";
 import { EmptyState } from '@/components/ui/empty-error';
-import { Button, InlineAlert, Input, Textarea } from '@/components/ui';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { fetchMyEscalations, submitEscalation } from '@/lib/api';
+import { Input, Textarea } from "@/components/ui/form-controls";
+import { MotionItem } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import { fetchMyEscalations, submitEscalation } from '@/lib/api';
 import type { EscalationStatus, LearnerEscalation } from '@/lib/types/learner';
+import {
+    AlertTriangle, CheckCircle2, Clock, Plus, Search, Send,
+    X, XCircle
+} from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 const STATUS_CONFIG: Record<EscalationStatus, { label: string; icon: React.ElementType; classes: string }> = {
   Pending:  { label: 'Pending',   icon: Clock,        classes: 'bg-warning/10 text-warning' },

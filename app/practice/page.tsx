@@ -1,13 +1,13 @@
 'use client';
 
-import { useEffect } from 'react';
-import { Shuffle, Zap, BookOpen, Headphones, Mic, PenLine } from 'lucide-react';
-import Link from 'next/link';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { Card } from '@/components/ui/card';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { analytics } from '@/lib/analytics';
+import { BookOpen, Headphones, Mic, PenLine, Shuffle, Zap } from 'lucide-react';
+import Link from 'next/link';
+import { useEffect } from 'react';
 
 const PRACTICE_MODES = [
   {

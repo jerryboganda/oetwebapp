@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Button } from '@/components/ui/button';
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { fetchMockReport, fetchMockSession, isApiError } from '@/lib/api';
+import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 export default function MockRouteRedirectPage() {
   const params = useParams();

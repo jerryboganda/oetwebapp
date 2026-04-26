@@ -1,26 +1,26 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
-import { Archive, CheckCircle, Layers, Plus } from 'lucide-react';
-import { AdminDashboardShell } from '@/components/layout';
 import {
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
-  AdminRouteWorkspace,
+    AdminRoutePanel,
+    AdminRouteSectionHeader,
+    AdminRouteWorkspace
 } from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/form-controls';
+import { AdminDashboardShell } from "@/components/layout/admin-dashboard-shell";
 import { InlineAlert, Toast } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
 import { EmptyState } from '@/components/ui/empty-error';
+import { Input } from '@/components/ui/form-controls';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
-  addAdminMockBundleSection,
-  archiveAdminMockBundle,
-  createAdminMockBundle,
-  fetchAdminMockBundles,
-  publishAdminMockBundle,
+    addAdminMockBundleSection,
+    archiveAdminMockBundle,
+    createAdminMockBundle,
+    fetchAdminMockBundles,
+    publishAdminMockBundle
 } from '@/lib/api';
+import { Archive, CheckCircle, Layers, Plus } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 
 type MockBundleRow = {
   id: string;

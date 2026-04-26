@@ -1,30 +1,28 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { MotionItem, MotionPresence } from '@/components/ui/motion-primitives';
-import { MessageSquare, Clock, ChevronRight, Mic, Zap, History, Sparkles } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-import Link from 'next/link';
-import { useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader, ExamTypeBadge } from '@/components/domain';
-import { Skeleton } from '@/components/ui/skeleton';
+import { ExamTypeBadge } from "@/components/domain/exam-type-badge";
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
-import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Card } from '@/components/ui/card';
+import { MotionItem, MotionPresence } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
 import {
-  createConversation,
-  getConversationHistory,
-  getConversationTaskTypes,
-  getConversationEntitlement,
+    createConversation, getConversationEntitlement, getConversationHistory,
+    getConversationTaskTypes
 } from '@/lib/api';
-import type {
-  ConversationHistoryItem,
-  ConversationTaskTypeCatalog,
-  ConversationEntitlement,
-} from '@/lib/types/conversation';
 import { formatScaledScore } from '@/lib/scoring';
+import type {
+    ConversationEntitlement, ConversationHistoryItem,
+    ConversationTaskTypeCatalog
+} from '@/lib/types/conversation';
+import type { LucideIcon } from 'lucide-react';
+import { ChevronRight, Clock, History, MessageSquare, Mic, Sparkles, Zap } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 const TASK_ICONS: Record<string, LucideIcon> = {
   'oet-roleplay': Mic,

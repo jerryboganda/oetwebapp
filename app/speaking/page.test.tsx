@@ -11,9 +11,97 @@ const { mockFetchSpeakingHome, mockFetchSubmissions, mockFetchMockReports, mockT
 vi.mock('next/link', () => ({
   default: ({ children, href }: { children: React.ReactNode; href?: string }) => <a href={href}>{children}</a>,
 }));
+vi.mock('@/components/layout/app-shell', () => ({
+  AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  LearnerDashboardShell: ({ children, workspaceClassName }: { children: React.ReactNode; workspaceClassName?: string }) => (
+    <div data-testid="learner-dashboard-shell" data-workspace-class={workspaceClassName}>{children}</div>
+  ),
+  LearnerWorkspaceContainer: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+    <div data-testid="learner-workspace-container" className={className}>{children}</div>
+  ),
+}));
 
+vi.mock('@/components/layout/admin-dashboard-shell', () => ({
+  AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  LearnerDashboardShell: ({ children, workspaceClassName }: { children: React.ReactNode; workspaceClassName?: string }) => (
+    <div data-testid="learner-dashboard-shell" data-workspace-class={workspaceClassName}>{children}</div>
+  ),
+  LearnerWorkspaceContainer: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+    <div data-testid="learner-workspace-container" className={className}>{children}</div>
+  ),
+}));
 
-vi.mock('@/components/layout', () => ({
+vi.mock('@/components/layout/expert-dashboard-shell', () => ({
+  AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  LearnerDashboardShell: ({ children, workspaceClassName }: { children: React.ReactNode; workspaceClassName?: string }) => (
+    <div data-testid="learner-dashboard-shell" data-workspace-class={workspaceClassName}>{children}</div>
+  ),
+  LearnerWorkspaceContainer: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+    <div data-testid="learner-workspace-container" className={className}>{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/learner-dashboard-shell', () => ({
+  AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  LearnerDashboardShell: ({ children, workspaceClassName }: { children: React.ReactNode; workspaceClassName?: string }) => (
+    <div data-testid="learner-dashboard-shell" data-workspace-class={workspaceClassName}>{children}</div>
+  ),
+  LearnerWorkspaceContainer: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+    <div data-testid="learner-workspace-container" className={className}>{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/sponsor-dashboard-shell', () => ({
+  AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  LearnerDashboardShell: ({ children, workspaceClassName }: { children: React.ReactNode; workspaceClassName?: string }) => (
+    <div data-testid="learner-dashboard-shell" data-workspace-class={workspaceClassName}>{children}</div>
+  ),
+  LearnerWorkspaceContainer: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+    <div data-testid="learner-workspace-container" className={className}>{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/learner-workspace-container', () => ({
+  AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  LearnerDashboardShell: ({ children, workspaceClassName }: { children: React.ReactNode; workspaceClassName?: string }) => (
+    <div data-testid="learner-dashboard-shell" data-workspace-class={workspaceClassName}>{children}</div>
+  ),
+  LearnerWorkspaceContainer: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+    <div data-testid="learner-workspace-container" className={className}>{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/notification-center', () => ({
+  AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  LearnerDashboardShell: ({ children, workspaceClassName }: { children: React.ReactNode; workspaceClassName?: string }) => (
+    <div data-testid="learner-dashboard-shell" data-workspace-class={workspaceClassName}>{children}</div>
+  ),
+  LearnerWorkspaceContainer: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+    <div data-testid="learner-workspace-container" className={className}>{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/notification-preferences-panel', () => ({
+  AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  LearnerDashboardShell: ({ children, workspaceClassName }: { children: React.ReactNode; workspaceClassName?: string }) => (
+    <div data-testid="learner-dashboard-shell" data-workspace-class={workspaceClassName}>{children}</div>
+  ),
+  LearnerWorkspaceContainer: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+    <div data-testid="learner-workspace-container" className={className}>{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/top-nav', () => ({
+  AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
+  LearnerDashboardShell: ({ children, workspaceClassName }: { children: React.ReactNode; workspaceClassName?: string }) => (
+    <div data-testid="learner-dashboard-shell" data-workspace-class={workspaceClassName}>{children}</div>
+  ),
+  LearnerWorkspaceContainer: ({ children, className }: { children: React.ReactNode; className?: string }) => (
+    <div data-testid="learner-workspace-container" className={className}>{children}</div>
+  ),
+}));
+
+vi.mock('@/components/layout/sidebar', () => ({
   AppShell: ({ children }: { children: React.ReactNode }) => <div>{children}</div>,
   LearnerDashboardShell: ({ children, workspaceClassName }: { children: React.ReactNode; workspaceClassName?: string }) => (
     <div data-testid="learner-dashboard-shell" data-workspace-class={workspaceClassName}>{children}</div>

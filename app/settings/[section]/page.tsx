@@ -1,58 +1,58 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import {
-  Accessibility,
-  ArrowLeft,
-  Bell,
-  BellRing,
-  BookOpen,
-  BriefcaseMedical,
-  Calendar,
-  CalendarClock,
-  Captions,
-  Clock3,
-  Contrast,
-  Database,
-  FileText,
-  Globe2,
-  Headphones,
-  Keyboard,
-  Loader2,
-  Mail,
-  MessageSquareMore,
-  Mic,
-  NotebookText,
-  Save,
-  Settings2,
-  Shield,
-  ShieldCheck,
-  SlidersHorizontal,
-  Sparkles,
-  Target,
-  Trash2,
-  Type,
-  User,
-  UserCircle2,
-  Volume2,
-  Wifi,
-  type LucideIcon,
-} from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { NotificationPreferencesPanel } from '@/components/layout/notification-preferences-panel';
 import { InlineAlert } from '@/components/ui/alert';
 import { Badge, type BadgeProps } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { LearnerPageHero } from '@/components/domain';
+import { useAuth } from '@/contexts/auth-context';
 import { analytics } from '@/lib/analytics';
 import { fetchSettingsSection, updateSettingsSection } from '@/lib/api';
 import { deleteAccount } from '@/lib/auth-client';
 import type { LearnerSurfaceAccent } from '@/lib/learner-surface';
 import type { SettingsSectionData, SettingsSectionId } from '@/lib/mock-data';
 import { cn } from '@/lib/utils';
-import { useAuth } from '@/contexts/auth-context';
+import {
+    Accessibility,
+    ArrowLeft,
+    Bell,
+    BellRing,
+    BookOpen,
+    BriefcaseMedical,
+    Calendar,
+    CalendarClock,
+    Captions,
+    Clock3,
+    Contrast,
+    Database,
+    FileText,
+    Globe2,
+    Headphones,
+    Keyboard,
+    Loader2,
+    Mail,
+    MessageSquareMore,
+    Mic,
+    NotebookText,
+    Save,
+    Settings2,
+    Shield,
+    ShieldCheck,
+    SlidersHorizontal,
+    Sparkles,
+    Target,
+    Trash2,
+    Type,
+    User,
+    UserCircle2,
+    Volume2,
+    Wifi,
+    type LucideIcon
+} from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 
 type FieldType = 'text' | 'email' | 'number' | 'date' | 'select' | 'textarea' | 'toggle';
 type FieldTagTone = 'section' | 'muted' | 'writing' | 'speaking' | 'reading' | 'listening' | 'study';

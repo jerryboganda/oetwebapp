@@ -16,7 +16,7 @@
 
 - **241 routes** across 4 portals (learner, expert, admin, sponsor)
 - **113 Vitest unit test files, 675 tests** (Vitest + React Testing Library)
-- **13 Playwright E2E test projects** (Chromium/Firefox/WebKit × roles)
+- **34 Playwright E2E spec files** across 13 role/browser projects
 - **686 backend endpoint map calls** with 16 granular admin permissions
 
 ---
@@ -113,9 +113,9 @@ npm run test:e2e:report
 
 ### Imports / Barrels
 
-- Prefer direct file imports (for example `@/components/ui/button`) over folder barrels for new code.
-- Do not add new `components/**/index.ts` or `lib/**/index.ts` barrels unless the file contains real implementation logic; re-export-only barrels are legacy compatibility and should be removed opportunistically with a codemod.
-- When touching a legacy barrel import, migrate that callsite to the direct file path rather than expanding the barrel.
+- Use direct file imports (for example `@/components/ui/button`) instead of folder barrels for component code.
+- Do not add `components/**/index.ts` or re-export-only `lib/**/index.ts` barrels. The legacy component barrels have been removed; `lib/rulebook/index.ts` is retained as an intentional public engine surface.
+- When touching imports, keep them on direct file paths rather than reintroducing a barrel.
 
 ### API Client
 

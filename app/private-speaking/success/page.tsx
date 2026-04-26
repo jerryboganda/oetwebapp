@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
-import { CheckCircle2 } from 'lucide-react';
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { Button } from '@/components/ui/button';
+import { CheckCircle2 } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 export default function PrivateSpeakingSuccessPage() {
   const router = useRouter();

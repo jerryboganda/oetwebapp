@@ -1,25 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams, useRouter } from 'next/navigation';
-import {
-  AlertTriangle,
-  ArrowLeft,
-  Clock,
-  CheckCircle2,
-  XCircle,
-  Search,
-  FileText,
-  MessageSquare,
-} from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Button } from '@/components/ui/button';
+import { LearnerPageHero } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { LearnerPageHero } from '@/components/domain';
-import { fetchEscalationDetails } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { fetchEscalationDetails } from '@/lib/api';
 import type { EscalationStatus, LearnerEscalation } from '@/lib/types/learner';
+import {
+    AlertTriangle,
+    ArrowLeft, CheckCircle2, Clock, FileText,
+    MessageSquare, Search, XCircle
+} from 'lucide-react';
+import { useParams, useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 const STATUS_CONFIG: Record<EscalationStatus, { label: string; icon: React.ElementType; classes: string }> = {
   Pending:  { label: 'Pending',   icon: Clock,        classes: 'bg-warning/10 text-warning' },

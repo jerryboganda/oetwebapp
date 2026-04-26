@@ -1,30 +1,21 @@
 'use client';
 
-import React, { useEffect, useState } from 'react';
-import { motion } from 'motion/react';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import {
-  Calendar,
-  Clock,
-  AlertTriangle,
-  ShieldAlert,
-  ShieldCheck,
-  Shield,
-  FileText,
-  Headphones,
-  PenTool,
-  Mic,
-  TrendingUp,
-  Info,
-} from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
+import { analytics } from '@/lib/analytics';
 import { fetchReadiness, fetchReadinessRisk } from '@/lib/api';
 import type { ReadinessData } from '@/lib/mock-data';
-import { analytics } from '@/lib/analytics';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-
+import {
+    AlertTriangle, Calendar,
+    Clock, FileText,
+    Headphones, Info, Mic, PenTool, Shield, ShieldAlert,
+    ShieldCheck, TrendingUp
+} from 'lucide-react';
+import { motion } from 'motion/react';
+import React, { useEffect, useState } from 'react';
 const SUBTEST_ICONS: Record<string, React.ElementType> = {
   reading:   FileText,
   listening: Headphones,

@@ -1,27 +1,27 @@
 'use client';
 
-import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { AlertCircle, Bookmark, Clock, Loader2, Save, Send } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { InlineAlert } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
 import { Modal } from '@/components/ui/modal';
-import { cn } from '@/lib/utils';
+import { Skeleton } from '@/components/ui/skeleton';
 import {
-  getReadingAttempt,
-  getReadingStructureLearner,
-  saveReadingAnswer,
-  startReadingAttempt,
-  submitReadingAttempt,
-  type ReadingAttemptStarted,
-  type ReadingAttemptStatus,
-  type ReadingLearnerStructureDto,
-  type ReadingPartCode,
-  type ReadingQuestionLearnerDto,
+    getReadingAttempt,
+    getReadingStructureLearner,
+    saveReadingAnswer,
+    startReadingAttempt,
+    submitReadingAttempt,
+    type ReadingAttemptStarted,
+    type ReadingAttemptStatus,
+    type ReadingLearnerStructureDto,
+    type ReadingPartCode,
+    type ReadingQuestionLearnerDto
 } from '@/lib/reading-authoring-api';
+import { cn } from '@/lib/utils';
+import { AlertCircle, Bookmark, Clock, Loader2, Save, Send } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, use, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 

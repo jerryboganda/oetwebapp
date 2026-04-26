@@ -1,17 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Trophy, Flame, Star, Zap, Lock } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { ProgressBar } from '@/components/ui/progress';
 import { Skeleton } from '@/components/ui/skeleton';
-import { InlineAlert } from '@/components/ui/alert';
-import { MotionItem } from '@/components/ui/motion-primitives';
-import { Button } from '@/components/ui/button';
-import { fetchXP, fetchStreak, fetchAchievements, applyStreakFreeze } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
+import { applyStreakFreeze, fetchAchievements, fetchStreak, fetchXP } from '@/lib/api';
+import { Flame, Lock, Star, Trophy, Zap } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 type XPData = { totalXP: number; weeklyXP: number; monthlyXP: number; level: number; nextLevelXP: number; currentLevelXP: number };
 type StreakData = { currentStreak: number; longestStreak: number; lastActiveDate: string | null; streakFreezesAvailable: number };

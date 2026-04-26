@@ -1,29 +1,20 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { useRouter } from 'next/navigation';
-import {
-  ArrowLeft,
-  MonitorSmartphone,
-  Smartphone,
-  Monitor,
-  Globe,
-  Loader2,
-  ShieldAlert,
-  Trash2,
-} from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
+import { LearnerPageHero } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
-import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import {
-  fetchActiveSessions,
-  revokeSession,
-  revokeAllOtherSessions,
-  type ActiveSession,
+    fetchActiveSessions, revokeAllOtherSessions, revokeSession, type ActiveSession
 } from '@/lib/api';
+import {
+    ArrowLeft, Globe,
+    Loader2, Monitor, MonitorSmartphone, ShieldAlert, Smartphone, Trash2
+} from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useState } from 'react';
 
 function maskIpAddress(ip: string | null): string {
   if (!ip) return 'Unknown';

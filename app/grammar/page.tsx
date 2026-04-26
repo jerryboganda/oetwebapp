@@ -1,32 +1,26 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { BookMarked, CheckCircle2, Sparkles, Trophy } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
+import { GrammarLessonCard, GrammarRecommendationStrip, GrammarTopicCard } from "@/components/domain/grammar/grammar-cards";
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
-import { InlineAlert } from '@/components/ui/alert';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
 import { ProgressBar } from '@/components/ui/progress';
-import {
-  GrammarTopicCard,
-  GrammarLessonCard,
-  GrammarRecommendationStrip,
-} from '@/components/domain/grammar';
-import {
-  fetchGrammarOverview,
-  fetchGrammarLessons,
-  dismissGrammarRecommendation,
-} from '@/lib/api';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
-import { cn } from '@/lib/utils';
+import {
+    dismissGrammarRecommendation, fetchGrammarLessons, fetchGrammarOverview
+} from '@/lib/api';
 import type {
-  GrammarLessonSummary,
-  GrammarOverview,
-  GrammarTopicLearner,
+    GrammarLessonSummary,
+    GrammarOverview,
+    GrammarTopicLearner
 } from '@/lib/grammar/types';
+import { cn } from '@/lib/utils';
+import { BookMarked, CheckCircle2, Sparkles, Trophy } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
 
 // ── constants ─────────────────────────────────────────────────────────────
 const EXAM_TYPES = [

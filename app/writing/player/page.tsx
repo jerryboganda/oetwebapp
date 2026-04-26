@@ -1,23 +1,23 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { AnimatePresence, MotionConfig, motion, useReducedMotion } from 'motion/react';
-import type { Transition } from 'motion/react';
-import { ChevronLeft, Maximize, Minimize, BookOpen } from 'lucide-react';
-import { useSearchParams, useRouter } from 'next/navigation';
-import { cn } from '@/lib/utils';
-import { Button } from '@/components/ui/button';
-import { Modal } from '@/components/ui/modal';
-import { Timer } from '@/components/ui/timer';
+import { RulebookFindingsPanel } from "@/components/domain/rulebook-findings-panel";
 import { WritingCaseNotesPanel } from '@/components/domain/writing-case-notes-panel';
 import { WritingEditor } from '@/components/domain/writing-editor';
-import { RulebookFindingsPanel } from '@/components/domain';
+import { Button } from '@/components/ui/button';
+import { Modal } from '@/components/ui/modal';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchWritingTask, fetchWritingChecklist, submitWritingDraft, submitWritingTask } from '@/lib/api';
-import { analytics } from '@/lib/analytics';
-import type { WritingTask } from '@/lib/mock-data';
+import { Timer } from '@/components/ui/timer';
 import { useIsMobile } from '@/hooks/use-mobile';
+import { analytics } from '@/lib/analytics';
+import { fetchWritingChecklist, fetchWritingTask, submitWritingDraft, submitWritingTask } from '@/lib/api';
+import type { WritingTask } from '@/lib/mock-data';
 import { deriveWritingCaseNotesMarkers, inferWritingLetterType, lintWritingLetter } from '@/lib/rulebook';
+import { cn } from '@/lib/utils';
+import { BookOpen, ChevronLeft, Maximize, Minimize } from 'lucide-react';
+import type { Transition } from 'motion/react';
+import { AnimatePresence, motion, MotionConfig, useReducedMotion } from 'motion/react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'failed';
 

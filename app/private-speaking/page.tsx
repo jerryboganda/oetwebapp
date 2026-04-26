@@ -1,22 +1,17 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Mic, Calendar, Star, Clock, CreditCard, Video, X, ChevronLeft, ChevronRight, User } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
-import {
-  fetchPrivateSpeakingConfig,
-  fetchPrivateSpeakingTutors,
-  fetchAllPrivateSpeakingSlots,
-  createPrivateSpeakingBooking,
-  fetchLearnerPrivateSpeakingBookings,
-  cancelPrivateSpeakingBooking,
-  ratePrivateSpeakingSession,
-} from '@/lib/api';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import {
+    cancelPrivateSpeakingBooking, createPrivateSpeakingBooking, fetchAllPrivateSpeakingSlots, fetchLearnerPrivateSpeakingBookings, fetchPrivateSpeakingConfig,
+    fetchPrivateSpeakingTutors, ratePrivateSpeakingSession
+} from '@/lib/api';
+import { Calendar, ChevronLeft, ChevronRight, Clock, CreditCard, Mic, Star, User, Video, X } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 
 type Config = {
   isEnabled: boolean; defaultPriceMinorUnits: number; currency: string;

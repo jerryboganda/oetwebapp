@@ -1,19 +1,18 @@
 'use client';
 
-import { useState, type FormEvent } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { ArrowLeft, BookOpen, Plus, Save, X } from 'lucide-react';
-import { AdminDashboardShell } from '@/components/layout';
 import {
-  AdminRouteWorkspace,
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
+    AdminRoutePanel,
+    AdminRouteSectionHeader, AdminRouteWorkspace
 } from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/form-controls';
+import { AdminDashboardShell } from "@/components/layout/admin-dashboard-shell";
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/form-controls';
+import { ArrowLeft, BookOpen, Plus, Save, X } from 'lucide-react';
+import Link from 'next/link';
+import { useRouter } from 'next/navigation';
+import { useState, type FormEvent } from 'react';
 
 export type VocabFormValues = {
   term: string;

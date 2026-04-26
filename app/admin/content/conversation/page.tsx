@@ -1,27 +1,25 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import {
+    AdminRoutePanel,
+    AdminRouteSectionHeader, AdminRouteWorkspace
+} from '@/components/domain/admin-route-surface';
+import { AdminDashboardShell } from "@/components/layout/admin-dashboard-shell";
+import { Toast } from '@/components/ui/alert';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { EmptyState } from '@/components/ui/empty-error';
+import { Input } from '@/components/ui/form-controls';
+import { Pagination } from '@/components/ui/pagination';
+import { Skeleton } from '@/components/ui/skeleton';
+import {
+    archiveAdminConversationTemplate, fetchAdminConversationTemplates,
+    publishAdminConversationTemplate
+} from '@/lib/api';
+import { Archive, CheckCircle, MessageSquare, Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { MessageSquare, Plus, Archive, CheckCircle } from 'lucide-react';
-import { AdminDashboardShell } from '@/components/layout';
-import {
-  AdminRouteWorkspace,
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
-} from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
-import { Input } from '@/components/ui/form-controls';
-import { Toast } from '@/components/ui/alert';
-import { Skeleton } from '@/components/ui/skeleton';
-import { EmptyState } from '@/components/ui/empty-error';
-import { Pagination } from '@/components/ui/pagination';
-import {
-  fetchAdminConversationTemplates,
-  publishAdminConversationTemplate,
-  archiveAdminConversationTemplate,
-} from '@/lib/api';
+import { useCallback, useEffect, useState } from 'react';
 
 type TemplateRow = {
   id: string;

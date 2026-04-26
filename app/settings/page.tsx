@@ -1,30 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from '@/components/ui/alert';
 import { MotionSection } from '@/components/ui/motion-primitives';
-import {
-  ChevronRight,
-  User,
-  Target,
-  Bell,
-  Shield,
-  Accessibility,
-  Wifi,
-  Volume2,
-  Calendar,
-  Settings as SettingsIcon,
-  Cpu,
-  Trash2,
-  MonitorSmartphone,
-} from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { LearnerDashboardShell } from '@/components/layout';
 import { analytics } from '@/lib/analytics';
 import { fetchFreezeStatus, fetchSettingsData, fetchUserProfile, updateSettingsSection } from '@/lib/api';
 import type { LearnerFreezeStatus } from '@/lib/types/freeze';
-import { InlineAlert } from '@/components/ui/alert';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-
+import {
+    Accessibility, Bell, Calendar, ChevronRight, Cpu, MonitorSmartphone, Settings as SettingsIcon, Shield, Target, Trash2, User, Volume2, Wifi
+} from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 type SettingType = 'link' | 'toggle';
 
 interface SettingItem {

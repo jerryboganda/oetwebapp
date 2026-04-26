@@ -1,25 +1,20 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import { ArrowLeft, Save, Send, Archive } from 'lucide-react';
-import { AdminDashboardShell } from '@/components/layout';
 import {
-  AdminRouteWorkspace,
-  AdminRoutePanel,
-  AdminRouteSectionHeader,
+    AdminRoutePanel,
+    AdminRouteSectionHeader, AdminRouteWorkspace
 } from '@/components/domain/admin-route-surface';
-import { Button } from '@/components/ui/button';
-import { Input, Textarea } from '@/components/ui/form-controls';
+import { AdminDashboardShell } from "@/components/layout/admin-dashboard-shell";
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Input, Textarea } from '@/components/ui/form-controls';
 import {
-  fetchAdminConversationTemplate,
-  createAdminConversationTemplate,
-  updateAdminConversationTemplate,
-  publishAdminConversationTemplate,
-  archiveAdminConversationTemplate,
+    archiveAdminConversationTemplate, createAdminConversationTemplate, fetchAdminConversationTemplate, publishAdminConversationTemplate, updateAdminConversationTemplate
 } from '@/lib/api';
+import { Archive, ArrowLeft, Save, Send } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 interface TemplateForm {
   title: string;

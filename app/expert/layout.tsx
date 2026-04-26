@@ -1,11 +1,13 @@
 'use client';
 
-import { useMemo } from 'react';
-import { AppShell, ExpertDashboardShell, type MobileMenuSection } from '@/components/layout';
+import { AppShell } from "@/components/layout/app-shell";
+import { ExpertDashboardShell } from "@/components/layout/expert-dashboard-shell";
 import type { NavItem } from '@/components/layout/sidebar';
-import { LayoutDashboard, Inbox, CheckCircle, BarChart3, CalendarClock, Users, Mic, Rocket } from 'lucide-react';
-import { usePathname } from 'next/navigation';
+import { MobileMenuSection } from "@/components/layout/top-nav";
 import { useExpertAuth } from '@/lib/hooks/use-expert-auth';
+import { BarChart3, CalendarClock, CheckCircle, Inbox, LayoutDashboard, Mic, Rocket, Users } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { useMemo } from 'react';
 
 const expertNavItems: NavItem[] = [
   { href: '/expert', label: 'Dashboard', icon: <LayoutDashboard className="w-5 h-5" />, matchPrefix: '/expert', exact: true },

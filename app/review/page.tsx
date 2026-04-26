@@ -1,16 +1,16 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'motion/react';
-import { Brain, CheckCircle2, RotateCcw, ChevronRight } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
-import { MotionItem, MotionPage } from '@/components/ui/motion-primitives';
-import { fetchReviewSummary, fetchDueReviewItems, submitReview } from '@/lib/api';
-import { analytics } from '@/lib/analytics';
 import { Card } from '@/components/ui/card';
+import { MotionItem, MotionPage } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
+import { analytics } from '@/lib/analytics';
+import { fetchDueReviewItems, fetchReviewSummary, submitReview } from '@/lib/api';
+import { Brain, CheckCircle2, ChevronRight, RotateCcw } from 'lucide-react';
+import { AnimatePresence, motion } from 'motion/react';
+import { useEffect, useState } from 'react';
 
 type ReviewSummary = { due: number; total: number; dueToday: number; mastered: number; upcoming?: number };
 type ReviewItem = {

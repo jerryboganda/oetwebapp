@@ -1,17 +1,17 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { Award, Download, Calendar } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero } from '@/components/domain';
-import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { Card } from '@/components/ui/card';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerPageHero } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
+import { Card } from '@/components/ui/card';
 import { EmptyState } from '@/components/ui/empty-error';
-import { getCertificatesData } from '@/lib/learner-data';
+import { MotionItem, MotionSection } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import { getCertificatesData } from '@/lib/learner-data';
 import type { LearnerCertificate } from '@/lib/types/learner';
+import { Award, Calendar, Download } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 const TYPE_LABELS: Record<string, { label: string; color: string }> = {
   study_plan_complete: { label: 'Study Plan', color: 'bg-info/10 text-info' },

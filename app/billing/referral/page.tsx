@@ -1,14 +1,14 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
-import { Gift, Copy, CheckCircle2, Users, DollarSign, Share2, RefreshCw } from 'lucide-react';
-import { Card } from '@/components/ui/card';
+import { LearnerPageHero } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
+import { CheckCircle2, Copy, DollarSign, Gift, RefreshCw, Share2, Users } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
 
 /* ── types ─────────────────────────────────────── */
 interface ReferralInfo {

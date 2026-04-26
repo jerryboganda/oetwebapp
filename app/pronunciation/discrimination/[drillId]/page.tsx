@@ -1,20 +1,20 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import { ArrowLeft, Headphones, RotateCcw, Volume2 } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero } from '@/components/domain';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerPageHero } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import {
-  fetchPronunciationDrill,
-  submitPronunciationDiscrimination,
-  type PronunciationDrillSummary,
-} from '@/lib/api';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import {
+    fetchPronunciationDrill,
+    submitPronunciationDiscrimination,
+    type PronunciationDrillSummary
+} from '@/lib/api';
+import { ArrowLeft, Headphones, RotateCcw, Volume2 } from 'lucide-react';
+import Link from 'next/link';
+import { useParams } from 'next/navigation';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 type MinimalPair = { a: string; b: string };
 

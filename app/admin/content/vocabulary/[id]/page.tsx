@@ -1,15 +1,14 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useParams } from 'next/navigation';
-import { VocabularyForm, type VocabFormValues } from '../_form';
-import {
-  fetchAdminVocabularyItem,
-  updateAdminVocabularyItem,
-} from '@/lib/api';
+import { AdminDashboardShell } from "@/components/layout/admin-dashboard-shell";
 import { Skeleton } from '@/components/ui/skeleton';
-import { AdminDashboardShell } from '@/components/layout';
-
+import {
+    fetchAdminVocabularyItem,
+    updateAdminVocabularyItem
+} from '@/lib/api';
+import { useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { VocabularyForm, type VocabFormValues } from '../_form';
 type Detail = {
   id: string;
   term: string;

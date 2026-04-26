@@ -1,17 +1,17 @@
 'use client';
 
-import { Suspense, use, useEffect, useState } from 'react';
-import { useSearchParams } from 'next/navigation';
-import Link from 'next/link';
-import { ArrowLeft, BookOpen, CheckCircle2, FileText, Target, XCircle } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
+import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
+import { InlineAlert } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
-import { InlineAlert } from '@/components/ui/alert';
+import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
 import { getReadingAttemptReview, type ReadingAttemptReviewDto } from '@/lib/reading-authoring-api';
 import { formatListeningReadingDisplay, isListeningReadingPassByRaw } from '@/lib/scoring';
-import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
+import { ArrowLeft, BookOpen, CheckCircle2, FileText, Target, XCircle } from 'lucide-react';
+import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
+import { Suspense, use, useEffect, useState } from 'react';
 
 export default function ReadingPaperResultsPage({ params }: { params: Promise<{ paperId: string }> }) {
   return (

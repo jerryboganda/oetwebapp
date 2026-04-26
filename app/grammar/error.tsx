@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect } from 'react';
-import Link from 'next/link';
-import { AlertTriangle, RefreshCcw } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { Card } from '@/components/ui/card';
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { AlertTriangle, RefreshCcw } from 'lucide-react';
+import Link from 'next/link';
+import { useEffect } from 'react';
 
 export default function GrammarError({
   error,

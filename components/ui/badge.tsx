@@ -52,16 +52,6 @@ export function StatusBadge({ status, className }: { status: StatusType; classNa
   return <Badge variant={variant} className={className}>{label}</Badge>;
 }
 
-/* ─── Score Range Badge ─── */
-export function ScoreRangeBadge({ low, high, label, className }: { low: number; high: number; label?: string; className?: string }) {
-  return (
-    <span className={cn('inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-primary/10 text-primary font-bold text-sm', className)}>
-      {label && <span className="text-xs font-semibold text-primary/70">{label}</span>}
-      {low}–{high}
-    </span>
-  );
-}
-
 /* ─── Confidence Badge ─── */
 export type ConfidenceLevel = 'high' | 'medium' | 'low';
 
@@ -74,23 +64,4 @@ const confidenceConfig: Record<ConfidenceLevel, { label: string; variant: BadgeP
 export function ConfidenceBadge({ level, className }: { level: ConfidenceLevel; className?: string }) {
   const { label, variant } = confidenceConfig[level];
   return <Badge variant={variant} className={className}>{label}</Badge>;
-}
-
-/* ─── Criterion Chip ─── */
-export function CriterionChip({ label, active, onClick, className }: { label: string; active?: boolean; onClick?: () => void; className?: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        'px-3.5 py-2.5 rounded-full text-xs font-semibold border transition-all duration-200 active:scale-95 shadow-sm',
-        active
-          ? 'bg-primary text-white border-primary ring-2 ring-primary/20 ring-offset-1'
-          : 'bg-surface text-navy border-gray-200/80 hover:border-primary/50 hover:bg-gray-50 hover:text-primary',
-        className,
-      )}
-    >
-      {label}
-    </button>
-  );
 }

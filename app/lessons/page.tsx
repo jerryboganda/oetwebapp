@@ -1,19 +1,19 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { BookOpenCheck, ChevronRight, Clock, LockKeyhole, PlayCircle, RotateCcw, Video } from 'lucide-react';
-import Link from 'next/link';
-import Image from 'next/image';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
-import { Skeleton } from '@/components/ui/skeleton';
+import { LearnerPageHero, LearnerSurfaceSectionHeader } from "@/components/domain/learner-surface";
+import { LearnerDashboardShell } from "@/components/layout/learner-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
-import { MotionItem } from '@/components/ui/motion-primitives';
-import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { fetchVideoLessons } from '@/lib/api';
+import { Card } from '@/components/ui/card';
+import { MotionItem } from '@/components/ui/motion-primitives';
+import { Skeleton } from '@/components/ui/skeleton';
 import { analytics } from '@/lib/analytics';
+import { fetchVideoLessons } from '@/lib/api';
 import type { VideoLessonListItem } from '@/lib/types/video-lessons';
+import { BookOpenCheck, ChevronRight, Clock, LockKeyhole, PlayCircle, RotateCcw, Video } from 'lucide-react';
+import Image from 'next/image';
+import Link from 'next/link';
+import { useEffect, useMemo, useState } from 'react';
 
 type LessonView = 'all' | 'continue' | 'recommended';
 

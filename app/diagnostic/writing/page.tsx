@@ -1,19 +1,19 @@
 'use client';
 
-import { useEffect, useState, useCallback, useRef } from 'react';
-import { useRouter } from 'next/navigation';
-import { AppShell } from '@/components/layout';
-import { AsyncStateWrapper } from '@/components/state';
 import { WritingCaseNotesPanel } from '@/components/domain/writing-case-notes-panel';
 import { WritingEditor } from '@/components/domain/writing-editor';
-import { Button } from '@/components/ui/button';
-import { Timer } from '@/components/ui/timer';
-import { Modal } from '@/components/ui/modal';
+import { AppShell } from "@/components/layout/app-shell";
+import { AsyncStateWrapper } from "@/components/state/async-state-wrapper";
 import { InlineAlert } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Modal } from '@/components/ui/modal';
+import { Timer } from '@/components/ui/timer';
 import { useAnalytics } from '@/hooks/use-analytics';
-import { fetchWritingTask, fetchWritingChecklist, submitWritingDraft, submitWritingTask } from '@/lib/api';
-import type { WritingTask, ChecklistItem } from '@/lib/mock-data';
-import { Send, LogOut, Save, CheckCircle2 } from 'lucide-react';
+import { fetchWritingChecklist, fetchWritingTask, submitWritingDraft, submitWritingTask } from '@/lib/api';
+import type { ChecklistItem, WritingTask } from '@/lib/mock-data';
+import { CheckCircle2, LogOut, Save, Send } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 const DIAGNOSTIC_WRITING_TASK_ID = 'wt-001';
 const AUTO_SAVE_DELAY = 3000; // 3s debounce

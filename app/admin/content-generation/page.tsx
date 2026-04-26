@@ -1,11 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { MotionItem } from '@/components/ui/motion-primitives';
-import { Wand2, Loader2, CheckCircle2, AlertCircle, Copy, RefreshCw, Clock3, FileJson2 } from 'lucide-react';
-import { AdminDashboardShell } from '@/components/layout';
+import { AdminDashboardShell } from "@/components/layout/admin-dashboard-shell";
 import { InlineAlert } from '@/components/ui/alert';
+import { MotionItem } from '@/components/ui/motion-primitives';
 import { fetchContentGenerationJob, fetchContentGenerationJobs, queueContentGeneration } from '@/lib/api';
+import { AlertCircle, CheckCircle2, Clock3, Copy, FileJson2, Loader2, RefreshCw, Wand2 } from 'lucide-react';
+import { useEffect, useState } from 'react';
 
 type GenerationRequest = {
   contentType: 'grammar_lesson' | 'strategy_guide' | 'pronunciation_drill' | 'vocabulary_term' | 'mock_question';
