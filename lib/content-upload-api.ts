@@ -126,6 +126,20 @@ function resolveUrl(path: string): string {
   return base ? `${base.replace(/\/$/, '')}${path}` : path;
 }
 
+const CSRF_SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS']);
+
+/**
+ * Reads the double-submit CSRF cookie value (set by the auth flow). The
+ * Next.js backend proxy at /api/backend/* requires this header for any
+ * state-changing method when a refresh-token cookie is present, otherwise
+ * it returns 403 before the request even reaches the .NET API.
+ */
+function readCsrfCookie(): string | null {
+  if (typeof document === 'undefined') return null;
+  const m = document.cookie.match(/(?:^|;\s*)oet_csrf=([^;]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
   const token = await ensureFreshAccessToken();
   const headers = new Headers(init?.headers);
@@ -134,7 +148,16 @@ async function api<T>(path: string, init?: RequestInit): Promise<T> {
   if (init?.body && typeof init.body === 'string' && !headers.has('Content-Type')) {
     headers.set('Content-Type', 'application/json');
   }
-  const res = await fetchWithTimeout(resolveUrl(path), { ...init, headers });
+  const method = (init?.method ?? 'GET').toUpperCase();
+  if (!CSRF_SAFE_METHODS.has(method) && !headers.has('x-csrf-token')) {
+    const csrf = readCsrfCookie();
+    if (csrf) headers.set('x-csrf-token', csrf);
+  }
+  const res = await fetchWithTimeout(resolveUrl(path), {
+    ...init,
+    headers,
+    credentials: init?.credentials ?? 'include',
+  });
   if (!res.ok) {
     let detail: unknown = null;
     try { detail = await res.json(); } catch { /* ignore */ }
@@ -196,13 +219,16 @@ export const startUpload = (body: {
 
 export async function uploadPart(uploadId: string, partNumber: number, body: Blob): Promise<void> {
   const token = await ensureFreshAccessToken();
+  const csrf = readCsrfCookie();
   const res = await fetchWithTimeout(
     resolveUrl(`/v1/admin/uploads/${uploadId}/parts/${partNumber}`),
     {
       method: 'PUT',
       body,
+      credentials: 'include',
       headers: {
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        ...(csrf ? { 'x-csrf-token': csrf } : {}),
         'Content-Type': 'application/octet-stream',
       },
     },
