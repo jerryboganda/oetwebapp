@@ -75,7 +75,7 @@ const adminNavGroups: NavGroup[] = [
   {
     label: 'Governance & rubrics',
     items: [
-      { href: '/admin/taxonomy', label: 'Profession Taxonomy', icon: <ListTree className="w-5 h-5" />, matchPrefix: '/admin/taxonomy' },
+      { href: '/admin/taxonomy', label: 'Professions', icon: <ListTree className="w-5 h-5" />, matchPrefix: '/admin/taxonomy' },
       { href: '/admin/criteria', label: 'Rubrics & Criteria', icon: <Target className="w-5 h-5" />, matchPrefix: '/admin/criteria' },
       { href: '/admin/rulebooks', label: 'Rulebooks', icon: <BookOpenText className="w-5 h-5" />, matchPrefix: '/admin/rulebooks' },
     ],
@@ -164,7 +164,7 @@ function getAdminPageTitle(pathname: string | null) {
   }
 
   if (pathname.startsWith('/admin/taxonomy')) {
-    return 'Profession Taxonomy';
+    return 'Professions';
   }
 
   if (pathname.startsWith('/admin/criteria')) {

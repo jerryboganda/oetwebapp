@@ -641,7 +641,7 @@ describe('Admin Non-Editor Pages', () => {
     expect(screen.getByRole('heading', { name: /policy change audit trail/i })).toBeInTheDocument();
   });
 
-  it('renders the profession taxonomy registry inside the learner-style route surface', async () => {
+  it('renders the professions registry inside the learner-style route surface', async () => {
     admin.getAdminTaxonomyData.mockResolvedValue([
       {
         id: 'taxonomy-1',
@@ -666,9 +666,8 @@ describe('Admin Non-Editor Pages', () => {
 
     renderPage(<TaxonomyPage />);
 
-    expect(await screen.findByRole('main', { name: /profession taxonomy/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /^profession taxonomy$/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /^professions$/i })).toBeInTheDocument();
+    expect(await screen.findByRole('main', { name: /professions/i })).toBeInTheDocument();
+    expect(screen.getAllByRole('heading', { name: /^professions$/i }).length).toBeGreaterThan(0);
     expect(screen.getAllByText('Nursing').length).toBeGreaterThan(0);
     expect(screen.getByRole('button', { name: /add profession/i })).toBeInTheDocument();
   });

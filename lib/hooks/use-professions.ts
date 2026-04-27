@@ -8,7 +8,7 @@ import type { SignupProfession } from '@/lib/types/auth';
 /**
  * Centralised profession list, sourced from the backend signup catalog
  * (`/v1/auth/catalog/signup`). The list is managed by admins via
- * `/admin/taxonomy` (Profession Taxonomy) and is the single source of
+ * `/admin/taxonomy` (Professions) and is the single source of
  * truth for every profession dropdown in the app.
  *
  * Falls back to the static enrollment list if the API is unreachable so

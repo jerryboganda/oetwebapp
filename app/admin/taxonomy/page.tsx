@@ -156,11 +156,11 @@ export default function AdminTaxonomyPage() {
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Profession taxonomy">
+    <AdminRouteWorkspace role="main" aria-label="Professions">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
       <AdminRouteSectionHeader
-        title="Profession Taxonomy"
+        title="Professions"
         description="Manage the professions that drive OET content targeting, learner goals, and downstream analytics."
         actions={
           <Button onClick={() => void openEditor()} className="gap-2">

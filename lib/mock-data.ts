@@ -697,8 +697,3 @@ export interface DiagnosticResult {
 //                    MOCK DATA FIXTURES
 // ══════════════════════════════════════════════════════
 
-export const PROFESSIONS = [
-  'Nursing', 'Medicine', 'Dentistry', 'Pharmacy', 'Physiotherapy',
-  'Occupational Therapy', 'Speech Pathology', 'Podiatry', 'Radiography',
-  'Optometry', 'Veterinary Science', 'Dietetics',
-] as const;

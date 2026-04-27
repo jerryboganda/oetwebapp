@@ -148,7 +148,7 @@ Status labels used in this document:
 - Cross-dashboard impact:
   - restored content can alter what learners receive and what experts review
 
-## 5. Profession Taxonomy
+## 5. Professions
 
 - Status: `implemented`
 - Purpose: Manage profession and classification structures used across the platform.
