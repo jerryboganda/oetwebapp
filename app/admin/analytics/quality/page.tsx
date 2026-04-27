@@ -178,80 +178,80 @@ export default function QualityAnalyticsPage() {
         }
       >
         {analytics ? (
-          <>
+          <div className="space-y-8">
             <MotionSection delayIndex={0}>
-            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <AdminRouteSummaryCard label="AI-Human Agreement" value={`${analytics.aiHumanAgreement.value}%`} hint={`${analytics.aiHumanAgreement.trend >= 0 ? '+' : ''}${analytics.aiHumanAgreement.trend}% vs prior window`} icon={<CheckCircle2 className="h-5 w-5" />} tone={analytics.aiHumanAgreement.trend >= 0 ? 'success' : 'warning'} />
-              <AdminRouteSummaryCard label="Appeals Rate" value={`${analytics.appealsRate.value}%`} hint={`${analytics.appealsRate.trend >= 0 ? '+' : ''}${analytics.appealsRate.trend}% vs prior window`} icon={<AlertTriangle className="h-5 w-5" />} tone={analytics.appealsRate.trend <= 0 ? 'success' : 'warning'} />
-              <AdminRouteSummaryCard label="Avg Review Time" value={`${analytics.avgReviewTime.value} ${analytics.avgReviewTime.unit}`} hint={`SLA met ${analytics.reviewSLA.metPercent}%`} icon={<Clock className="h-5 w-5" />} />
-              <AdminRouteSummaryCard label="Risk Cases" value={analytics.riskCases.count} hint={`Severity ${analytics.riskCases.severity}`} icon={<AlertTriangle className="h-5 w-5" />} tone={analytics.riskCases.count > 0 ? 'warning' : 'default'} />
-            </div>
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+                <AdminRouteSummaryCard label="AI-Human Agreement" value={`${analytics.aiHumanAgreement.value}%`} hint={`${analytics.aiHumanAgreement.trend >= 0 ? '+' : ''}${analytics.aiHumanAgreement.trend}% vs prior window`} icon={<CheckCircle2 className="h-5 w-5" />} tone={analytics.aiHumanAgreement.trend >= 0 ? 'success' : 'warning'} />
+                <AdminRouteSummaryCard label="Appeals Rate" value={`${analytics.appealsRate.value}%`} hint={`${analytics.appealsRate.trend >= 0 ? '+' : ''}${analytics.appealsRate.trend}% vs prior window`} icon={<AlertTriangle className="h-5 w-5" />} tone={analytics.appealsRate.trend <= 0 ? 'success' : 'warning'} />
+                <AdminRouteSummaryCard label="Avg Review Time" value={`${analytics.avgReviewTime.value} ${analytics.avgReviewTime.unit}`} hint={`SLA met ${analytics.reviewSLA.metPercent}%`} icon={<Clock className="h-5 w-5" />} />
+                <AdminRouteSummaryCard label="Risk Cases" value={analytics.riskCases.count} hint={`Severity ${analytics.riskCases.severity}`} icon={<AlertTriangle className="h-5 w-5" />} tone={analytics.riskCases.count > 0 ? 'warning' : 'default'} />
+              </div>
             </MotionSection>
 
             <MotionSection delayIndex={1}>
-            <div className="grid gap-4 md:grid-cols-3">
-              <AdminRouteSummaryCard label="Published Content" value={analytics.contentPerformance.publishedCount} icon={<FileText className="h-5 w-5" />} />
-              <AdminRouteSummaryCard label="Active Content" value={analytics.contentPerformance.activeContent} icon={<FileText className="h-5 w-5" />} />
-              <AdminRouteSummaryCard label="Feature Adoption" value={`${analytics.featureAdoption.adoptionRate}%`} hint={`${analytics.featureAdoption.activeUsers} active users`} icon={<Users className="h-5 w-5" />} />
-            </div>
+              <div className="grid gap-4 md:grid-cols-3">
+                <AdminRouteSummaryCard label="Published Content" value={analytics.contentPerformance.publishedCount} icon={<FileText className="h-5 w-5" />} />
+                <AdminRouteSummaryCard label="Active Content" value={analytics.contentPerformance.activeContent} icon={<FileText className="h-5 w-5" />} />
+                <AdminRouteSummaryCard label="Feature Adoption" value={`${analytics.featureAdoption.adoptionRate}%`} hint={`${analytics.featureAdoption.activeUsers} active users`} icon={<Users className="h-5 w-5" />} />
+              </div>
             </MotionSection>
 
             <MotionSection delayIndex={2}>
-            <div className="grid gap-6 xl:grid-cols-2">
-              <AdminRoutePanel title="Quality Rates Trend" description="Agreement and appeals trends from the current analytics window.">
-                <div className="h-[240px] w-full sm:h-[280px] lg:h-[320px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={rateChartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="label" stroke="#64748b" fontSize={12} />
-                      <YAxis stroke="#64748b" fontSize={12} />
-                      <Tooltip />
-                      <Legend />
-                      <Line type="monotone" dataKey="agreement" name="Agreement" stroke="#2563eb" strokeWidth={2} dot={false} />
-                      <Line type="monotone" dataKey="appeals" name="Appeals" stroke="#dc2626" strokeWidth={2} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </AdminRoutePanel>
+              <div className="grid gap-6 xl:grid-cols-2">
+                <AdminRoutePanel title="Quality Rates Trend" description="Agreement and appeals trends from the current analytics window.">
+                  <div className="h-[240px] w-full sm:h-[280px] lg:h-[320px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={rateChartData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="label" stroke="#64748b" fontSize={12} />
+                        <YAxis stroke="#64748b" fontSize={12} />
+                        <Tooltip />
+                        <Legend />
+                        <Line type="monotone" dataKey="agreement" name="Agreement" stroke="#2563eb" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="appeals" name="Appeals" stroke="#dc2626" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </AdminRoutePanel>
 
-              <AdminRoutePanel title="Operations Trend" description="Review time and risk case trend lines from the live analytics response.">
-                <div className="h-[240px] w-full sm:h-[280px] lg:h-[320px]">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={operationsChartData}>
-                      <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-                      <XAxis dataKey="label" stroke="#64748b" fontSize={12} />
-                      <YAxis stroke="#64748b" fontSize={12} />
-                      <Tooltip />
-                      <Legend />
-                      <Line type="monotone" dataKey="reviewTime" name="Review Time" stroke="#f59e0b" strokeWidth={2} dot={false} />
-                      <Line type="monotone" dataKey="riskCases" name="Risk Cases" stroke="#7c3aed" strokeWidth={2} dot={false} />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              </AdminRoutePanel>
-            </div>
+                <AdminRoutePanel title="Operations Trend" description="Review time and risk case trend lines from the live analytics response.">
+                  <div className="h-[240px] w-full sm:h-[280px] lg:h-[320px]">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={operationsChartData}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                        <XAxis dataKey="label" stroke="#64748b" fontSize={12} />
+                        <YAxis stroke="#64748b" fontSize={12} />
+                        <Tooltip />
+                        <Legend />
+                        <Line type="monotone" dataKey="reviewTime" name="Review Time" stroke="#f59e0b" strokeWidth={2} dot={false} />
+                        <Line type="monotone" dataKey="riskCases" name="Risk Cases" stroke="#7c3aed" strokeWidth={2} dot={false} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </AdminRoutePanel>
+              </div>
             </MotionSection>
 
             <MotionSection delayIndex={3}>
-            <AdminRoutePanel title="Sample Coverage" description="Quality analytics are only as trustworthy as the evidence window behind them.">
-              <div className="grid gap-4 md:grid-cols-3">
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Evaluation Samples</p>
-                  <p className="text-xl font-semibold text-navy">{analytics.freshness.evaluationSampleCount}</p>
+              <AdminRoutePanel title="Sample Coverage" description="Quality analytics are only as trustworthy as the evidence window behind them.">
+                <div className="grid gap-4 md:grid-cols-3">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Evaluation Samples</p>
+                    <p className="text-xl font-semibold text-navy">{analytics.freshness.evaluationSampleCount}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Review Samples</p>
+                    <p className="text-xl font-semibold text-navy">{analytics.freshness.reviewSampleCount}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Applied Filters</p>
+                    <p className="text-sm text-muted">Subtest: {analytics.filters.subtest}</p>
+                    <p className="text-sm text-muted">Profession: {analytics.filters.profession}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Review Samples</p>
-                  <p className="text-xl font-semibold text-navy">{analytics.freshness.reviewSampleCount}</p>
-                </div>
-                <div>
-                  <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Applied Filters</p>
-                  <p className="text-sm text-muted">Subtest: {analytics.filters.subtest}</p>
-                  <p className="text-sm text-muted">Profession: {analytics.filters.profession}</p>
-                </div>
-              </div>
-            </AdminRoutePanel>
+              </AdminRoutePanel>
             </MotionSection>
-          </>
+          </div>
         ) : null}
       </AsyncStateWrapper>
     </AdminRouteWorkspace>
