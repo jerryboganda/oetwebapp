@@ -67,7 +67,7 @@ public sealed class RulebookAdminService
     {
         var v = (raw ?? "").Trim().ToLowerInvariant();
         if (!ValidKinds.Contains(v))
-            throw new ArgumentException($"Invalid kind '{raw}'. Must be one of: {string.Join(", ", ValidKinds)}.");
+            throw ApiException.Validation("invalid_kind", $"Invalid kind '{raw}'. Must be one of: {string.Join(", ", ValidKinds)}.");
         return v;
     }
 
@@ -75,7 +75,7 @@ public sealed class RulebookAdminService
     {
         var v = (raw ?? "").Trim().ToLowerInvariant().Replace("-", "").Replace("_", "").Replace(" ", "");
         if (!ValidProfessions.Contains(v))
-            throw new ArgumentException($"Invalid profession '{raw}'. Must be one of: {string.Join(", ", ValidProfessions)}.");
+            throw ApiException.Validation("invalid_profession", $"Invalid profession '{raw}'. Must be one of: {string.Join(", ", ValidProfessions)}.");
         return v;
     }
 
@@ -183,14 +183,14 @@ public sealed class RulebookAdminService
         var kind = NormalizeKind(req.Kind);
         var profession = NormalizeProfession(req.Profession);
         if (string.IsNullOrWhiteSpace(req.Version))
-            throw new ArgumentException("Version label is required.");
+            throw ApiException.Validation("version_required", "Version label is required.");
 
         var version = req.Version.Trim();
         var id = $"rb_{kind}_{profession}_{version}".ToLowerInvariant().Replace(" ", "-");
 
         var existing = await _db.RulebookVersions.AnyAsync(v => v.Id == id, ct);
         if (existing)
-            throw new InvalidOperationException($"A rulebook with id '{id}' already exists. Pick a different version label.");
+            throw ApiException.Conflict("rulebook_exists", $"A rulebook with id '{id}' already exists. Pick a different version label.");
 
         var now = DateTimeOffset.UtcNow;
         var row = new RulebookVersion
@@ -222,11 +222,11 @@ public sealed class RulebookAdminService
         var newId = $"rb_{newKind}_{newProfession}_{newVersion}".ToLowerInvariant().Replace(" ", "-");
 
         if (string.Equals(newId, sourceId, StringComparison.OrdinalIgnoreCase))
-            throw new InvalidOperationException("Clone target is identical to source. Change kind, profession, or version label.");
+            throw ApiException.Validation("clone_target_identical", "Clone target is identical to source. Change kind, profession, or version label.");
 
         var dup = await _db.RulebookVersions.AnyAsync(v => v.Id == newId, ct);
         if (dup)
-            throw new InvalidOperationException($"A rulebook with id '{newId}' already exists. Pick a different version label.");
+            throw ApiException.Conflict("rulebook_exists", $"A rulebook with id '{newId}' already exists. Pick a different version label.");
 
         var now = DateTimeOffset.UtcNow;
         var clonedVersion = new RulebookVersion
@@ -293,7 +293,7 @@ public sealed class RulebookAdminService
         var v = await _db.RulebookVersions.FirstOrDefaultAsync(x => x.Id == id, ct)
             ?? throw new RulebookNotFoundException(id);
         if (v.Status != RulebookStatus.Published)
-            throw new InvalidOperationException($"Rulebook is not Published (current: {v.Status}).");
+            throw ApiException.Validation("not_published", $"Rulebook is not Published (current: {v.Status}).");
         v.Status = RulebookStatus.Draft;
         v.UpdatedAt = DateTimeOffset.UtcNow;
         v.UpdatedByUserId = adminId;
@@ -307,7 +307,7 @@ public sealed class RulebookAdminService
         var v = await _db.RulebookVersions.FirstOrDefaultAsync(x => x.Id == id, ct)
             ?? throw new RulebookNotFoundException(id);
         if (v.Status == RulebookStatus.Published)
-            throw new InvalidOperationException("Cannot delete a Published rulebook. Unpublish it first.");
+            throw ApiException.Validation("published_cannot_delete", "Cannot delete a Published rulebook. Unpublish it first.");
 
         var sectionRows = await _db.RulebookSectionRows.Where(s => s.RulebookVersionId == id).ToListAsync(ct);
         var ruleRows = await _db.RulebookRuleRows.Where(r => r.RulebookVersionId == id).ToListAsync(ct);
@@ -381,14 +381,14 @@ public sealed class RulebookAdminService
     public async Task<RulebookDetailDto> ImportAsync(ImportRulebookRequest req, string adminId, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(req.Json))
-            throw new ArgumentException("JSON payload is required.");
+            throw ApiException.Validation("json_required", "JSON payload is required.");
         var mode = (req.Mode ?? "create").Trim().ToLowerInvariant();
         if (mode != "create" && mode != "replace")
-            throw new ArgumentException("Mode must be 'create' or 'replace'.");
+            throw ApiException.Validation("invalid_mode", "Mode must be 'create' or 'replace'.");
 
         JsonDocument doc;
         try { doc = JsonDocument.Parse(req.Json); }
-        catch (JsonException ex) { throw new ArgumentException($"Invalid JSON: {ex.Message}"); }
+        catch (JsonException ex) { throw ApiException.Validation("invalid_json", $"Invalid JSON: {ex.Message}"); }
 
         using (doc)
         {
@@ -400,7 +400,7 @@ public sealed class RulebookAdminService
                 ? asEl.GetString() : null;
 
             if (!root.TryGetProperty("rules", out var rulesEl) || rulesEl.ValueKind != JsonValueKind.Array)
-                throw new ArgumentException("Payload must contain a 'rules' array.");
+                throw ApiException.Validation("rules_required", "Payload must contain a 'rules' array.");
 
             // Validate classification on every rule before any write.
             var sectionCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -410,7 +410,7 @@ public sealed class RulebookAdminService
                 {
                     var code = GetStringOrThrow(s, "id");
                     if (!sectionCodes.Add(code))
-                        throw new ArgumentException($"Duplicate section code '{code}'.");
+                        throw ApiException.Validation("duplicate_section", $"Duplicate section code '{code}'.");
                 }
             }
 
@@ -419,24 +419,24 @@ public sealed class RulebookAdminService
             {
                 var code = GetStringOrThrow(r, "id");
                 if (!ruleCodes.Add(code))
-                    throw new ArgumentException($"Duplicate rule code '{code}'.");
+                    throw ApiException.Validation("duplicate_rule", $"Duplicate rule code '{code}'.");
                 _ = GetStringOrThrow(r, "title");
                 _ = GetStringOrThrow(r, "body");
                 var sevRaw = GetStringOrThrow(r, "severity").Trim().ToLowerInvariant();
                 if (!ValidSeverities.Contains(sevRaw))
-                    throw new ArgumentException($"Rule '{code}' has invalid severity '{sevRaw}'.");
+                    throw ApiException.Validation("invalid_severity", $"Rule '{code}' has invalid severity '{sevRaw}'.");
                 var sec = GetStringOrThrow(r, "section");
                 if (sectionCodes.Count > 0 && !sectionCodes.Contains(sec))
-                    throw new ArgumentException($"Rule '{code}' references unknown section '{sec}'.");
+                    throw ApiException.Validation("unknown_section", $"Rule '{code}' references unknown section '{sec}'.");
             }
 
             var id = $"rb_{kind}_{profession}_{version}".ToLowerInvariant().Replace(" ", "-");
             var existing = await _db.RulebookVersions.FirstOrDefaultAsync(v => v.Id == id, ct);
 
             if (existing is not null && mode == "create")
-                throw new InvalidOperationException($"Rulebook '{id}' already exists. Use mode='replace' to overwrite.");
+                throw ApiException.Conflict("rulebook_exists", $"Rulebook '{id}' already exists. Use mode='replace' to overwrite.");
             if (existing is null && mode == "replace")
-                throw new InvalidOperationException($"Rulebook '{id}' does not exist; cannot replace. Use mode='create'.");
+                throw ApiException.Validation("rulebook_not_found", $"Rulebook '{id}' does not exist; cannot replace. Use mode='create'.");
 
             RulebookVersion target;
             var now = DateTimeOffset.UtcNow;
@@ -528,10 +528,10 @@ public sealed class RulebookAdminService
     private static string GetStringOrThrow(JsonElement el, string field)
     {
         if (!el.TryGetProperty(field, out var v) || v.ValueKind != JsonValueKind.String)
-            throw new ArgumentException($"Missing or non-string '{field}'.");
+            throw ApiException.Validation("missing_field", $"Missing or non-string '{field}'.");
         var s = v.GetString();
         if (string.IsNullOrWhiteSpace(s))
-            throw new ArgumentException($"'{field}' must not be empty.");
+            throw ApiException.Validation("empty_field", $"'{field}' must not be empty.");
         return s!;
     }
 
@@ -555,8 +555,8 @@ public sealed class RulebookAdminService
     {
         var v = await _db.RulebookVersions.FirstOrDefaultAsync(x => x.Id == versionId, ct)
             ?? throw new RulebookNotFoundException(versionId);
-        if (string.IsNullOrWhiteSpace(req.Code)) throw new ArgumentException("Section code is required.");
-        if (string.IsNullOrWhiteSpace(req.Title)) throw new ArgumentException("Section title is required.");
+        if (string.IsNullOrWhiteSpace(req.Code)) throw ApiException.Validation("section_code_required", "Section code is required.");
+        if (string.IsNullOrWhiteSpace(req.Title)) throw ApiException.Validation("section_title_required", "Section title is required.");
 
         var exists = await _db.RulebookSectionRows.AnyAsync(s => s.RulebookVersionId == versionId && s.Code == req.Code, ct);
         if (exists) throw new InvalidOperationException($"Section code '{req.Code}' already exists in this rulebook.");
@@ -606,11 +606,11 @@ public sealed class RulebookAdminService
     public async Task<RulebookRuleDto> CreateRuleAsync(string versionId, CreateRuleRequest req, string adminId, CancellationToken ct)
     {
         await EnsureVersionAsync(versionId, ct);
-        if (string.IsNullOrWhiteSpace(req.Code)) throw new ArgumentException("Rule code is required.");
-        if (string.IsNullOrWhiteSpace(req.SectionCode)) throw new ArgumentException("Section code is required.");
-        if (string.IsNullOrWhiteSpace(req.Title)) throw new ArgumentException("Rule title is required.");
-        if (string.IsNullOrWhiteSpace(req.Body)) throw new ArgumentException("Rule body is required.");
-        if (!IsValidSeverity(req.Severity)) throw new ArgumentException("Severity must be one of: critical, major, minor, info.");
+        if (string.IsNullOrWhiteSpace(req.Code)) throw ApiException.Validation("rule_code_required", "Rule code is required.");
+        if (string.IsNullOrWhiteSpace(req.SectionCode)) throw ApiException.Validation("section_code_required", "Section code is required.");
+        if (string.IsNullOrWhiteSpace(req.Title)) throw ApiException.Validation("rule_title_required", "Rule title is required.");
+        if (string.IsNullOrWhiteSpace(req.Body)) throw ApiException.Validation("rule_body_required", "Rule body is required.");
+        if (!IsValidSeverity(req.Severity)) throw ApiException.Validation("invalid_severity", "Severity must be one of: critical, major, minor, info.");
 
         var sectionExists = await _db.RulebookSectionRows.AnyAsync(s => s.RulebookVersionId == versionId && s.Code == req.SectionCode, ct);
         if (!sectionExists) throw new InvalidOperationException($"Section '{req.SectionCode}' does not exist in this rulebook.");
@@ -660,7 +660,7 @@ public sealed class RulebookAdminService
         if (req.Body is not null) row.Body = req.Body;
         if (!string.IsNullOrWhiteSpace(req.Severity))
         {
-            if (!IsValidSeverity(req.Severity)) throw new ArgumentException("Severity must be one of: critical, major, minor, info.");
+            if (!IsValidSeverity(req.Severity)) throw ApiException.Validation("invalid_severity", "Severity must be one of: critical, major, minor, info.");
             row.Severity = req.Severity!.ToLowerInvariant();
         }
         if (req.AppliesToJson is not null) row.AppliesToJson = req.AppliesToJson;
