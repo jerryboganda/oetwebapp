@@ -71,7 +71,7 @@ export default function EscalationsPage() {
     setIsMutating(true);
     try {
       await assignEscalationReviewer(assignTarget.id, selectedExpertId);
-      setToast({ variant: 'success', message: 'Expert assigned for second review.' });
+      setToast({ variant: 'success', message: 'Tutor assigned for second review.' });
       setAssignTarget(null);
       setSelectedExpertId('');
       setEscalations((prev) =>
@@ -218,10 +218,10 @@ export default function EscalationsPage() {
               {' '}AI: {assignTarget.aiScore} | Human: {assignTarget.humanScore} (Divergence: {assignTarget.divergence})
             </p>
             <Select
-              label="Select Expert Reviewer"
+              label="Select Tutor Reviewer"
               value={selectedExpertId}
               onChange={(e) => setSelectedExpertId(e.target.value)}
-              options={[{ value: '', label: 'Choose an expert...' }, ...experts.filter((ex) => ex.id !== assignTarget.originalReviewerId).map((ex) => ({ value: ex.id, label: `${ex.name} (${ex.email})` }))]}
+              options={[{ value: '', label: 'Choose a tutor...' }, ...experts.filter((ex) => ex.id !== assignTarget.originalReviewerId).map((ex) => ({ value: ex.id, label: `${ex.name} (${ex.email})` }))]}
             />
           </div>
           <div className="flex justify-end gap-2 pt-4 border-t border-border dark:border-border px-4 pb-4">

@@ -38,13 +38,13 @@ export default function ExpertEfficiencyPage() {
   useEffect(() => { analytics.track('admin_expert_efficiency_viewed'); load(30); }, []);
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Expert Efficiency Report">
+    <AdminRouteWorkspace role="main" aria-label="Tutor Efficiency Report">
       <AdminRouteHero
         eyebrow="Analytics"
         icon={UserCheck}
         accent="navy"
-        title="Expert Efficiency Report"
-        description="Review throughput, quality alignment, and operational efficiency per expert."
+        title="Tutor Efficiency Report"
+        description="Review throughput, quality alignment, and operational efficiency per tutor."
         aside={data && data.experts.length > 0 ? (
           <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
             <Button variant="outline" size="sm" className="gap-2" onClick={() => {
@@ -77,13 +77,13 @@ export default function ExpertEfficiencyPage() {
       ) : data ? (
         <MotionSection className="space-y-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <AdminRouteSummaryCard label="Total Experts" value={data.summary.totalExperts} icon={<Users className="h-5 w-5" />} />
+            <AdminRouteSummaryCard label="Total Tutors" value={data.summary.totalExperts} icon={<Users className="h-5 w-5" />} />
             <AdminRouteSummaryCard label="Active" value={data.summary.activeExperts} icon={<Activity className="h-5 w-5" />} tone="success" />
             <AdminRouteSummaryCard label="Reviews Done" value={data.summary.totalReviewsCompleted} icon={<BarChart3 className="h-5 w-5" />} />
-            <AdminRouteSummaryCard label="Avg/Expert/Day" value={data.summary.averageReviewsPerExpertPerDay} icon={<Gauge className="h-5 w-5" />} />
+            <AdminRouteSummaryCard label="Avg/Tutor/Day" value={data.summary.averageReviewsPerExpertPerDay} icon={<Gauge className="h-5 w-5" />} />
           </div>
 
-          <AdminRoutePanel title="Expert breakdown">
+          <AdminRoutePanel title="Tutor breakdown">
             <div className="space-y-3">
               {data.experts.map(e => {
                 const eff = EFF_BADGE[e.efficiency] ?? EFF_BADGE['no-data'];

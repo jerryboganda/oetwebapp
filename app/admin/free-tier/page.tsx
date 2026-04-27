@@ -41,7 +41,7 @@ const FREE_TIER_DEFAULTS: Record<string, { freeLimit: number; label: string }> =
   'gamification':         { freeLimit: 0,   label: 'Gamification (blocked)' },
   'spaced-repetition':    { freeLimit: 10,  label: 'Spaced Rep reviews/day' },
   'peer-review':          { freeLimit: 2,   label: 'Peer reviews/month' },
-  'ask-an-expert':        { freeLimit: 1,   label: 'Ask Expert Qs/month' },
+  'ask-an-expert':        { freeLimit: 1,   label: 'Ask a Tutor Qs/month' },
   'community-access':     { freeLimit: -1,  label: 'Community access (unlimited)' },
 };
 

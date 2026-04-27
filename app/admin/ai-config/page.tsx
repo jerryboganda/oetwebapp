@@ -41,7 +41,7 @@ const defaultFormState: AIConfigFormState = {
   status: 'testing',
   accuracy: '0.85',
   confidenceThreshold: '0.8',
-  routingRule: 'Escalate to expert review below threshold',
+  routingRule: 'Escalate to tutor review below threshold',
   experimentFlag: '',
   promptLabel: '',
 };

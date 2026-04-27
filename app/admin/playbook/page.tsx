@@ -28,7 +28,7 @@ const PLAYBOOK_SECTIONS = [
     icon: Users,
     color: 'text-success',
     workflows: [
-      { name: 'Onboard New Expert', steps: ['Create expert account with credentials', 'Assign profession specialisations', 'Complete calibration reviews (minimum 3)', 'Monitor initial review quality via AI alignment score', 'Grant full review access after calibration'] },
+      { name: 'Onboard New Tutor', steps: ['Create tutor account with credentials', 'Assign profession specialisations', 'Complete calibration reviews (minimum 3)', 'Monitor initial review quality via AI alignment score', 'Grant full review access after calibration'] },
       { name: 'Handle Account Issues', steps: ['Search user by email or ID', 'Check subscription status and payment history', 'Review login activity and last active date', 'Reset password or unlock account as needed', 'Document resolution in notes'] },
     ],
   },
@@ -37,8 +37,8 @@ const PLAYBOOK_SECTIONS = [
     icon: Shield,
     color: 'text-primary',
     workflows: [
-      { name: 'Monitor SLA Compliance', steps: ['Check SLA Health dashboard daily', 'Identify reviews approaching breach (< 4 hours remaining)', 'Redistribute overloaded expert queues', 'Escalate breached reviews with priority flag', 'Document chronic bottlenecks for staffing decisions'] },
-      { name: 'Handle Expert Disagreements', steps: ['Review calibration session flagged items', 'Compare expert scores with AI baseline and consensus', 'Convene calibration discussion if spread > 2 bands', 'Update rubric guidance if interpretation varies', 'Re-assign review if expert was clearly miscalibrated'] },
+      { name: 'Monitor SLA Compliance', steps: ['Check SLA Health dashboard daily', 'Identify reviews approaching breach (< 4 hours remaining)', 'Redistribute overloaded tutor queues', 'Escalate breached reviews with priority flag', 'Document chronic bottlenecks for staffing decisions'] },
+      { name: 'Handle Tutor Disagreements', steps: ['Review calibration session flagged items', 'Compare tutor scores with AI baseline and consensus', 'Convene calibration discussion if spread > 2 bands', 'Update rubric guidance if interpretation varies', 'Re-assign review if tutor was clearly miscalibrated'] },
     ],
   },
   {
@@ -46,7 +46,7 @@ const PLAYBOOK_SECTIONS = [
     icon: CreditCard,
     color: 'text-warning',
     workflows: [
-      { name: 'Handle Refund Requests', steps: ['Verify the failed or unsatisfactory review', 'Check credit lifecycle policy for eligibility', 'Issue credit refund to learner wallet', 'Document reason for audit trail', 'Flag expert if review quality was the cause'] },
+      { name: 'Handle Refund Requests', steps: ['Verify the failed or unsatisfactory review', 'Check credit lifecycle policy for eligibility', 'Issue credit refund to learner wallet', 'Document reason for audit trail', 'Flag tutor if review quality was the cause'] },
       { name: 'Plan Changes', steps: ['Review current subscription details', 'Check proration rules for mid-cycle changes', 'Process upgrade/downgrade', 'Verify new entitlements are active', 'Confirm billing amount adjustment'] },
     ],
   },
@@ -55,7 +55,7 @@ const PLAYBOOK_SECTIONS = [
     icon: BarChart3,
     color: 'text-primary',
     workflows: [
-      { name: 'Weekly Review', steps: ['Check Subscription Health for MRR and churn trends', 'Review Expert Efficiency for throughput bottlenecks', 'Scan Content Effectiveness for underperforming items', 'Review Cohort Analysis for engagement patterns', 'Export findings to stakeholder report'] },
+      { name: 'Weekly Review', steps: ['Check Subscription Health for MRR and churn trends', 'Review Tutor Efficiency for throughput bottlenecks', 'Scan Content Effectiveness for underperforming items', 'Review Cohort Analysis for engagement patterns', 'Export findings to stakeholder report'] },
     ],
   },
   {
@@ -63,7 +63,7 @@ const PLAYBOOK_SECTIONS = [
     icon: AlertTriangle,
     color: 'text-danger',
     workflows: [
-      { name: 'SLA Breach Escalation', steps: ['Identify affected learners from SLA Health alerts', 'Send apology notification with updated ETA', 'Reassign to available expert with shortest queue', 'Offer credit compensation per policy', 'Post-mortem: update capacity planning'] },
+      { name: 'SLA Breach Escalation', steps: ['Identify affected learners from SLA Health alerts', 'Send apology notification with updated ETA', 'Reassign to available tutor with shortest queue', 'Offer credit compensation per policy', 'Post-mortem: update capacity planning'] },
       { name: 'System Outage Impact', steps: ['Assess affected services (API, payments, reviews)', 'Pause SLA clocks for impacted reviews', 'Communicate status via system banner', 'Resume SLA tracking after resolution', 'Compensate affected users if warranted'] },
     ],
   },

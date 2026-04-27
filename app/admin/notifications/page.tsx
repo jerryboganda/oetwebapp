@@ -574,7 +574,7 @@ export default function AdminNotificationsPage() {
             <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Admin Workspace</p>
             <h1 className="text-xl font-semibold tracking-tight text-navy sm:text-2xl">Notifications</h1>
             <p className="max-w-4xl text-sm leading-6 text-muted">
-              Govern learner, expert, and admin delivery from one operational surface: role-wide switches, per-event policy, delivery health, test email, and audit visibility.
+              Govern learner, tutor, and admin delivery from one operational surface: role-wide switches, per-event policy, delivery health, test email, and audit visibility.
             </p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -678,7 +678,7 @@ export default function AdminNotificationsPage() {
                 onChange={(event) => setTestAudienceRole(event.target.value as NotificationAudienceRole)}
                 options={[
                   { value: 'learner', label: 'Learner' },
-                  { value: 'expert', label: 'Expert' },
+                  { value: 'expert', label: 'Tutor' },
                   { value: 'admin', label: 'Admin' },
                 ]}
               />

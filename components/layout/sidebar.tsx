@@ -182,7 +182,7 @@ export function Sidebar({
   const isLearnerWorkspace = activeWorkspaceRole === 'learner' && !isPrivilegedPath;
   const workspaceLabel =
     activeWorkspaceRole === 'expert'
-      ? 'Expert workspace'
+      ? 'Tutor workspace'
       : activeWorkspaceRole === 'admin'
         ? 'Admin workspace'
         : 'Learner workspace';

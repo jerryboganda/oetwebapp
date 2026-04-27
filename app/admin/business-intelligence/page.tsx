@@ -159,7 +159,7 @@ export default function BusinessIntelligencePage() {
     <AdminRouteWorkspace role="main" aria-label="Business intelligence">
       <AdminRouteSectionHeader
         title="Business Intelligence"
-        description="Live backend aggregates for subscription health, learner cohorts, content effectiveness, and expert throughput."
+        description="Live backend aggregates for subscription health, learner cohorts, content effectiveness, and tutor throughput."
         actions={<AdminRouteFreshnessBadge value={data?.generatedAt} />}
         meta="Live backend aggregates"
       />
@@ -207,9 +207,9 @@ export default function BusinessIntelligencePage() {
                 tone={topContent ? 'success' : 'default'}
               />
               <AdminRouteSummaryCard
-                label="Expert throughput"
+                label="Tutor throughput"
                 value={formatDecimal(data.expertEfficiency.summary.averageReviewsPerExpertPerDay)}
-                hint={`${formatNumber(data.expertEfficiency.summary.activeExperts)} active of ${formatNumber(data.expertEfficiency.summary.totalExperts)} experts`}
+                hint={`${formatNumber(data.expertEfficiency.summary.activeExperts)} active of ${formatNumber(data.expertEfficiency.summary.totalExperts)} tutors`}
                 icon={<Activity className="h-5 w-5" />}
               />
             </div>
@@ -399,8 +399,8 @@ export default function BusinessIntelligencePage() {
               </AdminRoutePanel>
 
               <AdminRoutePanel
-                title="Expert Efficiency"
-                description={`${formatNumber(data.expertEfficiency.summary.activeExperts)} active of ${formatNumber(data.expertEfficiency.summary.totalExperts)} experts over the last ${data.expertEfficiency.period} days.`}
+                title="Tutor Efficiency"
+                description={`${formatNumber(data.expertEfficiency.summary.activeExperts)} active of ${formatNumber(data.expertEfficiency.summary.totalExperts)} tutors over the last ${data.expertEfficiency.period} days.`}
               >
                 <div className="grid gap-3 md:grid-cols-3">
                   <div>
@@ -408,11 +408,11 @@ export default function BusinessIntelligencePage() {
                     <p className="text-lg font-semibold text-navy">{formatNumber(data.expertEfficiency.summary.totalReviewsCompleted)}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Reviews per expert</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Reviews per tutor</p>
                     <p className="text-lg font-semibold text-navy">{formatDecimal(data.expertEfficiency.summary.averageReviewsPerExpertPerDay)}</p>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Top expert</p>
+                    <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Top tutor</p>
                     <p className="text-lg font-semibold text-navy">{topExpert ? truncate(topExpert.expertName) : 'No data'}</p>
                   </div>
                 </div>
@@ -461,7 +461,7 @@ export default function BusinessIntelligencePage() {
                       </div>
                     );
                   }) : (
-                    <p className="text-sm text-muted">No expert efficiency data is available yet.</p>
+                    <p className="text-sm text-muted">No tutor efficiency data is available yet.</p>
                   )}
                 </div>
               </AdminRoutePanel>
@@ -476,7 +476,7 @@ export default function BusinessIntelligencePage() {
                   { href: '/admin/analytics/subscription-health', label: 'Subscription health' },
                   { href: '/admin/analytics/cohort', label: 'Learner cohorts' },
                   { href: '/admin/analytics/content-effectiveness', label: 'Content effectiveness' },
-                  { href: '/admin/analytics/expert-efficiency', label: 'Expert efficiency' },
+                  { href: '/admin/analytics/expert-efficiency', label: 'Tutor efficiency' },
                 ].map((link) => (
                   <AdminQuickAction key={link.href} href={link.href} label={link.label} />
                 ))}
