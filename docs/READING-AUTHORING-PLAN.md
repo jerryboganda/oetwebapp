@@ -228,7 +228,7 @@ The PDF assets remain — they're the source-of-truth artefact, useful for admin
 
 For the first Reading papers you publish and for any paper where accuracy is critical. Admin:
 
-1. Opens the paper editor (already built: `/admin/content-papers/[paperId]`).
+1. Opens the paper editor (already built: `/admin/content/papers/[paperId]`).
 2. New **"Reading structure"** tab appears because `subtestCode === 'reading'`.
 3. Tab lays out three sections: Part A, B, C. Each with per-part time limit field pre-filled from OET defaults (15 / 45 / 45).
 4. Within each part, admin clicks **"+ Text"** to add a passage. Tiptap (or existing rich-text) lets them paste content with bold/underline/lists intact. Source attribution required.
@@ -310,7 +310,7 @@ Every grading call routes through `lib/scoring.ts` / `OetLearner.Api.Services.Oe
 
 ## 6. Admin UI — the authoring console
 
-Adds one tab to the existing `/admin/content-papers/[paperId]` editor when `subtest === 'reading'`:
+Adds one tab to the existing `/admin/content/papers/[paperId]` editor when `subtest === 'reading'`:
 
 ### 6.1 Structure tab
 
@@ -404,7 +404,7 @@ Same pattern as Content Upload: each slice independently mergeable and independe
 
 ### Slice R3 — Admin endpoints + authoring UI
 - `/v1/admin/papers/{paperId}/reading-structure` — GET / PUT (whole structure) + granular PATCH per part.
-- `/admin/content-papers/[paperId]` gets the new "Reading structure" tab.
+- `/admin/content/papers/[paperId]` gets the new "Reading structure" tab.
 - All the inline question editors with per-type forms.
 - Tests: endpoint auth + permission, DTO shape correctness, audit events.
 

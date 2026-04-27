@@ -5,11 +5,14 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Wand2 } from 'lucide-react';
 import { adminGenerateGrammarAiDraft, adminListGrammarTopics } from '@/lib/api';
+import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import {
   AdminRouteHero,
   AdminRoutePanel,
   AdminRouteWorkspace,
 } from '@/components/domain/admin-route-surface';
+import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { Button } from '@/components/ui/button';
 import { Input, Select, Textarea } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
@@ -19,6 +22,9 @@ type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
 export default function GrammarAiDraftPage() {
   const router = useRouter();
+  const { isAuthenticated, isLoading, role } = useAdminAuth();
+  const { user } = useCurrentUser();
+  const canWriteContent = hasPermission(user?.adminPermissions, AdminPermission.ContentWrite);
   const [topics, setTopics] = useState<AdminGrammarTopic[]>([]);
   const [examType, setExamType] = useState('oet');
   const [topicSlug, setTopicSlug] = useState('');
@@ -29,15 +35,17 @@ export default function GrammarAiDraftPage() {
   const [toast, setToast] = useState<ToastState>(null);
 
   useEffect(() => {
+    if (!canWriteContent) return;
     (async () => {
       try {
         const t = (await adminListGrammarTopics({ examTypeCode: examType })) as AdminGrammarTopic[];
         setTopics(t || []);
       } catch {/* noop */}
     })();
-  }, [examType]);
+  }, [canWriteContent, examType]);
 
   const onGenerate = useCallback(async () => {
+    if (!canWriteContent) return;
     if (!prompt.trim()) {
       setToast({ variant: 'error', message: 'Provide a prompt.' });
       return;
@@ -63,7 +71,19 @@ export default function GrammarAiDraftPage() {
     } finally {
       setSubmitting(false);
     }
-  }, [examType, topicSlug, level, count, prompt, router]);
+  }, [canWriteContent, examType, topicSlug, level, count, prompt, router]);
+
+  if (isLoading) return null;
+
+  if (!isAuthenticated || role !== 'admin') return null;
+
+  if (!canWriteContent) {
+    return (
+      <AdminRouteWorkspace role="main" aria-label="AI grammar draft">
+        <p className="text-sm text-muted">Content write permission is required.</p>
+      </AdminRouteWorkspace>
+    );
+  }
 
   return (
     <AdminRouteWorkspace role="main" aria-label="AI grammar draft">

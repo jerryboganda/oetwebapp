@@ -2487,7 +2487,7 @@ app/
 
   # Admin Extensions
   admin/
-    content-generation/            -- AI content generation management
+    content/generation/            -- AI content generation management
     community/                     -- Community moderation
     tutoring/                      -- Tutoring management
     marketplace/                   -- Content marketplace review

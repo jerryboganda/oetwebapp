@@ -123,10 +123,10 @@
 |-------|---------|------|-------|-------|
 | `/admin` | P5 | T0 | todo | Ops home |
 | `/admin/users` + children | P5 | T0 | todo | Support surface |
-| `/admin/content-papers` + children | P5 | T0 | todo | Publish gate |
-| `/admin/content-import` | P5 | T0 | todo | ZIP ingest |
-| `/admin/publish-requests` | P5 | T0 | todo | |
-| `/admin/content-quality` | P5 | T1 | todo | |
+| `/admin/content/papers` + children | P5 | T0 | todo | Publish gate |
+| `/admin/content/import` | P5 | T0 | todo | ZIP ingest |
+| `/admin/content/publish-requests` | P5 | T0 | todo | |
+| `/admin/content/quality` | P5 | T1 | todo | |
 | `/admin/ai-config` + children | P5 | T1 | todo | |
 | `/admin/ai-usage` | P5 | T1 | todo | Quota dashboards |
 | `/admin/billing` + children | P5 | T0 | todo | Refunds, comps |
@@ -141,15 +141,15 @@
 | `/admin/audit-logs` | P5 | T1 | todo | |
 | `/admin/analytics` + `/admin/business-intelligence` | P5 | T1 | todo | |
 | `/admin/community` + children | P5 | T2 | todo | Moderation |
-| `/admin/grammar` / `pronunciation` / `strategies` / `private-speaking` | P5 | T1 | todo | Authoring |
-| `/admin/media` + `/admin/dedup` | P5 | T2 | todo | |
+| `/admin/content/grammar` / `content/pronunciation` / `content/strategies` / `private-speaking` | P5 | T1 | todo | Authoring |
+| `/admin/content/media` + `/admin/content/dedup` | P5 | T2 | todo | |
 | `/admin/taxonomy` | P5 | T2 | todo | |
 | `/admin/webhooks` | P5 | T2 | todo | |
 | `/admin/sla-health` | P5 | T1 | todo | |
 | `/admin/marketplace-review` | P5 | T2 | todo | |
 | `/admin/bulk-operations` | P5 | T1 | todo | |
 | `/admin/credit-lifecycle` | P5 | T1 | todo | |
-| `/admin/content-analytics` / `content-generation` / `content-hierarchy` | P5 | T1 | todo | |
+| `/admin/content/analytics` / `content/generation` / `content/hierarchy` | P5 | T1 | todo | |
 | `/admin/freeze` | P5 | T2 | todo | |
 | `/admin/playbook` | P5 | T2 | todo | |
 | `/admin/enterprise` | P5 | T1 | todo | Sponsor ops |

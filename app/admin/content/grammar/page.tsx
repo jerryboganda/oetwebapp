@@ -12,8 +12,8 @@ import {
   adminListGrammarTopics,
   adminListGrammarLessonsV2,
   adminArchiveGrammarLessonV2,
-  adminPublishGrammarLesson,
-  adminUnpublishGrammarLesson,
+  adminPublishGrammarLessonV2,
+  adminUnpublishGrammarLessonV2,
 } from '@/lib/api';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -21,6 +21,8 @@ import { Badge } from '@/components/ui/badge';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
+import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
+import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import type { AdminGrammarLessonRow, AdminGrammarTopic } from '@/lib/grammar/types';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -28,6 +30,10 @@ type ToastState = { variant: 'success' | 'error'; message: string } | null;
 type AdminLessonRow = AdminGrammarLessonRow;
 
 export default function AdminGrammarDashboard() {
+  const { user } = useCurrentUser();
+  const canWriteContent = hasPermission(user?.adminPermissions, AdminPermission.ContentWrite);
+  const canPublishContent = hasPermission(user?.adminPermissions, AdminPermission.ContentPublish);
+  const hasLessonActions = canWriteContent || canPublishContent;
   const [topics, setTopics] = useState<AdminGrammarTopic[]>([]);
   const [lessons, setLessons] = useState<AdminLessonRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -70,8 +76,9 @@ export default function AdminGrammarDashboard() {
   }, [topics]);
 
   async function publish(id: string) {
+    if (!canPublishContent) return;
     try {
-      await adminPublishGrammarLesson(id);
+      await adminPublishGrammarLessonV2(id);
       setToast({ variant: 'success', message: 'Lesson published.' });
       await reload();
     } catch (e) {
@@ -80,8 +87,9 @@ export default function AdminGrammarDashboard() {
   }
 
   async function unpublish(id: string) {
+    if (!canPublishContent) return;
     try {
-      await adminUnpublishGrammarLesson(id);
+      await adminUnpublishGrammarLessonV2(id);
       setToast({ variant: 'success', message: 'Lesson unpublished.' });
       await reload();
     } catch (e) {
@@ -90,6 +98,7 @@ export default function AdminGrammarDashboard() {
   }
 
   async function archive(id: string) {
+    if (!canWriteContent) return;
     if (!confirm('Archive this lesson? Learners will no longer see it.')) return;
     try {
       await adminArchiveGrammarLessonV2(id);
@@ -108,7 +117,7 @@ export default function AdminGrammarDashboard() {
         accent="navy"
         title="Grammar CMS"
         description="Manage grammar topics, authored lessons, and AI drafts."
-        aside={(
+        aside={canWriteContent ? (
           <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
             <div className="flex flex-wrap gap-2">
               <Link href="/admin/content/grammar/topics">
@@ -128,7 +137,7 @@ export default function AdminGrammarDashboard() {
               </Link>
             </div>
           </div>
-        )}
+        ) : undefined}
       />
 
       <AdminRoutePanel>
@@ -178,8 +187,12 @@ export default function AdminGrammarDashboard() {
           </div>
         ) : topics.length === 0 ? (
           <Card className="border-dashed p-6 text-sm text-muted">
-            No topics yet.{' '}
-            <Link href="/admin/content/grammar/topics" className="text-primary hover:underline">Create the first one →</Link>
+            No topics yet.{canWriteContent ? (
+              <>
+                {' '}
+                <Link href="/admin/content/grammar/topics" className="text-primary hover:underline">Create the first one →</Link>
+              </>
+            ) : null}
           </Card>
         ) : (
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
@@ -193,9 +206,11 @@ export default function AdminGrammarDashboard() {
                 {t.description ? <p className="mt-2 line-clamp-2 text-xs text-muted">{t.description}</p> : null}
                 <div className="mt-3 flex items-center justify-between text-xs text-muted">
                   <span>{t.slug}</span>
-                  <Link href={`/admin/content/grammar/topics?id=${encodeURIComponent(t.id)}`} className="font-semibold text-primary hover:underline">
-                    Manage
-                  </Link>
+                  {canWriteContent ? (
+                    <Link href={`/admin/content/grammar/topics?id=${encodeURIComponent(t.id)}`} className="font-semibold text-primary hover:underline">
+                      Manage
+                    </Link>
+                  ) : null}
                 </div>
               </Card>
             ))}
@@ -209,8 +224,12 @@ export default function AdminGrammarDashboard() {
           <Skeleton className="h-64 rounded-2xl" />
         ) : lessons.length === 0 ? (
           <Card className="border-dashed p-6 text-sm text-muted">
-            No lessons yet.{' '}
-            <Link href="/admin/content/grammar/lessons/new" className="text-primary hover:underline">Author the first one →</Link>
+            No lessons yet.{canWriteContent ? (
+              <>
+                {' '}
+                <Link href="/admin/content/grammar/lessons/new" className="text-primary hover:underline">Author the first one →</Link>
+              </>
+            ) : null}
           </Card>
         ) : (
           <Card className="overflow-x-auto p-0">
@@ -223,7 +242,7 @@ export default function AdminGrammarDashboard() {
                   <th className="p-3">Mins</th>
                   <th className="p-3">State</th>
                   <th className="p-3">Updated</th>
-                  <th className="p-3">Actions</th>
+                  {hasLessonActions ? <th className="p-3">Actions</th> : null}
                 </tr>
               </thead>
               <tbody>
@@ -237,19 +256,25 @@ export default function AdminGrammarDashboard() {
                       <Badge className={stateColor(l.publishState)}>{l.publishState}</Badge>
                     </td>
                     <td className="p-3 text-xs text-muted">{new Date(l.updatedAt).toLocaleDateString()}</td>
-                    <td className="p-3">
-                      <div className="flex flex-wrap gap-2">
-                        <Link href={`/admin/content/grammar/lessons/${encodeURIComponent(l.id)}`}>
-                          <Button variant="outline" size="sm">Edit</Button>
-                        </Link>
-                        {l.publishState === 'published' ? (
-                          <Button variant="outline" size="sm" onClick={() => unpublish(l.id)}>Unpublish</Button>
-                        ) : (
-                          <Button size="sm" onClick={() => publish(l.id)}>Publish</Button>
-                        )}
-                        <Button variant="outline" size="sm" onClick={() => archive(l.id)}>Archive</Button>
-                      </div>
-                    </td>
+                    {hasLessonActions ? (
+                      <td className="p-3">
+                        <div className="flex flex-wrap gap-2">
+                          {canWriteContent ? (
+                            <Link href={`/admin/content/grammar/lessons/${encodeURIComponent(l.id)}`}>
+                              <Button variant="outline" size="sm">Edit</Button>
+                            </Link>
+                          ) : null}
+                          {canPublishContent ? (
+                            l.publishState === 'published' ? (
+                              <Button variant="outline" size="sm" onClick={() => unpublish(l.id)}>Unpublish</Button>
+                            ) : (
+                              <Button size="sm" onClick={() => publish(l.id)}>Publish</Button>
+                            )
+                          ) : null}
+                          {canWriteContent ? <Button variant="outline" size="sm" onClick={() => archive(l.id)}>Archive</Button> : null}
+                        </div>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>

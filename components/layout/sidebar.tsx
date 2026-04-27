@@ -94,6 +94,17 @@ function isActive(pathname: string | null, item: NavItem): boolean {
   return pathname.startsWith(item.matchPrefix ?? item.href);
 }
 
+function getActiveItemHref(pathname: string | null, items: NavItem[]): string | null {
+  const activeItems = items.filter((item) => isActive(pathname, item));
+  if (activeItems.length === 0) return null;
+
+  return [...activeItems].sort((firstItem, secondItem) => {
+    const firstPrefix = firstItem.matchPrefix ?? firstItem.href;
+    const secondPrefix = secondItem.matchPrefix ?? secondItem.href;
+    return secondPrefix.length - firstPrefix.length;
+  })[0].href;
+}
+
 function NavSection({
   label,
   items,
@@ -105,12 +116,14 @@ function NavSection({
   pathname: string | null;
   reducedMotion: boolean;
 }) {
+  const activeHref = getActiveItemHref(pathname, items);
+
   return (
     <motion.div className="mb-4" layout={!reducedMotion}>
       <div className="mb-2 px-2 text-xs font-semibold uppercase tracking-[0.22em] text-muted">{label}</div>
       <motion.ul className="flex flex-col gap-1" layout={!reducedMotion}>
         {items.map((item) => {
-          const active = isActive(pathname, item);
+          const active = item.href === activeHref;
           return (
             <motion.li key={item.href} layout={!reducedMotion}>
               <Link

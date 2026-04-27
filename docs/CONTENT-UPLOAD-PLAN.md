@@ -362,15 +362,15 @@ manually classifies before approval.
 
 ## 7. Authoring UI (admin)
 
-One new top-level page `/admin/content-papers` with three views:
+One Content Hub page `/admin/content/papers` with three views:
 
-### 7.1 List view (`/admin/content-papers`)
+### 7.1 List view (`/admin/content/papers`)
 - Filters: subtest, profession, status, card-type, letter-type, search.
 - Reuses existing `DataTable`, `FilterBar`, `Badge`, `EmptyState`.
 - Bulk actions: archive, reassign profession, change status.
 - Quick "+ New Paper" + "Bulk Import" buttons.
 
-### 7.2 Editor view (`/admin/content-papers/[paperId]`)
+### 7.2 Editor view (`/admin/content/papers/[paperId]`)
 - Header: title, subtest, profession (dropdown including "All professions"),
   difficulty, status badge, publish/archive actions.
 - Tabs:
@@ -385,7 +385,7 @@ One new top-level page `/admin/content-papers` with three views:
   4. **Revisions** — full revision history via existing `ContentRevision`.
   5. **Publish workflow** — connects to existing `ContentPublishRequest`.
 
-### 7.3 Bulk import view (`/admin/content-papers/import`)
+### 7.3 Bulk import view (`/admin/content/papers/import`)
 - Upload ZIP → server parses → manifest review table.
 - Each row: detected file → suggested role → editable fields → diff against
   existing papers (so a re-import doesn't duplicate).
@@ -502,12 +502,12 @@ revertable. Each slice is roughly one PR.
 
 ### Slice 3 — Paper CRUD endpoints + admin list page
 - `GET/POST/PUT/DELETE /v1/admin/papers` + `/papers/{id}/assets`.
-- New `/admin/content-papers` list page reusing existing CMS components.
+- New `/admin/content/papers` list page reusing existing CMS components.
 - Audit + permission gating on every mutation.
 - Tests: CRUD, permission denial, audit event written.
 
 ### Slice 4 — Paper editor + asset management UI
-- `/admin/content-papers/[paperId]` editor with the four tabs.
+- `/admin/content/papers/[paperId]` editor with the four tabs.
 - Drag-drop upload using the chunked protocol.
 - Required-role validation (Listening must have audio + question paper +
   answer key before publish).
@@ -518,7 +518,7 @@ revertable. Each slice is roughly one PR.
 ### Slice 5 — Convention parser + bulk import
 - Parser implementation matching §6 table.
 - ZIP upload endpoint with manifest generation.
-- `/admin/content-papers/import` review-and-approve UI.
+- `/admin/content/papers/import` review-and-approve UI.
 - Idempotency: re-uploading the same SHA against an existing paper updates
   rather than duplicates.
 - Tests: parser unit tests with fixture filenames from §1, end-to-end import

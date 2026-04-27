@@ -211,7 +211,7 @@ import AdminDashboardPage from './page';
 import AIConfigPage from './ai-config/page';
 import AuditLogsPage from './audit-logs/page';
 import ContentEditPage from './content/[id]/page';
-import ContentLibraryPage from './content/page';
+import ContentLibraryPage from './content/library/page';
 import ContentNewPage from './content/new/page';
 import CriteriaPage from './criteria/page';
 import FlagsPage from './flags/page';

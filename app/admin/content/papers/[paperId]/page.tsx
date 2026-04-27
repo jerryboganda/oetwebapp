@@ -9,7 +9,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Input, Select } from '@/components/ui/form-controls';
 import { InlineAlert, Toast } from '@/components/ui/alert';
+import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { ReadingStructureEditor } from '@/components/domain/ReadingStructureEditor';
 import { ListeningStructureEditor } from '@/components/domain/ListeningStructureEditor';
 import { DEFAULT_CONTENT_SOURCE_PROVENANCE } from '@/lib/content-upload-defaults';
@@ -68,7 +70,10 @@ const ROLE_OPTIONS: { value: PaperAssetRole; label: string; accept: string }[] =
 
 export default function ContentPaperEditorPage({ params }: { params: Promise<{ paperId: string }> }) {
   const { paperId } = use(params);
-  const { isAuthenticated, role } = useAdminAuth();
+  const { isAuthenticated, isLoading: isAdminLoading, role } = useAdminAuth();
+  const { user, isLoading: isUserLoading } = useCurrentUser();
+  const canWriteContent = hasPermission(user?.adminPermissions, AdminPermission.ContentWrite);
+  const canPublishContent = hasPermission(user?.adminPermissions, AdminPermission.ContentPublish);
   const [status, setStatus] = useState<PageStatus>('loading');
   const [paper, setPaper] = useState<ContentPaperDto | null>(null);
   const [requiredRoles, setRequiredRoles] = useState<PaperAssetRole[]>([]);
@@ -82,6 +87,7 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const load = useCallback(async () => {
+    if (!canWriteContent) return;
     setStatus('loading');
     try {
       const p = await getContentPaper(paperId);
@@ -93,12 +99,15 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
       setStatus('error');
       setToast({ variant: 'error', message: `${(e as Error).message}` });
     }
-  }, [paperId]);
+  }, [canWriteContent, paperId]);
 
-  useEffect(() => { queueMicrotask(() => { void load(); }); }, [load]);
+  useEffect(() => {
+    if (!canWriteContent) return;
+    queueMicrotask(() => { void load(); });
+  }, [canWriteContent, load]);
 
   const saveMetadata = async () => {
-    if (!paper) return;
+    if (!paper || !canWriteContent) return;
     setSaving(true);
     try {
       const updated = await updateContentPaper(paper.id, {
@@ -121,6 +130,7 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
   };
 
   const uploadFile = async (file: File) => {
+    if (!canWriteContent) return;
     setUploadProgress(0);
     try {
       const result = await uploadFileChunked(file, uploadRole, (pct) => setUploadProgress(pct));
@@ -142,6 +152,7 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
   };
 
   const removeAsset = async (assetId: string) => {
+    if (!canWriteContent) return;
     try {
       await removePaperAsset(paperId, assetId);
       setToast({ variant: 'success', message: 'Asset removed.' });
@@ -152,6 +163,7 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
   };
 
   const publish = async () => {
+    if (!canPublishContent) return;
     setPublishing(true);
     try {
       await publishContentPaper(paperId);
@@ -163,8 +175,14 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
     } finally { setPublishing(false); }
   };
 
+  if (isAdminLoading || isUserLoading) return null;
+
   if (!isAuthenticated || role !== 'admin') {
     return <AdminRouteWorkspace><p className="text-sm text-muted">Admin access required.</p></AdminRouteWorkspace>;
+  }
+
+  if (!canWriteContent) {
+    return <AdminRouteWorkspace><p className="text-sm text-muted">Content write permission is required.</p></AdminRouteWorkspace>;
   }
 
   const missingRoles = paper
@@ -194,35 +212,39 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
 
             <AdminRoutePanel title="Metadata">
               <div className="grid grid-cols-2 gap-4">
-                <Input label="Title" value={paper.title} onChange={(e) => setPaper({ ...paper, title: e.target.value })} />
-                <Input label="Difficulty" value={paper.difficulty} onChange={(e) => setPaper({ ...paper, difficulty: e.target.value })} />
+                <Input label="Title" value={paper.title} onChange={(e) => setPaper({ ...paper, title: e.target.value })} disabled={!canWriteContent} />
+                <Input label="Difficulty" value={paper.difficulty} onChange={(e) => setPaper({ ...paper, difficulty: e.target.value })} disabled={!canWriteContent} />
                 <Input type="number" label="Estimated duration (minutes)" value={paper.estimatedDurationMinutes}
-                  onChange={(e) => setPaper({ ...paper, estimatedDurationMinutes: Number(e.target.value) })} />
+                  onChange={(e) => setPaper({ ...paper, estimatedDurationMinutes: Number(e.target.value) })} disabled={!canWriteContent} />
                 <Input type="number" label="Priority" value={paper.priority}
-                  onChange={(e) => setPaper({ ...paper, priority: Number(e.target.value) })} />
+                  onChange={(e) => setPaper({ ...paper, priority: Number(e.target.value) })} disabled={!canWriteContent} />
                 <label className="flex items-center gap-2 col-span-2">
                   <input type="checkbox" checked={paper.appliesToAllProfessions}
-                    onChange={(e) => setPaper({ ...paper, appliesToAllProfessions: e.target.checked, professionId: e.target.checked ? null : paper.professionId })} />
+                    onChange={(e) => setPaper({ ...paper, appliesToAllProfessions: e.target.checked, professionId: e.target.checked ? null : paper.professionId })}
+                    disabled={!canWriteContent} />
                   Applies to all professions
                 </label>
                 {!paper.appliesToAllProfessions && (
                   <Input label="Profession ID" value={paper.professionId ?? ''}
-                    onChange={(e) => setPaper({ ...paper, professionId: e.target.value || null })} />
+                    onChange={(e) => setPaper({ ...paper, professionId: e.target.value || null })} disabled={!canWriteContent} />
                 )}
                 {paper.subtestCode === 'writing' && (
                   <Input label="Letter type" value={paper.letterType ?? ''}
                     onChange={(e) => setPaper({ ...paper, letterType: e.target.value || null })}
-                    placeholder="routine_referral | urgent_referral | transfer_letter | …" />
+                    placeholder="routine_referral | urgent_referral | transfer_letter | …"
+                    disabled={!canWriteContent} />
                 )}
                 {paper.subtestCode === 'speaking' && (
                   <Input label="Card type" value={paper.cardType ?? ''}
                     onChange={(e) => setPaper({ ...paper, cardType: e.target.value || null })}
-                    placeholder="already_known_pt | examination | first_visit_emergency | …" />
+                    placeholder="already_known_pt | examination | first_visit_emergency | …"
+                    disabled={!canWriteContent} />
                 )}
                 <Select
                   label="Access tier"
                   value={readAccessTier(paper.tagsCsv)}
                   onChange={(e) => setPaper({ ...paper, tagsCsv: writeAccessTier(paper.tagsCsv, e.target.value as 'free' | 'premium') })}
+                  disabled={!canWriteContent}
                   options={[
                     { value: 'premium', label: 'Premium (subscription required)' },
                     { value: 'free', label: 'Free preview (no subscription required)' },
@@ -230,60 +252,66 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
                 />
                 <Input label="Tags CSV" value={paper.tagsCsv}
                   onChange={(e) => setPaper({ ...paper, tagsCsv: e.target.value })}
-                  placeholder="dermatology,acne" />
+                  placeholder="dermatology,acne"
+                  disabled={!canWriteContent} />
                 <Input label="Source provenance (required to publish)"
                   value={paper.sourceProvenance ?? ''}
                   onChange={(e) => setPaper({ ...paper, sourceProvenance: e.target.value })}
-                  placeholder={DEFAULT_CONTENT_SOURCE_PROVENANCE} />
+                  placeholder={DEFAULT_CONTENT_SOURCE_PROVENANCE}
+                  disabled={!canWriteContent} />
               </div>
               <div className="flex gap-3 mt-4">
-                <Button variant="primary" onClick={saveMetadata} loading={saving}>Save metadata</Button>
-                <Button variant="secondary" onClick={publish} loading={publishing}
-                  disabled={missingRoles.length > 0 || !paper.sourceProvenance || paper.status === 'Published'}>
-                  Publish
-                </Button>
+                {canWriteContent ? <Button variant="primary" onClick={saveMetadata} loading={saving}>Save metadata</Button> : null}
+                {canPublishContent ? (
+                  <Button variant="secondary" onClick={publish} loading={publishing}
+                    disabled={missingRoles.length > 0 || !paper.sourceProvenance || paper.status === 'Published'}>
+                    Publish
+                  </Button>
+                ) : null}
               </div>
             </AdminRoutePanel>
 
             <AdminRoutePanel title="Assets">
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4 items-end">
-                <Select
-                  label="Role"
-                  value={uploadRole}
-                  onChange={(e) => setUploadRole(e.target.value as PaperAssetRole)}
-                  options={ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.label }))}
-                />
-                <Input label="Part (optional)" value={uploadPart} onChange={(e) => setUploadPart(e.target.value)} placeholder='A | B+C | Section1' />
-                <div className="md:col-span-2">
-                  <label className="block text-sm font-medium mb-1">File</label>
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept={ROLE_OPTIONS.find((r) => r.value === uploadRole)?.accept ?? ''}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      if (f) void uploadFile(f);
-                    }}
-                    disabled={uploadProgress !== null}
-                    className="block w-full text-sm"
+              {canWriteContent ? (
+                <div className="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4 items-end">
+                  <Select
+                    label="Role"
+                    value={uploadRole}
+                    onChange={(e) => setUploadRole(e.target.value as PaperAssetRole)}
+                    options={ROLE_OPTIONS.map((r) => ({ value: r.value, label: r.label }))}
                   />
-                  {uploadProgress !== null && (
-                    <div className="mt-2 flex items-center gap-2 text-sm text-muted">
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Uploading… {Math.round(uploadProgress * 100)}%
-                    </div>
-                  )}
+                  <Input label="Part (optional)" value={uploadPart} onChange={(e) => setUploadPart(e.target.value)} placeholder='A | B+C | Section1' />
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium mb-1">File</label>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept={ROLE_OPTIONS.find((r) => r.value === uploadRole)?.accept ?? ''}
+                      onChange={(e) => {
+                        const f = e.target.files?.[0];
+                        if (f) void uploadFile(f);
+                      }}
+                      disabled={uploadProgress !== null}
+                      className="block w-full text-sm"
+                    />
+                    {uploadProgress !== null && (
+                      <div className="mt-2 flex items-center gap-2 text-sm text-muted">
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                        Uploading… {Math.round(uploadProgress * 100)}%
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
+              ) : null}
 
-              <AssetList assets={paper.assets ?? []} onRemove={removeAsset} />
+              <AssetList assets={paper.assets ?? []} onRemove={removeAsset} canRemove={canWriteContent} />
             </AdminRoutePanel>
 
-            {paper.subtestCode === 'reading' && (
+            {canWriteContent && paper.subtestCode === 'reading' && (
               <ReadingStructureEditor paperId={paper.id} />
             )}
 
-            {paper.subtestCode === 'listening' && (
+            {canWriteContent && paper.subtestCode === 'listening' && (
               <ListeningStructureEditor paperId={paper.id} />
             )}
           </>
@@ -295,7 +323,7 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
   );
 }
 
-function AssetList({ assets, onRemove }: { assets: ContentPaperAssetDto[]; onRemove: (id: string) => void }) {
+function AssetList({ assets, onRemove, canRemove }: { assets: ContentPaperAssetDto[]; onRemove: (id: string) => void; canRemove: boolean }) {
   if (assets.length === 0) {
     return <p className="text-sm text-muted">No assets yet. Upload a file above.</p>;
   }
@@ -315,9 +343,11 @@ function AssetList({ assets, onRemove }: { assets: ContentPaperAssetDto[]; onRem
               {a.media?.sha256 && ` · SHA ${a.media.sha256.slice(0, 10)}…`}
             </div>
           </div>
-          <Button variant="ghost" size="sm" onClick={() => onRemove(a.id)}>
-            <Trash2 className="w-4 h-4" />
-          </Button>
+          {canRemove ? (
+            <Button variant="ghost" size="sm" onClick={() => onRemove(a.id)}>
+              <Trash2 className="w-4 h-4" />
+            </Button>
+          ) : null}
         </li>
       ))}
     </ul>

@@ -11,7 +11,9 @@ import { DataTable, type Column } from '@/components/ui/data-table';
 import { Input, Select } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
 import { Toast } from '@/components/ui/alert';
+import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { DEFAULT_CONTENT_SOURCE_PROVENANCE } from '@/lib/content-upload-defaults';
 import {
   archiveContentPaper,
@@ -41,6 +43,8 @@ const STATUSES = [
 
 export default function ContentPapersListPage() {
   const { isAuthenticated, role } = useAdminAuth();
+  const { user } = useCurrentUser();
+  const canWriteContent = hasPermission(user?.adminPermissions, AdminPermission.ContentWrite);
   const [status, setStatus] = useState<PageStatus>('loading');
   const [rows, setRows] = useState<ContentPaperDto[]>([]);
   const [toast, setToast] = useState<ToastState>(null);
@@ -77,6 +81,7 @@ export default function ContentPapersListPage() {
   useEffect(() => { queueMicrotask(() => { void load(); }); }, [load]);
 
   const createNow = async () => {
+    if (!canWriteContent) return;
     setSaving(true);
     try {
       const paper = await createContentPaper({
@@ -100,6 +105,7 @@ export default function ContentPapersListPage() {
   };
 
   const archive = useCallback(async (id: string) => {
+    if (!canWriteContent) return;
     try {
       await archiveContentPaper(id);
       setToast({ variant: 'success', message: 'Paper archived.' });
@@ -107,16 +113,16 @@ export default function ContentPapersListPage() {
     } catch (e) {
       setToast({ variant: 'error', message: `Archive failed: ${(e as Error).message}` });
     }
-  }, [load]);
+  }, [canWriteContent, load]);
 
   const columns: Column<ContentPaperDto>[] = useMemo(() => [
     { key: 'st', header: 'Subtest', render: (p) => <Badge variant="info">{p.subtestCode}</Badge> },
     {
-      key: 't', header: 'Title', render: (p) => (
+      key: 't', header: 'Title', render: (p) => canWriteContent ? (
         <Link href={`/admin/content/papers/${p.id}`} className="font-medium hover:text-primary">
           {p.title}
         </Link>
-      ),
+      ) : <span className="font-medium">{p.title}</span>,
     },
     { key: 'sl', header: 'Slug', render: (p) => <span className="font-mono text-xs">{p.slug}</span> },
     {
@@ -134,7 +140,7 @@ export default function ContentPapersListPage() {
     },
     { key: 'u', header: 'Updated', render: (p) => new Date(p.updatedAt).toLocaleString() },
     {
-      key: 'a', header: 'Actions', render: (p) => (
+      key: 'a', header: 'Actions', render: (p) => canWriteContent ? (
         <div className="flex gap-2">
           <Link href={`/admin/content/papers/${p.id}`}>
             <Button variant="ghost" size="sm">Edit</Button>
@@ -145,9 +151,9 @@ export default function ContentPapersListPage() {
             </Button>
           )}
         </div>
-      ),
+      ) : <span className="text-xs text-muted">Read only</span>,
     },
-  ], [archive]);
+  ], [archive, canWriteContent]);
 
   if (!isAuthenticated || role !== 'admin') {
     return (
@@ -170,17 +176,19 @@ export default function ContentPapersListPage() {
           <Select label="Subtest" value={filterSubtest} onChange={(e) => setFilterSubtest(e.target.value)} options={SUBTESTS} />
           <Select label="Status" value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)} options={STATUSES} />
           <Input label="Search" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Title or slug" />
-          <div className="flex items-end gap-2">
-            <Button variant="primary" onClick={() => {
-              setNewProvenance(DEFAULT_CONTENT_SOURCE_PROVENANCE);
-              setShowCreate(true);
-            }}>
-              <Plus className="w-4 h-4 mr-1" /> New paper
-            </Button>
-            <Link href="/admin/content/papers/import">
-              <Button variant="ghost">Bulk import</Button>
-            </Link>
-          </div>
+          {canWriteContent ? (
+            <div className="flex items-end gap-2">
+              <Button variant="primary" onClick={() => {
+                setNewProvenance(DEFAULT_CONTENT_SOURCE_PROVENANCE);
+                setShowCreate(true);
+              }}>
+                <Plus className="w-4 h-4 mr-1" /> New paper
+              </Button>
+              <Link href="/admin/content/papers/import">
+                <Button variant="ghost">Bulk import</Button>
+              </Link>
+            </div>
+          ) : null}
         </div>
       </AdminRoutePanel>
 
@@ -190,7 +198,7 @@ export default function ContentPapersListPage() {
         </AdminRoutePanel>
       </AsyncStateWrapper>
 
-      <Modal open={showCreate} onClose={() => setShowCreate(false)} title="Create paper">
+      <Modal open={showCreate && canWriteContent} onClose={() => setShowCreate(false)} title="Create paper">
         <div className="grid grid-cols-2 gap-4">
           <Select
             label="Subtest"

@@ -8,16 +8,19 @@ import {
   adminGetGrammarLessonV2,
   adminUpdateGrammarLessonV2,
   adminListGrammarTopics,
-  adminPublishGrammarLesson,
-  adminUnpublishGrammarLesson,
-  adminEvaluateGrammarPublishGate,
+  adminPublishGrammarLessonV2,
+  adminUnpublishGrammarLessonV2,
+  adminFetchGrammarPublishGate,
   adminArchiveGrammarLessonV2,
 } from '@/lib/api';
+import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import {
   AdminRouteHero,
   AdminRoutePanel,
   AdminRouteWorkspace,
 } from '@/components/domain/admin-route-surface';
+import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { Toast } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -36,6 +39,10 @@ type ToastState = { variant: 'success' | 'error'; message: string } | null;
 export default function EditGrammarLessonPage() {
   const params = useParams<{ lessonId: string }>();
   const router = useRouter();
+  const { isAuthenticated, isLoading, role } = useAdminAuth();
+  const { user } = useCurrentUser();
+  const canWriteContent = hasPermission(user?.adminPermissions, AdminPermission.ContentWrite);
+  const canPublishContent = hasPermission(user?.adminPermissions, AdminPermission.ContentPublish);
   const lessonId = params?.lessonId ?? '';
 
   const [topics, setTopics] = useState<AdminGrammarTopic[]>([]);
@@ -55,7 +62,7 @@ export default function EditGrammarLessonPage() {
       setTopics(t || []);
       setLesson(l);
       try {
-        const gate = (await adminEvaluateGrammarPublishGate(lessonId)) as { canPublish: boolean; errors: string[] };
+        const gate = (await adminFetchGrammarPublishGate(lessonId)) as { canPublish: boolean; errors: string[] };
         setPublishGate(gate);
       } catch {
         setPublishGate(null);
@@ -68,11 +75,12 @@ export default function EditGrammarLessonPage() {
   }, [lessonId]);
 
   useEffect(() => {
-    if (!lessonId) return;
+    if (!lessonId || !canWriteContent) return;
     queueMicrotask(() => void reload());
-  }, [lessonId, reload]);
+  }, [canWriteContent, lessonId, reload]);
 
   const onSave = useCallback(async (draft: LessonDraft) => {
+    if (!canWriteContent) return;
     setSaving(true);
     try {
       const body = draftToApi(draft);
@@ -84,29 +92,32 @@ export default function EditGrammarLessonPage() {
     } finally {
       setSaving(false);
     }
-  }, [lessonId, reload]);
+  }, [canWriteContent, lessonId, reload]);
 
   const onPublish = useCallback(async () => {
+    if (!canPublishContent) return;
     try {
-      await adminPublishGrammarLesson(lessonId);
+      await adminPublishGrammarLessonV2(lessonId);
       setToast({ variant: 'success', message: 'Lesson published.' });
       await reload();
     } catch (e) {
       setToast({ variant: 'error', message: (e as Error).message || 'Publish failed.' });
     }
-  }, [lessonId, reload]);
+  }, [canPublishContent, lessonId, reload]);
 
   const onUnpublish = useCallback(async () => {
+    if (!canPublishContent) return;
     try {
-      await adminUnpublishGrammarLesson(lessonId);
+      await adminUnpublishGrammarLessonV2(lessonId);
       setToast({ variant: 'success', message: 'Lesson unpublished.' });
       await reload();
     } catch (e) {
       setToast({ variant: 'error', message: (e as Error).message || 'Unpublish failed.' });
     }
-  }, [lessonId, reload]);
+  }, [canPublishContent, lessonId, reload]);
 
   const onArchive = useCallback(async () => {
+    if (!canWriteContent) return;
     if (!confirm('Archive this lesson?')) return;
     try {
       await adminArchiveGrammarLessonV2(lessonId);
@@ -115,7 +126,19 @@ export default function EditGrammarLessonPage() {
     } catch (e) {
       setToast({ variant: 'error', message: (e as Error).message || 'Archive failed.' });
     }
-  }, [lessonId, router]);
+  }, [canWriteContent, lessonId, router]);
+
+  if (isLoading) return null;
+
+  if (!isAuthenticated || role !== 'admin') return null;
+
+  if (!canWriteContent) {
+    return (
+      <AdminRouteWorkspace role="main" aria-label="Edit grammar lesson">
+        <p className="text-sm text-muted">Content write permission is required.</p>
+      </AdminRouteWorkspace>
+    );
+  }
 
   if (loading || !lesson) {
     return (
@@ -177,7 +200,7 @@ export default function EditGrammarLessonPage() {
               {lesson.publishState} · v{lesson.version}
             </Badge>
             <div className="mt-3 flex flex-wrap gap-2">
-              {lesson.publishState === 'published' ? (
+              {canPublishContent && lesson.publishState === 'published' ? (
                 <Button variant="outline" size="sm" onClick={onUnpublish}>Unpublish</Button>
               ) : null}
               <Button variant="outline" size="sm" onClick={onArchive}>Archive</Button>
@@ -206,7 +229,7 @@ export default function EditGrammarLessonPage() {
         initial={initial}
         topics={topics.map((t) => ({ id: t.id, name: t.name, slug: t.slug }))}
         onSave={onSave}
-        onPublish={publishGate?.canPublish ? onPublish : undefined}
+        onPublish={canPublishContent && publishGate?.canPublish ? onPublish : undefined}
         publishable={publishGate?.canPublish}
         publishErrors={publishGate && !publishGate.canPublish ? publishGate.errors : null}
         saving={saving}

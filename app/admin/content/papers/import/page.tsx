@@ -8,7 +8,9 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { InlineAlert, Toast } from '@/components/ui/alert';
+import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { apiClient } from '@/lib/api';
 import { DEFAULT_CONTENT_SOURCE_PROVENANCE } from '@/lib/content-upload-defaults';
 
@@ -41,7 +43,9 @@ interface StagedResponse {
 }
 
 export default function BulkImportPage() {
-  const { isAuthenticated, role } = useAdminAuth();
+  const { isAuthenticated, isLoading, role } = useAdminAuth();
+  const { user } = useCurrentUser();
+  const canWriteContent = hasPermission(user?.adminPermissions, AdminPermission.ContentWrite);
   const [uploading, setUploading] = useState(false);
   const [staged, setStaged] = useState<StagedResponse | null>(null);
   const [approved, setApproved] = useState<Record<string, boolean>>({});
@@ -50,11 +54,18 @@ export default function BulkImportPage() {
   const [toast, setToast] = useState<ToastState>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
+  if (isLoading) return null;
+
   if (!isAuthenticated || role !== 'admin') {
     return <AdminRouteWorkspace><p className="text-sm text-muted">Admin access required.</p></AdminRouteWorkspace>;
   }
 
+  if (!canWriteContent) {
+    return <AdminRouteWorkspace><p className="text-sm text-muted">Content write permission is required.</p></AdminRouteWorkspace>;
+  }
+
   const doUpload = async (file: File) => {
+    if (!canWriteContent) return;
     setUploading(true);
     try {
       const form = new FormData();
@@ -75,7 +86,7 @@ export default function BulkImportPage() {
   };
 
   const doCommit = async () => {
-    if (!staged) return;
+    if (!staged || !canWriteContent) return;
     setCommitting(true);
     try {
       const approvals = staged.papers.map((p) => ({

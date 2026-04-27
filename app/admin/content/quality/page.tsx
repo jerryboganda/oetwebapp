@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { FileSearch, RefreshCw } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
@@ -8,7 +8,9 @@ import { DataTable, type Column } from '@/components/ui/data-table';
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
 
@@ -41,19 +43,18 @@ function adminRequest<T = unknown>(path: string, init?: RequestInit): Promise<T>
 }
 
 export default function ContentQualityPage() {
-  useAdminAuth();
+  const { isAuthenticated, isLoading, role } = useAdminAuth();
+  const { user } = useCurrentUser();
+  const canViewQuality = hasPermission(user?.adminPermissions, AdminPermission.ContentRead);
+  const canScoreQuality = hasPermission(user?.adminPermissions, AdminPermission.ContentWrite);
   const [items, setItems] = useState<ContentQualityItem[]>([]);
   const [total, setTotal] = useState(0);
   const [status, setStatus] = useState<PageStatus>('loading');
   const [toast, setToast] = useState<ToastState>(null);
   const [scoring, setScoring] = useState<string | null>(null);
 
-  useEffect(() => {
-    analytics.track('admin_view', { page: 'content-quality' });
-    loadData();
-  }, []);
-
-  async function loadData() {
+  const loadData = useCallback(async () => {
+    if (!canViewQuality) return;
     try {
       setStatus('loading');
       const data = await adminRequest<{ items: ContentQualityItem[]; total: number }>('/v1/admin/content-quality?pageSize=50');
@@ -63,9 +64,16 @@ export default function ContentQualityPage() {
     } catch {
       setStatus('error');
     }
-  }
+  }, [canViewQuality]);
+
+  useEffect(() => {
+    if (!isAuthenticated || role !== 'admin' || !canViewQuality) return;
+    analytics.track('admin_view', { page: 'content-quality' });
+    loadData();
+  }, [canViewQuality, isAuthenticated, loadData, role]);
 
   async function handleScore(contentId: string) {
+    if (!canScoreQuality) return;
     setScoring(contentId);
     try {
       const result = await adminRequest<{ contentId: string; qualityScore: number; qaStatus: string; factors: string[] }>(
@@ -102,17 +110,29 @@ export default function ContentQualityPage() {
     {
       key: 'actions',
       header: '',
-      render: (r) => (
+      render: (r) => canScoreQuality ? (
         <Button size="sm" variant="outline" onClick={() => handleScore(r.id)} disabled={scoring === r.id}>
           <RefreshCw className={`w-3.5 h-3.5 mr-1 ${scoring === r.id ? 'animate-spin' : ''}`} />
           Score
         </Button>
-      ),
+      ) : <span className="text-xs text-muted">Read only</span>,
     },
   ];
 
   const approvedCount = items.filter((i) => i.qaStatus === 'approved').length;
   const needsReviewCount = items.filter((i) => i.qaStatus === 'needs_review').length;
+
+  if (isLoading) return null;
+
+  if (!isAuthenticated || role !== 'admin') return null;
+
+  if (!canViewQuality) {
+    return (
+      <AdminRouteWorkspace>
+        <p className="text-sm text-muted">Content read permission is required.</p>
+      </AdminRouteWorkspace>
+    );
+  }
 
   return (
     <AdminRouteWorkspace>

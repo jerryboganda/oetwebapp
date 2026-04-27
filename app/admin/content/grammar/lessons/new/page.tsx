@@ -5,10 +5,13 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, FilePlus } from 'lucide-react';
 import { adminCreateGrammarLessonV2, adminListGrammarTopics } from '@/lib/api';
+import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import {
   AdminRouteHero,
   AdminRouteWorkspace,
 } from '@/components/domain/admin-route-surface';
+import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import { Toast } from '@/components/ui/alert';
 import { GrammarLessonEditor, emptyDraft, draftToApi, type LessonDraft } from '@/components/domain/grammar/grammar-lesson-editor';
 import type { AdminGrammarTopic } from '@/lib/grammar/types';
@@ -17,11 +20,15 @@ type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
 export default function NewGrammarLessonPage() {
   const router = useRouter();
+  const { isAuthenticated, isLoading, role } = useAdminAuth();
+  const { user } = useCurrentUser();
+  const canWriteContent = hasPermission(user?.adminPermissions, AdminPermission.ContentWrite);
   const [topics, setTopics] = useState<AdminGrammarTopic[]>([]);
   const [saving, setSaving] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
 
   useEffect(() => {
+    if (!canWriteContent) return;
     (async () => {
       try {
         const data = (await adminListGrammarTopics({})) as AdminGrammarTopic[];
@@ -30,9 +37,10 @@ export default function NewGrammarLessonPage() {
         setToast({ variant: 'error', message: (e as Error).message || 'Failed to load topics.' });
       }
     })();
-  }, []);
+  }, [canWriteContent]);
 
   const onSave = useCallback(async (draft: LessonDraft) => {
+    if (!canWriteContent) return;
     setSaving(true);
     try {
       const body = draftToApi(draft);
@@ -44,7 +52,19 @@ export default function NewGrammarLessonPage() {
     } finally {
       setSaving(false);
     }
-  }, [router]);
+  }, [canWriteContent, router]);
+
+  if (isLoading) return null;
+
+  if (!isAuthenticated || role !== 'admin') return null;
+
+  if (!canWriteContent) {
+    return (
+      <AdminRouteWorkspace role="main" aria-label="New grammar lesson">
+        <p className="text-sm text-muted">Content write permission is required.</p>
+      </AdminRouteWorkspace>
+    );
+  }
 
   return (
     <AdminRouteWorkspace role="main" aria-label="New grammar lesson">

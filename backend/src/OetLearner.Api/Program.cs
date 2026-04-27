@@ -494,6 +494,9 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminContentPublisherApproval", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "content:publisher_approval", "content:publish", "system_admin")));
+    options.AddPolicy("AdminContentPublishRequestsRead", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "content:editor_review", "content:publisher_approval", "content:publish", "system_admin")));
     options.AddPolicy("AdminBillingRead", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:read", "system_admin")));

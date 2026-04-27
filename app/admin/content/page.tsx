@@ -2,10 +2,13 @@
 
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useMemo } from 'react';
 import {
   ArrowRight,
+  BarChart3,
   BookOpenText,
   Copy,
+  FileSearch,
   FileCheck2,
   GitBranch,
   Headphones,
@@ -22,7 +25,9 @@ import {
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { hasPermission, sidebarPermissionMap } from '@/lib/admin-permissions';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import { useCurrentUser } from '@/lib/hooks/use-current-user';
 
 type HubLink = {
   href: string;
@@ -64,6 +69,12 @@ const hubSections: HubSection[] = [
         label: 'Full Mocks',
         description: 'Bundle Listening + Reading + Writing + Speaking into a complete OET mock paper.',
         icon: <ScrollText className="h-5 w-5" />,
+      },
+      {
+        href: '/admin/content/analytics',
+        label: 'Item Analytics',
+        description: 'Deep-dive into per-item usage, completion rates, and learner outcomes.',
+        icon: <BarChart3 className="h-5 w-5" />,
       },
     ],
   },
@@ -154,6 +165,12 @@ const hubSections: HubSection[] = [
         icon: <FileCheck2 className="h-5 w-5" />,
       },
       {
+        href: '/admin/content/quality',
+        label: 'Quality Review',
+        description: 'Review automated QA status for recent content before human review and publishing.',
+        icon: <FileSearch className="h-5 w-5" />,
+      },
+      {
         href: '/admin/content/dedup',
         label: 'Deduplication',
         description: 'Detect and merge near-duplicate items before they reach learners.',
@@ -181,9 +198,44 @@ const hubSections: HubSection[] = [
   },
 ];
 
+function canAccessHubHref(href: string, userPermissions: string[] | null | undefined) {
+  const required = sidebarPermissionMap[href];
+  return !required || hasPermission(userPermissions, ...required);
+}
+
 export default function AdminContentHubPage() {
   const router = useRouter();
   const { isAuthenticated, role } = useAdminAuth();
+  const { user } = useCurrentUser();
+  const userPermissions = user?.adminPermissions;
+
+  const visibleHubSections = useMemo(
+    () =>
+      hubSections
+        .map((section) => ({
+          ...section,
+          links: section.links.filter((link) => canAccessHubHref(link.href, userPermissions)),
+        }))
+        .filter((section) => section.links.length > 0),
+    [userPermissions],
+  );
+
+  const canOpenLibrary = canAccessHubHref('/admin/content/library', userPermissions);
+  const canCreateContent = canAccessHubHref('/admin/content/new', userPermissions);
+  const headerActions = canOpenLibrary || canCreateContent ? (
+    <div className="flex flex-wrap gap-2">
+      {canOpenLibrary ? (
+        <Button onClick={() => router.push('/admin/content/library')} variant="outline" className="gap-2">
+          <Library className="h-4 w-4" /> Open Library
+        </Button>
+      ) : null}
+      {canCreateContent ? (
+        <Button onClick={() => router.push('/admin/content/new')} className="gap-2">
+          <PenSquare className="h-4 w-4" /> New Content
+        </Button>
+      ) : null}
+    </div>
+  ) : undefined;
 
   if (!isAuthenticated || role !== 'admin') return null;
 
@@ -192,19 +244,10 @@ export default function AdminContentHubPage() {
       <AdminRouteSectionHeader
         title="Content Hub"
         description="Single front-door for every content workflow: papers, lessons, mocks, imports, AI drafts, hierarchy, media, and governance."
-        actions={
-          <div className="flex flex-wrap gap-2">
-            <Button onClick={() => router.push('/admin/content/library')} variant="outline" className="gap-2">
-              <Library className="h-4 w-4" /> Open Library
-            </Button>
-            <Button onClick={() => router.push('/admin/content/new')} className="gap-2">
-              <PenSquare className="h-4 w-4" /> New Content
-            </Button>
-          </div>
-        }
+        actions={headerActions}
       />
 
-      {hubSections.map((section) => (
+      {visibleHubSections.length > 0 ? visibleHubSections.map((section) => (
         <AdminRoutePanel key={section.id} title={section.title} description={section.description}>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
             {section.links.map((link) => (
@@ -234,7 +277,14 @@ export default function AdminContentHubPage() {
             ))}
           </div>
         </AdminRoutePanel>
-      ))}
+      )) : (
+        <AdminRoutePanel
+          title="No available content workflows"
+          description="Your admin account does not currently have permission to open any content workflows."
+        >
+          <div />
+        </AdminRoutePanel>
+      )}
     </AdminRouteWorkspace>
   );
 }

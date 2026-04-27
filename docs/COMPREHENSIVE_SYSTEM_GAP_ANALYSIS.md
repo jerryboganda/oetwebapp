@@ -54,8 +54,8 @@ The OET Prep platform is a multi-role (Admin, Expert, Learner, Sponsor) educatio
 | ID | Feature | Existing Operations | Missing Operations | Severity | Impact |
 |----|---------|--------------------|--------------------|----------|--------|
 | A-01 | **Content Hard Delete** | Create, Read, Update, Archive, Publish, Bulk Action | **Permanent Delete** — Admins can only archive content, not permanently remove it | Medium | Storage accumulation; GDPR data-removal compliance risk |
-| A-02 | **Media Asset CRUD** | Read (list), Audit references | **Create (upload), Update (replace), Delete** | Medium | `/admin/media` is list-only; no ability to upload new media or remove obsolete assets |
-| A-03 | **Content Hierarchy Edit** | Read-only view (Programs, Packages) | **Update, Reorder, Delete** programs/packages from the UI | Medium | Backend has full CRUD (`POST/PUT /admin/programs`, `/tracks`, `/modules`, `/lessons`, `/packages`) but `/admin/content-hierarchy` page is read-only |
+| A-02 | **Media Asset CRUD** | Read (list), Audit references | **Create (upload), Update (replace), Delete** | Medium | `/admin/content/media` is list-only; no ability to upload new media or remove obsolete assets |
+| A-03 | **Content Hierarchy Edit** | Read-only view (Programs, Packages) | **Update, Reorder, Delete** programs/packages from the UI | Medium | Backend has full CRUD (`POST/PUT /admin/programs`, `/tracks`, `/modules`, `/lessons`, `/packages`) but `/admin/content/hierarchy` page is read-only |
 | A-04 | **Permission Role Templates** | Per-user checkbox permissions | **Pre-defined role templates** (e.g., "Content Editor", "Billing Manager") | Medium | Must manually set 8+ permission bits per new admin user; error-prone at scale |
 | A-05 | **Bulk User Import** | Single invite-by-email | **CSV bulk import for user/learner onboarding** | Medium | Enterprise sponsors cannot bulk-enroll learners efficiently |
 | A-06 | **Analytics Export** | Read-only dashboards across 7 analytics pages | **Export to CSV/PDF** for quality, efficiency, cohort, content analytics | Low | Only audit-logs have export; all other analytics lack downloadable reports |
@@ -243,8 +243,8 @@ These backend endpoints are implemented and registered but no frontend page or A
 
 | Priority | ID(s) | Action | Effort | Status |
 |----------|-------|--------|--------|--------|
-| P9 | A-02 | Build media asset upload/delete/replace in `/admin/media` | Small | ✅ **DONE** — Upload/delete endpoints + admin media library UI |
-| P10 | A-03 | Make `/admin/content-hierarchy` page editable (consume existing backend CRUD) | Medium | ✅ **DONE** — Frontend create/update/delete for programs, tracks, modules, lessons, packages |
+| P9 | A-02 | Build media asset upload/delete/replace in `/admin/content/media` | Small | ✅ **DONE** — Upload/delete endpoints + admin media library UI |
+| P10 | A-03 | Make `/admin/content/hierarchy` page editable (consume existing backend CRUD) | Medium | ✅ **DONE** — Frontend create/update/delete for programs, tracks, modules, lessons, packages |
 | P11 | A-04 | Implement admin permission role templates (pre-defined permission bundles) | Small | ✅ **DONE** — Template CRUD + assign/revoke flows |
 | P12 | A-05 | Build bulk user CSV import for enterprise onboarding | Medium | ✅ **DONE** — CSV upload with validation, preview, and error reporting |
 | P13 | E-01 | Add schedule exceptions/holidays for experts | Small | ✅ **DONE** — Block dates + custom hours for specific dates |
@@ -293,7 +293,7 @@ These backend endpoints are implemented and registered but no frontend page or A
 | 18 | `/predictions` | ✅ Complete | ✅ | Score range visualization, confidence badges |
 | 19 | `/vocabulary` | ✅ Complete | ✅ | Stats cards, word list with mastery badges |
 | 20 | `/grammar` | ✅ Complete | ✅ | Filtered lesson grid with level accents |
-| 21 | `/pronunciation` | ✅ Complete | ✅ | Drill grid, spaced-repetition "Due today" ribbon, focus + difficulty filters, recording UX with waveform level meter, grounded AI feedback, projected Speaking band, minimal-pair listening game at `/pronunciation/discrimination/[drillId]`, admin CMS at `/admin/pronunciation`. Backed by `IPronunciationAsrProvider` (Azure / Whisper / Mock runtime-selectable). See `docs/PRONUNCIATION.md`. |
+| 21 | `/pronunciation` | ✅ Complete | ✅ | Drill grid, spaced-repetition "Due today" ribbon, focus + difficulty filters, recording UX with waveform level meter, grounded AI feedback, projected Speaking band, minimal-pair listening game at `/pronunciation/discrimination/[drillId]`, admin CMS at `/admin/content/pronunciation`. Backed by `IPronunciationAsrProvider` (Azure / Whisper / Mock runtime-selectable). See `docs/PRONUNCIATION.md`. |
 | 22 | `/learning-paths` | ✅ Complete | ✅ | Progress bar, recommended items, per-subtest cards |
 | 23 | `/lessons` | ✅ Complete | ✅ | Video grid with thumbnails, duration badges |
 | 24 | `/leaderboard` | ✅ Complete | ✅ | Period/exam toggles, medal icons, opt-in system |
@@ -376,7 +376,7 @@ The initial exploration pass (before code verification) contained these signific
 | Item | What Was Built |
 |------|----------------|
 | **P9 — Media Upload/Delete** | `POST /v1/admin/media/upload` and `DELETE /v1/admin/media/{id}` endpoints. Admin media library page updated with upload dropzone and delete confirmation. |
-| **P10 — Content Hierarchy Editing** | `/admin/content-hierarchy` page now supports create, update, reorder, and delete operations for programs, tracks, modules, lessons, and packages. Consumes existing backend CRUD endpoints. |
+| **P10 — Content Hierarchy Editing** | `/admin/content/hierarchy` page now supports create, update, reorder, and delete operations for programs, tracks, modules, lessons, and packages. Consumes existing backend CRUD endpoints. |
 | **P11 — Permission Templates** | Admin permission role templates (e.g., "Content Editor", "Billing Manager") with template CRUD, assign/revoke flows, and bulk-apply to users. |
 | **P12 — Bulk User Import** | CSV upload with client-side validation, preview of parsed rows, server-side duplicate detection, and batch-create endpoint for enterprise learner onboarding. |
 | **P13 — Expert Schedule Exceptions** | Experts can now block specific dates and set custom hours per date, overriding their weekly recurring availability. |

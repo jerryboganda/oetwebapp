@@ -40,8 +40,43 @@ describe('sidebarPermissionMap', () => {
     expect(sidebarPermissionMap['/admin']).toBeUndefined();
   });
 
+  it('allows content workflow permissions to open the content hub', () => {
+    expect(sidebarPermissionMap['/admin/content']).toEqual([
+      AdminPermission.ContentRead,
+      AdminPermission.ContentWrite,
+      AdminPermission.ContentPublish,
+      AdminPermission.ContentEditorReview,
+      AdminPermission.ContentPublisherApproval,
+    ]);
+
+    const required = sidebarPermissionMap['/admin/content'];
+    expect(hasPermission([AdminPermission.ContentRead], ...required)).toBe(true);
+    expect(hasPermission([AdminPermission.ContentWrite], ...required)).toBe(true);
+    expect(hasPermission([AdminPermission.ContentPublish], ...required)).toBe(true);
+    expect(hasPermission([AdminPermission.ContentEditorReview], ...required)).toBe(true);
+    expect(hasPermission([AdminPermission.ContentPublisherApproval], ...required)).toBe(true);
+    expect(hasPermission([AdminPermission.BillingRead], ...required)).toBe(false);
+  });
+
   it('requires content:read for the content library', () => {
-    expect(sidebarPermissionMap['/admin/content']).toEqual([AdminPermission.ContentRead]);
+    expect(sidebarPermissionMap['/admin/content/library']).toEqual([AdminPermission.ContentRead]);
+  });
+
+  it('keeps consolidated content hub child workflows mapped to granular permissions', () => {
+    expect(sidebarPermissionMap['/admin/content/import']).toEqual([AdminPermission.ContentWrite]);
+    expect(sidebarPermissionMap['/admin/content/papers/import']).toEqual([AdminPermission.ContentWrite]);
+    expect(sidebarPermissionMap['/admin/content/generation']).toEqual([AdminPermission.ContentWrite]);
+    expect(sidebarPermissionMap['/admin/content/dedup']).toEqual([AdminPermission.ContentWrite]);
+    expect(sidebarPermissionMap['/admin/content/analytics']).toEqual([AdminPermission.ContentRead]);
+    expect(sidebarPermissionMap['/admin/content/quality']).toEqual([AdminPermission.ContentRead]);
+    expect(sidebarPermissionMap['/admin/content/grammar/topics']).toEqual([AdminPermission.ContentWrite]);
+    expect(sidebarPermissionMap['/admin/content/grammar/ai-draft']).toEqual([AdminPermission.ContentWrite]);
+    expect(sidebarPermissionMap['/admin/content/grammar/lessons/new']).toEqual([AdminPermission.ContentWrite]);
+    expect(sidebarPermissionMap['/admin/content/publish-requests']).toEqual([
+      AdminPermission.ContentEditorReview,
+      AdminPermission.ContentPublisherApproval,
+      AdminPermission.ContentPublish,
+    ]);
   });
 
   it('requires system_admin for permissions page', () => {

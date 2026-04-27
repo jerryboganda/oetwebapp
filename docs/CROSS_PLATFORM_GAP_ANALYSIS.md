@@ -262,7 +262,7 @@ This matrix maps every **end-user feature** to its corresponding **admin managem
 | **Grammar Lessons** | ❌ | ✅ | ❌ | ❌ | Read-only for admin | 🟠 High |
 | **Vocabulary Items** | ❌ | ❌ | ❌ | ❌ | No admin management at all | 🟠 High |
 | **Conversation Templates** | ❌ | ❌ | ❌ | ❌ | No admin management at all | 🟠 High |
-| **Pronunciation Drills** | ✅ | ✅ | ✅ | ✅ | Full admin CMS + AI drafting at `/admin/pronunciation` (Create/Read/Update/Archive). Publish gate enforced server-side. | ✅ Shipped |
+| **Pronunciation Drills** | ✅ | ✅ | ✅ | ✅ | Full admin CMS + AI drafting at `/admin/content/pronunciation` (Create/Read/Update/Archive). Publish gate enforced server-side. | ✅ Shipped |
 | **Community Forum** | ❌ | ✅ (moderation) | ✅ (moderate) | ✅ (remove) | No admin thread creation | 🟡 Medium |
 | **Notification Templates** | ❌ | ⚠️ | ❌ | ❌ | No template management | 🟠 High |
 | **Study Plan Templates** | ❌ | ❌ | ❌ | ❌ | Auto-generated only | 🟡 Medium |
@@ -446,7 +446,7 @@ These frontend pages reference API calls to endpoints that **do not exist** in t
 |----------------------|---------------|-------------------|--------|----------|
 | `SocialEndpoints.cs` | Social feed / sharing | Not clearly mapped | ⚠️ Possibly unused | 🟡 Medium |
 | `ReviewItemEndpoints.cs` | Review item management | Unclear consumer | ⚠️ Verify usage | 🟡 Medium |
-| `MediaEndpoints.cs` | Media upload/management | `app/admin/media/` exists | ✅ Has consumer | — |
+| `MediaEndpoints.cs` | Media upload/management | `app/admin/content/media/` exists | ✅ Has consumer | — |
 | `AdaptiveEndpoints.cs` | Difficulty adaptation | Internal algorithm | ✅ Backend-internal | — |
 
 ### D.4 Real-Time Communication Gaps

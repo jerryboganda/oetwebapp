@@ -54,8 +54,8 @@ function StatusPipeline({ status }: { status: string }) {
 }
 
 export default function PublishRequestsPage() {
-  const { isAuthenticated, role } = useAdminAuth();
-  const { user } = useCurrentUser();
+  const { isAuthenticated, isLoading: isAdminLoading, role } = useAdminAuth();
+  const { user, isLoading: isUserLoading } = useCurrentUser();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
   const [filters, setFilters] = useState<Record<string, string[]>>({ status: [], stage: [] });
   const [requests, setRequests] = useState<AdminPublishRequest[]>([]);
@@ -71,10 +71,18 @@ export default function PublishRequestsPage() {
   const selectedStatus = filters.status?.[0];
   const selectedStage = filters.stage?.[0];
   const userPerms = user?.adminPermissions ?? [];
+  const canReadPublishQueue = hasPermission(
+    userPerms,
+    AdminPermission.ContentEditorReview,
+    AdminPermission.ContentPublisherApproval,
+    AdminPermission.ContentPublish,
+  );
+  const canPublishContent = hasPermission(userPerms, AdminPermission.ContentPublish);
   const canEditorReview = hasPermission(userPerms, AdminPermission.ContentEditorReview, AdminPermission.ContentPublish);
   const canPublisherApprove = hasPermission(userPerms, AdminPermission.ContentPublisherApproval, AdminPermission.ContentPublish);
 
   useEffect(() => {
+    if (isAdminLoading || isUserLoading || !isAuthenticated || role !== 'admin' || !canReadPublishQueue) return;
     let cancelled = false;
     async function load() {
       setPageStatus('loading');
@@ -91,7 +99,7 @@ export default function PublishRequestsPage() {
     }
     load();
     return () => { cancelled = true; };
-  }, [selectedStatus, selectedStage, page]);
+  }, [canReadPublishQueue, isAdminLoading, isAuthenticated, isUserLoading, page, role, selectedStatus, selectedStage]);
 
   async function handleEditorApprove() {
     if (!reviewTarget) return;
@@ -165,7 +173,7 @@ export default function PublishRequestsPage() {
 
   // Legacy single-stage approve/reject still wired for backward compat
   async function handleLegacyApprove() {
-    if (!reviewTarget) return;
+    if (!reviewTarget || !canPublishContent) return;
     setIsMutating(true);
     try {
       await approvePublishRequest(reviewTarget.id, reviewNote || undefined);
@@ -181,7 +189,7 @@ export default function PublishRequestsPage() {
   }
 
   async function handleLegacyReject() {
-    if (!reviewTarget) return;
+    if (!reviewTarget || !canPublishContent) return;
     setIsMutating(true);
     try {
       await rejectPublishRequest(reviewTarget.id, reviewNote || undefined);
@@ -253,7 +261,7 @@ export default function PublishRequestsPage() {
         if (isPublisherStage && canPublisherApprove) {
           return <Button size="sm" variant="outline" onClick={() => { setReviewTarget(r); setReviewNote(''); setRejectionReason(''); setShowRejectForm(false); }}>Review (Publisher)</Button>;
         }
-        if (isLegacyPending) {
+        if (isLegacyPending && canPublishContent) {
           return <Button size="sm" variant="outline" onClick={() => { setReviewTarget(r); setReviewNote(''); setRejectionReason(''); setShowRejectForm(false); }}>Review</Button>;
         }
         return null;
@@ -263,8 +271,21 @@ export default function PublishRequestsPage() {
 
   const editorReviewCount = requests.filter((r) => r.status === 'editor_review').length;
   const publisherApprovalCount = requests.filter((r) => r.status === 'publisher_approval').length;
+  const canReviewTarget = reviewTarget
+    ? reviewTarget.status === 'editor_review'
+      ? canEditorReview
+      : reviewTarget.status === 'publisher_approval'
+        ? canPublisherApprove
+        : canPublishContent
+    : false;
+
+  if (isAdminLoading || isUserLoading) return null;
 
   if (!isAuthenticated || role !== 'admin') return null;
+
+  if (!canReadPublishQueue) {
+    return <AdminRouteWorkspace><p className="text-sm text-muted">Publish workflow permission is required.</p></AdminRouteWorkspace>;
+  }
 
   return (
     <AdminRouteWorkspace>
@@ -350,7 +371,7 @@ export default function PublishRequestsPage() {
           </div>
           <div className="flex justify-end gap-2 pt-4 border-t border-border dark:border-border px-4 pb-4">
             <Button variant="ghost" onClick={() => { setReviewTarget(null); setShowRejectForm(false); }}>Cancel</Button>
-            {!showRejectForm ? (
+            {canReviewTarget ? !showRejectForm ? (
               <>
                 <Button variant="destructive" onClick={() => setShowRejectForm(true)} disabled={isMutating}>
                   <X className="w-3.5 h-3.5 mr-1" />
@@ -393,7 +414,7 @@ export default function PublishRequestsPage() {
                   </Button>
                 )}
               </>
-            )}
+            ) : null}
           </div>
         </Modal>
       )}

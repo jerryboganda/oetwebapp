@@ -12,8 +12,11 @@ import {
   AdminRouteSummaryCard,
   AdminRouteWorkspace,
 } from '@/components/domain/admin-route-surface';
+import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
+import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import { useCurrentUser } from '@/lib/hooks/use-current-user';
 
 interface ContentAnalytics {
   contentId: string; title: string; subtestCode: string; status: string;
@@ -25,19 +28,37 @@ interface ContentAnalytics {
 const apiRequest = apiClient.request;
 
 export default function ContentAnalyticsPage() {
+  const { isAuthenticated, isLoading, role } = useAdminAuth();
+  const { user } = useCurrentUser();
+  const canViewAnalytics = hasPermission(user?.adminPermissions, AdminPermission.ContentRead);
   const [data, setData] = useState<ContentAnalytics | null>(null);
   const [loading, setLoading] = useState(false);
   const [contentId, setContentId] = useState('');
 
-  useEffect(() => { analytics.track('admin_content_analytics_viewed'); }, []);
+  useEffect(() => {
+    if (!isAuthenticated || role !== 'admin' || !canViewAnalytics) return;
+    analytics.track('admin_content_analytics_viewed');
+  }, [canViewAnalytics, isAuthenticated, role]);
 
   const load = async () => {
-    if (!contentId) return;
+    if (!contentId || !canViewAnalytics) return;
     setLoading(true);
     try { setData(await apiRequest<ContentAnalytics>(`/v1/admin/content-analytics/${contentId}`)); }
     catch { setData(null); }
     finally { setLoading(false); }
   };
+
+  if (isLoading) return null;
+
+  if (!isAuthenticated || role !== 'admin') return null;
+
+  if (!canViewAnalytics) {
+    return (
+      <AdminRouteWorkspace role="main" aria-label="Content Analytics">
+        <p className="text-sm text-muted">Content read permission is required.</p>
+      </AdminRouteWorkspace>
+    );
+  }
 
   return (
     <AdminRouteWorkspace role="main" aria-label="Content Analytics">

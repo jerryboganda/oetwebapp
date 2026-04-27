@@ -31,15 +31,34 @@ export function hasPermission(
 }
 
 /**
- * Map from admin sidebar `href` to the permission(s) required to see it.
+ * Map from admin navigation `href` to the permission(s) required to see it.
  * Items not listed here are always visible (e.g. the dashboard).
  */
 export const sidebarPermissionMap: Record<string, string[]> = {
-  '/admin/content': [AdminPermission.ContentRead],
+  '/admin/content': [
+    AdminPermission.ContentRead,
+    AdminPermission.ContentWrite,
+    AdminPermission.ContentPublish,
+    AdminPermission.ContentEditorReview,
+    AdminPermission.ContentPublisherApproval,
+  ],
+  '/admin/content/library': [AdminPermission.ContentRead],
+  '/admin/content/new': [AdminPermission.ContentWrite],
   '/admin/content/mocks': [AdminPermission.ContentRead],
+  '/admin/content/analytics': [AdminPermission.ContentRead],
+  '/admin/content/quality': [AdminPermission.ContentRead],
   '/admin/content/papers': [AdminPermission.ContentRead],
+  '/admin/content/papers/import': [AdminPermission.ContentWrite],
+  '/admin/content/vocabulary': [AdminPermission.ContentRead],
+  '/admin/content/conversation': [AdminPermission.ContentRead],
+  '/admin/content/grammar': [AdminPermission.ContentRead],
+  '/admin/content/grammar/topics': [AdminPermission.ContentWrite],
+  '/admin/content/grammar/ai-draft': [AdminPermission.ContentWrite],
+  '/admin/content/grammar/lessons/new': [AdminPermission.ContentWrite],
+  '/admin/content/pronunciation': [AdminPermission.ContentRead],
   '/admin/taxonomy': [AdminPermission.ContentRead],
   '/admin/criteria': [AdminPermission.ContentRead],
+  '/admin/rulebooks': [AdminPermission.ContentRead],
   '/admin/ai-config': [AdminPermission.AiConfig],
   '/admin/ai-usage': [AdminPermission.AiConfig],
   '/admin/review-ops': [AdminPermission.ReviewOps],
@@ -59,7 +78,7 @@ export const sidebarPermissionMap: Record<string, string[]> = {
   '/admin/freeze': [AdminPermission.ContentPublish],
   '/admin/content/hierarchy': [AdminPermission.ContentRead],
   '/admin/permissions': [AdminPermission.SystemAdmin],
-  '/admin/content/publish-requests': [AdminPermission.ContentPublish],
+  '/admin/content/publish-requests': [AdminPermission.ContentEditorReview, AdminPermission.ContentPublisherApproval, AdminPermission.ContentPublish],
   '/admin/pending-review': [AdminPermission.ContentEditorReview, AdminPermission.ContentPublisherApproval, AdminPermission.ContentPublish],
   '/admin/webhooks': [AdminPermission.SystemAdmin],
   '/admin/escalations': [AdminPermission.SystemAdmin],

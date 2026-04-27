@@ -191,7 +191,7 @@ Emitted via `lib/analytics.ts`:
 | `components/domain/grammar/grammar-entitlement-banner.tsx` | Paywall UI |
 | `components/domain/grammar/grammar-lesson-editor.tsx` | `draftToApi` returns typed `GrammarLessonUpsertPayload` |
 | `app/grammar/*` | Learner pages |
-| `app/admin/grammar/*` | Admin pages |
+| `app/admin/content/grammar/*` | Admin pages |
 
 ---
 

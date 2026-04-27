@@ -222,14 +222,14 @@ The backend contains **70+ EF Core entities** with **65+ composite indexes**. Ke
 
 | Feature Cluster | Key Routes | Status |
 |----------------|------------|--------|
-| Content CMS | `/admin/content/*`, `/admin/content-hierarchy` | Implemented — CRUD, publish/archive, revisions |
+| Content CMS | `/admin/content/*`, `/admin/content/hierarchy` | Implemented — CRUD, publish/archive, revisions |
 | Taxonomy | `/admin/taxonomy` | Implemented — profession/scenario management |
 | Criteria & Rubrics | `/admin/criteria` | Implemented — rubric definition, weight management |
 | AI Configuration | `/admin/ai-config` | Implemented — model selection, confidence thresholds, prompt templates |
 | Review Ops | `/admin/review-ops` | Implemented — queue oversight, assign/reassign, SLA monitoring |
 | User Management | `/admin/users/*` | Implemented — account lifecycle, credit adjustments |
 | Billing Ops | `/admin/billing` | Implemented — plans, add-ons, coupons, subscriptions, invoices |
-| Analytics | `/admin/analytics`, `/admin/business-intelligence`, `/admin/content-analytics` | Implemented — cohort analysis, content effectiveness, expert efficiency |
+| Analytics | `/admin/analytics`, `/admin/business-intelligence`, `/admin/content/analytics` | Implemented — cohort analysis, content effectiveness, expert efficiency |
 | Feature Flags | `/admin/flags` | Implemented — release/experiment/operational toggles |
 | Audit Logs | `/admin/audit-logs` | Implemented — searchable action log with CSV export |
 | Notifications | `/admin/notifications` | Implemented — event catalog, delivery health |
@@ -239,7 +239,7 @@ The backend contains **70+ EF Core entities** with **65+ composite indexes**. Ke
 | Private Speaking | `/admin/private-speaking` | Implemented — tutor/session management |
 | Credit Lifecycle | `/admin/credit-lifecycle` | Implemented — credit system management |
 | Webhooks | `/admin/webhooks` | Implemented — event monitoring, health summary |
-| Content Quality | `/admin/content-quality`, `/admin/dedup` | Implemented — quality analytics, deduplication |
+| Content Quality | `/admin/content/quality`, `/admin/content/dedup` | Implemented — quality analytics, deduplication |
 | Bulk Operations | `/admin/bulk-operations` | Implemented — batch user/content actions |
 | Escalations | `/admin/escalations` | Implemented — user issue management |
 | Score Guarantee Claims | `/admin/score-guarantee-claims` | Route exists — supports guarantee program ops |

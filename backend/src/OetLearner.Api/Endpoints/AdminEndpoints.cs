@@ -395,7 +395,7 @@ public static class AdminEndpoints
 
         admin.MapGet("/publish-requests", async (AdminService service, CancellationToken ct, string? status, int? page, int? pageSize)
             => Results.Ok(await service.GetPublishRequestsAsync(status, page ?? 1, pageSize ?? 20, ct)))
-            .WithAdminRead("AdminContentRead");
+            .WithAdminRead("AdminContentPublishRequestsRead");
 
         admin.MapPost("/publish-requests/{requestId}/approve", async (string requestId, HttpContext http, AdminPublishReviewPayload request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.ApprovePublishRequestAsync(http.AdminId(), http.AdminName(), requestId, request, ct)))
@@ -615,14 +615,14 @@ public static class AdminEndpoints
                     ? Results.Ok(new { published = true, status = "active", errors = Array.Empty<string>() })
                     : Results.Json(new { published = false, errors = result.Errors }, statusCode: 422);
             })
-            .WithAdminWrite("AdminContentWrite");
+            .WithAdminWrite("AdminContentPublish");
 
         admin.MapPost("/grammar/lessons/{lessonId}/unpublish",
             async (string lessonId, HttpContext http,
                 OetLearner.Api.Services.Grammar.IGrammarPublishGateService gate,
                 CancellationToken ct)
             => Results.Ok(await gate.UnpublishAsync(lessonId, http.AdminId(), http.AdminName(), ct)))
-            .WithAdminWrite("AdminContentWrite");
+            .WithAdminWrite("AdminContentPublish");
 
         admin.MapGet("/grammar/lessons/{lessonId}/stats",
             async (string lessonId,

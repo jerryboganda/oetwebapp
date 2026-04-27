@@ -24,7 +24,7 @@ The platform's learner dashboard is largely functional and visually cohesive in 
 However, there are **3 critical issues** that must be fixed before public launch:
 
 1. **Developer/internal copy is visible to end-users** across 5+ pages
-2. **Four lesson sub-routes (grammar, vocabulary, strategies, pronunciation) return errors** despite being linked in navigation — **pronunciation: RESOLVED** (see `/pronunciation` hub + drill recorder + listening-game routes and `/admin/pronunciation` CMS)
+2. **Four lesson sub-routes (grammar, vocabulary, strategies, pronunciation) return errors** despite being linked in navigation — **pronunciation: RESOLVED** (see `/pronunciation` hub + drill recorder + listening-game routes and `/admin/content/pronunciation` CMS)
 3. **The `/practice` route returns a 404** page
 
 ---

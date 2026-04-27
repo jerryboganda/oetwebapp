@@ -28,10 +28,10 @@ A drill may also ship with profession `all` to signal cross-profession applicabi
 
 Admins author drills through:
 
-1. `/admin/pronunciation` — list + filter
-2. `/admin/pronunciation/new` — manual draft
-3. `/admin/pronunciation/[drillId]` — edit + publish
-4. `/admin/pronunciation/ai-draft` — grounded AI assisted draft
+1. `/admin/content/pronunciation` — list + filter
+2. `/admin/content/pronunciation/new` — manual draft
+3. `/admin/content/pronunciation/[drillId]` — edit + publish
+4. `/admin/content/pronunciation/ai-draft` — grounded AI assisted draft
 
 ## 4. AI-assisted drafting rules
 

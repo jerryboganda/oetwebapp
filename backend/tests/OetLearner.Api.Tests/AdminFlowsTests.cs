@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Tests.Infrastructure;
 
@@ -123,6 +124,99 @@ public class AdminFlowsTests : IClassFixture<FirstPartyAuthTestWebApplicationFac
         Assert.True(json.RootElement.TryGetProperty("reviewOps", out _));
         Assert.True(json.RootElement.TryGetProperty("billingRisk", out _));
         Assert.True(json.RootElement.TryGetProperty("quality", out _));
+    }
+
+    [Fact]
+    public async Task PublishRequests_AllowsEditorReviewPermissionToReadQueue()
+    {
+        var previous = Environment.GetEnvironmentVariable("Auth__UseDevelopmentAuth");
+        Environment.SetEnvironmentVariable("Auth__UseDevelopmentAuth", "true");
+        try
+        {
+            using var factory = new TestWebApplicationFactory();
+            using var client = factory.CreateClient();
+            client.DefaultRequestHeaders.Add("X-Debug-Role", "admin");
+            client.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", AdminPermissions.ContentEditorReview);
+
+            var response = await client.GetAsync("/v1/admin/publish-requests");
+
+            response.EnsureSuccessStatusCode();
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("Auth__UseDevelopmentAuth", previous);
+        }
+    }
+
+    [Fact]
+    public async Task PublishRequests_DoesNotAllowContentReadOnlyPermissionToReadQueue()
+    {
+        var previous = Environment.GetEnvironmentVariable("Auth__UseDevelopmentAuth");
+        Environment.SetEnvironmentVariable("Auth__UseDevelopmentAuth", "true");
+        try
+        {
+            using var factory = new TestWebApplicationFactory();
+            using var client = factory.CreateClient();
+            client.DefaultRequestHeaders.Add("X-Debug-Role", "admin");
+            client.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", AdminPermissions.ContentRead);
+
+            var response = await client.GetAsync("/v1/admin/publish-requests");
+
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("Auth__UseDevelopmentAuth", previous);
+        }
+    }
+
+    [Theory]
+    [InlineData("publish")]
+    [InlineData("unpublish")]
+    public async Task GrammarLessonPublishing_DoesNotAllowContentWriteOnlyPermission(string action)
+    {
+        var previous = Environment.GetEnvironmentVariable("Auth__UseDevelopmentAuth");
+        Environment.SetEnvironmentVariable("Auth__UseDevelopmentAuth", "true");
+        try
+        {
+            using var factory = new TestWebApplicationFactory();
+            using var client = factory.CreateClient();
+            client.DefaultRequestHeaders.Add("X-Debug-Role", "admin");
+            client.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", AdminPermissions.ContentWrite);
+
+            var response = await client.PostAsync($"/v1/admin/grammar/lessons/missing-lesson/{action}", null);
+
+            Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("Auth__UseDevelopmentAuth", previous);
+        }
+    }
+
+    [Theory]
+    [InlineData("publish")]
+    [InlineData("unpublish")]
+    public async Task GrammarLessonPublishing_AllowsContentPublishPermissionToReachHandler(string action)
+    {
+        var previous = Environment.GetEnvironmentVariable("Auth__UseDevelopmentAuth");
+        Environment.SetEnvironmentVariable("Auth__UseDevelopmentAuth", "true");
+        try
+        {
+            using var factory = new TestWebApplicationFactory();
+            using var client = factory.CreateClient();
+            client.DefaultRequestHeaders.Add("X-Debug-Role", "admin");
+            client.DefaultRequestHeaders.Add("X-Debug-AdminPermissions", AdminPermissions.ContentPublish);
+
+            var response = await client.PostAsync($"/v1/admin/grammar/lessons/missing-lesson/{action}", null);
+
+            Assert.NotEqual(HttpStatusCode.Unauthorized, response.StatusCode);
+            Assert.NotEqual(HttpStatusCode.Forbidden, response.StatusCode);
+        }
+        finally
+        {
+            Environment.SetEnvironmentVariable("Auth__UseDevelopmentAuth", previous);
+        }
     }
 
     [Fact]

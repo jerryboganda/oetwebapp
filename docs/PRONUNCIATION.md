@@ -131,10 +131,10 @@ Those rows:
 
 Admin pages:
 
-- `/admin/pronunciation`
-- `/admin/pronunciation/new`
-- `/admin/pronunciation/[drillId]`
-- `/admin/pronunciation/ai-draft`
+- `/admin/content/pronunciation`
+- `/admin/content/pronunciation/new`
+- `/admin/content/pronunciation/[drillId]`
+- `/admin/content/pronunciation/ai-draft`
 
 Publish gate requires:
 

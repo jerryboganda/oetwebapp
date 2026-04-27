@@ -197,7 +197,7 @@ The existing project Electron code was compared against all 20 official Electron
 | Feature Area | Key Routes |
 |---|---|
 | User management | `/admin/users/*`, `/admin/experts`, `/admin/roles`, `/admin/permissions` |
-| Content CMS | `/admin/content/*`, `/admin/media`, `/admin/taxonomy`, `/admin/criteria`, `/admin/content-*` |
+| Content CMS | `/admin/content/*`, `/admin/taxonomy`, `/admin/criteria` |
 | Analytics | `/admin/analytics/*` (5 sub-dashboards), `/admin/business-intelligence` |
 | Operations | `/admin/review-ops`, `/admin/escalations`, `/admin/sla-health`, `/admin/audit-logs` |
 | Configuration | `/admin/ai-config`, `/admin/flags`, `/admin/webhooks`, `/admin/notifications` |

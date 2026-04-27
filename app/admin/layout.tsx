@@ -123,6 +123,8 @@ function isContentWorkspace(pathname: string | null) {
     'conversation',
     'library',
     'mocks',
+    'analytics',
+    'quality',
     'papers',
     'import',
     'generation',
@@ -167,6 +169,14 @@ function getAdminPageTitle(pathname: string | null) {
 
   if (pathname.startsWith('/admin/content/mocks')) {
     return 'Mock Bundles';
+  }
+
+  if (pathname.startsWith('/admin/content/analytics')) {
+    return 'Content Analytics';
+  }
+
+  if (pathname.startsWith('/admin/content/quality')) {
+    return 'Content Quality';
   }
 
   if (pathname.startsWith('/admin/content/papers')) {

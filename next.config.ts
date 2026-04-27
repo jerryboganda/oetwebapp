@@ -20,6 +20,8 @@ const nextConfig: NextConfig = {
       ['/admin/content-hierarchy', '/admin/content/hierarchy'],
       ['/admin/content-import', '/admin/content/import'],
       ['/admin/content-generation', '/admin/content/generation'],
+      ['/admin/content-analytics', '/admin/content/analytics'],
+      ['/admin/content-quality', '/admin/content/quality'],
       ['/admin/grammar', '/admin/content/grammar'],
       ['/admin/pronunciation', '/admin/content/pronunciation'],
       ['/admin/strategies', '/admin/content/strategies'],

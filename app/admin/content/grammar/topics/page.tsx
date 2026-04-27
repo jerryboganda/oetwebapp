@@ -19,6 +19,9 @@ import { Button } from '@/components/ui/button';
 import { Input, Select, Textarea } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { AdminPermission, hasPermission } from '@/lib/admin-permissions';
+import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import { useCurrentUser } from '@/lib/hooks/use-current-user';
 import type { AdminGrammarTopic } from '@/lib/grammar/types';
 
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -36,6 +39,9 @@ const LEVELS = [
 ];
 
 export default function AdminGrammarTopicsPage() {
+  const { isAuthenticated, isLoading, role } = useAdminAuth();
+  const { user } = useCurrentUser();
+  const canWriteContent = hasPermission(user?.adminPermissions, AdminPermission.ContentWrite);
   const [topics, setTopics] = useState<AdminGrammarTopic[]>([]);
   const [loading, setLoading] = useState(true);
   const [examFilter, setExamFilter] = useState('oet');
@@ -62,10 +68,12 @@ export default function AdminGrammarTopicsPage() {
   }, [examFilter]);
 
   useEffect(() => {
+    if (!canWriteContent) return;
     queueMicrotask(() => void reload());
-  }, [reload]);
+  }, [canWriteContent, reload]);
 
   async function create() {
+    if (!canWriteContent) return;
     if (!newName.trim() || !newSlug.trim()) {
       setToast({ variant: 'error', message: 'Slug and name are required.' });
       return;
@@ -91,6 +99,7 @@ export default function AdminGrammarTopicsPage() {
   }
 
   async function togglePublish(t: AdminGrammarTopic) {
+    if (!canWriteContent) return;
     try {
       await adminUpdateGrammarTopic(t.id, { status: t.status === 'published' ? 'draft' : 'published' });
       setToast({ variant: 'success', message: `Topic ${t.status === 'published' ? 'unpublished' : 'published'}.` });
@@ -101,6 +110,7 @@ export default function AdminGrammarTopicsPage() {
   }
 
   async function archive(t: AdminGrammarTopic) {
+    if (!canWriteContent) return;
     if (!confirm(`Archive topic "${t.name}"? Lessons in this topic will be hidden from learners.`)) return;
     try {
       await adminArchiveGrammarTopic(t.id);
@@ -109,6 +119,18 @@ export default function AdminGrammarTopicsPage() {
     } catch (e) {
       setToast({ variant: 'error', message: (e as Error).message || 'Archive failed.' });
     }
+  }
+
+  if (isLoading) return null;
+
+  if (!isAuthenticated || role !== 'admin') return null;
+
+  if (!canWriteContent) {
+    return (
+      <AdminRouteWorkspace role="main" aria-label="Grammar Topics">
+        <p className="text-sm text-muted">Content write permission is required.</p>
+      </AdminRouteWorkspace>
+    );
   }
 
   return (
