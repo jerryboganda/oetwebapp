@@ -1,23 +1,14 @@
 using System;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using OetLearner.Api.Data;
 
 #nullable disable
 
 namespace OetLearner.Api.Data.Migrations
 {
-    /// <inheritdoc />
-    /// <remarks>
-    /// Vocabulary V1 enhancements (Phase V1 of docs/VOCABULARY-MODULE.md):
-    ///   - VocabularyTerm: adds IpaPronunciation, AudioMediaAssetId, SourceProvenance,
-    ///     CreatedAt, UpdatedAt; widens Category (32 → 64).
-    ///   - LearnerVocabulary: adds SourceRef.
-    ///   - VocabularyQuizResult: adds Format (default "definition_match").
-    ///   - Adds indexes: (ProfessionId, Category, Status), (Term, ExamTypeCode, ProfessionId),
-    ///     (UserId, CompletedAt).
-    ///
-    /// Safe to apply on top of existing data: all added columns are nullable or
-    /// have sensible defaults.
-    /// </remarks>
+    [DbContext(typeof(LearnerDbContext))]
+    [Migration("20260420000000_AddVocabularyV1Enhancements")]
     public partial class AddVocabularyV1Enhancements : Migration
     {
         /// <inheritdoc />

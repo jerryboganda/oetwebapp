@@ -1,10 +1,13 @@
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using OetLearner.Api.Data;
 
 #nullable disable
 
 namespace OetLearner.Api.Data.Migrations
 {
-    /// <inheritdoc />
+    [DbContext(typeof(LearnerDbContext))]
+    [Migration("20260413120000_AddSessionMetadataToRefreshTokens")]
     public partial class AddSessionMetadataToRefreshTokens : Migration
     {
         /// <inheritdoc />

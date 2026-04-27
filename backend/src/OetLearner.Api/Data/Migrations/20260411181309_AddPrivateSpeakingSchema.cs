@@ -1,11 +1,14 @@
 using System;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Infrastructure;
+using OetLearner.Api.Data;
 
 #nullable disable
 
 namespace OetLearner.Api.Data.Migrations
 {
-    /// <inheritdoc />
+    [DbContext(typeof(LearnerDbContext))]
+    [Migration("20260411181309_AddPrivateSpeakingSchema")]
     public partial class AddPrivateSpeakingSchema : Migration
     {
         /// <inheritdoc />
