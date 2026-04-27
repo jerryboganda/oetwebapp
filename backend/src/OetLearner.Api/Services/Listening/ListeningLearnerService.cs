@@ -3,10 +3,13 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services.Listening;
 
-public sealed class ListeningLearnerService(LearnerDbContext db)
+public sealed class ListeningLearnerService(
+    LearnerDbContext db,
+    IContentEntitlementService entitlements)
 {
     private const string Subtest = "listening";
     private const int CanonicalRawMax = OetScoring.ListeningReadingRawMax;
@@ -247,6 +250,18 @@ public sealed class ListeningLearnerService(LearnerDbContext db)
     public async Task<object> StartAttemptAsync(string userId, string paperId, string? mode, CancellationToken ct)
     {
         await EnsureLearnerMutationAllowedAsync(userId, ct);
+
+        // Subscription gate (Phase 3). Only applies to authored ContentPaper rows;
+        // legacy ContentItem-backed seed/diagnostic tasks (e.g. "lt-001") have no
+        // ContentPaper row and remain ungated until they migrate to the paper
+        // schema. Free papers (tagged "access:free") and admins bypass automatically.
+        var paperEntity = await db.ContentPapers.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == paperId, ct);
+        if (paperEntity is not null)
+        {
+            await entitlements.RequireAccessAsync(userId, paperEntity, ct);
+        }
+
         var source = await ResolveSourceAsync(paperId, ct);
         if (source.Questions.Count == 0)
         {

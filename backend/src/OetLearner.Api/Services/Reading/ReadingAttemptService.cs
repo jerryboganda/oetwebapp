@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Content;
 
 namespace OetLearner.Api.Services.Reading;
 
@@ -51,6 +52,7 @@ public sealed class ReadingAttemptService(
     LearnerDbContext db,
     IReadingPolicyService policyService,
     IReadingGradingService grader,
+    IContentEntitlementService entitlements,
     ILogger<ReadingAttemptService> logger) : IReadingAttemptService
 {
     public async Task<ReadingAttemptStarted> StartAsync(string userId, string paperId, CancellationToken ct)
@@ -60,6 +62,12 @@ public sealed class ReadingAttemptService(
         var paper = await db.ContentPapers.AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == paperId, ct)
             ?? throw new InvalidOperationException("Paper not found.");
+
+        // Gate 0 (Phase 3): subscription / content entitlement. Throws
+        // ApiException.PaymentRequired with code "content_locked" when the
+        // learner's plan does not grant access to this paper. Free papers
+        // (tag "access:free") and admins bypass automatically.
+        await entitlements.RequireAccessAsync(userId, paper, ct);
 
         var policy = await policyService.ResolveForUserAsync(userId, ct);
         var globalPolicy = await policyService.GetGlobalAsync(ct);

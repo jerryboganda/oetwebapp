@@ -29,6 +29,30 @@ import {
 type PageStatus = 'loading' | 'success' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
+/**
+ * Reads the current access tier ("free" or "premium") encoded in a paper's
+ * tagsCsv. Defaults to "premium" — subscription required — when no access:*
+ * token is present, matching the backend ContentEntitlementService gate.
+ */
+function readAccessTier(tagsCsv: string | null | undefined): 'free' | 'premium' {
+  const tokens = (tagsCsv ?? '').split(',').map((t) => t.trim().toLowerCase());
+  if (tokens.includes('access:free')) return 'free';
+  return 'premium';
+}
+
+/**
+ * Returns a new tagsCsv string with the access:* token replaced. Preserves all
+ * other tags and their original casing/order. Strips empty entries.
+ */
+function writeAccessTier(tagsCsv: string | null | undefined, tier: 'free' | 'premium'): string {
+  const kept = (tagsCsv ?? '')
+    .split(',')
+    .map((t) => t.trim())
+    .filter((t) => t.length > 0 && !t.toLowerCase().startsWith('access:'));
+  kept.push(`access:${tier}`);
+  return kept.join(',');
+}
+
 const ROLE_OPTIONS: { value: PaperAssetRole; label: string; accept: string }[] = [
   { value: 'Audio', label: 'Audio (MP3)', accept: 'audio/mpeg,audio/mp4,.mp3,.m4a' },
   { value: 'QuestionPaper', label: 'Question Paper (PDF)', accept: 'application/pdf,.pdf' },
@@ -195,6 +219,15 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
                     onChange={(e) => setPaper({ ...paper, cardType: e.target.value || null })}
                     placeholder="already_known_pt | examination | first_visit_emergency | …" />
                 )}
+                <Select
+                  label="Access tier"
+                  value={readAccessTier(paper.tagsCsv)}
+                  onChange={(e) => setPaper({ ...paper, tagsCsv: writeAccessTier(paper.tagsCsv, e.target.value as 'free' | 'premium') })}
+                  options={[
+                    { value: 'premium', label: 'Premium (subscription required)' },
+                    { value: 'free', label: 'Free preview (no subscription required)' },
+                  ]}
+                />
                 <Input label="Tags CSV" value={paper.tagsCsv}
                   onChange={(e) => setPaper({ ...paper, tagsCsv: e.target.value })}
                   placeholder="dermatology,acne" />

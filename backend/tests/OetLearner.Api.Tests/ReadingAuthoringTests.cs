@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Reading;
 
 namespace OetLearner.Api.Tests;
@@ -33,7 +34,8 @@ public class ReadingAuthoringTests
         var structure = new ReadingStructureService(db);
         var policy = new ReadingPolicyService(db, cache);
         var grader = new ReadingGradingService(db, policy, NullLogger<ReadingGradingService>.Instance);
-        var attempt = new ReadingAttemptService(db, policy, grader, NullLogger<ReadingAttemptService>.Instance);
+        var entitlements = new ContentEntitlementService(db);
+        var attempt = new ReadingAttemptService(db, policy, grader, entitlements, NullLogger<ReadingAttemptService>.Instance);
         return (db, structure, policy, grader, attempt);
     }
 
@@ -50,6 +52,7 @@ public class ReadingAuthoringTests
             EstimatedDurationMinutes = 60,
             Status = status,
             SourceProvenance = "Test",
+            TagsCsv = "access:free",
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow,
         });
