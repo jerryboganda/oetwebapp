@@ -82,7 +82,7 @@ describe('AdminLayout', () => {
     expect(screen.getByTestId('mfa-banner')).toBeInTheDocument();
   });
 
-  it('keeps content editor routes on the distraction-free app shell', () => {
+  it('keeps content editor routes inside the admin dashboard shell so the sidebar stays visible', () => {
     renderWithRouter(
       <AdminLayout>
         <div>Content editor workspace</div>
@@ -90,13 +90,12 @@ describe('AdminLayout', () => {
       { pathname: '/admin/content/content-1' },
     );
 
-    expect(screen.getByTestId('app-shell')).toHaveAttribute('data-page-title', 'Content Workspace');
-    expect(screen.getByTestId('app-shell')).toHaveAttribute('data-distraction-free', 'true');
-    expect(screen.queryByTestId('admin-dashboard-shell')).not.toBeInTheDocument();
-    expect(screen.getByTestId('learner-workspace')).toBeInTheDocument();
+    expect(screen.getByTestId('admin-dashboard-shell')).toHaveAttribute('data-page-title', 'Content Workspace');
+    expect(screen.queryByTestId('app-shell')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('learner-workspace')).not.toBeInTheDocument();
   });
 
-  it('keeps the new content workspace route on the distraction-free app shell', () => {
+  it('keeps the new content workspace route inside the admin dashboard shell', () => {
     renderWithRouter(
       <AdminLayout>
         <div>New content workspace</div>
@@ -104,10 +103,9 @@ describe('AdminLayout', () => {
       { pathname: '/admin/content/new' },
     );
 
-    expect(screen.getByTestId('app-shell')).toHaveAttribute('data-page-title', 'Content Workspace');
-    expect(screen.getByTestId('app-shell')).toHaveAttribute('data-distraction-free', 'true');
-    expect(screen.queryByTestId('admin-dashboard-shell')).not.toBeInTheDocument();
-    expect(screen.getByTestId('learner-workspace')).toBeInTheDocument();
+    expect(screen.getByTestId('admin-dashboard-shell')).toHaveAttribute('data-page-title', 'Content Workspace');
+    expect(screen.queryByTestId('app-shell')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('learner-workspace')).not.toBeInTheDocument();
   });
 
   it('maps revision history routes back to the learner-style admin shell title', () => {

@@ -1,6 +1,10 @@
-import { type ReactNode } from 'react';
+"use client";
+
+import { createContext, type ReactNode, useContext } from 'react';
 import { AppShell, type AppShellProps } from './app-shell';
 import { LearnerWorkspaceContainer } from './learner-workspace-container';
+
+const AdminDashboardShellContext = createContext(false);
 
 export interface AdminDashboardShellProps extends AppShellProps {
   workspaceClassName?: string;
@@ -12,11 +16,19 @@ export function AdminDashboardShell({
   workspaceClassName,
   ...shellProps
 }: AdminDashboardShellProps) {
+  const isNestedShell = useContext(AdminDashboardShellContext);
+
+  if (isNestedShell) {
+    return <>{children}</>;
+  }
+
   return (
-    <AppShell requiredRole="admin" {...shellProps} workspaceRole="admin">
-      <LearnerWorkspaceContainer className={workspaceClassName}>
-        {children}
-      </LearnerWorkspaceContainer>
-    </AppShell>
+    <AdminDashboardShellContext.Provider value={true}>
+      <AppShell requiredRole="admin" {...shellProps} workspaceRole="admin">
+        <LearnerWorkspaceContainer className={workspaceClassName}>
+          {children}
+        </LearnerWorkspaceContainer>
+      </AppShell>
+    </AdminDashboardShellContext.Provider>
   );
 }

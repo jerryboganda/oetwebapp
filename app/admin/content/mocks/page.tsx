@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import { Archive, CheckCircle, Layers, Plus } from 'lucide-react';
-import { AdminDashboardShell } from '@/components/layout';
 import {
   AdminRoutePanel,
   AdminRouteSectionHeader,
@@ -132,7 +131,7 @@ export default function AdminMockBundlesPage() {
   }
 
   return (
-    <AdminDashboardShell>
+    <>
       <AdminRouteWorkspace>
         <AdminRoutePanel>
           <AdminRouteSectionHeader
@@ -271,6 +270,6 @@ export default function AdminMockBundlesPage() {
       </AdminRouteWorkspace>
 
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
-    </AdminDashboardShell>
+    </>
   );
 }

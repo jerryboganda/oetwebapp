@@ -3,8 +3,12 @@
 import { useEffect, useState } from 'react';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { Wand2, Loader2, CheckCircle2, AlertCircle, Copy, RefreshCw, Clock3, FileJson2 } from 'lucide-react';
-import { AdminDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
+import {
+  AdminRouteHero,
+  AdminRoutePanel,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
 import { fetchContentGenerationJob, fetchContentGenerationJobs, queueContentGeneration } from '@/lib/api';
 
 type GenerationRequest = {
@@ -192,24 +196,20 @@ export default function AdminContentGenerationPage() {
   }
 
   return (
-    <AdminDashboardShell>
-      <div className="max-w-5xl mx-auto">
-        <div className="flex items-center gap-3 mb-6">
-          <div className="p-2.5 bg-lavender dark:bg-primary/15 rounded-xl">
-            <Wand2 className="w-6 h-6 text-primary dark:text-primary" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold text-navy dark:text-navy">AI Content Generation</h1>
-            <p className="text-sm text-muted">Generate learning content using AI for the OET platform</p>
-          </div>
-        </div>
+    <AdminRouteWorkspace role="main" aria-label="AI content generation">
+        <AdminRouteHero
+          eyebrow="AI tooling"
+          icon={Wand2}
+          accent="navy"
+          title="AI content generation"
+          description="Generate learning content using AI for the OET platform."
+        />
 
-        {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
+        {error && <InlineAlert variant="warning">{error}</InlineAlert>}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Form */}
-          <div className="bg-surface dark:bg-surface rounded-2xl border border-border dark:border-border p-6">
-            <h2 className="font-semibold text-navy dark:text-navy mb-4">Generation Parameters</h2>
+          <AdminRoutePanel title="Generation parameters">
             <form onSubmit={handleGenerate} className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-navy dark:text-navy mb-1.5">Content Type</label>
@@ -299,7 +299,7 @@ export default function AdminContentGenerationPage() {
                 )}
               </button>
             </form>
-          </div>
+          </AdminRoutePanel>
 
           {/* Results */}
           <div>
@@ -332,7 +332,7 @@ export default function AdminContentGenerationPage() {
                     <div className="flex items-start gap-3 mb-2">
                       <div className="flex-shrink-0 mt-0.5">
                         {result.status === 'processing' && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
-                        {result.status === 'done' && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                        {result.status === 'done' && <CheckCircle2 className="w-4 h-4 text-success" />}
                         {result.status === 'error' && <AlertCircle className="w-4 h-4 text-danger" />}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -364,7 +364,7 @@ export default function AdminContentGenerationPage() {
                             className="rounded-lg p-2.5 -m-1 text-muted transition-colors hover:bg-lavender/40 hover:text-primary dark:hover:bg-surface"
                             title="Copy JSON"
                           >
-                            {copied === result.id ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                            {copied === result.id ? <CheckCircle2 className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
                           </button>
                         )}
                       </div>
@@ -380,7 +380,6 @@ export default function AdminContentGenerationPage() {
             )}
           </div>
         </div>
-      </div>
-    </AdminDashboardShell>
+    </AdminRouteWorkspace>
   );
 }

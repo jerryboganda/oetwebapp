@@ -4,7 +4,6 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Radio } from 'lucide-react';
-import { AdminDashboardShell } from '@/components/layout';
 import {
   AdminRouteWorkspace,
   AdminRoutePanel,
@@ -98,19 +97,19 @@ export default function AdminSessionDetailPage() {
 
   if (loading) {
     return (
-      <AdminDashboardShell>
+      <>
         <AdminRouteWorkspace>
           <AdminRoutePanel>
             <Skeleton className="h-48 rounded-2xl" />
           </AdminRoutePanel>
         </AdminRouteWorkspace>
-      </AdminDashboardShell>
+      </>
     );
   }
 
   if (error || !detail) {
     return (
-      <AdminDashboardShell>
+      <>
         <AdminRouteWorkspace>
           <AdminRoutePanel>
             <p className="text-sm text-muted">{error ?? 'Session not found.'}</p>
@@ -119,7 +118,7 @@ export default function AdminSessionDetailPage() {
             </Link>
           </AdminRoutePanel>
         </AdminRouteWorkspace>
-      </AdminDashboardShell>
+      </>
     );
   }
 
@@ -132,7 +131,7 @@ export default function AdminSessionDetailPage() {
   const appliedRules = detail.evaluation ? safeParse<string[]>(detail.evaluation.appliedRuleIdsJson, []) : [];
 
   return (
-    <AdminDashboardShell>
+    <>
       <AdminRouteWorkspace>
         <AdminRoutePanel>
           <AdminRouteSectionHeader
@@ -221,6 +220,6 @@ export default function AdminSessionDetailPage() {
           </section>
         </AdminRoutePanel>
       </AdminRouteWorkspace>
-    </AdminDashboardShell>
+    </>
   );
 }

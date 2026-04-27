@@ -8,7 +8,6 @@ import {
   updateAdminVocabularyItem,
 } from '@/lib/api';
 import { Skeleton } from '@/components/ui/skeleton';
-import { AdminDashboardShell } from '@/components/layout';
 
 type Detail = {
   id: string;
@@ -58,18 +57,18 @@ export default function AdminVocabularyEditPage() {
 
   if (loading) {
     return (
-      <AdminDashboardShell>
+      <>
         <Skeleton className="h-8 w-48 rounded" />
         <Skeleton className="mt-4 h-96 rounded-3xl" />
-      </AdminDashboardShell>
+      </>
     );
   }
 
   if (!detail) {
     return (
-      <AdminDashboardShell>
+      <>
         <div className="p-8 text-center text-muted">Term not found.</div>
-      </AdminDashboardShell>
+      </>
     );
   }
 

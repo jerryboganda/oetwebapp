@@ -3,7 +3,6 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Sparkles, RefreshCcw } from 'lucide-react';
-import { AdminDashboardShell } from '@/components/layout';
 import {
   AdminRouteWorkspace,
   AdminRoutePanel,
@@ -108,7 +107,7 @@ export default function AdminVocabularyAiDraftPage() {
   }
 
   return (
-    <AdminDashboardShell>
+    <>
       {toast && <Toast variant={toast.variant === 'error' ? 'error' : 'success'} message={toast.message} onClose={() => setToast(null)} />}
       <AdminRouteWorkspace>
         <AdminRouteSectionHeader
@@ -245,6 +244,6 @@ export default function AdminVocabularyAiDraftPage() {
           </div>
         </AdminRoutePanel>
       </AdminRouteWorkspace>
-    </AdminDashboardShell>
+    </>
   );
 }
