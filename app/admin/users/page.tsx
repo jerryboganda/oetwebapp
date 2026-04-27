@@ -17,6 +17,7 @@ import { Pagination } from '@/components/ui/pagination';
 import { inviteAdminUser } from '@/lib/api';
 import { getAdminUsersPageData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import { useProfessions } from '@/lib/hooks/use-professions';
 import type { AdminUserRow } from '@/lib/types/admin';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
@@ -49,6 +50,7 @@ export default function UsersPage() {
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
   const [toast, setToast] = useState<ToastState>(null);
+  const { options: professionOptions } = useProfessions();
 
   const selectedRole = filters.role?.[0];
   const selectedStatus = filters.status?.[0];
@@ -328,13 +330,7 @@ export default function UsersPage() {
               label={inviteForm.role === 'expert' ? 'Primary Specialty' : 'Profession'}
               value={inviteForm.professionId}
               onChange={(event) => setInviteForm((current) => ({ ...current, professionId: event.target.value }))}
-              options={[
-                { value: 'nursing', label: 'Nursing' },
-                { value: 'medicine', label: 'Medicine' },
-                { value: 'dentistry', label: 'Dentistry' },
-                { value: 'pharmacy', label: 'Pharmacy' },
-                { value: 'physiotherapy', label: 'Physiotherapy' },
-              ]}
+              options={professionOptions}
             />
           ) : null}
 

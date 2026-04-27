@@ -31,6 +31,7 @@ import { InlineAlert } from '@/components/ui/alert';
 import type { WritingTask, WritingSubmission, MockReport } from '@/lib/mock-data';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { createLearnerMetaLabel, type LearnerSurfaceCardModel } from '@/lib/learner-surface';
+import { useProfessions } from '@/lib/hooks/use-professions';
 
 type TabType = 'practice' | 'drills' | 'past';
 
@@ -58,15 +59,9 @@ interface WritingHomeDto {
   criterionDrillLibrary?: WritingHomeCriterionDrillDto[];
 }
 
-const filterGroups: FilterGroup[] = [
-  { id: 'profession', label: 'Profession', options: [
-    { id: 'Nursing', label: 'Nursing' }, { id: 'Medicine', label: 'Medicine' },
-    { id: 'Physiotherapy', label: 'Physiotherapy' }, { id: 'Dietetics', label: 'Dietetics' },
-  ]},
-  { id: 'difficulty', label: 'Difficulty', options: [
-    { id: 'Easy', label: 'Easy' }, { id: 'Medium', label: 'Medium' }, { id: 'Hard', label: 'Hard' },
-  ]},
-];
+const difficultyFilterGroup: FilterGroup = { id: 'difficulty', label: 'Difficulty', options: [
+  { id: 'Easy', label: 'Easy' }, { id: 'Medium', label: 'Medium' }, { id: 'Hard', label: 'Hard' },
+]};
 
 export default function WritingHome() {
   const router = useRouter();
@@ -78,6 +73,15 @@ export default function WritingHome() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filters, setFilters] = useState<Record<string, string[]>>({});
+  const { professions } = useProfessions();
+  const filterGroups = useMemo<FilterGroup[]>(() => [
+    {
+      id: 'profession',
+      label: 'Profession',
+      options: professions.map((p) => ({ id: p.label, label: p.label })),
+    },
+    difficultyFilterGroup,
+  ], [professions]);
 
   useEffect(() => {
     analytics.track('module_entry', { module: 'writing' });

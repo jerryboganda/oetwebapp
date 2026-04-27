@@ -39,6 +39,7 @@ import {
 } from '@/lib/api';
 import { getAdminUsersPageData, getAdminUserDetailData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
+import { useProfessions } from '@/lib/hooks/use-professions';
 import type { AdminUserRow, AdminUserDetail } from '@/lib/types/admin';
 
 /* ─────────────────────── types ─────────────────────── */
@@ -60,6 +61,7 @@ interface TutorProfileRef {
 
 export default function ExpertManagementPage() {
   const { isAuthenticated, role } = useAdminAuth();
+  const { options: professionOptions } = useProfessions();
 
   /* list state */
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
@@ -504,20 +506,7 @@ export default function ExpertManagementPage() {
             label="Profession"
             value={inviteForm.professionId}
             onChange={(e) => setInviteForm({ ...inviteForm, professionId: e.target.value })}
-            options={[
-              { label: 'Nursing', value: 'nursing' },
-              { label: 'Medicine', value: 'medicine' },
-              { label: 'Dentistry', value: 'dentistry' },
-              { label: 'Pharmacy', value: 'pharmacy' },
-              { label: 'Physiotherapy', value: 'physiotherapy' },
-              { label: 'Radiography', value: 'radiography' },
-              { label: 'Dietetics', value: 'dietetics' },
-              { label: 'Occupational Therapy', value: 'occupational-therapy' },
-              { label: 'Speech Pathology', value: 'speech-pathology' },
-              { label: 'Veterinary Science', value: 'veterinary-science' },
-              { label: 'Podiatry', value: 'podiatry' },
-              { label: 'Optometry', value: 'optometry' },
-            ]}
+            options={professionOptions}
           />
           <div className="flex justify-end gap-3 pt-2">
             <Button variant="secondary" onClick={() => setActiveModal(null)}>

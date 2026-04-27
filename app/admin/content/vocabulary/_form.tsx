@@ -14,6 +14,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
+import { useProfessions } from '@/lib/hooks/use-professions';
 
 export type VocabFormValues = {
   term: string;
@@ -48,13 +49,8 @@ const CATEGORIES = [
   'dispensing', 'counselling',
 ];
 
-const PROFESSIONS = [
-  { value: '', label: 'General (all)' },
-  { value: 'medicine', label: 'Medicine' },
-  { value: 'nursing', label: 'Nursing' },
-  { value: 'dentistry', label: 'Dentistry' },
-  { value: 'pharmacy', label: 'Pharmacy' },
-];
+const PROFESSIONS_FALLBACK_HEAD = [{ value: '', label: 'General (all)' }] as const;
+
 
 function TagInput({ value, onChange, placeholder, label }: { value: string[]; onChange: (v: string[]) => void; placeholder: string; label: string }) {
   const [draft, setDraft] = useState('');
@@ -93,6 +89,8 @@ function TagInput({ value, onChange, placeholder, label }: { value: string[]; on
 
 export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: Props) {
   const router = useRouter();
+  const { options: professionOptions } = useProfessions();
+  const PROFESSIONS = [...PROFESSIONS_FALLBACK_HEAD, ...professionOptions];
   const [v, setV] = useState<VocabFormValues>({
     term: initial?.term ?? '',
     definition: initial?.definition ?? '',

@@ -49,6 +49,7 @@ import { LearnerPageHero } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
 import { fetchSettingsSection, updateSettingsSection } from '@/lib/api';
 import { deleteAccount } from '@/lib/auth-client';
+import { useProfessions } from '@/lib/hooks/use-professions';
 import type { LearnerSurfaceAccent } from '@/lib/learner-surface';
 import type { SettingsSectionData, SettingsSectionId } from '@/lib/mock-data';
 import { cn } from '@/lib/utils';
@@ -733,6 +734,7 @@ function SettingsSectionForm({
   data: SettingsSectionData;
   onChange: (key: string, value: string | boolean) => void;
 }) {
+  const { options: professionOptions } = useProfessions();
   const config = SECTION_CONFIG[data.section];
   const palette = accentStyles[accent];
 
@@ -792,7 +794,10 @@ function SettingsSectionForm({
                     onChange={(event) => onChange(field.key, event.target.value)}
                   >
                     <option value="">Select an option</option>
-                    {(field.options ?? []).map((option) => (
+                    {(field.key === 'professionId' && professionOptions.length > 0
+                      ? professionOptions
+                      : (field.options ?? [])
+                    ).map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                   </select>

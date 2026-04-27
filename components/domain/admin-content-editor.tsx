@@ -12,6 +12,7 @@ import { Toast } from '@/components/ui/alert';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useCurrentUser } from '@/lib/hooks/use-current-user';
+import { useProfessions } from '@/lib/hooks/use-professions';
 import { createAdminContent, publishAdminContent, submitContentForReview, updateAdminContent } from '@/lib/api';
 import { getAdminContentDetailData, getAdminContentImpactData, getAdminCriteriaData } from '@/lib/admin';
 import { hasPermission, AdminPermission } from '@/lib/admin-permissions';
@@ -53,10 +54,10 @@ const defaultFormState: FormState = {
   qaStatus: 'pending',
 };
 
-export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
-  const router = useRouter();
+export function AdminContentEditor({ contentId }: AdminContentEditorProps) {  const router = useRouter();
   const { isAuthenticated, role } = useAdminAuth();
   const { user } = useCurrentUser();
+  const { options: professionOptions } = useProfessions();
   const [pageStatus, setPageStatus] = useState<PageStatus>(contentId ? 'loading' : 'success');
   const [activeTab, setActiveTab] = useState('metadata');
   const [form, setForm] = useState<FormState>(defaultFormState);
@@ -380,13 +381,7 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
                   label="Profession"
                   value={form.professionId}
                   onChange={(event) => updateField('professionId', event.target.value)}
-                  options={[
-                    { value: 'nursing', label: 'Nursing' },
-                    { value: 'medicine', label: 'Medicine' },
-                    { value: 'dentistry', label: 'Dentistry' },
-                    { value: 'pharmacy', label: 'Pharmacy' },
-                    { value: 'physiotherapy', label: 'Physiotherapy' },
-                  ]}
+                  options={professionOptions}
                 />
                 <Select
                   label="Difficulty"
