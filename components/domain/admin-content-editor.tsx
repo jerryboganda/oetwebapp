@@ -175,6 +175,8 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
         caseNotes: form.caseNotes,
         modelAnswer: form.modelAnswer,
         criteriaFocus: JSON.stringify(form.criteriaFocus),
+        sourceType: form.sourceType,
+        qaStatus: form.qaStatus,
       };
 
       let resolvedContentId = contentId;
@@ -229,6 +231,8 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
         caseNotes: form.caseNotes,
         modelAnswer: form.modelAnswer,
         criteriaFocus: JSON.stringify(form.criteriaFocus),
+        sourceType: form.sourceType,
+        qaStatus: form.qaStatus,
       });
       await submitContentForReview(contentId);
       setContentStatus('EditorReview');
@@ -323,22 +327,23 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
       </div>
 
       <AsyncStateWrapper status={pageStatus} onRetry={() => window.location.reload()}>
-        {impact ? (
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <AdminRouteSummaryCard label="Attempts" value={impact.usage.attemptCount} hint="Learner sessions linked to this content." icon={BookMarked} />
-            <AdminRouteSummaryCard label="Evaluations" value={impact.usage.evaluationCount} hint="AI or expert evaluations completed in-window." icon={ClipboardCheck} />
-            <AdminRouteSummaryCard label="Study Plan References" value={impact.usage.studyPlanReferences} hint="Study plans currently surfacing this item." icon={TimerReset} />
-            <AdminRouteSummaryCard
-              label="Archive Safety"
-              value={impact.safeToArchive ? 'Safe' : 'Live usage'}
-              hint={impact.safeToArchive ? 'No active learner dependencies detected.' : 'This content is still attached to live learner journeys.'}
-              tone={impact.safeToArchive ? 'success' : 'warning'}
-              icon={CheckCircle}
-            />
-          </div>
-        ) : null}
+        <div className="space-y-6">
+          {impact ? (
+            <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+              <AdminRouteSummaryCard label="Attempts" value={impact.usage.attemptCount} hint="Learner sessions linked to this content." icon={BookMarked} />
+              <AdminRouteSummaryCard label="Evaluations" value={impact.usage.evaluationCount} hint="AI or expert evaluations completed in-window." icon={ClipboardCheck} />
+              <AdminRouteSummaryCard label="Study Plan References" value={impact.usage.studyPlanReferences} hint="Study plans currently surfacing this item." icon={TimerReset} />
+              <AdminRouteSummaryCard
+                label="Archive Safety"
+                value={impact.safeToArchive ? 'Safe' : 'Live usage'}
+                hint={impact.safeToArchive ? 'No active learner dependencies detected.' : 'This content is still attached to live learner journeys.'}
+                tone={impact.safeToArchive ? 'success' : 'warning'}
+                icon={CheckCircle}
+              />
+            </div>
+          ) : null}
 
-        <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
+          <Tabs tabs={tabs} activeTab={activeTab} onChange={setActiveTab} />
 
         <TabPanel id="metadata" activeTab={activeTab}>
           <AdminRoutePanel
@@ -485,6 +490,7 @@ export function AdminContentEditor({ contentId }: AdminContentEditorProps) {
               </p>
           </AdminRoutePanel>
         </TabPanel>
+        </div>
       </AsyncStateWrapper>
     </AdminRouteWorkspace>
   );

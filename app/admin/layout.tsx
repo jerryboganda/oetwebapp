@@ -1,7 +1,7 @@
 'use client';
 
 import { PrivilegedMfaBanner } from '@/components/auth/privileged-mfa-banner';
-import { AdminDashboardShell, AppShell, LearnerWorkspaceContainer, type MobileMenuSection } from '@/components/layout';
+import { AdminDashboardShell, type MobileMenuSection } from '@/components/layout';
 import type { NavGroup, NavItem } from '@/components/layout/sidebar';
 import { hasPermission, sidebarPermissionMap } from '@/lib/admin-permissions';
 import { useAuth } from '@/contexts/auth-context';
@@ -301,23 +301,6 @@ function AdminLayoutContent({ children }: { children: React.ReactNode }) {
       {children}
     </div>
   );
-
-  if (isContentWorkspace(pathname)) {
-    return (
-      <AppShell
-        distractionFree
-        pageTitle={pageTitle}
-        navItems={filteredNavItems}
-        navGroups={filteredNavGroups}
-        mobileNavItems={filteredMobileNavItems}
-        mobileMenuSections={filteredMobileMenuSections}
-        requiredRole="admin"
-        workspaceRole="admin"
-      >
-        <LearnerWorkspaceContainer>{bannerBlock}</LearnerWorkspaceContainer>
-      </AppShell>
-    );
-  }
 
   return (
     <AdminDashboardShell

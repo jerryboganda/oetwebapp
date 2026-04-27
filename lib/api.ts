@@ -2820,7 +2820,7 @@ export async function fetchAdminContentDetail(contentId: string) {
   return apiRequest(`/v1/admin/content/${encodeURIComponent(contentId)}`);
 }
 
-export async function createAdminContent(payload: { contentType: string; subtestCode: string; professionId: string; title: string; difficulty: string; estimatedDurationMinutes?: number; description?: string; caseNotes?: string; modelAnswer?: string; criteriaFocus?: string }) {
+export async function createAdminContent(payload: { contentType: string; subtestCode: string; professionId: string; title: string; difficulty: string; estimatedDurationMinutes?: number; description?: string; caseNotes?: string; modelAnswer?: string; criteriaFocus?: string; sourceType?: string; qaStatus?: string }) {
   return apiRequest('/v1/admin/content', { method: 'POST', body: JSON.stringify(payload) });
 }
 

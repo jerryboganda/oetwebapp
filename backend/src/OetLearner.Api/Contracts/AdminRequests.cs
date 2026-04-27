@@ -12,7 +12,9 @@ public record AdminContentCreateRequest(
     string? Description,
     string? ModelAnswer,
     string? CriteriaFocus,
-    string? CaseNotes);
+    string? CaseNotes,
+    string? SourceType,
+    string? QaStatus);
 
 public record AdminContentUpdateRequest(
     string? Title,
@@ -25,6 +27,8 @@ public record AdminContentUpdateRequest(
     string? ModelAnswer,
     string? CriteriaFocus,
     string? CaseNotes,
+    string? SourceType,
+    string? QaStatus,
     string? ChangeNote);
 
 public record AdminContentStatusRequest(string? Reason);

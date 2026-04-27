@@ -604,6 +604,8 @@ public partial class AdminService(
             Status = ContentStatus.Draft,
             DetailJson = JsonSupport.Serialize(new { description = request.Description, caseNotes = request.CaseNotes }),
             ModelAnswerJson = request.ModelAnswer ?? "{}",
+            SourceType = string.IsNullOrWhiteSpace(request.SourceType) ? "manual" : request.SourceType!.Trim(),
+            QaStatus = string.IsNullOrWhiteSpace(request.QaStatus) ? "pending" : request.QaStatus!.Trim(),
             CreatedBy = adminName,
             CreatedAt = now,
             UpdatedAt = now
@@ -645,6 +647,17 @@ public partial class AdminService(
         if (request.EstimatedDurationMinutes.HasValue) item.EstimatedDurationMinutes = request.EstimatedDurationMinutes.Value;
         if (request.ModelAnswer is not null) item.ModelAnswerJson = request.ModelAnswer;
         if (request.CriteriaFocus is not null) item.CriteriaFocusJson = request.CriteriaFocus;
+        if (!string.IsNullOrWhiteSpace(request.SourceType)) item.SourceType = request.SourceType!.Trim();
+        if (!string.IsNullOrWhiteSpace(request.QaStatus))
+        {
+            var nextQa = request.QaStatus!.Trim();
+            if (!string.Equals(item.QaStatus, nextQa, StringComparison.Ordinal))
+            {
+                item.QaStatus = nextQa;
+                item.QaReviewedBy = adminName;
+                item.QaReviewedAt = DateTimeOffset.UtcNow;
+            }
+        }
         if (request.Description is not null || request.CaseNotes is not null)
         {
             item.DetailJson = JsonSupport.Serialize(new { description = request.Description, caseNotes = request.CaseNotes });
