@@ -22,7 +22,7 @@ interface EfficiencyData { period: number; experts: ExpertReport[]; summary: { t
 
 const apiRequest = apiClient.request;
 
-const EFF_BADGE: Record<string, { label: string; color: string }> = { high: { label: 'High', color: 'bg-emerald-100 text-emerald-700' }, medium: { label: 'Medium', color: 'bg-amber-100 text-amber-700' }, low: { label: 'Low', color: 'bg-danger/15 text-danger' }, 'no-data': { label: 'No Data', color: 'bg-muted text-muted' } };
+const EFF_BADGE: Record<string, { label: string; color: string }> = { high: { label: 'High', color: 'bg-success/10 text-success' }, medium: { label: 'Medium', color: 'bg-warning/10 text-warning' }, low: { label: 'Low', color: 'bg-danger/15 text-danger' }, 'no-data': { label: 'No Data', color: 'bg-muted text-muted' } };
 
 export default function ExpertEfficiencyPage() {
   const [data, setData] = useState<EfficiencyData | null>(null);

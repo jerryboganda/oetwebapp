@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Users, Calendar, BarChart3, Settings, Plus, Trash2, RefreshCw, X } from 'lucide-react';
+import { Users, Calendar, BarChart3, Settings, Plus, Trash2, RefreshCw, X, CheckCircle2, CreditCard, ListChecks, Video } from 'lucide-react';
 import { AdminRouteHero, AdminRoutePanel, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
@@ -223,18 +223,10 @@ export default function AdminPrivateSpeakingPage() {
             <AdminRouteSummaryCard label="Revenue (30d)" value={formatPrice(stats.revenueMinorUnitsLast30Days, config?.currency)} />
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-            <AdminRoutePanel title="Total Bookings" className="text-center">
-              <span className="text-2xl font-bold text-navy dark:text-navy">{stats.totalBookings}</span>
-            </AdminRoutePanel>
-            <AdminRoutePanel title="Confirmed" className="text-center">
-              <span className="text-2xl font-bold text-primary">{stats.confirmedBookings}</span>
-            </AdminRoutePanel>
-            <AdminRoutePanel title="Payment Failures" className="text-center">
-              <span className={`text-2xl font-bold ${stats.failedPayments > 0 ? 'text-danger' : 'text-success'}`}>{stats.failedPayments}</span>
-            </AdminRoutePanel>
-            <AdminRoutePanel title="Zoom Failures" className="text-center">
-              <span className={`text-2xl font-bold ${stats.zoomFailures > 0 ? 'text-danger' : 'text-success'}`}>{stats.zoomFailures}</span>
-            </AdminRoutePanel>
+            <AdminRouteSummaryCard label="Total Bookings" value={String(stats.totalBookings)} icon={ListChecks} />
+            <AdminRouteSummaryCard label="Confirmed" value={String(stats.confirmedBookings)} icon={CheckCircle2} />
+            <AdminRouteSummaryCard label="Payment Failures" value={String(stats.failedPayments)} icon={CreditCard} tone={stats.failedPayments > 0 ? 'warning' : 'default'} />
+            <AdminRouteSummaryCard label="Zoom Failures" value={String(stats.zoomFailures)} icon={Video} tone={stats.zoomFailures > 0 ? 'warning' : 'default'} />
           </div>
         </>
       )}
@@ -347,7 +339,7 @@ export default function AdminPrivateSpeakingPage() {
                   <div>
                     <div className="flex items-center gap-2">
                       <span className="font-medium text-navy dark:text-navy">{tutor.displayName}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${tutor.isActive ? 'bg-success/10 text-success dark:bg-green-900/30 dark:text-success' : 'bg-lavender/30 text-muted'}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${tutor.isActive ? 'bg-success/10 text-success' : 'bg-lavender/30 text-muted'}`}>
                         {tutor.isActive ? 'Active' : 'Inactive'}
                       </span>
                     </div>

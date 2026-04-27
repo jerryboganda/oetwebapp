@@ -173,7 +173,7 @@ export default function EditGrammarLessonPage() {
         description={`State: ${lesson.publishState} · v${lesson.version}`}
         aside={(
           <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
-            <Badge className={lesson.publishState === 'published' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}>
+            <Badge className={lesson.publishState === 'published' ? 'bg-success/10 text-success' : 'bg-surface text-navy'}>
               {lesson.publishState} · v{lesson.version}
             </Badge>
             <div className="mt-3 flex flex-wrap gap-2">

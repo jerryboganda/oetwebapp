@@ -26,7 +26,7 @@ const PLAYBOOK_SECTIONS = [
   {
     title: 'User Management',
     icon: Users,
-    color: 'text-emerald-600',
+    color: 'text-success',
     workflows: [
       { name: 'Onboard New Expert', steps: ['Create expert account with credentials', 'Assign profession specialisations', 'Complete calibration reviews (minimum 3)', 'Monitor initial review quality via AI alignment score', 'Grant full review access after calibration'] },
       { name: 'Handle Account Issues', steps: ['Search user by email or ID', 'Check subscription status and payment history', 'Review login activity and last active date', 'Reset password or unlock account as needed', 'Document resolution in notes'] },
@@ -35,7 +35,7 @@ const PLAYBOOK_SECTIONS = [
   {
     title: 'Review Operations',
     icon: Shield,
-    color: 'text-purple-600',
+    color: 'text-primary',
     workflows: [
       { name: 'Monitor SLA Compliance', steps: ['Check SLA Health dashboard daily', 'Identify reviews approaching breach (< 4 hours remaining)', 'Redistribute overloaded expert queues', 'Escalate breached reviews with priority flag', 'Document chronic bottlenecks for staffing decisions'] },
       { name: 'Handle Expert Disagreements', steps: ['Review calibration session flagged items', 'Compare expert scores with AI baseline and consensus', 'Convene calibration discussion if spread > 2 bands', 'Update rubric guidance if interpretation varies', 'Re-assign review if expert was clearly miscalibrated'] },
@@ -44,7 +44,7 @@ const PLAYBOOK_SECTIONS = [
   {
     title: 'Billing & Credits',
     icon: CreditCard,
-    color: 'text-amber-600',
+    color: 'text-warning',
     workflows: [
       { name: 'Handle Refund Requests', steps: ['Verify the failed or unsatisfactory review', 'Check credit lifecycle policy for eligibility', 'Issue credit refund to learner wallet', 'Document reason for audit trail', 'Flag expert if review quality was the cause'] },
       { name: 'Plan Changes', steps: ['Review current subscription details', 'Check proration rules for mid-cycle changes', 'Process upgrade/downgrade', 'Verify new entitlements are active', 'Confirm billing amount adjustment'] },

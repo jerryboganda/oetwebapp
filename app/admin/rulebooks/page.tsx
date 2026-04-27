@@ -162,7 +162,7 @@ export default function AdminRulebooksListPage() {
           {[1, 2, 3].map((i) => <Skeleton key={i} className="h-20" />)}
         </div>
       ) : grouped.length === 0 ? (
-        <Card className="p-8 text-center text-gray-500">No rulebooks found. Click <strong>New Rulebook</strong> to create one.</Card>
+        <Card className="p-8 text-center text-muted">No rulebooks found. Click <strong>New Rulebook</strong> to create one.</Card>
       ) : (
         <div className="space-y-3">
           {grouped.map(([key, group]) => (
@@ -170,21 +170,21 @@ export default function AdminRulebooksListPage() {
               <div className="flex items-start justify-between flex-wrap gap-3 mb-3">
                 <div>
                   <h2 className="font-semibold text-lg capitalize">{key.replace('/', ' · ')}</h2>
-                  <p className="text-xs text-gray-500">{group.length} version(s)</p>
+                  <p className="text-xs text-muted">{group.length} version(s)</p>
                 </div>
               </div>
               <div className="space-y-2">
                 {group.map((r) => (
                   <Link key={r.id} href={`/admin/rulebooks/${encodeURIComponent(r.id)}`}
-                    className="flex items-center justify-between p-3 rounded border hover:bg-gray-50 transition">
+                    className="flex items-center justify-between p-3 rounded border hover:bg-surface transition">
                     <div className="flex items-center gap-3 flex-wrap">
                       <span className="font-mono text-sm">{r.version}</span>
                       <Badge variant={r.status === 'Published' ? 'success' : r.status === 'Draft' ? 'muted' : 'outline'}>
                         {r.status}
                       </Badge>
-                      <span className="text-xs text-gray-500">{r.sectionCount} sections · {r.ruleCount} rules</span>
+                      <span className="text-xs text-muted">{r.sectionCount} sections · {r.ruleCount} rules</span>
                     </div>
-                    <span className="text-xs text-gray-400">Updated {new Date(r.updatedAt).toLocaleDateString()}</span>
+                    <span className="text-xs text-muted">Updated {new Date(r.updatedAt).toLocaleDateString()}</span>
                   </Link>
                 ))}
               </div>

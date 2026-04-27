@@ -565,13 +565,13 @@ export default function ReviewOpsPage() {
                       transition={cardTransition}
                     />
                     <motion.div
-                      className="bg-amber-400"
+                      className="bg-warning"
                       initial={{ width: 0 }}
                       animate={{ width: `${(summary.statusDistribution.inProgress / totalReviews) * 100}%` }}
                       transition={cardTransition}
                     />
                     <motion.div
-                      className="bg-emerald-500"
+                      className="bg-success/100"
                       initial={{ width: 0 }}
                       animate={{ width: `${(summary.statusDistribution.completed / totalReviews) * 100}%` }}
                       transition={cardTransition}

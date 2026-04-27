@@ -10,6 +10,7 @@ import {
   AdminRoutePanel,
   AdminRouteWorkspace,
 } from '@/components/domain/admin-route-surface';
+import { AdminQuickAction } from '@/components/domain/admin-quick-action';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
@@ -214,12 +215,11 @@ export default function UserDetailPage() {
                       {user.status === 'active' ? 'Suspend Account' : 'Reactivate Account'}
                     </Button>
                   ) : null}
-                  <Link
+                  <AdminQuickAction
                     href={`/admin/freeze?userId=${encodeURIComponent(user.id)}`}
-                    className="inline-flex items-center justify-center rounded-lg border border-border px-4 py-2 text-sm font-medium text-navy transition-colors hover:bg-surface"
-                  >
-                    Freeze Controls
-                  </Link>
+                    label="Freeze Controls"
+                    className="w-auto"
+                  />
                   {user.availableActions.canDelete ? (
                     <Button variant="destructive" onClick={() => openLifecycleModal('delete')} loading={isMutating}>
                       Delete Account

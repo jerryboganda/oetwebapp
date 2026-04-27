@@ -2,9 +2,10 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { AnimatePresence } from 'motion/react';
-import { Shield, CheckCircle2, XCircle, Clock, Loader2, ChevronDown, BookOpen, Mic, Pen, Headphones } from 'lucide-react';
-import { LearnerDashboardShell } from '@/components/layout';
-import { LearnerPageHero, ExamTypeBadge } from '@/components/domain';
+import { Store, CheckCircle2, XCircle, Clock, ChevronDown, BookOpen, Mic, Pen, Headphones } from 'lucide-react';
+import { AdminRouteHero, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { ExamTypeBadge } from '@/components/domain';
+import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionCollapse, MotionItem } from '@/components/ui/motion-primitives';
@@ -79,28 +80,35 @@ export default function AdminMarketplaceReviewPage() {
   const dateFormatter = new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 
   return (
-    <LearnerDashboardShell>
-      <LearnerPageHero
+    <AdminRouteWorkspace role="main" aria-label="Marketplace review">
+      <AdminRouteHero
         title="Marketplace Review Queue"
         description="Review and moderate community-submitted content before publication."
-        icon={Shield}
+        icon={Store}
         accent="amber"
       />
 
-      {error && <InlineAlert variant="warning" className="mb-4">{error}</InlineAlert>}
+      {error && <InlineAlert variant="warning">{error}</InlineAlert>}
 
       {loading ? (
-        <div className="space-y-4">
-          {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)}
-        </div>
+        <AdminRoutePanel>
+          <div className="space-y-4">
+            {Array.from({ length: 3 }).map((_, i) => <Skeleton key={i} className="h-32 rounded-xl" />)}
+          </div>
+        </AdminRoutePanel>
       ) : items.length === 0 ? (
-        <div className="text-center py-16 bg-background-light dark:bg-surface/50 rounded-2xl border border-dashed border-border dark:border-border">
-          <CheckCircle2 className="w-12 h-12 text-green-400 mx-auto mb-3" />
-          <p className="text-sm font-bold text-muted dark:text-muted">All caught up!</p>
-          <p className="text-xs text-muted mt-1">No pending submissions to review.</p>
-        </div>
+        <AdminRoutePanel>
+          <div className="text-center py-16">
+            <CheckCircle2 className="w-12 h-12 text-success mx-auto mb-3" />
+            <p className="text-sm font-bold text-navy">All caught up!</p>
+            <p className="text-xs text-muted mt-1">No pending submissions to review.</p>
+          </div>
+        </AdminRoutePanel>
       ) : (
-        <div className="space-y-4">
+        <AdminRoutePanel
+          title="Pending Submissions"
+          description={`${items.length} submission${items.length !== 1 ? 's' : ''} awaiting review.`}
+        >
           <div className="text-sm text-muted">
             <Clock className="w-4 h-4 inline mr-1" /> {items.length} submission{items.length !== 1 ? 's' : ''} pending review
           </div>
@@ -121,7 +129,7 @@ export default function AdminMarketplaceReviewPage() {
                     className="w-full text-left p-4 flex items-center justify-between gap-3 hover:bg-surface dark:hover:bg-surface transition-colors"
                   >
                     <div className="flex items-center gap-3 min-w-0">
-                      <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-900/20 text-amber-600 dark:text-amber-400">
+                      <div className="p-2 rounded-lg bg-warning/10 text-warning">
                         <SubIcon className="w-5 h-5" />
                       </div>
                       <div className="min-w-0">
@@ -169,21 +177,19 @@ export default function AdminMarketplaceReviewPage() {
 
                         <div className="flex items-center gap-2">
                           <input type="checkbox" id={`ci-${item.id}`} checked={createContentItem} onChange={e => setCreateContentItem(e.target.checked)}
-                            className="w-4 h-4 text-amber-600 rounded" />
+                            className="w-4 h-4 text-warning rounded" />
                           <label htmlFor={`ci-${item.id}`} className="text-xs text-muted dark:text-muted">
                             Create ContentItem (Draft) on approval
                           </label>
                         </div>
 
                         <div className="flex gap-3">
-                          <button onClick={() => handleReview(item.id, 'approved')} disabled={processing === item.id}
-                            className="flex-1 py-2.5 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors">
-                            {processing === item.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <CheckCircle2 className="w-4 h-4" />} Approve
-                          </button>
-                          <button onClick={() => handleReview(item.id, 'rejected')} disabled={processing === item.id}
-                            className="flex-1 py-2.5 bg-danger hover:bg-danger/90 disabled:opacity-50 text-white rounded-lg font-semibold text-sm flex items-center justify-center gap-2 transition-colors">
-                            {processing === item.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />} Reject
-                          </button>
+                          <Button onClick={() => handleReview(item.id, 'approved')} loading={processing === item.id} fullWidth className="bg-success hover:bg-success/90">
+                            <CheckCircle2 className="w-4 h-4" /> Approve
+                          </Button>
+                          <Button onClick={() => handleReview(item.id, 'rejected')} loading={processing === item.id} variant="destructive" fullWidth>
+                            <XCircle className="w-4 h-4" /> Reject
+                          </Button>
                         </div>
                       </div>
                   </MotionCollapse>
@@ -191,8 +197,8 @@ export default function AdminMarketplaceReviewPage() {
               );
             })}
           </AnimatePresence>
-        </div>
+        </AdminRoutePanel>
       )}
-    </LearnerDashboardShell>
+    </AdminRouteWorkspace>
   );
 }

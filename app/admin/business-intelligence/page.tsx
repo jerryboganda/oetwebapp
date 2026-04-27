@@ -1,9 +1,9 @@
 'use client';
 
-import Link from 'next/link';
 import { useEffect, useState } from 'react';
-import { ArrowRight, Activity, DollarSign, Layers3, Target, TrendingDown, Users } from 'lucide-react';
+import { Activity, DollarSign, Layers3, Target, TrendingDown, Users } from 'lucide-react';
 import { AdminRouteFreshnessBadge, AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminQuickAction } from '@/components/domain/admin-quick-action';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -23,9 +23,9 @@ const decimalFormatter = new Intl.NumberFormat('en-AU', {
 });
 
 const efficiencyBadgeClasses: Record<string, string> = {
-  high: 'bg-emerald-100 text-emerald-700',
-  medium: 'bg-amber-100 text-amber-700',
-  low: 'bg-rose-100 text-rose-700',
+  high: 'bg-success/10 text-success',
+  medium: 'bg-warning/10 text-warning',
+  low: 'bg-danger/10 text-danger',
   'no-data': 'bg-muted text-muted-foreground',
 };
 
@@ -268,8 +268,8 @@ export default function BusinessIntelligencePage() {
                           <span className="w-16 text-xs font-medium text-muted">{point.month}</span>
                           <div className="flex h-6 flex-1 overflow-hidden rounded-full bg-surface">
                             <div className="flex h-full" style={{ width: barWidth(total, maxTrendVolume) }}>
-                              <div className="h-full bg-emerald-500" style={{ width: total > 0 ? `${(point.newSubscriptions / total) * 100}%` : '0%' }} />
-                              <div className="h-full bg-rose-500" style={{ width: total > 0 ? `${(point.cancellations / total) * 100}%` : '0%' }} />
+                              <div className="h-full bg-success/100" style={{ width: total > 0 ? `${(point.newSubscriptions / total) * 100}%` : '0%' }} />
+                              <div className="h-full bg-danger" style={{ width: total > 0 ? `${(point.cancellations / total) * 100}%` : '0%' }} />
                             </div>
                           </div>
                           <span className="w-24 text-right text-xs text-muted">+{point.newSubscriptions} / -{point.cancellations}</span>
@@ -478,14 +478,7 @@ export default function BusinessIntelligencePage() {
                   { href: '/admin/analytics/content-effectiveness', label: 'Content effectiveness' },
                   { href: '/admin/analytics/expert-efficiency', label: 'Expert efficiency' },
                 ].map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className="inline-flex items-center justify-between gap-2 rounded-lg border border-border px-5 py-3 text-sm font-medium text-navy transition-all duration-200 hover:border-border-hover hover:bg-surface"
-                  >
-                    {link.label}
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
+                  <AdminQuickAction key={link.href} href={link.href} label={link.label} />
                 ))}
               </div>
             </AdminRoutePanel>

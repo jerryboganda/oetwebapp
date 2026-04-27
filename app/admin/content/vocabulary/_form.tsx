@@ -67,7 +67,7 @@ function TagInput({ value, onChange, placeholder, label }: { value: string[]; on
   return (
     <div>
       <label className="mb-1 block text-sm font-medium text-navy">{label}</label>
-      <div className="flex flex-wrap gap-2 rounded-xl border border-gray-200 bg-surface p-2">
+      <div className="flex flex-wrap gap-2 rounded-xl border border-border bg-surface p-2">
         {value.map((v, i) => (
           <span key={i} className="inline-flex items-center gap-1 rounded-full bg-background-light px-2 py-0.5 text-sm">
             {v}
@@ -170,7 +170,7 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
             {/* Core */}
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-1 block text-sm font-medium text-navy">Term <span className="text-red-500">*</span></label>
+                <label className="mb-1 block text-sm font-medium text-navy">Term <span className="text-danger">*</span></label>
                 <Input required value={v.term} onChange={(e) => setV({ ...v, term: e.target.value })} maxLength={128} />
               </div>
               <div>
@@ -180,27 +180,27 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-navy">Definition <span className="text-red-500">*</span></label>
+              <label className="mb-1 block text-sm font-medium text-navy">Definition <span className="text-danger">*</span></label>
               <textarea
                 required
                 value={v.definition}
                 onChange={(e) => setV({ ...v, definition: e.target.value })}
                 maxLength={1024}
                 rows={3}
-                className="w-full rounded-xl border border-gray-200 bg-surface px-3 py-2 text-sm"
+                className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
               />
               <p className="mt-1 text-xs text-muted">{v.definition.length}/25 words recommended · {v.definition.length}/1024 chars</p>
             </div>
 
             <div>
-              <label className="mb-1 block text-sm font-medium text-navy">Example sentence <span className="text-red-500">*</span></label>
+              <label className="mb-1 block text-sm font-medium text-navy">Example sentence <span className="text-danger">*</span></label>
               <textarea
                 required
                 value={v.exampleSentence}
                 onChange={(e) => setV({ ...v, exampleSentence: e.target.value })}
                 maxLength={2048}
                 rows={2}
-                className="w-full rounded-xl border border-gray-200 bg-surface px-3 py-2 text-sm"
+                className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
               />
             </div>
 
@@ -211,7 +211,7 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
                 onChange={(e) => setV({ ...v, contextNotes: e.target.value })}
                 maxLength={1024}
                 rows={2}
-                className="w-full rounded-xl border border-gray-200 bg-surface px-3 py-2 text-sm"
+                className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
               />
             </div>
 
@@ -219,7 +219,7 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
             <div className="grid gap-4 md:grid-cols-4">
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Exam</label>
-                <select value={v.examTypeCode} onChange={(e) => setV({ ...v, examTypeCode: e.target.value })} className="w-full rounded-xl border border-gray-200 bg-surface px-3 py-2 text-sm">
+                <select value={v.examTypeCode} onChange={(e) => setV({ ...v, examTypeCode: e.target.value })} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm">
                   <option value="oet">OET</option>
                   <option value="ielts">IELTS</option>
                   <option value="pte">PTE</option>
@@ -227,19 +227,19 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Profession</label>
-                <select value={v.professionId} onChange={(e) => setV({ ...v, professionId: e.target.value })} className="w-full rounded-xl border border-gray-200 bg-surface px-3 py-2 text-sm">
+                <select value={v.professionId} onChange={(e) => setV({ ...v, professionId: e.target.value })} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm">
                   {PROFESSIONS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-sm font-medium text-navy">Category <span className="text-red-500">*</span></label>
-                <select required value={v.category} onChange={(e) => setV({ ...v, category: e.target.value })} className="w-full rounded-xl border border-gray-200 bg-surface px-3 py-2 text-sm capitalize">
+                <label className="mb-1 block text-sm font-medium text-navy">Category <span className="text-danger">*</span></label>
+                <select required value={v.category} onChange={(e) => setV({ ...v, category: e.target.value })} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm capitalize">
                   {CATEGORIES.map(c => <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>)}
                 </select>
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Difficulty</label>
-                <select value={v.difficulty} onChange={(e) => setV({ ...v, difficulty: e.target.value })} className="w-full rounded-xl border border-gray-200 bg-surface px-3 py-2 text-sm capitalize">
+                <select value={v.difficulty} onChange={(e) => setV({ ...v, difficulty: e.target.value })} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm capitalize">
                   <option value="easy">Easy</option>
                   <option value="medium">Medium</option>
                   <option value="hard">Hard</option>
@@ -269,7 +269,7 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
             {/* Provenance + status */}
             <div className="grid gap-4 md:grid-cols-2">
               <div>
-                <label className="mb-1 block text-sm font-medium text-navy">Source provenance <span className="text-red-500">*</span> (required to publish)</label>
+                <label className="mb-1 block text-sm font-medium text-navy">Source provenance <span className="text-danger">*</span> (required to publish)</label>
                 <Input
                   value={v.sourceProvenance}
                   onChange={(e) => setV({ ...v, sourceProvenance: e.target.value })}
@@ -291,7 +291,7 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
             </div>
 
             {/* Actions */}
-            <div className="flex flex-wrap gap-2 border-t border-gray-100 pt-4">
+            <div className="flex flex-wrap gap-2 border-t border-border pt-4">
               <Button type="submit" variant="primary" disabled={submitting}>
                 <Save className="mr-1.5 h-4 w-4" /> {mode === 'create' ? 'Create draft' : 'Save changes'}
               </Button>

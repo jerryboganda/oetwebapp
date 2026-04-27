@@ -1,7 +1,6 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import Link from 'next/link';
 import { Shield, BadgeCheck, PlayCircle, SquarePen, Clock3, Users } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
 import {
@@ -10,6 +9,7 @@ import {
   AdminRouteSummaryCard,
   AdminRouteWorkspace,
 } from '@/components/domain/admin-route-surface';
+import { AdminQuickAction } from '@/components/domain/admin-quick-action';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Button } from '@/components/ui/button';
 import { InlineAlert } from '@/components/ui/alert';
@@ -172,20 +172,8 @@ export default function AdminFreezePage() {
                 <div className="space-y-3 rounded-2xl border border-border bg-background-light p-4 shadow-sm">
                   <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Quick Links</p>
                   <div className="space-y-2">
-                    <Link
-                      href="/admin/users"
-                      className="inline-flex w-full items-center justify-between rounded-lg border border-border px-4 py-3 text-sm font-medium text-navy transition-colors hover:bg-surface"
-                    >
-                      <span>User directory</span>
-                      <SquarePen className="h-4 w-4" />
-                    </Link>
-                    <Link
-                      href="/freeze"
-                      className="inline-flex w-full items-center justify-between rounded-lg border border-border px-4 py-3 text-sm font-medium text-navy transition-colors hover:bg-surface"
-                    >
-                      <span>Learner freeze page</span>
-                      <PlayCircle className="h-4 w-4" />
-                    </Link>
+                    <AdminQuickAction href="/admin/users" label="User directory" icon={SquarePen} />
+                    <AdminQuickAction href="/freeze" label="Learner freeze page" icon={PlayCircle} />
                   </div>
                 </div>
               )}

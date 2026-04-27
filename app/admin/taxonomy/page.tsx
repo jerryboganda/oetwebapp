@@ -87,7 +87,7 @@ export default function AdminTaxonomyPage() {
             <Edit2 className="h-4 w-4" /> Edit
           </Button>
           {row.status === 'active' ? (
-            <Button variant="outline" size="sm" onClick={() => void archiveNode(row)} className="text-rose-600">
+            <Button variant="outline" size="sm" onClick={() => void archiveNode(row)} className="text-danger">
               Archive
             </Button>
           ) : null}

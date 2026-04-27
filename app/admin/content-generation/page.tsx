@@ -334,7 +334,7 @@ export default function AdminContentGenerationPage() {
                     <div className="flex items-start gap-3 mb-2">
                       <div className="flex-shrink-0 mt-0.5">
                         {result.status === 'processing' && <Loader2 className="w-4 h-4 text-primary animate-spin" />}
-                        {result.status === 'done' && <CheckCircle2 className="w-4 h-4 text-green-500" />}
+                        {result.status === 'done' && <CheckCircle2 className="w-4 h-4 text-success" />}
                         {result.status === 'error' && <AlertCircle className="w-4 h-4 text-danger" />}
                       </div>
                       <div className="flex-1 min-w-0">
@@ -366,7 +366,7 @@ export default function AdminContentGenerationPage() {
                             className="rounded-lg p-2.5 -m-1 text-muted transition-colors hover:bg-lavender/40 hover:text-primary dark:hover:bg-surface"
                             title="Copy JSON"
                           >
-                            {copied === result.id ? <CheckCircle2 className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                            {copied === result.id ? <CheckCircle2 className="w-4 h-4 text-success" /> : <Copy className="w-4 h-4" />}
                           </button>
                         )}
                       </div>

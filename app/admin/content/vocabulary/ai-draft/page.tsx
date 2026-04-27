@@ -132,7 +132,7 @@ export default function AdminVocabularyAiDraftPage() {
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Profession</label>
-                <select value={professionId} onChange={(e) => setProfessionId(e.target.value)} className="w-full rounded-xl border border-gray-200 bg-surface px-3 py-2 text-sm">
+                <select value={professionId} onChange={(e) => setProfessionId(e.target.value)} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm">
                   <option value="">General (medicine)</option>
                   <option value="medicine">Medicine</option>
                   <option value="nursing">Nursing</option>
@@ -142,7 +142,7 @@ export default function AdminVocabularyAiDraftPage() {
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Category</label>
-                <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full rounded-xl border border-gray-200 bg-surface px-3 py-2 text-sm capitalize">
+                <select value={category} onChange={(e) => setCategory(e.target.value)} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm capitalize">
                   {['medical', 'anatomy', 'symptoms', 'procedures', 'pharmacology', 'conditions', 'clinical_communication', 'diagnostics'].map(c => (
                     <option key={c} value={c}>{c.replace(/_/g, ' ')}</option>
                   ))}
@@ -150,7 +150,7 @@ export default function AdminVocabularyAiDraftPage() {
               </div>
               <div>
                 <label className="mb-1 block text-sm font-medium text-navy">Difficulty</label>
-                <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)} className="w-full rounded-xl border border-gray-200 bg-surface px-3 py-2 text-sm">
+                <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)} className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm">
                   <option value="easy">Easy</option>
                   <option value="medium">Medium</option>
                   <option value="hard">Hard</option>
@@ -166,7 +166,7 @@ export default function AdminVocabularyAiDraftPage() {
                 rows={2}
                 maxLength={500}
                 placeholder="e.g. 'Focus on respiratory symptoms for asthma patients.'"
-                className="w-full rounded-xl border border-gray-200 bg-surface px-3 py-2 text-sm"
+                className="w-full rounded-xl border border-border bg-surface px-3 py-2 text-sm"
               />
             </div>
 
@@ -201,7 +201,7 @@ export default function AdminVocabularyAiDraftPage() {
 
                 <div className="space-y-2">
                   {response.drafts.map((d, i) => (
-                    <div key={i} className={`rounded-2xl border p-4 ${selected.has(i) ? 'border-primary/40 bg-primary/5' : 'border-gray-200 bg-surface'}`}>
+                    <div key={i} className={`rounded-2xl border p-4 ${selected.has(i) ? 'border-primary/40 bg-primary/5' : 'border-border bg-surface'}`}>
                       <div className="flex items-start gap-3">
                         <input
                           type="checkbox"
@@ -223,7 +223,7 @@ export default function AdminVocabularyAiDraftPage() {
                             <div className="mt-2 flex flex-wrap gap-1">
                               <span className="text-xs text-muted">Synonyms:</span>
                               {d.synonyms.map((s, j) => (
-                                <span key={j} className="rounded-full bg-gray-100 px-2 py-0.5 text-xs">{s}</span>
+                                <span key={j} className="rounded-full bg-surface px-2 py-0.5 text-xs">{s}</span>
                               ))}
                             </div>
                           )}

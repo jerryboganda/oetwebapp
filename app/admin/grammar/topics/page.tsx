@@ -177,7 +177,7 @@ export default function AdminGrammarTopicsPage() {
                     <h3 className="truncate text-sm font-semibold text-navy">{t.name}</h3>
                     <p className="text-xs text-muted">{t.examTypeCode} · {t.slug} · {t.levelHint}</p>
                   </div>
-                  <Badge className={t.status === 'published' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}>
+                  <Badge className={t.status === 'published' ? 'bg-success/10 text-success' : 'bg-surface text-navy'}>
                     {t.status}
                   </Badge>
                 </div>

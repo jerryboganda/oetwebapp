@@ -347,7 +347,7 @@ export default function AdminRulebookDetailPage() {
             <div key={s.id} className="flex items-center gap-2 p-2 rounded border">
               {editingSection?.id === s.id ? (
                 <>
-                  <span className="font-mono text-xs text-gray-500 w-32">{s.code}</span>
+                  <span className="font-mono text-xs text-muted w-32">{s.code}</span>
                   <Input value={editingSection.title} onChange={(e) => setEditingSection({ ...editingSection, title: e.target.value })} className="flex-1" />
                   <Input type="number" value={editingSection.orderIndex} onChange={(e) => setEditingSection({ ...editingSection, orderIndex: Number(e.target.value) })} className="w-20" />
                   <Button size="sm" onClick={() => handleUpdateSection(editingSection)}>Save</Button>
@@ -355,11 +355,11 @@ export default function AdminRulebookDetailPage() {
                 </>
               ) : (
                 <>
-                  <span className="font-mono text-xs text-gray-500 w-32">{s.code}</span>
+                  <span className="font-mono text-xs text-muted w-32">{s.code}</span>
                   <span className="flex-1 font-medium">{s.title}</span>
-                  <span className="text-xs text-gray-400">#{s.orderIndex}</span>
+                  <span className="text-xs text-muted">#{s.orderIndex}</span>
                   <Button size="sm" variant="ghost" onClick={() => setEditingSection(s)}><Edit3 className="h-4 w-4" /></Button>
-                  <Button size="sm" variant="ghost" onClick={() => handleDeleteSection(s)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                  <Button size="sm" variant="ghost" onClick={() => handleDeleteSection(s)}><Trash2 className="h-4 w-4 text-danger" /></Button>
                 </>
               )}
             </div>
@@ -390,28 +390,28 @@ export default function AdminRulebookDetailPage() {
 
         <div className="space-y-2">
           {filteredRules.map((r) => (
-            <div key={r.id} className="p-3 rounded border hover:bg-gray-50">
+            <div key={r.id} className="p-3 rounded border hover:bg-surface">
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-xs px-2 py-0.5 bg-gray-100 rounded">{r.code}</span>
+                    <span className="font-mono text-xs px-2 py-0.5 bg-surface rounded">{r.code}</span>
                     <Badge variant={r.severity === 'critical' ? 'danger' : r.severity === 'major' ? 'warning' : 'muted'}>
                       {r.severity}
                     </Badge>
-                    <span className="text-xs text-gray-500">{r.sectionCode}</span>
+                    <span className="text-xs text-muted">{r.sectionCode}</span>
                   </div>
                   <h3 className="font-medium mt-1">{r.title}</h3>
-                  <p className="text-sm text-gray-600 line-clamp-2 mt-1">{r.body}</p>
+                  <p className="text-sm text-muted line-clamp-2 mt-1">{r.body}</p>
                 </div>
                 <div className="flex gap-1">
                   <Button size="sm" variant="ghost" onClick={() => openRuleEditor(r)}><Edit3 className="h-4 w-4" /></Button>
-                  <Button size="sm" variant="ghost" onClick={() => handleDeleteRule(r)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                  <Button size="sm" variant="ghost" onClick={() => handleDeleteRule(r)}><Trash2 className="h-4 w-4 text-danger" /></Button>
                 </div>
               </div>
             </div>
           ))}
           {filteredRules.length === 0 && (
-            <p className="text-sm text-gray-500 text-center py-6">No rules{filterSection ? ' in this section' : ''} yet.</p>
+            <p className="text-sm text-muted text-center py-6">No rules{filterSection ? ' in this section' : ''} yet.</p>
           )}
         </div>
       </AdminRoutePanel>
@@ -453,7 +453,7 @@ export default function AdminRulebookDetailPage() {
               </div>
               <Input label="Check ID (optional)" value={ruleForm.checkId ?? ''} onChange={(e) => setRuleForm({ ...ruleForm, checkId: e.target.value })} />
               <details>
-                <summary className="cursor-pointer text-sm font-medium text-gray-700 mb-2">Advanced JSON fields</summary>
+                <summary className="cursor-pointer text-sm font-medium text-navy mb-2">Advanced JSON fields</summary>
                 <div className="space-y-3 pt-2">
                   <Textarea label="Applies To (JSON)" rows={2} value={ruleForm.appliesToJson ?? ''} onChange={(e) => setRuleForm({ ...ruleForm, appliesToJson: e.target.value })} placeholder='"all" or ["nursing","medicine"]' />
                   <Textarea label="Exemplar Phrases (JSON array)" rows={2} value={ruleForm.exemplarPhrasesJson ?? ''} onChange={(e) => setRuleForm({ ...ruleForm, exemplarPhrasesJson: e.target.value })} />

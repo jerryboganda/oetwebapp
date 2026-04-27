@@ -158,7 +158,7 @@ export default function AdminVocabularyImportPage() {
                   </InlineAlert>
                 )}
 
-                <div className="overflow-hidden rounded-2xl border border-gray-200">
+                <div className="overflow-hidden rounded-2xl border border-border">
                   <table className="w-full text-sm">
                     <thead className="bg-background-light text-left text-xs text-muted">
                       <tr>
@@ -172,7 +172,7 @@ export default function AdminVocabularyImportPage() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {preview.rows.slice(0, 100).map(r => (
-                        <tr key={r.lineNumber} className={!r.valid ? 'bg-red-50/50' : ''}>
+                        <tr key={r.lineNumber} className={!r.valid ? 'bg-danger/10' : ''}>
                           <td className="px-3 py-1.5 text-xs text-muted">{r.lineNumber}</td>
                           <td className="px-3 py-1.5">
                             {r.valid
@@ -183,7 +183,7 @@ export default function AdminVocabularyImportPage() {
                           <td className="px-3 py-1.5 font-medium">{r.term ?? '—'}</td>
                           <td className="px-3 py-1.5 text-xs text-muted line-clamp-1 max-w-xs">{r.definition ?? '—'}</td>
                           <td className="px-3 py-1.5 text-xs">{r.category ?? '—'}</td>
-                          <td className="px-3 py-1.5 text-xs text-red-700">{r.error ?? ''}</td>
+                          <td className="px-3 py-1.5 text-xs text-danger">{r.error ?? ''}</td>
                         </tr>
                       ))}
                     </tbody>

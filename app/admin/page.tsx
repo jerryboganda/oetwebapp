@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { AlertTriangle, ArrowRight, BarChart3, CreditCard, FileText, Inbox, Sparkles } from 'lucide-react';
+import { AlertTriangle, BarChart3, CreditCard, FileText, Inbox, Sparkles } from 'lucide-react';
 import { AdminRouteFreshnessBadge, AdminRouteHero, AdminRoutePanel, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminQuickAction } from '@/components/domain/admin-quick-action';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { getAdminDashboardData } from '@/lib/admin';
@@ -15,7 +16,6 @@ export default function AdminDashboardPage() {
   const { isAuthenticated, role } = useAdminAuth();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
   const [dashboard, setDashboard] = useState<AdminDashboardData | null>(null);
-  const quickActionLinkClassName = 'inline-flex w-full items-center justify-center rounded-lg px-5 py-2 text-sm font-medium transition-[background-color,border-color,color,box-shadow,transform,opacity] duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2';
 
   useEffect(() => {
     let cancelled = false;
@@ -61,18 +61,10 @@ export default function AdminDashboardPage() {
                     <p className="mt-1 text-sm text-muted">Move straight into the admin areas that typically need action first.</p>
                   </div>
                   <div className="space-y-2">
-                    <Link href="/admin/review-ops" className={`${quickActionLinkClassName} bg-primary text-white shadow-sm hover:bg-primary/90`}>
-                      Open Review Ops
-                    </Link>
-                    <Link href="/admin/freeze" className={`${quickActionLinkClassName} border border-border text-navy hover:bg-surface hover:border-border-hover`}>
-                      Open Freeze Center
-                    </Link>
-                    <Link href="/admin/content" className={`${quickActionLinkClassName} border border-border text-navy hover:bg-surface hover:border-border-hover`}>
-                      Open Content Library
-                    </Link>
-                    <Link href="/admin/business-intelligence" className={`${quickActionLinkClassName} border border-border text-navy hover:bg-surface hover:border-border-hover`}>
-                      Open BI Dashboard
-                    </Link>
+                    <AdminQuickAction href="/admin/review-ops" label="Open Review Ops" variant="primary" />
+                    <AdminQuickAction href="/admin/freeze" label="Open Freeze Center" />
+                    <AdminQuickAction href="/admin/content" label="Open Content Library" />
+                    <AdminQuickAction href="/admin/business-intelligence" label="Open BI Dashboard" />
                   </div>
                   <div className="space-y-1 text-xs text-muted">
                     <AdminRouteFreshnessBadge value={dashboard.generatedAt} />
@@ -170,14 +162,7 @@ export default function AdminDashboardPage() {
                   { href: '/admin/business-intelligence', label: 'Business Intelligence' },
                   { href: '/admin/analytics/quality', label: 'Quality Analytics' },
                 ].map((link) => (
-                  <Link
-                    key={link.href}
-                    href={link.href}
-                    className="inline-flex items-center justify-between gap-2 rounded-lg border border-border px-5 py-2 text-sm font-medium text-navy transition-all duration-200 hover:bg-surface hover:border-border-hover"
-                  >
-                    {link.label}
-                    <ArrowRight className="h-4 w-4" />
-                  </Link>
+                  <AdminQuickAction key={link.href} href={link.href} label={link.label} />
                 ))}
               </div>
             </AdminRoutePanel>

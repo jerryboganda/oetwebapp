@@ -128,7 +128,7 @@ export default function EscalationsPage() {
       key: 'divergence',
       header: 'Divergence',
       render: (e) => (
-        <span className={`font-mono font-semibold ${e.divergence >= 50 ? 'text-danger' : 'text-amber-600'}`}>
+        <span className={`font-mono font-semibold ${e.divergence >= 50 ? 'text-danger' : 'text-warning'}`}>
           {e.divergence}
         </span>
       ),

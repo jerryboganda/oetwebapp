@@ -139,7 +139,7 @@ export default function BulkImportUsersPage() {
               isDragging
                 ? 'border-primary bg-primary/5'
                 : selectedFile
-                  ? 'border-emerald-400 bg-emerald-50/50 dark:bg-emerald-950/20'
+                  ? 'border-success bg-success/10'
                   : 'border-border/60 hover:border-primary/40 hover:bg-background-light'
             }`}
             onDrop={handleDrop}
@@ -157,7 +157,7 @@ export default function BulkImportUsersPage() {
               className="hidden"
               onChange={(e) => handleFileSelect(e.target.files?.[0])}
             />
-            <Upload size={32} className={selectedFile ? 'text-emerald-500' : 'text-muted'} />
+            <Upload size={32} className={selectedFile ? 'text-success' : 'text-muted'} />
             {selectedFile ? (
               <div className="mt-3">
                 <p className="text-sm font-semibold text-navy">{selectedFile.name}</p>
@@ -220,7 +220,7 @@ export default function BulkImportUsersPage() {
           </div>
 
           {result.created > 0 && result.errors.length === 0 && (
-            <div className="mt-4 flex items-center gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-700 dark:border-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-400">
+            <div className="mt-4 flex items-center gap-2 rounded-2xl border border-success bg-success/10 px-4 py-3 text-sm text-success">
               <CheckCircle2 size={16} />
               All users imported successfully.
             </div>
@@ -228,7 +228,7 @@ export default function BulkImportUsersPage() {
 
           {result.errors.length > 0 && (
             <div className="mt-4">
-              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-red-600">
+              <div className="mb-2 flex items-center gap-2 text-sm font-medium text-danger">
                 <AlertCircle size={16} />
                 {result.errors.length} row(s) had errors
               </div>
@@ -246,7 +246,7 @@ export default function BulkImportUsersPage() {
                       <tr key={i} className="border-b border-border/20 last:border-b-0">
                         <td className="px-4 py-2 text-muted">{err.row}</td>
                         <td className="px-4 py-2 font-mono text-xs text-navy">{err.email || '—'}</td>
-                        <td className="px-4 py-2 text-red-600">{err.error}</td>
+                        <td className="px-4 py-2 text-danger">{err.error}</td>
                       </tr>
                     ))}
                   </tbody>

@@ -110,7 +110,7 @@ function PronunciationDrillForm({
       <Card className="p-5 space-y-3">
         <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-muted">Metadata</h2>
         <label className="block">
-          <span className="text-sm text-navy dark:text-white">Label <span className="text-rose-500">*</span></span>
+          <span className="text-sm text-navy dark:text-white">Label <span className="text-danger">*</span></span>
           <input
             type="text"
             value={form.word}
@@ -121,7 +121,7 @@ function PronunciationDrillForm({
           />
         </label>
         <label className="block">
-          <span className="text-sm text-navy dark:text-white">Target phoneme (IPA) <span className="text-rose-500">*</span></span>
+          <span className="text-sm text-navy dark:text-white">Target phoneme (IPA) <span className="text-danger">*</span></span>
           <input
             type="text"
             value={form.phoneticTranscription}

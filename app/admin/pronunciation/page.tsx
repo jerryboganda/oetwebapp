@@ -229,7 +229,7 @@ export default function AdminPronunciationDashboard() {
                     </td>
                     <td className="px-4 py-2">
                       {r.audioModelUrl ? (
-                        <span className="text-xs text-emerald-700">✓</span>
+                        <span className="text-xs text-success">✓</span>
                       ) : (
                         <span className="text-xs text-muted">—</span>
                       )}

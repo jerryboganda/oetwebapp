@@ -145,14 +145,14 @@ export default function AdminUserAiPage({ params }: { params: Promise<{ userId: 
     { key: 's', header: 'Source', render: (r) => <Badge variant="info">{r.source}</Badge> },
     {
       key: 'd', header: 'Tokens', render: (r) => (
-        <span className={r.tokensDelta > 0 ? 'text-emerald-600' : 'text-red-600'}>
+        <span className={r.tokensDelta > 0 ? 'text-success' : 'text-danger'}>
           {r.tokensDelta > 0 ? '+' : ''}{r.tokensDelta.toLocaleString()}
         </span>
       ),
     },
     { key: 'ex', header: 'Expires', render: (r) => r.expiresAt ? new Date(r.expiresAt).toLocaleDateString() : '—' },
     { key: 'x', header: 'State', render: (r) => r.expiredByEntryId ? <Badge variant="muted">Expired</Badge> : <Badge variant="success">Active</Badge> },
-    { key: 'desc', header: 'Description', render: (r) => <span className="text-xs text-gray-500">{r.description ?? ''}</span> },
+    { key: 'desc', header: 'Description', render: (r) => <span className="text-xs text-muted">{r.description ?? ''}</span> },
   ];
 
   return (

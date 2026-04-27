@@ -265,10 +265,10 @@ export default function AdminGrammarDashboard() {
 
 function stateColor(state: string) {
   switch (state) {
-    case 'published': return 'bg-emerald-100 text-emerald-800';
-    case 'draft': return 'bg-slate-100 text-slate-700';
-    case 'review': return 'bg-amber-100 text-amber-800';
-    case 'archived': return 'bg-rose-100 text-rose-800';
-    default: return 'bg-slate-100 text-slate-700';
+    case 'published': return 'bg-success/10 text-success';
+    case 'draft': return 'bg-surface text-navy';
+    case 'review': return 'bg-warning/10 text-warning';
+    case 'archived': return 'bg-danger/10 text-danger';
+    default: return 'bg-surface text-navy';
   }
 }

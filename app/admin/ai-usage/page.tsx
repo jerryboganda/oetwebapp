@@ -145,7 +145,7 @@ function UsagePanel({ onToast }: { onToast: (t: ToastState) => void }) {
     { key: 'tk', header: 'Tokens', render: (r) => fmt(r.totalTokens) },
     { key: 'o', header: 'Outcome', render: (r) => <Badge variant={r.outcome === 'Success' ? 'success' : 'danger'}>{r.outcome}</Badge> },
     { key: 'l', header: 'Latency', render: (r) => `${r.latencyMs}ms` },
-    { key: 'tr', header: 'Policy trace', render: (r) => <span className="text-xs text-gray-500 truncate max-w-xs">{r.policyTrace ?? ''}</span> },
+    { key: 'tr', header: 'Policy trace', render: (r) => <span className="text-xs text-muted truncate max-w-xs">{r.policyTrace ?? ''}</span> },
   ];
 
   return (
@@ -237,7 +237,7 @@ function BudgetPanel({ onToast }: { onToast: (t: ToastState) => void }) {
               <Input type="number" label="Hard-kill at %" value={policy.hardKillPct}
                 onChange={(e) => setPolicy({ ...policy, hardKillPct: Number(e.target.value) })} />
             </div>
-            <p className="text-sm text-gray-500 mt-2">
+            <p className="text-sm text-muted mt-2">
               Current platform spend: {fmtUsd(policy.currentSpendUsd)} ({policy.monthlyBudgetUsd > 0
                 ? Math.round((policy.currentSpendUsd / policy.monthlyBudgetUsd) * 100)
                 : 0}%).
@@ -466,7 +466,7 @@ function ProvidersPanel({ onToast }: { onToast: (t: ToastState) => void }) {
     { key: 'code', header: 'Code', render: (p) => <span className="font-mono">{p.code}</span> },
     { key: 'name', header: 'Name', render: (p) => p.name },
     { key: 'd', header: 'Dialect', render: (p) => p.dialect },
-    { key: 'u', header: 'Base URL', render: (p) => <span className="text-xs text-gray-500">{p.baseUrl}</span> },
+    { key: 'u', header: 'Base URL', render: (p) => <span className="text-xs text-muted">{p.baseUrl}</span> },
     { key: 'k', header: 'Key', render: (p) => <span className="font-mono text-xs">{p.apiKeyHint}</span> },
     { key: 'pr', header: 'Price 1k in/out', render: (p) => `${fmtUsd(p.pricePer1kPromptTokens)}/${fmtUsd(p.pricePer1kCompletionTokens)}` },
     { key: 'pri', header: 'Priority', render: (p) => p.failoverPriority },

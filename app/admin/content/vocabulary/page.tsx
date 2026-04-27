@@ -131,7 +131,7 @@ export default function AdminVocabularyPage() {
             <Edit3 className="h-4 w-4 text-muted hover:text-primary" />
           </Link>
           <button onClick={() => handleDelete(row.id, row.term)} aria-label={`Delete ${row.term}`}>
-            <Trash2 className="h-4 w-4 text-muted hover:text-red-500" />
+            <Trash2 className="h-4 w-4 text-muted hover:text-danger" />
           </button>
         </div>
       ),
@@ -176,7 +176,7 @@ export default function AdminVocabularyPage() {
             <select
               value={category}
               onChange={(e) => { setCategory(e.target.value); setPage(1); }}
-              className="rounded-xl border border-gray-200 bg-surface px-3 py-2 text-sm"
+              className="rounded-xl border border-border bg-surface px-3 py-2 text-sm"
             >
               <option value="">All categories ({total})</option>
               {categories.map(c => (
@@ -188,7 +188,7 @@ export default function AdminVocabularyPage() {
             <select
               value={profession}
               onChange={(e) => { setProfession(e.target.value); setPage(1); }}
-              className="rounded-xl border border-gray-200 bg-surface px-3 py-2 text-sm"
+              className="rounded-xl border border-border bg-surface px-3 py-2 text-sm"
             >
               <option value="">All professions</option>
               <option value="medicine">Medicine</option>
@@ -199,7 +199,7 @@ export default function AdminVocabularyPage() {
             <select
               value={status}
               onChange={(e) => { setStatus(e.target.value); setPage(1); }}
-              className="rounded-xl border border-gray-200 bg-surface px-3 py-2 text-sm"
+              className="rounded-xl border border-border bg-surface px-3 py-2 text-sm"
             >
               <option value="">All statuses</option>
               <option value="active">Active</option>

@@ -302,7 +302,7 @@ export default function ExpertManagementPage() {
               </button>
               <p className="text-sm text-muted">{expert.email}</p>
               {tutor ? (
-                <span className="inline-flex items-center gap-1 text-xs text-emerald-600">
+                <span className="inline-flex items-center gap-1 text-xs text-success">
                   <Mic className="h-3 w-3" />
                   PS Tutor
                   {tutor.totalSessions > 0 && (
@@ -362,7 +362,7 @@ export default function ExpertManagementPage() {
             </button>
             <p className="truncate text-sm text-muted">{expert.email}</p>
             {tutor ? (
-              <span className="mt-1 inline-flex items-center gap-1 text-xs text-emerald-600">
+              <span className="mt-1 inline-flex items-center gap-1 text-xs text-success">
                 <Mic className="h-3 w-3" />
                 PS Tutor &middot; {tutor.totalSessions} sessions
               </span>
@@ -607,18 +607,18 @@ export default function ExpertManagementPage() {
               const tutor = tutorByExpert.get(selectedExpert.id);
               if (tutor) {
                 return (
-                  <div className="rounded-2xl border border-emerald-200 bg-emerald-50 p-4">
+                  <div className="rounded-2xl border border-success bg-success/10 p-4">
                     <div className="flex items-center gap-2">
-                      <Mic className="h-5 w-5 text-emerald-600" />
-                      <p className="font-medium text-emerald-800">Private Speaking Tutor</p>
+                      <Mic className="h-5 w-5 text-success" />
+                      <p className="font-medium text-success">Private Speaking Tutor</p>
                     </div>
-                    <p className="mt-1 text-sm text-emerald-700">
+                    <p className="mt-1 text-sm text-success">
                       {tutor.totalSessions} sessions &middot; ★{tutor.averageRating.toFixed(1)} avg rating &middot;{' '}
                       {tutor.isActive ? 'Active' : 'Inactive'}
                     </p>
                     <Link
                       href="/admin/private-speaking"
-                      className="mt-2 inline-block text-sm font-medium text-emerald-700 hover:underline"
+                      className="mt-2 inline-block text-sm font-medium text-success hover:underline"
                     >
                       Manage in Private Speaking →
                     </Link>
