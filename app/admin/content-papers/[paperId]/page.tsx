@@ -11,6 +11,7 @@ import { Input, Select } from '@/components/ui/form-controls';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { ReadingStructureEditor } from '@/components/domain/ReadingStructureEditor';
+import { ListeningStructureEditor } from '@/components/domain/ListeningStructureEditor';
 import { DEFAULT_CONTENT_SOURCE_PROVENANCE } from '@/lib/content-upload-defaults';
 import {
   attachPaperAsset,
@@ -247,6 +248,10 @@ export default function ContentPaperEditorPage({ params }: { params: Promise<{ p
 
             {paper.subtestCode === 'reading' && (
               <ReadingStructureEditor paperId={paper.id} />
+            )}
+
+            {paper.subtestCode === 'listening' && (
+              <ListeningStructureEditor paperId={paper.id} />
             )}
           </>
         )}
