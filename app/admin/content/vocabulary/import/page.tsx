@@ -3,7 +3,6 @@
 import { useState, useRef } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, Upload, FileSpreadsheet, AlertTriangle, CheckCircle2, Download, FileText, Copy } from 'lucide-react';
-import { AdminDashboardShell } from '@/components/layout';
 import {
   AdminRouteWorkspace,
   AdminRoutePanel,
@@ -101,7 +100,7 @@ export default function AdminVocabularyImportPage() {
   }
 
   return (
-    <AdminDashboardShell>
+    <>
       {toast && <Toast variant={toast.variant === 'error' ? 'error' : 'success'} message={toast.message} onClose={() => setToast(null)} />}
       <AdminRouteWorkspace>
         <AdminRouteSectionHeader
@@ -197,6 +196,6 @@ export default function AdminVocabularyImportPage() {
           </div>
         </AdminRoutePanel>
       </AdminRouteWorkspace>
-    </AdminDashboardShell>
+    </>
   );
 }

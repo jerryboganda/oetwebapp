@@ -3,7 +3,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { Save, Volume2, Settings as SettingsIcon, ArrowLeft } from 'lucide-react';
-import { AdminDashboardShell } from '@/components/layout';
 import {
   AdminRouteWorkspace,
   AdminRoutePanel,
@@ -124,7 +123,7 @@ export default function AdminConversationSettingsPage() {
     (draft[key as string] as Settings[K] | undefined) ?? settings?.[key];
 
   return (
-    <AdminDashboardShell>
+    <>
       <AdminRouteWorkspace>
         <AdminRoutePanel>
           <AdminRouteSectionHeader
@@ -283,7 +282,7 @@ export default function AdminConversationSettingsPage() {
       </AdminRouteWorkspace>
 
       {toast && (<Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />)}
-    </AdminDashboardShell>
+    </>
   );
 }
 

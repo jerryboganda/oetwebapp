@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { MotionItem } from '@/components/ui/motion-primitives';
 import { Wand2, Loader2, CheckCircle2, AlertCircle, Copy, RefreshCw, Clock3, FileJson2 } from 'lucide-react';
-import { AdminDashboardShell } from '@/components/layout';
 import { InlineAlert } from '@/components/ui/alert';
 import {
   AdminRouteHero,
@@ -197,7 +196,7 @@ export default function AdminContentGenerationPage() {
   }
 
   return (
-    <AdminDashboardShell>
+    <>
       <AdminRouteWorkspace role="main" aria-label="AI content generation">
         <AdminRouteHero
           eyebrow="AI tooling"
@@ -383,6 +382,6 @@ export default function AdminContentGenerationPage() {
           </div>
         </div>
       </AdminRouteWorkspace>
-    </AdminDashboardShell>
+    </>
   );
 }

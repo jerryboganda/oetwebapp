@@ -4,7 +4,6 @@ import { useState, type FormEvent } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { ArrowLeft, BookOpen, Plus, Save, X } from 'lucide-react';
-import { AdminDashboardShell } from '@/components/layout';
 import {
   AdminRouteWorkspace,
   AdminRoutePanel,
@@ -144,7 +143,7 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
   }
 
   return (
-    <AdminDashboardShell>
+    <>
       {toast && <Toast variant={toast.variant === 'error' ? 'error' : 'success'} message={toast.message} onClose={() => setToast(null)} />}
       <AdminRouteWorkspace>
         <AdminRouteSectionHeader
@@ -302,6 +301,6 @@ export function VocabularyForm({ mode, initial, onSubmit, onPublish, itemId }: P
           </form>
         </AdminRoutePanel>
       </AdminRouteWorkspace>
-    </AdminDashboardShell>
+    </>
   );
 }

@@ -77,7 +77,7 @@ describe('AdminLayout', () => {
       { pathname: '/admin/users/user-1' },
     );
 
-    expect(screen.getByTestId('admin-dashboard-shell')).toHaveAttribute('data-page-title', 'User Ops');
+    expect(screen.getByTestId('admin-dashboard-shell')).toHaveAttribute('data-page-title', 'User Operations');
     expect(screen.queryByTestId('app-shell')).not.toBeInTheDocument();
     expect(screen.getByTestId('mfa-banner')).toBeInTheDocument();
   });

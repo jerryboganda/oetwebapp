@@ -4,7 +4,6 @@ import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { MessageSquare, Plus, Archive, CheckCircle } from 'lucide-react';
-import { AdminDashboardShell } from '@/components/layout';
 import {
   AdminRouteWorkspace,
   AdminRoutePanel,
@@ -94,7 +93,7 @@ export default function AdminConversationTemplatesPage() {
 
 
   return (
-    <AdminDashboardShell>
+    <>
       <AdminRouteWorkspace>
         <AdminRoutePanel>
           <AdminRouteSectionHeader
@@ -205,6 +204,6 @@ export default function AdminConversationTemplatesPage() {
       </AdminRouteWorkspace>
 
       {toast && (<Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />)}
-    </AdminDashboardShell>
+    </>
   );
 }
