@@ -118,12 +118,16 @@ export default function ContentQualityPage() {
     <AdminRouteWorkspace>
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
-      <AdminRouteSectionHeader title="Content Quality Scoring" icon={<FileSearch className="w-5 h-5" />} />
+      <AdminRouteSectionHeader
+        title="Content quality scoring"
+        description="Run automated QA scoring across recent content and surface items that still need review."
+        icon={FileSearch}
+      />
 
-      <div className="grid grid-cols-3 gap-4 mb-6">
-        <AdminRouteSummaryCard label="Total Content" value={total} />
-        <AdminRouteSummaryCard label="Approved" value={approvedCount} />
-        <AdminRouteSummaryCard label="Needs Review" value={needsReviewCount} />
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <AdminRouteSummaryCard label="Total content" value={total} hint="All items in QA pipeline" />
+        <AdminRouteSummaryCard label="Approved" value={approvedCount} hint="Passed automated QA" tone="success" />
+        <AdminRouteSummaryCard label="Needs review" value={needsReviewCount} hint="Awaiting human reviewer" tone={needsReviewCount > 0 ? 'warning' : 'default'} />
       </div>
 
       <AsyncStateWrapper status={status} errorMessage="Failed to load content quality data." onRetry={loadData}>

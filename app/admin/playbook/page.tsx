@@ -5,6 +5,11 @@ import { BookOpen, Users, FileText, CreditCard, Shield, BarChart3, AlertTriangle
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import {
+  AdminRouteHero,
+  AdminRouteSectionHeader,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
 import { analytics } from '@/lib/analytics';
 
 const PLAYBOOK_SECTIONS = [
@@ -68,40 +73,43 @@ export default function AdminPlaybookPage() {
   useEffect(() => { analytics.track('admin_playbook_viewed'); }, []);
 
   return (
-    <div className="min-h-screen bg-background-light">
-      <div className="max-w-5xl mx-auto px-4 py-8 space-y-8">
-        <div>
-          <h1 className="text-3xl font-bold flex items-center gap-2"><BookOpen className="w-8 h-8" /> Admin Operational Playbook</h1>
-          <p className="text-muted mt-2">Standard workflows and procedures for platform operations.</p>
-        </div>
+    <AdminRouteWorkspace role="main" aria-label="Admin operational playbook">
+      <AdminRouteHero
+        eyebrow="Operations"
+        icon={BookOpen}
+        accent="navy"
+        title="Admin operational playbook"
+        description="Standard workflows and procedures for platform operations."
+      />
 
-        {PLAYBOOK_SECTIONS.map(section => (
-          <MotionSection key={section.title} className="space-y-4">
-            <h2 className="text-xl font-semibold flex items-center gap-2">
-              <section.icon className={`w-5 h-5 ${section.color}`} />
-              {section.title}
-            </h2>
-            {section.workflows.map(wf => (
-              <MotionItem key={wf.name}>
-                <Card className="p-5">
-                  <h3 className="font-semibold mb-3 flex items-center gap-2">
-                    <Badge variant="outline">{wf.steps.length} steps</Badge>
-                    {wf.name}
-                  </h3>
-                  <ol className="space-y-2">
-                    {wf.steps.map((step, i) => (
-                      <li key={i} className="flex gap-3 items-start text-sm">
-                        <CheckCircle2 className="w-4 h-4 text-muted flex-shrink-0 mt-0.5" />
-                        <span>{step}</span>
-                      </li>
-                    ))}
-                  </ol>
-                </Card>
-              </MotionItem>
-            ))}
-          </MotionSection>
-        ))}
-      </div>
-    </div>
+      {PLAYBOOK_SECTIONS.map(section => (
+        <MotionSection key={section.title} className="space-y-4">
+          <AdminRouteSectionHeader
+            eyebrow="Workflow group"
+            icon={section.icon}
+            title={section.title}
+            description={`${section.workflows.length} workflow${section.workflows.length === 1 ? '' : 's'}`}
+          />
+          {section.workflows.map(wf => (
+            <MotionItem key={wf.name}>
+              <Card className="p-5">
+                <h3 className="font-semibold mb-3 flex items-center gap-2">
+                  <Badge variant="outline">{wf.steps.length} steps</Badge>
+                  {wf.name}
+                </h3>
+                <ol className="space-y-2">
+                  {wf.steps.map((step, i) => (
+                    <li key={i} className="flex gap-3 items-start text-sm">
+                      <CheckCircle2 className="w-4 h-4 text-muted flex-shrink-0 mt-0.5" />
+                      <span>{step}</span>
+                    </li>
+                  ))}
+                </ol>
+              </Card>
+            </MotionItem>
+          ))}
+        </MotionSection>
+      ))}
+    </AdminRouteWorkspace>
   );
 }

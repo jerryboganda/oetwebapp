@@ -123,12 +123,12 @@ export default function AdminCommunityPage() {
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-1.5 mb-0.5">
             {row.isPinned && (
-              <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 text-[10px] px-1.5 py-0">
+              <Badge variant="warning" className="text-[10px] px-1.5 py-0">
                 <Pin className="mr-0.5 h-2.5 w-2.5" /> Pinned
               </Badge>
             )}
             {row.isLocked && (
-              <Badge variant="outline" className="text-gray-500 border-gray-300 text-[10px] px-1.5 py-0">
+              <Badge variant="muted" className="text-[10px] px-1.5 py-0">
                 <Lock className="mr-0.5 h-2.5 w-2.5" /> Locked
               </Badge>
             )}
@@ -171,7 +171,7 @@ export default function AdminCommunityPage() {
             disabled={isMutating}
             title={row.isPinned ? 'Unpin thread' : 'Pin thread'}
           >
-            <Pin className={`h-3.5 w-3.5 ${row.isPinned ? 'text-amber-600' : ''}`} />
+            <Pin className={`h-3.5 w-3.5 ${row.isPinned ? 'text-warning' : ''}`} />
           </Button>
           <Button
             variant="outline"
@@ -180,14 +180,14 @@ export default function AdminCommunityPage() {
             disabled={isMutating}
             title={row.isLocked ? 'Unlock thread' : 'Lock thread'}
           >
-            <Lock className={`h-3.5 w-3.5 ${row.isLocked ? 'text-red-600' : ''}`} />
+            <Lock className={`h-3.5 w-3.5 ${row.isLocked ? 'text-danger' : ''}`} />
           </Button>
           <Button
             variant="outline"
             size="sm"
             onClick={() => setDeleteTarget(row)}
             disabled={isMutating}
-            className="text-red-600 hover:bg-red-50"
+            className="text-danger"
             title="Delete thread"
           >
             <Trash2 className="h-3.5 w-3.5" />
@@ -203,7 +203,11 @@ export default function AdminCommunityPage() {
     <AdminRouteWorkspace role="main" aria-label="Community moderation">
       <AsyncStateWrapper status={pageStatus} onRetry={() => loadThreads(page, pageSize)}>
         <div className="space-y-6">
-          <AdminRouteSectionHeader title="Community Moderation" />
+          <AdminRouteSectionHeader
+            icon={MessageSquareText}
+            title="Community moderation"
+            description="Pin, lock, or delete forum threads to keep discussions on-topic."
+          />
 
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <AdminRouteSummaryCard label="Total Threads" value={String(total)} />
@@ -229,12 +233,12 @@ export default function AdminCommunityPage() {
                     <div className="space-y-2">
                       <div className="flex flex-wrap items-center gap-1.5">
                         {row.isPinned && (
-                          <Badge variant="outline" className="text-amber-600 border-amber-300 bg-amber-50 text-xs">
+                          <Badge variant="warning" className="text-xs">
                             <Pin className="mr-0.5 h-3 w-3" /> Pinned
                           </Badge>
                         )}
                         {row.isLocked && (
-                          <Badge variant="outline" className="text-gray-500 border-gray-300 text-xs">
+                          <Badge variant="muted" className="text-xs">
                             <Lock className="mr-0.5 h-3 w-3" /> Locked
                           </Badge>
                         )}
@@ -247,14 +251,14 @@ export default function AdminCommunityPage() {
                       </div>
                       <div className="flex items-center gap-1.5 pt-1">
                         <Button variant="outline" size="sm" onClick={() => handlePin(row)} disabled={isMutating}>
-                          <Pin className={`h-3.5 w-3.5 mr-1 ${row.isPinned ? 'text-amber-600' : ''}`} />
+                          <Pin className={`h-3.5 w-3.5 mr-1 ${row.isPinned ? 'text-warning' : ''}`} />
                           {row.isPinned ? 'Unpin' : 'Pin'}
                         </Button>
                         <Button variant="outline" size="sm" onClick={() => handleLock(row)} disabled={isMutating}>
-                          <Lock className={`h-3.5 w-3.5 mr-1 ${row.isLocked ? 'text-red-600' : ''}`} />
+                          <Lock className={`h-3.5 w-3.5 mr-1 ${row.isLocked ? 'text-danger' : ''}`} />
                           {row.isLocked ? 'Unlock' : 'Lock'}
                         </Button>
-                        <Button variant="outline" size="sm" onClick={() => setDeleteTarget(row)} disabled={isMutating} className="text-red-600 hover:bg-red-50">
+                        <Button variant="outline" size="sm" onClick={() => setDeleteTarget(row)} disabled={isMutating} className="text-danger">
                           <Trash2 className="h-3.5 w-3.5 mr-1" /> Delete
                         </Button>
                       </div>
@@ -291,9 +295,9 @@ export default function AdminCommunityPage() {
             </Button>
             <Button
               size="sm"
+              variant="primary"
               onClick={handleDeleteConfirm}
               disabled={isMutating}
-              className="bg-red-600 text-white hover:bg-red-700"
             >
               {isMutating ? 'Deleting…' : 'Delete Thread'}
             </Button>

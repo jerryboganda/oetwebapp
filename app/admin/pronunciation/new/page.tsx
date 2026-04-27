@@ -3,10 +3,14 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Save } from 'lucide-react';
+import { ArrowLeft, Save, Mic } from 'lucide-react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Toast } from '@/components/ui/alert';
+import {
+  AdminRouteHero,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
 import { createAdminPronunciationDrill } from '@/lib/api';
 
 export default function NewPronunciationDrillPage() {
@@ -43,32 +47,37 @@ export default function NewPronunciationDrillPage() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
-      <header className="flex items-center gap-3">
-        <Link href="/admin/pronunciation" aria-label="Back to pronunciation drills" className="text-muted hover:text-navy dark:hover:text-white">
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <div>
-          <h1 className="text-2xl font-bold text-navy dark:text-white">New pronunciation drill</h1>
-          <p className="text-sm text-muted">Draft a new drill. You can publish after uploading model audio and completing the content.</p>
-        </div>
-      </header>
+    <AdminRouteWorkspace role="main" aria-label="New pronunciation drill">
+      <Link href="/admin/pronunciation" className="inline-flex items-center gap-1 text-sm text-muted hover:text-navy" aria-label="Back to pronunciation drills">
+        <ArrowLeft className="h-4 w-4" /> Back to pronunciation drills
+      </Link>
+
+      <AdminRouteHero
+        eyebrow="CMS"
+        icon={Mic}
+        accent="navy"
+        title="New pronunciation drill"
+        description="Draft a new drill. You can publish after uploading model audio and completing the content."
+        aside={(
+          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
+            <div className="flex flex-wrap gap-2">
+              <Link href="/admin/pronunciation">
+                <Button variant="ghost">Cancel</Button>
+              </Link>
+              <Button variant="primary" onClick={handleSave} loading={saving} className="gap-2">
+                <Save className="h-4 w-4" /> Save draft
+              </Button>
+            </div>
+          </div>
+        )}
+      />
 
       <PronunciationDrillForm form={form} onChange={setForm} />
-
-      <div className="flex justify-end gap-2">
-        <Link href="/admin/pronunciation">
-          <Button variant="ghost">Cancel</Button>
-        </Link>
-        <Button variant="primary" onClick={handleSave} loading={saving} className="gap-2">
-          <Save className="h-4 w-4" /> Save draft
-        </Button>
-      </div>
 
       {toast && (
         <Toast variant={toast.variant === 'error' ? 'error' : 'success'} message={toast.message} onClose={() => setToast(null)} />
       )}
-    </div>
+    </AdminRouteWorkspace>
   );
 }
 

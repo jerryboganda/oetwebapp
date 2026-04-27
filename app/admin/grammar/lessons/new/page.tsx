@@ -3,8 +3,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, FilePlus } from 'lucide-react';
 import { adminCreateGrammarLessonV2, adminListGrammarTopics } from '@/lib/api';
+import {
+  AdminRouteHero,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
 import { Toast } from '@/components/ui/alert';
 import { GrammarLessonEditor, emptyDraft, draftToApi, type LessonDraft } from '@/components/domain/grammar/grammar-lesson-editor';
 import type { AdminGrammarTopic } from '@/lib/grammar/types';
@@ -43,13 +47,18 @@ export default function NewGrammarLessonPage() {
   }, [router]);
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
-      <header className="flex items-center gap-2">
-        <Link href="/admin/grammar" className="text-muted hover:text-navy" aria-label="Back">
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <h1 className="text-2xl font-bold text-navy">New grammar lesson</h1>
-      </header>
+    <AdminRouteWorkspace role="main" aria-label="New grammar lesson">
+      <Link href="/admin/grammar" className="inline-flex items-center gap-1 text-sm text-muted hover:text-navy" aria-label="Back">
+        <ArrowLeft className="h-4 w-4" /> Back to Grammar CMS
+      </Link>
+
+      <AdminRouteHero
+        eyebrow="CMS"
+        icon={FilePlus}
+        accent="navy"
+        title="New grammar lesson"
+        description="Author a new grammar lesson with content blocks and exercises before publishing."
+      />
 
       <GrammarLessonEditor
         initial={emptyDraft()}
@@ -59,6 +68,6 @@ export default function NewGrammarLessonPage() {
       />
 
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
-    </div>
+    </AdminRouteWorkspace>
   );
 }

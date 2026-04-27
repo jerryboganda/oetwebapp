@@ -11,6 +11,11 @@ import {
   type AdminRulebookSummary,
   type AdminRulebookMetadata,
 } from '@/lib/api';
+import {
+  AdminRouteHero,
+  AdminRoutePanel,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -121,26 +126,28 @@ export default function AdminRulebooksListPage() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <BookOpen className="h-7 w-7 text-blue-600" />
-          <div>
-            <h1 className="text-2xl font-bold">Rulebooks</h1>
-            <p className="text-sm text-gray-600">Create, edit, version, publish, import &amp; export grading rules — fully managed from this UI.</p>
+    <AdminRouteWorkspace role="main" aria-label="Rulebooks">
+      <AdminRouteHero
+        eyebrow="CMS"
+        icon={BookOpen}
+        accent="navy"
+        title="Rulebooks"
+        description="Create, edit, version, publish, import & export grading rules — fully managed from this UI."
+        aside={(
+          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" onClick={() => setImportOpen(true)}>
+                <Upload className="h-4 w-4 mr-1" /> Import JSON
+              </Button>
+              <Button onClick={() => setCreateOpen(true)}>
+                <Plus className="h-4 w-4 mr-1" /> New Rulebook
+              </Button>
+            </div>
           </div>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setImportOpen(true)}>
-            <Upload className="h-4 w-4 mr-1" /> Import JSON
-          </Button>
-          <Button onClick={() => setCreateOpen(true)}>
-            <Plus className="h-4 w-4 mr-1" /> New Rulebook
-          </Button>
-        </div>
-      </header>
+        )}
+      />
 
-      <Card className="p-4">
+      <AdminRoutePanel>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <Select label="Kind" value={kind} onChange={(e) => setKind(e.target.value)} options={kindOptions} />
           <Select label="Profession" value={profession} onChange={(e) => setProfession(e.target.value)} options={professionOptions} />
@@ -148,7 +155,7 @@ export default function AdminRulebooksListPage() {
             <Button onClick={() => void reload()} variant="outline">Refresh</Button>
           </div>
         </div>
-      </Card>
+      </AdminRoutePanel>
 
       {loading ? (
         <div className="space-y-3">
@@ -241,6 +248,6 @@ export default function AdminRulebooksListPage() {
       )}
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-    </div>
+    </AdminRouteWorkspace>
   );
 }

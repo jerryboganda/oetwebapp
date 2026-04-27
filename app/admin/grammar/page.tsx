@@ -4,6 +4,11 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { BookMarked, Plus, Library, Wand2 } from 'lucide-react';
 import {
+  AdminRouteHero,
+  AdminRoutePanel,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
+import {
   adminListGrammarTopics,
   adminListGrammarLessonsV2,
   adminArchiveGrammarLessonV2,
@@ -96,35 +101,37 @@ export default function AdminGrammarDashboard() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <Library className="h-6 w-6 text-primary" />
-            <h1 className="text-2xl font-bold text-navy">Grammar CMS</h1>
+    <AdminRouteWorkspace role="main" aria-label="Grammar CMS">
+      <AdminRouteHero
+        eyebrow="CMS"
+        icon={Library}
+        accent="navy"
+        title="Grammar CMS"
+        description="Manage grammar topics, authored lessons, and AI drafts."
+        aside={(
+          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
+            <div className="flex flex-wrap gap-2">
+              <Link href="/admin/grammar/topics">
+                <Button variant="outline" className="inline-flex items-center gap-2">
+                  <BookMarked className="h-4 w-4" /> Topics
+                </Button>
+              </Link>
+              <Link href="/admin/grammar/ai-draft">
+                <Button variant="outline" className="inline-flex items-center gap-2">
+                  <Wand2 className="h-4 w-4" /> AI draft
+                </Button>
+              </Link>
+              <Link href="/admin/grammar/lessons/new">
+                <Button className="inline-flex items-center gap-2">
+                  <Plus className="h-4 w-4" /> New lesson
+                </Button>
+              </Link>
+            </div>
           </div>
-          <p className="mt-1 text-sm text-muted">Manage grammar topics, authored lessons, and AI drafts.</p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/admin/grammar/topics">
-            <Button variant="outline" className="inline-flex items-center gap-2">
-              <BookMarked className="h-4 w-4" /> Topics
-            </Button>
-          </Link>
-          <Link href="/admin/grammar/ai-draft">
-            <Button variant="outline" className="inline-flex items-center gap-2">
-              <Wand2 className="h-4 w-4" /> AI draft
-            </Button>
-          </Link>
-          <Link href="/admin/grammar/lessons/new">
-            <Button className="inline-flex items-center gap-2">
-              <Plus className="h-4 w-4" /> New lesson
-            </Button>
-          </Link>
-        </div>
-      </header>
+        )}
+      />
 
-      <Card className="p-4">
+      <AdminRoutePanel>
         <div className="grid gap-3 sm:grid-cols-4">
           <Select
             value={filterExam}
@@ -161,7 +168,7 @@ export default function AdminGrammarDashboard() {
             placeholder="title or description"
           />
         </div>
-      </Card>
+      </AdminRoutePanel>
 
       <section>
         <h2 className="mb-3 text-sm font-semibold uppercase tracking-[0.18em] text-muted">Topics ({topics.length})</h2>
@@ -252,7 +259,7 @@ export default function AdminGrammarDashboard() {
       </section>
 
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
-    </div>
+    </AdminRouteWorkspace>
   );
 }
 

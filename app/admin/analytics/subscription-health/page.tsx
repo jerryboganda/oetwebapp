@@ -8,6 +8,12 @@ import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  AdminRouteHero,
+  AdminRoutePanel,
+  AdminRouteSummaryCard,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
 
@@ -30,11 +36,15 @@ export default function SubscriptionHealthPage() {
   }, []);
 
   return (
-    <div className="min-h-screen bg-background-light">
-      <div className="max-w-5xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-1">
-          <h1 className="text-2xl font-bold">Subscription Health</h1>
-          {data && (
+    <AdminRouteWorkspace role="main" aria-label="Subscription Health">
+      <AdminRouteHero
+        eyebrow="Analytics"
+        icon={DollarSign}
+        accent="emerald"
+        title="Subscription Health"
+        description="MRR, churn, ARPU, trial conversion, and revenue breakdown."
+        aside={data ? (
+          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
             <Button variant="outline" size="sm" className="gap-2" onClick={() => {
               const rows: Record<string, unknown>[] = [
                 { metric: 'MRR', value: data.mrr },
@@ -51,62 +61,63 @@ export default function SubscriptionHealthPage() {
               <Download className="w-4 h-4" />
               Export CSV
             </Button>
+          </div>
+        ) : undefined}
+      />
+
+      {loading ? (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
+      ) : data ? (
+        <MotionSection className="space-y-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+            <MotionItem><AdminRouteSummaryCard label="Monthly Recurring Revenue" value={`$${data.mrr.toLocaleString()}`} icon={<DollarSign className="h-5 w-5" />} tone="success" /></MotionItem>
+            <MotionItem><AdminRouteSummaryCard label="Active Subscriptions" value={data.activeSubscriptions} icon={<Users className="h-5 w-5" />} /></MotionItem>
+            <MotionItem><AdminRouteSummaryCard label="Churn Rate (30d)" value={`${data.churnRate}%`} icon={<TrendingDown className="h-5 w-5" />} tone={data.churnRate > 5 ? 'danger' : 'default'} /></MotionItem>
+            <MotionItem><AdminRouteSummaryCard label="New This Month" value={data.newSubscriptionsThisMonth} icon={<TrendingUp className="h-5 w-5" />} tone="success" /></MotionItem>
+            <MotionItem><AdminRouteSummaryCard label="ARPU" value={`$${data.arpu}`} icon={<CreditCard className="h-5 w-5" />} /></MotionItem>
+            <MotionItem><AdminRouteSummaryCard label="Trial Conversion" value={`${data.trialConversionRate}%`} icon={<BarChart3 className="h-5 w-5" />} tone="warning" /></MotionItem>
+          </div>
+
+          {data.revenueByPlan.length > 0 && (
+            <AdminRoutePanel title="Revenue by Plan">
+              <div className="space-y-3">
+                {data.revenueByPlan.map(p => (
+                  <div key={p.planId} className="flex items-center gap-3">
+                    <span className="text-sm font-medium w-32 truncate">{p.planName}</span>
+                    <div className="flex-1 h-4 rounded-full bg-muted overflow-hidden"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, data.mrr > 0 ? p.monthlyRevenue / data.mrr * 100 : 0)}%` }} /></div>
+                    <span className="text-sm text-muted w-24 text-right">${p.monthlyRevenue}</span>
+                    <Badge variant="outline" className="text-[10px]">{p.subscribers} subs</Badge>
+                  </div>
+                ))}
+              </div>
+            </AdminRoutePanel>
           )}
-        </div>
-        <p className="text-muted mb-6">MRR, churn, ARPU, trial conversion, and revenue breakdown.</p>
 
-        {loading ? <div className="grid grid-cols-3 gap-4">{Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div> : data ? (
-          <MotionSection className="space-y-6">
-            {/* Key metrics */}
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <MotionItem><Card className="p-5 text-center"><DollarSign className="w-6 h-6 mx-auto mb-2 text-emerald-500" /><p className="text-3xl font-bold">${data.mrr.toLocaleString()}</p><p className="text-sm text-muted">Monthly Recurring Revenue</p></Card></MotionItem>
-              <MotionItem><Card className="p-5 text-center"><Users className="w-6 h-6 mx-auto mb-2 text-primary" /><p className="text-3xl font-bold">{data.activeSubscriptions}</p><p className="text-sm text-muted">Active Subscriptions</p></Card></MotionItem>
-              <MotionItem><Card className="p-5 text-center"><TrendingDown className="w-6 h-6 mx-auto mb-2 text-danger" /><p className="text-3xl font-bold">{data.churnRate}%</p><p className="text-sm text-muted">Churn Rate (30d)</p></Card></MotionItem>
-              <MotionItem><Card className="p-5 text-center"><TrendingUp className="w-6 h-6 mx-auto mb-2 text-emerald-500" /><p className="text-3xl font-bold">{data.newSubscriptionsThisMonth}</p><p className="text-sm text-muted">New This Month</p></Card></MotionItem>
-              <MotionItem><Card className="p-5 text-center"><CreditCard className="w-6 h-6 mx-auto mb-2 text-purple-500" /><p className="text-3xl font-bold">${data.arpu}</p><p className="text-sm text-muted">ARPU</p></Card></MotionItem>
-              <MotionItem><Card className="p-5 text-center"><BarChart3 className="w-6 h-6 mx-auto mb-2 text-amber-500" /><p className="text-3xl font-bold">{data.trialConversionRate}%</p><p className="text-sm text-muted">Trial Conversion</p></Card></MotionItem>
-            </div>
-
-            {/* Revenue by plan */}
-            {data.revenueByPlan.length > 0 && (
-              <Card className="p-5">
-                <h3 className="font-semibold mb-4">Revenue by Plan</h3>
-                <div className="space-y-3">
-                  {data.revenueByPlan.map(p => (
-                    <div key={p.planId} className="flex items-center gap-3">
-                      <span className="text-sm font-medium w-32 truncate">{p.planName}</span>
-                      <div className="flex-1 h-4 rounded-full bg-muted overflow-hidden"><div className="h-full rounded-full bg-primary" style={{ width: `${Math.min(100, data.mrr > 0 ? p.monthlyRevenue / data.mrr * 100 : 0)}%` }} /></div>
-                      <span className="text-sm text-muted w-24 text-right">${p.monthlyRevenue}</span>
-                      <Badge variant="outline" className="text-[10px]">{p.subscribers} subs</Badge>
+          {data.monthlyTrend.length > 0 && (
+            <AdminRoutePanel title="Monthly Trend (6 months)">
+              <div className="space-y-2">
+                {data.monthlyTrend.map(m => (
+                  <div key={m.month} className="flex items-center gap-3">
+                    <span className="text-xs font-mono w-20 text-muted">{m.month}</span>
+                    <div className="flex-1 flex gap-1">
+                      <div className="h-4 rounded-l-full bg-success" style={{ width: `${m.newSubscriptions * 5}%` }} />
+                      <div className="h-4 rounded-r-full bg-danger" style={{ width: `${m.cancellations * 5}%` }} />
                     </div>
-                  ))}
-                </div>
-              </Card>
-            )}
-
-            {/* Monthly trend */}
-            {data.monthlyTrend.length > 0 && (
-              <Card className="p-5">
-                <h3 className="font-semibold mb-4">Monthly Trend (6 months)</h3>
-                <div className="space-y-2">
-                  {data.monthlyTrend.map(m => (
-                    <div key={m.month} className="flex items-center gap-3">
-                      <span className="text-xs font-mono w-20 text-muted">{m.month}</span>
-                      <div className="flex-1 flex gap-1">
-                        <div className="h-4 rounded-l-full bg-emerald-400" style={{ width: `${m.newSubscriptions * 5}%` }} />
-                        <div className="h-4 rounded-r-full bg-danger" style={{ width: `${m.cancellations * 5}%` }} />
-                      </div>
-                      <span className="text-xs text-emerald-600 w-12 text-right">+{m.newSubscriptions}</span>
-                      <span className="text-xs text-danger w-12 text-right">-{m.cancellations}</span>
-                    </div>
-                  ))}
-                </div>
-                <div className="flex gap-4 mt-3"><span className="text-xs flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-emerald-400" /> New</span><span className="text-xs flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-danger" /> Cancellations</span></div>
-              </Card>
-            )}
-          </MotionSection>
-        ) : <Card className="p-8 text-center text-muted"><p>No data available.</p></Card>}
-      </div>
-    </div>
+                    <span className="text-xs text-success w-12 text-right">+{m.newSubscriptions}</span>
+                    <span className="text-xs text-danger w-12 text-right">-{m.cancellations}</span>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-4 mt-3">
+                <span className="text-xs flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-success" /> New</span>
+                <span className="text-xs flex items-center gap-1"><span className="w-3 h-3 rounded-full bg-danger" /> Cancellations</span>
+              </div>
+            </AdminRoutePanel>
+          )}
+        </MotionSection>
+      ) : (
+        <AdminRoutePanel><p className="text-center text-sm text-muted">No data available.</p></AdminRoutePanel>
+      )}
+    </AdminRouteWorkspace>
   );
 }

@@ -5,7 +5,7 @@ import { AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
-import { Toast } from '@/components/ui/alert';
+import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Pagination } from '@/components/ui/pagination';
@@ -255,20 +255,24 @@ export default function AdminMediaPage() {
         </div>
 
         {audit && (
-          <div className="mb-4 rounded-lg border p-3 text-sm bg-muted/50">
-            <div className="grid grid-cols-4 gap-4 mb-2">
+          <InlineAlert
+            variant={audit.failedCount > 0 ? 'warning' : 'info'}
+            title="Media inventory snapshot"
+            className="mb-4"
+          >
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <div><strong>Total:</strong> {audit.totalAssets}</div>
               <div><strong>Ready:</strong> {audit.readyCount}</div>
               <div><strong>Processing:</strong> {audit.processingCount}</div>
-              <div className="text-destructive"><strong>Failed:</strong> {audit.failedCount}</div>
+              <div className="text-danger"><strong>Failed:</strong> {audit.failedCount}</div>
             </div>
             {audit.missingThumbnails.length > 0 && (
-              <div className="text-xs text-amber-600">⚠ {audit.missingThumbnails.length} missing thumbnails</div>
+              <div className="mt-2 text-xs text-warning">⚠ {audit.missingThumbnails.length} missing thumbnails</div>
             )}
             {audit.missingTranscripts.length > 0 && (
-              <div className="text-xs text-amber-600">⚠ {audit.missingTranscripts.length} missing transcripts</div>
+              <div className="mt-1 text-xs text-warning">⚠ {audit.missingTranscripts.length} missing transcripts</div>
             )}
-          </div>
+          </InlineAlert>
         )}
 
         <AsyncStateWrapper status={pageStatus} errorMessage="Failed to load media assets.">

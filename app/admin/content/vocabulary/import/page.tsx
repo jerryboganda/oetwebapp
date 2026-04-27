@@ -2,12 +2,13 @@
 
 import { useState, useRef } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Upload, FileSpreadsheet, AlertTriangle, CheckCircle2, Download } from 'lucide-react';
+import { ArrowLeft, Upload, FileSpreadsheet, AlertTriangle, CheckCircle2, Download, FileText, Copy } from 'lucide-react';
 import { AdminDashboardShell } from '@/components/layout';
 import {
   AdminRouteWorkspace,
   AdminRoutePanel,
   AdminRouteSectionHeader,
+  AdminRouteSummaryCard,
 } from '@/components/domain/admin-route-surface';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -142,23 +143,11 @@ export default function AdminVocabularyImportPage() {
 
             {preview && (
               <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-                  <div className="rounded-2xl border border-gray-200 bg-surface p-3 text-sm">
-                    <div className="text-xs text-muted">Total rows</div>
-                    <div className="text-2xl font-bold text-navy">{preview.totalRows}</div>
-                  </div>
-                  <div className="rounded-2xl border border-green-200 bg-green-50 p-3 text-sm">
-                    <div className="text-xs text-green-700">Valid</div>
-                    <div className="text-2xl font-bold text-green-800">{preview.validRows}</div>
-                  </div>
-                  <div className="rounded-2xl border border-red-200 bg-red-50 p-3 text-sm">
-                    <div className="text-xs text-red-700">Invalid</div>
-                    <div className="text-2xl font-bold text-red-800">{preview.invalidRows}</div>
-                  </div>
-                  <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm">
-                    <div className="text-xs text-amber-700">Duplicates</div>
-                    <div className="text-2xl font-bold text-amber-800">{preview.duplicateRows}</div>
-                  </div>
+                <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
+                  <AdminRouteSummaryCard label="Total rows" value={preview.totalRows} icon={<FileText className="h-5 w-5" />} />
+                  <AdminRouteSummaryCard label="Valid" value={preview.validRows} icon={<CheckCircle2 className="h-5 w-5" />} tone="success" />
+                  <AdminRouteSummaryCard label="Invalid" value={preview.invalidRows} icon={<AlertTriangle className="h-5 w-5" />} tone={preview.invalidRows > 0 ? 'danger' : 'default'} />
+                  <AdminRouteSummaryCard label="Duplicates" value={preview.duplicateRows} icon={<Copy className="h-5 w-5" />} tone={preview.duplicateRows > 0 ? 'warning' : 'default'} />
                 </div>
 
                 {preview.warnings.length > 0 && (

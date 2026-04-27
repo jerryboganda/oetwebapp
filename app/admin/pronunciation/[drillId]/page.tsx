@@ -3,11 +3,15 @@
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import { ArrowLeft, Save, Archive, Rocket, Undo2 } from 'lucide-react';
+import { ArrowLeft, Save, Archive, Rocket, Undo2, Mic } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Toast } from '@/components/ui/alert';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  AdminRouteHero,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
 import {
   fetchAdminPronunciationDrill,
   updateAdminPronunciationDrill,
@@ -114,73 +118,72 @@ export default function EditPronunciationDrillPage() {
 
   if (loading) {
     return (
-      <div className="space-y-6 p-4 sm:p-6">
+      <AdminRouteWorkspace role="main" aria-label="Edit pronunciation drill">
         <Skeleton className="h-8 w-64" />
         <Skeleton className="h-96 rounded-2xl" />
-      </div>
+      </AdminRouteWorkspace>
     );
   }
 
   if (!drill) {
     return (
-      <div className="space-y-4 p-4 sm:p-6">
+      <AdminRouteWorkspace role="main" aria-label="Edit pronunciation drill">
         <Link href="/admin/pronunciation" className="text-sm text-primary hover:underline">← Back</Link>
         <p className="text-muted">Drill not found.</p>
-      </div>
+      </AdminRouteWorkspace>
     );
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
-      <header className="flex flex-wrap items-center gap-3">
-        <Link href="/admin/pronunciation" aria-label="Back to pronunciation drills" className="text-muted hover:text-navy dark:hover:text-white">
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <div className="flex-1 min-w-0">
-          <h1 className="text-2xl font-bold text-navy dark:text-white truncate">{drill.label}</h1>
-          <div className="flex items-center gap-2 text-xs text-muted">
-            <span className="font-mono">/{drill.targetPhoneme}/</span>
-            {drill.primaryRuleId && <span className="font-mono">{drill.primaryRuleId}</span>}
-            <Badge variant={drill.status === 'active' ? 'success' : drill.status === 'archived' ? 'muted' : 'warning'}>
-              {drill.status}
-            </Badge>
+    <AdminRouteWorkspace role="main" aria-label="Edit pronunciation drill">
+      <Link href="/admin/pronunciation" className="inline-flex items-center gap-1 text-sm text-muted hover:text-navy" aria-label="Back to pronunciation drills">
+        <ArrowLeft className="h-4 w-4" /> Back to pronunciation drills
+      </Link>
+
+      <AdminRouteHero
+        eyebrow="CMS"
+        icon={Mic}
+        accent="navy"
+        title={drill.label}
+        description={`Phoneme /${drill.targetPhoneme}/${drill.primaryRuleId ? ` • Rule ${drill.primaryRuleId}` : ''} • Status ${drill.status}`}
+        aside={(
+          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge variant={drill.status === 'active' ? 'success' : drill.status === 'archived' ? 'muted' : 'warning'}>
+                {drill.status}
+              </Badge>
+              <Button
+                variant="secondary"
+                onClick={() => doSave()}
+                loading={saving}
+                className="gap-2"
+              >
+                <Save className="h-4 w-4" /> Save
+              </Button>
+              {drill.status === 'active' ? (
+                <Button variant="secondary" onClick={() => doSave('draft')} loading={saving} className="gap-2">
+                  <Undo2 className="h-4 w-4" /> Unpublish
+                </Button>
+              ) : drill.status !== 'archived' ? (
+                <Button variant="primary" onClick={() => doSave('active')} loading={saving} className="gap-2">
+                  <Rocket className="h-4 w-4" /> Publish
+                </Button>
+              ) : null}
+              {drill.status !== 'archived' && (
+                <Button variant="destructive" onClick={doArchive} className="gap-2">
+                  <Archive className="h-4 w-4" /> Archive
+                </Button>
+              )}
+            </div>
           </div>
-        </div>
-      </header>
+        )}
+      />
 
       <PronunciationDrillForm form={form} onChange={setForm} />
-
-      <div className="flex flex-wrap justify-end gap-2">
-        <Link href="/admin/pronunciation">
-          <Button variant="ghost">Cancel</Button>
-        </Link>
-        <Button
-          variant="secondary"
-          onClick={() => doSave()}
-          loading={saving}
-          className="gap-2"
-        >
-          <Save className="h-4 w-4" /> Save changes
-        </Button>
-        {drill.status === 'active' ? (
-          <Button variant="secondary" onClick={() => doSave('draft')} loading={saving} className="gap-2">
-            <Undo2 className="h-4 w-4" /> Unpublish
-          </Button>
-        ) : drill.status !== 'archived' ? (
-          <Button variant="primary" onClick={() => doSave('active')} loading={saving} className="gap-2">
-            <Rocket className="h-4 w-4" /> Publish
-          </Button>
-        ) : null}
-        {drill.status !== 'archived' && (
-          <Button variant="destructive" onClick={doArchive} className="gap-2">
-            <Archive className="h-4 w-4" /> Archive
-          </Button>
-        )}
-      </div>
 
       {toast && (
         <Toast variant={toast.variant === 'error' ? 'error' : 'success'} message={toast.message} onClose={() => setToast(null)} />
       )}
-    </div>
+    </AdminRouteWorkspace>
   );
 }

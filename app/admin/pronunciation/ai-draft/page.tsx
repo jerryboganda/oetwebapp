@@ -8,6 +8,11 @@ import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { InlineAlert, Toast } from '@/components/ui/alert';
 import {
+  AdminRouteHero,
+  AdminRoutePanel,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
+import {
   adminPronunciationAiDraft,
   createAdminPronunciationDrill,
 } from '@/lib/api';
@@ -86,24 +91,20 @@ export default function PronunciationAiDraftPage() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
-      <header className="flex items-center gap-3">
-        <Link href="/admin/pronunciation" aria-label="Back to pronunciation drills" className="text-muted hover:text-navy dark:hover:text-white">
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <div>
-          <div className="flex items-center gap-2">
-            <Sparkles className="h-6 w-6 text-primary" />
-            <h1 className="text-2xl font-bold text-navy dark:text-white">AI draft a pronunciation drill</h1>
-          </div>
-          <p className="text-sm text-muted">
-            Grounded in the pronunciation rulebook + canonical OET scoring. Drafts are saved as <code>draft</code>; publishing requires admin review.
-          </p>
-        </div>
-      </header>
+    <AdminRouteWorkspace role="main" aria-label="AI draft pronunciation drill">
+      <Link href="/admin/pronunciation" className="inline-flex items-center gap-1 text-sm text-muted hover:text-navy" aria-label="Back to pronunciation drills">
+        <ArrowLeft className="h-4 w-4" /> Back to pronunciation drills
+      </Link>
 
-      <Card className="p-5 space-y-3">
-        <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-muted">Parameters</h2>
+      <AdminRouteHero
+        eyebrow="CMS"
+        icon={Sparkles}
+        accent="navy"
+        title="AI draft a pronunciation drill"
+        description="Grounded in the pronunciation rulebook and canonical OET scoring. Drafts are saved as draft; publishing requires admin review."
+      />
+
+      <AdminRoutePanel title="Parameters">
         <div className="grid grid-cols-2 gap-3">
           <label className="block">
             <span className="text-sm text-navy dark:text-white">Target phoneme / IPA</span>
@@ -179,16 +180,17 @@ export default function PronunciationAiDraftPage() {
         <Button variant="primary" onClick={generate} loading={generating} className="gap-2">
           <Sparkles className="h-4 w-4" /> Generate draft
         </Button>
-      </Card>
+      </AdminRoutePanel>
 
       {draft && (
-        <Card className="p-5 space-y-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold uppercase tracking-[0.15em] text-muted">Generated draft</h2>
+        <AdminRoutePanel
+          title="Generated draft"
+          actions={(
             <Button variant="primary" onClick={saveAsDrill} loading={saving} className="gap-2">
               <Save className="h-4 w-4" /> Save as draft drill
             </Button>
-          </div>
+          )}
+        >
           {draft.warning && <InlineAlert variant="warning">{draft.warning}</InlineAlert>}
           <dl className="grid grid-cols-1 gap-2 text-sm md:grid-cols-2">
             <DraftRow label="Label" value={draft.label} />
@@ -232,13 +234,13 @@ export default function PronunciationAiDraftPage() {
               <div className="prose prose-sm mt-1 max-w-none" dangerouslySetInnerHTML={{ __html: draft.tipsHtml }} />
             </div>
           )}
-        </Card>
+        </AdminRoutePanel>
       )}
 
       {toast && (
         <Toast variant={toast.variant === 'error' ? 'error' : 'success'} message={toast.message} onClose={() => setToast(null)} />
       )}
-    </div>
+    </AdminRouteWorkspace>
   );
 }
 

@@ -2,7 +2,12 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, BookMarked } from 'lucide-react';
+import {
+  AdminRouteHero,
+  AdminRoutePanel,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
 import {
   adminListGrammarTopics,
   adminCreateGrammarTopic,
@@ -107,16 +112,20 @@ export default function AdminGrammarTopicsPage() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
-      <header className="flex flex-wrap items-center gap-2">
-        <Link href="/admin/grammar" className="text-muted hover:text-navy" aria-label="Back">
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <h1 className="text-2xl font-bold text-navy">Grammar Topics</h1>
-      </header>
+    <AdminRouteWorkspace role="main" aria-label="Grammar Topics">
+      <Link href="/admin/grammar" className="inline-flex items-center gap-1 text-sm text-muted hover:text-navy" aria-label="Back">
+        <ArrowLeft className="h-4 w-4" /> Back to Grammar CMS
+      </Link>
 
-      <Card className="p-4">
-        <h2 className="mb-3 text-sm font-semibold text-navy">Create a new topic</h2>
+      <AdminRouteHero
+        eyebrow="CMS"
+        icon={BookMarked}
+        accent="navy"
+        title="Grammar Topics"
+        description="Create and manage the topic taxonomy that groups grammar lessons."
+      />
+
+      <AdminRoutePanel title="Create a new topic">
         <div className="grid gap-3 sm:grid-cols-3">
           <Select
             value={newExam}
@@ -141,7 +150,7 @@ export default function AdminGrammarTopicsPage() {
             <Plus className="h-4 w-4" /> Create topic
           </Button>
         </div>
-      </Card>
+      </AdminRoutePanel>
 
       <section>
         <div className="mb-3 flex items-center justify-between">
@@ -188,6 +197,6 @@ export default function AdminGrammarTopicsPage() {
       </section>
 
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
-    </div>
+    </AdminRouteWorkspace>
   );
 }

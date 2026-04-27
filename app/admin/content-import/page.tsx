@@ -5,7 +5,7 @@ import { AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
-import { Toast } from '@/components/ui/alert';
+import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Pagination } from '@/components/ui/pagination';
@@ -116,15 +116,15 @@ export default function AdminContentImportPage() {
         </div>
 
         {importResult && (
-          <div className="mb-4 rounded-lg border p-3 text-sm bg-muted/50">
-            <div className="flex items-center gap-2 mb-1">
-              <Package className="w-4 h-4" />
-              <strong>Last Import:</strong> Batch {importResult.batchId}
-            </div>
-            <div className="text-muted">
-              Created: {importResult.created} | Failed: {importResult.failed}
+          <InlineAlert
+            variant={importResult.failed > 0 ? 'warning' : 'success'}
+            title={`Last import — batch ${importResult.batchId}`}
+            className="mb-4"
+          >
+            <div>
+              Created: {importResult.created} · Failed: {importResult.failed}
               {importResult.errors.length > 0 && (
-                <ul className="mt-1 list-disc list-inside text-destructive">
+                <ul className="mt-1 list-disc list-inside text-danger">
                   {importResult.errors.slice(0, 5).map((e, i) => (
                     <li key={i}>Row {e.rowIndex}: {e.message}</li>
                   ))}
@@ -132,7 +132,7 @@ export default function AdminContentImportPage() {
                 </ul>
               )}
             </div>
-          </div>
+          </InlineAlert>
         )}
 
         <AsyncStateWrapper status={pageStatus} errorMessage="Failed to load inventory.">

@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Plus, Trash2, Edit3, CheckCircle2, X, Copy, Download, Undo2 } from 'lucide-react';
+import { ArrowLeft, BookOpen, Plus, Trash2, Edit3, CheckCircle2, X, Copy, Download, Undo2 } from 'lucide-react';
 import {
   adminGetRulebook,
   adminUpdateRulebookMeta,
@@ -23,6 +23,11 @@ import {
   type AdminRulebookSection,
 } from '@/lib/api';
 import { Card } from '@/components/ui/card';
+import {
+  AdminRouteHero,
+  AdminRoutePanel,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Input, Textarea, Select } from '@/components/ui/form-controls';
@@ -292,48 +297,51 @@ export default function AdminRulebookDetailPage() {
   }
 
   return (
-    <div className="space-y-6 p-4 sm:p-6 max-w-7xl">
-      <header className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-3">
-          <Button variant="ghost" size="sm" onClick={() => router.push('/admin/rulebooks')}>
-            <ArrowLeft className="h-4 w-4 mr-1" /> Back
-          </Button>
-          <div>
-            <h1 className="text-2xl font-bold capitalize">{data.kind} · {data.profession}</h1>
-            <div className="flex items-center gap-2 text-sm text-gray-600">
-              <button onClick={handleVersionEdit} className="font-mono hover:underline">v{data.version}</button>
+    <AdminRouteWorkspace role="main" aria-label="Rulebook editor">
+      <Link href="/admin/rulebooks" className="inline-flex items-center gap-1 text-sm text-muted hover:text-navy">
+        <ArrowLeft className="h-4 w-4" /> Back to rulebooks
+      </Link>
+
+      <AdminRouteHero
+        eyebrow="CMS"
+        icon={BookOpen}
+        accent="navy"
+        title={`${data.kind} · ${data.profession}`}
+        description={`Authority source: ${data.authoritySource || 'unspecified'}.`}
+        aside={(
+          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
+            <div className="flex flex-wrap items-center gap-2">
+              <button onClick={handleVersionEdit} className="font-mono text-sm hover:underline">v{data.version}</button>
               <Badge variant={data.status === 'Published' ? 'success' : 'muted'}>{data.status}</Badge>
-              <span className="text-xs">· {data.authoritySource}</span>
+            </div>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button variant="outline" onClick={handleExport}>
+                <Download className="h-4 w-4 mr-1" /> Export
+              </Button>
+              <Button variant="outline" onClick={handleClone}>
+                <Copy className="h-4 w-4 mr-1" /> Clone
+              </Button>
+              {data.status === 'Published' ? (
+                <Button variant="outline" onClick={handleUnpublish}>
+                  <Undo2 className="h-4 w-4 mr-1" /> Unpublish
+                </Button>
+              ) : (
+                <Button onClick={handlePublish}>
+                  <CheckCircle2 className="h-4 w-4 mr-1" /> Publish
+                </Button>
+              )}
+              {data.status !== 'Published' && (
+                <Button variant="outline" onClick={handleDelete}>
+                  <Trash2 className="h-4 w-4 mr-1" /> Delete
+                </Button>
+              )}
             </div>
           </div>
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          <Button variant="outline" onClick={handleExport}>
-            <Download className="h-4 w-4 mr-1" /> Export
-          </Button>
-          <Button variant="outline" onClick={handleClone}>
-            <Copy className="h-4 w-4 mr-1" /> Clone
-          </Button>
-          {data.status === 'Published' ? (
-            <Button variant="outline" onClick={handleUnpublish}>
-              <Undo2 className="h-4 w-4 mr-1" /> Unpublish
-            </Button>
-          ) : (
-            <Button onClick={handlePublish} className="bg-green-600 hover:bg-green-700">
-              <CheckCircle2 className="h-4 w-4 mr-1" /> Publish
-            </Button>
-          )}
-          {data.status !== 'Published' && (
-            <Button variant="outline" onClick={handleDelete} className="text-red-600 border-red-300 hover:bg-red-50">
-              <Trash2 className="h-4 w-4 mr-1" /> Delete
-            </Button>
-          )}
-        </div>
-      </header>
+        )}
+      />
 
       {/* Sections */}
-      <Card className="p-4">
-        <h2 className="font-semibold mb-3">Sections ({data.sections.length})</h2>
+      <AdminRoutePanel title={`Sections (${data.sections.length})`}>
         <div className="space-y-2 mb-4">
           {data.sections.map((s) => (
             <div key={s.id} className="flex items-center gap-2 p-2 rounded border">
@@ -362,12 +370,12 @@ export default function AdminRulebookDetailPage() {
           <Input label="Title" placeholder="e.g. Opening behaviours" value={newSection.title} onChange={(e) => setNewSection({ ...newSection, title: e.target.value })} className="flex-1" />
           <Button onClick={handleCreateSection}><Plus className="h-4 w-4 mr-1" /> Add Section</Button>
         </div>
-      </Card>
+      </AdminRoutePanel>
 
       {/* Rules */}
-      <Card className="p-4">
-        <div className="flex items-center justify-between flex-wrap gap-3 mb-3">
-          <h2 className="font-semibold">Rules ({filteredRules.length}{filterSection ? ` of ${data.rules.length}` : ''})</h2>
+      <AdminRoutePanel
+        title={`Rules (${filteredRules.length}${filterSection ? ` of ${data.rules.length}` : ''})`}
+        actions={(
           <div className="flex items-center gap-2">
             <Select
               value={filterSection}
@@ -377,7 +385,8 @@ export default function AdminRulebookDetailPage() {
             />
             <Button onClick={() => openRuleEditor()}><Plus className="h-4 w-4 mr-1" /> New Rule</Button>
           </div>
-        </div>
+        )}
+      >
 
         <div className="space-y-2">
           {filteredRules.map((r) => (
@@ -405,7 +414,7 @@ export default function AdminRulebookDetailPage() {
             <p className="text-sm text-gray-500 text-center py-6">No rules{filterSection ? ' in this section' : ''} yet.</p>
           )}
         </div>
-      </Card>
+      </AdminRoutePanel>
 
       {/* Rule Editor Modal */}
       {ruleForm && (
@@ -463,6 +472,6 @@ export default function AdminRulebookDetailPage() {
       )}
 
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
-    </div>
+    </AdminRouteWorkspace>
   );
 }

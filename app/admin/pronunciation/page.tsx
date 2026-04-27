@@ -7,6 +7,11 @@ import {
   fetchAdminPronunciationDrills,
   archiveAdminPronunciationDrill,
 } from '@/lib/api';
+import {
+  AdminRouteHero,
+  AdminRoutePanel,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -79,35 +84,35 @@ export default function AdminPronunciationDashboard() {
   }, [load]);
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
-      <header className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <Mic className="h-6 w-6 text-primary" />
-            <h1 className="text-2xl font-bold text-navy dark:text-white">Pronunciation CMS</h1>
+    <AdminRouteWorkspace role="main" aria-label="Pronunciation CMS">
+      <AdminRouteHero
+        eyebrow="CMS"
+        icon={Mic}
+        accent="navy"
+        title="Pronunciation CMS"
+        description="Manage pronunciation drills. Each drill is grounded in the pronunciation rulebook; publishing requires phoneme, tips, and at least 3 example words plus 1 sentence."
+        aside={(
+          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
+            <div className="flex flex-wrap gap-2">
+              <Link href="/admin/pronunciation/ai-draft">
+                <Button variant="secondary" className="gap-2">
+                  <Sparkles className="h-4 w-4" /> AI draft
+                </Button>
+              </Link>
+              <Link href="/admin/pronunciation/new">
+                <Button variant="primary" className="gap-2">
+                  <Plus className="h-4 w-4" /> New drill
+                </Button>
+              </Link>
+            </div>
           </div>
-          <p className="mt-1 text-sm text-muted">
-            Manage pronunciation drills. Each drill is grounded in the pronunciation rulebook; publishing requires phoneme, tips, and at least 3 example words + 1 sentence.
-          </p>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Link href="/admin/pronunciation/ai-draft">
-            <Button variant="secondary" className="gap-2">
-              <Sparkles className="h-4 w-4" /> AI draft
-            </Button>
-          </Link>
-          <Link href="/admin/pronunciation/new">
-            <Button variant="primary" className="gap-2">
-              <Plus className="h-4 w-4" /> New drill
-            </Button>
-          </Link>
-        </div>
-      </header>
+        )}
+      />
 
       <div className="space-y-4">
         <div className="text-sm text-muted">{total} drill{total === 1 ? '' : 's'}</div>
 
-        <Card className="p-4">
+        <AdminRoutePanel>
           <div className="grid grid-cols-1 gap-3 md:grid-cols-4">
             <label className="flex flex-col text-xs uppercase tracking-[0.15em] text-muted">
               Search
@@ -171,7 +176,7 @@ export default function AdminPronunciationDashboard() {
               </select>
             </label>
           </div>
-        </Card>
+        </AdminRoutePanel>
 
         {loading ? (
           <div className="space-y-2">
@@ -263,6 +268,6 @@ export default function AdminPronunciationDashboard() {
           />
         )}
       </div>
-    </div>
+    </AdminRouteWorkspace>
   );
 }

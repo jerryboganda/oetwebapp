@@ -1,11 +1,17 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { AlertOctagon, AlertTriangle, CheckCircle2, ShieldAlert, Users, Clock } from 'lucide-react';
+import { AlertOctagon, AlertTriangle, CheckCircle2, ShieldAlert, Users, Clock, Activity } from 'lucide-react';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  AdminRouteHero,
+  AdminRoutePanel,
+  AdminRouteSummaryCard,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
 
@@ -18,10 +24,10 @@ interface SlaData {
 
 const apiRequest = apiClient.request;
 
-const HEALTH_CONFIG: Record<string, { icon: typeof AlertOctagon; color: string; bg: string; label: string }> = {
-  critical: { icon: AlertOctagon, color: 'text-danger', bg: 'bg-danger/10 dark:bg-danger/10', label: 'Critical' },
-  warning: { icon: AlertTriangle, color: 'text-amber-600', bg: 'bg-amber-50 dark:bg-amber-950', label: 'Warning' },
-  healthy: { icon: CheckCircle2, color: 'text-emerald-600', bg: 'bg-emerald-50 dark:bg-emerald-950', label: 'Healthy' },
+const HEALTH_CONFIG: Record<string, { icon: typeof AlertOctagon; tone: 'default' | 'success' | 'warning' | 'danger'; label: string }> = {
+  critical: { icon: AlertOctagon, tone: 'danger', label: 'Critical' },
+  warning: { icon: AlertTriangle, tone: 'warning', label: 'Warning' },
+  healthy: { icon: CheckCircle2, tone: 'success', label: 'Healthy' },
 };
 
 export default function SlaHealthPage() {
@@ -37,59 +43,79 @@ export default function SlaHealthPage() {
   const HealthIcon = health.icon;
 
   return (
-    <div className="min-h-screen bg-background-light">
-      <div className="max-w-5xl mx-auto px-4 py-8">
-        <h1 className="text-2xl font-bold mb-1">SLA Health Monitor</h1>
-        <p className="text-muted mb-6">Real-time view of review SLA compliance, alerts, and capacity.</p>
+    <AdminRouteWorkspace role="main" aria-label="SLA Health Monitor">
+      <AdminRouteHero
+        eyebrow="Admin Workspace"
+        icon={Activity}
+        accent="navy"
+        title="SLA Health Monitor"
+        description="Real-time view of review SLA compliance, alerts, and capacity."
+      />
 
-        {loading ? <div className="space-y-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div> : data ? (
-          <MotionSection className="space-y-6">
-            {/* Overall health */}
-            <MotionItem><Card className={`p-6 ${health.bg}`}><div className="flex items-center gap-3"><HealthIcon className={`w-8 h-8 ${health.color}`} /><div><h2 className="text-xl font-bold">{health.label}</h2><p className="text-sm text-muted">Overall SLA health as of {new Date(data.timestamp).toLocaleTimeString()}</p></div></div></Card></MotionItem>
+      {loading ? (
+        <div className="space-y-4">{Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-24 rounded-xl" />)}</div>
+      ) : data ? (
+        <MotionSection className="space-y-6">
+          <MotionItem>
+            <AdminRouteSummaryCard
+              label="Overall SLA Health"
+              value={health.label}
+              hint={`As of ${new Date(data.timestamp).toLocaleTimeString()}`}
+              tone={health.tone}
+              icon={<HealthIcon className="h-5 w-5" />}
+            />
+          </MotionItem>
 
-            {/* Summary cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <Card className="p-4 text-center"><p className="text-2xl font-bold">{data.summary.totalOpen}</p><p className="text-xs text-muted">Open Reviews</p></Card>
-              <Card className="p-4 text-center bg-danger/10 dark:bg-danger/10"><p className="text-2xl font-bold text-danger">{data.summary.breached}</p><p className="text-xs text-danger">SLA Breached</p></Card>
-              <Card className="p-4 text-center bg-amber-50 dark:bg-amber-950"><p className="text-2xl font-bold text-amber-600">{data.summary.atRisk}</p><p className="text-xs text-amber-600">At Risk</p></Card>
-              <Card className="p-4 text-center"><p className="text-2xl font-bold text-emerald-600">{data.summary.healthy}</p><p className="text-xs text-muted">Healthy</p></Card>
-            </div>
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <AdminRouteSummaryCard label="Open Reviews" value={data.summary.totalOpen} icon={<Activity className="h-5 w-5" />} />
+            <AdminRouteSummaryCard label="SLA Breached" value={data.summary.breached} tone={data.summary.breached > 0 ? 'danger' : 'default'} icon={<AlertOctagon className="h-5 w-5" />} />
+            <AdminRouteSummaryCard label="At Risk" value={data.summary.atRisk} tone={data.summary.atRisk > 0 ? 'warning' : 'default'} icon={<AlertTriangle className="h-5 w-5" />} />
+            <AdminRouteSummaryCard label="Healthy" value={data.summary.healthy} tone="success" icon={<CheckCircle2 className="h-5 w-5" />} />
+          </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              <Card className="p-4 text-center"><Users className="w-5 h-5 mx-auto mb-1 text-primary" /><p className="text-xl font-bold">{data.summary.activeExperts}</p><p className="text-xs text-muted">Active Experts</p></Card>
-              <Card className="p-4 text-center"><ShieldAlert className="w-5 h-5 mx-auto mb-1 text-amber-500" /><p className="text-xl font-bold">{data.summary.unassigned}</p><p className="text-xs text-muted">Unassigned</p></Card>
-              <Card className="p-4 text-center"><Clock className="w-5 h-5 mx-auto mb-1 text-purple-500" /><p className="text-xl font-bold">{data.summary.queueDepthPerExpert}</p><p className="text-xs text-muted">Per Expert</p>{data.summary.capacityAlert && <Badge variant="danger" className="mt-1 text-[10px]">Over Capacity</Badge>}</Card>
-            </div>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <AdminRouteSummaryCard label="Active Experts" value={data.summary.activeExperts} icon={<Users className="h-5 w-5" />} />
+            <AdminRouteSummaryCard label="Unassigned" value={data.summary.unassigned} tone={data.summary.unassigned > 0 ? 'warning' : 'default'} icon={<ShieldAlert className="h-5 w-5" />} />
+            <AdminRouteSummaryCard
+              label="Per Expert"
+              value={data.summary.queueDepthPerExpert}
+              hint={data.summary.capacityAlert ? 'Over capacity' : undefined}
+              tone={data.summary.capacityAlert ? 'danger' : 'default'}
+              icon={<Clock className="h-5 w-5" />}
+            />
+          </div>
 
-            {/* Recommendations */}
-            {data.recommendations.length > 0 && (
-              <Card className="p-4 bg-warning/5 dark:bg-warning/10">
-                <h3 className="font-semibold mb-2">Recommendations</h3>
-                {data.recommendations.map((r, i) => <p key={i} className="text-sm text-muted">• {r}</p>)}
-              </Card>
-            )}
+          {data.recommendations.length > 0 && (
+            <AdminRoutePanel title="Recommendations">
+              <ul className="space-y-1">
+                {data.recommendations.map((r, i) => <li key={i} className="text-sm text-muted">• {r}</li>)}
+              </ul>
+            </AdminRoutePanel>
+          )}
 
-            {/* Alerts */}
-            {data.alerts.length > 0 && (
-              <>
-                <h3 className="text-lg font-semibold">Alerts ({data.alerts.length})</h3>
-                <div className="space-y-2">
-                  {data.alerts.map(alert => (
-                    <MotionItem key={alert.reviewId}>
-                      <Card className={`p-3 border ${alert.severity === 'breached' ? 'border-danger/30 bg-danger/10/50 dark:bg-danger/10/20' : 'border-warning/30 bg-warning/5 dark:bg-warning/10'}`}>
-                        <div className="flex items-center justify-between">
-                          <div><Badge variant={alert.severity === 'breached' ? 'danger' : 'default'} className="text-[10px] uppercase">{alert.severity}</Badge><span className="text-sm ml-2">{alert.message}</span></div>
-                          <div className="text-xs text-muted capitalize">{alert.subtestCode} • {alert.turnaround}</div>
+          {data.alerts.length > 0 && (
+            <AdminRoutePanel title={`Alerts (${data.alerts.length})`}>
+              <div className="space-y-2">
+                {data.alerts.map(alert => (
+                  <MotionItem key={alert.reviewId}>
+                    <Card className={`p-3 border ${alert.severity === 'breached' ? 'border-danger/30' : 'border-warning/30'}`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <Badge variant={alert.severity === 'breached' ? 'danger' : 'default'} className="text-[10px] uppercase">{alert.severity}</Badge>
+                          <span className="text-sm ml-2">{alert.message}</span>
                         </div>
-                      </Card>
-                    </MotionItem>
-                  ))}
-                </div>
-              </>
-            )}
-          </MotionSection>
-        ) : <Card className="p-8 text-center text-muted"><p>Unable to load SLA health data.</p></Card>}
-      </div>
-    </div>
+                        <div className="text-xs text-muted capitalize">{alert.subtestCode} • {alert.turnaround}</div>
+                      </div>
+                    </Card>
+                  </MotionItem>
+                ))}
+              </div>
+            </AdminRoutePanel>
+          )}
+        </MotionSection>
+      ) : (
+        <AdminRoutePanel><p className="text-center text-sm text-muted">Unable to load SLA health data.</p></AdminRoutePanel>
+      )}
+    </AdminRouteWorkspace>
   );
 }

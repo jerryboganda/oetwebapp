@@ -190,15 +190,20 @@ export default function AdminPrivateSpeakingPage() {
   }
 
   return (
-    <>
-      <AdminRouteHero title="Private Speaking Sessions" description="Manage tutors, availability, bookings, and session configuration" />
+    <AdminRouteWorkspace role="main" aria-label="Private speaking">
+      <AdminRouteHero
+        eyebrow="Operations"
+        icon={Calendar}
+        accent="navy"
+        title="Private speaking sessions"
+        description="Manage tutors, availability, bookings, and session configuration."
+      />
 
-      {error && <InlineAlert variant="warning" className="mb-4">{error}<button onClick={() => setError(null)} className="ml-2"><X className="w-4 h-4 inline" /></button></InlineAlert>}
+      {error && <InlineAlert variant="warning">{error}<button onClick={() => setError(null)} className="ml-2"><X className="w-4 h-4 inline" /></button></InlineAlert>}
 
       {/* Tab navigation */}
-      <div className="flex gap-1 border-b border-border dark:border-border mb-6">
-        {(['overview', 'config', 'tutors', 'bookings', 'audit'] as AdminTab[]).map(t => (
-          <button key={t} onClick={() => setTab(t)}
+      <div className="flex gap-1 border-b border-border dark:border-border">
+        {(['overview', 'config', 'tutors', 'bookings', 'audit'] as AdminTab[]).map(t => (          <button key={t} onClick={() => setTab(t)}
             className={`px-4 py-2.5 text-sm font-medium border-b-2 transition-colors capitalize ${
               tab === t ? 'border-primary text-primary dark:text-primary' : 'border-transparent text-muted hover:text-navy'
             }`}>
@@ -209,7 +214,7 @@ export default function AdminPrivateSpeakingPage() {
 
       {/* ── Overview Tab ────────────────────────────── */}
       {tab === 'overview' && stats && (
-        <AdminRouteWorkspace>
+        <>
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
             <AdminRouteSummaryCard label="Active Tutors" value={String(stats.activeTutors)} icon={Users} />
             <AdminRouteSummaryCard label="Upcoming" value={String(stats.upcomingSessions)} icon={Calendar} />
@@ -231,12 +236,11 @@ export default function AdminPrivateSpeakingPage() {
               <span className={`text-2xl font-bold ${stats.zoomFailures > 0 ? 'text-danger' : 'text-success'}`}>{stats.zoomFailures}</span>
             </AdminRoutePanel>
           </div>
-        </AdminRouteWorkspace>
+        </>
       )}
 
       {/* ── Config Tab ──────────────────────────────── */}
       {tab === 'config' && config && (
-        <AdminRouteWorkspace>
           <AdminRoutePanel title="Module Configuration">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <label className="flex items-center gap-3">
@@ -298,12 +302,11 @@ export default function AdminPrivateSpeakingPage() {
               {saving ? 'Saving...' : 'Save Configuration'}
             </button>
           </AdminRoutePanel>
-        </AdminRouteWorkspace>
       )}
 
-      {/* ── Tutors Tab ──────────────────────────────── */}
+      {/* ── Tutors Tab ───────────────────────────── */}
       {tab === 'tutors' && (
-        <AdminRouteWorkspace>
+        <>
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold text-navy dark:text-navy">Tutor Profiles</h3>
             <button onClick={() => setShowCreateTutor(true)} className="flex items-center gap-2 px-4 py-2 bg-primary hover:bg-primary-dark text-white rounded-lg text-sm font-medium">
@@ -400,13 +403,12 @@ export default function AdminPrivateSpeakingPage() {
               </AdminRoutePanel>
             ))}
           </div>
-        </AdminRouteWorkspace>
+        </>
       )}
 
-      {/* ── Bookings Tab ────────────────────────────── */}
+      {/* ── Bookings Tab ─────────────────────────── */}
       {tab === 'bookings' && (
-        <AdminRouteWorkspace>
-          <h3 className="text-lg font-semibold text-navy dark:text-navy mb-4">All Bookings</h3>
+        <AdminRoutePanel title="All bookings">
           {bookings.length === 0 ? (
             <p className="text-sm text-muted text-center py-8">No bookings found.</p>
           ) : (
@@ -454,13 +456,12 @@ export default function AdminPrivateSpeakingPage() {
               </table>
             </div>
           )}
-        </AdminRouteWorkspace>
+        </AdminRoutePanel>
       )}
 
-      {/* ── Audit Logs Tab ──────────────────────────── */}
+      {/* ── Audit Logs Tab ──────────────────────── */}
       {tab === 'audit' && (
-        <AdminRouteWorkspace>
-          <h3 className="text-lg font-semibold text-navy dark:text-navy mb-4">Audit Logs</h3>
+        <AdminRoutePanel title="Audit logs">
           {auditLogs.length === 0 ? (
             <p className="text-sm text-muted text-center py-8">No audit logs found.</p>
           ) : (
@@ -480,8 +481,8 @@ export default function AdminPrivateSpeakingPage() {
               ))}
             </div>
           )}
-        </AdminRouteWorkspace>
+        </AdminRoutePanel>
       )}
-    </>
+    </AdminRouteWorkspace>
   );
 }

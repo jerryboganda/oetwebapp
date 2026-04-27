@@ -3,7 +3,7 @@
 import { use, useCallback, useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ArrowLeft, CreditCard, Shield, SlidersHorizontal, Trash2, User } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -171,9 +171,9 @@ export default function AdminUserAiPage({ params }: { params: Promise<{ userId: 
       <AsyncStateWrapper status={status}>
         {balance && (
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <StatCard label="Available tokens" value={balance.tokensAvailable.toLocaleString()} icon={<CreditCard className="w-5 h-5" />} />
-            <StatCard label="Granted lifetime" value={balance.tokensGrantedLifetime.toLocaleString()} icon={<Shield className="w-5 h-5" />} />
-            <StatCard label="Consumed lifetime" value={balance.tokensConsumedLifetime.toLocaleString()} icon={<Shield className="w-5 h-5" />} />
+            <AdminRouteSummaryCard label="Available tokens" value={balance.tokensAvailable.toLocaleString()} icon={<CreditCard className="h-5 w-5" />} />
+            <AdminRouteSummaryCard label="Granted lifetime" value={balance.tokensGrantedLifetime.toLocaleString()} icon={<Shield className="h-5 w-5" />} />
+            <AdminRouteSummaryCard label="Consumed lifetime" value={balance.tokensConsumedLifetime.toLocaleString()} icon={<Shield className="h-5 w-5" />} />
           </div>
         )}
 
@@ -239,14 +239,5 @@ export default function AdminUserAiPage({ params }: { params: Promise<{ userId: 
         </AdminRoutePanel>
       </AsyncStateWrapper>
     </AdminRouteWorkspace>
-  );
-}
-
-function StatCard({ label, value, icon }: { label: string; value: string; icon: React.ReactNode }) {
-  return (
-    <div className="bg-surface rounded-[20px] border border-gray-200 p-4">
-      <div className="flex items-center gap-2 text-sm text-muted mb-1">{icon}{label}</div>
-      <div className="text-2xl font-semibold text-navy">{value}</div>
-    </div>
   );
 }

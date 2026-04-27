@@ -3,7 +3,6 @@
 import { useEffect, useState } from 'react';
 import { Users, CreditCard, Bell, UserX } from 'lucide-react';
 import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
-import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input, Textarea, Select } from '@/components/ui/form-controls';
 import { Toast, InlineAlert } from '@/components/ui/alert';
@@ -106,9 +105,13 @@ export default function BulkOperationsPage() {
     <AdminRouteWorkspace>
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
 
-      <AdminRouteSectionHeader title="Bulk Learner Operations" icon={<Users className="w-5 h-5" />} />
+      <AdminRouteSectionHeader
+        title="Bulk learner operations"
+        description="Apply credit adjustments, notifications, or status changes to multiple learners at once."
+        icon={Users}
+      />
 
-      <div className="flex gap-2 mb-6">
+      <div className="flex flex-wrap gap-2">
         {tabs.map((t) => (
           <Button key={t.key} variant={tab === t.key ? 'primary' : 'outline'} size="sm" onClick={() => setTab(t.key)}>
             {t.icon} <span className="ml-1">{t.label}</span>
@@ -116,89 +119,87 @@ export default function BulkOperationsPage() {
         ))}
       </div>
 
-      <AdminRoutePanel>
-        {tab === 'credits' && (
-          <Card>
-            <CardContent className="pt-5 space-y-4">
-              <InlineAlert variant="info" title="Bulk Credit Adjustment">
-                Add or deduct credits from multiple learner accounts at once. Use negative values to debit.
-              </InlineAlert>
+      {tab === 'credits' && (
+        <AdminRoutePanel>
+          <div className="space-y-4">
+            <InlineAlert variant="info" title="Bulk credit adjustment">
+              Add or deduct credits from multiple learner accounts at once. Use negative values to debit.
+            </InlineAlert>
+            <div>
+              <label className="text-sm font-medium">User IDs (one per line or comma-separated)</label>
+              <Textarea value={creditUserIds} onChange={(e) => setCreditUserIds(e.target.value)} rows={4} placeholder="user-id-1&#10;user-id-2" />
+              <p className="text-xs text-muted mt-1">{parseUserIds(creditUserIds).length} users</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">User IDs (one per line or comma-separated)</label>
-                <Textarea value={creditUserIds} onChange={(e) => setCreditUserIds(e.target.value)} rows={4} placeholder="user-id-1&#10;user-id-2" />
-                <p className="text-xs text-muted mt-1">{parseUserIds(creditUserIds).length} users</p>
+                <label className="text-sm font-medium">Credit Amount</label>
+                <Input type="number" value={creditAmount} onChange={(e) => setCreditAmount(e.target.value)} placeholder="50" />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">Credit Amount</label>
-                  <Input type="number" value={creditAmount} onChange={(e) => setCreditAmount(e.target.value)} placeholder="50" />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Reason</label>
-                  <Input value={creditReason} onChange={(e) => setCreditReason(e.target.value)} placeholder="Promotional credits" />
-                </div>
+              <div>
+                <label className="text-sm font-medium">Reason</label>
+                <Input value={creditReason} onChange={(e) => setCreditReason(e.target.value)} placeholder="Promotional credits" />
               </div>
-              <Button onClick={handleCreditSubmit} disabled={submitting || parseUserIds(creditUserIds).length === 0}>
-                {submitting ? 'Processing…' : 'Apply Credits'}
-              </Button>
-            </CardContent>
-          </Card>
-        )}
+            </div>
+            <Button onClick={handleCreditSubmit} disabled={submitting || parseUserIds(creditUserIds).length === 0}>
+              {submitting ? 'Processing…' : 'Apply Credits'}
+            </Button>
+          </div>
+        </AdminRoutePanel>
+      )}
 
-        {tab === 'notifications' && (
-          <Card>
-            <CardContent className="pt-5 space-y-4">
-              <InlineAlert variant="info" title="Bulk Notification">
-                Send a notification to multiple learners simultaneously.
-              </InlineAlert>
-              <div>
-                <label className="text-sm font-medium">User IDs (one per line or comma-separated)</label>
-                <Textarea value={notifUserIds} onChange={(e) => setNotifUserIds(e.target.value)} rows={4} placeholder="user-id-1&#10;user-id-2" />
-                <p className="text-xs text-muted mt-1">{parseUserIds(notifUserIds).length} users</p>
-              </div>
-              <div>
-                <label className="text-sm font-medium">Title</label>
-                <Input value={notifTitle} onChange={(e) => setNotifTitle(e.target.value)} placeholder="Important Update" />
-              </div>
-              <div>
-                <label className="text-sm font-medium">Message</label>
-                <Textarea value={notifMessage} onChange={(e) => setNotifMessage(e.target.value)} rows={3} placeholder="Your message here..." />
-              </div>
-              <Button onClick={handleNotificationSubmit} disabled={submitting || parseUserIds(notifUserIds).length === 0}>
-                {submitting ? 'Sending…' : 'Send Notifications'}
-              </Button>
-            </CardContent>
-          </Card>
-        )}
+      {tab === 'notifications' && (
+        <AdminRoutePanel>
+          <div className="space-y-4">
+            <InlineAlert variant="info" title="Bulk notification">
+              Send a notification to multiple learners simultaneously.
+            </InlineAlert>
+            <div>
+              <label className="text-sm font-medium">User IDs (one per line or comma-separated)</label>
+              <Textarea value={notifUserIds} onChange={(e) => setNotifUserIds(e.target.value)} rows={4} placeholder="user-id-1&#10;user-id-2" />
+              <p className="text-xs text-muted mt-1">{parseUserIds(notifUserIds).length} users</p>
+            </div>
+            <div>
+              <label className="text-sm font-medium">Title</label>
+              <Input value={notifTitle} onChange={(e) => setNotifTitle(e.target.value)} placeholder="Important Update" />
+            </div>
+            <div>
+              <label className="text-sm font-medium">Message</label>
+              <Textarea value={notifMessage} onChange={(e) => setNotifMessage(e.target.value)} rows={3} placeholder="Your message here..." />
+            </div>
+            <Button onClick={handleNotificationSubmit} disabled={submitting || parseUserIds(notifUserIds).length === 0}>
+              {submitting ? 'Sending…' : 'Send Notifications'}
+            </Button>
+          </div>
+        </AdminRoutePanel>
+      )}
 
-        {tab === 'status' && (
-          <Card>
-            <CardContent className="pt-5 space-y-4">
-              <InlineAlert variant="warning" title="Bulk Status Change">
-                Change the account status of multiple learners. This action may restrict their access.
-              </InlineAlert>
+      {tab === 'status' && (
+        <AdminRoutePanel>
+          <div className="space-y-4">
+            <InlineAlert variant="warning" title="Bulk status change">
+              Change the account status of multiple learners. This action may restrict their access.
+            </InlineAlert>
+            <div>
+              <label className="text-sm font-medium">User IDs (one per line or comma-separated)</label>
+              <Textarea value={statusUserIds} onChange={(e) => setStatusUserIds(e.target.value)} rows={4} placeholder="user-id-1&#10;user-id-2" />
+              <p className="text-xs text-muted mt-1">{parseUserIds(statusUserIds).length} users</p>
+            </div>
+            <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="text-sm font-medium">User IDs (one per line or comma-separated)</label>
-                <Textarea value={statusUserIds} onChange={(e) => setStatusUserIds(e.target.value)} rows={4} placeholder="user-id-1&#10;user-id-2" />
-                <p className="text-xs text-muted mt-1">{parseUserIds(statusUserIds).length} users</p>
+                <label className="text-sm font-medium">New Status</label>
+                <Select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} options={[{ value: 'active', label: 'Active' }, { value: 'suspended', label: 'Suspended' }]} />
               </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="text-sm font-medium">New Status</label>
-                  <Select value={newStatus} onChange={(e) => setNewStatus(e.target.value)} options={[{ value: 'active', label: 'Active' }, { value: 'suspended', label: 'Suspended' }]} />
-                </div>
-                <div>
-                  <label className="text-sm font-medium">Reason</label>
-                  <Input value={statusReason} onChange={(e) => setStatusReason(e.target.value)} placeholder="Compliance review" />
-                </div>
+              <div>
+                <label className="text-sm font-medium">Reason</label>
+                <Input value={statusReason} onChange={(e) => setStatusReason(e.target.value)} placeholder="Compliance review" />
               </div>
-              <Button variant="destructive" onClick={handleStatusSubmit} disabled={submitting || parseUserIds(statusUserIds).length === 0}>
-                {submitting ? 'Processing…' : 'Change Status'}
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-      </AdminRoutePanel>
+            </div>
+            <Button variant="destructive" onClick={handleStatusSubmit} disabled={submitting || parseUserIds(statusUserIds).length === 0}>
+              {submitting ? 'Processing…' : 'Change Status'}
+            </Button>
+          </div>
+        </AdminRoutePanel>
+      )}
     </AdminRouteWorkspace>
   );
 }

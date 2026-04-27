@@ -1,13 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { UserCheck, Download } from 'lucide-react';
+import { UserCheck, Download, Users, Activity, Gauge, BarChart3 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { exportToCsv, formatDateForExport } from '@/lib/csv-export';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  AdminRouteHero,
+  AdminRoutePanel,
+  AdminRouteSummaryCard,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
 
@@ -32,11 +38,15 @@ export default function ExpertEfficiencyPage() {
   useEffect(() => { analytics.track('admin_expert_efficiency_viewed'); load(30); }, []);
 
   return (
-    <div className="min-h-screen bg-background-light">
-      <div className="max-w-5xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-1">
-          <h1 className="text-2xl font-bold">Expert Efficiency Report</h1>
-          {data && data.experts.length > 0 && (
+    <AdminRouteWorkspace role="main" aria-label="Expert Efficiency Report">
+      <AdminRouteHero
+        eyebrow="Analytics"
+        icon={UserCheck}
+        accent="navy"
+        title="Expert Efficiency Report"
+        description="Review throughput, quality alignment, and operational efficiency per expert."
+        aside={data && data.experts.length > 0 ? (
+          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
             <Button variant="outline" size="sm" className="gap-2" onClick={() => {
               const rows = data.experts.map(e => ({
                 expertName: e.expertName,
@@ -52,27 +62,28 @@ export default function ExpertEfficiencyPage() {
               <Download className="w-4 h-4" />
               Export CSV
             </Button>
-          )}
-        </div>
-        <p className="text-muted mb-6">Review throughput, quality alignment, and operational efficiency per expert.</p>
+          </div>
+        ) : undefined}
+      />
 
-        <div className="flex gap-2 mb-6">
-          {[7, 14, 30, 60, 90].map(d => (
-            <button key={d} onClick={() => load(d)} className={`px-4 py-2 rounded-lg text-sm font-medium ${days === d ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>{d}d</button>
-          ))}
-        </div>
+      <div className="flex gap-2">
+        {[7, 14, 30, 60, 90].map(d => (
+          <button key={d} onClick={() => load(d)} className={`px-4 py-2 rounded-lg text-sm font-medium ${days === d ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>{d}d</button>
+        ))}
+      </div>
 
-        {loading ? <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div> : data ? (
-          <MotionSection className="space-y-6">
-            {/* Summary */}
-            <div className="grid grid-cols-4 gap-4">
-              <Card className="p-4 text-center"><p className="text-2xl font-bold">{data.summary.totalExperts}</p><p className="text-xs text-muted">Total Experts</p></Card>
-              <Card className="p-4 text-center"><p className="text-2xl font-bold">{data.summary.activeExperts}</p><p className="text-xs text-muted">Active</p></Card>
-              <Card className="p-4 text-center"><p className="text-2xl font-bold">{data.summary.totalReviewsCompleted}</p><p className="text-xs text-muted">Reviews Done</p></Card>
-              <Card className="p-4 text-center"><p className="text-2xl font-bold">{data.summary.averageReviewsPerExpertPerDay}</p><p className="text-xs text-muted">Avg/Expert/Day</p></Card>
-            </div>
+      {loading ? (
+        <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div>
+      ) : data ? (
+        <MotionSection className="space-y-6">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <AdminRouteSummaryCard label="Total Experts" value={data.summary.totalExperts} icon={<Users className="h-5 w-5" />} />
+            <AdminRouteSummaryCard label="Active" value={data.summary.activeExperts} icon={<Activity className="h-5 w-5" />} tone="success" />
+            <AdminRouteSummaryCard label="Reviews Done" value={data.summary.totalReviewsCompleted} icon={<BarChart3 className="h-5 w-5" />} />
+            <AdminRouteSummaryCard label="Avg/Expert/Day" value={data.summary.averageReviewsPerExpertPerDay} icon={<Gauge className="h-5 w-5" />} />
+          </div>
 
-            {/* Expert list */}
+          <AdminRoutePanel title="Expert breakdown">
             <div className="space-y-3">
               {data.experts.map(e => {
                 const eff = EFF_BADGE[e.efficiency] ?? EFF_BADGE['no-data'];
@@ -95,9 +106,11 @@ export default function ExpertEfficiencyPage() {
                 );
               })}
             </div>
-          </MotionSection>
-        ) : <Card className="p-8 text-center text-muted"><p>No data available.</p></Card>}
-      </div>
-    </div>
+          </AdminRoutePanel>
+        </MotionSection>
+      ) : (
+        <AdminRoutePanel><p className="text-center text-sm text-muted">No data available.</p></AdminRoutePanel>
+      )}
+    </AdminRouteWorkspace>
   );
 }

@@ -85,10 +85,8 @@ export default function AdminFreezePage() {
     () => [
       { icon: Users, label: 'Self-service', value: policy.selfServiceEnabled ? 'Enabled' : 'Disabled' },
       { icon: Clock3, label: 'Max duration', value: `${policy.maxDurationDays ?? 365} days` },
-      { icon: BadgeCheck, label: 'Active freezes', value: String(counts.active ?? 0) },
-      { icon: Shield, label: 'Pending', value: String(counts.pending ?? 0) },
     ],
-    [counts.active, counts.pending, policy.maxDurationDays, policy.selfServiceEnabled],
+    [policy.maxDurationDays, policy.selfServiceEnabled],
   );
 
   const savePolicy = async () => {
@@ -196,10 +194,10 @@ export default function AdminFreezePage() {
             {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
 
             <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-              <AdminRouteSummaryCard label="Active" value={counts.active ?? 0} icon={<Shield className="h-5 w-5" />} />
-              <AdminRouteSummaryCard label="Pending" value={counts.pending ?? 0} icon={<Clock3 className="h-5 w-5" />} />
-              <AdminRouteSummaryCard label="Scheduled" value={counts.scheduled ?? 0} icon={<PlayCircle className="h-5 w-5" />} />
-              <AdminRouteSummaryCard label="Ended" value={counts.ended ?? 0} icon={<BadgeCheck className="h-5 w-5" />} />
+              <AdminRouteSummaryCard label="Active" value={counts.active ?? 0} icon={<Shield className="h-5 w-5" />} hint="Currently frozen accounts" />
+              <AdminRouteSummaryCard label="Pending" value={counts.pending ?? 0} icon={<Clock3 className="h-5 w-5" />} hint="Awaiting approval" tone={(counts.pending ?? 0) > 0 ? 'warning' : 'default'} />
+              <AdminRouteSummaryCard label="Scheduled" value={counts.scheduled ?? 0} icon={<PlayCircle className="h-5 w-5" />} hint="Future-dated freezes" />
+              <AdminRouteSummaryCard label="Ended" value={counts.ended ?? 0} icon={<BadgeCheck className="h-5 w-5" />} hint="Completed in window" />
             </div>
 
             <div className="grid gap-6 lg:grid-cols-2">

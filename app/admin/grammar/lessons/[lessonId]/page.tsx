@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft } from 'lucide-react';
+import { ArrowLeft, FileEdit } from 'lucide-react';
 import {
   adminGetGrammarLessonV2,
   adminUpdateGrammarLessonV2,
@@ -13,10 +13,14 @@ import {
   adminEvaluateGrammarPublishGate,
   adminArchiveGrammarLessonV2,
 } from '@/lib/api';
+import {
+  AdminRouteHero,
+  AdminRoutePanel,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
 import { Toast } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   GrammarLessonEditor,
@@ -115,10 +119,10 @@ export default function EditGrammarLessonPage() {
 
   if (loading || !lesson) {
     return (
-      <div className="space-y-6 p-4 sm:p-6">
+      <AdminRouteWorkspace role="main" aria-label="Edit grammar lesson">
         <Skeleton className="h-8 w-64 rounded" />
         <Skeleton className="h-64 rounded-2xl" />
-      </div>
+      </AdminRouteWorkspace>
     );
   }
 
@@ -156,40 +160,47 @@ export default function EditGrammarLessonPage() {
   };
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
-      <header className="flex items-center gap-2">
-        <Link href="/admin/grammar" className="text-muted hover:text-navy" aria-label="Back">
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <h1 className="flex-1 truncate text-2xl font-bold text-navy">Edit: {lesson.title}</h1>
-        <Badge className={lesson.publishState === 'published' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}>
-          {lesson.publishState} · v{lesson.version}
-        </Badge>
-      </header>
+    <AdminRouteWorkspace role="main" aria-label="Edit grammar lesson">
+      <Link href="/admin/grammar" className="inline-flex items-center gap-1 text-sm text-muted hover:text-navy" aria-label="Back">
+        <ArrowLeft className="h-4 w-4" /> Back to Grammar CMS
+      </Link>
 
-      <Card className="p-4">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <p className="text-sm text-muted">
-            Publish gate:{' '}
-            {publishGate === null
-              ? 'checking…'
-              : publishGate.canPublish
-                ? <span className="font-semibold text-emerald-700">Pass</span>
-                : <span className="font-semibold text-rose-700">Fail ({publishGate.errors.length} issue{publishGate.errors.length === 1 ? '' : 's'})</span>}
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {lesson.publishState === 'published' ? (
-              <Button variant="outline" size="sm" onClick={onUnpublish}>Unpublish</Button>
-            ) : null}
-            <Button variant="outline" size="sm" onClick={onArchive}>Archive</Button>
+      <AdminRouteHero
+        eyebrow="CMS"
+        icon={FileEdit}
+        accent="navy"
+        title={`Edit: ${lesson.title}`}
+        description={`State: ${lesson.publishState} · v${lesson.version}`}
+        aside={(
+          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
+            <Badge className={lesson.publishState === 'published' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'}>
+              {lesson.publishState} · v{lesson.version}
+            </Badge>
+            <div className="mt-3 flex flex-wrap gap-2">
+              {lesson.publishState === 'published' ? (
+                <Button variant="outline" size="sm" onClick={onUnpublish}>Unpublish</Button>
+              ) : null}
+              <Button variant="outline" size="sm" onClick={onArchive}>Archive</Button>
+            </div>
           </div>
-        </div>
+        )}
+      />
+
+      <AdminRoutePanel title="Publish gate">
+        <p className="text-sm text-muted">
+          Publish gate:{' '}
+          {publishGate === null
+            ? 'checking…'
+            : publishGate.canPublish
+              ? <span className="font-semibold text-success">Pass</span>
+              : <span className="font-semibold text-danger">Fail ({publishGate.errors.length} issue{publishGate.errors.length === 1 ? '' : 's'})</span>}
+        </p>
         {publishGate && !publishGate.canPublish ? (
-          <ul className="mt-2 list-disc pl-5 text-sm text-rose-700">
+          <ul className="mt-2 list-disc pl-5 text-sm text-danger">
             {publishGate.errors.map((e, i) => <li key={i}>{e}</li>)}
           </ul>
         ) : null}
-      </Card>
+      </AdminRoutePanel>
 
       <GrammarLessonEditor
         initial={initial}
@@ -202,6 +213,6 @@ export default function EditGrammarLessonPage() {
       />
 
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
-    </div>
+    </AdminRouteWorkspace>
   );
 }

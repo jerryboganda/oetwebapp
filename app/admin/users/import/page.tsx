@@ -2,8 +2,8 @@
 
 import Link from 'next/link';
 import { useCallback, useRef, useState } from 'react';
-import { ArrowLeft, Download, Upload, FileSpreadsheet, AlertCircle, CheckCircle2 } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { ArrowLeft, Download, Upload, FileSpreadsheet, AlertCircle, CheckCircle2, Users, FileText, SkipForward } from 'lucide-react';
+import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { Toast } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { bulkImportUsers } from '@/lib/api';
@@ -213,19 +213,10 @@ export default function BulkImportUsersPage() {
         <AdminRoutePanel className="mt-6">
           <AdminRouteSectionHeader title="Import Results" />
 
-          <div className="mt-4 grid grid-cols-3 gap-4">
-            <div className="rounded-2xl bg-background-light px-4 py-3 text-center">
-              <p className="text-2xl font-bold text-navy">{result.total}</p>
-              <p className="text-xs text-muted">Total rows</p>
-            </div>
-            <div className="rounded-2xl bg-emerald-50 px-4 py-3 text-center dark:bg-emerald-950/30">
-              <p className="text-2xl font-bold text-emerald-600">{result.created}</p>
-              <p className="text-xs text-muted">Created</p>
-            </div>
-            <div className="rounded-2xl bg-amber-50 px-4 py-3 text-center dark:bg-amber-950/30">
-              <p className="text-2xl font-bold text-amber-600">{result.skipped}</p>
-              <p className="text-xs text-muted">Skipped</p>
-            </div>
+          <div className="mt-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <AdminRouteSummaryCard label="Total rows" value={result.total} icon={<FileText className="h-5 w-5" />} />
+            <AdminRouteSummaryCard label="Created" value={result.created} icon={<Users className="h-5 w-5" />} tone="success" />
+            <AdminRouteSummaryCard label="Skipped" value={result.skipped} icon={<SkipForward className="h-5 w-5" />} tone={result.skipped > 0 ? 'warning' : 'default'} />
           </div>
 
           {result.created > 0 && result.errors.length === 0 && (

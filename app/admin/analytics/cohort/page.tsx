@@ -1,13 +1,19 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { Download } from 'lucide-react';
+import { Download, Users } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { exportToCsv, formatDateForExport } from '@/lib/csv-export';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  AdminRouteHero,
+  AdminRoutePanel,
+  AdminRouteSummaryCard,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
 
@@ -30,11 +36,15 @@ export default function CohortAnalysisPage() {
   useEffect(() => { analytics.track('admin_cohort_analysis_viewed'); load('profession'); }, []);
 
   return (
-    <div className="min-h-screen bg-background-light">
-      <div className="max-w-5xl mx-auto px-4 py-8">
-        <div className="flex items-center justify-between mb-1">
-          <h1 className="text-2xl font-bold">Learner Cohort Analysis</h1>
-          {data && data.cohorts.length > 0 && (
+    <AdminRouteWorkspace role="main" aria-label="Cohort analysis">
+      <AdminRouteHero
+        eyebrow="Analytics"
+        icon={Users}
+        accent="navy"
+        title="Learner cohort analysis"
+        description="Compare outcomes across professions and subscription tiers."
+        aside={data && data.cohorts.length > 0 ? (
+          <div className="rounded-2xl border border-border bg-background-light p-4 shadow-sm">
             <Button variant="outline" size="sm" className="gap-2" onClick={() => {
               const rows = data.cohorts.map(c => ({
                 cohort: c.cohortName,
@@ -48,36 +58,36 @@ export default function CohortAnalysisPage() {
               <Download className="w-4 h-4" />
               Export CSV
             </Button>
-          )}
-        </div>
-        <p className="text-muted mb-6">Compare outcomes across professions and subscription tiers.</p>
+          </div>
+        ) : undefined}
+      />
 
-        <div className="flex gap-2 mb-6">
-          <button onClick={() => load('profession')} className={`px-4 py-2 rounded-lg text-sm font-medium ${groupBy === 'profession' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>By Profession</button>
-          <button onClick={() => load('plan')} className={`px-4 py-2 rounded-lg text-sm font-medium ${groupBy === 'plan' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>By Plan</button>
-        </div>
-
-        {loading ? <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div> : data ? (
-          <MotionSection className="space-y-4">
-            <Card className="p-4"><p className="text-sm text-muted">Total learners: <strong>{data.totalLearners}</strong> • Grouped by: <strong className="capitalize">{data.groupBy}</strong></p></Card>
-            {data.cohorts.map(c => (
-              <MotionItem key={c.cohortKey}>
-                <Card className="p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <h3 className="font-semibold">{c.cohortName}</h3>
-                    <Badge variant="outline">{c.learnerCount} learners</Badge>
-                  </div>
-                  <div className="grid grid-cols-3 gap-4 text-center">
-                    <div><p className="text-lg font-bold">{c.averageScore ?? '--'}</p><p className="text-xs text-muted">Avg Score</p></div>
-                    <div><p className="text-lg font-bold">{c.evaluationCount}</p><p className="text-xs text-muted">Evaluations</p></div>
-                    <div><p className="text-lg font-bold">{c.activeLastMonth}</p><p className="text-xs text-muted">Active (30d)</p></div>
-                  </div>
-                </Card>
-              </MotionItem>
-            ))}
-          </MotionSection>
-        ) : <Card className="p-8 text-center text-muted"><p>No data available.</p></Card>}
+      <div className="flex gap-2">
+        <button onClick={() => load('profession')} className={`px-4 py-2 rounded-lg text-sm font-medium ${groupBy === 'profession' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>By Profession</button>
+        <button onClick={() => load('plan')} className={`px-4 py-2 rounded-lg text-sm font-medium ${groupBy === 'plan' ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>By Plan</button>
       </div>
-    </div>
+
+      {loading ? <div className="space-y-3">{Array.from({ length: 5 }).map((_, i) => <Skeleton key={i} className="h-20 rounded-xl" />)}</div> : data ? (
+        <MotionSection className="space-y-4">
+          <AdminRoutePanel>
+            <p className="text-sm text-muted">Total learners: <strong>{data.totalLearners}</strong> • Grouped by: <strong className="capitalize">{data.groupBy}</strong></p>
+          </AdminRoutePanel>
+          {data.cohorts.map(c => (
+            <MotionItem key={c.cohortKey}>
+              <AdminRoutePanel
+                title={c.cohortName}
+                actions={<Badge variant="outline">{c.learnerCount} learners</Badge>}
+              >
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                  <AdminRouteSummaryCard label="Avg score" value={c.averageScore ?? '—'} hint="Across recent evaluations" />
+                  <AdminRouteSummaryCard label="Evaluations" value={c.evaluationCount} hint="Lifetime total" />
+                  <AdminRouteSummaryCard label="Active (30d)" value={c.activeLastMonth} hint="Logged in last 30 days" />
+                </div>
+              </AdminRoutePanel>
+            </MotionItem>
+          ))}
+        </MotionSection>
+      ) : <AdminRoutePanel><p className="text-center text-muted">No data available.</p></AdminRoutePanel>}
+    </AdminRouteWorkspace>
   );
 }

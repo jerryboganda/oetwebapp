@@ -54,11 +54,6 @@ export default function AdminDashboardPage() {
               accent="navy"
               title="Keep platform health, review risk, and rollout signals in one place"
               description="Use the admin console with the same visual hierarchy as the learner dashboard: start from the highest-signal summaries, then move directly into the workstream that needs attention."
-              highlights={[
-                { icon: FileText, label: 'Published content', value: String(dashboard.contentHealth.published) },
-                { icon: Inbox, label: 'Backlog at risk', value: String(dashboard.reviewOps.overdue) },
-                { icon: BarChart3, label: 'Agreement rate', value: `${dashboard.quality.agreementRate}%` },
-              ]}
               aside={(
                   <div className="space-y-4 rounded-2xl border border-border bg-background-light p-4 shadow-sm">
                   <div>
@@ -141,13 +136,13 @@ export default function AdminDashboardPage() {
             <div className="grid gap-6 lg:grid-cols-3">
               <AdminRoutePanel title="Billing" description="Subscription exposure and legacy plan drag.">
                 <p className="text-sm text-muted">Legacy plans</p>
-                <p className="text-2xl font-semibold text-navy">{dashboard.billingRisk.legacyPlans}</p>
+                <p className="text-xl font-semibold text-navy">{dashboard.billingRisk.legacyPlans}</p>
                 <p className="mt-3 text-sm text-muted">Active subscribers: {dashboard.billingRisk.activeSubscribers.toLocaleString()}</p>
               </AdminRoutePanel>
 
               <AdminRoutePanel title="Feature Flags" description="Rollout footprint and recent changes.">
                 <p className="text-sm text-muted">Enabled / total</p>
-                <p className="text-2xl font-semibold text-navy">
+                <p className="text-xl font-semibold text-navy">
                   {dashboard.flags.enabled} / {dashboard.flags.total}
                 </p>
                 <p className="mt-3 text-sm text-muted">Live experiments: {dashboard.flags.liveExperiments}</p>
@@ -156,9 +151,9 @@ export default function AdminDashboardPage() {
 
               <AdminRoutePanel title="Quality Risk" description="Signals that need closer QA review.">
                 <div className="flex items-start gap-3">
-                  <AlertTriangle className="mt-1 h-5 w-5 text-amber-500" />
+                  <AlertTriangle className="mt-1 h-5 w-5 text-warning" />
                   <div>
-                    <p className="text-2xl font-semibold text-navy">{dashboard.quality.riskCases}</p>
+                    <p className="text-xl font-semibold text-navy">{dashboard.quality.riskCases}</p>
                     <p className="text-sm text-muted">Combined failed jobs and failed review cases in the current operational view.</p>
                   </div>
                 </div>

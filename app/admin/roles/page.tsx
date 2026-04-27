@@ -7,6 +7,11 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  AdminRouteHero,
+  AdminRoutePanel,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
 
@@ -131,26 +136,25 @@ export default function AdminRolesPage() {
   /* ── render ────────────────────────────────── */
   if (loading) {
     return (
-      <div className="min-h-screen bg-background-light">
-        <div className="max-w-5xl mx-auto px-4 py-8 space-y-4">
-          <Skeleton className="h-8 w-64" /><Skeleton className="h-4 w-96" />
-          {[1,2,3,4].map(i => <Skeleton key={i} className="h-20" />)}
-        </div>
-      </div>
+      <AdminRouteWorkspace role="main" aria-label="Admin roles loading">
+        <Skeleton className="h-8 w-64" />
+        <Skeleton className="h-4 w-96" />
+        {[1,2,3,4].map(i => <Skeleton key={i} className="h-20" />)}
+      </AdminRouteWorkspace>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background-light">
-      <div className="max-w-5xl mx-auto px-4 py-8">
+    <AdminRouteWorkspace role="main" aria-label="Admin roles & permissions">
+      <AdminRouteHero
+        eyebrow="Access control"
+        icon={Shield}
+        accent="navy"
+        title="Admin roles & permissions"
+        description="Manage granular access control for admin team members."
+      />
 
-        {/* header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold flex items-center gap-2"><Shield className="h-6 w-6" />Admin Roles & Permissions</h1>
-          <p className="text-muted mt-1">Manage granular access control for admin team members</p>
-        </div>
-
-        <div className="grid lg:grid-cols-5 gap-6">
+      <div className="grid lg:grid-cols-5 gap-6">
           {/* left — admin list */}
           <div className="lg:col-span-2 space-y-3">
             <div className="relative mb-3">
@@ -204,8 +208,7 @@ export default function AdminRolesPage() {
             {selectedUser && userPerms && (
               <div className="space-y-4">
                 {/* preset roles */}
-                <Card className="p-4">
-                  <p className="text-sm font-medium mb-3">Quick Presets</p>
+                <AdminRoutePanel title="Quick presets">
                   <div className="flex flex-wrap gap-2">
                     {['Content Editor', 'Content Publisher', 'Billing Admin', 'Quality Manager', 'System Admin'].map(preset => (
                       <Button key={preset} size="sm" variant="outline" onClick={() => applyPreset(preset)} className="text-xs h-7">
@@ -213,14 +216,13 @@ export default function AdminRolesPage() {
                       </Button>
                     ))}
                   </div>
-                </Card>
+                </AdminRoutePanel>
 
                 {/* permissions by group */}
                 {GROUPS.map(group => {
                   const perms = Object.entries(PERM_META).filter(([, m]) => m.group === group);
                   return (
-                    <Card key={group} className="p-4">
-                      <p className="text-sm font-semibold mb-3 text-muted uppercase tracking-wider">{group}</p>
+                    <AdminRoutePanel key={group} title={group}>
                       <div className="space-y-2">
                         {perms.map(([key, meta]) => {
                           const checked = editPerms.has(key);
@@ -243,7 +245,7 @@ export default function AdminRolesPage() {
                           );
                         })}
                       </div>
-                    </Card>
+                    </AdminRoutePanel>
                   );
                 })}
 
@@ -261,7 +263,6 @@ export default function AdminRolesPage() {
             )}
           </div>
         </div>
-      </div>
-    </div>
+    </AdminRouteWorkspace>
   );
 }

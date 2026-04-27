@@ -5,7 +5,11 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Wand2 } from 'lucide-react';
 import { adminGenerateGrammarAiDraft, adminListGrammarTopics } from '@/lib/api';
-import { Card } from '@/components/ui/card';
+import {
+  AdminRouteHero,
+  AdminRoutePanel,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
 import { Button } from '@/components/ui/button';
 import { Input, Select, Textarea } from '@/components/ui/form-controls';
 import { Toast } from '@/components/ui/alert';
@@ -62,17 +66,20 @@ export default function GrammarAiDraftPage() {
   }, [examType, topicSlug, level, count, prompt, router]);
 
   return (
-    <div className="space-y-6 p-4 sm:p-6">
-      <header className="flex items-center gap-2">
-        <Link href="/admin/grammar" className="text-muted hover:text-navy" aria-label="Back">
-          <ArrowLeft className="h-5 w-5" />
-        </Link>
-        <h1 className="flex items-center gap-2 text-2xl font-bold text-navy">
-          <Wand2 className="h-5 w-5 text-primary" /> AI grammar draft
-        </h1>
-      </header>
+    <AdminRouteWorkspace role="main" aria-label="AI grammar draft">
+      <Link href="/admin/grammar" className="inline-flex items-center gap-1 text-sm text-muted hover:text-navy" aria-label="Back">
+        <ArrowLeft className="h-4 w-4" /> Back to Grammar CMS
+      </Link>
 
-      <Card className="space-y-4 p-5">
+      <AdminRouteHero
+        eyebrow="CMS"
+        icon={Wand2}
+        accent="navy"
+        title="AI grammar draft"
+        description="Generate a draft lesson via the grounded AI gateway. Drafts are always stored as draft and must be reviewed before publishing."
+      />
+
+      <AdminRoutePanel>
         <p className="text-sm leading-6 text-muted">
           This generates a draft lesson via the grounded AI gateway. Drafts are always stored as <strong>draft</strong> — review and edit before publishing. The gateway physically refuses ungrounded prompts.
         </p>
@@ -120,9 +127,9 @@ export default function GrammarAiDraftPage() {
             {submitting ? 'Generating…' : 'Generate draft'}
           </Button>
         </div>
-      </Card>
+      </AdminRoutePanel>
 
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
-    </div>
+    </AdminRouteWorkspace>
   );
 }

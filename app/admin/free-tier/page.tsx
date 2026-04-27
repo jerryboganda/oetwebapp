@@ -7,6 +7,12 @@ import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
+import {
+  AdminRouteHero,
+  AdminRoutePanel,
+  AdminRouteSummaryCard,
+  AdminRouteWorkspace,
+} from '@/components/domain/admin-route-surface';
 import { analytics } from '@/lib/analytics';
 import { apiClient } from '@/lib/api';
 
@@ -118,86 +124,71 @@ export default function FreeTierStrategyPage() {
   /* ── render ────────────────────────────────── */
   if (loading) {
     return (
-      <div className="min-h-screen bg-background-light">
-        <div className="max-w-5xl mx-auto px-4 py-8 space-y-4">
-          <Skeleton className="h-8 w-64" /><Skeleton className="h-4 w-96" />
-          <div className="grid sm:grid-cols-3 gap-4">{[1,2,3].map(i => <Skeleton key={i} className="h-20" />)}</div>
-          {[1,2,3,4].map(i => <Skeleton key={i} className="h-24" />)}
-        </div>
-      </div>
+      <AdminRouteWorkspace role="main" aria-label="Free Tier Strategy">
+        <Skeleton className="h-8 w-64" /><Skeleton className="h-4 w-96" />
+        <div className="grid sm:grid-cols-3 gap-4">{[1,2,3].map(i => <Skeleton key={i} className="h-20" />)}</div>
+        {[1,2,3,4].map(i => <Skeleton key={i} className="h-24" />)}
+      </AdminRouteWorkspace>
     );
   }
 
   return (
-    <div className="min-h-screen bg-background-light">
-      <div className="max-w-5xl mx-auto px-4 py-8">
+    <AdminRouteWorkspace role="main" aria-label="Free Tier Strategy">
+      <AdminRouteHero
+        eyebrow="Admin Workspace"
+        icon={Shield}
+        accent="navy"
+        title="Free Tier Strategy"
+        description="Configure feature access limits for free-tier learners vs premium subscribers."
+      />
 
-        {/* header */}
-        <div className="mb-8">
-          <h1 className="text-2xl font-bold flex items-center gap-2"><Shield className="h-6 w-6" />Free Tier Strategy</h1>
-          <p className="text-muted mt-1">Configure feature access limits for free-tier learners vs premium subscribers</p>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <AdminRouteSummaryCard label="Total Flags" value={flags.length} icon={<Layers className="h-5 w-5" />} />
+        <AdminRouteSummaryCard label="Active" value={enabledCount} icon={<CheckCircle2 className="h-5 w-5" />} tone="success" />
+        <AdminRouteSummaryCard label="Blocked for Free Tier" value={freeTierBlockedCount} icon={<AlertTriangle className="h-5 w-5" />} tone="warning" />
+      </div>
+
+      {/* search + filters */}
+      <div className="flex flex-col sm:flex-row gap-3">
+        <div className="relative flex-1">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
+          <input
+            type="text"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            placeholder="Search flags…"
+            className="w-full pl-9 pr-3 py-2 border rounded-lg bg-muted/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
+          />
         </div>
-
-        {/* summary cards */}
-        <div className="grid sm:grid-cols-3 gap-4 mb-8">
-          <Card className="p-4 text-center">
-            <Layers className="h-5 w-5 mx-auto mb-1.5 text-primary" />
-            <p className="text-2xl font-bold">{flags.length}</p>
-            <p className="text-xs text-muted">Total Flags</p>
-          </Card>
-          <Card className="p-4 text-center">
-            <CheckCircle2 className="h-5 w-5 mx-auto mb-1.5 text-success" />
-            <p className="text-2xl font-bold">{enabledCount}</p>
-            <p className="text-xs text-muted">Active</p>
-          </Card>
-          <Card className="p-4 text-center">
-            <AlertTriangle className="h-5 w-5 mx-auto mb-1.5 text-amber-600" />
-            <p className="text-2xl font-bold">{freeTierBlockedCount}</p>
-            <p className="text-xs text-muted">Blocked for Free Tier</p>
-          </Card>
-        </div>
-
-        {/* search + filters */}
-        <div className="flex flex-col sm:flex-row gap-3 mb-6">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted" />
-            <input
-              type="text"
-              value={search}
-              onChange={e => setSearch(e.target.value)}
-              placeholder="Search flags…"
-              className="w-full pl-9 pr-3 py-2 border rounded-lg bg-muted/30 text-sm focus:outline-none focus:ring-2 focus:ring-primary/50"
-            />
-          </div>
-          <div className="flex gap-2 flex-wrap">
+        <div className="flex gap-2 flex-wrap">
+          <button
+            onClick={() => setFilterType(null)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors
+              ${!filterType ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/30 border-border'}`}
+          >
+            All
+          </button>
+          {flagTypes.map(t => (
             <button
-              onClick={() => setFilterType(null)}
-              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors
-                ${!filterType ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/30 border-border'}`}
+              key={t}
+              onClick={() => setFilterType(filterType === t.toLowerCase() ? null : t.toLowerCase())}
+              className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors capitalize
+                ${filterType === t.toLowerCase() ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/30 border-border'}`}
             >
-              All
+              {t}
             </button>
-            {flagTypes.map(t => (
-              <button
-                key={t}
-                onClick={() => setFilterType(filterType === t.toLowerCase() ? null : t.toLowerCase())}
-                className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors capitalize
-                  ${filterType === t.toLowerCase() ? 'bg-primary text-primary-foreground border-primary' : 'bg-muted/30 border-border'}`}
-              >
-                {t}
-              </button>
-            ))}
-          </div>
+          ))}
         </div>
+      </div>
 
-        {/* flags list */}
-        <MotionSection className="space-y-3 mb-8">
-          {filtered.map(flag => {
-            const limits = tierLimits[flag.id] || { freeLimit: -1, premiumLimit: -1 };
-            const preset = FREE_TIER_DEFAULTS[flag.key];
-            return (
-              <MotionItem key={flag.id}>
-                <Card className="p-4">
+      {/* flags list */}
+      <MotionSection className="space-y-3">
+        {filtered.map(flag => {
+          const limits = tierLimits[flag.id] || { freeLimit: -1, premiumLimit: -1 };
+          const preset = FREE_TIER_DEFAULTS[flag.key];
+          return (
+            <MotionItem key={flag.id}>
+              <Card className="p-4">
                   <div className="flex items-start justify-between gap-4 mb-3">
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-1">
@@ -285,29 +276,28 @@ export default function FreeTierStrategyPage() {
                       </select>
                     </div>
                   </div>
-                </Card>
-              </MotionItem>
-            );
-          })}
-        </MotionSection>
+              </Card>
+            </MotionItem>
+          );
+        })}
+      </MotionSection>
 
-        {filtered.length === 0 && (
-          <div className="text-center py-12 text-muted">
-            <Tag className="h-10 w-10 mx-auto mb-3 opacity-30" />
-            <p className="text-sm">No flags match your search</p>
-          </div>
-        )}
+      {filtered.length === 0 && (
+        <div className="text-center py-12 text-muted">
+          <Tag className="h-10 w-10 mx-auto mb-3 opacity-30" />
+          <p className="text-sm">No flags match your search</p>
+        </div>
+      )}
 
-        {/* save bar */}
-        <div className="sticky bottom-[calc(var(--bottom-nav-height)+0.5rem)] lg:bottom-0 bg-background/95 backdrop-blur border-t py-4 -mx-4 px-4">
-          <div className="max-w-5xl mx-auto flex items-center justify-between">
-            <p className="text-xs text-muted">Changes are applied in real-time for toggles and rollout. Tier limits save separately.</p>
-            <Button onClick={saveTierConfig} disabled={saving}>
-              {saving ? 'Saving…' : <><Save className="h-4 w-4 mr-1.5" />Save Tier Config</>}
-            </Button>
-          </div>
+      {/* save bar */}
+      <div className="sticky bottom-[calc(var(--bottom-nav-height)+0.5rem)] lg:bottom-0 bg-background/95 backdrop-blur border-t py-4 -mx-4 px-4">
+        <div className="max-w-5xl mx-auto flex items-center justify-between">
+          <p className="text-xs text-muted">Changes are applied in real-time for toggles and rollout. Tier limits save separately.</p>
+          <Button onClick={saveTierConfig} disabled={saving}>
+            {saving ? 'Saving…' : <><Save className="h-4 w-4 mr-1.5" />Save Tier Config</>}
+          </Button>
         </div>
       </div>
-    </div>
+    </AdminRouteWorkspace>
   );
 }
