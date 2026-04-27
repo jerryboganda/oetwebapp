@@ -3,11 +3,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { ArrowLeft, Plus, Trash2, Edit3, CheckCircle2, X } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Edit3, CheckCircle2, X, Copy, Download, Undo2 } from 'lucide-react';
 import {
   adminGetRulebook,
   adminUpdateRulebookMeta,
   adminPublishRulebook,
+  adminUnpublishRulebook,
+  adminCloneRulebook,
+  adminDeleteRulebook,
+  adminExportRulebook,
   adminCreateRulebookSection,
   adminUpdateRulebookSection,
   adminDeleteRulebookSection,
@@ -92,6 +96,57 @@ export default function AdminRulebookDetailPage() {
       const d = await adminPublishRulebook(id);
       setData(d);
       setToast({ variant: 'success', message: 'Rulebook published.' });
+    } catch (e) { setToast({ variant: 'error', message: (e as Error).message }); }
+  }
+
+  async function handleUnpublish() {
+    if (!confirm('Unpublish this rulebook? It will revert to Draft and stop being used for grading.')) return;
+    try {
+      const d = await adminUnpublishRulebook(id);
+      setData(d);
+      setToast({ variant: 'success', message: 'Rulebook unpublished (now Draft).' });
+    } catch (e) { setToast({ variant: 'error', message: (e as Error).message }); }
+  }
+
+  async function handleClone() {
+    const newVersion = prompt('Clone into a new version label:', `${data?.version || ''}-copy`);
+    if (!newVersion?.trim()) return;
+    try {
+      const cloned = await adminCloneRulebook(id, { version: newVersion.trim() });
+      setToast({ variant: 'success', message: 'Cloned.' });
+      router.push(`/admin/rulebooks/${encodeURIComponent(cloned.id)}`);
+    } catch (e) { setToast({ variant: 'error', message: (e as Error).message }); }
+  }
+
+  async function handleDelete() {
+    if (data?.status === 'Published') {
+      setToast({ variant: 'error', message: 'Unpublish before deleting.' });
+      return;
+    }
+    if (!confirm(`Delete rulebook "${id}"? This is permanent.`)) return;
+    if (prompt('Type the rulebook id to confirm:') !== id) {
+      setToast({ variant: 'error', message: 'Confirmation did not match. Aborted.' });
+      return;
+    }
+    try {
+      await adminDeleteRulebook(id);
+      setToast({ variant: 'success', message: 'Deleted.' });
+      router.push('/admin/rulebooks');
+    } catch (e) { setToast({ variant: 'error', message: (e as Error).message }); }
+  }
+
+  async function handleExport() {
+    try {
+      const json = await adminExportRulebook(id);
+      const blob = new Blob([JSON.stringify(json, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `${id}.json`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
     } catch (e) { setToast({ variant: 'error', message: (e as Error).message }); }
   }
 
@@ -252,10 +307,25 @@ export default function AdminRulebookDetailPage() {
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
-          {data.status !== 'Published' && (
+        <div className="flex gap-2 flex-wrap">
+          <Button variant="outline" onClick={handleExport}>
+            <Download className="h-4 w-4 mr-1" /> Export
+          </Button>
+          <Button variant="outline" onClick={handleClone}>
+            <Copy className="h-4 w-4 mr-1" /> Clone
+          </Button>
+          {data.status === 'Published' ? (
+            <Button variant="outline" onClick={handleUnpublish}>
+              <Undo2 className="h-4 w-4 mr-1" /> Unpublish
+            </Button>
+          ) : (
             <Button onClick={handlePublish} className="bg-green-600 hover:bg-green-700">
               <CheckCircle2 className="h-4 w-4 mr-1" /> Publish
+            </Button>
+          )}
+          {data.status !== 'Published' && (
+            <Button variant="outline" onClick={handleDelete} className="text-red-600 border-red-300 hover:bg-red-50">
+              <Trash2 className="h-4 w-4 mr-1" /> Delete
             </Button>
           )}
         </div>

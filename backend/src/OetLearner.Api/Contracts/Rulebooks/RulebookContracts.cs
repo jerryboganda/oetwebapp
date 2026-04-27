@@ -98,3 +98,26 @@ public sealed record UpdateRuleRequest(
     int? OrderIndex);
 
 public sealed record PublishRulebookRequest(string? VersionLabel);
+
+public sealed record CreateRulebookRequest(
+    string Kind,
+    string Profession,
+    string Version,
+    string? AuthoritySource);
+
+public sealed record CloneRulebookRequest(
+    string? Version,
+    string? Kind,
+    string? Profession,
+    string? AuthoritySource);
+
+public sealed record ImportRulebookRequest(
+    string Json,
+    string Mode); // "create" | "replace"
+
+/// <summary>Static metadata used by the admin UI to populate dropdowns.</summary>
+public sealed record RulebookMetadataDto(
+    IReadOnlyList<string> Kinds,
+    IReadOnlyList<string> Professions,
+    IReadOnlyList<string> Severities,
+    IReadOnlyList<string> Statuses);

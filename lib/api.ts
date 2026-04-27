@@ -6565,3 +6565,30 @@ export async function adminUpdateRulebookRule(id: string, ruleId: string, body: 
 export async function adminDeleteRulebookRule(id: string, ruleId: string) {
   return apiRequest(`/v1/admin/rulebooks/${encodeURIComponent(id)}/rules/${encodeURIComponent(ruleId)}`, { method: 'DELETE' });
 }
+export interface AdminRulebookMetadata { kinds: string[]; professions: string[]; severities: string[]; statuses: string[]; }
+
+export async function adminGetRulebookMetadata() {
+  return apiRequest<AdminRulebookMetadata>('/v1/admin/rulebooks/_metadata');
+}
+export async function adminCreateRulebook(body: { kind: string; profession: string; version: string; authoritySource?: string | null }) {
+  return apiRequest<AdminRulebookDetail>('/v1/admin/rulebooks', { method: 'POST', body: JSON.stringify(body) });
+}
+export async function adminCloneRulebook(id: string, body: { version?: string | null; kind?: string | null; profession?: string | null; authoritySource?: string | null }) {
+  return apiRequest<AdminRulebookDetail>(`/v1/admin/rulebooks/${encodeURIComponent(id)}/clone`, {
+    method: 'POST', body: JSON.stringify(body),
+  });
+}
+export async function adminUnpublishRulebook(id: string) {
+  return apiRequest<AdminRulebookDetail>(`/v1/admin/rulebooks/${encodeURIComponent(id)}/unpublish`, { method: 'POST' });
+}
+export async function adminDeleteRulebook(id: string) {
+  return apiRequest(`/v1/admin/rulebooks/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+export async function adminExportRulebook(id: string) {
+  return apiRequest<unknown>(`/v1/admin/rulebooks/${encodeURIComponent(id)}/export`);
+}
+export async function adminImportRulebook(json: string, mode: 'create' | 'replace') {
+  return apiRequest<AdminRulebookDetail>('/v1/admin/rulebooks/import', {
+    method: 'POST', body: JSON.stringify({ json, mode }),
+  });
+}

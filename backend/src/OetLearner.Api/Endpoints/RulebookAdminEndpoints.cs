@@ -20,6 +20,11 @@ public static class RulebookAdminEndpoints
             .RequireAuthorization("AdminOnly")
             .RequireRateLimiting("PerUser");
 
+        // Static metadata for admin UI dropdowns (kinds, professions, severities, statuses).
+        group.MapGet("/_metadata", (RulebookAdminService svc)
+                => Results.Ok(svc.GetMetadata()))
+            .WithAdminRead("AdminContentRead");
+
         // List versions (filterable).
         group.MapGet("", async (string? kind, string? profession, RulebookAdminService svc, CancellationToken ct)
                 => Results.Ok(await svc.ListAsync(kind, profession, ct)))
@@ -33,6 +38,26 @@ public static class RulebookAdminEndpoints
             })
             .WithAdminRead("AdminContentRead");
 
+        // Export rulebook as canonical JSON.
+        group.MapGet("/{id}/export", async (string id, RulebookAdminService svc, CancellationToken ct)
+                => Results.Ok(await svc.ExportAsync(id, ct)))
+            .WithAdminRead("AdminContentRead");
+
+        // Create new rulebook (Draft).
+        group.MapPost("", async (CreateRulebookRequest req, RulebookAdminService svc, HttpContext http, CancellationToken ct)
+                => Results.Ok(await svc.CreateAsync(req, AdminId(http), ct)))
+            .WithAdminWrite("AdminContentWrite");
+
+        // Clone an existing rulebook into a new Draft.
+        group.MapPost("/{id}/clone", async (string id, CloneRulebookRequest req, RulebookAdminService svc, HttpContext http, CancellationToken ct)
+                => Results.Ok(await svc.CloneAsync(id, req, AdminId(http), ct)))
+            .WithAdminWrite("AdminContentWrite");
+
+        // Import rulebook from JSON (create | replace).
+        group.MapPost("/import", async (ImportRulebookRequest req, RulebookAdminService svc, HttpContext http, CancellationToken ct)
+                => Results.Ok(await svc.ImportAsync(req, AdminId(http), ct)))
+            .WithAdminWrite("AdminContentWrite");
+
         // Update meta (version label, authority source).
         group.MapPut("/{id}", async (string id, UpdateRulebookMetaRequest req, RulebookAdminService svc, HttpContext http, CancellationToken ct)
                 => Results.Ok(await svc.UpdateMetaAsync(id, req, AdminId(http), ct)))
@@ -42,6 +67,19 @@ public static class RulebookAdminEndpoints
         group.MapPost("/{id}/publish", async (string id, PublishRulebookRequest? req, RulebookAdminService svc, HttpContext http, CancellationToken ct)
                 => Results.Ok(await svc.PublishAsync(id, req ?? new PublishRulebookRequest(null), AdminId(http), ct)))
             .WithAdminWrite("AdminContentPublish");
+
+        // Unpublish (Published → Draft).
+        group.MapPost("/{id}/unpublish", async (string id, RulebookAdminService svc, HttpContext http, CancellationToken ct)
+                => Results.Ok(await svc.UnpublishAsync(id, AdminId(http), ct)))
+            .WithAdminWrite("AdminContentPublish");
+
+        // Delete a Draft or Archived rulebook.
+        group.MapDelete("/{id}", async (string id, RulebookAdminService svc, HttpContext http, CancellationToken ct) =>
+            {
+                await svc.DeleteAsync(id, AdminId(http), ct);
+                return Results.NoContent();
+            })
+            .WithAdminWrite("AdminContentWrite");
 
         // Section CRUD.
         group.MapPost("/{id}/sections", async (string id, CreateSectionRequest req, RulebookAdminService svc, HttpContext http, CancellationToken ct)

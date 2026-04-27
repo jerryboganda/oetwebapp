@@ -9,6 +9,7 @@ using OetLearner.Api.Contracts.Rulebooks;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Rulebook;
+using System.Text.Json;
 
 namespace OetLearner.Api.Services.Rulebooks;
 
@@ -35,6 +36,48 @@ public sealed class RulebookAdminService
     /// </summary>
     private void InvalidateLoaderCache(RulebookVersion version)
         => DbBackedRulebookLoader.InvalidateCacheKey(_cache, version.Kind, version.Profession);
+
+    // ── Classification: canonical enums (proper classification on insert) ──
+
+    public static readonly IReadOnlyList<string> ValidKinds = new[]
+    {
+        "writing", "speaking", "grammar", "pronunciation", "vocabulary", "conversation",
+    };
+
+    public static readonly IReadOnlyList<string> ValidProfessions = new[]
+    {
+        "medicine", "nursing", "dentistry", "pharmacy", "physiotherapy", "veterinary",
+        "optometry", "radiography", "occupationaltherapy", "speechpathology", "podiatry", "dietetics",
+    };
+
+    public static readonly IReadOnlyList<string> ValidSeverities = new[]
+    {
+        "critical", "major", "minor", "info",
+    };
+
+    public static readonly IReadOnlyList<string> ValidStatuses = new[]
+    {
+        RulebookStatus.Draft, RulebookStatus.Published, RulebookStatus.Archived,
+    };
+
+    public RulebookMetadataDto GetMetadata() =>
+        new(ValidKinds, ValidProfessions, ValidSeverities, ValidStatuses);
+
+    private static string NormalizeKind(string? raw)
+    {
+        var v = (raw ?? "").Trim().ToLowerInvariant();
+        if (!ValidKinds.Contains(v))
+            throw new ArgumentException($"Invalid kind '{raw}'. Must be one of: {string.Join(", ", ValidKinds)}.");
+        return v;
+    }
+
+    private static string NormalizeProfession(string? raw)
+    {
+        var v = (raw ?? "").Trim().ToLowerInvariant().Replace("-", "").Replace("_", "").Replace(" ", "");
+        if (!ValidProfessions.Contains(v))
+            throw new ArgumentException($"Invalid profession '{raw}'. Must be one of: {string.Join(", ", ValidProfessions)}.");
+        return v;
+    }
 
     // ── Read ─────────────────────────────────────────────────────────
 
@@ -133,6 +176,377 @@ public sealed class RulebookAdminService
         await _db.SaveChangesAsync(ct);
         InvalidateLoaderCache(v);
         return (await GetAsync(id, ct))!;
+    }
+
+    public async Task<RulebookDetailDto> CreateAsync(CreateRulebookRequest req, string adminId, CancellationToken ct)
+    {
+        var kind = NormalizeKind(req.Kind);
+        var profession = NormalizeProfession(req.Profession);
+        if (string.IsNullOrWhiteSpace(req.Version))
+            throw new ArgumentException("Version label is required.");
+
+        var version = req.Version.Trim();
+        var id = $"rb_{kind}_{profession}_{version}".ToLowerInvariant().Replace(" ", "-");
+
+        var existing = await _db.RulebookVersions.AnyAsync(v => v.Id == id, ct);
+        if (existing)
+            throw new InvalidOperationException($"A rulebook with id '{id}' already exists. Pick a different version label.");
+
+        var now = DateTimeOffset.UtcNow;
+        var row = new RulebookVersion
+        {
+            Id = id,
+            Kind = kind,
+            Profession = profession,
+            Version = version,
+            Status = RulebookStatus.Draft,
+            AuthoritySource = req.AuthoritySource,
+            CreatedAt = now,
+            UpdatedAt = now,
+            UpdatedByUserId = adminId,
+        };
+        _db.RulebookVersions.Add(row);
+        await _db.SaveChangesAsync(ct);
+        InvalidateLoaderCache(row);
+        return (await GetAsync(id, ct))!;
+    }
+
+    public async Task<RulebookDetailDto> CloneAsync(string sourceId, CloneRulebookRequest req, string adminId, CancellationToken ct)
+    {
+        var src = await _db.RulebookVersions.AsNoTracking().FirstOrDefaultAsync(v => v.Id == sourceId, ct)
+            ?? throw new RulebookNotFoundException(sourceId);
+
+        var newKind = string.IsNullOrWhiteSpace(req.Kind) ? src.Kind : NormalizeKind(req.Kind);
+        var newProfession = string.IsNullOrWhiteSpace(req.Profession) ? src.Profession : NormalizeProfession(req.Profession);
+        var newVersion = string.IsNullOrWhiteSpace(req.Version) ? $"{src.Version}-clone" : req.Version!.Trim();
+        var newId = $"rb_{newKind}_{newProfession}_{newVersion}".ToLowerInvariant().Replace(" ", "-");
+
+        if (string.Equals(newId, sourceId, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException("Clone target is identical to source. Change kind, profession, or version label.");
+
+        var dup = await _db.RulebookVersions.AnyAsync(v => v.Id == newId, ct);
+        if (dup)
+            throw new InvalidOperationException($"A rulebook with id '{newId}' already exists. Pick a different version label.");
+
+        var now = DateTimeOffset.UtcNow;
+        var clonedVersion = new RulebookVersion
+        {
+            Id = newId,
+            Kind = newKind,
+            Profession = newProfession,
+            Version = newVersion,
+            Status = RulebookStatus.Draft,
+            AuthoritySource = req.AuthoritySource ?? src.AuthoritySource,
+            CreatedAt = now,
+            UpdatedAt = now,
+            UpdatedByUserId = adminId,
+        };
+        _db.RulebookVersions.Add(clonedVersion);
+
+        var sections = await _db.RulebookSectionRows.AsNoTracking()
+            .Where(s => s.RulebookVersionId == sourceId)
+            .ToListAsync(ct);
+        foreach (var s in sections)
+        {
+            _db.RulebookSectionRows.Add(new RulebookSectionRow
+            {
+                Id = Guid.NewGuid().ToString(),
+                RulebookVersionId = newId,
+                Code = s.Code,
+                Title = s.Title,
+                OrderIndex = s.OrderIndex,
+            });
+        }
+
+        var rules = await _db.RulebookRuleRows.AsNoTracking()
+            .Where(r => r.RulebookVersionId == sourceId)
+            .ToListAsync(ct);
+        foreach (var r in rules)
+        {
+            _db.RulebookRuleRows.Add(new RulebookRuleRow
+            {
+                Id = Guid.NewGuid().ToString(),
+                RulebookVersionId = newId,
+                Code = r.Code,
+                SectionCode = r.SectionCode,
+                Title = r.Title,
+                Body = r.Body,
+                Severity = r.Severity,
+                AppliesToJson = r.AppliesToJson,
+                TurnStage = r.TurnStage,
+                ExemplarPhrasesJson = r.ExemplarPhrasesJson,
+                ForbiddenPatternsJson = r.ForbiddenPatternsJson,
+                CheckId = r.CheckId,
+                ParamsJson = r.ParamsJson,
+                ExamplesJson = r.ExamplesJson,
+                OrderIndex = r.OrderIndex,
+            });
+        }
+
+        await _db.SaveChangesAsync(ct);
+        InvalidateLoaderCache(clonedVersion);
+        return (await GetAsync(newId, ct))!;
+    }
+
+    public async Task<RulebookDetailDto> UnpublishAsync(string id, string adminId, CancellationToken ct)
+    {
+        var v = await _db.RulebookVersions.FirstOrDefaultAsync(x => x.Id == id, ct)
+            ?? throw new RulebookNotFoundException(id);
+        if (v.Status != RulebookStatus.Published)
+            throw new InvalidOperationException($"Rulebook is not Published (current: {v.Status}).");
+        v.Status = RulebookStatus.Draft;
+        v.UpdatedAt = DateTimeOffset.UtcNow;
+        v.UpdatedByUserId = adminId;
+        await _db.SaveChangesAsync(ct);
+        InvalidateLoaderCache(v);
+        return (await GetAsync(id, ct))!;
+    }
+
+    public async Task DeleteAsync(string id, string adminId, CancellationToken ct)
+    {
+        var v = await _db.RulebookVersions.FirstOrDefaultAsync(x => x.Id == id, ct)
+            ?? throw new RulebookNotFoundException(id);
+        if (v.Status == RulebookStatus.Published)
+            throw new InvalidOperationException("Cannot delete a Published rulebook. Unpublish it first.");
+
+        var sectionRows = await _db.RulebookSectionRows.Where(s => s.RulebookVersionId == id).ToListAsync(ct);
+        var ruleRows = await _db.RulebookRuleRows.Where(r => r.RulebookVersionId == id).ToListAsync(ct);
+        _db.RulebookRuleRows.RemoveRange(ruleRows);
+        _db.RulebookSectionRows.RemoveRange(sectionRows);
+        _db.RulebookVersions.Remove(v);
+        await _db.SaveChangesAsync(ct);
+        InvalidateLoaderCache(v);
+    }
+
+    /// <summary>
+    /// Export the current DB rows as the canonical rulebook JSON shape
+    /// (the same shape stored in <c>/rulebooks/{kind}/{profession}/rulebook.v1.json</c>).
+    /// </summary>
+    public async Task<JsonElement> ExportAsync(string id, CancellationToken ct)
+    {
+        var detail = await GetAsync(id, ct) ?? throw new RulebookNotFoundException(id);
+
+        var sections = detail.Sections
+            .Select(s => new Dictionary<string, object?>
+            {
+                ["id"] = s.Code,
+                ["title"] = s.Title,
+                ["order"] = s.OrderIndex,
+            })
+            .ToList();
+
+        var rules = detail.Rules
+            .Select(r =>
+            {
+                var dict = new Dictionary<string, object?>
+                {
+                    ["id"] = r.Code,
+                    ["section"] = r.SectionCode,
+                    ["title"] = r.Title,
+                    ["body"] = r.Body,
+                    ["severity"] = r.Severity,
+                    ["appliesTo"] = ParseOrString(r.AppliesToJson),
+                };
+                if (!string.IsNullOrWhiteSpace(r.TurnStage)) dict["turnStage"] = r.TurnStage;
+                if (!string.IsNullOrWhiteSpace(r.ExemplarPhrasesJson)) dict["exemplarPhrases"] = ParseOrString(r.ExemplarPhrasesJson);
+                if (!string.IsNullOrWhiteSpace(r.ForbiddenPatternsJson)) dict["forbiddenPatterns"] = ParseOrString(r.ForbiddenPatternsJson);
+                if (!string.IsNullOrWhiteSpace(r.CheckId)) dict["checkId"] = r.CheckId;
+                if (!string.IsNullOrWhiteSpace(r.ParamsJson)) dict["params"] = ParseOrString(r.ParamsJson);
+                if (!string.IsNullOrWhiteSpace(r.ExamplesJson)) dict["examples"] = ParseOrString(r.ExamplesJson);
+                return dict;
+            })
+            .ToList();
+
+        var payload = new Dictionary<string, object?>
+        {
+            ["version"] = detail.Version,
+            ["kind"] = detail.Kind,
+            ["profession"] = detail.Profession,
+            ["status"] = detail.Status,
+            ["authoritySource"] = detail.AuthoritySource,
+            ["publishedAt"] = detail.PublishedAt,
+            ["sections"] = sections,
+            ["rules"] = rules,
+        };
+        return JsonSerializer.SerializeToElement(payload, new JsonSerializerOptions { WriteIndented = true });
+    }
+
+    /// <summary>
+    /// Import a rulebook from canonical JSON. Mode "create" fails if a row
+    /// for (kind, profession, version) already exists; mode "replace" wipes
+    /// the existing version and re-imports from the JSON payload (preserving
+    /// the row's id and Status). Always validates required fields and
+    /// classification (kind, profession, severity) before any DB writes.
+    /// </summary>
+    public async Task<RulebookDetailDto> ImportAsync(ImportRulebookRequest req, string adminId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.Json))
+            throw new ArgumentException("JSON payload is required.");
+        var mode = (req.Mode ?? "create").Trim().ToLowerInvariant();
+        if (mode != "create" && mode != "replace")
+            throw new ArgumentException("Mode must be 'create' or 'replace'.");
+
+        JsonDocument doc;
+        try { doc = JsonDocument.Parse(req.Json); }
+        catch (JsonException ex) { throw new ArgumentException($"Invalid JSON: {ex.Message}"); }
+
+        using (doc)
+        {
+            var root = doc.RootElement;
+            var kind = NormalizeKind(GetStringOrThrow(root, "kind"));
+            var profession = NormalizeProfession(GetStringOrThrow(root, "profession"));
+            var version = GetStringOrThrow(root, "version").Trim();
+            var authoritySource = root.TryGetProperty("authoritySource", out var asEl) && asEl.ValueKind == JsonValueKind.String
+                ? asEl.GetString() : null;
+
+            if (!root.TryGetProperty("rules", out var rulesEl) || rulesEl.ValueKind != JsonValueKind.Array)
+                throw new ArgumentException("Payload must contain a 'rules' array.");
+
+            // Validate classification on every rule before any write.
+            var sectionCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            if (root.TryGetProperty("sections", out var sectionsEl) && sectionsEl.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var s in sectionsEl.EnumerateArray())
+                {
+                    var code = GetStringOrThrow(s, "id");
+                    if (!sectionCodes.Add(code))
+                        throw new ArgumentException($"Duplicate section code '{code}'.");
+                }
+            }
+
+            var ruleCodes = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var r in rulesEl.EnumerateArray())
+            {
+                var code = GetStringOrThrow(r, "id");
+                if (!ruleCodes.Add(code))
+                    throw new ArgumentException($"Duplicate rule code '{code}'.");
+                _ = GetStringOrThrow(r, "title");
+                _ = GetStringOrThrow(r, "body");
+                var sevRaw = GetStringOrThrow(r, "severity").Trim().ToLowerInvariant();
+                if (!ValidSeverities.Contains(sevRaw))
+                    throw new ArgumentException($"Rule '{code}' has invalid severity '{sevRaw}'.");
+                var sec = GetStringOrThrow(r, "section");
+                if (sectionCodes.Count > 0 && !sectionCodes.Contains(sec))
+                    throw new ArgumentException($"Rule '{code}' references unknown section '{sec}'.");
+            }
+
+            var id = $"rb_{kind}_{profession}_{version}".ToLowerInvariant().Replace(" ", "-");
+            var existing = await _db.RulebookVersions.FirstOrDefaultAsync(v => v.Id == id, ct);
+
+            if (existing is not null && mode == "create")
+                throw new InvalidOperationException($"Rulebook '{id}' already exists. Use mode='replace' to overwrite.");
+            if (existing is null && mode == "replace")
+                throw new InvalidOperationException($"Rulebook '{id}' does not exist; cannot replace. Use mode='create'.");
+
+            RulebookVersion target;
+            var now = DateTimeOffset.UtcNow;
+            if (existing is null)
+            {
+                target = new RulebookVersion
+                {
+                    Id = id,
+                    Kind = kind,
+                    Profession = profession,
+                    Version = version,
+                    Status = RulebookStatus.Draft,
+                    AuthoritySource = authoritySource,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                    UpdatedByUserId = adminId,
+                };
+                _db.RulebookVersions.Add(target);
+            }
+            else
+            {
+                target = existing;
+                target.AuthoritySource = authoritySource ?? target.AuthoritySource;
+                target.UpdatedAt = now;
+                target.UpdatedByUserId = adminId;
+                // Wipe existing children for replace.
+                var oldRules = await _db.RulebookRuleRows.Where(r => r.RulebookVersionId == id).ToListAsync(ct);
+                var oldSections = await _db.RulebookSectionRows.Where(s => s.RulebookVersionId == id).ToListAsync(ct);
+                _db.RulebookRuleRows.RemoveRange(oldRules);
+                _db.RulebookSectionRows.RemoveRange(oldSections);
+            }
+
+            // Insert sections.
+            if (root.TryGetProperty("sections", out var importSections) && importSections.ValueKind == JsonValueKind.Array)
+            {
+                var idx = 0;
+                foreach (var s in importSections.EnumerateArray())
+                {
+                    var code = s.GetProperty("id").GetString()!;
+                    var title = s.GetProperty("title").GetString() ?? code;
+                    var order = s.TryGetProperty("order", out var oEl) && oEl.ValueKind == JsonValueKind.Number
+                        ? oEl.GetInt32() : idx;
+                    _db.RulebookSectionRows.Add(new RulebookSectionRow
+                    {
+                        Id = Guid.NewGuid().ToString(),
+                        RulebookVersionId = id,
+                        Code = code,
+                        Title = title,
+                        OrderIndex = order,
+                    });
+                    idx++;
+                }
+            }
+
+            // Insert rules.
+            var ridx = 0;
+            foreach (var r in rulesEl.EnumerateArray())
+            {
+                var sectionCode = r.GetProperty("section").GetString()!;
+                var orderIndex = r.TryGetProperty("order", out var oEl) && oEl.ValueKind == JsonValueKind.Number
+                    ? oEl.GetInt32() : ridx;
+                _db.RulebookRuleRows.Add(new RulebookRuleRow
+                {
+                    Id = Guid.NewGuid().ToString(),
+                    RulebookVersionId = id,
+                    Code = r.GetProperty("id").GetString()!,
+                    SectionCode = sectionCode,
+                    Title = r.GetProperty("title").GetString()!,
+                    Body = r.GetProperty("body").GetString() ?? "",
+                    Severity = r.GetProperty("severity").GetString()!.Trim().ToLowerInvariant(),
+                    AppliesToJson = r.TryGetProperty("appliesTo", out var atEl) ? atEl.GetRawText() : "\"all\"",
+                    TurnStage = r.TryGetProperty("turnStage", out var tsEl) && tsEl.ValueKind == JsonValueKind.String ? tsEl.GetString() : null,
+                    ExemplarPhrasesJson = r.TryGetProperty("exemplarPhrases", out var epEl) ? epEl.GetRawText() : null,
+                    ForbiddenPatternsJson = r.TryGetProperty("forbiddenPatterns", out var fpEl) ? fpEl.GetRawText() : null,
+                    CheckId = r.TryGetProperty("checkId", out var ciEl) && ciEl.ValueKind == JsonValueKind.String ? ciEl.GetString() : null,
+                    ParamsJson = r.TryGetProperty("params", out var pEl) ? pEl.GetRawText() : null,
+                    ExamplesJson = r.TryGetProperty("examples", out var exEl) ? exEl.GetRawText() : null,
+                    OrderIndex = orderIndex,
+                });
+                ridx++;
+            }
+
+            await _db.SaveChangesAsync(ct);
+            InvalidateLoaderCache(target);
+            return (await GetAsync(id, ct))!;
+        }
+    }
+
+    private static string GetStringOrThrow(JsonElement el, string field)
+    {
+        if (!el.TryGetProperty(field, out var v) || v.ValueKind != JsonValueKind.String)
+            throw new ArgumentException($"Missing or non-string '{field}'.");
+        var s = v.GetString();
+        if (string.IsNullOrWhiteSpace(s))
+            throw new ArgumentException($"'{field}' must not be empty.");
+        return s!;
+    }
+
+    private static object? ParseOrString(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return null;
+        try
+        {
+            using var d = JsonDocument.Parse(raw);
+            return JsonSerializer.Deserialize<object?>(d.RootElement.GetRawText());
+        }
+        catch
+        {
+            return raw;
+        }
     }
 
     // ── Section CRUD ─────────────────────────────────────────────────
@@ -272,7 +686,8 @@ public sealed class RulebookAdminService
 
     // ── Helpers ──────────────────────────────────────────────────────
 
-    private static bool IsValidSeverity(string? s) => s is "critical" or "major" or "minor" or "info" || s is "Critical" or "Major" or "Minor" or "Info";
+    private static bool IsValidSeverity(string? s)
+        => !string.IsNullOrWhiteSpace(s) && ValidSeverities.Contains(s.Trim().ToLowerInvariant());
 
     private async Task EnsureVersionAsync(string versionId, CancellationToken ct)
     {
