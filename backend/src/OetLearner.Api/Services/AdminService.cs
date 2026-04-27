@@ -46,6 +46,7 @@ public partial class AdminService(
             Id = $"AUD-{Guid.NewGuid():N}",
             OccurredAt = DateTimeOffset.UtcNow,
             ActorId = actorId,
+            ActorAuthAccountId = actorId,
             ActorName = actorName,
             Action = action,
             ResourceType = resourceType,
@@ -69,6 +70,11 @@ public partial class AdminService(
             perms.Add(AdminPermissions.SystemAdmin);
         return perms;
     }
+
+    private static bool CanResendInvite(ApplicationUserAccount? authAccount, string status)
+        => authAccount is not null
+           && status is not DeletedUserStatus
+           && authAccount.LastLoginAt is null;
 
     private Task NotifyAdminsAsync(
         NotificationEventKey eventKey,
@@ -1402,7 +1408,7 @@ public partial class AdminService(
                     canTriggerPasswordReset = learner.AuthAccountId is not null && status is not DeletedUserStatus,
                     canForceSignOut = (security?.ActiveSessionCount ?? 0) > 0,
                     canUnlock = security?.LockedOut ?? false,
-                    canResendInvite = authAccount != null && authAccount.EmailVerifiedAt == null && status is not DeletedUserStatus
+                    canResendInvite = CanResendInvite(authAccount, status)
                 }
             };
         }
@@ -1441,7 +1447,7 @@ public partial class AdminService(
                     canTriggerPasswordReset = expert.AuthAccountId is not null && status is not DeletedUserStatus,
                     canForceSignOut = (security?.ActiveSessionCount ?? 0) > 0,
                     canUnlock = security?.LockedOut ?? false,
-                    canResendInvite = authAccount != null && authAccount.EmailVerifiedAt == null && status is not DeletedUserStatus
+                    canResendInvite = CanResendInvite(authAccount, status)
                 }
             };
         }
@@ -1476,7 +1482,7 @@ public partial class AdminService(
                     canTriggerPasswordReset = status is not DeletedUserStatus,
                     canForceSignOut = (security?.ActiveSessionCount ?? 0) > 0,
                     canUnlock = security?.LockedOut ?? false,
-                    canResendInvite = false
+                    canResendInvite = CanResendInvite(adminAccount, status)
                 }
             };
         }
@@ -1501,6 +1507,29 @@ public partial class AdminService(
         if (await db.ApplicationUserAccounts.AnyAsync(a => a.NormalizedEmail == normalizedEmail, ct))
         {
             throw ApiException.Conflict("email_already_exists", "An account with this email already exists.");
+        }
+
+        var professionId = string.IsNullOrWhiteSpace(request.ProfessionId)
+            ? null
+            : request.ProfessionId.Trim();
+        if (role is ApplicationUserRoles.Learner or ApplicationUserRoles.Expert)
+        {
+            if (string.IsNullOrWhiteSpace(professionId))
+            {
+                throw ApiException.Validation("profession_required", "A profession is required for learner and expert invitations.");
+            }
+
+            var professionExists = await db.Professions.AsNoTracking().AnyAsync(
+                p => p.Id == professionId && p.Status == ActiveUserStatus,
+                ct);
+            if (!professionExists)
+            {
+                throw ApiException.Validation("invalid_profession", "The selected profession is not active or does not exist.");
+            }
+        }
+        else if (professionId is not null)
+        {
+            throw ApiException.Validation("profession_not_allowed", "Admin invitations cannot be assigned a profession.");
         }
 
         var displayName = string.IsNullOrWhiteSpace(request.Name) ? email : request.Name.Trim();
@@ -1538,7 +1567,7 @@ public partial class AdminService(
                     Email = email,
                     Timezone = "UTC",
                     Locale = "en-AU",
-                    ActiveProfessionId = request.ProfessionId,
+                    ActiveProfessionId = professionId,
                     CreatedAt = now,
                     LastActiveAt = now,
                     AccountStatus = "active"
@@ -1561,7 +1590,7 @@ public partial class AdminService(
                     Role = ApplicationUserRoles.Expert,
                     DisplayName = displayName,
                     Email = email,
-                    SpecialtiesJson = JsonSupport.Serialize(string.IsNullOrWhiteSpace(request.ProfessionId) ? Array.Empty<string>() : new[] { request.ProfessionId }),
+                    SpecialtiesJson = JsonSupport.Serialize(new[] { professionId! }),
                     Timezone = "UTC",
                     IsActive = true,
                     CreatedAt = now
@@ -2378,7 +2407,8 @@ public partial class AdminService(
     {
         var events = await db.AuditEvents.AsNoTracking()
             .Where(e => (e.ResourceType == "User" && e.ResourceId == userId)
-                || (authAccountId != null && e.ActorAuthAccountId == authAccountId))
+                || e.ActorId == userId
+                || (authAccountId != null && (e.ActorAuthAccountId == authAccountId || e.ActorId == authAccountId)))
             .OrderByDescending(e => e.OccurredAt)
             .Take(20)
             .Select(e => new

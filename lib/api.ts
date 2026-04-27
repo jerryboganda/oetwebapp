@@ -2954,7 +2954,7 @@ export async function fetchAdminUserDetail(userId: string) {
   return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}`);
 }
 
-export async function inviteAdminUser(payload: { name: string; email: string; role: string; professionId?: string }) {
+export async function inviteAdminUser(payload: { name: string; email: string; role: 'learner' | 'expert' | 'admin'; professionId?: string }) {
   return apiRequest('/v1/admin/users/invite', { method: 'POST', body: JSON.stringify(payload) });
 }
 
@@ -2978,8 +2978,8 @@ export async function triggerAdminUserPasswordReset(userId: string) {
   return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/password-reset`, { method: 'POST' });
 }
 
-export async function revokeAdminUserSessions(userId: string) {
-  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/sessions/revoke`, { method: 'POST' });
+export async function revokeAdminUserSessions(userId: string): Promise<{ id: string; revoked: number }> {
+  return apiRequest<{ id: string; revoked: number }>(`/v1/admin/users/${encodeURIComponent(userId)}/sessions/revoke`, { method: 'POST' });
 }
 
 export async function unlockAdminUser(userId: string) {

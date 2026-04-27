@@ -44,7 +44,7 @@ import type { AdminUserDetail } from '@/lib/types/admin';
 type PageStatus = 'loading' | 'success' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
 
-function formatDate(value: string | null | undefined, fallback = '—') {
+function formatDate(value: string | null | undefined, fallback = '-') {
   if (!value) return fallback;
   try {
     return new Date(value).toLocaleString();
@@ -98,6 +98,8 @@ export default function UserDetailPage() {
 
   const closeCreditModal = useCallback(() => {
     setIsCreditModalOpen(false);
+    setCreditAmount('0');
+    setCreditReason('');
     window.setTimeout(() => {
       adjustCreditsButtonRef.current?.focus();
       if (document.activeElement !== adjustCreditsButtonRef.current) {
@@ -147,8 +149,8 @@ export default function UserDetailPage() {
     if (!user) return;
     setIsMutating(true);
     try {
-      const result = (await revokeAdminUserSessions(user.id)) as { revoked?: number };
-      const revokedCount = result.revoked ?? 0;
+      const result = await revokeAdminUserSessions(user.id);
+      const revokedCount = result.revoked;
       setToast({
         variant: 'success',
         message: revokedCount > 0
@@ -248,8 +250,6 @@ export default function UserDetailPage() {
       });
       await reloadUser();
       closeCreditModal();
-      setCreditAmount('0');
-      setCreditReason('');
       setToast({ variant: 'success', message: 'Credit balance updated successfully.' });
     } catch (error) {
       console.error(error);
@@ -262,7 +262,7 @@ export default function UserDetailPage() {
   const subscriptionLabel = useMemo(() => {
     if (!user?.subscription) return null;
     const sub = user.subscription;
-    return `${sub.planName} • ${sub.priceAmount} ${sub.currency}/${sub.interval}`;
+    return `${sub.planName} - ${sub.priceAmount} ${sub.currency}/${sub.interval}`;
   }, [user?.subscription]);
 
   if (!isAuthenticated || role !== 'admin') return null;
@@ -418,8 +418,8 @@ export default function UserDetailPage() {
                       <div className="rounded-2xl border border-border/60 bg-background-light p-4 md:col-span-2">
                         <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">Last seen</p>
                         <p className="mt-1 text-sm font-medium text-navy">
-                          {formatDate(user.security.lastSessionAt, '—')}
-                          {user.security.lastSessionIp ? ` • ${user.security.lastSessionIp}` : ''}
+                          {formatDate(user.security.lastSessionAt, '-')}
+                          {user.security.lastSessionIp ? ` - ${user.security.lastSessionIp}` : ''}
                         </p>
                         {user.security.lastSessionDevice ? (
                           <p className="mt-1 text-xs text-muted">{user.security.lastSessionDevice}</p>

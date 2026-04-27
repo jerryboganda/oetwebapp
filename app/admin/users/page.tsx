@@ -170,7 +170,7 @@ export default function UsersPage() {
         header: 'Created',
         render: (user) => (
           <span className="text-sm text-muted">
-            {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'â€”'}
+            {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}
           </span>
         ),
       },
@@ -207,7 +207,7 @@ export default function UsersPage() {
         </div>
         <div className="rounded-2xl bg-background-light px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Created</p>
-          <p className="mt-1 font-medium text-navy">{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'â€”'}</p>
+          <p className="mt-1 font-medium text-navy">{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : '-'}</p>
         </div>
       </div>
 
@@ -244,8 +244,15 @@ export default function UsersPage() {
   }
 
   async function handleInviteUser() {
-    if (!inviteForm.email.trim() || !inviteForm.name.trim()) {
+    const name = inviteForm.name.trim();
+    const email = inviteForm.email.trim();
+    const emailLooksValid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+    if (!email || !name) {
       setToast({ variant: 'error', message: 'Name and email are required.' });
+      return;
+    }
+    if (!emailLooksValid) {
+      setToast({ variant: 'error', message: 'Please enter a valid email address.' });
       return;
     }
     if (inviteForm.role !== 'admin' && !inviteForm.professionId) {
@@ -255,8 +262,8 @@ export default function UsersPage() {
     setIsInviting(true);
     try {
       const result = await inviteAdminUser({
-        name: inviteForm.name.trim(),
-        email: inviteForm.email.trim(),
+        name,
+        email,
         role: inviteForm.role,
         professionId: inviteForm.role === 'admin' ? undefined : inviteForm.professionId,
       });
@@ -295,7 +302,7 @@ export default function UsersPage() {
           <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Admin workspace</p>
           <h1 className="text-2xl font-semibold text-navy">User Operations</h1>
           <p className="max-w-2xl text-sm text-muted">
-            Manage learner, expert, and admin accounts. Invite, suspend, restore, audit, and recover access â€” all backed by the live admin API and full audit trail.
+            Manage learner, expert, and admin accounts. Invite, suspend, restore, audit, and recover access - all backed by the live admin API and full audit trail.
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
@@ -378,7 +385,7 @@ export default function UsersPage() {
               label={inviteForm.role === 'expert' ? 'Primary Specialty' : 'Profession'}
               value={inviteForm.professionId}
               onChange={(event) => setInviteForm((current) => ({ ...current, professionId: event.target.value }))}
-              options={[{ value: '', label: 'Select a professionâ€¦' }, ...professionOptions]}
+              options={[{ value: '', label: 'Select a profession...' }, ...professionOptions]}
             />
           ) : null}
 
