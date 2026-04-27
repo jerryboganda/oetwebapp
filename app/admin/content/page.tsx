@@ -53,7 +53,7 @@ const hubSections: HubSection[] = [
         icon: <Library className="h-5 w-5" />,
       },
       {
-        href: '/admin/content-papers',
+        href: '/admin/content/papers',
         label: 'Content Papers',
         description: 'Canonical paper records with typed asset slots (case notes, audio, scripts, role cards).',
         icon: <FileCheck2 className="h-5 w-5" />,
@@ -85,19 +85,19 @@ const hubSections: HubSection[] = [
         icon: <MessageSquareText className="h-5 w-5" />,
       },
       {
-        href: '/admin/grammar',
+        href: '/admin/content/grammar',
         label: 'Grammar Lessons',
         description: 'Server-authoritative grammar rulebook content (free tier capped, AI-drafted).',
         icon: <PenSquare className="h-5 w-5" />,
       },
       {
-        href: '/admin/pronunciation',
+        href: '/admin/content/pronunciation',
         label: 'Pronunciation Drills',
         description: 'Phonemes, example words, sentences and ASR-graded drills.',
         icon: <Mic className="h-5 w-5" />,
       },
       {
-        href: '/admin/strategies',
+        href: '/admin/content/strategies',
         label: 'Strategy Guides',
         description: 'How-to guides per skill and band level.',
         icon: <Headphones className="h-5 w-5" />,
@@ -110,32 +110,32 @@ const hubSections: HubSection[] = [
     description: 'Bring content into the system at scale, draft new items with AI, and keep the catalogue organised.',
     links: [
       {
-        href: '/admin/content-import',
+        href: '/admin/content/import',
         label: 'Bulk Import',
         description: 'CSV / ZIP imports with required source provenance and audit trail.',
         icon: <Upload className="h-5 w-5" />,
       },
       {
-        href: '/admin/content-papers/import',
+        href: '/admin/content/papers/import',
         label: 'Paper ZIP Import',
         description: 'Mission-critical chunked ZIP import that maps files to typed paper assets.',
         icon: <Upload className="h-5 w-5" />,
         badge: 'Canonical',
       },
       {
-        href: '/admin/content-generation',
+        href: '/admin/content/generation',
         label: 'AI Generation',
         description: 'Grounded AI drafts (rulebook + scoring + guardrails) routed via the AI gateway.',
         icon: <Sparkles className="h-5 w-5" />,
       },
       {
-        href: '/admin/content-hierarchy',
+        href: '/admin/content/hierarchy',
         label: 'Hierarchy',
         description: 'Programs → Tracks → Modules → Lessons → Packages.',
         icon: <GitBranch className="h-5 w-5" />,
       },
       {
-        href: '/admin/media',
+        href: '/admin/content/media',
         label: 'Media Assets',
         description: 'Content-addressed (SHA-256) storage of every uploaded file.',
         icon: <ImageIcon className="h-5 w-5" />,
@@ -148,13 +148,13 @@ const hubSections: HubSection[] = [
     description: 'Pre-publish checks, approvals, and ongoing quality control for the entire catalogue.',
     links: [
       {
-        href: '/admin/publish-requests',
+        href: '/admin/content/publish-requests',
         label: 'Publish Requests',
         description: 'Approval queue for content moving from draft to published.',
         icon: <FileCheck2 className="h-5 w-5" />,
       },
       {
-        href: '/admin/dedup',
+        href: '/admin/content/dedup',
         label: 'Deduplication',
         description: 'Detect and merge near-duplicate items before they reach learners.',
         icon: <Copy className="h-5 w-5" />,

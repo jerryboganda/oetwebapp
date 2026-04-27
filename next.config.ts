@@ -11,6 +11,27 @@ const nextConfig: NextConfig = {
     remotePatterns: [],
   },
   output: 'standalone',
+  async redirects() {
+    // Phase 2 of the Content Hub consolidation: every legacy /admin/<area>
+    // route now lives under /admin/content/<area>. Permanent redirects keep
+    // bookmarks, audit-trail URLs, emails, and tests working.
+    const moves: Array<[string, string]> = [
+      ['/admin/content-papers', '/admin/content/papers'],
+      ['/admin/content-hierarchy', '/admin/content/hierarchy'],
+      ['/admin/content-import', '/admin/content/import'],
+      ['/admin/content-generation', '/admin/content/generation'],
+      ['/admin/grammar', '/admin/content/grammar'],
+      ['/admin/pronunciation', '/admin/content/pronunciation'],
+      ['/admin/strategies', '/admin/content/strategies'],
+      ['/admin/media', '/admin/content/media'],
+      ['/admin/dedup', '/admin/content/dedup'],
+      ['/admin/publish-requests', '/admin/content/publish-requests'],
+    ];
+    return moves.flatMap(([source, destination]) => [
+      { source, destination, permanent: true },
+      { source: `${source}/:path*`, destination: `${destination}/:path*`, permanent: true },
+    ]);
+  },
   async headers() {
     return [
       {

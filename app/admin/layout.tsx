@@ -116,8 +116,27 @@ const adminMobileMenuSections: MobileMenuSection[] = adminNavGroups.map((g) => (
 
 function isContentWorkspace(pathname: string | null) {
   if (!pathname) return false;
-  if (pathname.startsWith('/admin/content/vocabulary')) return false;
-  if (pathname.startsWith('/admin/content/conversation')) return false;
+  // The "content workspace" editor lives at /admin/content/[id]; it must NOT
+  // match the new hub sub-routes (papers, import, hierarchy, grammar, etc.).
+  const hubSubRoutes = [
+    'vocabulary',
+    'conversation',
+    'library',
+    'mocks',
+    'papers',
+    'import',
+    'generation',
+    'hierarchy',
+    'media',
+    'dedup',
+    'grammar',
+    'pronunciation',
+    'strategies',
+    'publish-requests',
+  ];
+  for (const seg of hubSubRoutes) {
+    if (pathname.startsWith(`/admin/content/${seg}`)) return false;
+  }
   return pathname === '/admin/content/new' || Boolean(pathname?.match(/^\/admin\/content\/[^/]+$/));
 }
 
@@ -148,6 +167,46 @@ function getAdminPageTitle(pathname: string | null) {
 
   if (pathname.startsWith('/admin/content/mocks')) {
     return 'Mock Bundles';
+  }
+
+  if (pathname.startsWith('/admin/content/papers')) {
+    return 'Content Papers';
+  }
+
+  if (pathname.startsWith('/admin/content/import')) {
+    return 'Content Import';
+  }
+
+  if (pathname.startsWith('/admin/content/generation')) {
+    return 'Content Generation';
+  }
+
+  if (pathname.startsWith('/admin/content/hierarchy')) {
+    return 'Content Hierarchy';
+  }
+
+  if (pathname.startsWith('/admin/content/media')) {
+    return 'Media Assets';
+  }
+
+  if (pathname.startsWith('/admin/content/dedup')) {
+    return 'Deduplication';
+  }
+
+  if (pathname.startsWith('/admin/content/grammar')) {
+    return 'Grammar CMS';
+  }
+
+  if (pathname.startsWith('/admin/content/pronunciation')) {
+    return 'Pronunciation CMS';
+  }
+
+  if (pathname.startsWith('/admin/content/strategies')) {
+    return 'Strategy Guides';
+  }
+
+  if (pathname.startsWith('/admin/content/publish-requests')) {
+    return 'Publish Requests';
   }
 
   if (pathname.startsWith('/admin/content')) {
@@ -198,30 +257,6 @@ function getAdminPageTitle(pathname: string | null) {
     return 'Audit Logs';
   }
 
-  if (pathname.startsWith('/admin/content-import')) {
-    return 'Content Import';
-  }
-
-  if (pathname.startsWith('/admin/dedup')) {
-    return 'Deduplication';
-  }
-
-  if (pathname.startsWith('/admin/media')) {
-    return 'Media Assets';
-  }
-
-  if (pathname.startsWith('/admin/content-generation')) {
-    return 'Content Generation';
-  }
-
-  if (pathname.startsWith('/admin/grammar')) {
-    return 'Grammar CMS';
-  }
-
-  if (pathname.startsWith('/admin/pronunciation')) {
-    return 'Pronunciation CMS';
-  }
-
   if (pathname.startsWith('/admin/marketplace-review')) {
     return 'Marketplace Review';
   }
@@ -230,20 +265,12 @@ function getAdminPageTitle(pathname: string | null) {
     return 'Subscription Freezes';
   }
 
-  if (pathname.startsWith('/admin/content-hierarchy')) {
-    return 'Content Hierarchy';
-  }
-
   if (pathname.startsWith('/admin/private-speaking')) {
     return 'Private Speaking';
   }
 
   if (pathname.startsWith('/admin/community')) {
     return 'Community Moderation';
-  }
-
-  if (pathname.startsWith('/admin/strategies')) {
-    return 'Strategy Guides';
   }
 
   return undefined;
