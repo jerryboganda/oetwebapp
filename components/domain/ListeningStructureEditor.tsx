@@ -201,29 +201,30 @@ export function ListeningStructureEditor({ paperId }: { paperId: string }) {
 
 // ── Subcomponents ──────────────────────────────────────────────────────────
 
+function CountsPill({
+  label, actual, expected,
+}: { label: string; actual: number; expected: number }) {
+  const ok = actual === expected;
+  return (
+    <div className={`rounded-lg border px-3 py-2 text-sm ${ok ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
+      <div className="text-xs text-muted">{label}</div>
+      <div className="font-semibold">{actual} / {expected} {ok ? <CheckCircle2 className="inline w-4 h-4 text-emerald-600" /> : <AlertTriangle className="inline w-4 h-4 text-amber-600" />}</div>
+    </div>
+  );
+}
+
 function CountsBar({
   live, server,
 }: {
   live: ListeningValidationCounts;
   server: ListeningValidationCounts | null;
 }) {
-  const Pill = ({
-    label, actual, expected,
-  }: { label: string; actual: number; expected: number }) => {
-    const ok = actual === expected;
-    return (
-      <div className={`rounded-lg border px-3 py-2 text-sm ${ok ? 'border-emerald-200 bg-emerald-50' : 'border-amber-200 bg-amber-50'}`}>
-        <div className="text-xs text-muted">{label}</div>
-        <div className="font-semibold">{actual} / {expected} {ok ? <CheckCircle2 className="inline w-4 h-4 text-emerald-600" /> : <AlertTriangle className="inline w-4 h-4 text-amber-600" />}</div>
-      </div>
-    );
-  };
   return (
     <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-      <Pill label="Part A" actual={live.partACount} expected={LISTENING_PART_A_COUNT} />
-      <Pill label="Part B" actual={live.partBCount} expected={LISTENING_PART_B_COUNT} />
-      <Pill label="Part C" actual={live.partCCount} expected={LISTENING_PART_C_COUNT} />
-      <Pill label="Total"  actual={live.totalItems} expected={LISTENING_CANONICAL_TOTAL} />
+      <CountsPill label="Part A" actual={live.partACount} expected={LISTENING_PART_A_COUNT} />
+      <CountsPill label="Part B" actual={live.partBCount} expected={LISTENING_PART_B_COUNT} />
+      <CountsPill label="Part C" actual={live.partCCount} expected={LISTENING_PART_C_COUNT} />
+      <CountsPill label="Total"  actual={live.totalItems} expected={LISTENING_CANONICAL_TOTAL} />
       {server && server.totalItems !== live.totalItems && (
         <div className="md:col-span-4 text-xs text-muted">
           Last saved on server: {server.partACount}/{server.partBCount}/{server.partCCount} = {server.totalItems}.

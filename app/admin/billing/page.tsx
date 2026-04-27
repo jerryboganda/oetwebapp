@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox, Input, Select, Textarea } from '@/components/ui/form-controls';
 import { Modal } from '@/components/ui/modal';
+import { ContentScopePanel } from '@/components/domain/ContentScopePanel';
 import {
   createAdminBillingAddOn,
   createAdminBillingCoupon,
@@ -1303,7 +1304,13 @@ export default function BillingPage() {
             />
             <Input label="Included subtests" value={planForm.includedSubtestsText} onChange={(event) => setPlanForm((current) => ({ ...current, includedSubtestsText: event.target.value }))} hint="Comma-separated codes like writing, speaking" />
           </div>
-          <Textarea label="Entitlements JSON" value={planForm.entitlementsJson} onChange={(event) => setPlanForm((current) => ({ ...current, entitlementsJson: event.target.value }))} />
+
+          <ContentScopePanel
+            entitlementsJson={planForm.entitlementsJson}
+            onChange={(next) => setPlanForm((current) => ({ ...current, entitlementsJson: next }))}
+          />
+
+          <Textarea label="Entitlements JSON" value={planForm.entitlementsJson} onChange={(event) => setPlanForm((current) => ({ ...current, entitlementsJson: event.target.value }))} hint="Advanced. Edit the panel above for the standard content-gating fields." />
 
           <div className="flex justify-end gap-3 border-t border-border pt-4">
             <Button

@@ -22,6 +22,7 @@ import {
   type ReadingPartCode,
   type ReadingQuestionLearnerDto,
 } from '@/lib/reading-authoring-api';
+import { ContentLockedNotice, isContentLockedError, readContentLockedMessage } from '@/components/domain/ContentLockedNotice';
 
 type SaveState = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -61,6 +62,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const [starting, setStarting] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [contentLockedMessage, setContentLockedMessage] = useState<string | null>(null);
   const [activePart, setActivePart] = useState<ReadingPartCode>('A');
   const [activeQuestionId, setActiveQuestionId] = useState<string | null>(null);
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -136,6 +138,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const start = async () => {
     setStarting(true);
     setError(null);
+    setContentLockedMessage(null);
     try {
       const started = await startReadingAttempt(paperId);
       setAttempt(fromStartedAttempt(started));
@@ -143,7 +146,11 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
       setFlagged(new Set());
       setActivePart('A');
     } catch (err) {
-      setError(readErrorMessage(err, 'Could not start Reading attempt.'));
+      if (isContentLockedError(err)) {
+        setContentLockedMessage(readContentLockedMessage(err));
+      } else {
+        setError(readErrorMessage(err, 'Could not start Reading attempt.'));
+      }
     } finally {
       setStarting(false);
     }
@@ -192,6 +199,14 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
 
   if (loading) {
     return <LearnerDashboardShell pageTitle="Reading"><Skeleton className="h-64" /></LearnerDashboardShell>;
+  }
+
+  if (contentLockedMessage) {
+    return (
+      <LearnerDashboardShell pageTitle="Reading" backHref="/reading">
+        <ContentLockedNotice message={contentLockedMessage} />
+      </LearnerDashboardShell>
+    );
   }
 
   if (!structure) {

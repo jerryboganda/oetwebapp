@@ -30,6 +30,7 @@ import {
   groupQuestionsBySection,
   type ListeningSectionCode,
 } from '@/lib/listening-sections';
+import { ContentLockedNotice, isContentLockedError, readContentLockedMessage } from '@/components/domain/ContentLockedNotice';
 
 function formatTime(seconds: number) {
   if (!seconds || Number.isNaN(seconds)) return '00:00';
@@ -69,6 +70,7 @@ function PlayerContent() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [loadingTask, setLoadingTask] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [contentLockedMessage, setContentLockedMessage] = useState<string | null>(null);
   const [audioError, setAudioError] = useState<string | null>(null);
   const [audioState, setAudioState] = useState<'idle' | 'buffering' | 'ready' | 'error'>('idle');
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
@@ -142,6 +144,10 @@ function PlayerContent() {
       router.replace(`/listening/player/${session.paper.id}?attemptId=${started.attemptId}&mode=${started.mode}${drillId ? `&drill=${encodeURIComponent(drillId)}` : ''}`);
       await audioRef.current?.play().catch((err) => handleAudioPlaybackError(err, setAudioError));
     } catch (err) {
+      if (isContentLockedError(err)) {
+        setContentLockedMessage(readContentLockedMessage(err));
+        return;
+      }
       setLoadError(err instanceof Error ? err.message : 'Could not start this Listening attempt.');
     }
   };
@@ -257,6 +263,17 @@ function PlayerContent() {
           <Skeleton className="h-16 rounded-2xl" />
           <Skeleton className="h-48 rounded-2xl" />
           <Skeleton className="h-48 rounded-2xl" />
+        </div>
+      </AppShell>
+    );
+  }
+
+  if (contentLockedMessage) {
+    return (
+      <AppShell pageTitle="Listening Task" distractionFree>
+        <div className="flex flex-1 flex-col items-center justify-center gap-4 p-8">
+          <ContentLockedNotice message={contentLockedMessage} />
+          <Link href="/listening"><Button variant="ghost">Back to Listening</Button></Link>
         </div>
       </AppShell>
     );
