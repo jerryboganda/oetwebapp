@@ -71,7 +71,9 @@ function buildCsp(nonce: string, apiOrigins: string[], apiWsOrigins: string[], i
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
-    'upgrade-insecure-requests',
+    // upgrade-insecure-requests breaks plain-HTTP local dev (assets get rewritten to https://);
+    // only emit it in production where the app is served over HTTPS.
+    ...(isDev ? [] : ['upgrade-insecure-requests']),
   ];
   return directives.join('; ');
 }

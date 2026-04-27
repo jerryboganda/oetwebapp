@@ -6476,3 +6476,92 @@ export async function removeSponsoredLearner(id: string): Promise<{ revoked: boo
 export async function fetchSponsorBilling(): Promise<SponsorBillingData> {
   return apiRequest<SponsorBillingData>('/v1/sponsor/billing');
 }
+
+
+
+// -- Admin: Rulebook Management ------------------------------------------
+export interface AdminRulebookSummary {
+  id: string;
+  kind: string;
+  profession: string;
+  version: string;
+  status: string;
+  authoritySource: string;
+  sectionCount: number;
+  ruleCount: number;
+  updatedByUserId: string | null;
+  createdAt: string;
+  updatedAt: string;
+  publishedAt: string | null;
+}
+export interface AdminRulebookSection { id: string; code: string; title: string; orderIndex: number; }
+export interface AdminRulebookRule {
+  id: string; code: string; sectionCode: string; title: string; body: string; severity: string;
+  appliesToJson: string; turnStage: string | null;
+  exemplarPhrasesJson: string | null; forbiddenPatternsJson: string | null;
+  checkId: string | null; paramsJson: string | null; examplesJson: string | null;
+  orderIndex: number;
+}
+export interface AdminRulebookDetail extends Omit<AdminRulebookSummary, 'sectionCount' | 'ruleCount' | 'updatedByUserId'> {
+  sections: AdminRulebookSection[];
+  rules: AdminRulebookRule[];
+}
+
+export async function adminListRulebooks(filter?: { kind?: string; profession?: string }) {
+  const p = new URLSearchParams();
+  if (filter?.kind) p.set('kind', filter.kind);
+  if (filter?.profession) p.set('profession', filter.profession);
+  const qs = p.toString();
+  return apiRequest<AdminRulebookSummary[]>(`/v1/admin/rulebooks${qs ? `?${qs}` : ''}`);
+}
+export async function adminGetRulebook(id: string) {
+  return apiRequest<AdminRulebookDetail>(`/v1/admin/rulebooks/${encodeURIComponent(id)}`);
+}
+export async function adminUpdateRulebookMeta(id: string, body: { version?: string | null; authoritySource?: string | null }) {
+  return apiRequest<AdminRulebookDetail>(`/v1/admin/rulebooks/${encodeURIComponent(id)}`, {
+    method: 'PUT', body: JSON.stringify(body),
+  });
+}
+export async function adminPublishRulebook(id: string, versionLabel?: string | null) {
+  return apiRequest<AdminRulebookDetail>(`/v1/admin/rulebooks/${encodeURIComponent(id)}/publish`, {
+    method: 'POST', body: JSON.stringify({ versionLabel: versionLabel ?? null }),
+  });
+}
+export async function adminCreateRulebookSection(id: string, body: { code: string; title: string; orderIndex?: number | null }) {
+  return apiRequest<AdminRulebookSection>(`/v1/admin/rulebooks/${encodeURIComponent(id)}/sections`, {
+    method: 'POST', body: JSON.stringify(body),
+  });
+}
+export async function adminUpdateRulebookSection(id: string, sectionId: string, body: { title?: string | null; orderIndex?: number | null }) {
+  return apiRequest<AdminRulebookSection>(`/v1/admin/rulebooks/${encodeURIComponent(id)}/sections/${encodeURIComponent(sectionId)}`, {
+    method: 'PUT', body: JSON.stringify(body),
+  });
+}
+export async function adminDeleteRulebookSection(id: string, sectionId: string) {
+  return apiRequest(`/v1/admin/rulebooks/${encodeURIComponent(id)}/sections/${encodeURIComponent(sectionId)}`, { method: 'DELETE' });
+}
+export async function adminCreateRulebookRule(id: string, body: {
+  code: string; sectionCode: string; title: string; body: string; severity: string;
+  appliesToJson?: string | null; turnStage?: string | null;
+  exemplarPhrasesJson?: string | null; forbiddenPatternsJson?: string | null;
+  checkId?: string | null; paramsJson?: string | null; examplesJson?: string | null;
+  orderIndex?: number | null;
+}) {
+  return apiRequest<AdminRulebookRule>(`/v1/admin/rulebooks/${encodeURIComponent(id)}/rules`, {
+    method: 'POST', body: JSON.stringify(body),
+  });
+}
+export async function adminUpdateRulebookRule(id: string, ruleId: string, body: Partial<{
+  sectionCode: string; title: string; body: string; severity: string;
+  appliesToJson: string | null; turnStage: string | null;
+  exemplarPhrasesJson: string | null; forbiddenPatternsJson: string | null;
+  checkId: string | null; paramsJson: string | null; examplesJson: string | null;
+  orderIndex: number | null;
+}>) {
+  return apiRequest<AdminRulebookRule>(`/v1/admin/rulebooks/${encodeURIComponent(id)}/rules/${encodeURIComponent(ruleId)}`, {
+    method: 'PUT', body: JSON.stringify(body),
+  });
+}
+export async function adminDeleteRulebookRule(id: string, ruleId: string) {
+  return apiRequest(`/v1/admin/rulebooks/${encodeURIComponent(id)}/rules/${encodeURIComponent(ruleId)}`, { method: 'DELETE' });
+}

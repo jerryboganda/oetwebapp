@@ -58,6 +58,7 @@ const adminNavItems: NavItem[] = [
   { href: '/admin/media', label: 'Media Assets', icon: <ImageIcon className="w-5 h-5" />, matchPrefix: '/admin/media' },
   { href: '/admin/content-generation', label: 'Content Generation', icon: <Sparkles className="w-5 h-5" />, matchPrefix: '/admin/content-generation' },
   { href: '/admin/grammar', label: 'Grammar CMS', icon: <Library className="w-5 h-5" />, matchPrefix: '/admin/grammar' },
+  { href: '/admin/rulebooks', label: 'Rulebooks', icon: <BookOpenText className="w-5 h-5" />, matchPrefix: '/admin/rulebooks' },
   { href: '/admin/pronunciation', label: 'Pronunciation CMS', icon: <Mic className="w-5 h-5" />, matchPrefix: '/admin/pronunciation' },
   { href: '/admin/content/vocabulary', label: 'Vocabulary CMS', icon: <Library className="w-5 h-5" />, matchPrefix: '/admin/content/vocabulary' },
   { href: '/admin/content/conversation', label: 'Conversation CMS', icon: <MessageSquareText className="w-5 h-5" />, matchPrefix: '/admin/content/conversation' },

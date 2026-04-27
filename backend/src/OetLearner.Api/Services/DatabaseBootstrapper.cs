@@ -57,6 +57,10 @@ public static class DatabaseBootstrapper
         // Reference data (professions, subtests, criteria, content) is always seeded
         await SeedData.EnsureReferenceDataAsync(db, cancellationToken);
 
+        // Bootstrap rulebook tables from canonical JSON on first run.
+        // Idempotent: skipped if RulebookVersions already has rows.
+        await OetLearner.Api.Services.Rulebooks.RulebookSeeder.EnsureAsync(db, environment, cancellationToken);
+
         // Demo/test data (mock user, goals, settings) only in development or when explicitly enabled
         if (seedDemoData)
         {

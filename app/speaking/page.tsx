@@ -213,7 +213,7 @@ export default function SpeakingHome() {
               ],
               primaryAction: {
                 label: 'Open Speaking Rules',
-                href: '/speaking/rulebook/RULE_22',
+                href: '/speaking/rulebook',
               },
               secondaryAction: {
                 label: 'Breaking Bad News',

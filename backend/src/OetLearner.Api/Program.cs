@@ -756,6 +756,7 @@ builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingAttemptServic
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningLearnerService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningStructureService,
     OetLearner.Api.Services.Listening.ListeningStructureService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebooks.RulebookAdminService>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Reading.ReadingAttemptExpireWorker>();
 builder.Services.AddHostedService<OetLearner.Api.Services.Content.AdminUploadCleanupWorker>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IAiGatewayService,
@@ -1088,6 +1089,7 @@ app.MapPrivateSpeakingEndpoints();
 
 // ── Rulebook + Writing linter + Speaking auditor + Grounded AI gateway ──
 app.MapRulebookEndpoints();
+app.MapRulebookAdminEndpoints();
 
 // ── Media Management ──
 app.MapMediaEndpoints();

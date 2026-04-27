@@ -78,6 +78,11 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<ExpertMetricSnapshot> ExpertMetricSnapshots => Set<ExpertMetricSnapshot>();
     public DbSet<ExpertOnboardingProgress> ExpertOnboardingProgresses => Set<ExpertOnboardingProgress>();
 
+    // Rulebook authoring (admin-managed)
+    public DbSet<RulebookVersion> RulebookVersions => Set<RulebookVersion>();
+    public DbSet<RulebookSectionRow> RulebookSectionRows => Set<RulebookSectionRow>();
+    public DbSet<RulebookRuleRow> RulebookRuleRows => Set<RulebookRuleRow>();
+
     // Gamification entities
     public DbSet<LearnerStreak> LearnerStreaks => Set<LearnerStreak>();
     public DbSet<LearnerXP> LearnerXPs => Set<LearnerXP>();
@@ -294,6 +299,15 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<NotificationEvent>().Property(x => x.EventKey).HasMaxLength(128);
         modelBuilder.Entity<NotificationInboxItem>().Property(x => x.EventKey).HasMaxLength(128);
         modelBuilder.Entity<NotificationPolicyOverride>().Property(x => x.EventKey).HasMaxLength(128);
+
+        // Rulebook authoring (admin-managed)
+        modelBuilder.Entity<RulebookVersion>().HasIndex(x => new { x.Kind, x.Profession, x.Status });
+        modelBuilder.Entity<RulebookVersion>().Property(x => x.Status).HasMaxLength(16);
+        modelBuilder.Entity<RulebookVersion>().Property(x => x.Kind).HasMaxLength(32);
+        modelBuilder.Entity<RulebookVersion>().Property(x => x.Profession).HasMaxLength(32);
+        modelBuilder.Entity<RulebookSectionRow>().HasIndex(x => new { x.RulebookVersionId, x.Code }).IsUnique();
+        modelBuilder.Entity<RulebookRuleRow>().HasIndex(x => new { x.RulebookVersionId, x.Code }).IsUnique();
+        modelBuilder.Entity<RulebookRuleRow>().HasIndex(x => new { x.RulebookVersionId, x.SectionCode });
 
         // Learner lookup indexes (frequently queried by UserId)
         modelBuilder.Entity<LearnerGoal>().HasIndex(x => x.UserId);

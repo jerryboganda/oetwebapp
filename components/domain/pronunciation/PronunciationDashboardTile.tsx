@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { Mic, ChevronRight } from 'lucide-react';
 import { fetchPronunciationProfile, fetchPronunciationDueDrills } from '@/lib/api';
+import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 
 type Profile = {
   overallScore: number;
@@ -23,10 +24,8 @@ type DueDrill = {
 
 /**
  * Dashboard pronunciation tile — mounted in the learner dashboard.
- * Surfaces:
- *   - Current projected Speaking band from pronunciation attempts
- *   - Top 3 weakest phonemes
- *   - "Due today" count from the spaced-repetition scheduler
+ * Uses the canonical DESIGN.md Card primitive (rounded-2xl, border + shadow,
+ * Surface White, Manrope, navy headings, lavender icon chip).
  */
 export function PronunciationDashboardTile() {
   const [profile, setProfile] = useState<Profile | null>(null);
@@ -46,42 +45,49 @@ export function PronunciationDashboardTile() {
       if (dr.status === 'fulfilled') setDue(dr.value as DueDrill[]);
       setLoading(false);
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   return (
     <Link
       href="/pronunciation"
-      className="group block rounded-3xl border border-border bg-surface p-5 shadow-sm transition hover:border-primary/50 hover:shadow-clinical"
       aria-label="Open pronunciation practice"
+      className="group block rounded-2xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2"
     >
-      <div className="flex items-start gap-3">
-        <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-rose-50 text-rose-600 dark:bg-rose-900/30 dark:text-rose-400">
-          <Mic className="h-5 w-5" aria-hidden />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="text-xs uppercase tracking-[0.15em] text-muted">Learn</div>
-          <div className="flex items-center gap-2">
-            <h3 className="text-base font-semibold text-navy dark:text-white">Pronunciation</h3>
-            <ChevronRight className="h-4 w-4 text-muted transition group-hover:translate-x-0.5" aria-hidden />
+      <Card hoverable padding="md" className="h-full">
+        <CardHeader className="mb-3 flex items-center justify-between gap-3">
+          <div className="flex items-center gap-3 min-w-0">
+            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-lavender text-primary">
+              <Mic className="h-4.5 w-4.5" aria-hidden />
+            </span>
+            <CardTitle className="truncate">Pronunciation</CardTitle>
           </div>
+          <ChevronRight
+            className="h-4 w-4 shrink-0 text-muted transition group-hover:translate-x-0.5 group-hover:text-primary"
+            aria-hidden
+          />
+        </CardHeader>
+
+        <CardContent className="space-y-2">
           {loading ? (
-            <div className="mt-2 h-4 w-40 animate-pulse rounded bg-background-light" />
+            <div className="h-4 w-40 animate-pulse rounded bg-background-light" />
           ) : profile && profile.totalAssessments > 0 ? (
             <>
-              <div className="mt-1 text-xs text-muted">
+              <p className="text-sm text-muted">
                 Projected Speaking band:{' '}
-                <span className="font-semibold text-navy dark:text-white">
+                <span className="font-semibold text-navy">
                   {profile.projectedSpeakingScaled}/500 · Grade {profile.projectedSpeakingGrade}
                 </span>
                 {profile.projectedSpeakingPassed ? ' · pass' : ' · below pass'}
-              </div>
+              </p>
               {profile.weakPhonemes.length > 0 && (
-                <div className="mt-2 flex flex-wrap gap-1">
+                <div className="flex flex-wrap gap-1.5 pt-1">
                   {profile.weakPhonemes.slice(0, 3).map((p) => (
                     <span
                       key={p.phonemeCode}
-                      className="rounded-full bg-rose-50 px-2 py-0.5 font-mono text-[11px] text-rose-700 dark:bg-rose-900/30 dark:text-rose-300"
+                      className="rounded-full bg-rose-50 px-2 py-0.5 font-mono text-[11px] text-rose-700"
                       title={`${p.phonemeCode} · ${Math.round(p.averageScore)}% avg`}
                     >
                       /{p.phonemeCode}/
@@ -91,17 +97,17 @@ export function PronunciationDashboardTile() {
               )}
             </>
           ) : (
-            <p className="mt-1 text-xs text-muted">
+            <p className="text-sm text-muted">
               Record your first drill to get a phoneme-level AI score and a projected Speaking band.
             </p>
           )}
           {due.length > 0 && (
-            <div className="mt-2 text-xs text-primary">
+            <p className="pt-1 text-xs font-medium text-primary">
               {due.length} drill{due.length === 1 ? '' : 's'} due today
-            </div>
+            </p>
           )}
-        </div>
-      </div>
+        </CardContent>
+      </Card>
     </Link>
   );
 }
