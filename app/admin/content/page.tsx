@@ -1,296 +1,240 @@
 'use client';
 
-import { useDeferredValue, useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { FileText, History, Plus, Search } from 'lucide-react';
-import { AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
-import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
-import { DataTable, type Column } from '@/components/ui/data-table';
-import { EmptyState } from '@/components/ui/empty-error';
-import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
-import { Toast } from '@/components/ui/alert';
+import {
+  ArrowRight,
+  BookOpenText,
+  Copy,
+  FileCheck2,
+  GitBranch,
+  Headphones,
+  Image as ImageIcon,
+  Library,
+  MessageSquareText,
+  Mic,
+  PenSquare,
+  ScrollText,
+  Sparkles,
+  Upload,
+  Users,
+} from 'lucide-react';
+import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Pagination } from '@/components/ui/pagination';
-import { Input } from '@/components/ui/form-controls';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
-import { getAdminContentLibraryData } from '@/lib/admin';
-import type { AdminContentRow } from '@/lib/types/admin';
 
-type PageStatus = 'loading' | 'success' | 'empty' | 'error';
+type HubLink = {
+  href: string;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  badge?: string;
+};
 
-export default function AdminContentLibraryPage() {
+type HubSection = {
+  id: string;
+  title: string;
+  description: string;
+  links: HubLink[];
+};
+
+const hubSections: HubSection[] = [
+  {
+    id: 'papers',
+    title: 'Papers (canonical content)',
+    description:
+      'The mission-critical ContentPaper → Asset → MediaAsset model. All Reading, Listening, Writing, and Speaking practice papers are authored, versioned, and published from here.',
+    links: [
+      {
+        href: '/admin/content/library',
+        label: 'Content Library',
+        description: 'Browse, search, edit, and publish every published or draft content item across professions.',
+        icon: <Library className="h-5 w-5" />,
+      },
+      {
+        href: '/admin/content-papers',
+        label: 'Content Papers',
+        description: 'Canonical paper records with typed asset slots (case notes, audio, scripts, role cards).',
+        icon: <FileCheck2 className="h-5 w-5" />,
+        badge: 'Canonical',
+      },
+      {
+        href: '/admin/content/mocks',
+        label: 'Full Mocks',
+        description: 'Bundle Listening + Reading + Writing + Speaking into a complete OET mock paper.',
+        icon: <ScrollText className="h-5 w-5" />,
+      },
+    ],
+  },
+  {
+    id: 'lessons',
+    title: 'Lessons & micro-content',
+    description: 'Authoring surfaces for the supporting modules that wrap practice papers — vocabulary, conversation, grammar, pronunciation, strategies.',
+    links: [
+      {
+        href: '/admin/content/vocabulary',
+        label: 'Vocabulary',
+        description: 'Term banks tagged by profession with examples and audio.',
+        icon: <BookOpenText className="h-5 w-5" />,
+      },
+      {
+        href: '/admin/content/conversation',
+        label: 'Conversation Templates',
+        description: 'Role-play scenarios, objectives, and patient context for AI-led conversation practice.',
+        icon: <MessageSquareText className="h-5 w-5" />,
+      },
+      {
+        href: '/admin/grammar',
+        label: 'Grammar Lessons',
+        description: 'Server-authoritative grammar rulebook content (free tier capped, AI-drafted).',
+        icon: <PenSquare className="h-5 w-5" />,
+      },
+      {
+        href: '/admin/pronunciation',
+        label: 'Pronunciation Drills',
+        description: 'Phonemes, example words, sentences and ASR-graded drills.',
+        icon: <Mic className="h-5 w-5" />,
+      },
+      {
+        href: '/admin/strategies',
+        label: 'Strategy Guides',
+        description: 'How-to guides per skill and band level.',
+        icon: <Headphones className="h-5 w-5" />,
+      },
+    ],
+  },
+  {
+    id: 'pipelines',
+    title: 'Pipelines',
+    description: 'Bring content into the system at scale, draft new items with AI, and keep the catalogue organised.',
+    links: [
+      {
+        href: '/admin/content-import',
+        label: 'Bulk Import',
+        description: 'CSV / ZIP imports with required source provenance and audit trail.',
+        icon: <Upload className="h-5 w-5" />,
+      },
+      {
+        href: '/admin/content-papers/import',
+        label: 'Paper ZIP Import',
+        description: 'Mission-critical chunked ZIP import that maps files to typed paper assets.',
+        icon: <Upload className="h-5 w-5" />,
+        badge: 'Canonical',
+      },
+      {
+        href: '/admin/content-generation',
+        label: 'AI Generation',
+        description: 'Grounded AI drafts (rulebook + scoring + guardrails) routed via the AI gateway.',
+        icon: <Sparkles className="h-5 w-5" />,
+      },
+      {
+        href: '/admin/content-hierarchy',
+        label: 'Hierarchy',
+        description: 'Programs → Tracks → Modules → Lessons → Packages.',
+        icon: <GitBranch className="h-5 w-5" />,
+      },
+      {
+        href: '/admin/media',
+        label: 'Media Assets',
+        description: 'Content-addressed (SHA-256) storage of every uploaded file.',
+        icon: <ImageIcon className="h-5 w-5" />,
+      },
+    ],
+  },
+  {
+    id: 'governance',
+    title: 'Quality & governance',
+    description: 'Pre-publish checks, approvals, and ongoing quality control for the entire catalogue.',
+    links: [
+      {
+        href: '/admin/publish-requests',
+        label: 'Publish Requests',
+        description: 'Approval queue for content moving from draft to published.',
+        icon: <FileCheck2 className="h-5 w-5" />,
+      },
+      {
+        href: '/admin/dedup',
+        label: 'Deduplication',
+        description: 'Detect and merge near-duplicate items before they reach learners.',
+        icon: <Copy className="h-5 w-5" />,
+      },
+      {
+        href: '/admin/rulebooks',
+        label: 'Rulebooks',
+        description: 'The single source of truth that grounds every grade and AI prompt.',
+        icon: <BookOpenText className="h-5 w-5" />,
+      },
+      {
+        href: '/admin/criteria',
+        label: 'Rubrics & Criteria',
+        description: 'Writing and Speaking criterion definitions per profession.',
+        icon: <ScrollText className="h-5 w-5" />,
+      },
+      {
+        href: '/admin/taxonomy',
+        label: 'Professions',
+        description: 'Profession registry that tags every paper, lesson, and rubric.',
+        icon: <Users className="h-5 w-5" />,
+      },
+    ],
+  },
+];
+
+export default function AdminContentHubPage() {
   const router = useRouter();
   const { isAuthenticated, role } = useAdminAuth();
-  const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
-  const [rows, setRows] = useState<AdminContentRow[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [pageSize, setPageSize] = useState(25);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [filters, setFilters] = useState<Record<string, string[]>>({});
-  const [reloadNonce, setReloadNonce] = useState(0);
-  const [toast, setToast] = useState<{ variant: 'success' | 'error'; message: string } | null>(null);
-
-  const deferredSearchQuery = useDeferredValue(searchQuery.trim());
-  const selectedType = filters.type?.[0];
-  const selectedProfession = filters.profession?.[0];
-  const selectedStatus = filters.status?.[0];
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function load() {
-      setPageStatus('loading');
-      try {
-        const result = await getAdminContentLibraryData({
-          page,
-          pageSize,
-          search: deferredSearchQuery || undefined,
-          type: selectedType,
-          profession: selectedProfession,
-          status: selectedStatus,
-        });
-        if (cancelled) return;
-        if (result.items.length === 0 && result.total > 0 && page > 1) {
-          setPage((current) => Math.max(1, current - 1));
-          return;
-        }
-        setRows(result.items);
-        setTotal(result.total);
-        setPageStatus(result.items.length > 0 ? 'success' : 'empty');
-      } catch (error) {
-        console.error(error);
-        if (!cancelled) {
-          setPageStatus('error');
-          setToast({ variant: 'error', message: 'Failed to load content library.' });
-        }
-      }
-    }
-
-    load();
-    return () => {
-      cancelled = true;
-    };
-  }, [deferredSearchQuery, page, pageSize, reloadNonce, selectedProfession, selectedStatus, selectedType]);
-
-  const filterGroups: FilterGroup[] = [
-    {
-      id: 'type',
-      label: 'Type',
-      options: [
-        { id: 'writing_task', label: 'Writing' },
-        { id: 'speaking_task', label: 'Speaking' },
-        { id: 'reading_task', label: 'Reading' },
-        { id: 'listening_task', label: 'Listening' },
-      ],
-    },
-    {
-      id: 'profession',
-      label: 'Profession',
-      options: [
-        { id: 'medicine', label: 'Medicine' },
-        { id: 'nursing', label: 'Nursing' },
-        { id: 'dentistry', label: 'Dentistry' },
-        { id: 'pharmacy', label: 'Pharmacy' },
-        { id: 'physiotherapy', label: 'Physiotherapy' },
-      ],
-    },
-    {
-      id: 'status',
-      label: 'Status',
-      options: [
-        { id: 'draft', label: 'Draft' },
-        { id: 'published', label: 'Published' },
-        { id: 'archived', label: 'Archived' },
-      ],
-    },
-  ];
-
-  const columns: Column<AdminContentRow>[] = [
-    { key: 'id', header: 'ID', render: (row) => <span className="font-mono text-xs">{row.id}</span> },
-    {
-      key: 'title',
-      header: 'Title',
-      render: (row) => (
-        <button className="text-left font-medium text-primary hover:underline" onClick={() => router.push(`/admin/content/${row.id}`)}>
-          {row.title}
-        </button>
-      ),
-    },
-    { key: 'type', header: 'Type', render: (row) => <span className="capitalize">{row.type.replace('_', ' ')}</span> },
-    { key: 'profession', header: 'Profession', render: (row) => <span className="capitalize">{row.profession || 'All'}</span> },
-    { key: 'author', header: 'Author', render: (row) => <span className="text-muted">{row.author}</span> },
-    {
-      key: 'status',
-      header: 'Status',
-      render: (row) => (
-        <Badge variant={row.status === 'published' ? 'success' : row.status === 'archived' ? 'muted' : 'warning'}>
-          {row.status}
-        </Badge>
-      ),
-    },
-    {
-      key: 'revisions',
-      header: 'Revisions',
-      render: (row) => (
-        <button
-          className="flex items-center gap-1 text-xs text-muted hover:text-navy"
-          onClick={() => router.push(`/admin/content/${row.id}/revisions`)}
-        >
-          <History className="h-3.5 w-3.5" />
-          {row.revisionCount}
-        </button>
-      ),
-    },
-    { key: 'updatedAt', header: 'Updated', render: (row) => <span className="text-xs text-muted">{new Date(row.updatedAt).toLocaleString()}</span> },
-  ];
-
-  const mobileCardRender = (row: AdminContentRow) => (
-    <div className="space-y-3">
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{row.id}</p>
-          <button className="truncate text-left font-semibold text-primary hover:underline" onClick={() => router.push(`/admin/content/${row.id}`)}>
-            {row.title}
-          </button>
-        </div>
-        <Badge variant={row.status === 'published' ? 'success' : row.status === 'archived' ? 'muted' : 'warning'}>
-          {row.status}
-        </Badge>
-      </div>
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
-        <div className="rounded-2xl bg-background-light px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Type</p>
-          <p className="mt-1 font-medium capitalize text-navy">{row.type.replace('_', ' ')}</p>
-        </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Profession</p>
-          <p className="mt-1 font-medium capitalize text-navy">{row.profession || 'All'}</p>
-        </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Author</p>
-          <p className="mt-1 font-medium text-navy">{row.author}</p>
-        </div>
-        <div className="rounded-2xl bg-background-light px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Updated</p>
-          <p className="mt-1 font-medium text-navy">{new Date(row.updatedAt).toLocaleString()}</p>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-2 sm:flex-row">
-        <Button variant="outline" size="sm" className="w-full sm:flex-1" onClick={() => router.push(`/admin/content/${row.id}`)}>
-          Open
-        </Button>
-        <Button variant="outline" size="sm" className="w-full sm:flex-1" onClick={() => router.push(`/admin/content/${row.id}/revisions`)}>
-          <History className="h-4 w-4" />
-          Revisions ({row.revisionCount})
-        </Button>
-      </div>
-    </div>
-  );
-
-  function handleFilterChange(groupId: string, optionId: string) {
-    setPage(1);
-    setFilters((current) => {
-      return {
-        ...current,
-        [groupId]: current[groupId]?.[0] === optionId ? [] : [optionId],
-      };
-    });
-  }
-
 
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Content library">
-      {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
-
+    <AdminRouteWorkspace role="main" aria-label="Content Hub">
       <AdminRouteSectionHeader
-        title="Content Library"
-        description="Manage the live OET content catalog, editorial revisions, and publish-ready practice material."
+        title="Content Hub"
+        description="Single front-door for every content workflow: papers, lessons, mocks, imports, AI drafts, hierarchy, media, and governance."
         actions={
-          <Button onClick={() => router.push('/admin/content/new')} className="gap-2">
-            <Plus className="h-4 w-4" /> New Content
-          </Button>
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={() => router.push('/admin/content/library')} variant="outline" className="gap-2">
+              <Library className="h-4 w-4" /> Open Library
+            </Button>
+            <Button onClick={() => router.push('/admin/content/new')} className="gap-2">
+              <PenSquare className="h-4 w-4" /> New Content
+            </Button>
+          </div>
         }
       />
 
-      <AsyncStateWrapper
-        status={pageStatus}
-        onRetry={() => setReloadNonce((current) => current + 1)}
-        emptyContent={
-          <EmptyState
-            icon={<FileText className="h-10 w-10 text-muted" />}
-            title="No content items yet"
-            description="Create the first publishable content item to start the library."
-            action={{ label: 'Create Content', onClick: () => router.push('/admin/content/new') }}
-          />
-        }
-      >
-        <AdminRoutePanel title="Filters" description="Filter by subtest, profession, or publication state.">
-          <div className="max-w-sm">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
-              <Input
-                placeholder="Search title, ID, or author"
-                value={searchQuery}
-                onChange={(event) => {
-                  setSearchQuery(event.target.value);
-                  setPage(1);
-                }}
-                className="pl-9"
-              />
-            </div>
+      {hubSections.map((section) => (
+        <AdminRoutePanel key={section.id} title={section.title} description={section.description}>
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
+            {section.links.map((link) => (
+              <Link
+                key={link.href}
+                href={link.href}
+                className="group flex h-full flex-col justify-between gap-3 rounded-2xl border border-border bg-background-light p-4 transition hover:-translate-y-0.5 hover:border-primary hover:shadow-sm"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex items-center gap-3">
+                    <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                      {link.icon}
+                    </span>
+                    <div>
+                      <p className="font-semibold text-navy">{link.label}</p>
+                      {link.badge ? (
+                        <Badge variant="success" className="mt-1 text-[10px] uppercase tracking-wide">
+                          {link.badge}
+                        </Badge>
+                      ) : null}
+                    </div>
+                  </div>
+                  <ArrowRight className="h-4 w-4 text-muted transition group-hover:text-primary" />
+                </div>
+                <p className="text-sm text-muted">{link.description}</p>
+              </Link>
+            ))}
           </div>
-          <FilterBar
-            groups={filterGroups}
-            selected={filters}
-            onChange={handleFilterChange}
-            onClear={() => {
-              setFilters({});
-              setSearchQuery('');
-              setPage(1);
-            }}
-          />
         </AdminRoutePanel>
-
-        <AdminRoutePanel
-          title="Content Items"
-          description="Every visible row is backed by the live admin content endpoint."
-        >
-          {rows.length === 0 ? (
-            <EmptyState
-              icon={<Search className="h-10 w-10 text-muted" />}
-              title="No matching content"
-              description="Adjust your search or filters to find a content item."
-              action={{
-                label: 'Clear Filters',
-                onClick: () => {
-                  setFilters({});
-                  setSearchQuery('');
-                  setPage(1);
-                },
-              }}
-            />
-          ) : (
-            <div className="space-y-4">
-              <DataTable columns={columns} data={rows} keyExtractor={(row) => row.id} mobileCardRender={mobileCardRender} />
-              <Pagination
-                page={page}
-                pageSize={pageSize}
-                total={total}
-                onPageChange={setPage}
-                onPageSizeChange={setPageSize}
-                itemLabel="item"
-                itemLabelPlural="items"
-              />
-            </div>
-          )}
-        </AdminRoutePanel>
-      </AsyncStateWrapper>
+      ))}
     </AdminRouteWorkspace>
   );
 }

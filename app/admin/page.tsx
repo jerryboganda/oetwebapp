@@ -217,9 +217,9 @@ export default function AdminDashboardPage() {
             <AdminRoutePanel title="Operational Shortcuts" description="Jump straight into the admin workstreams that need action.">
               <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
                 {[
-                  { href: '/admin/content', label: 'Content Library' },
+                  { href: '/admin/content', label: 'Content Hub' },
                   { href: '/admin/review-ops', label: 'Review Ops' },
-                  { href: '/admin/freeze', label: 'Freeze Center' },
+                  { href: '/admin/freeze', label: 'Subscription Freezes' },
                   { href: '/admin/billing', label: 'Billing Ops' },
                   { href: '/admin/business-intelligence', label: 'Business Intelligence' },
                   { href: '/admin/analytics/quality', label: 'Quality Analytics' },

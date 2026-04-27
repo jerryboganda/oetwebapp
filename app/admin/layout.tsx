@@ -49,27 +49,9 @@ const adminNavGroups: NavGroup[] = [
     ],
   },
   {
-    label: 'Content authoring',
+    label: 'Content',
     items: [
-      { href: '/admin/content', label: 'Content Library', icon: <Library className="w-5 h-5" />, matchPrefix: '/admin/content' },
-      { href: '/admin/content-papers', label: 'Content Papers', icon: <FileCheck2 className="w-5 h-5" />, matchPrefix: '/admin/content-papers' },
-      { href: '/admin/content/vocabulary', label: 'Vocabulary CMS', icon: <BookOpenText className="w-5 h-5" />, matchPrefix: '/admin/content/vocabulary' },
-      { href: '/admin/content/conversation', label: 'Conversation CMS', icon: <MessageSquareText className="w-5 h-5" />, matchPrefix: '/admin/content/conversation' },
-      { href: '/admin/grammar', label: 'Grammar CMS', icon: <BookOpenText className="w-5 h-5" />, matchPrefix: '/admin/grammar' },
-      { href: '/admin/pronunciation', label: 'Pronunciation CMS', icon: <Mic className="w-5 h-5" />, matchPrefix: '/admin/pronunciation' },
-      { href: '/admin/strategies', label: 'Strategy Guides', icon: <BookOpenText className="w-5 h-5" />, matchPrefix: '/admin/strategies' },
-      { href: '/admin/content-generation', label: 'Content Generation', icon: <Sparkles className="w-5 h-5" />, matchPrefix: '/admin/content-generation' },
-    ],
-  },
-  {
-    label: 'Content operations',
-    items: [
-      { href: '/admin/content-import', label: 'Content Import', icon: <Upload className="w-5 h-5" />, matchPrefix: '/admin/content-import' },
-      { href: '/admin/content-hierarchy', label: 'Content Hierarchy', icon: <GitBranch className="w-5 h-5" />, matchPrefix: '/admin/content-hierarchy' },
-      { href: '/admin/media', label: 'Media Assets', icon: <ImageIcon className="w-5 h-5" />, matchPrefix: '/admin/media' },
-      { href: '/admin/dedup', label: 'Deduplication', icon: <Copy className="w-5 h-5" />, matchPrefix: '/admin/dedup' },
-      { href: '/admin/freeze', label: 'Content Freeze', icon: <Snowflake className="w-5 h-5" />, matchPrefix: '/admin/freeze' },
-      { href: '/admin/publish-requests', label: 'Publish Requests', icon: <FileCheck2 className="w-5 h-5" />, matchPrefix: '/admin/publish-requests' },
+      { href: '/admin/content', label: 'Content Hub', icon: <Library className="w-5 h-5" />, matchPrefix: '/admin/content' },
     ],
   },
   {
@@ -109,6 +91,7 @@ const adminNavGroups: NavGroup[] = [
     label: 'Billing & growth',
     items: [
       { href: '/admin/billing', label: 'Billing Ops', icon: <CreditCard className="w-5 h-5" />, matchPrefix: '/admin/billing' },
+      { href: '/admin/freeze', label: 'Subscription Freezes', icon: <Snowflake className="w-5 h-5" />, matchPrefix: '/admin/freeze' },
       { href: '/admin/flags', label: 'Feature Flags', icon: <Flag className="w-5 h-5" />, matchPrefix: '/admin/flags' },
       { href: '/admin/notifications', label: 'Notifications', icon: <Bell className="w-5 h-5" />, matchPrefix: '/admin/notifications' },
       { href: '/admin/webhooks', label: 'Webhooks', icon: <Webhook className="w-5 h-5" />, matchPrefix: '/admin/webhooks' },
@@ -159,8 +142,16 @@ function getAdminPageTitle(pathname: string | null) {
     return 'Conversation CMS';
   }
 
-  if (pathname.startsWith('/admin/content')) {
+  if (pathname.startsWith('/admin/content/library')) {
     return 'Content Library';
+  }
+
+  if (pathname.startsWith('/admin/content/mocks')) {
+    return 'Mock Bundles';
+  }
+
+  if (pathname.startsWith('/admin/content')) {
+    return 'Content Hub';
   }
 
   if (pathname.startsWith('/admin/taxonomy')) {
@@ -236,7 +227,7 @@ function getAdminPageTitle(pathname: string | null) {
   }
 
   if (pathname.startsWith('/admin/freeze')) {
-    return 'Content Freeze';
+    return 'Subscription Freezes';
   }
 
   if (pathname.startsWith('/admin/content-hierarchy')) {
