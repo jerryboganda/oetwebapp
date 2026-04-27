@@ -1,9 +1,9 @@
-'use client';
+﻿'use client';
 
 import Link from 'next/link';
 import { useEffect, useMemo, useState } from 'react';
-import { MailPlus, Search, Upload, Users } from 'lucide-react';
-import { AdminRoutePanel, AdminRouteSectionHeader, AdminRouteSummaryCard, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { CheckCircle2, MailPlus, Search, ShieldAlert, ShieldCheck, Upload, UserMinus, Users, UserX } from 'lucide-react';
+import { AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -18,7 +18,7 @@ import { inviteAdminUser } from '@/lib/api';
 import { getAdminUsersPageData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import { useProfessions } from '@/lib/hooks/use-professions';
-import type { AdminUserRow } from '@/lib/types/admin';
+import type { AdminUserRow, AdminUsersPageData } from '@/lib/types/admin';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -34,7 +34,7 @@ const defaultInviteForm: InviteFormState = {
   name: '',
   email: '',
   role: 'learner',
-  professionId: 'nursing',
+  professionId: '',
 };
 
 export default function UsersPage() {
@@ -46,6 +46,7 @@ export default function UsersPage() {
   const [pageSize, setPageSize] = useState(20);
   const [total, setTotal] = useState(0);
   const [users, setUsers] = useState<AdminUserRow[]>([]);
+  const [summary, setSummary] = useState<AdminUsersPageData['summary'] | undefined>(undefined);
   const [inviteForm, setInviteForm] = useState<InviteFormState>(defaultInviteForm);
   const [isInviteOpen, setIsInviteOpen] = useState(false);
   const [isInviting, setIsInviting] = useState(false);
@@ -75,6 +76,7 @@ export default function UsersPage() {
         setTotal(result.total);
         setPage(result.page);
         setPageSize(result.pageSize);
+        setSummary(result.summary);
         setPageStatus(result.total > 0 ? 'success' : 'empty');
       } catch (error) {
         console.error(error);
@@ -113,12 +115,6 @@ export default function UsersPage() {
     },
   ];
 
-  const roleCounts = useMemo(() => ({
-    learners: users.filter((user) => user.role === 'learner').length,
-    experts: users.filter((user) => user.role === 'expert').length,
-    admins: users.filter((user) => user.role === 'admin').length,
-  }), [users]);
-
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
 
   const columns: Column<AdminUserRow>[] = useMemo(
@@ -132,6 +128,9 @@ export default function UsersPage() {
               {user.name}
             </Link>
             <p className="text-sm text-muted">{user.email}</p>
+            {user.profession ? (
+              <p className="text-xs text-muted">Profession: {user.profession}</p>
+            ) : null}
           </div>
         ),
       },
@@ -148,9 +147,13 @@ export default function UsersPage() {
         key: 'status',
         header: 'Status',
         render: (user) => (
-          <Badge variant={user.status === 'active' ? 'success' : user.status === 'deleted' ? 'danger' : 'muted'}>
-            {user.status}
-          </Badge>
+          <div className="flex flex-wrap gap-1">
+            <Badge variant={user.status === 'active' ? 'success' : user.status === 'deleted' ? 'danger' : 'muted'}>
+              {user.status}
+            </Badge>
+            {user.lockedOut ? <Badge variant="danger">Locked</Badge> : null}
+            {user.mfaEnabled ? <Badge variant="success">MFA</Badge> : null}
+          </div>
         ),
       },
       {
@@ -159,6 +162,15 @@ export default function UsersPage() {
         render: (user) => (
           <span className="text-sm text-muted">
             {user.lastLogin ? new Date(user.lastLogin).toLocaleString() : 'Never'}
+          </span>
+        ),
+      },
+      {
+        key: 'createdAt',
+        header: 'Created',
+        render: (user) => (
+          <span className="text-sm text-muted">
+            {user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'â€”'}
           </span>
         ),
       },
@@ -180,14 +192,22 @@ export default function UsersPage() {
         </Badge>
       </div>
 
+      <div className="flex flex-wrap gap-1.5">
+        <Badge variant={user.status === 'active' ? 'success' : user.status === 'deleted' ? 'danger' : 'muted'}>
+          {user.status}
+        </Badge>
+        {user.lockedOut ? <Badge variant="danger">Locked</Badge> : null}
+        {user.mfaEnabled ? <Badge variant="success">MFA</Badge> : null}
+      </div>
+
       <div className="grid grid-cols-2 gap-3 text-sm">
-        <div className="rounded-2xl bg-background-light px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Status</p>
-          <p className="mt-1 font-medium text-navy">{user.status}</p>
-        </div>
         <div className="rounded-2xl bg-background-light px-3 py-2">
           <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Last login</p>
           <p className="mt-1 font-medium text-navy">{user.lastLogin ? new Date(user.lastLogin).toLocaleString() : 'Never'}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Created</p>
+          <p className="mt-1 font-medium text-navy">{user.createdAt ? new Date(user.createdAt).toLocaleDateString() : 'â€”'}</p>
         </div>
       </div>
 
@@ -219,15 +239,24 @@ export default function UsersPage() {
     setTotal(result.total);
     setPage(result.page);
     setPageSize(result.pageSize);
+    setSummary(result.summary);
     setPageStatus(result.total > 0 ? 'success' : 'empty');
   }
 
   async function handleInviteUser() {
+    if (!inviteForm.email.trim() || !inviteForm.name.trim()) {
+      setToast({ variant: 'error', message: 'Name and email are required.' });
+      return;
+    }
+    if (inviteForm.role !== 'admin' && !inviteForm.professionId) {
+      setToast({ variant: 'error', message: 'Please pick a profession for this account.' });
+      return;
+    }
     setIsInviting(true);
     try {
       const result = await inviteAdminUser({
-        name: inviteForm.name,
-        email: inviteForm.email,
+        name: inviteForm.name.trim(),
+        email: inviteForm.email.trim(),
         role: inviteForm.role,
         professionId: inviteForm.role === 'admin' ? undefined : inviteForm.professionId,
       });
@@ -249,28 +278,39 @@ export default function UsersPage() {
 
   if (!isAuthenticated || role !== 'admin') return null;
 
+  const summaryCards = [
+    { label: 'Active', value: summary?.active ?? users.filter((u) => u.status === 'active').length, icon: CheckCircle2, tone: 'text-emerald-600' },
+    { label: 'Suspended', value: summary?.suspended ?? users.filter((u) => u.status === 'suspended').length, icon: UserMinus, tone: 'text-amber-600' },
+    { label: 'Deleted', value: summary?.deleted ?? users.filter((u) => u.status === 'deleted').length, icon: UserX, tone: 'text-rose-600' },
+    { label: 'MFA enabled', value: summary?.mfaEnabled ?? users.filter((u) => u.mfaEnabled).length, icon: ShieldCheck, tone: 'text-emerald-600' },
+    { label: 'Locked out', value: summary?.lockedOut ?? users.filter((u) => u.lockedOut).length, icon: ShieldAlert, tone: 'text-rose-600' },
+  ];
+
   return (
     <AdminRouteWorkspace role="main" aria-label="User operations">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminRouteSectionHeader
-        title="User Operations"
-        description="Manage learner, expert, and admin accounts with real invite, access, and status controls."
-        actions={
-          <div className="flex gap-2">
-            <Link href="/admin/users/import">
-              <Button variant="outline" className="gap-2">
-                <Upload className="h-4 w-4" />
-                Bulk Import
-              </Button>
-            </Link>
-            <Button onClick={() => setIsInviteOpen(true)} className="gap-2">
-              <MailPlus className="h-4 w-4" />
-              Invite User
+      <header className="flex flex-col gap-4 border-b border-border/60 pb-4 md:flex-row md:items-end md:justify-between">
+        <div className="space-y-1">
+          <p className="text-[11px] font-semibold uppercase tracking-[0.18em] text-muted">Admin workspace</p>
+          <h1 className="text-2xl font-semibold text-navy">User Operations</h1>
+          <p className="max-w-2xl text-sm text-muted">
+            Manage learner, expert, and admin accounts. Invite, suspend, restore, audit, and recover access â€” all backed by the live admin API and full audit trail.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Link href="/admin/users/import">
+            <Button variant="outline" className="gap-2">
+              <Upload className="h-4 w-4" />
+              Bulk Import
             </Button>
-          </div>
-        }
-      />
+          </Link>
+          <Button onClick={() => setIsInviteOpen(true)} className="gap-2">
+            <MailPlus className="h-4 w-4" />
+            Invite User
+          </Button>
+        </div>
+      </header>
 
       <AsyncStateWrapper
         status={pageStatus}
@@ -284,13 +324,21 @@ export default function UsersPage() {
           />
         }
       >
-        <div className="grid gap-4 md:grid-cols-3">
-          <AdminRouteSummaryCard label="Learners" value={roleCounts.learners} hint="Accounts currently visible in the active filter window." icon={Users} />
-          <AdminRouteSummaryCard label="Experts" value={roleCounts.experts} hint="Operational reviewer accounts in the current result set." icon={Users} accent="amber" />
-          <AdminRouteSummaryCard label="Admins" value={roleCounts.admins} hint="Administrative accounts visible to this query." icon={Users} accent="rose" />
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+          {summaryCards.map(({ label, value, icon: Icon, tone }) => (
+            <div key={label} className="rounded-2xl border border-border/60 bg-surface p-4 shadow-sm">
+              <div className="flex items-start justify-between gap-2">
+                <div>
+                  <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-muted">{label}</p>
+                  <p className="mt-1 text-2xl font-semibold text-navy">{value ?? 0}</p>
+                </div>
+                <Icon className={`h-5 w-5 ${tone}`} aria-hidden="true" />
+              </div>
+            </div>
+          ))}
         </div>
 
-        <AdminRoutePanel title="Directory" description="This directory is powered by the live admin users endpoint with real role and status filtering.">
+        <AdminRoutePanel title="Directory" description={`Showing ${users.length} of ${total.toLocaleString()} accounts (page ${page} of ${totalPages}). Filter by role, status, or free-text search across name, email, and ID.`}>
           <div className="max-w-sm">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
@@ -330,7 +378,7 @@ export default function UsersPage() {
               label={inviteForm.role === 'expert' ? 'Primary Specialty' : 'Profession'}
               value={inviteForm.professionId}
               onChange={(event) => setInviteForm((current) => ({ ...current, professionId: event.target.value }))}
-              options={professionOptions}
+              options={[{ value: '', label: 'Select a professionâ€¦' }, ...professionOptions]}
             />
           ) : null}
 

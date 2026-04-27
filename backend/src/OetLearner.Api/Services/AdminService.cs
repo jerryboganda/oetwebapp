@@ -104,7 +104,9 @@ public partial class AdminService(
         string Role,
         string Status,
         string? AuthAccountId,
-        DateTimeOffset? LastLogin);
+        DateTimeOffset? LastLogin,
+        DateTimeOffset? CreatedAt,
+        string? Profession);
 
     private static string NormalizeStoredUserStatus(string? status)
     {
@@ -1227,19 +1229,34 @@ public partial class AdminService(
                 u.Role,
                 u.AccountStatus ?? ActiveUserStatus,
                 u.AuthAccountId,
-                u.LastActiveAt))
+                u.LastActiveAt,
+                u.CreatedAt,
+                u.ActiveProfessionId))
             .ToListAsync(ct));
 
-        rows.AddRange(await db.ExpertUsers.AsNoTracking()
-            .Select(e => new AdminUserListRow(
+        var expertProjections = await db.ExpertUsers.AsNoTracking()
+            .Select(e => new
+            {
                 e.Id,
                 e.DisplayName,
                 e.Email,
                 e.Role,
-                e.IsActive ? ActiveUserStatus : SuspendedUserStatus,
+                e.IsActive,
                 e.AuthAccountId,
-                e.CreatedAt))
-            .ToListAsync(ct));
+                e.CreatedAt,
+                e.SpecialtiesJson,
+            })
+            .ToListAsync(ct);
+        rows.AddRange(expertProjections.Select(e => new AdminUserListRow(
+            e.Id,
+            e.DisplayName,
+            e.Email,
+            e.Role,
+            e.IsActive ? ActiveUserStatus : SuspendedUserStatus,
+            e.AuthAccountId,
+            e.CreatedAt,
+            e.CreatedAt,
+            JsonSupport.Deserialize(e.SpecialtiesJson, Array.Empty<string>()).FirstOrDefault())));
 
         rows.AddRange(await db.ApplicationUserAccounts.AsNoTracking()
             .Where(a => a.Role == ApplicationUserRoles.Admin)
@@ -1250,23 +1267,39 @@ public partial class AdminService(
                 a.Role,
                 ActiveUserStatus,
                 a.Id,
-                a.LastLoginAt ?? a.UpdatedAt))
+                a.LastLoginAt ?? a.UpdatedAt,
+                a.CreatedAt,
+                null))
             .ToListAsync(ct));
 
-        var deletedAuthAccountIds = await db.ApplicationUserAccounts.AsNoTracking()
-            .Where(a => a.DeletedAt != null)
-            .Select(a => a.Id)
+        var referencedAuthIds = rows
+            .Where(r => !string.IsNullOrWhiteSpace(r.AuthAccountId))
+            .Select(r => r.AuthAccountId!)
+            .Distinct()
+            .ToList();
+        var authAccountFlags = await db.ApplicationUserAccounts.AsNoTracking()
+            .Where(a => referencedAuthIds.Contains(a.Id))
+            .Select(a => new
+            {
+                a.Id,
+                IsDeleted = a.DeletedAt != null,
+                MfaEnabled = a.AuthenticatorEnabledAt != null,
+                LockoutUntil = a.LockoutUntil,
+            })
             .ToListAsync(ct);
-        var deletedLookup = deletedAuthAccountIds.ToHashSet(StringComparer.Ordinal);
+        var authFlagsLookup = authAccountFlags.ToDictionary(a => a.Id, StringComparer.Ordinal);
+        var nowUtc = timeProvider.GetUtcNow();
 
         rows = rows.Select(row => new AdminUserListRow(
             row.Id,
             row.Name,
             row.Email,
             row.Role,
-            ResolveUserStatus(row.Status, !string.IsNullOrWhiteSpace(row.AuthAccountId) && deletedLookup.Contains(row.AuthAccountId)),
+            ResolveUserStatus(row.Status, !string.IsNullOrWhiteSpace(row.AuthAccountId) && authFlagsLookup.TryGetValue(row.AuthAccountId!, out var f) && f.IsDeleted),
             row.AuthAccountId,
-            row.LastLogin)).ToList();
+            row.LastLogin,
+            row.CreatedAt,
+            row.Profession)).ToList();
 
         IEnumerable<AdminUserListRow> filtered = rows;
 
@@ -1282,23 +1315,52 @@ public partial class AdminService(
                 || u.Id.Contains(search, StringComparison.OrdinalIgnoreCase));
         }
 
-        var total = filtered.Count();
-        var items = filtered
+        var materialized = filtered
             .OrderByDescending(u => u.LastLogin ?? DateTimeOffset.MinValue)
+            .ToList();
+
+        var summary = new
+        {
+            total = materialized.Count,
+            active = materialized.Count(u => u.Status == ActiveUserStatus),
+            suspended = materialized.Count(u => u.Status == SuspendedUserStatus),
+            deleted = materialized.Count(u => u.Status == DeletedUserStatus),
+            mfaEnabled = materialized.Count(u =>
+                !string.IsNullOrWhiteSpace(u.AuthAccountId)
+                && authFlagsLookup.TryGetValue(u.AuthAccountId!, out var f)
+                && f.MfaEnabled),
+            lockedOut = materialized.Count(u =>
+                !string.IsNullOrWhiteSpace(u.AuthAccountId)
+                && authFlagsLookup.TryGetValue(u.AuthAccountId!, out var f)
+                && f.LockoutUntil != null
+                && f.LockoutUntil > nowUtc),
+        };
+
+        var items = materialized
             .Skip((page - 1) * clampedPageSize)
             .Take(clampedPageSize)
-            .Select(u => new
+            .Select(u =>
             {
-                id = u.Id,
-                name = u.Name,
-                email = u.Email,
-                role = u.Role,
-                status = u.Status,
-                lastLogin = u.LastLogin
+                var hasAuth = !string.IsNullOrWhiteSpace(u.AuthAccountId)
+                    && authFlagsLookup.TryGetValue(u.AuthAccountId!, out _);
+                var flags = hasAuth ? authFlagsLookup[u.AuthAccountId!] : null;
+                return new
+                {
+                    id = u.Id,
+                    name = u.Name,
+                    email = u.Email,
+                    role = u.Role,
+                    status = u.Status,
+                    lastLogin = u.LastLogin,
+                    createdAt = u.CreatedAt,
+                    profession = u.Profession,
+                    mfaEnabled = flags?.MfaEnabled ?? false,
+                    lockedOut = flags?.LockoutUntil != null && flags.LockoutUntil > nowUtc,
+                };
             })
             .ToList();
 
-        return new { total, page, pageSize = clampedPageSize, items };
+        return new { total = materialized.Count, page, pageSize = clampedPageSize, items, summary };
     }
 
     public async Task<object> GetUserDetailAsync(string userId, CancellationToken ct)
@@ -1312,6 +1374,9 @@ public partial class AdminService(
             var status = ResolveUserStatus(learner.AccountStatus, authAccount?.DeletedAt is not null);
             var attemptCount = await db.Attempts.CountAsync(a => a.UserId == userId, ct);
             var wallet = await db.Wallets.FirstOrDefaultAsync(w => w.UserId == userId, ct);
+            var security = await BuildSecuritySnapshotAsync(authAccount, ct);
+            var subscription = await BuildLearnerSubscriptionAsync(learner.Id, ct);
+            var recentActivity = await GetRecentUserActivityAsync(learner.Id, learner.AuthAccountId, ct);
             return new
             {
                 learner.Id,
@@ -1325,13 +1390,19 @@ public partial class AdminService(
                 profession = learner.ActiveProfessionId,
                 authAccountId = learner.AuthAccountId,
                 createdAt = learner.CreatedAt,
+                security,
+                subscription,
+                recentActivity,
                 availableActions = new
                 {
                     canSuspend = status is not DeletedUserStatus,
                     canDelete = status is not DeletedUserStatus,
                     canRestore = status is DeletedUserStatus && !string.Equals(learner.Role, ApplicationUserRoles.Admin, StringComparison.Ordinal),
                     canAdjustCredits = status is not DeletedUserStatus,
-                    canTriggerPasswordReset = learner.AuthAccountId is not null && status is not DeletedUserStatus
+                    canTriggerPasswordReset = learner.AuthAccountId is not null && status is not DeletedUserStatus,
+                    canForceSignOut = (security?.ActiveSessionCount ?? 0) > 0,
+                    canUnlock = security?.LockedOut ?? false,
+                    canResendInvite = authAccount != null && authAccount.EmailVerifiedAt == null && status is not DeletedUserStatus
                 }
             };
         }
@@ -1344,6 +1415,8 @@ public partial class AdminService(
                 : null;
             var status = ResolveUserStatus(expert.IsActive ? ActiveUserStatus : SuspendedUserStatus, authAccount?.DeletedAt is not null);
             var reviewCount = await db.ExpertReviewAssignments.CountAsync(a => a.AssignedReviewerId == userId, ct);
+            var security = await BuildSecuritySnapshotAsync(authAccount, ct);
+            var recentActivity = await GetRecentUserActivityAsync(expert.Id, expert.AuthAccountId, ct);
             return new
             {
                 expert.Id,
@@ -1356,13 +1429,19 @@ public partial class AdminService(
                 specialties = JsonSupport.Deserialize(expert.SpecialtiesJson, Array.Empty<string>()),
                 authAccountId = expert.AuthAccountId,
                 createdAt = expert.CreatedAt,
+                security,
+                subscription = (object?)null,
+                recentActivity,
                 availableActions = new
                 {
                     canSuspend = status is not DeletedUserStatus,
                     canDelete = status is not DeletedUserStatus,
                     canRestore = status is DeletedUserStatus && !string.Equals(expert.Role, ApplicationUserRoles.Admin, StringComparison.Ordinal),
                     canAdjustCredits = false,
-                    canTriggerPasswordReset = expert.AuthAccountId is not null && status is not DeletedUserStatus
+                    canTriggerPasswordReset = expert.AuthAccountId is not null && status is not DeletedUserStatus,
+                    canForceSignOut = (security?.ActiveSessionCount ?? 0) > 0,
+                    canUnlock = security?.LockedOut ?? false,
+                    canResendInvite = authAccount != null && authAccount.EmailVerifiedAt == null && status is not DeletedUserStatus
                 }
             };
         }
@@ -1373,6 +1452,8 @@ public partial class AdminService(
         if (adminAccount is not null)
         {
             var status = ResolveUserStatus(ActiveUserStatus, adminAccount.DeletedAt is not null);
+            var security = await BuildSecuritySnapshotAsync(adminAccount, ct);
+            var recentActivity = await GetRecentUserActivityAsync(adminAccount.Id, adminAccount.Id, ct);
             return new
             {
                 adminAccount.Id,
@@ -1383,13 +1464,19 @@ public partial class AdminService(
                 lastLogin = adminAccount.LastLoginAt ?? adminAccount.UpdatedAt,
                 authAccountId = adminAccount.Id,
                 createdAt = adminAccount.CreatedAt,
+                security,
+                subscription = (object?)null,
+                recentActivity,
                 availableActions = new
                 {
                     canSuspend = false,
                     canDelete = false,
                     canRestore = false,
                     canAdjustCredits = false,
-                    canTriggerPasswordReset = status is not DeletedUserStatus
+                    canTriggerPasswordReset = status is not DeletedUserStatus,
+                    canForceSignOut = (security?.ActiveSessionCount ?? 0) > 0,
+                    canUnlock = security?.LockedOut ?? false,
+                    canResendInvite = false
                 }
             };
         }
@@ -2123,6 +2210,189 @@ public partial class AdminService(
             expiresAt = challenge.ExpiresAt,
             retryAfterSeconds = challenge.RetryAfterSeconds
         };
+    }
+
+    public async Task<object> RevokeUserSessionsAsync(string adminId, string adminName,
+        string userId, CancellationToken ct)
+    {
+        var target = await ResolveUserTargetAsync(userId, ct);
+        if (string.IsNullOrWhiteSpace(target.AuthAccountId))
+        {
+            throw ApiException.Validation("auth_account_missing", "This user does not have an authentication account to revoke.");
+        }
+
+        var now = timeProvider.GetUtcNow();
+        var revoked = 0;
+        var activeRefreshTokens = await db.RefreshTokenRecords
+            .Where(t => t.ApplicationUserAccountId == target.AuthAccountId && t.RevokedAt == null)
+            .ToListAsync(ct);
+        foreach (var token in activeRefreshTokens)
+        {
+            token.RevokedAt = now;
+            revoked++;
+        }
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Revoked Sessions", "User", userId,
+            $"Force sign-out: revoked {revoked} active session(s).", ct);
+        return new { id = target.Id, revoked };
+    }
+
+    public async Task<object> UnlockUserAsync(string adminId, string adminName,
+        string userId, CancellationToken ct)
+    {
+        var target = await ResolveUserTargetAsync(userId, ct);
+        if (string.IsNullOrWhiteSpace(target.AuthAccountId))
+        {
+            throw ApiException.Validation("auth_account_missing", "This user does not have an authentication account.");
+        }
+
+        var authAccount = await db.ApplicationUserAccounts.FirstOrDefaultAsync(a => a.Id == target.AuthAccountId, ct);
+        if (authAccount is null)
+        {
+            throw ApiException.NotFound("auth_account_not_found", "Authentication account not found.");
+        }
+
+        var hadLockout = authAccount.LockoutUntil is not null || authAccount.FailedSignInCount > 0;
+        authAccount.LockoutUntil = null;
+        authAccount.FailedSignInCount = 0;
+        authAccount.UpdatedAt = timeProvider.GetUtcNow();
+        await db.SaveChangesAsync(ct);
+        await LogAuditAsync(adminId, adminName, "Unlocked Account", "User", userId,
+            hadLockout ? "Cleared lockout and failed sign-in counter." : "Account had no active lockout; counter reset.", ct);
+        return new { id = target.Id, lockoutCleared = hadLockout };
+    }
+
+    public async Task<object> ResendUserInviteAsync(string adminId, string adminName,
+        string userId, CancellationToken ct)
+    {
+        var target = await ResolveUserTargetAsync(userId, ct);
+        if (target.Status == DeletedUserStatus)
+        {
+            throw ApiException.Validation("account_deleted", "Restore the account before resending the invitation.");
+        }
+        if (string.IsNullOrWhiteSpace(target.AuthAccountId))
+        {
+            throw ApiException.Validation("auth_account_missing", "This user does not have an authentication account.");
+        }
+
+        var authAccount = await db.ApplicationUserAccounts.AsNoTracking()
+            .FirstOrDefaultAsync(a => a.Id == target.AuthAccountId, ct);
+        if (authAccount is null)
+        {
+            throw ApiException.NotFound("auth_account_not_found", "Authentication account not found.");
+        }
+
+        var challenge = await emailOtpService.RequestPasswordResetOtpAsync(target.Email, ct);
+        await LogAuditAsync(adminId, adminName, "Resent Invite", "User", userId,
+            $"Resent invitation to {target.Email}.", ct);
+        return new
+        {
+            id = target.Id,
+            target.Email,
+            purpose = challenge.Purpose,
+            deliveryChannel = challenge.DeliveryChannel,
+            destinationHint = challenge.DestinationHint,
+            expiresAt = challenge.ExpiresAt,
+            retryAfterSeconds = challenge.RetryAfterSeconds
+        };
+    }
+
+    private sealed record AdminUserSecuritySnapshot(
+        bool MfaEnabled,
+        int FailedSignInCount,
+        DateTimeOffset? LockoutUntil,
+        bool LockedOut,
+        DateTimeOffset? EmailVerifiedAt,
+        int ActiveSessionCount,
+        DateTimeOffset? LastSessionAt,
+        string? LastSessionIp,
+        string? LastSessionDevice);
+
+    private async Task<AdminUserSecuritySnapshot?> BuildSecuritySnapshotAsync(
+        ApplicationUserAccount? authAccount,
+        CancellationToken ct)
+    {
+        if (authAccount is null) return null;
+        var now = timeProvider.GetUtcNow();
+        var sessions = await db.RefreshTokenRecords.AsNoTracking()
+            .Where(t => t.ApplicationUserAccountId == authAccount.Id
+                && t.RevokedAt == null
+                && t.ExpiresAt > now)
+            .OrderByDescending(t => t.LastUsedAt ?? t.CreatedAt)
+            .Take(10)
+            .Select(t => new
+            {
+                t.LastUsedAt,
+                t.CreatedAt,
+                t.IpAddress,
+                t.DeviceInfo,
+            })
+            .ToListAsync(ct);
+
+        var activeCount = sessions.Count;
+        var latest = sessions.FirstOrDefault();
+
+        return new AdminUserSecuritySnapshot(
+            MfaEnabled: authAccount.AuthenticatorEnabledAt is not null,
+            FailedSignInCount: authAccount.FailedSignInCount,
+            LockoutUntil: authAccount.LockoutUntil,
+            LockedOut: authAccount.LockoutUntil is not null && authAccount.LockoutUntil > now,
+            EmailVerifiedAt: authAccount.EmailVerifiedAt,
+            ActiveSessionCount: activeCount,
+            LastSessionAt: latest?.LastUsedAt ?? latest?.CreatedAt,
+            LastSessionIp: latest?.IpAddress,
+            LastSessionDevice: latest?.DeviceInfo);
+    }
+
+    private async Task<object?> BuildLearnerSubscriptionAsync(string userId, CancellationToken ct)
+    {
+        var subscription = await db.Subscriptions.AsNoTracking()
+            .Where(s => s.UserId == userId)
+            .OrderByDescending(s => s.ChangedAt)
+            .FirstOrDefaultAsync(ct);
+        if (subscription is null) return null;
+
+        var plan = await db.BillingPlans.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == subscription.PlanId, ct);
+
+        return new
+        {
+            subscription.Id,
+            planId = subscription.PlanId,
+            planName = plan?.Name ?? subscription.PlanId,
+            planCode = plan?.Code,
+            status = subscription.Status.ToString().ToLowerInvariant(),
+            startedAt = subscription.StartedAt,
+            nextRenewalAt = subscription.NextRenewalAt,
+            changedAt = subscription.ChangedAt,
+            priceAmount = subscription.PriceAmount,
+            currency = subscription.Currency,
+            interval = subscription.Interval,
+        };
+    }
+
+    private async Task<List<object>> GetRecentUserActivityAsync(
+        string userId,
+        string? authAccountId,
+        CancellationToken ct)
+    {
+        var events = await db.AuditEvents.AsNoTracking()
+            .Where(e => (e.ResourceType == "User" && e.ResourceId == userId)
+                || (authAccountId != null && e.ActorAuthAccountId == authAccountId))
+            .OrderByDescending(e => e.OccurredAt)
+            .Take(20)
+            .Select(e => new
+            {
+                e.Id,
+                occurredAt = e.OccurredAt,
+                action = e.Action,
+                actorName = e.ActorName,
+                resourceType = e.ResourceType,
+                resourceId = e.ResourceId,
+                details = e.Details,
+            })
+            .ToListAsync(ct);
+        return events.Cast<object>().ToList();
     }
 
     // ════════════════════════════════════════════

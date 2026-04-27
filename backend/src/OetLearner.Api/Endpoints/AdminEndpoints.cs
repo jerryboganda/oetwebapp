@@ -236,6 +236,18 @@ public static class AdminEndpoints
             => Results.Ok(await service.TriggerUserPasswordResetAsync(http.AdminId(), http.AdminName(), userId, ct)))
             .WithAdminWrite("AdminUsersWrite");
 
+        admin.MapPost("/users/{userId}/sessions/revoke", async (string userId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.RevokeUserSessionsAsync(http.AdminId(), http.AdminName(), userId, ct)))
+            .WithAdminWrite("AdminUsersWrite");
+
+        admin.MapPost("/users/{userId}/unlock", async (string userId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.UnlockUserAsync(http.AdminId(), http.AdminName(), userId, ct)))
+            .WithAdminWrite("AdminUsersWrite");
+
+        admin.MapPost("/users/{userId}/resend-invite", async (string userId, HttpContext http, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ResendUserInviteAsync(http.AdminId(), http.AdminName(), userId, ct)))
+            .WithAdminWrite("AdminUsersWrite");
+
         // ── Billing ─────────────────────────────────────────
 
         admin.MapGet("/billing/plans", async (AdminService service, CancellationToken ct, string? status)

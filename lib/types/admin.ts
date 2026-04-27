@@ -181,6 +181,46 @@ export interface AdminUserRow {
   role: 'learner' | 'expert' | 'admin' | 'sponsor';
   status: 'active' | 'suspended' | 'deleted';
   lastLogin: string | null;
+  createdAt?: string | null;
+  profession?: string | null;
+  mfaEnabled?: boolean;
+  lockedOut?: boolean;
+}
+
+export interface AdminUserSecuritySnapshot {
+  mfaEnabled: boolean;
+  failedSignInCount: number;
+  lockoutUntil: string | null;
+  lockedOut: boolean;
+  emailVerifiedAt: string | null;
+  activeSessionCount: number;
+  lastSessionAt: string | null;
+  lastSessionIp: string | null;
+  lastSessionDevice: string | null;
+}
+
+export interface AdminUserSubscriptionSnapshot {
+  id: string;
+  planId: string;
+  planName: string;
+  planCode?: string | null;
+  status: string;
+  startedAt: string | null;
+  nextRenewalAt: string | null;
+  changedAt: string | null;
+  priceAmount: number;
+  currency: string;
+  interval: string;
+}
+
+export interface AdminUserActivityEvent {
+  id: string;
+  occurredAt: string;
+  action: string;
+  actorName: string;
+  resourceType?: string | null;
+  resourceId?: string | null;
+  details?: string | null;
 }
 
 export interface AdminUserDetail {
@@ -197,12 +237,18 @@ export interface AdminUserDetail {
   tasksCompleted?: number;
   tasksGraded?: number;
   creditBalance?: number;
+  security?: AdminUserSecuritySnapshot | null;
+  subscription?: AdminUserSubscriptionSnapshot | null;
+  recentActivity?: AdminUserActivityEvent[];
   availableActions: {
     canSuspend: boolean;
     canDelete: boolean;
     canRestore: boolean;
     canAdjustCredits: boolean;
     canTriggerPasswordReset: boolean;
+    canForceSignOut?: boolean;
+    canUnlock?: boolean;
+    canResendInvite?: boolean;
   };
 }
 
@@ -211,6 +257,14 @@ export interface AdminUsersPageData {
   page: number;
   pageSize: number;
   items: AdminUserRow[];
+  summary?: {
+    total: number;
+    active: number;
+    suspended: number;
+    deleted: number;
+    mfaEnabled: number;
+    lockedOut: number;
+  };
 }
 
 

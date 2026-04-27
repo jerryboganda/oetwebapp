@@ -409,6 +409,7 @@ export async function getAdminAuditLogDetailData(eventId: string): Promise<Admin
 
 export async function getAdminUsersPageData(params?: Parameters<typeof fetchAdminUsers>[0]): Promise<AdminUsersPageData> {
   const raw = asRecord(await fetchAdminUsers(params));
+  const summaryRaw = asRecord(raw.summary);
   return {
     total: toNumberValue(raw.total),
     page: toNumberValue(raw.page, 1),
@@ -420,12 +421,67 @@ export async function getAdminUsersPageData(params?: Parameters<typeof fetchAdmi
       role: normalizeUserRole(item.role),
       status: normalizeUserStatus(item.status),
       lastLogin: toNullableString(item.lastLogin),
+      createdAt: toNullableString(item.createdAt),
+      profession: toNullableString(item.profession),
+      mfaEnabled: toBooleanValue(item.mfaEnabled),
+      lockedOut: toBooleanValue(item.lockedOut),
     })),
+    summary: raw.summary != null ? {
+      total: toNumberValue(summaryRaw.total),
+      active: toNumberValue(summaryRaw.active),
+      suspended: toNumberValue(summaryRaw.suspended),
+      deleted: toNumberValue(summaryRaw.deleted),
+      mfaEnabled: toNumberValue(summaryRaw.mfaEnabled),
+      lockedOut: toNumberValue(summaryRaw.lockedOut),
+    } : undefined,
   };
 }
 
 export async function getAdminUserDetailData(userId: string): Promise<AdminUserDetail> {
   const raw = asRecord(await fetchAdminUserDetail(userId));
+  const securityRaw = asRecord(raw.security);
+  const subscriptionRaw = asRecord(raw.subscription);
+  const security = raw.security
+    ? {
+        mfaEnabled: toBooleanValue(securityRaw.mfaEnabled),
+        failedSignInCount: toNumberValue(securityRaw.failedSignInCount),
+        lockoutUntil: toNullableString(securityRaw.lockoutUntil),
+        lockedOut: toBooleanValue(securityRaw.lockedOut),
+        emailVerifiedAt: toNullableString(securityRaw.emailVerifiedAt),
+        activeSessionCount: toNumberValue(securityRaw.activeSessionCount),
+        lastSessionAt: toNullableString(securityRaw.lastSessionAt),
+        lastSessionIp: toNullableString(securityRaw.lastSessionIp),
+        lastSessionDevice: toNullableString(securityRaw.lastSessionDevice),
+      }
+    : null;
+  const subscription = raw.subscription
+    ? {
+        id: toStringValue(subscriptionRaw.id),
+        planId: toStringValue(subscriptionRaw.planId),
+        planName: toStringValue(subscriptionRaw.planName),
+        planCode: toNullableString(subscriptionRaw.planCode),
+        status: toStringValue(subscriptionRaw.status),
+        startedAt: toNullableString(subscriptionRaw.startedAt),
+        nextRenewalAt: toNullableString(subscriptionRaw.nextRenewalAt),
+        changedAt: toNullableString(subscriptionRaw.changedAt),
+        priceAmount: toNumberValue(subscriptionRaw.priceAmount),
+        currency: toStringValue(subscriptionRaw.currency, 'AUD'),
+        interval: toStringValue(subscriptionRaw.interval, 'monthly'),
+      }
+    : null;
+  const recentActivity = asArray(raw.recentActivity).map((event) => {
+    const ev = asRecord(event);
+    return {
+      id: toStringValue(ev.id),
+      occurredAt: toStringValue(ev.occurredAt),
+      action: toStringValue(ev.action),
+      actorName: toStringValue(ev.actorName),
+      resourceType: toNullableString(ev.resourceType),
+      resourceId: toNullableString(ev.resourceId),
+      details: toNullableString(ev.details),
+    };
+  });
+  const actionsRaw = asRecord(raw.availableActions);
   return {
     id: toStringValue(raw.id),
     name: toStringValue(raw.name),
@@ -440,12 +496,18 @@ export async function getAdminUserDetailData(userId: string): Promise<AdminUserD
     tasksCompleted: raw.tasksCompleted != null ? toNumberValue(raw.tasksCompleted) : undefined,
     tasksGraded: raw.tasksGraded != null ? toNumberValue(raw.tasksGraded) : undefined,
     creditBalance: raw.creditBalance != null ? toNumberValue(raw.creditBalance) : undefined,
+    security,
+    subscription,
+    recentActivity,
     availableActions: {
-      canSuspend: toBooleanValue(asRecord(raw.availableActions).canSuspend),
-      canDelete: toBooleanValue(asRecord(raw.availableActions).canDelete),
-      canRestore: toBooleanValue(asRecord(raw.availableActions).canRestore),
-      canAdjustCredits: toBooleanValue(asRecord(raw.availableActions).canAdjustCredits),
-      canTriggerPasswordReset: toBooleanValue(asRecord(raw.availableActions).canTriggerPasswordReset),
+      canSuspend: toBooleanValue(actionsRaw.canSuspend),
+      canDelete: toBooleanValue(actionsRaw.canDelete),
+      canRestore: toBooleanValue(actionsRaw.canRestore),
+      canAdjustCredits: toBooleanValue(actionsRaw.canAdjustCredits),
+      canTriggerPasswordReset: toBooleanValue(actionsRaw.canTriggerPasswordReset),
+      canForceSignOut: toBooleanValue(actionsRaw.canForceSignOut),
+      canUnlock: toBooleanValue(actionsRaw.canUnlock),
+      canResendInvite: toBooleanValue(actionsRaw.canResendInvite),
     },
   };
 }

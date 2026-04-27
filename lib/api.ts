@@ -2978,6 +2978,18 @@ export async function triggerAdminUserPasswordReset(userId: string) {
   return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/password-reset`, { method: 'POST' });
 }
 
+export async function revokeAdminUserSessions(userId: string) {
+  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/sessions/revoke`, { method: 'POST' });
+}
+
+export async function unlockAdminUser(userId: string) {
+  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/unlock`, { method: 'POST' });
+}
+
+export async function resendAdminUserInvite(userId: string) {
+  return apiRequest(`/v1/admin/users/${encodeURIComponent(userId)}/resend-invite`, { method: 'POST' });
+}
+
 export async function bulkImportUsers(file: File) {
   const form = new FormData();
   form.append('file', file);
