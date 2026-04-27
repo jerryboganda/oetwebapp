@@ -171,12 +171,21 @@ export function Modal({ open, onClose, title, children, className, size = 'md' }
     [],
   );
 
+  // Hold the latest onClose in a ref so the open/close effect below depends only
+  // on `open`. Without this, parents that pass an inline `onClose={() => ...}`
+  // create a new function reference on every render — every keystroke in a
+  // child input would re-run the effect and steal focus back to the close button.
+  const onCloseRef = useRef(onClose);
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+
   useEffect(() => {
     if (!open) return;
     restoreFocusRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     restoreFocusDescriptorRef.current = describeFocusTarget(restoreFocusRef.current);
     const handler = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape') onCloseRef.current();
       trapFocus(event);
     };
     document.addEventListener('keydown', handler);
@@ -191,7 +200,7 @@ export function Modal({ open, onClose, title, children, className, size = 'md' }
       document.removeEventListener('keydown', handler);
       document.body.style.overflow = '';
     };
-  }, [open, onClose, trapFocus]);
+  }, [open, trapFocus]);
 
   useEffect(() => {
     if (!open && wasOpenRef.current) {
