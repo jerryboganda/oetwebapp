@@ -26,12 +26,10 @@ import {
   Store,
   Snowflake,
   GitBranch,
-  KeyRound,
   FileCheck2,
   Webhook,
   Scale,
   Mic,
-  GraduationCap,
   MessageSquareText,
   BookOpenText,
 } from 'lucide-react';
@@ -81,9 +79,7 @@ const adminNavGroups: NavGroup[] = [
   {
     label: 'People & access',
     items: [
-      { href: '/admin/users', label: 'User Ops', icon: <Users className="w-5 h-5" />, matchPrefix: '/admin/users' },
-      { href: '/admin/experts', label: 'Expert Management', icon: <GraduationCap className="w-5 h-5" />, matchPrefix: '/admin/experts' },
-      { href: '/admin/permissions', label: 'Permissions', icon: <KeyRound className="w-5 h-5" />, matchPrefix: '/admin/permissions' },
+      { href: '/admin/users', label: 'User Operations', icon: <Users className="w-5 h-5" />, matchPrefix: '/admin/users' },
       { href: '/admin/community', label: 'Community', icon: <MessageSquareText className="w-5 h-5" />, matchPrefix: '/admin/community' },
     ],
   },
@@ -248,11 +244,12 @@ function getAdminPageTitle(pathname: string | null) {
   }
 
   if (pathname.startsWith('/admin/users')) {
-    return 'User Ops';
+    return 'User Operations';
   }
 
-  if (pathname.startsWith('/admin/experts')) {
-    return 'Expert Management';
+  // Legacy routes — kept for redirect stubs only.
+  if (pathname.startsWith('/admin/experts') || pathname.startsWith('/admin/permissions') || pathname.startsWith('/admin/roles')) {
+    return 'User Operations';
   }
 
   if (pathname.startsWith('/admin/billing')) {

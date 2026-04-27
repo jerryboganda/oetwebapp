@@ -10,6 +10,7 @@ import {
   Lock,
   LogOut,
   Mail,
+  Mic,
   RefreshCcw,
   Shield,
   ShieldCheck,
@@ -30,6 +31,7 @@ import { Modal } from '@/components/ui/modal';
 import {
   adjustAdminUserCredits,
   deleteAdminUser,
+  fetchAdminPermissions,
   resendAdminUserInvite,
   restoreAdminUser,
   revokeAdminUserSessions,
@@ -39,7 +41,7 @@ import {
 } from '@/lib/api';
 import { getAdminUserDetailData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
-import type { AdminUserDetail } from '@/lib/types/admin';
+import type { AdminPermissionGrant, AdminUserDetail } from '@/lib/types/admin';
 
 type PageStatus = 'loading' | 'success' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -51,6 +53,11 @@ function formatDate(value: string | null | undefined, fallback = '-') {
   } catch {
     return fallback;
   }
+}
+
+// UI translation: backend role "expert" → operator-facing "tutor".
+function uiRoleLabel(role: string) {
+  return role === 'expert' ? 'tutor' : role;
 }
 
 export default function UserDetailPage() {
@@ -68,6 +75,7 @@ export default function UserDetailPage() {
   const [lifecycleReason, setLifecycleReason] = useState('');
   const [isMutating, setIsMutating] = useState(false);
   const adjustCreditsButtonRef = useRef<HTMLButtonElement | null>(null);
+  const [adminPermissions, setAdminPermissions] = useState<AdminPermissionGrant[] | null>(null);
 
   useEffect(() => {
     if (!userId) return;
@@ -81,6 +89,18 @@ export default function UserDetailPage() {
 
         setUser(detail);
         setPageStatus('success');
+
+        // For admins, also load granular permissions for the inline summary card.
+        if (detail.role === 'admin') {
+          try {
+            const perms = (await fetchAdminPermissions(detail.id)) as { permissions?: AdminPermissionGrant[] };
+            if (!cancelled) setAdminPermissions(perms.permissions ?? []);
+          } catch {
+            if (!cancelled) setAdminPermissions([]);
+          }
+        } else {
+          setAdminPermissions(null);
+        }
       } catch (error) {
         console.error(error);
         if (!cancelled) {
@@ -285,7 +305,7 @@ export default function UserDetailPage() {
                 <h1 className="text-2xl font-semibold text-navy">{user.name}</h1>
                 <p className="font-mono text-xs text-muted">{user.id}</p>
                 <div className="flex flex-wrap items-center gap-2 pt-1">
-                  <Badge variant={user.role === 'admin' ? 'danger' : user.role === 'expert' ? 'warning' : 'default'}>{user.role}</Badge>
+                  <Badge variant={user.role === 'admin' ? 'danger' : user.role === 'expert' ? 'warning' : 'default'}>{uiRoleLabel(user.role)}</Badge>
                   <Badge variant={user.status === 'active' ? 'success' : user.status === 'deleted' ? 'danger' : 'muted'}>{user.status}</Badge>
                   {user.security?.lockedOut ? <Badge variant="danger">Locked</Badge> : null}
                   {user.security?.mfaEnabled ? <Badge variant="success">MFA</Badge> : null}
@@ -393,6 +413,69 @@ export default function UserDetailPage() {
                     <p className="mt-1 text-sm font-semibold text-navy">{formatDate(user.lastLogin, 'Never')}</p>
                   </div>
                 </div>
+
+                {user.role === 'admin' ? (
+                  <AdminRoutePanel
+                    title="Permissions"
+                    description="Granular admin permissions for this account. Edit in the Admins & Permissions tab."
+                  >
+                    {adminPermissions === null ? (
+                      <p className="text-sm text-muted">Loading permissions…</p>
+                    ) : adminPermissions.length === 0 ? (
+                      <div className="flex flex-wrap items-center gap-3">
+                        <p className="text-sm text-muted">No granular permissions granted yet.</p>
+                        <Link
+                          href="/admin/users?tab=admins"
+                          className="inline-flex items-center gap-1.5 rounded-2xl border border-border/60 bg-surface px-3 py-1.5 text-xs font-semibold text-navy hover:bg-background-light"
+                        >
+                          <KeyRound className="h-3.5 w-3.5" />
+                          Manage permissions
+                        </Link>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex flex-wrap gap-1.5">
+                          {adminPermissions.map((p) => (
+                            <Badge key={p.permission} variant="info" className="text-[11px]">
+                              {p.permission}
+                            </Badge>
+                          ))}
+                        </div>
+                        <Link
+                          href="/admin/users?tab=admins"
+                          className="inline-flex items-center gap-1.5 rounded-2xl border border-border/60 bg-surface px-3 py-1.5 text-xs font-semibold text-navy hover:bg-background-light"
+                        >
+                          <KeyRound className="h-3.5 w-3.5" />
+                          Edit permissions
+                        </Link>
+                      </div>
+                    )}
+                  </AdminRoutePanel>
+                ) : null}
+
+                {user.role === 'expert' ? (
+                  <AdminRoutePanel
+                    title="Tutor profile"
+                    description="Tutor-specific tools: Private Speaking onboarding, calibration, and scheduling."
+                  >
+                    <div className="flex flex-wrap gap-2">
+                      <Link
+                        href={`/admin/private-speaking?expertUserId=${encodeURIComponent(user.id)}`}
+                        className="inline-flex items-center gap-1.5 rounded-2xl border border-border/60 bg-surface px-3 py-1.5 text-xs font-semibold text-navy hover:bg-background-light"
+                      >
+                        <Mic className="h-3.5 w-3.5" />
+                        Private Speaking
+                      </Link>
+                      <Link
+                        href={`/admin/review-ops?expertId=${encodeURIComponent(user.id)}`}
+                        className="inline-flex items-center gap-1.5 rounded-2xl border border-border/60 bg-surface px-3 py-1.5 text-xs font-semibold text-navy hover:bg-background-light"
+                      >
+                        <ShieldCheck className="h-3.5 w-3.5" />
+                        Review Ops
+                      </Link>
+                    </div>
+                  </AdminRoutePanel>
+                ) : null}
 
                 <AdminRoutePanel title="Security" description="MFA, lockout, and active sessions for this account.">
                   {user.security ? (
