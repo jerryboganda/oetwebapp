@@ -4,9 +4,11 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using OetLearner.Api.Contracts.Rulebooks;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Services.Rulebooks;
 
@@ -17,8 +19,22 @@ namespace OetLearner.Api.Services.Rulebooks;
 public sealed class RulebookAdminService
 {
     private readonly LearnerDbContext _db;
+    private readonly IMemoryCache _cache;
 
-    public RulebookAdminService(LearnerDbContext db) { _db = db; }
+    public RulebookAdminService(LearnerDbContext db, IMemoryCache cache)
+    {
+        _db = db;
+        _cache = cache;
+    }
+
+    /// <summary>
+    /// Drop the DbBackedRulebookLoader cache entry for this version's
+    /// (kind, profession) pair so grading + linting picks up the change
+    /// on the very next call. Safe even when the version is currently a
+    /// Draft — invalidating an unrelated cache key is a no-op.
+    /// </summary>
+    private void InvalidateLoaderCache(RulebookVersion version)
+        => DbBackedRulebookLoader.InvalidateCacheKey(_cache, version.Kind, version.Profession);
 
     // ── Read ─────────────────────────────────────────────────────────
 
@@ -94,6 +110,7 @@ public sealed class RulebookAdminService
         v.UpdatedAt = DateTimeOffset.UtcNow;
         v.UpdatedByUserId = adminId;
         await _db.SaveChangesAsync(ct);
+        InvalidateLoaderCache(v);
         return (await GetAsync(id, ct))!;
     }
 
@@ -114,6 +131,7 @@ public sealed class RulebookAdminService
         v.UpdatedAt = DateTimeOffset.UtcNow;
         v.UpdatedByUserId = adminId;
         await _db.SaveChangesAsync(ct);
+        InvalidateLoaderCache(v);
         return (await GetAsync(id, ct))!;
     }
 
@@ -145,6 +163,7 @@ public sealed class RulebookAdminService
         v.UpdatedAt = DateTimeOffset.UtcNow;
         v.UpdatedByUserId = adminId;
         await _db.SaveChangesAsync(ct);
+        InvalidateLoaderCache(v);
         return new RulebookSectionDto(row.Id, row.Code, row.Title, row.OrderIndex);
     }
 
@@ -268,6 +287,7 @@ public sealed class RulebookAdminService
         v.UpdatedAt = DateTimeOffset.UtcNow;
         v.UpdatedByUserId = adminId;
         await _db.SaveChangesAsync(ct);
+        InvalidateLoaderCache(v);
     }
 
     private static RulebookRuleDto ToDto(RulebookRuleRow r) => new(

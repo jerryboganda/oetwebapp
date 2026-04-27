@@ -661,8 +661,14 @@ builder.Services.AddHostedService<OetLearner.Api.Services.PartitionMaintenanceWo
 // OET rulebook engine + grounded AI gateway. These services are the single
 // source of truth for rule enforcement and for every AI call: no code path
 // invokes a model without a rulebook-grounded prompt built here.
-builder.Services.AddSingleton<OetLearner.Api.Services.Rulebook.IRulebookLoader,
-    OetLearner.Api.Services.Rulebook.RulebookLoader>();
+//
+// Two-layer loader: RulebookLoader is a singleton that owns the immutable
+// embedded-JSON cache; DbBackedRulebookLoader is the public IRulebookLoader
+// (scoped because it touches the DbContext) and prefers Published DB rows
+// with a 60s in-process cache, falling back to JSON when no DB row exists.
+builder.Services.AddSingleton<OetLearner.Api.Services.Rulebook.RulebookLoader>();
+builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.IRulebookLoader,
+    OetLearner.Api.Services.Rulebook.DbBackedRulebookLoader>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.WritingRuleEngine>();
 builder.Services.AddScoped<OetLearner.Api.Services.Rulebook.SpeakingRuleEngine>();
 builder.Services.AddHttpClient("AiOpenAiCompatible", client =>
