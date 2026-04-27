@@ -98,7 +98,14 @@ export interface AdminNotificationPolicyRow {
 
 export interface AdminNotificationPoliciesResponse {
   globalEmailEnabledByAudience: Record<NotificationAudienceRole, boolean>;
+  globalChannelEnabledByAudience?: Record<NotificationAudienceRole, AdminNotificationAudienceChannelPolicy>;
   rows: AdminNotificationPolicyRow[];
+}
+
+export interface AdminNotificationAudienceChannelPolicy {
+  inAppEnabled: boolean;
+  emailEnabled: boolean;
+  pushEnabled: boolean;
 }
 
 export interface AdminNotificationHealthChannelSnapshot {

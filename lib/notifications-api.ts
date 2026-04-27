@@ -131,6 +131,16 @@ export async function updateAdminNotificationPolicy(
   );
 }
 
+export async function resetAdminNotificationPolicyOverride(
+  audienceRole: NotificationAudienceRole,
+  eventKey: string,
+): Promise<AdminNotificationPolicyRow> {
+  return requestJson<AdminNotificationPolicyRow>(
+    `/v1/admin/notifications/policies/${encodeURIComponent(audienceRole)}/${encodeURIComponent(eventKey)}`,
+    { method: 'DELETE' },
+  );
+}
+
 export async function fetchAdminNotificationHealth(): Promise<AdminNotificationHealthSnapshot> {
   return requestJson<AdminNotificationHealthSnapshot>('/v1/admin/notifications/health', {
     method: 'GET',

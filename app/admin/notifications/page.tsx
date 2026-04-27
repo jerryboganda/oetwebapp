@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
-import { Bell, Mail, RefreshCw, Send, Siren, Smartphone } from 'lucide-react';
-import { AdminRouteSummaryCard, AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Bell, Filter, Mail, RefreshCw, RotateCcw, Send, Siren, Smartphone } from 'lucide-react';
+import { AdminRouteSummaryCard, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
@@ -16,29 +16,62 @@ import {
   fetchAdminNotificationDeliveries,
   fetchAdminNotificationHealth,
   fetchAdminNotificationPolicies,
+  resetAdminNotificationPolicyOverride,
   sendAdminNotificationTestEmail,
   updateAdminNotificationPolicy,
 } from '@/lib/notifications-api';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import type {
+  AdminNotificationAudienceChannelPolicy,
   AdminNotificationCatalogEntry,
   AdminNotificationHealthSnapshot,
   AdminNotificationPolicyRow,
   NotificationAudienceRole,
+  NotificationChannel,
   NotificationDeliveryAttemptItem,
+  NotificationDeliveryStatus,
   NotificationEmailMode,
 } from '@/lib/types/notifications';
 import type { AdminAuditLogRow } from '@/lib/types/admin';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
+type GlobalChannelKey = keyof AdminNotificationAudienceChannelPolicy;
+type DeliveryFilters = {
+  status: '' | NotificationDeliveryStatus;
+  channel: '' | NotificationChannel;
+  audienceRole: '' | NotificationAudienceRole;
+  eventKey: string;
+};
 
 const GLOBAL_POLICY_EVENT_KEY = '__global__';
+const DELIVERY_PAGE_SIZE = 20;
+const AUDIENCE_ROLES = ['learner', 'expert', 'admin'] as const satisfies readonly NotificationAudienceRole[];
+const GLOBAL_CHANNELS: Array<{ key: GlobalChannelKey; label: string; description: string }> = [
+  { key: 'inAppEnabled', label: 'In-app', description: 'Shared inbox and realtime badge.' },
+  { key: 'emailEnabled', label: 'Email', description: 'Transactional and digest email fan-out.' },
+  { key: 'pushEnabled', label: 'Push', description: 'Browser push and quiet-hour deferral.' },
+];
+const DEFAULT_GLOBAL_CHANNELS: Record<NotificationAudienceRole, AdminNotificationAudienceChannelPolicy> = {
+  learner: { inAppEnabled: true, emailEnabled: true, pushEnabled: true },
+  expert: { inAppEnabled: true, emailEnabled: true, pushEnabled: true },
+  admin: { inAppEnabled: true, emailEnabled: true, pushEnabled: true },
+};
+const EMPTY_DELIVERY_FILTERS: DeliveryFilters = {
+  status: '',
+  channel: '',
+  audienceRole: '',
+  eventKey: '',
+};
 
 interface PolicyDraft extends Pick<AdminNotificationPolicyRow, 'inAppEnabled' | 'emailEnabled' | 'pushEnabled' | 'emailMode'> {}
 
 function policyKey(audienceRole: NotificationAudienceRole, eventKey: string) {
   return `${audienceRole}:${eventKey}`;
+}
+
+function globalPolicyKey(audienceRole: NotificationAudienceRole, channelKey: GlobalChannelKey) {
+  return `${audienceRole}:${GLOBAL_POLICY_EVENT_KEY}:${channelKey}`;
 }
 
 function deliveryStatusVariant(status: NotificationDeliveryAttemptItem['status']) {
@@ -59,18 +92,31 @@ function boolLabel(value: boolean) {
   return value ? 'On' : 'Off';
 }
 
+function normalizeGlobalChannels(
+  response: { globalEmailEnabledByAudience: Record<NotificationAudienceRole, boolean>; globalChannelEnabledByAudience?: Record<NotificationAudienceRole, AdminNotificationAudienceChannelPolicy> },
+): Record<NotificationAudienceRole, AdminNotificationAudienceChannelPolicy> {
+  return AUDIENCE_ROLES.reduce((accumulator, audienceRole) => {
+    const channelPolicy = response.globalChannelEnabledByAudience?.[audienceRole];
+    accumulator[audienceRole] = {
+      inAppEnabled: channelPolicy?.inAppEnabled ?? true,
+      emailEnabled: channelPolicy?.emailEnabled ?? response.globalEmailEnabledByAudience[audienceRole] ?? true,
+      pushEnabled: channelPolicy?.pushEnabled ?? true,
+    };
+    return accumulator;
+  }, { ...DEFAULT_GLOBAL_CHANNELS } as Record<NotificationAudienceRole, AdminNotificationAudienceChannelPolicy>);
+}
+
 export default function AdminNotificationsPage() {
   const { isAuthenticated, role } = useAdminAuth();
   const [pageStatus, setPageStatus] = useState<PageStatus>('loading');
   const [catalog, setCatalog] = useState<AdminNotificationCatalogEntry[]>([]);
   const [policies, setPolicies] = useState<AdminNotificationPolicyRow[]>([]);
-  const [globalEmailEnabledByAudience, setGlobalEmailEnabledByAudience] = useState<Record<NotificationAudienceRole, boolean>>({
-    learner: true,
-    expert: true,
-    admin: true,
-  });
+  const [globalChannelEnabledByAudience, setGlobalChannelEnabledByAudience] = useState<Record<NotificationAudienceRole, AdminNotificationAudienceChannelPolicy>>(DEFAULT_GLOBAL_CHANNELS);
   const [health, setHealth] = useState<AdminNotificationHealthSnapshot | null>(null);
   const [deliveries, setDeliveries] = useState<NotificationDeliveryAttemptItem[]>([]);
+  const [deliveryFilters, setDeliveryFilters] = useState<DeliveryFilters>(EMPTY_DELIVERY_FILTERS);
+  const [deliveryPage, setDeliveryPage] = useState(1);
+  const [deliveryTotalCount, setDeliveryTotalCount] = useState(0);
   const [auditRows, setAuditRows] = useState<AdminAuditLogRow[]>([]);
   const [drafts, setDrafts] = useState<Record<string, PolicyDraft>>({});
   const [savingKey, setSavingKey] = useState<string | null>(null);
@@ -87,13 +133,31 @@ export default function AdminNotificationsPage() {
     admin: catalog.filter((entry) => entry.audienceRole === 'admin'),
   }), [catalog]);
 
+  const catalogEventOptions = useMemo(() => (
+    Array.from(new Map(catalog.map((entry) => [entry.eventKey, entry])).values())
+      .sort((left, right) => left.label.localeCompare(right.label))
+  ), [catalog]);
+
+  const selectedTestCatalogEntry = useMemo(
+    () => catalog.find((entry) => entry.eventKey === testEventKey && entry.audienceRole === testAudienceRole),
+    [catalog, testAudienceRole, testEventKey],
+  );
+
+  const deliveryTotalPages = Math.max(1, Math.ceil(deliveryTotalCount / DELIVERY_PAGE_SIZE));
+  const deliveryStartIndex = deliveryTotalCount === 0 ? 0 : ((deliveryPage - 1) * DELIVERY_PAGE_SIZE) + 1;
+  const deliveryEndIndex = Math.min(deliveryPage * DELIVERY_PAGE_SIZE, deliveryTotalCount);
+
   useEffect(() => {
     if (catalogByAudience[testAudienceRole].length > 0 && !catalogByAudience[testAudienceRole].some((entry) => entry.eventKey === testEventKey)) {
       setTestEventKey(catalogByAudience[testAudienceRole][0].eventKey);
     }
   }, [catalogByAudience, testAudienceRole, testEventKey]);
 
-  async function loadPageData(showSpinner = true) {
+  const loadPageData = useCallback(async (
+    showSpinner = true,
+    nextDeliveryPage = 1,
+    nextDeliveryFilters = EMPTY_DELIVERY_FILTERS,
+  ) => {
     if (showSpinner) {
       setPageStatus('loading');
     } else {
@@ -105,15 +169,24 @@ export default function AdminNotificationsPage() {
         fetchAdminNotificationCatalog(),
         fetchAdminNotificationPolicies(),
         fetchAdminNotificationHealth(),
-        fetchAdminNotificationDeliveries({ page: 1, pageSize: 20 }),
+        fetchAdminNotificationDeliveries({
+          page: nextDeliveryPage,
+          pageSize: DELIVERY_PAGE_SIZE,
+          status: nextDeliveryFilters.status || undefined,
+          channel: nextDeliveryFilters.channel || undefined,
+          audienceRole: nextDeliveryFilters.audienceRole || undefined,
+          eventKey: nextDeliveryFilters.eventKey || undefined,
+        }),
         fetchAdminAuditLogs({ action: 'notification_policy_updated', pageSize: 20 }) as Promise<{ items: AdminAuditLogRow[] }>,
       ]);
 
       setCatalog(catalogResponse);
       setPolicies(policiesResponse.rows);
-      setGlobalEmailEnabledByAudience(policiesResponse.globalEmailEnabledByAudience);
+      setGlobalChannelEnabledByAudience(normalizeGlobalChannels(policiesResponse));
       setHealth(healthResponse);
       setDeliveries(deliveriesResponse.items);
+      setDeliveryPage(deliveriesResponse.page ?? nextDeliveryPage);
+      setDeliveryTotalCount(deliveriesResponse.totalCount ?? deliveriesResponse.items.length);
       setAuditRows(auditResponse.items ?? []);
 
       const hasData =
@@ -129,13 +202,13 @@ export default function AdminNotificationsPage() {
     } finally {
       setReloading(false);
     }
-  }
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
-      await loadPageData(true);
+      await loadPageData(true, 1, EMPTY_DELIVERY_FILTERS);
       if (cancelled) {
         return;
       }
@@ -144,7 +217,7 @@ export default function AdminNotificationsPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [loadPageData]);
 
   const policyColumns: Column<AdminNotificationPolicyRow>[] = [
     {
@@ -274,7 +347,7 @@ export default function AdminNotificationsPage() {
         );
 
         return (
-          <div className="flex justify-end">
+          <div className="flex justify-end gap-2">
             <Button
               type="button"
               size="sm"
@@ -284,10 +357,22 @@ export default function AdminNotificationsPage() {
             >
               Save
             </Button>
+            <Button
+              type="button"
+              size="sm"
+              variant="outline"
+              onClick={() => void handleResetPolicy(row.audienceRole, row.eventKey)}
+              disabled={!row.isOverride}
+              loading={savingKey === `${key}:reset`}
+              className="gap-1.5"
+            >
+              <RotateCcw className="h-3.5 w-3.5" />
+              Reset
+            </Button>
           </div>
         );
       },
-      className: 'w-28',
+      className: 'w-48',
     },
   ];
 
@@ -377,7 +462,7 @@ export default function AdminNotificationsPage() {
         return next;
       });
       setToast({ variant: 'success', message: `Updated policy for ${audienceRole}/${eventKey}.` });
-      await loadPageData(false);
+      await loadPageData(false, deliveryPage, deliveryFilters);
     } catch (error) {
       console.error(error);
       setToast({ variant: 'error', message: 'Unable to save notification policy.' });
@@ -386,21 +471,70 @@ export default function AdminNotificationsPage() {
     }
   }
 
-  async function handleToggleGlobalEmail(audienceRole: NotificationAudienceRole) {
-    const key = policyKey(audienceRole, GLOBAL_POLICY_EVENT_KEY);
-    setSavingKey(key);
+  async function handleResetPolicy(audienceRole: NotificationAudienceRole, eventKey: string) {
+    const key = policyKey(audienceRole, eventKey);
+    setSavingKey(`${key}:reset`);
     try {
-      const nextValue = !globalEmailEnabledByAudience[audienceRole];
-      await updateAdminNotificationPolicy(audienceRole, GLOBAL_POLICY_EVENT_KEY, { emailEnabled: nextValue });
-      setGlobalEmailEnabledByAudience((current) => ({ ...current, [audienceRole]: nextValue }));
-      setToast({ variant: 'success', message: `Updated ${audienceRole} email governance.` });
-      await loadPageData(false);
+      const response = await resetAdminNotificationPolicyOverride(audienceRole, eventKey);
+      setPolicies((current) => current.map((candidate) => (
+        candidate.audienceRole === audienceRole && candidate.eventKey === eventKey ? response : candidate
+      )));
+      setDrafts((current) => {
+        const next = { ...current };
+        delete next[key];
+        return next;
+      });
+      setToast({ variant: 'success', message: `Reset policy for ${audienceRole}/${eventKey}.` });
+      await loadPageData(false, deliveryPage, deliveryFilters);
     } catch (error) {
       console.error(error);
-      setToast({ variant: 'error', message: 'Unable to update the global email switch.' });
+      setToast({ variant: 'error', message: 'Unable to reset notification policy.' });
     } finally {
       setSavingKey(null);
     }
+  }
+
+  async function handleToggleGlobalChannel(audienceRole: NotificationAudienceRole, channelKey: GlobalChannelKey) {
+    const key = globalPolicyKey(audienceRole, channelKey);
+    setSavingKey(key);
+    try {
+      const nextValue = !globalChannelEnabledByAudience[audienceRole][channelKey];
+      await updateAdminNotificationPolicy(audienceRole, GLOBAL_POLICY_EVENT_KEY, {
+        ...globalChannelEnabledByAudience[audienceRole],
+        [channelKey]: nextValue,
+      });
+      setGlobalChannelEnabledByAudience((current) => ({
+        ...current,
+        [audienceRole]: {
+          ...current[audienceRole],
+          [channelKey]: nextValue,
+        },
+      }));
+      setToast({ variant: 'success', message: `Updated ${audienceRole} ${channelKey.replace('Enabled', '').toLowerCase()} governance.` });
+      await loadPageData(false, deliveryPage, deliveryFilters);
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: 'Unable to update the global channel switch.' });
+    } finally {
+      setSavingKey(null);
+    }
+  }
+
+  async function handleApplyDeliveryFilters() {
+    setDeliveryPage(1);
+    await loadPageData(false, 1, deliveryFilters);
+  }
+
+  async function handleClearDeliveryFilters() {
+    setDeliveryFilters(EMPTY_DELIVERY_FILTERS);
+    setDeliveryPage(1);
+    await loadPageData(false, 1, EMPTY_DELIVERY_FILTERS);
+  }
+
+  async function handleDeliveryPageChange(nextPage: number) {
+    const boundedPage = Math.min(Math.max(1, nextPage), deliveryTotalPages);
+    setDeliveryPage(boundedPage);
+    await loadPageData(false, boundedPage, deliveryFilters);
   }
 
   async function handleSendTestEmail() {
@@ -417,7 +551,7 @@ export default function AdminNotificationsPage() {
         eventKey: testEventKey,
       });
       setToast({ variant: 'success', message: 'Notification test email sent.' });
-      await loadPageData(false);
+      await loadPageData(false, deliveryPage, deliveryFilters);
     } catch (error) {
       console.error(error);
       setToast({ variant: 'error', message: 'Unable to send the notification test email.' });
@@ -431,23 +565,32 @@ export default function AdminNotificationsPage() {
   }
 
   return (
-    <AdminRouteWorkspace role="main" aria-label="Notifications">
+    <AdminRouteWorkspace role="main" aria-label="Notifications" className="space-y-5">
       {toast ? <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} /> : null}
 
-      <AdminRouteSectionHeader
-        title="Notifications"
-        description="Govern learner, expert, and admin notification delivery from one operational surface: global switches, per-event policy, delivery health, test email, and audit visibility."
-        actions={(
-          <Button type="button" variant="outline" onClick={() => void loadPageData(false)} loading={reloading} className="gap-2">
+      <div className="rounded-lg border border-border bg-surface px-4 py-4 shadow-sm sm:px-5">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+          <div className="min-w-0 space-y-1">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Admin Workspace</p>
+            <h1 className="text-xl font-semibold tracking-tight text-navy sm:text-2xl">Notifications</h1>
+            <p className="max-w-4xl text-sm leading-6 text-muted">
+              Govern learner, expert, and admin delivery from one operational surface: role-wide switches, per-event policy, delivery health, test email, and audit visibility.
+            </p>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {health?.generatedAt ? <Badge variant="muted">Updated {new Date(health.generatedAt).toLocaleString()}</Badge> : null}
+          <Button type="button" variant="outline" onClick={() => void loadPageData(false, deliveryPage, deliveryFilters)} loading={reloading} className="gap-2">
             <RefreshCw className="h-4 w-4" />
             Refresh
           </Button>
-        )}
-      />
+          </div>
+        </div>
+      </div>
 
       <AsyncStateWrapper
         status={pageStatus}
-        onRetry={() => void loadPageData(true)}
+        className="space-y-5"
+        onRetry={() => void loadPageData(true, deliveryPage, deliveryFilters)}
         emptyContent={(
           <EmptyState
             icon={<Bell className="h-10 w-10 text-muted" />}
@@ -456,43 +599,56 @@ export default function AdminNotificationsPage() {
           />
         )}
       >
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+        <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
           <AdminRouteSummaryCard label="Queued Events" value={health?.queuedEvents ?? 0} icon={<Bell className="h-5 w-5" />} />
           <AdminRouteSummaryCard label="Failed Deliveries (24h)" value={health?.failedDeliveriesLast24Hours ?? 0} icon={<Siren className="h-5 w-5" />} tone={(health?.failedDeliveriesLast24Hours ?? 0) > 0 ? 'danger' : 'default'} />
           <AdminRouteSummaryCard label="Unread Inbox Items" value={health?.unreadInboxItems ?? 0} icon={<Mail className="h-5 w-5" />} />
           <AdminRouteSummaryCard label="Active Push Subscriptions" value={health?.activePushSubscriptions ?? 0} icon={<Smartphone className="h-5 w-5" />} tone={(health?.activePushSubscriptions ?? 0) > 0 ? 'success' : 'default'} />
         </div>
 
-        <AdminRoutePanel title="Global Email Governance" description="These switches suppress email only. In-app delivery remains active even when a role-wide email switch is off.">
+        <AdminRoutePanel title="Role-wide Channel Governance" description="These switches apply before per-event policy and account preferences. Use them when an entire audience channel needs to be paused or restored.">
           <div className="grid gap-3 md:grid-cols-3">
-            {(['learner', 'expert', 'admin'] as NotificationAudienceRole[]).map((audienceRole) => (
-              <div key={audienceRole} className="rounded-[20px] border border-border bg-background-light p-4 shadow-sm">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <p className="text-sm font-semibold capitalize text-navy">{audienceRole} email</p>
-                      <p className="text-xs text-muted">Role-wide email enable/disable.</p>
-                    </div>
-                    <Badge variant={globalEmailEnabledByAudience[audienceRole] ? 'success' : 'warning'}>
-                      {globalEmailEnabledByAudience[audienceRole] ? 'Enabled' : 'Suppressed'}
-                    </Badge>
+            {AUDIENCE_ROLES.map((audienceRole) => (
+              <div key={audienceRole} className="rounded-lg border border-border bg-background-light p-3 shadow-sm">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold capitalize text-navy">{audienceRole}</p>
+                    <p className="text-xs text-muted">Role-wide delivery controls.</p>
                   </div>
-                  <Button
-                    type="button"
-                    variant={globalEmailEnabledByAudience[audienceRole] ? 'destructive' : 'primary'}
-                    onClick={() => void handleToggleGlobalEmail(audienceRole)}
-                    loading={savingKey === policyKey(audienceRole, GLOBAL_POLICY_EVENT_KEY)}
-                    className="w-full"
-                  >
-                    {globalEmailEnabledByAudience[audienceRole] ? 'Disable Email' : 'Enable Email'}
-                  </Button>
+                  <Badge variant="muted">{GLOBAL_CHANNELS.filter((channel) => globalChannelEnabledByAudience[audienceRole][channel.key]).length}/3 on</Badge>
+                </div>
+                <div className="space-y-2">
+                  {GLOBAL_CHANNELS.map((channel) => {
+                    const enabled = globalChannelEnabledByAudience[audienceRole][channel.key];
+                    return (
+                      <div key={channel.key} className="rounded-lg border border-border bg-white px-3 py-2">
+                        <div className="flex items-center justify-between gap-3">
+                          <div>
+                            <p className="text-sm font-semibold text-navy">{channel.label}</p>
+                            <p className="text-xs text-muted">{channel.description}</p>
+                          </div>
+                          <Badge variant={enabled ? 'success' : 'warning'}>{enabled ? 'Enabled' : 'Suppressed'}</Badge>
+                        </div>
+                        <Button
+                          type="button"
+                          size="sm"
+                          variant={enabled ? 'destructive' : 'primary'}
+                          onClick={() => void handleToggleGlobalChannel(audienceRole, channel.key)}
+                          loading={savingKey === globalPolicyKey(audienceRole, channel.key)}
+                          className="mt-2 w-full"
+                        >
+                          {enabled ? `Disable ${channel.label}` : `Enable ${channel.label}`}
+                        </Button>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             ))}
           </div>
         </AdminRoutePanel>
 
-        {(['learner', 'expert', 'admin'] as NotificationAudienceRole[]).map((audienceRole) => (
+        {AUDIENCE_ROLES.map((audienceRole) => (
           <AdminRoutePanel
             key={audienceRole}
             title={`${audienceRole.charAt(0).toUpperCase()}${audienceRole.slice(1)} Policy Matrix`}
@@ -536,17 +692,13 @@ export default function AdminNotificationsPage() {
                 label: `${entry.label} (${entry.eventKey})`,
               }))}
             />
-            {catalog.find((entry) => entry.eventKey === testEventKey && entry.audienceRole === testAudienceRole) ? (
-              <div className="rounded-2xl border border-border bg-background-light p-4 text-sm text-muted">
-                <p className="font-semibold text-navy">
-                  {catalog.find((entry) => entry.eventKey === testEventKey && entry.audienceRole === testAudienceRole)?.label}
-                </p>
-                <p className="mt-1">
-                  {catalog.find((entry) => entry.eventKey === testEventKey && entry.audienceRole === testAudienceRole)?.description}
-                </p>
+            {selectedTestCatalogEntry ? (
+              <div className="rounded-lg border border-border bg-background-light p-4 text-sm text-muted">
+                <p className="font-semibold text-navy">{selectedTestCatalogEntry.label}</p>
+                <p className="mt-1">{selectedTestCatalogEntry.description}</p>
                 <div className="mt-3 flex flex-wrap gap-2">
-                  <Badge variant="info">Severity {catalog.find((entry) => entry.eventKey === testEventKey && entry.audienceRole === testAudienceRole)?.defaultSeverity}</Badge>
-                  <Badge variant="muted">Email mode {catalog.find((entry) => entry.eventKey === testEventKey && entry.audienceRole === testAudienceRole)?.defaultEmailMode}</Badge>
+                  <Badge variant="info">Severity {selectedTestCatalogEntry.defaultSeverity}</Badge>
+                  <Badge variant="muted">Email mode {selectedTestCatalogEntry.defaultEmailMode}</Badge>
                 </div>
               </div>
             ) : null}
@@ -559,10 +711,28 @@ export default function AdminNotificationsPage() {
           </AdminRoutePanel>
 
           <AdminRoutePanel title="Delivery Health" description="Recent delivery attempts and failed queue entries stay visible here so admins can react before notifications silently degrade.">
+            <div className="grid gap-3 sm:grid-cols-2">
+              <div className="rounded-lg border border-border bg-background-light p-3 text-sm">
+                <p className="font-semibold text-navy">Failed Events</p>
+                <p className="mt-1 text-2xl font-bold text-navy">{health?.failedEvents ?? 0}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-background-light p-3 text-sm">
+                <p className="font-semibold text-navy">Pending Digests</p>
+                <p className="mt-1 text-2xl font-bold text-navy">{health?.pendingDigestJobs ?? 0}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-background-light p-3 text-sm">
+                <p className="font-semibold text-navy">Expired Push Subscriptions</p>
+                <p className="mt-1 text-2xl font-bold text-navy">{health?.expiredPushSubscriptions ?? 0}</p>
+              </div>
+              <div className="rounded-lg border border-border bg-background-light p-3 text-sm">
+                <p className="font-semibold text-navy">Health Snapshot</p>
+                <p className="mt-2 text-muted">{health?.generatedAt ? new Date(health.generatedAt).toLocaleString() : 'Not generated yet'}</p>
+              </div>
+            </div>
             {health?.channels?.length ? (
               <div className="grid gap-3 sm:grid-cols-3">
                 {health.channels.map((channel) => (
-                  <div key={channel.channel} className="rounded-[20px] border border-border bg-background-light p-4 text-sm shadow-sm">
+                  <div key={channel.channel} className="rounded-lg border border-border bg-background-light p-3 text-sm shadow-sm">
                     <p className="font-semibold capitalize text-navy">{channel.channel}</p>
                     <p className="mt-2 text-muted">Sent {channel.sentLast24Hours}</p>
                     <p className="text-muted">Failed {channel.failedLast24Hours}</p>
@@ -586,8 +756,94 @@ export default function AdminNotificationsPage() {
           </AdminRoutePanel>
 
           <AdminRoutePanel title="Recent Deliveries" description="Latest delivery attempts across in-app, email, and push channels.">
+            <div className="rounded-lg border border-border bg-background-light p-3">
+              <div className="mb-3 flex items-center gap-2 text-sm font-semibold text-navy">
+                <Filter className="h-4 w-4" />
+                Delivery filters
+              </div>
+              <div className="grid gap-3 lg:grid-cols-4">
+                <Select
+                  label="Status"
+                  value={deliveryFilters.status}
+                  onChange={(event) => setDeliveryFilters((current) => ({ ...current, status: event.target.value as DeliveryFilters['status'] }))}
+                  options={[
+                    { value: '', label: 'All statuses' },
+                    { value: 'pending', label: 'Pending' },
+                    { value: 'sent', label: 'Sent' },
+                    { value: 'suppressed', label: 'Suppressed' },
+                    { value: 'failed', label: 'Failed' },
+                    { value: 'expired', label: 'Expired' },
+                  ]}
+                />
+                <Select
+                  label="Channel"
+                  value={deliveryFilters.channel}
+                  onChange={(event) => setDeliveryFilters((current) => ({ ...current, channel: event.target.value as DeliveryFilters['channel'] }))}
+                  options={[
+                    { value: '', label: 'All channels' },
+                    { value: 'in_app', label: 'In-app' },
+                    { value: 'email', label: 'Email' },
+                    { value: 'push', label: 'Push' },
+                  ]}
+                />
+                <Select
+                  label="Audience"
+                  value={deliveryFilters.audienceRole}
+                  onChange={(event) => setDeliveryFilters((current) => ({ ...current, audienceRole: event.target.value as DeliveryFilters['audienceRole'] }))}
+                  options={[
+                    { value: '', label: 'All audiences' },
+                    ...AUDIENCE_ROLES.map((audienceRole) => ({ value: audienceRole, label: audienceRole.charAt(0).toUpperCase() + audienceRole.slice(1) })),
+                  ]}
+                />
+                <Select
+                  label="Event"
+                  value={deliveryFilters.eventKey}
+                  onChange={(event) => setDeliveryFilters((current) => ({ ...current, eventKey: event.target.value }))}
+                  options={[
+                    { value: '', label: 'All events' },
+                    ...catalogEventOptions.map((entry) => ({ value: entry.eventKey, label: `${entry.label} (${entry.eventKey})` })),
+                  ]}
+                />
+              </div>
+              <div className="mt-3 flex flex-wrap justify-end gap-2">
+                <Button type="button" variant="outline" size="sm" onClick={() => void handleClearDeliveryFilters()}>
+                  Clear
+                </Button>
+                <Button type="button" size="sm" onClick={() => void handleApplyDeliveryFilters()} loading={reloading}>
+                  Apply Filters
+                </Button>
+              </div>
+            </div>
             {deliveries.length ? (
-              <DataTable columns={deliveryColumns} data={deliveries} keyExtractor={(row) => row.id} />
+              <>
+                <DataTable columns={deliveryColumns} data={deliveries} keyExtractor={(row) => row.id} />
+                <div className="flex flex-col gap-3 border-t border-border pt-3 text-sm text-muted sm:flex-row sm:items-center sm:justify-between">
+                  <span>Showing {deliveryStartIndex}-{deliveryEndIndex} of {deliveryTotalCount}</span>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void handleDeliveryPageChange(deliveryPage - 1)}
+                      disabled={deliveryPage <= 1}
+                      loading={reloading && deliveryPage > 1}
+                    >
+                      Previous
+                    </Button>
+                    <span className="text-xs font-semibold uppercase tracking-[0.12em] text-muted">Page {deliveryPage} / {deliveryTotalPages}</span>
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={() => void handleDeliveryPageChange(deliveryPage + 1)}
+                      disabled={deliveryPage >= deliveryTotalPages}
+                      loading={reloading && deliveryPage < deliveryTotalPages}
+                    >
+                      Next
+                    </Button>
+                  </div>
+                </div>
+              </>
             ) : (
               <p className="text-sm text-muted">No delivery attempts have been recorded yet.</p>
             )}

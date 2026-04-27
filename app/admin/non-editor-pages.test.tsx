@@ -211,7 +211,7 @@ import AdminDashboardPage from './page';
 import AIConfigPage from './ai-config/page';
 import AuditLogsPage from './audit-logs/page';
 import ContentEditPage from './content/[id]/page';
-import ContentLibraryPage from './content/library/page';
+import ContentLibraryPage from './content/page';
 import ContentNewPage from './content/new/page';
 import CriteriaPage from './criteria/page';
 import FlagsPage from './flags/page';
@@ -637,7 +637,8 @@ describe('Admin Non-Editor Pages', () => {
 
     expect(await screen.findByRole('main', { name: /notifications/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^notifications$/i })).toBeInTheDocument();
-    expect(screen.getByRole('heading', { name: /global email governance/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /role-wide channel governance/i })).toBeInTheDocument();
+    expect(screen.getByText(/delivery filters/i)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /policy change audit trail/i })).toBeInTheDocument();
   });
 

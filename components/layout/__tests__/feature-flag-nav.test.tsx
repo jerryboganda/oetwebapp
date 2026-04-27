@@ -1,7 +1,7 @@
 import { createContext } from 'react';
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { Video } from 'lucide-react';
+import { Library, Sparkles, Video } from 'lucide-react';
 import { renderWithRouter } from '@/tests/test-utils';
 
 const { mockFetchLearnerFeatureFlag, mockFetchStreak, mockFetchXP, mockSignOut, mockUseAuth } = vi.hoisted(() => ({
@@ -35,6 +35,14 @@ const learnerUser = {
   displayName: 'Amina Khan',
   email: 'amina@example.com',
   role: 'learner',
+  isEmailVerified: true,
+};
+
+const adminUser = {
+  userId: 'admin-1',
+  displayName: 'Admin User',
+  email: 'admin@example.com',
+  role: 'admin',
   isEmailVerified: true,
 };
 
@@ -94,5 +102,27 @@ describe('learner feature-gated navigation', () => {
 
     expect(screen.getByRole('link', { name: /grammar/i })).toHaveAttribute('href', '/grammar');
     expect(screen.queryByRole('link', { name: /video lessons/i })).not.toBeInTheDocument();
+  });
+
+  it('prefers the canonical content tool route over the generic content library route in the mobile menu', async () => {
+    mockUseAuth.mockReturnValue({ user: adminUser, signOut: mockSignOut });
+    const adminSection: NavItem[] = [
+      { href: '/admin/content', label: 'Content Library', icon: <Library className="h-4 w-4" />, matchPrefix: '/admin/content' },
+      { href: '/admin/content/generation', label: 'Content Generation', icon: <Sparkles className="h-4 w-4" />, matchPrefix: '/admin/content/generation' },
+    ];
+
+    renderWithRouter(
+      <TopNav
+        workspaceRole="admin"
+        userSummary={{ displayName: 'Admin User', email: 'admin@example.com' }}
+        sectionedItems={[{ label: 'Content authoring', items: adminSection }]}
+      />,
+      { pathname: '/admin/content/generation' },
+    );
+
+    await userEvent.click(screen.getByRole('button', { name: /open menu/i }));
+
+    expect(screen.getByRole('link', { name: /content generation/i })).toHaveAttribute('aria-current', 'page');
+    expect(screen.getByRole('link', { name: /content library/i })).not.toHaveAttribute('aria-current');
   });
 });

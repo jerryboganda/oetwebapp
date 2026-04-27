@@ -77,6 +77,19 @@ public class NotificationFlowsTests
         Assert.NotNull(deliveries);
         Assert.Contains(deliveries!.Items, item => item.EventId == proof.NotificationEventId && item.Channel == "email");
 
+        var filteredDeliveries = await adminClient.GetFromJsonAsync<NotificationDeliveryAttemptResponse>(
+            "/v1/admin/notifications/deliveries?page=1&pageSize=50&channel=email&audienceRole=learner&eventKey=LearnerReviewCompleted",
+            JsonSupport.Options);
+
+        Assert.NotNull(filteredDeliveries);
+        Assert.Contains(filteredDeliveries!.Items, item => item.EventId == proof.NotificationEventId);
+        Assert.All(filteredDeliveries.Items, item =>
+        {
+            Assert.Equal("email", item.Channel);
+            Assert.Equal("learner", item.AudienceRole);
+            Assert.Equal("LearnerReviewCompleted", item.EventKey);
+        });
+
         var health = await adminClient.GetFromJsonAsync<AdminNotificationHealthSnapshot>(
             "/v1/admin/notifications/health",
             JsonSupport.Options);
@@ -159,6 +172,8 @@ public class NotificationFlowsTests
 
         Assert.NotNull(policies);
         Assert.Contains(policies!.Rows, row => row.AudienceRole == "learner" && row.EventKey == "LearnerReviewCompleted" && !row.EmailEnabled);
+        Assert.True(policies.GlobalChannelEnabledByAudience["learner"].InAppEnabled);
+        Assert.True(policies.GlobalChannelEnabledByAudience["learner"].PushEnabled);
 
         var proof = await TriggerProofAsync(adminClient, new AdminNotificationProofTriggerRequest(
             "LearnerReviewCompleted",
@@ -184,6 +199,50 @@ public class NotificationFlowsTests
         Assert.NotNull(emailAttempt);
         Assert.Equal(NotificationDeliveryStatus.Suppressed, emailAttempt!.Status);
         Assert.Equal("email_disabled", emailAttempt.ErrorCode);
+
+        var resetResponse = await adminClient.DeleteAsync("/v1/admin/notifications/policies/learner/LearnerReviewCompleted");
+        resetResponse.EnsureSuccessStatusCode();
+
+        var resetPolicy = await resetResponse.Content.ReadFromJsonAsync<AdminNotificationPolicyRow>(JsonSupport.Options);
+        Assert.NotNull(resetPolicy);
+        Assert.False(resetPolicy!.IsOverride);
+        Assert.True(resetPolicy.EmailEnabled);
+    }
+
+    [Fact]
+    public async Task AdminGlobalChannelSwitches_AreReturnedForEachAudience()
+    {
+        await using var factory = new TestWebApplicationFactory();
+        using var adminClient = await CreateAuthenticatedClientAsync(factory, SeedData.AdminEmail, SeedData.LocalSeedPassword);
+
+        var updateResponse = await adminClient.PutAsJsonAsync(
+            "/v1/admin/notifications/policies/admin/__global__",
+            new AdminNotificationPolicyUpdateRequest(false, true, false, null));
+        updateResponse.EnsureSuccessStatusCode();
+
+        var policies = await adminClient.GetFromJsonAsync<AdminNotificationPoliciesResponse>(
+            "/v1/admin/notifications/policies",
+            JsonSupport.Options);
+
+        Assert.NotNull(policies);
+        Assert.False(policies!.GlobalChannelEnabledByAudience["admin"].InAppEnabled);
+        Assert.True(policies.GlobalChannelEnabledByAudience["admin"].EmailEnabled);
+        Assert.False(policies.GlobalChannelEnabledByAudience["admin"].PushEnabled);
+        Assert.True(policies.GlobalChannelEnabledByAudience["learner"].InAppEnabled);
+
+        var partialUpdateResponse = await adminClient.PutAsJsonAsync(
+            "/v1/admin/notifications/policies/admin/__global__",
+            new AdminNotificationPolicyUpdateRequest(null, false, null, null));
+        partialUpdateResponse.EnsureSuccessStatusCode();
+
+        var updatedPolicies = await adminClient.GetFromJsonAsync<AdminNotificationPoliciesResponse>(
+            "/v1/admin/notifications/policies",
+            JsonSupport.Options);
+
+        Assert.NotNull(updatedPolicies);
+        Assert.False(updatedPolicies!.GlobalChannelEnabledByAudience["admin"].InAppEnabled);
+        Assert.False(updatedPolicies.GlobalChannelEnabledByAudience["admin"].EmailEnabled);
+        Assert.False(updatedPolicies.GlobalChannelEnabledByAudience["admin"].PushEnabled);
     }
 
     [Fact]

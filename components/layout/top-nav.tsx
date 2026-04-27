@@ -33,6 +33,34 @@ interface TopNavProps {
   workspaceRole?: UserRole;
 }
 
+function matchesPathPrefix(pathname: string, prefix: string): boolean {
+  const normalizedPrefix = prefix !== '/' && prefix.endsWith('/') ? prefix.slice(0, -1) : prefix;
+  return pathname === normalizedPrefix || pathname.startsWith(`${normalizedPrefix}/`);
+}
+
+function getActiveMatchLength(pathname: string, item: NavItem): number {
+  if (item.exact) return pathname === item.href ? Number.MAX_SAFE_INTEGER : -1;
+  if (item.href === '/') return pathname === '/' ? 1 : -1;
+
+  const prefix = item.matchPrefix ?? item.href;
+  return matchesPathPrefix(pathname, prefix) ? prefix.length : -1;
+}
+
+function getActiveHref(pathname: string, items: NavItem[]): string | null {
+  let activeHref: string | null = null;
+  let activeLength = -1;
+
+  for (const item of items) {
+    const matchLength = getActiveMatchLength(pathname, item);
+    if (matchLength > activeLength) {
+      activeHref = item.href;
+      activeLength = matchLength;
+    }
+  }
+
+  return activeHref;
+}
+
 export function TopNav({
   pageTitle,
   className,
@@ -66,6 +94,11 @@ export function TopNav({
         .filter((section) => section.items.length > 0),
     [learnerFeatureFlags, sectionedItems, shouldFilterFeatures],
   );
+  const sectionedActiveHref = useMemo(
+    () => getActiveHref(pathname, visibleSectionedItems?.flatMap((section) => section.items) ?? []),
+    [pathname, visibleSectionedItems],
+  );
+  const flatActiveHref = useMemo(() => getActiveHref(pathname, items), [items, pathname]);
   const hasSectionedMenu = Boolean(sectionedItems?.length);
   const pathnameLower = pathname.toLowerCase();
   const isPrivilegedPath = pathnameLower.startsWith('/expert') || pathnameLower.startsWith('/admin');
@@ -198,7 +231,7 @@ export function TopNav({
                           <div className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-[0.24em] text-muted">{section.label}</div>
                           <ul className="flex flex-col gap-1">
                             {section.items.map((item, itemIndex) => {
-                              const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.matchPrefix ?? item.href);
+                              const active = sectionedActiveHref === item.href;
                               return (
                                 <motion.li
                                   key={item.href}
@@ -252,7 +285,7 @@ export function TopNav({
                   ) : (
                     <ul className="flex flex-col gap-1">
                       {items.map((item, index) => {
-                        const active = item.href === '/' ? pathname === '/' : pathname.startsWith(item.matchPrefix ?? item.href);
+                        const active = flatActiveHref === item.href;
                         return (
                           <motion.li
                             key={item.href}

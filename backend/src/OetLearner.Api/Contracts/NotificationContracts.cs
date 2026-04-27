@@ -86,7 +86,13 @@ public sealed record AdminNotificationPolicyRow(
 
 public sealed record AdminNotificationPoliciesResponse(
     IReadOnlyDictionary<string, bool> GlobalEmailEnabledByAudience,
+    IReadOnlyDictionary<string, AdminNotificationAudienceChannelPolicy> GlobalChannelEnabledByAudience,
     IReadOnlyList<AdminNotificationPolicyRow> Rows);
+
+public sealed record AdminNotificationAudienceChannelPolicy(
+    bool InAppEnabled,
+    bool EmailEnabled,
+    bool PushEnabled);
 
 public sealed record AdminNotificationPolicyUpdateRequest(
     bool? InAppEnabled,

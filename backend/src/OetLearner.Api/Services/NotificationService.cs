@@ -512,6 +512,13 @@ public sealed class NotificationService(
             [ApplicationUserRoles.Admin] = ResolveGlobalAudienceEmailEnabled(overrideLookup, ApplicationUserRoles.Admin)
         };
 
+        var globalChannelEnabledByAudience = new Dictionary<string, AdminNotificationAudienceChannelPolicy>(StringComparer.OrdinalIgnoreCase)
+        {
+            [ApplicationUserRoles.Learner] = ResolveGlobalAudienceChannelPolicy(overrideLookup, ApplicationUserRoles.Learner),
+            [ApplicationUserRoles.Expert] = ResolveGlobalAudienceChannelPolicy(overrideLookup, ApplicationUserRoles.Expert),
+            [ApplicationUserRoles.Admin] = ResolveGlobalAudienceChannelPolicy(overrideLookup, ApplicationUserRoles.Admin)
+        };
+
         var rows = NotificationCatalog.All
             .Select(entry =>
             {
@@ -535,7 +542,7 @@ public sealed class NotificationService(
             .ThenBy(row => row.Label)
             .ToArray();
 
-        return new AdminNotificationPoliciesResponse(globalEmailEnabledByAudience, rows);
+        return new AdminNotificationPoliciesResponse(globalEmailEnabledByAudience, globalChannelEnabledByAudience, rows);
     }
 
     public async Task<AdminNotificationPolicyRow> UpdateAdminPolicyAsync(
@@ -583,10 +590,13 @@ public sealed class NotificationService(
             db.NotificationPolicyOverrides.Add(overrideRow);
         }
 
-        overrideRow.InAppEnabled = request.InAppEnabled;
-        overrideRow.EmailEnabled = request.EmailEnabled;
-        overrideRow.PushEnabled = request.PushEnabled;
-        overrideRow.EmailMode = ParseEmailMode(request.EmailMode);
+        overrideRow.InAppEnabled = request.InAppEnabled ?? overrideRow.InAppEnabled;
+        overrideRow.EmailEnabled = request.EmailEnabled ?? overrideRow.EmailEnabled;
+        overrideRow.PushEnabled = request.PushEnabled ?? overrideRow.PushEnabled;
+        if (request.EmailMode is not null)
+        {
+            overrideRow.EmailMode = ParseEmailMode(request.EmailMode);
+        }
         overrideRow.UpdatedByAdminId = adminId;
         overrideRow.UpdatedByAdminName = adminName;
         overrideRow.UpdatedAt = timeProvider.GetUtcNow();
@@ -611,11 +621,11 @@ public sealed class NotificationService(
                 audienceRole,
                 eventKey,
                 "global",
-                "Global Email Switch",
-                request.InAppEnabled ?? false,
-                request.EmailEnabled ?? true,
-                request.PushEnabled ?? false,
-                NormalizeEmailMode(ParseEmailMode(request.EmailMode) ?? NotificationEmailMode.Off),
+                "Global Channel Switches",
+                overrideRow.InAppEnabled ?? true,
+                overrideRow.EmailEnabled ?? true,
+                overrideRow.PushEnabled ?? true,
+                NormalizeEmailMode(overrideRow.EmailMode ?? NotificationEmailMode.Off),
                 true,
                 overrideRow.UpdatedAt,
                 overrideRow.UpdatedByAdminId,
@@ -635,6 +645,89 @@ public sealed class NotificationService(
             overrideRow.UpdatedAt,
             overrideRow.UpdatedByAdminId,
             overrideRow.UpdatedByAdminName);
+    }
+
+    public async Task<AdminNotificationPolicyRow> ResetAdminPolicyOverrideAsync(
+        string adminId,
+        string adminName,
+        string audienceRole,
+        string eventKey,
+        CancellationToken ct)
+    {
+        ValidateAudienceRole(audienceRole);
+
+        NotificationCatalogEntry? catalogEntry = null;
+        if (!string.Equals(eventKey, NotificationCatalog.GlobalPolicyEventKey, StringComparison.OrdinalIgnoreCase))
+        {
+            if (!NotificationCatalog.TryParseKey(eventKey, out var parsedEventKey))
+            {
+                throw ApiException.Validation(
+                    "invalid_notification_event_key",
+                    $"Unsupported notification event key '{eventKey}'.",
+                    [new ApiFieldError("eventKey", "invalid_event_key", "Use an event key returned by the notification catalog.")]);
+            }
+
+            catalogEntry = NotificationCatalog.Get(parsedEventKey);
+            if (!string.Equals(catalogEntry.AudienceRole, audienceRole, StringComparison.OrdinalIgnoreCase))
+            {
+                throw ApiException.Validation(
+                    "notification_audience_mismatch",
+                    $"Event {eventKey} does not belong to audience {audienceRole}.",
+                    [new ApiFieldError("audienceRole", "invalid", "The event key does not match the selected audience role.")]);
+            }
+        }
+
+        var overrideRow = await db.NotificationPolicyOverrides
+            .FirstOrDefaultAsync(existingOverride => existingOverride.AudienceRole == audienceRole && existingOverride.EventKey == eventKey, ct);
+
+        if (overrideRow is not null)
+        {
+            db.NotificationPolicyOverrides.Remove(overrideRow);
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = $"AUD-{Guid.NewGuid():N}",
+                OccurredAt = timeProvider.GetUtcNow(),
+                ActorId = adminId,
+                ActorName = adminName,
+                Action = "notification_policy_reset",
+                ResourceType = "NotificationPolicy",
+                ResourceId = $"{audienceRole}:{eventKey}",
+                Details = $"Reset notification policy for {audienceRole}/{eventKey} to catalog defaults"
+            });
+
+            await db.SaveChangesAsync(ct);
+        }
+
+        if (catalogEntry is null)
+        {
+            return new AdminNotificationPolicyRow(
+                audienceRole,
+                eventKey,
+                "global",
+                "Global Channel Switches",
+                true,
+                true,
+                true,
+                NormalizeEmailMode(NotificationEmailMode.Off),
+                false,
+                null,
+                null,
+                null);
+        }
+
+        return new AdminNotificationPolicyRow(
+            audienceRole,
+            eventKey,
+            catalogEntry.Category,
+            catalogEntry.Label,
+            catalogEntry.DefaultChannels.InAppEnabled,
+            catalogEntry.DefaultChannels.EmailEnabled,
+            catalogEntry.DefaultChannels.PushEnabled,
+            NormalizeEmailMode(catalogEntry.DefaultChannels.EmailMode),
+            false,
+            null,
+            null,
+            null);
     }
 
     public async Task<AdminNotificationHealthSnapshot> GetAdminHealthAsync(CancellationToken ct)
@@ -718,13 +811,41 @@ public sealed class NotificationService(
             failureQueue);
     }
 
-    public async Task<NotificationDeliveryAttemptResponse> GetAdminDeliveriesAsync(int page, int pageSize, CancellationToken ct)
+    public async Task<NotificationDeliveryAttemptResponse> GetAdminDeliveriesAsync(
+        int page,
+        int pageSize,
+        string? status,
+        string? channel,
+        string? audienceRole,
+        string? eventKey,
+        CancellationToken ct)
     {
         var normalizedPage = Math.Max(1, page);
         var normalizedPageSize = Math.Clamp(pageSize, 1, MaxPageSize);
 
-        var totalCount = await db.NotificationDeliveryAttempts.CountAsync(ct);
-        var itemRows = await db.NotificationDeliveryAttempts
+        var statusFilter = string.IsNullOrWhiteSpace(status) ? (NotificationDeliveryStatus?)null : ParseDeliveryStatusFilter(status);
+        var channelFilter = string.IsNullOrWhiteSpace(channel) ? (NotificationChannel?)null : ParseChannelFilter(channel);
+        var normalizedAudienceRole = string.IsNullOrWhiteSpace(audienceRole) ? null : audienceRole.Trim().ToLowerInvariant();
+        if (!string.IsNullOrWhiteSpace(normalizedAudienceRole))
+        {
+            ValidateAudienceRole(normalizedAudienceRole);
+        }
+
+        string? normalizedEventKey = null;
+        if (!string.IsNullOrWhiteSpace(eventKey))
+        {
+            if (!NotificationCatalog.TryParseKey(eventKey, out var parsedEventKey))
+            {
+                throw ApiException.Validation(
+                    "invalid_notification_event_key",
+                    $"Unsupported notification event key '{eventKey}'.",
+                    [new ApiFieldError("eventKey", "invalid_event_key", "Use an event key returned by the notification catalog.")]);
+            }
+
+            normalizedEventKey = NotificationCatalog.GetKey(parsedEventKey);
+        }
+
+        var baseQuery = db.NotificationDeliveryAttempts
             .AsNoTracking()
             .Join(
                 db.NotificationEvents.AsNoTracking(),
@@ -743,7 +864,30 @@ public sealed class NotificationService(
                     attempt.ErrorMessage,
                     attempt.AttemptedAt,
                     attempt.CompletedAt
-                })
+                });
+
+        if (statusFilter.HasValue)
+        {
+            baseQuery = baseQuery.Where(item => item.Status == statusFilter.Value);
+        }
+
+        if (channelFilter.HasValue)
+        {
+            baseQuery = baseQuery.Where(item => item.Channel == channelFilter.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(normalizedAudienceRole))
+        {
+            baseQuery = baseQuery.Where(item => item.RecipientRole == normalizedAudienceRole);
+        }
+
+        if (!string.IsNullOrWhiteSpace(normalizedEventKey))
+        {
+            baseQuery = baseQuery.Where(item => item.EventKey == normalizedEventKey);
+        }
+
+        var totalCount = await baseQuery.CountAsync(ct);
+        var itemRows = await baseQuery
             .OrderByDescending(item => item.AttemptedAt)
             .Skip((normalizedPage - 1) * normalizedPageSize)
             .Take(normalizedPageSize)
@@ -1286,6 +1430,16 @@ public sealed class NotificationService(
             ? globalOverride.EmailEnabled ?? true
             : true;
 
+    private static AdminNotificationAudienceChannelPolicy ResolveGlobalAudienceChannelPolicy(
+        IReadOnlyDictionary<(string AudienceRole, string EventKey), NotificationPolicyOverride> overrideLookup,
+        string audienceRole)
+        => overrideLookup.TryGetValue((audienceRole, NotificationCatalog.GlobalPolicyEventKey), out var globalOverride)
+            ? new AdminNotificationAudienceChannelPolicy(
+                globalOverride.InAppEnabled ?? true,
+                globalOverride.EmailEnabled ?? true,
+                globalOverride.PushEnabled ?? true)
+            : new AdminNotificationAudienceChannelPolicy(true, true, true);
+
     private async Task<bool> MirrorLegacyLearnerNotificationsAsync(
         string authAccountId,
         NotificationPreference preference,
@@ -1692,6 +1846,18 @@ public sealed class NotificationService(
             _ => throw new ArgumentOutOfRangeException(nameof(channel), channel, "Unsupported notification channel.")
         };
 
+    private static NotificationChannel ParseChannelFilter(string value)
+        => NormalizeChannel(value) switch
+        {
+            "in_app" => NotificationChannel.InApp,
+            "email" => NotificationChannel.Email,
+            "push" => NotificationChannel.Push,
+            var other => throw ApiException.Validation(
+                "invalid_notification_channel",
+                $"Unsupported notification channel '{other}'.",
+                [new ApiFieldError("channel", "invalid_channel", "Use in_app, email, or push.")])
+        };
+
     private static string NormalizeSeverity(NotificationSeverity severity)
         => severity switch
         {
@@ -1711,6 +1877,20 @@ public sealed class NotificationService(
             NotificationDeliveryStatus.Failed => "failed",
             NotificationDeliveryStatus.Expired => "expired",
             _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Unsupported notification delivery status.")
+        };
+
+    private static NotificationDeliveryStatus ParseDeliveryStatusFilter(string value)
+        => value.Trim().ToLowerInvariant().Replace('-', '_') switch
+        {
+            "pending" => NotificationDeliveryStatus.Pending,
+            "sent" => NotificationDeliveryStatus.Sent,
+            "suppressed" => NotificationDeliveryStatus.Suppressed,
+            "failed" => NotificationDeliveryStatus.Failed,
+            "expired" => NotificationDeliveryStatus.Expired,
+            var other => throw ApiException.Validation(
+                "invalid_notification_delivery_status",
+                $"Unsupported notification delivery status '{other}'.",
+                [new ApiFieldError("status", "invalid_status", "Use pending, sent, suppressed, failed, or expired.")])
         };
 
     private static string? NormalizeActionUrl(string? actionUrl)

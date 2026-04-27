@@ -106,6 +106,15 @@ public static class NotificationEndpoints
             Results.Ok(await service.UpdateAdminPolicyAsync(http.AdminId(), http.AdminName(), audienceRole, eventKey, request, ct)))
             .RequireRateLimiting("PerUserWrite");
 
+        admin.MapDelete("/policies/{audienceRole}/{eventKey}", async (
+            HttpContext http,
+            string audienceRole,
+            string eventKey,
+            NotificationService service,
+            CancellationToken ct) =>
+            Results.Ok(await service.ResetAdminPolicyOverrideAsync(http.AdminId(), http.AdminName(), audienceRole, eventKey, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
         admin.MapGet("/health", async (NotificationService service, CancellationToken ct)
             => Results.Ok(await service.GetAdminHealthAsync(ct)));
 
@@ -113,8 +122,12 @@ public static class NotificationEndpoints
             NotificationService service,
             CancellationToken ct,
             [FromQuery] int page = 1,
-            [FromQuery] int pageSize = 20) =>
-            Results.Ok(await service.GetAdminDeliveriesAsync(page, pageSize, ct)));
+            [FromQuery] int pageSize = 20,
+            [FromQuery] string? status = null,
+            [FromQuery] string? channel = null,
+            [FromQuery] string? audienceRole = null,
+            [FromQuery] string? eventKey = null) =>
+            Results.Ok(await service.GetAdminDeliveriesAsync(page, pageSize, status, channel, audienceRole, eventKey, ct)));
 
         admin.MapPost("/test-email", async (
             HttpContext http,
