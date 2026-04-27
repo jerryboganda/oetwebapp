@@ -9,7 +9,7 @@ import { getMotionPresenceMode, getSurfaceMotion, prefersReducedMotion } from '@
 import type { UserRole } from '@/lib/types/auth';
 import { cn } from '@/lib/utils';
 import { usePathname } from 'next/navigation';
-import { BottomNav, type NavItem, type ShellUserSummary, Sidebar } from './sidebar';
+import { BottomNav, type NavGroup, type NavItem, type ShellUserSummary, Sidebar } from './sidebar';
 import { TopNav, type MobileMenuSection } from './top-nav';
 
 export interface AppShellProps {
@@ -21,6 +21,7 @@ export interface AppShellProps {
   navActions?: ReactNode;
   className?: string;
   navItems?: NavItem[];
+  navGroups?: NavGroup[];
   mobileNavItems?: NavItem[];
   mobileMenuSections?: MobileMenuSection[];
   userSummary?: ShellUserSummary;
@@ -50,6 +51,7 @@ export function AppShell({
   navActions,
   className,
   navItems,
+  navGroups,
   mobileNavItems,
   mobileMenuSections,
   userSummary,
@@ -119,7 +121,7 @@ export function AppShell({
         userSummary={userSummary}
         workspaceRole={workspaceRole}
       />
-      <Sidebar items={navItems} userSummary={userSummary} workspaceRole={workspaceRole} />
+      <Sidebar items={navItems} groups={navGroups} userSummary={userSummary} workspaceRole={workspaceRole} />
       <div className="relative z-10 flex min-w-0 flex-1 min-h-0 flex-col">
         <TopNav
           className="hidden lg:flex"

@@ -44,6 +44,11 @@ export interface NavItem {
   featureFlag?: string;
 }
 
+export interface NavGroup {
+  label: string;
+  items: NavItem[];
+}
+
 export interface ShellUserSummary {
   displayName?: string | null;
   email?: string | null;
@@ -145,11 +150,13 @@ function NavSection({
 export function Sidebar({
   className,
   items = mainNavItems,
+  groups,
   userSummary,
   workspaceRole,
 }: {
   className?: string;
   items?: NavItem[];
+  groups?: NavGroup[];
   userSummary?: ShellUserSummary;
   workspaceRole?: UserRole;
 }) {
@@ -209,7 +216,19 @@ export function Sidebar({
       </div>
 
       <nav className="flex-1 overflow-y-auto px-4 py-5" aria-label="Main navigation">
-        <NavSection label="Practice" items={items} pathname={pathname} reducedMotion={reducedMotion} />
+        {groups && groups.length > 0 ? (
+          groups.map((group) => (
+            <NavSection
+              key={group.label}
+              label={group.label}
+              items={group.items}
+              pathname={pathname}
+              reducedMotion={reducedMotion}
+            />
+          ))
+        ) : (
+          <NavSection label="Practice" items={items} pathname={pathname} reducedMotion={reducedMotion} />
+        )}
         {isLearnerWorkspace ? (
           <>
             <NavSection label="Learn" items={visibleLearnNavItems} pathname={pathname} reducedMotion={reducedMotion} />
