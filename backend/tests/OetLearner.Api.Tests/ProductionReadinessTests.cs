@@ -3,10 +3,12 @@ using System.Net.Http.Json;
 using System.Text.Json;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
+using OetLearner.Api.Data;
 using OetLearner.Api.Services;
 using OetLearner.Api.Tests.Infrastructure;
 
@@ -230,6 +232,8 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
             },
             "speaking evaluation to complete");
 
+        await SetWalletCreditsAsync("audio-owner", 1);
+
         var reviewResponse = await learner.PostAsJsonAsync("/v1/reviews/requests", new
         {
             attemptId,
@@ -237,7 +241,7 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
             turnaroundOption = "standard",
             focusAreas = new[] { "fluency" },
             learnerNotes = "Please review the audio quality.",
-            paymentSource = "invoice",
+            paymentSource = "credits",
             idempotencyKey = Guid.NewGuid().ToString("N")
         });
         reviewResponse.EnsureSuccessStatusCode();
@@ -328,6 +332,16 @@ public class ProductionReadinessTests : IClassFixture<TestWebApplicationFactory>
         }
 
         throw new TimeoutException($"Timed out waiting for {description}.");
+    }
+
+    private async Task SetWalletCreditsAsync(string userId, int credits)
+    {
+        await using var scope = _factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId);
+        wallet.CreditBalance = credits;
+        wallet.LastUpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
     }
 
     private static ProductionAuthWebApplicationFactory CreateProductionFactory(Action<Dictionary<string, string?>>? configure = null)

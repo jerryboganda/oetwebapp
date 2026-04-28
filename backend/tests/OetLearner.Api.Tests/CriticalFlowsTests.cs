@@ -1,15 +1,20 @@
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using OetLearner.Api.Data;
 using OetLearner.Api.Tests.Infrastructure;
 
 namespace OetLearner.Api.Tests;
 
 public class CriticalFlowsTests : IClassFixture<TestWebApplicationFactory>
 {
+    private readonly TestWebApplicationFactory _factory;
     private readonly HttpClient _client;
 
     public CriticalFlowsTests(TestWebApplicationFactory factory)
     {
+        _factory = factory;
         _client = factory.CreateClient();
     }
 
@@ -80,14 +85,18 @@ public class CriticalFlowsTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task ReviewRequest_DeductsCredits_WhenPayingWithCredits()
     {
-        var billingBeforeResponse = await _client.GetAsync("/v1/billing/summary");
+        var userId = $"review-credit-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId, walletCredits: 2);
+        var attemptId = await CreateCompletedWritingAttemptAsync(client);
+
+        var billingBeforeResponse = await client.GetAsync("/v1/billing/summary");
         billingBeforeResponse.EnsureSuccessStatusCode();
         using var billingBefore = JsonDocument.Parse(await billingBeforeResponse.Content.ReadAsStringAsync());
         var creditsBefore = billingBefore.RootElement.GetProperty("wallet").GetProperty("creditBalance").GetInt32();
 
-        var requestResponse = await _client.PostAsJsonAsync("/v1/reviews/requests", new
+        var requestResponse = await client.PostAsJsonAsync("/v1/reviews/requests", new
         {
-            attemptId = "wa-001",
+            attemptId,
             subtest = "writing",
             turnaroundOption = "standard",
             focusAreas = new[] { "conciseness", "genre" },
@@ -97,7 +106,7 @@ public class CriticalFlowsTests : IClassFixture<TestWebApplicationFactory>
         });
         requestResponse.EnsureSuccessStatusCode();
 
-        var billingAfterResponse = await _client.GetAsync("/v1/billing/summary");
+        var billingAfterResponse = await client.GetAsync("/v1/billing/summary");
         billingAfterResponse.EnsureSuccessStatusCode();
         using var billingAfter = JsonDocument.Parse(await billingAfterResponse.Content.ReadAsStringAsync());
         var creditsAfter = billingAfter.RootElement.GetProperty("wallet").GetProperty("creditBalance").GetInt32();
@@ -108,11 +117,19 @@ public class CriticalFlowsTests : IClassFixture<TestWebApplicationFactory>
     [Fact]
     public async Task ReviewRequest_IsIdempotent_ForDuplicateSubmission()
     {
+        var userId = $"review-idempotent-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId, walletCredits: 2);
+        var attemptId = await CreateCompletedWritingAttemptAsync(client);
         var key = Guid.NewGuid().ToString("N");
 
-        var firstResponse = await _client.PostAsJsonAsync("/v1/reviews/requests", new
+        var billingBeforeResponse = await client.GetAsync("/v1/billing/summary");
+        billingBeforeResponse.EnsureSuccessStatusCode();
+        using var billingBefore = JsonDocument.Parse(await billingBeforeResponse.Content.ReadAsStringAsync());
+        var creditsBefore = billingBefore.RootElement.GetProperty("wallet").GetProperty("creditBalance").GetInt32();
+
+        var firstResponse = await client.PostAsJsonAsync("/v1/reviews/requests", new
         {
-            attemptId = "wa-001",
+            attemptId,
             subtest = "writing",
             turnaroundOption = "standard",
             focusAreas = new[] { "conciseness" },
@@ -122,9 +139,9 @@ public class CriticalFlowsTests : IClassFixture<TestWebApplicationFactory>
         });
         firstResponse.EnsureSuccessStatusCode();
 
-        var secondResponse = await _client.PostAsJsonAsync("/v1/reviews/requests", new
+        var secondResponse = await client.PostAsJsonAsync("/v1/reviews/requests", new
         {
-            attemptId = "wa-001",
+            attemptId,
             subtest = "writing",
             turnaroundOption = "standard",
             focusAreas = new[] { "conciseness" },
@@ -140,5 +157,85 @@ public class CriticalFlowsTests : IClassFixture<TestWebApplicationFactory>
         Assert.Equal(
             firstJson.RootElement.GetProperty("reviewRequestId").GetString(),
             secondJson.RootElement.GetProperty("reviewRequestId").GetString());
+
+        var billingAfterResponse = await client.GetAsync("/v1/billing/summary");
+        billingAfterResponse.EnsureSuccessStatusCode();
+        using var billingAfter = JsonDocument.Parse(await billingAfterResponse.Content.ReadAsStringAsync());
+        var creditsAfter = billingAfter.RootElement.GetProperty("wallet").GetProperty("creditBalance").GetInt32();
+
+        Assert.Equal(creditsBefore - 1, creditsAfter);
+    }
+
+    private async Task<HttpClient> CreateClientForUserAsync(string userId, int walletCredits)
+    {
+        await _factory.EnsureLearnerProfileAsync(userId, $"{userId}@example.test", userId);
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId);
+            wallet.CreditBalance = walletCredits;
+            wallet.LastUpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync();
+        }
+
+        var client = _factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Debug-UserId", userId);
+        client.DefaultRequestHeaders.Add("X-Debug-Role", "learner");
+        client.DefaultRequestHeaders.Add("X-Debug-Email", $"{userId}@example.test");
+        client.DefaultRequestHeaders.Add("X-Debug-Name", userId);
+        return client;
+    }
+
+    private static async Task<string> CreateCompletedWritingAttemptAsync(HttpClient client)
+    {
+        var createAttemptResponse = await client.PostAsJsonAsync("/v1/writing/attempts", new
+        {
+            contentId = "wt-001",
+            context = "practice",
+            mode = "timed",
+            deviceType = "desktop",
+            parentAttemptId = (string?)null
+        });
+        createAttemptResponse.EnsureSuccessStatusCode();
+
+        using var createdAttemptJson = JsonDocument.Parse(await createAttemptResponse.Content.ReadAsStringAsync());
+        var attemptId = createdAttemptJson.RootElement.GetProperty("attemptId").GetString()
+            ?? throw new InvalidOperationException("Writing attempt id was missing.");
+
+        var content = "Dear Dr Patterson, I am writing to update you regarding Mrs Vance after her knee replacement. She recovered well post-operatively and needs staple removal in 14 days.";
+        var draftResponse = await client.PatchAsJsonAsync($"/v1/writing/attempts/{attemptId}/draft", new
+        {
+            content,
+            scratchpad = "Focus on conciseness.",
+            checklist = new Dictionary<string, bool> { ["Addressed the purpose clearly"] = true },
+            draftVersion = 1
+        });
+        draftResponse.EnsureSuccessStatusCode();
+
+        var submitResponse = await client.PostAsJsonAsync($"/v1/writing/attempts/{attemptId}/submit", new
+        {
+            content,
+            idempotencyKey = Guid.NewGuid().ToString("N")
+        });
+        submitResponse.EnsureSuccessStatusCode();
+
+        using var submitJson = JsonDocument.Parse(await submitResponse.Content.ReadAsStringAsync());
+        var evaluationId = submitJson.RootElement.GetProperty("evaluationId").GetString()
+            ?? throw new InvalidOperationException("Writing evaluation id was missing.");
+
+        for (var poll = 0; poll < 20; poll++)
+        {
+            var summaryResponse = await client.GetAsync($"/v1/writing/evaluations/{evaluationId}/summary");
+            summaryResponse.EnsureSuccessStatusCode();
+            using var summaryJson = JsonDocument.Parse(await summaryResponse.Content.ReadAsStringAsync());
+            if (summaryJson.RootElement.GetProperty("state").GetString() == "completed")
+            {
+                return attemptId;
+            }
+
+            await Task.Delay(250);
+        }
+
+        throw new TimeoutException("Timed out waiting for writing evaluation to complete.");
     }
 }
