@@ -35,6 +35,7 @@ const admin = vi.hoisted(() => ({
   getAdminBillingCouponVersionHistoryData: vi.fn(),
   getAdminBillingCouponRedemptionData: vi.fn(),
   getAdminBillingInvoiceData: vi.fn(),
+  getAdminBillingInvoiceEvidenceData: vi.fn(),
   getAdminBillingSubscriptionData: vi.fn(),
   getAdminQualityAnalyticsData: vi.fn(),
   getAdminUserDetailData: vi.fn(),
@@ -162,6 +163,7 @@ vi.mock('@/lib/admin', () => ({
   getAdminBillingCouponVersionHistoryData: admin.getAdminBillingCouponVersionHistoryData,
   getAdminBillingCouponRedemptionData: admin.getAdminBillingCouponRedemptionData,
   getAdminBillingInvoiceData: admin.getAdminBillingInvoiceData,
+  getAdminBillingInvoiceEvidenceData: admin.getAdminBillingInvoiceEvidenceData,
   getAdminBillingSubscriptionData: admin.getAdminBillingSubscriptionData,
   getAdminQualityAnalyticsData: admin.getAdminQualityAnalyticsData,
   getAdminUserDetailData: admin.getAdminUserDetailData,
@@ -563,7 +565,20 @@ describe('Admin Non-Editor Pages', () => {
     ]);
     admin.getAdminBillingSubscriptionData.mockResolvedValue({ items: [] });
     admin.getAdminBillingCouponRedemptionData.mockResolvedValue({ items: [] });
-    admin.getAdminBillingInvoiceData.mockResolvedValue({ items: [] });
+    admin.getAdminBillingInvoiceData.mockResolvedValue({
+      items: [
+        {
+          id: 'invoice-1',
+          userId: 'learner-1',
+          userName: 'Learner One',
+          amount: 49,
+          currency: 'AUD',
+          status: 'paid',
+          date: '2026-04-01T12:00:00.000Z',
+          plan: 'Starter with credits',
+        },
+      ],
+    });
     admin.getAdminBillingPlanVersionHistoryData.mockResolvedValue({
       subject: {
         kind: 'plan',
@@ -609,6 +624,100 @@ describe('Admin Non-Editor Pages', () => {
         },
       ],
     });
+    admin.getAdminBillingInvoiceEvidenceData.mockResolvedValue({
+      invoice: {
+        id: 'invoice-1',
+        userId: 'learner-1',
+        userName: 'Learner One',
+        amount: 49,
+        currency: 'AUD',
+        status: 'paid',
+        description: 'Starter with credits',
+        issuedAt: '2026-04-01T12:00:00.000Z',
+        planVersionId: 'plan-version-2',
+        addOnVersionIds: { 'credits-5': 'addon-version-1' },
+        couponVersionId: 'coupon-version-1',
+        quoteId: 'quote-1',
+        checkoutSessionId: 'checkout-1',
+      },
+      quote: {
+        id: 'quote-1',
+        status: 'completed',
+        currency: 'AUD',
+        subtotalAmount: 55,
+        discountAmount: 6,
+        totalAmount: 49,
+        planCode: 'starter',
+        couponCode: 'WELCOME10',
+        addOnCodes: ['credits-5'],
+        items: [
+          { kind: 'plan', code: 'starter', name: 'Starter', amount: 49, currency: 'AUD', quantity: 1, description: 'Monthly access' },
+        ],
+        createdAt: '2026-04-01T11:55:00.000Z',
+        expiresAt: '2026-04-02T11:55:00.000Z',
+        checkoutSessionId: 'checkout-1',
+        planVersionId: 'plan-version-2',
+        addOnVersionIds: { 'credits-5': 'addon-version-1' },
+        couponVersionId: 'coupon-version-1',
+        summary: 'Starter with credits',
+      },
+      payments: [
+        {
+          id: 'payment-1',
+          gateway: 'paypal',
+          gatewayTransactionId: 'checkout-1',
+          transactionType: 'subscription_payment',
+          status: 'completed',
+          amount: 49,
+          currency: 'AUD',
+          productType: 'plan',
+          productId: 'starter',
+          quoteId: 'quote-1',
+          planVersionId: 'plan-version-2',
+          addOnVersionIds: { 'credits-5': 'addon-version-1' },
+          couponVersionId: 'coupon-version-1',
+          createdAt: '2026-04-01T11:56:00.000Z',
+          updatedAt: '2026-04-01T12:00:00.000Z',
+        },
+      ],
+      redemptions: [
+        {
+          id: 'redemption-1',
+          couponCode: 'WELCOME10',
+          couponId: 'coupon-1',
+          couponVersionId: 'coupon-version-1',
+          userId: 'learner-1',
+          quoteId: 'quote-1',
+          checkoutSessionId: 'checkout-1',
+          subscriptionId: 'subscription-1',
+          discountAmount: 6,
+          currency: 'AUD',
+          status: 'applied',
+          redeemedAt: '2026-04-01T11:56:30.000Z',
+        },
+      ],
+      subscriptionItems: [],
+      events: [
+        {
+          id: 'event-1',
+          eventType: 'checkout_completed',
+          entityType: 'PaymentTransaction',
+          entityId: 'checkout-1',
+          subscriptionId: 'subscription-1',
+          quoteId: 'quote-1',
+          occurredAt: '2026-04-01T12:00:00.000Z',
+        },
+      ],
+      catalogAnchors: {
+        planVersionId: 'plan-version-2',
+        addOnVersionIds: { 'credits-5': 'addon-version-1' },
+        couponVersionId: 'coupon-version-1',
+        source: 'invoice',
+      },
+      notRecorded: [],
+      integrityFlags: [],
+      rawPayload: 'SHOULD_NOT_RENDER_RAW_PAYLOAD',
+    });
 
     renderPage(<BillingPage />);
 
@@ -624,6 +733,14 @@ describe('Admin Non-Editor Pages', () => {
     expect(admin.getAdminBillingPlanVersionHistoryData).toHaveBeenCalledWith('plan-1');
     expect(screen.getByText('Active v2')).toBeInTheDocument();
     expect(screen.getAllByText('Admin User').length).toBeGreaterThan(0);
+
+    await user.click(screen.getAllByRole('button', { name: /view evidence for invoice invoice-1/i })[0]);
+
+    expect(await screen.findByRole('heading', { name: /invoice evidence/i })).toBeInTheDocument();
+    expect(admin.getAdminBillingInvoiceEvidenceData).toHaveBeenCalledWith('invoice-1');
+    expect(screen.getAllByText('Quote Snapshot').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('checkout_completed').length).toBeGreaterThan(0);
+    expect(screen.queryByText('SHOULD_NOT_RENDER_RAW_PAYLOAD')).not.toBeInTheDocument();
   });
 
   it('renders the notifications page inside the learner-style route surface', async () => {

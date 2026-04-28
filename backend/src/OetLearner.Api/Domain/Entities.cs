@@ -654,7 +654,7 @@ public class Invoice
     [MaxLength(64)]
     public string? QuoteId { get; set; }
 
-    [MaxLength(64)]
+    [MaxLength(256)]
     public string? CheckoutSessionId { get; set; }
 }
 

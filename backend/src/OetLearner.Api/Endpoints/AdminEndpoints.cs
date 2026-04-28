@@ -311,6 +311,10 @@ public static class AdminEndpoints
             => Results.Ok(await service.GetBillingInvoicesAsync(status, search, page ?? 1, pageSize ?? 20, ct)))
             .WithAdminRead("AdminBillingRead");
 
+        admin.MapGet("/billing/invoices/{invoiceId}/evidence", async (string invoiceId, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GetBillingInvoiceEvidenceAsync(invoiceId, ct)))
+            .WithAdminRead("AdminBillingRead");
+
         // ── Review Ops ──────────────────────────────────────
 
         admin.MapGet("/review-ops/summary", async (AdminService service, CancellationToken ct)

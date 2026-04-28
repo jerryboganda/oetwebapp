@@ -1341,6 +1341,10 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("ActiveVersionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<bool>("AppliesToAllPlans")
                         .HasColumnType("boolean");
 
@@ -1356,6 +1360,110 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DurationDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("GrantCredits")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("GrantEntitlementsJson")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<string>("Interval")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<bool>("IsRecurring")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsStackable")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("LatestVersionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<int?>("MaxQuantity")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<decimal>("Price")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("QuantityStep")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code")
+                        .IsUnique();
+
+                    b.HasIndex("Status", "DisplayOrder");
+
+                    b.ToTable("BillingAddOns");
+                });
+
+            modelBuilder.Entity("OetLearner.Api.Domain.BillingAddOnVersion", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("AddOnId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<bool>("AppliesToAllPlans")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("CompatiblePlanCodesJson")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByAdminId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("CreatedByAdminName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
 
                     b.Property<string>("Currency")
                         .IsRequired()
@@ -1409,22 +1517,26 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
-                    b.Property<DateTimeOffset>("UpdatedAt")
-                        .HasColumnType("timestamp with time zone");
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("integer");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("Code")
+                    b.HasIndex("Code");
+
+                    b.HasIndex("AddOnId", "VersionNumber")
                         .IsUnique();
 
-                    b.HasIndex("Status", "DisplayOrder");
-
-                    b.ToTable("BillingAddOns");
+                    b.ToTable("BillingAddOnVersions");
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.BillingCoupon", b =>
                 {
                     b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ActiveVersionId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
@@ -1468,6 +1580,10 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<bool>("IsStackable")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("LatestVersionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<decimal?>("MinimumSubtotal")
                         .HasColumnType("numeric");
 
@@ -1508,6 +1624,102 @@ namespace OetLearner.Api.Data.Migrations
                     b.ToTable("BillingCoupons");
                 });
 
+            modelBuilder.Entity("OetLearner.Api.Domain.BillingCouponVersion", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ApplicableAddOnCodesJson")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<string>("ApplicablePlanCodesJson")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("CouponId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByAdminId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("CreatedByAdminName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<int>("DiscountType")
+                        .HasColumnType("integer");
+
+                    b.Property<decimal>("DiscountValue")
+                        .HasColumnType("numeric");
+
+                    b.Property<DateTimeOffset?>("EndsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsStackable")
+                        .HasColumnType("boolean");
+
+                    b.Property<decimal?>("MinimumSubtotal")
+                        .HasColumnType("numeric");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Notes")
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<DateTimeOffset?>("StartsAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("UsageLimitPerUser")
+                        .HasColumnType("integer");
+
+                    b.Property<int?>("UsageLimitTotal")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code");
+
+                    b.HasIndex("CouponId", "VersionNumber")
+                        .IsUnique();
+
+                    b.ToTable("BillingCouponVersions");
+                });
+
             modelBuilder.Entity("OetLearner.Api.Domain.BillingCouponRedemption", b =>
                 {
                     b.Property<string>("Id")
@@ -1515,11 +1727,19 @@ namespace OetLearner.Api.Data.Migrations
                         .HasColumnType("character varying(64)");
 
                     b.Property<string>("CheckoutSessionId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("CouponId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
                     b.Property<string>("CouponCode")
                         .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("CouponVersionId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
@@ -1555,6 +1775,10 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("CouponCode", "UserId", "RedeemedAt");
 
+                    b.HasIndex("CouponId", "UserId", "RedeemedAt");
+
+                    b.HasIndex("CouponVersionId");
+
                     b.ToTable("BillingCouponRedemptions");
                 });
 
@@ -1565,8 +1789,8 @@ namespace OetLearner.Api.Data.Migrations
                         .HasColumnType("character varying(64)");
 
                     b.Property<string>("EntityId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.Property<string>("EntityType")
                         .IsRequired()
@@ -1610,6 +1834,10 @@ namespace OetLearner.Api.Data.Migrations
             modelBuilder.Entity("OetLearner.Api.Domain.BillingPlan", b =>
                 {
                     b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("ActiveVersionId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
@@ -1667,6 +1895,10 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<bool>("IsVisible")
                         .HasColumnType("boolean");
 
+                    b.Property<string>("LatestVersionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(128)
@@ -1694,6 +1926,103 @@ namespace OetLearner.Api.Data.Migrations
                     b.ToTable("BillingPlans");
                 });
 
+            modelBuilder.Entity("OetLearner.Api.Domain.BillingPlanVersion", b =>
+                {
+                    b.Property<string>("Id")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset?>("ArchivedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("Code")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("CreatedByAdminId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("CreatedByAdminName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("Currency")
+                        .IsRequired()
+                        .HasMaxLength(8)
+                        .HasColumnType("character varying(8)");
+
+                    b.Property<string>("Description")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
+                    b.Property<int>("DisplayOrder")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("DurationMonths")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("EntitlementsJson")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<int>("IncludedCredits")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("IncludedSubtestsJson")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)");
+
+                    b.Property<string>("Interval")
+                        .IsRequired()
+                        .HasMaxLength(16)
+                        .HasColumnType("character varying(16)");
+
+                    b.Property<bool>("IsRenewable")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("IsVisible")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<string>("PlanId")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<decimal>("Price")
+                        .HasColumnType("numeric");
+
+                    b.Property<int>("Status")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("TrialDays")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("VersionNumber")
+                        .HasColumnType("integer");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Code");
+
+                    b.HasIndex("PlanId", "VersionNumber")
+                        .IsUnique();
+
+                    b.ToTable("BillingPlanVersions");
+                });
+
             modelBuilder.Entity("OetLearner.Api.Domain.BillingQuote", b =>
                 {
                     b.Property<string>("Id")
@@ -1705,11 +2034,20 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(1024)
                         .HasColumnType("character varying(1024)");
 
+                    b.Property<string>("AddOnVersionIdsJson")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
                     b.Property<string>("CheckoutSessionId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("CouponCode")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
-                    b.Property<string>("CouponCode")
+                    b.Property<string>("CouponVersionId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
@@ -1732,6 +2070,10 @@ namespace OetLearner.Api.Data.Migrations
                         .HasColumnType("character varying(64)");
 
                     b.Property<string>("PlanCode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("PlanVersionId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
@@ -1761,6 +2103,10 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("Status", "ExpiresAt");
+
+                    b.HasIndex("CouponVersionId");
+
+                    b.HasIndex("PlanVersionId");
 
                     b.HasIndex("UserId", "CreatedAt");
 
@@ -4865,6 +5211,11 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("AddOnVersionIdsJson")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
                     b.Property<decimal>("Amount")
                         .HasColumnType("numeric");
 
@@ -4876,8 +5227,24 @@ namespace OetLearner.Api.Data.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
+                    b.Property<string>("CheckoutSessionId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("CouponVersionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<DateTimeOffset>("IssuedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("PlanVersionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("QuoteId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("Status")
                         .IsRequired()
@@ -4891,6 +5258,12 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("UserId", "IssuedAt");
+
+                    b.HasIndex("CheckoutSessionId");
+
+                    b.HasIndex("PlanVersionId");
+
+                    b.HasIndex("QuoteId");
 
                     b.ToTable("Invoices");
                 });
@@ -6705,6 +7078,11 @@ namespace OetLearner.Api.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid");
 
+                    b.Property<string>("AddOnVersionIdsJson")
+                        .IsRequired()
+                        .HasMaxLength(1024)
+                        .HasColumnType("character varying(1024)");
+
                     b.Property<decimal>("Amount")
                         .HasColumnType("numeric");
 
@@ -6715,6 +7093,10 @@ namespace OetLearner.Api.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(8)
                         .HasColumnType("character varying(8)");
+
+                    b.Property<string>("CouponVersionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<string>("Gateway")
                         .IsRequired()
@@ -6742,6 +7124,14 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)");
 
+                    b.Property<string>("PlanVersionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("QuoteId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasMaxLength(32)
@@ -6763,6 +7153,12 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("LearnerUserId");
 
                     b.HasIndex("LearnerUserId", "CreatedAt");
+
+                    b.HasIndex("CouponVersionId");
+
+                    b.HasIndex("PlanVersionId");
+
+                    b.HasIndex("QuoteId");
 
                     b.ToTable("PaymentTransactions");
                 });
@@ -9309,6 +9705,10 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
+                    b.Property<string>("PlanVersionId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
                     b.Property<decimal>("PriceAmount")
                         .HasColumnType("numeric");
 
@@ -9327,6 +9727,8 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("UserId");
 
+                    b.HasIndex("PlanVersionId");
+
                     b.ToTable("Subscriptions");
                 });
 
@@ -9337,6 +9739,10 @@ namespace OetLearner.Api.Data.Migrations
                         .HasColumnType("character varying(64)");
 
                     b.Property<string>("CheckoutSessionId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("AddOnVersionId")
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)");
 
@@ -9380,6 +9786,8 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ItemCode", "SubscriptionId");
+
+                    b.HasIndex("AddOnVersionId");
 
                     b.HasIndex("SubscriptionId", "Status");
 

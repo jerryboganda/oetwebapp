@@ -3341,6 +3341,10 @@ export async function fetchAdminBillingInvoices(params?: { status?: string; sear
   return apiRequest(`/v1/admin/billing/invoices${q ? `?${q}` : ''}`);
 }
 
+export async function fetchAdminBillingInvoiceEvidence(invoiceId: string) {
+  return apiRequest(`/v1/admin/billing/invoices/${encodeURIComponent(invoiceId)}/evidence`);
+}
+
 export async function fetchAdminReviewOpsSummary() {
   return apiRequest('/v1/admin/review-ops/summary');
 }

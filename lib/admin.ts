@@ -8,6 +8,7 @@ import {
   fetchAdminBillingCouponRedemptions,
   fetchAdminBillingCoupons,
   fetchAdminBillingCouponVersions,
+  fetchAdminBillingInvoiceEvidence,
   fetchAdminBillingInvoices,
   fetchAdminBillingPlans,
   fetchAdminBillingPlanVersions,
@@ -45,6 +46,7 @@ import type {
   AdminBillingCatalogVersion,
   AdminBillingCatalogVersionHistory,
   AdminBillingInvoice,
+  AdminBillingInvoiceEvidence,
   AdminBillingCoupon,
   AdminBillingCouponRedemption,
   AdminBillingPlan,
@@ -87,6 +89,15 @@ function asRecord(value: unknown): ApiRecord {
 
 function asArray(value: unknown): ApiRecord[] {
   return Array.isArray(value) ? value.map(asRecord) : [];
+}
+
+function asStringRecord(value: unknown): Record<string, string> {
+  const record = asRecord(value);
+  return Object.fromEntries(
+    Object.entries(record)
+      .map(([key, entry]) => [key, toStringValue(entry)] as const)
+      .filter(([, entry]) => entry.length > 0),
+  );
 }
 
 function toStringValue(value: unknown, fallback = ''): string {
@@ -686,6 +697,120 @@ export async function getAdminBillingInvoiceData(params?: Parameters<typeof fetc
       date: toStringValue(item.date),
       plan: toStringValue(item.plan),
     })),
+  };
+}
+
+export async function getAdminBillingInvoiceEvidenceData(invoiceId: string): Promise<AdminBillingInvoiceEvidence> {
+  const raw = asRecord(await fetchAdminBillingInvoiceEvidence(invoiceId));
+  const invoice = asRecord(raw.invoice);
+  const quote = raw.quote == null ? null : asRecord(raw.quote);
+
+  return {
+    invoice: {
+      id: toStringValue(invoice.id),
+      userId: toStringValue(invoice.userId),
+      userName: toStringValue(invoice.userName, toStringValue(invoice.userId)),
+      amount: toNumberValue(invoice.amount),
+      currency: toStringValue(invoice.currency, 'AUD'),
+      status: toStringValue(invoice.status).toLowerCase(),
+      description: toStringValue(invoice.description),
+      issuedAt: toStringValue(invoice.issuedAt),
+      planVersionId: toNullableString(invoice.planVersionId),
+      addOnVersionIds: asStringRecord(invoice.addOnVersionIds),
+      couponVersionId: toNullableString(invoice.couponVersionId),
+      quoteId: toNullableString(invoice.quoteId),
+      checkoutSessionId: toNullableString(invoice.checkoutSessionId),
+    },
+    quote: quote
+      ? {
+        id: toStringValue(quote.id),
+        status: toStringValue(quote.status).toLowerCase(),
+        currency: toStringValue(quote.currency, 'AUD'),
+        subtotalAmount: toNumberValue(quote.subtotalAmount),
+        discountAmount: toNumberValue(quote.discountAmount),
+        totalAmount: toNumberValue(quote.totalAmount),
+        planCode: toNullableString(quote.planCode),
+        couponCode: toNullableString(quote.couponCode),
+        addOnCodes: parseJsonArray(quote.addOnCodes),
+        items: asArray(quote.items).map((item) => ({
+          kind: toStringValue(item.kind),
+          code: toStringValue(item.code),
+          name: toStringValue(item.name),
+          amount: toNumberValue(item.amount),
+          currency: toStringValue(item.currency, 'AUD'),
+          quantity: toNumberValue(item.quantity, 1),
+          description: toNullableString(item.description),
+        })),
+        createdAt: toStringValue(quote.createdAt),
+        expiresAt: toStringValue(quote.expiresAt),
+        checkoutSessionId: toNullableString(quote.checkoutSessionId),
+        planVersionId: toNullableString(quote.planVersionId),
+        addOnVersionIds: asStringRecord(quote.addOnVersionIds),
+        couponVersionId: toNullableString(quote.couponVersionId),
+        summary: toStringValue(quote.summary),
+      }
+      : null,
+    payments: asArray(raw.payments).map((payment) => ({
+      id: toStringValue(payment.id),
+      gateway: toStringValue(payment.gateway),
+      gatewayTransactionId: toStringValue(payment.gatewayTransactionId),
+      transactionType: toStringValue(payment.transactionType),
+      status: toStringValue(payment.status).toLowerCase(),
+      amount: toNumberValue(payment.amount),
+      currency: toStringValue(payment.currency, 'AUD'),
+      productType: toStringValue(payment.productType),
+      productId: toStringValue(payment.productId),
+      quoteId: toNullableString(payment.quoteId),
+      planVersionId: toNullableString(payment.planVersionId),
+      addOnVersionIds: asStringRecord(payment.addOnVersionIds),
+      couponVersionId: toNullableString(payment.couponVersionId),
+      createdAt: toStringValue(payment.createdAt),
+      updatedAt: toStringValue(payment.updatedAt),
+    })),
+    redemptions: asArray(raw.redemptions).map((redemption) => ({
+      id: toStringValue(redemption.id),
+      couponCode: toStringValue(redemption.couponCode),
+      couponId: toNullableString(redemption.couponId),
+      couponVersionId: toNullableString(redemption.couponVersionId),
+      userId: toStringValue(redemption.userId),
+      quoteId: toNullableString(redemption.quoteId),
+      checkoutSessionId: toNullableString(redemption.checkoutSessionId),
+      subscriptionId: toNullableString(redemption.subscriptionId),
+      discountAmount: toNumberValue(redemption.discountAmount),
+      currency: toStringValue(redemption.currency, 'AUD'),
+      status: toStringValue(redemption.status).toLowerCase(),
+      redeemedAt: toStringValue(redemption.redeemedAt),
+    })),
+    subscriptionItems: asArray(raw.subscriptionItems).map((item) => ({
+      id: toStringValue(item.id),
+      subscriptionId: toStringValue(item.subscriptionId),
+      itemType: toStringValue(item.itemType),
+      itemCode: toStringValue(item.itemCode),
+      addOnVersionId: toNullableString(item.addOnVersionId),
+      quantity: toNumberValue(item.quantity, 1),
+      status: toStringValue(item.status).toLowerCase(),
+      quoteId: toNullableString(item.quoteId),
+      checkoutSessionId: toNullableString(item.checkoutSessionId),
+      startsAt: toStringValue(item.startsAt),
+      endsAt: toNullableString(item.endsAt),
+    })),
+    events: asArray(raw.events).map((event) => ({
+      id: toStringValue(event.id),
+      eventType: toStringValue(event.eventType),
+      entityType: toStringValue(event.entityType),
+      entityId: toStringValue(event.entityId),
+      subscriptionId: toNullableString(event.subscriptionId),
+      quoteId: toNullableString(event.quoteId),
+      occurredAt: toStringValue(event.occurredAt),
+    })),
+    catalogAnchors: {
+      planVersionId: toNullableString(asRecord(raw.catalogAnchors).planVersionId),
+      addOnVersionIds: asStringRecord(asRecord(raw.catalogAnchors).addOnVersionIds),
+      couponVersionId: toNullableString(asRecord(raw.catalogAnchors).couponVersionId),
+      source: toStringValue(asRecord(raw.catalogAnchors).source, 'not_recorded'),
+    },
+    notRecorded: parseJsonArray(raw.notRecorded),
+    integrityFlags: parseJsonArray(raw.integrityFlags),
   };
 }
 

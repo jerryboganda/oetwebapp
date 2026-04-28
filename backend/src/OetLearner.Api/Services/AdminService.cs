@@ -4023,6 +4023,344 @@ public partial class AdminService(
         return new { total, page, pageSize, items };
     }
 
+    public async Task<AdminBillingInvoiceEvidenceResponse> GetBillingInvoiceEvidenceAsync(string invoiceId, CancellationToken ct)
+    {
+        var normalizedInvoiceId = invoiceId.Trim();
+        var invoice = await db.Invoices.AsNoTracking()
+            .FirstOrDefaultAsync(i => i.Id == normalizedInvoiceId, ct)
+            ?? throw ApiException.NotFound("billing_invoice_not_found", "Billing invoice not found.");
+
+        var userName = await db.Users.AsNoTracking()
+            .Where(user => user.Id == invoice.UserId)
+            .Select(user => user.DisplayName)
+            .FirstOrDefaultAsync(ct) ?? invoice.UserId;
+
+        BillingQuote? quote = null;
+        if (!string.IsNullOrWhiteSpace(invoice.QuoteId))
+        {
+            quote = await db.BillingQuotes.AsNoTracking()
+                .FirstOrDefaultAsync(q => q.Id == invoice.QuoteId, ct);
+        }
+
+        if (quote is null && !string.IsNullOrWhiteSpace(invoice.CheckoutSessionId))
+        {
+            quote = await db.BillingQuotes.AsNoTracking()
+                .FirstOrDefaultAsync(q => q.CheckoutSessionId == invoice.CheckoutSessionId, ct);
+        }
+
+        var quoteId = FirstNonEmpty(quote?.Id, invoice.QuoteId);
+        var checkoutSessionId = FirstNonEmpty(invoice.CheckoutSessionId, quote?.CheckoutSessionId);
+        var legacyTopUpGatewayPrefix = TryGetGatewayTransactionPrefixFromInvoiceId(invoice.Id);
+
+        var payments = await db.PaymentTransactions.AsNoTracking()
+            .Where(payment =>
+                (!string.IsNullOrWhiteSpace(quoteId) && payment.QuoteId == quoteId)
+                || (!string.IsNullOrWhiteSpace(checkoutSessionId) && payment.GatewayTransactionId == checkoutSessionId)
+                || (!string.IsNullOrWhiteSpace(legacyTopUpGatewayPrefix)
+                    && payment.LearnerUserId == invoice.UserId
+                    && payment.TransactionType == "wallet_top_up"
+                    && payment.Amount == invoice.Amount
+                    && payment.Currency == invoice.Currency
+                    && payment.GatewayTransactionId.StartsWith(legacyTopUpGatewayPrefix)))
+            .OrderByDescending(payment => payment.CreatedAt)
+            .ToListAsync(ct);
+
+        var redemptions = await db.BillingCouponRedemptions.AsNoTracking()
+            .Where(redemption =>
+                (!string.IsNullOrWhiteSpace(quoteId) && redemption.QuoteId == quoteId)
+                || (!string.IsNullOrWhiteSpace(checkoutSessionId) && redemption.CheckoutSessionId == checkoutSessionId))
+            .OrderByDescending(redemption => redemption.RedeemedAt)
+            .ToListAsync(ct);
+
+        var subscriptionItems = await db.SubscriptionItems.AsNoTracking()
+            .Where(item =>
+                (!string.IsNullOrWhiteSpace(quoteId) && item.QuoteId == quoteId)
+                || (!string.IsNullOrWhiteSpace(checkoutSessionId) && item.CheckoutSessionId == checkoutSessionId))
+            .OrderByDescending(item => item.StartsAt)
+            .ToListAsync(ct);
+
+        var eventEntityIds = new[]
+            {
+                invoice.Id,
+                checkoutSessionId
+            }
+            .Concat(payments.Select(payment => payment.GatewayTransactionId))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        var eventSubscriptionIds = redemptions.Select(redemption => redemption.SubscriptionId)
+            .Concat(subscriptionItems.Select(item => item.SubscriptionId))
+            .Where(id => !string.IsNullOrWhiteSpace(id))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        var events = await db.BillingEvents.AsNoTracking()
+            .Where(e =>
+                (e.UserId == null || e.UserId == invoice.UserId)
+                && ((!string.IsNullOrWhiteSpace(quoteId) && e.QuoteId == quoteId)
+                    || eventEntityIds.Contains(e.EntityId)
+                    || (e.SubscriptionId != null && eventSubscriptionIds.Contains(e.SubscriptionId))))
+            .OrderByDescending(e => e.OccurredAt)
+            .Take(25)
+            .ToListAsync(ct);
+
+        var catalogAnchors = BuildCatalogAnchorEvidence(invoice, quote, payments.FirstOrDefault());
+        var notRecorded = BuildInvoiceEvidenceNotRecorded(invoice, quote, payments, redemptions, events, catalogAnchors);
+        var integrityFlags = BuildInvoiceEvidenceIntegrityFlags(invoice, quote, payments, redemptions, legacyTopUpGatewayPrefix);
+
+        return new AdminBillingInvoiceEvidenceResponse(
+            new AdminBillingInvoiceEvidenceInvoiceResponse(
+                invoice.Id,
+                invoice.UserId,
+                userName,
+                invoice.Amount,
+                invoice.Currency,
+                invoice.Status,
+                invoice.Description,
+                invoice.IssuedAt,
+                invoice.PlanVersionId,
+                DeserializeStringDictionary(invoice.AddOnVersionIdsJson),
+                invoice.CouponVersionId,
+                invoice.QuoteId,
+                invoice.CheckoutSessionId),
+            quote is null ? null : MapInvoiceEvidenceQuote(quote),
+            payments.Select(MapInvoiceEvidencePayment).ToList(),
+            redemptions.Select(MapInvoiceEvidenceRedemption).ToList(),
+            subscriptionItems.Select(MapInvoiceEvidenceSubscriptionItem).ToList(),
+            events.Select(MapInvoiceEvidenceEvent).ToList(),
+            catalogAnchors,
+            notRecorded,
+            integrityFlags);
+    }
+
+    private static AdminBillingInvoiceEvidenceQuoteResponse MapInvoiceEvidenceQuote(BillingQuote quote)
+    {
+        var snapshot = JsonSupport.Deserialize<Dictionary<string, object?>>(quote.SnapshotJson, new Dictionary<string, object?>());
+        var items = JsonSupport.Deserialize<List<BillingQuoteLineItem>>(
+            JsonSupport.Serialize(snapshot.GetValueOrDefault("items") ?? Array.Empty<object>()),
+            []);
+        var summary = snapshot.TryGetValue("summary", out var summaryValue) ? summaryValue?.ToString() ?? string.Empty : string.Empty;
+
+        return new AdminBillingInvoiceEvidenceQuoteResponse(
+            quote.Id,
+            quote.Status.ToString().ToLowerInvariant(),
+            quote.Currency,
+            quote.SubtotalAmount,
+            quote.DiscountAmount,
+            quote.TotalAmount,
+            quote.PlanCode,
+            quote.CouponCode,
+            JsonSupport.Deserialize<List<string>>(quote.AddOnCodesJson, []),
+            items,
+            quote.CreatedAt,
+            quote.ExpiresAt,
+            quote.CheckoutSessionId,
+            quote.PlanVersionId,
+            DeserializeStringDictionary(quote.AddOnVersionIdsJson),
+            quote.CouponVersionId,
+            summary);
+    }
+
+    private static AdminBillingInvoiceEvidencePaymentResponse MapInvoiceEvidencePayment(PaymentTransaction payment)
+        => new(
+            payment.Id.ToString("D"),
+            payment.Gateway,
+            payment.GatewayTransactionId,
+            payment.TransactionType,
+            payment.Status,
+            payment.Amount,
+            payment.Currency,
+            payment.ProductType ?? string.Empty,
+            payment.ProductId ?? string.Empty,
+            payment.QuoteId,
+            payment.PlanVersionId,
+            DeserializeStringDictionary(payment.AddOnVersionIdsJson),
+            payment.CouponVersionId,
+            payment.CreatedAt,
+            payment.UpdatedAt);
+
+    private static AdminBillingInvoiceEvidenceRedemptionResponse MapInvoiceEvidenceRedemption(BillingCouponRedemption redemption)
+        => new(
+            redemption.Id,
+            redemption.CouponCode,
+            redemption.CouponId,
+            redemption.CouponVersionId,
+            redemption.UserId,
+            redemption.QuoteId,
+            redemption.CheckoutSessionId,
+            redemption.SubscriptionId,
+            redemption.DiscountAmount,
+            redemption.Currency,
+            redemption.Status.ToString().ToLowerInvariant(),
+            redemption.RedeemedAt);
+
+    private static AdminBillingInvoiceEvidenceSubscriptionItemResponse MapInvoiceEvidenceSubscriptionItem(SubscriptionItem item)
+        => new(
+            item.Id,
+            item.SubscriptionId,
+            item.ItemType,
+            item.ItemCode,
+            item.AddOnVersionId,
+            item.Quantity,
+            item.Status.ToString().ToLowerInvariant(),
+            item.QuoteId,
+            item.CheckoutSessionId,
+            item.StartsAt,
+            item.EndsAt);
+
+    private static AdminBillingInvoiceEvidenceEventResponse MapInvoiceEvidenceEvent(BillingEvent billingEvent)
+        => new(
+            billingEvent.Id,
+            billingEvent.EventType,
+            billingEvent.EntityType,
+            billingEvent.EntityId ?? string.Empty,
+            billingEvent.SubscriptionId,
+            billingEvent.QuoteId,
+            billingEvent.OccurredAt);
+
+    private static AdminBillingInvoiceEvidenceCatalogAnchorResponse BuildCatalogAnchorEvidence(
+        Invoice invoice,
+        BillingQuote? quote,
+        PaymentTransaction? payment)
+    {
+        var invoiceAddOnVersionIds = DeserializeStringDictionary(invoice.AddOnVersionIdsJson);
+        if (!string.IsNullOrWhiteSpace(invoice.PlanVersionId) || invoiceAddOnVersionIds.Count > 0 || !string.IsNullOrWhiteSpace(invoice.CouponVersionId))
+        {
+            return new AdminBillingInvoiceEvidenceCatalogAnchorResponse(invoice.PlanVersionId, invoiceAddOnVersionIds, invoice.CouponVersionId, "invoice");
+        }
+
+        if (quote is not null)
+        {
+            var quoteAddOnVersionIds = DeserializeStringDictionary(quote.AddOnVersionIdsJson);
+            if (!string.IsNullOrWhiteSpace(quote.PlanVersionId) || quoteAddOnVersionIds.Count > 0 || !string.IsNullOrWhiteSpace(quote.CouponVersionId))
+            {
+                return new AdminBillingInvoiceEvidenceCatalogAnchorResponse(quote.PlanVersionId, quoteAddOnVersionIds, quote.CouponVersionId, "quote");
+            }
+        }
+
+        if (payment is not null)
+        {
+            var paymentAddOnVersionIds = DeserializeStringDictionary(payment.AddOnVersionIdsJson);
+            if (!string.IsNullOrWhiteSpace(payment.PlanVersionId) || paymentAddOnVersionIds.Count > 0 || !string.IsNullOrWhiteSpace(payment.CouponVersionId))
+            {
+                return new AdminBillingInvoiceEvidenceCatalogAnchorResponse(payment.PlanVersionId, paymentAddOnVersionIds, payment.CouponVersionId, "payment");
+            }
+        }
+
+        return new AdminBillingInvoiceEvidenceCatalogAnchorResponse(null, new Dictionary<string, string>(), null, "not_recorded");
+    }
+
+    private static IReadOnlyList<string> BuildInvoiceEvidenceNotRecorded(
+        Invoice invoice,
+        BillingQuote? quote,
+        IReadOnlyCollection<PaymentTransaction> payments,
+        IReadOnlyCollection<BillingCouponRedemption> redemptions,
+        IReadOnlyCollection<BillingEvent> events,
+        AdminBillingInvoiceEvidenceCatalogAnchorResponse catalogAnchors)
+    {
+        var notRecorded = new List<string>();
+        if (quote is null)
+        {
+            notRecorded.Add("quote");
+        }
+
+        if (payments.Count == 0)
+        {
+            notRecorded.Add("payment");
+        }
+
+        if (redemptions.Count == 0 && (!string.IsNullOrWhiteSpace(invoice.CouponVersionId) || !string.IsNullOrWhiteSpace(quote?.CouponCode)))
+        {
+            notRecorded.Add("couponRedemption");
+        }
+
+        if (events.Count == 0)
+        {
+            notRecorded.Add("events");
+        }
+
+        if (catalogAnchors.Source == "not_recorded")
+        {
+            notRecorded.Add("catalogAnchors");
+        }
+
+        return notRecorded;
+    }
+
+    private static IReadOnlyList<string> BuildInvoiceEvidenceIntegrityFlags(
+        Invoice invoice,
+        BillingQuote? quote,
+        IReadOnlyCollection<PaymentTransaction> payments,
+        IReadOnlyCollection<BillingCouponRedemption> redemptions,
+        string? legacyTopUpGatewayPrefix)
+    {
+        var flags = new List<string>();
+        if (quote is not null)
+        {
+            if (quote.UserId != invoice.UserId)
+            {
+                flags.Add("invoice_quote_user_mismatch");
+            }
+
+            if (invoice.Currency != quote.Currency)
+            {
+                flags.Add("invoice_quote_currency_mismatch");
+            }
+
+            if (invoice.Amount != quote.TotalAmount)
+            {
+                flags.Add("invoice_quote_total_mismatch");
+            }
+        }
+
+        foreach (var payment in payments)
+        {
+            if (payment.LearnerUserId != invoice.UserId)
+            {
+                flags.Add("invoice_payment_user_mismatch");
+            }
+
+            if (payment.Currency != invoice.Currency)
+            {
+                flags.Add("invoice_payment_currency_mismatch");
+            }
+
+            if (payment.Amount != invoice.Amount)
+            {
+                flags.Add("invoice_payment_amount_mismatch");
+            }
+        }
+
+        foreach (var redemption in redemptions)
+        {
+            if (redemption.UserId != invoice.UserId)
+            {
+                flags.Add("invoice_redemption_user_mismatch");
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(legacyTopUpGatewayPrefix)
+            && payments.Count(payment => payment.GatewayTransactionId.StartsWith(legacyTopUpGatewayPrefix, StringComparison.OrdinalIgnoreCase)) > 1)
+        {
+            flags.Add("legacy_wallet_top_up_correlation_ambiguous");
+        }
+
+        return flags.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private static Dictionary<string, string> DeserializeStringDictionary(string? json)
+        => string.IsNullOrWhiteSpace(json)
+            ? new Dictionary<string, string>()
+            : JsonSupport.Deserialize<Dictionary<string, string>>(json, new Dictionary<string, string>());
+
+    private static string? FirstNonEmpty(params string?[] values)
+        => values.FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
+
+    private static string? TryGetGatewayTransactionPrefixFromInvoiceId(string invoiceId)
+        => invoiceId.StartsWith("inv-topup-", StringComparison.OrdinalIgnoreCase)
+            ? invoiceId["inv-topup-".Length..]
+            : null;
+
     // ════════════════════════════════════════════
     //  Review Ops
     // ════════════════════════════════════════════

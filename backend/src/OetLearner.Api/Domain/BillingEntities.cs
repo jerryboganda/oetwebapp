@@ -265,7 +265,7 @@ public class BillingCouponRedemption
     [MaxLength(64)]
     public string QuoteId { get; set; } = default!;
 
-    [MaxLength(64)]
+    [MaxLength(256)]
     public string? CheckoutSessionId { get; set; }
 
     [MaxLength(64)]
@@ -327,7 +327,7 @@ public class BillingQuote
 
     public DateTimeOffset ExpiresAt { get; set; }
 
-    [MaxLength(64)]
+    [MaxLength(256)]
     public string? CheckoutSessionId { get; set; }
 
     [MaxLength(64)]
@@ -359,7 +359,7 @@ public class BillingEvent
     [MaxLength(64)]
     public string EntityType { get; set; } = default!;
 
-    [MaxLength(64)]
+    [MaxLength(256)]
     public string? EntityId { get; set; }
 
     [MaxLength(4096)]
@@ -398,7 +398,7 @@ public class SubscriptionItem
     [MaxLength(64)]
     public string? QuoteId { get; set; }
 
-    [MaxLength(64)]
+    [MaxLength(256)]
     public string? CheckoutSessionId { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; }

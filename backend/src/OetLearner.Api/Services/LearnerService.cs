@@ -6253,8 +6253,13 @@ public partial class LearnerService(
                 Amount = transaction.Amount,
                 Currency = transaction.Currency,
                 Status = "Paid",
-                Description = $"Wallet top-up: {credits} credits + {bonus} bonus credits"
+                Description = $"Wallet top-up: {credits} credits + {bonus} bonus credits",
+                CheckoutSessionId = transaction.GatewayTransactionId
             });
+        }
+        else
+        {
+            existingInvoice.CheckoutSessionId ??= transaction.GatewayTransactionId;
         }
 
         db.BillingEvents.Add(new BillingEvent

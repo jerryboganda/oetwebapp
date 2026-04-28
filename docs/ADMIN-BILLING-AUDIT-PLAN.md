@@ -37,7 +37,7 @@ The backend already has useful primitives: `BillingPlan`, `BillingAddOn`, `Billi
 5. Catalog changes mutate plans and prices in place. Existing subscriptions and historical invoices can drift if a code, price, interval, or entitlement is edited after purchase. Versioned catalog snapshots are needed.
 6. Entitlement logic is fragmented. Content, grammar, AI quotas, and sponsor access should eventually use one entitlement resolver that combines subscription state, add-ons, free-tier rules, freeze state, and sponsor seats.
 7. Webhook retry is not a full inbox processor. Failed webhook rows can be marked for retry, but the operational processor and reconciliation workflow need to be explicit and observable.
-8. Invoice evidence is minimal. Invoices are local records with plain text downloads; production billing needs provider invoice IDs, line items, tax/VAT fields, receipt URLs, PDF artifacts, and sponsor ownership.
+8. Invoice evidence is partially improved. Admins can now inspect local invoice, quote, payment, coupon, subscription-item, catalog-anchor, and billing-event evidence from the invoice list, but production billing still needs provider invoice IDs, line items, tax/VAT fields, receipt URLs, PDF artifacts, and sponsor ownership.
 9. Admin validation is still too loose. JSON entitlement fields, coupon windows, discount caps, interval/currency values, compatible plan references, and usage limits need stronger server-side validation and focused tests.
 10. Test coverage is thin around money-moving behavior. Existing tests cover route shape and hosted checkout configuration, but not enough successful webhook application, coupon limits, add-on compatibility, sponsor billing, or admin mutation behavior.
 
@@ -68,7 +68,7 @@ Known residual risk:
 
 ### Phase 2: Catalog Validation And Versioning
 
-Status: Phase 2A admin catalog validation hardening, Phase 2B-1 quote-time fulfillment snapshots, Phase 2B-2A immutable billing catalog version anchors, and Phase 2B-2B admin catalog version history are implemented. The current model creates immutable plan, add-on, and coupon version rows, backfills baseline v1 rows during migration, stores active/latest version pointers on mutable catalog rows, writes version references onto quotes, subscriptions, subscription items, invoices, payment transactions, and coupon redemptions, and exposes read-only admin history timelines for catalog operators. Fulfillment still treats the quote snapshot as the source of truth; version references are audit/reporting anchors and correlation evidence, not the authority for what gets granted after checkout.
+Status: Phase 2A admin catalog validation hardening, Phase 2B-1 quote-time fulfillment snapshots, Phase 2B-2A immutable billing catalog version anchors, Phase 2B-2B admin catalog version history, and Phase 2B-2C admin invoice evidence inspection are implemented. The current model creates immutable plan, add-on, and coupon version rows, backfills baseline v1 rows during migration, stores active/latest version pointers on mutable catalog rows, writes version references onto quotes, subscriptions, subscription items, invoices, payment transactions, and coupon redemptions, exposes read-only admin history timelines for catalog operators, and exposes a read-only invoice evidence drawer for local checkout/payment/coupon/event correlation. Fulfillment still treats the quote snapshot as the source of truth; version references are audit/reporting anchors and correlation evidence, not the authority for what gets granted after checkout.
 
 Implemented scope:
 
@@ -79,12 +79,15 @@ Implemented scope:
 - Treat catalog codes as immutable after creation; mutable display, pricing, entitlement, and status fields move forward through appended versions.
 - Keep checkout completion fulfillment based on `BillingQuote.SnapshotJson`, with version IDs retained for audit and downstream reporting.
 - Expose read-only plan, add-on, and coupon version-history endpoints plus an admin drawer timeline that lazy-loads the selected catalog item's history.
+- Expose read-only invoice evidence from the invoice list, including curated invoice, quote, payment transaction, coupon redemption, subscription item, catalog anchor, and event timeline sections. Raw payment metadata, billing-event payloads, and webhook payloads are not returned.
 
 Migration/deploy preflight:
 
 - Apply and inspect `20260428120000_AddBillingImmutableCatalogVersioning` against a production-like database before deploy.
 - Confirm existing plans, add-ons, and coupons receive v1 version rows and matching `ActiveVersionId` / `LatestVersionId` values.
 - Confirm new nullable version-reference columns and `{}` JSON defaults do not break existing subscriptions, invoices, payment transactions, or coupon redemptions.
+- Apply and inspect `20260428133000_WidenBillingCheckoutReferences` so local checkout/session evidence can hold provider transaction identifiers up to 256 characters.
+- Treat rollback of `20260428133000_WidenBillingCheckoutReferences` as restore-or-forward-fix once longer provider identifiers are written, because narrowing those columns back to 64 characters may fail if long values exist.
 - Take a database backup before production migration, then run backend tests and a checkout smoke path after deploy.
 
 Acceptance criteria:
@@ -95,10 +98,11 @@ Acceptance criteria:
 - New catalog edits append immutable versions rather than mutating prior version evidence.
 - New checkout, payment, invoice, subscription, and coupon redemption rows retain quote/version audit anchors.
 - Admin billing operators can inspect catalog version history newest-first, including active/latest markers and compact catalog-field summaries, without mixing in mutable payment or redemption evidence.
+- Admin billing operators can inspect the local evidence behind an invoice without mutating billing state or exposing raw provider/webhook payloads.
 
-Residual risk after Phase 2B-2B:
+Residual risk after Phase 2B-2C:
 
-- Provider price mapping, transaction-level evidence views, and version-aware reporting/backfill are still incomplete.
+- Provider price mapping, provider invoice/receipt evidence, refund/dispute visibility, webhook inbox processing, and version-aware reporting/backfill are still incomplete.
 - Database-level immutability hardening is not yet enforced with triggers, restrictive permissions, or append-only database constraints; immutability is currently application-enforced.
 - Coupon usage limits are improved with parent coupon/version references, but true race-safe coupon inventory still needs a larger transactional design, provider event reconciliation, and concurrency tests.
 

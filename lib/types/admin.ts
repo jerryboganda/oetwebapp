@@ -307,6 +307,128 @@ export interface AdminBillingInvoice {
   plan: string;
 }
 
+export interface AdminBillingQuoteLineItem {
+  kind: string;
+  code: string;
+  name: string;
+  amount: number;
+  currency: string;
+  quantity: number;
+  description?: string | null;
+}
+
+export interface AdminBillingInvoiceEvidenceInvoice {
+  id: string;
+  userId: string;
+  userName: string;
+  amount: number;
+  currency: string;
+  status: string;
+  description: string;
+  issuedAt: string;
+  planVersionId: string | null;
+  addOnVersionIds: Record<string, string>;
+  couponVersionId: string | null;
+  quoteId: string | null;
+  checkoutSessionId: string | null;
+}
+
+export interface AdminBillingInvoiceEvidenceQuote {
+  id: string;
+  status: string;
+  currency: string;
+  subtotalAmount: number;
+  discountAmount: number;
+  totalAmount: number;
+  planCode: string | null;
+  couponCode: string | null;
+  addOnCodes: string[];
+  items: AdminBillingQuoteLineItem[];
+  createdAt: string;
+  expiresAt: string;
+  checkoutSessionId: string | null;
+  planVersionId: string | null;
+  addOnVersionIds: Record<string, string>;
+  couponVersionId: string | null;
+  summary: string;
+}
+
+export interface AdminBillingInvoiceEvidencePayment {
+  id: string;
+  gateway: string;
+  gatewayTransactionId: string;
+  transactionType: string;
+  status: string;
+  amount: number;
+  currency: string;
+  productType: string;
+  productId: string;
+  quoteId: string | null;
+  planVersionId: string | null;
+  addOnVersionIds: Record<string, string>;
+  couponVersionId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminBillingInvoiceEvidenceRedemption {
+  id: string;
+  couponCode: string;
+  couponId: string | null;
+  couponVersionId: string | null;
+  userId: string;
+  quoteId: string | null;
+  checkoutSessionId: string | null;
+  subscriptionId: string | null;
+  discountAmount: number;
+  currency: string;
+  status: string;
+  redeemedAt: string;
+}
+
+export interface AdminBillingInvoiceEvidenceSubscriptionItem {
+  id: string;
+  subscriptionId: string;
+  itemType: string;
+  itemCode: string;
+  addOnVersionId: string | null;
+  quantity: number;
+  status: string;
+  quoteId: string | null;
+  checkoutSessionId: string | null;
+  startsAt: string;
+  endsAt: string | null;
+}
+
+export interface AdminBillingInvoiceEvidenceEvent {
+  id: string;
+  eventType: string;
+  entityType: string;
+  entityId: string;
+  subscriptionId: string | null;
+  quoteId: string | null;
+  occurredAt: string;
+}
+
+export interface AdminBillingInvoiceEvidenceCatalogAnchors {
+  planVersionId: string | null;
+  addOnVersionIds: Record<string, string>;
+  couponVersionId: string | null;
+  source: string;
+}
+
+export interface AdminBillingInvoiceEvidence {
+  invoice: AdminBillingInvoiceEvidenceInvoice;
+  quote: AdminBillingInvoiceEvidenceQuote | null;
+  payments: AdminBillingInvoiceEvidencePayment[];
+  redemptions: AdminBillingInvoiceEvidenceRedemption[];
+  subscriptionItems: AdminBillingInvoiceEvidenceSubscriptionItem[];
+  events: AdminBillingInvoiceEvidenceEvent[];
+  catalogAnchors: AdminBillingInvoiceEvidenceCatalogAnchors;
+  notRecorded: string[];
+  integrityFlags: string[];
+}
+
 export interface AdminBillingAddOn {
   id: string;
   code: string;

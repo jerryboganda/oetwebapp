@@ -116,3 +116,107 @@ public record AdminBillingCatalogVersionResponse(
 public record AdminBillingCatalogVersionHistoryResponse(
     AdminBillingCatalogSubjectResponse Subject,
     IReadOnlyList<AdminBillingCatalogVersionResponse> Items);
+
+public record AdminBillingInvoiceEvidenceInvoiceResponse(
+    string Id,
+    string UserId,
+    string UserName,
+    decimal Amount,
+    string Currency,
+    string Status,
+    string Description,
+    DateTimeOffset IssuedAt,
+    string? PlanVersionId,
+    Dictionary<string, string> AddOnVersionIds,
+    string? CouponVersionId,
+    string? QuoteId,
+    string? CheckoutSessionId);
+
+public record AdminBillingInvoiceEvidenceQuoteResponse(
+    string Id,
+    string Status,
+    string Currency,
+    decimal SubtotalAmount,
+    decimal DiscountAmount,
+    decimal TotalAmount,
+    string? PlanCode,
+    string? CouponCode,
+    IReadOnlyList<string> AddOnCodes,
+    IReadOnlyList<BillingQuoteLineItem> Items,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset ExpiresAt,
+    string? CheckoutSessionId,
+    string? PlanVersionId,
+    Dictionary<string, string> AddOnVersionIds,
+    string? CouponVersionId,
+    string Summary);
+
+public record AdminBillingInvoiceEvidencePaymentResponse(
+    string Id,
+    string Gateway,
+    string GatewayTransactionId,
+    string TransactionType,
+    string Status,
+    decimal Amount,
+    string Currency,
+    string ProductType,
+    string ProductId,
+    string? QuoteId,
+    string? PlanVersionId,
+    Dictionary<string, string> AddOnVersionIds,
+    string? CouponVersionId,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
+public record AdminBillingInvoiceEvidenceRedemptionResponse(
+    string Id,
+    string CouponCode,
+    string? CouponId,
+    string? CouponVersionId,
+    string UserId,
+    string? QuoteId,
+    string? CheckoutSessionId,
+    string? SubscriptionId,
+    decimal DiscountAmount,
+    string Currency,
+    string Status,
+    DateTimeOffset RedeemedAt);
+
+public record AdminBillingInvoiceEvidenceSubscriptionItemResponse(
+    string Id,
+    string SubscriptionId,
+    string ItemType,
+    string ItemCode,
+    string? AddOnVersionId,
+    int Quantity,
+    string Status,
+    string? QuoteId,
+    string? CheckoutSessionId,
+    DateTimeOffset StartsAt,
+    DateTimeOffset? EndsAt);
+
+public record AdminBillingInvoiceEvidenceEventResponse(
+    string Id,
+    string EventType,
+    string EntityType,
+    string EntityId,
+    string? SubscriptionId,
+    string? QuoteId,
+    DateTimeOffset OccurredAt);
+
+public record AdminBillingInvoiceEvidenceCatalogAnchorResponse(
+    string? PlanVersionId,
+    Dictionary<string, string> AddOnVersionIds,
+    string? CouponVersionId,
+    string Source);
+
+public record AdminBillingInvoiceEvidenceResponse(
+    AdminBillingInvoiceEvidenceInvoiceResponse Invoice,
+    AdminBillingInvoiceEvidenceQuoteResponse? Quote,
+    IReadOnlyList<AdminBillingInvoiceEvidencePaymentResponse> Payments,
+    IReadOnlyList<AdminBillingInvoiceEvidenceRedemptionResponse> Redemptions,
+    IReadOnlyList<AdminBillingInvoiceEvidenceSubscriptionItemResponse> SubscriptionItems,
+    IReadOnlyList<AdminBillingInvoiceEvidenceEventResponse> Events,
+    AdminBillingInvoiceEvidenceCatalogAnchorResponse CatalogAnchors,
+    IReadOnlyList<string> NotRecorded,
+    IReadOnlyList<string> IntegrityFlags);
