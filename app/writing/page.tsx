@@ -206,7 +206,7 @@ export default function WritingHome() {
           icon={PenTool}
           accent="amber"
           title="Choose the next writing task that moves your score"
-          description="Pick the right letter task, focus on the criteria that matter, and request expert review when it counts."
+          description="Pick the right letter task, focus on the criteria that matter, and request tutor review when it counts."
           highlights={[
             { icon: Star, label: 'Recommended next', value: recommended ? 'Task ready' : 'Choose a task' },
             { icon: Award, label: 'Review credits', value: `${credits} available` },

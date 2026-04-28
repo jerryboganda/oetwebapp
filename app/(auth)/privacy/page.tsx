@@ -67,7 +67,7 @@ const sections: LegalSection[] = [
     id: 'lawful-bases',
     title: 'Why we process it (lawful bases)',
     bullets: [
-      'Performance of contract — to provide the Service you signed up for, including AI feedback, expert review, and mock scoring.',
+      'Performance of contract — to provide the Service you signed up for, including AI feedback, tutor review, and mock scoring.',
       'Legitimate interests — keeping the Service secure, preventing abuse, improving features, measuring product quality, and running de-identified analytics.',
       'Legal obligation — accounting, tax, fraud prevention, response to lawful requests.',
       'Consent — optional marketing emails, product research interviews, and any non-essential cookies. You can withdraw consent at any time without affecting prior processing.',
@@ -79,7 +79,7 @@ const sections: LegalSection[] = [
     bullets: [
       'Account data: while your account is active, plus up to 24 months after closure to handle re-activation, support disputes, and statutory obligations.',
       'Speaking and conversation audio: by default 30 days, configurable in Settings → Privacy. Transcripts and scores have longer retention (1 year) for progress tracking.',
-      'Writing submissions and expert feedback: retained while your account is active so you can revisit feedback over your prep journey.',
+      'Writing submissions and tutor feedback: retained while your account is active so you can revisit feedback over your prep journey.',
       'Billing records: 7 years (UK accounting requirement).',
       'Security logs: up to 90 days for incident investigation.',
     ],

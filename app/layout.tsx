@@ -69,7 +69,7 @@ const apiWebSocketOrigins = apiOrigins.map((origin) =>
 
 export const metadata: Metadata = {
   title: 'OET Prep — Learner Platform',
-  description: 'Prepare for the Occupational English Test with personalised practice, AI feedback, and expert review.',
+  description: 'Prepare for the Occupational English Test with personalised practice, AI feedback, and tutor review.',
   manifest: '/manifest.json',
   icons: {
     icon: [
@@ -85,7 +85,7 @@ export const metadata: Metadata = {
   },
   openGraph: {
     title: 'OET Prep — Learner Platform',
-    description: 'Prepare for the OET with personalised practice, AI feedback, and expert review.',
+    description: 'Prepare for the OET with personalised practice, AI feedback, and tutor review.',
     type: 'website',
   },
   robots: { index: true, follow: true },

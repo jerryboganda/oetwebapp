@@ -49,7 +49,7 @@ export default function AiPreFillPage() {
       <div className="max-w-4xl mx-auto px-4 py-8">
         <div className="mb-8">
           <h1 className="text-2xl font-bold">AI Pre-Fill Assistant</h1>
-          <p className="text-muted-foreground mt-1">Use AI-suggested scores as a starting point for your expert review.</p>
+          <p className="text-muted-foreground mt-1">Use AI-suggested scores as a starting point for your tutor review.</p>
         </div>
 
         <MotionSection className="space-y-6">

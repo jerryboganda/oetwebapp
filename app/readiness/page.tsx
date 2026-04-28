@@ -341,7 +341,7 @@ export default function ReadinessCenter() {
                   <span className="text-base font-black text-navy">{data.evidence.practiceQuestions}</span>
                 </div>
                 <div className="flex items-center justify-between py-3 border-b border-border">
-                  <span className="text-sm font-medium text-muted">Expert Reviews</span>
+                  <span className="text-sm font-medium text-muted">Tutor Reviews</span>
                   <span className="text-base font-black text-navy">{data.evidence.expertReviews}</span>
                 </div>
               </div>

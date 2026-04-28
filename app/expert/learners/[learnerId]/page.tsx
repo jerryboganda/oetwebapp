@@ -217,7 +217,7 @@ export default function AssignedLearnerPage() {
                   {learner.priorReviews.length === 0 ? (
                     <Card className="border-slate-200 shadow-sm">
                       <CardContent className="p-4">
-                        <p className="text-sm italic text-muted">No prior expert feedback is available for this learner.</p>
+                        <p className="text-sm italic text-muted">No prior tutor feedback is available for this learner.</p>
                       </CardContent>
                     </Card>
                   ) : (

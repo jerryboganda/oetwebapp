@@ -44,7 +44,7 @@ export function ReviewRequestDrawer({
   const hasCredits = availableCredits >= creditCost;
 
   return (
-    <Drawer open={open} onClose={onClose} title="Request Expert Review" className={className}>
+    <Drawer open={open} onClose={onClose} title="Request Tutor Review" className={className}>
       <div className="flex flex-col gap-5">
         {submissionTitle && (
           <MotionSection delayIndex={0}>

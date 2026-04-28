@@ -82,7 +82,7 @@ export function PronunciationResultsCard(props: PronunciationResultsCardProps) {
             </div>
             <p className="mt-1 max-w-lg text-xs text-muted">
               Advisory projection from this pronunciation attempt. The authoritative Speaking band
-              is set by expert review of a full Speaking role-play — pass is 350/500 (universal).
+              is set by tutor review of a full Speaking role-play — pass is 350/500 (universal).
             </p>
           </div>
           <Info className="h-5 w-5 shrink-0 text-muted" aria-hidden />
@@ -187,7 +187,7 @@ export function PronunciationResultsCard(props: PronunciationResultsCardProps) {
 
       <div className="text-xs text-muted">
         Scoring provider: <span className="font-mono">{props.provider}</span>. Results are advisory;
-        authoritative Speaking bands require expert review.
+        authoritative Speaking bands require tutor review.
       </div>
     </div>
   );

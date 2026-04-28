@@ -86,11 +86,11 @@ export default function SubmissionEvidencePage() {
                 action={(
                   <Button onClick={() => router.push(requestReviewHref)}>
                     <Send className="h-4 w-4" />
-                    Request expert review
+                    Request tutor review
                   </Button>
                 )}
               >
-                This submission is eligible for productive-skill expert review. Continue when you are ready to spend credits.
+                This submission is eligible for productive-skill tutor review. Continue when you are ready to spend credits.
               </InlineAlert>
             ) : null}
 
@@ -147,7 +147,7 @@ export default function SubmissionEvidencePage() {
                   {requestReviewHref ? (
                     <Button fullWidth onClick={() => router.push(requestReviewHref)}>
                       <Send className="h-4 w-4" />
-                      Request expert review
+                      Request tutor review
                     </Button>
                   ) : null}
                   <Button variant="ghost" fullWidth onClick={() => router.push('/submissions')}>

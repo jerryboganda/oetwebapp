@@ -540,7 +540,7 @@ export default function WritingReviewWorkspace() {
                 </div>
                 {learnerContext.priorReviews[0] ? (
                   <div className="mt-3 rounded-lg bg-slate-50 p-3">
-                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Latest prior expert feedback</p>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">Latest prior tutor feedback</p>
                     <p className="mt-1 text-sm text-navy">{learnerContext.priorReviews[0].overallComment}</p>
                   </div>
                 ) : null}
@@ -550,7 +550,7 @@ export default function WritingReviewWorkspace() {
             {reviewDetail?.aiSuggestedScores && Object.keys(reviewDetail.aiSuggestedScores).length > 0 && (
               <div className="rounded-xl border border-blue-200 bg-blue-50 p-3">
                 <p className="text-sm font-semibold text-blue-900">AI Reference Scores</p>
-                <p className="mt-1 text-xs text-blue-700">Visible by default as advisory guidance only. These are not the final expert scores.</p>
+                <p className="mt-1 text-xs text-blue-700">Visible by default as advisory guidance only. These are not the final tutor scores.</p>
                 <div className="mt-3 grid grid-cols-2 gap-2">
                   {CRITERIA.map(({ key, label }) => (
                     <div key={`ai-${key}`} className="rounded-lg bg-white px-3 py-2 text-sm text-navy">

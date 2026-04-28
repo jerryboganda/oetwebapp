@@ -165,7 +165,7 @@ export default function SpeakingHome() {
           icon={Mic}
           accent="purple"
           title="Keep the next speaking move and recent evidence in view"
-          description="Choose your next role play, drill targeted weaknesses, and review recent recordings before requesting expert feedback."
+          description="Choose your next role play, drill targeted weaknesses, and review recent recordings before requesting tutor feedback."
           highlights={[
             { icon: Star, label: 'Review credits', value: `${credits} available` },
             { icon: Mic, label: 'Role plays', value: featuredTasks.length > 0 ? `${featuredTasks.length} ready` : 'Browse library' },
@@ -408,7 +408,7 @@ export default function SpeakingHome() {
               <LearnerSurfaceSectionHeader
                 eyebrow="Evidence"
                 title="Recent Speaking Evidence"
-                description="Review your latest attempts to decide your next step — another role play, a focused drill, or expert feedback."
+                description="Review your latest attempts to decide your next step — another role play, a focused drill, or tutor feedback."
                 action={<Link href="/submissions" className="text-sm font-bold text-primary hover:underline">View Full History</Link>}
                 className="mb-4"
               />

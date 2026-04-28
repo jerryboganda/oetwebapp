@@ -107,7 +107,7 @@ describe('ExpertDashboardPage', () => {
     });
   });
 
-  it('renders the learner-style expert dashboard surface and keeps the main routes intact', async () => {
+  it('renders the learner-style tutor dashboard surface and keeps the main routes intact', async () => {
     renderWithRouter(<ExpertDashboardPage />, { router: { push: mockPush } });
 
     expect(await screen.findByRole('heading', { name: /keep owned reviews and exam signals in view/i })).toBeInTheDocument();

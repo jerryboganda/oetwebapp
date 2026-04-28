@@ -290,7 +290,7 @@ export default function ReviewOpsPage() {
           <p className="mt-1 font-medium capitalize text-navy">{item.subtestCode}</p>
         </div>
         <div className="rounded-2xl bg-background-light px-3 py-2">
-          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Expert</p>
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Tutor</p>
           <p className="mt-1 font-medium text-navy">{item.assignedExpertId ?? 'Unassigned'}</p>
         </div>
       </div>
@@ -506,7 +506,7 @@ export default function ReviewOpsPage() {
         >
           <AdminRouteSectionHeader
             title="Review Operations"
-            description="Manage productive-skill review queue health, expert assignment, and failure recovery from one operational view."
+            description="Manage productive-skill review queue health, tutor assignment, and failure recovery from one operational view."
           />
         </motion.div>
 
@@ -658,7 +658,7 @@ export default function ReviewOpsPage() {
         <Modal open={Boolean(assignTarget)} onClose={() => setAssignTarget(null)} title="Assign Review">
           <div className="space-y-4 py-2">
             <div className="rounded-xl border border-border bg-background-light p-3 text-sm text-muted">
-              {assignTarget ? `Assign review ${assignTarget.id} for ${assignTarget.learnerName} (${assignTarget.subtestCode}).` : 'Select an expert to continue.'}
+              {assignTarget ? `Assign review ${assignTarget.id} for ${assignTarget.learnerName} (${assignTarget.subtestCode}).` : 'Select a tutor to continue.'}
             </div>
             <Select
               label="Expert"

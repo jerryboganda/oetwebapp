@@ -169,7 +169,7 @@ export default function ScoringQualityPage() {
                   </div>
                 </div>
                 <p className="text-xs text-gray-500 mt-3 text-center">
-                  Agreement is measured as the percentage of reviews where the expert-AI score difference ≤ 1.0 point.
+                  Agreement is measured as the percentage of reviews where the tutor-AI score difference ≤ 1.0 point.
                 </p>
               </CardContent>
             </Card>

@@ -11,7 +11,7 @@ vi.mock('@/contexts/auth-context', () => ({
 vi.mock('@/lib/hooks/use-expert-auth', () => ({
   useExpertAuth: () => ({
     expert: {
-      displayName: 'Expert Console',
+      displayName: 'Tutor Console',
       email: 'expert@example.com',
     },
   }),
@@ -68,7 +68,7 @@ describe('ExpertLayout', () => {
     expect(screen.queryByTestId('app-shell')).not.toBeInTheDocument();
   });
 
-  it('keeps expert review workspaces on the distraction-free app shell', () => {
+  it('keeps tutor review workspaces on the distraction-free app shell', () => {
     renderWithRouter(
       <ExpertLayout>
         <div>Review workspace</div>

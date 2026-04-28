@@ -3,7 +3,7 @@ import ReviewPage from '../review/page';
 
 export const metadata: Metadata = {
   title: 'Reviews — OET Prep',
-  description: 'Track expert review requests and returned feedback across your attempts.',
+  description: 'Track tutor review requests and returned feedback across your attempts.',
 };
 
 // `/app/reviews` is the blueprint-canonical learner reviews route. It renders

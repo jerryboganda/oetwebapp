@@ -324,11 +324,11 @@ export default function MockCenter() {
     title:
       availableCredits > 0
         ? 'Writing and speaking reviews are available'
-        : 'Top up review credits to unlock expert feedback',
+        : 'Top up review credits to unlock tutor feedback',
     description:
       reviewSlaLabel
-        ? `Use review credits to add expert feedback after high-value mock attempts. Credits are reserved when you start and consumed only after the review is delivered. ${reviewSlaLabel}.`
-        : 'Use review credits to add expert feedback after high-value mock attempts. Credits are reserved when you start and consumed only after the review is delivered.',
+        ? `Use review credits to add tutor feedback after high-value mock attempts. Credits are reserved when you start and consumed only after the review is delivered. ${reviewSlaLabel}.`
+        : 'Use review credits to add tutor feedback after high-value mock attempts. Credits are reserved when you start and consumed only after the review is delivered.',
     metaItems: [
       { icon: Star, label: `${availableCredits} available` },
       { icon: Hourglass, label: `${reservedCredits} reserved` },

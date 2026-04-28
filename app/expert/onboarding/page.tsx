@@ -421,9 +421,9 @@ function WelcomeStep() {
       <div className="w-14 h-14 rounded-xl bg-lavender flex items-center justify-center mb-6">
         <BookOpen className="w-7 h-7 text-primary" />
       </div>
-      <h2 className="text-2xl font-bold text-navy mb-3">Welcome to the Expert Console</h2>
+      <h2 className="text-2xl font-bold text-navy mb-3">Welcome to the Tutor Console</h2>
       <p className="text-muted leading-relaxed mb-6">
-        Let&rsquo;s get your expert profile set up so learners can find you and you can start reviewing submissions.
+        Let&rsquo;s get your tutor profile set up so learners can find you and you can start reviewing submissions.
         This wizard will walk you through the essential steps.
       </p>
       <ul className="space-y-3">

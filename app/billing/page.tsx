@@ -597,7 +597,7 @@ export default function BillingPage() {
         {/* ── Add-ons + Invoices ── */}
         <section className="grid gap-6 lg:grid-cols-[1fr_1.2fr]">
           <div>
-            <LearnerSurfaceSectionHeader eyebrow="Extras" title="Top up expert review credits" description="Extras only add expert review capacity for Writing and Speaking. They don't affect Listening or Reading scoring." className="mb-4" />
+            <LearnerSurfaceSectionHeader eyebrow="Extras" title="Top up tutor review credits" description="Extras only add tutor review capacity for Writing and Speaking. They don't affect Listening or Reading scoring." className="mb-4" />
             {addOns.length > 0 ? (
               <div className="space-y-4">
                 {addOns.map((addOn) => (

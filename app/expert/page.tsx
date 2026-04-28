@@ -151,7 +151,7 @@ export default function ExpertDashboardPage() {
         });
       } catch (error) {
         if (!cancelled) {
-          setErrorMessage(isApiError(error) ? error.userMessage : 'Unable to load the expert dashboard right now.');
+          setErrorMessage(isApiError(error) ? error.userMessage : 'Unable to load the tutor dashboard right now.');
           setStatus('error');
         }
       }
@@ -203,7 +203,7 @@ export default function ExpertDashboardPage() {
             {expert?.isOnboardingComplete === false && (
               <InlineAlert
                 variant="info"
-                title="Complete your expert onboarding"
+                title="Complete your tutor onboarding"
                 action={(
                   <Button variant="primary" size="sm" onClick={() => router.push('/expert/onboarding')}>
                     Start Onboarding
@@ -258,7 +258,7 @@ export default function ExpertDashboardPage() {
               <LearnerSurfaceSectionHeader
                 eyebrow="Expert workflow"
                 title="Resume what is already in motion"
-                description="Same visual rhythm as the learner dashboard, tuned for expert review work."
+                description="Same visual rhythm as the learner dashboard, tuned for tutor review work."
                 action={(
                   <Button variant="ghost" size="sm" onClick={() => router.push('/expert/queue')}>
                     View Queue <ArrowRight className="h-4 w-4" />
@@ -399,7 +399,7 @@ export default function ExpertDashboardPage() {
                     {dashboard.assignedReviews.length === 0 ? (
                       <EmptyState
                         title="No assigned reviews"
-                        description="Claim a queued review to start your next expert workspace."
+                        description="Claim a queued review to start your next tutor workspace."
                         action={{ label: 'Open Queue', onClick: () => router.push('/expert/queue') }}
                       />
                     ) : (

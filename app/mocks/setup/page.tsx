@@ -50,9 +50,9 @@ function reviewCost(selection: ReviewSelection) {
 function buildReviewOptions(mockType: MockType, subType: MockSubType) {
   if (mockType === 'full') {
     return [
-      { id: 'none' as const, label: 'No Review', description: 'Run the mock without expert review.', cost: 0 },
-      { id: 'writing' as const, label: 'Writing Only', description: 'Reserve one credit for Writing expert review.', cost: 1 },
-      { id: 'speaking' as const, label: 'Speaking Only', description: 'Reserve one credit for Speaking expert review.', cost: 1 },
+      { id: 'none' as const, label: 'No Review', description: 'Run the mock without tutor review.', cost: 0 },
+      { id: 'writing' as const, label: 'Writing Only', description: 'Reserve one credit for Writing tutor review.', cost: 1 },
+      { id: 'speaking' as const, label: 'Speaking Only', description: 'Reserve one credit for Speaking tutor review.', cost: 1 },
       { id: 'writing_and_speaking' as const, label: 'Writing + Speaking', description: 'Reserve two credits for both productive sections.', cost: 2 },
     ];
   }
@@ -60,12 +60,12 @@ function buildReviewOptions(mockType: MockType, subType: MockSubType) {
   if (subType === 'writing' || subType === 'speaking') {
     return [
       { id: 'none' as const, label: 'No Review', description: 'Keep this sub-test mock platform-evaluated only.', cost: 0 },
-      { id: 'current_subtest' as const, label: 'Review Current Sub-test', description: 'Reserve one credit for expert review of this Writing or Speaking mock.', cost: 1 },
+      { id: 'current_subtest' as const, label: 'Review Current Sub-test', description: 'Reserve one credit for tutor review of this Writing or Speaking mock.', cost: 1 },
     ];
   }
 
   return [
-    { id: 'none' as const, label: 'No Review', description: 'Expert review is not offered for Reading or Listening mocks.', cost: 0 },
+    { id: 'none' as const, label: 'No Review', description: 'Tutor review is not offered for Reading or Listening mocks.', cost: 0 },
   ];
 }
 
@@ -192,7 +192,7 @@ export default function MockSetup() {
           icon={Layers}
           accent="navy"
           title="Start from a published mock bundle"
-          description="Choose your mock paper, exam mode, timing, and whether to reserve expert review before you start."
+          description="Choose your mock paper, exam mode, timing, and whether to reserve tutor review before you start."
           highlights={[
             { icon: Award, label: 'Credits', value: `${availableCredits} available` },
             { icon: Layers, label: 'Bundles', value: `${options?.availableBundles.length ?? 0} published` },
@@ -395,7 +395,7 @@ export default function MockSetup() {
             <section className="rounded-2xl border border-border bg-surface p-6 shadow-sm sm:p-8">
               <LearnerSurfaceSectionHeader
                 eyebrow={showProfession ? '5. Review Credits' : '4. Review Credits'}
-                title="Reserve expert review at mock start"
+                title="Reserve tutor review at mock start"
                 description="Credits are reserved when you start, used when you submit Writing or Speaking, and refunded if you cancel."
                 className="mb-4"
               />

@@ -79,7 +79,7 @@ export default function AskAnExpertPage() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-3xl font-bold flex items-center gap-2">
-              <MessageSquareText className="w-8 h-8" /> Ask an Expert
+              <MessageSquareText className="w-8 h-8" /> Ask a Tutor
             </h1>
             <p className="text-muted-foreground mt-1">
               Answer learner questions with verified expert responses.
@@ -159,7 +159,7 @@ export default function AskAnExpertPage() {
             {data.threads.length === 0 && (
               <Card className="p-8 text-center text-muted-foreground">
                 <MessageSquareText className="w-12 h-12 mx-auto mb-3 opacity-30" />
-                <p>No questions yet. Learners will post questions in the &quot;Ask an Expert&quot; forum category.</p>
+                <p>No questions yet. Learners will post questions in the &quot;Ask a Tutor&quot; forum category.</p>
               </Card>
             )}
           </MotionSection>

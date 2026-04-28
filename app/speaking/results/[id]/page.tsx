@@ -190,7 +190,7 @@ export default function SpeakingResultSummary() {
               </Link>
               <Link href={`/speaking/expert-review/${id}`}>
                 <Button variant="outline" fullWidth>
-                  <UserCheck className="w-5 h-5" /> Request Expert Review
+                  <UserCheck className="w-5 h-5" /> Request Tutor Review
                 </Button>
               </Link>
             </div>

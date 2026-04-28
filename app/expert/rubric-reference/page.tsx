@@ -99,9 +99,9 @@ const SPEAKING_RUBRIC = [
 ];
 
 const CALIBRATION_TIPS = [
-  'Compare AI scores with expert scores to identify your calibration gaps.',
-  'Scores within 1 band of the expert are considered well-calibrated.',
-  'When AI and expert scores differ by 2+, read the expert commentary carefully.',
+  'Compare AI scores with tutor scores to identify your calibration gaps.',
+  'Scores within 1 band of the tutor are considered well-calibrated.',
+  'When AI and tutor scores differ by 2+, read the tutor commentary carefully.',
   'Use the "I disagree" flag to surface scoring disputes for review.',
 ];
 

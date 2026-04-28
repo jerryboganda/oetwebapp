@@ -85,7 +85,7 @@ export default async function SpeakingRulebookIndexPage() {
                 Every rule your speaking is judged on
               </h1>
               <p className="mt-3 max-w-3xl text-base leading-7 text-muted">
-                These are the canonical rules our AI audit and your expert reviewers apply to every role-play.
+                These are the canonical rules our AI audit and your tutor reviewers apply to every role-play.
                 Critical rules must be followed; major rules cost band points; minor rules are polish.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">

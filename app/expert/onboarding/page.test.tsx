@@ -72,7 +72,7 @@ describe('ExpertOnboardingPage', () => {
   it('renders the welcome step with stepper', async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('Welcome to the Expert Console')).toBeInTheDocument();
+      expect(screen.getByText('Welcome to the Tutor Console')).toBeInTheDocument();
     });
     expect(screen.getByRole('button', { name: /continue/i })).toBeInTheDocument();
   });
@@ -80,7 +80,7 @@ describe('ExpertOnboardingPage', () => {
   it('shows progress stepper with all 6 steps', async () => {
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('Welcome to the Expert Console')).toBeInTheDocument();
+      expect(screen.getByText('Welcome to the Tutor Console')).toBeInTheDocument();
     });
     expect(screen.getAllByText('Profile').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('Qualifications').length).toBeGreaterThanOrEqual(1);
@@ -93,7 +93,7 @@ describe('ExpertOnboardingPage', () => {
     const user = userEvent.setup();
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('Welcome to the Expert Console')).toBeInTheDocument();
+      expect(screen.getByText('Welcome to the Tutor Console')).toBeInTheDocument();
     });
     await user.click(screen.getByRole('button', { name: /continue/i }));
     await waitFor(() => {
@@ -105,7 +105,7 @@ describe('ExpertOnboardingPage', () => {
     const user = userEvent.setup();
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('Welcome to the Expert Console')).toBeInTheDocument();
+      expect(screen.getByText('Welcome to the Tutor Console')).toBeInTheDocument();
     });
     await user.click(screen.getByRole('button', { name: /continue/i }));
     await waitFor(() => {
@@ -113,7 +113,7 @@ describe('ExpertOnboardingPage', () => {
     });
     await user.click(screen.getByRole('button', { name: /back/i }));
     await waitFor(() => {
-      expect(screen.getByText('Welcome to the Expert Console')).toBeInTheDocument();
+      expect(screen.getByText('Welcome to the Tutor Console')).toBeInTheDocument();
     });
   });
 
@@ -121,7 +121,7 @@ describe('ExpertOnboardingPage', () => {
     const user = userEvent.setup();
     renderPage();
     await waitFor(() => {
-      expect(screen.getByText('Welcome to the Expert Console')).toBeInTheDocument();
+      expect(screen.getByText('Welcome to the Tutor Console')).toBeInTheDocument();
     });
     // Go to profile step
     await user.click(screen.getByRole('button', { name: /continue/i }));

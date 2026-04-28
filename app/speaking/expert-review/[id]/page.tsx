@@ -92,7 +92,7 @@ function ExpertReviewRequestContent() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell pageTitle="Expert Review Request">
+      <LearnerDashboardShell pageTitle="Tutor Review Request">
         <div className="space-y-6">
           <Skeleton className="h-32 rounded-xl" />
           <Skeleton className="h-48 rounded-xl" />
@@ -105,7 +105,7 @@ function ExpertReviewRequestContent() {
 
   if (error) {
     return (
-      <LearnerDashboardShell pageTitle="Expert Review Request">
+      <LearnerDashboardShell pageTitle="Tutor Review Request">
         <div>
           <InlineAlert variant="error">{error}</InlineAlert>
         </div>
@@ -114,7 +114,7 @@ function ExpertReviewRequestContent() {
   }
 
   return (
-    <LearnerDashboardShell pageTitle="Expert Review Request">
+    <LearnerDashboardShell pageTitle="Tutor Review Request">
       <main className="flex-1">
         <form onSubmit={handleSubmit} className="max-w-3xl mx-auto space-y-8">
 
@@ -125,7 +125,7 @@ function ExpertReviewRequestContent() {
               <div>
                 <h2 className="text-sm font-bold text-info uppercase tracking-widest mb-1">Beyond AI Evaluation</h2>
                 <p className="text-sm text-info/80 leading-relaxed">
-                  While our AI provides immediate insights, an Expert Review offers deep clinical nuance, specific OET grading, and personalized coaching from certified healthcare educators.
+                  While our AI provides immediate insights, an Tutor Review offers deep clinical nuance, specific OET grading, and personalized coaching from certified healthcare educators.
                 </p>
               </div>
             </div>
@@ -255,7 +255,7 @@ function ExpertReviewRequestContent() {
 export default function ExpertReviewRequest() {
   return (
     <Suspense fallback={
-      <LearnerDashboardShell pageTitle="Expert Review Request">
+      <LearnerDashboardShell pageTitle="Tutor Review Request">
         <div className="flex-1 flex items-center justify-center">
           <Loader2 className="w-8 h-8 text-primary animate-spin" />
         </div>

@@ -16,7 +16,7 @@ vi.mock('@/lib/api', () => ({
 
 import ReviewQueuePage from './page';
 
-describe('Expert queue page', () => {
+describe('Tutor queue page', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockFetchExpertQueueFilterMetadata.mockResolvedValue({
@@ -30,7 +30,7 @@ describe('Expert queue page', () => {
     });
   });
 
-  it('renders the expert review queue with items from the API', async () => {
+  it('renders the tutor review queue with items from the API', async () => {
     renderWithRouter(<ReviewQueuePage />, { pathname: '/expert/queue' });
     const matches = await screen.findAllByText('Dr Amina Khan');
     expect(matches.length).toBeGreaterThan(0);

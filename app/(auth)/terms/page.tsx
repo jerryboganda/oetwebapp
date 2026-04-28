@@ -8,7 +8,7 @@ import { AUTH_ROUTES } from '@/lib/auth/routes';
 export const metadata: Metadata = {
   title: 'Terms of Service · OET with Dr Ahmed Hesham',
   description:
-    'The terms of service governing use of the OET with Dr Ahmed Hesham preparation platform — eligibility, billing, the Score Guarantee, AI feedback, expert review, intellectual property, and your rights.',
+    'The terms of service governing use of the OET with Dr Ahmed Hesham preparation platform — eligibility, billing, the Score Guarantee, AI feedback, tutor review, intellectual property, and your rights.',
 };
 
 const LAST_UPDATED = '26 April 2026';
@@ -80,7 +80,7 @@ const sections: LegalSection[] = [
     bullets: [
       'Subscriptions auto-renew at the end of each billing period at the then-current rate unless you cancel before the renewal date. You can cancel anytime from Settings → Billing; cancellation takes effect at the end of the current period.',
       'Payments are processed by Stripe. We do not store full card details on our servers; only Stripe customer / subscription identifiers are retained.',
-      'UK / EU consumers have a 14-day right of withdrawal under applicable consumer-protection law. Where you actively use the Service (open AI feedback, submit speaking attempts, request expert review, etc.) within that window, you expressly request immediate access and acknowledge that the withdrawal right is reduced proportionally to the value of services consumed.',
+      'UK / EU consumers have a 14-day right of withdrawal under applicable consumer-protection law. Where you actively use the Service (open AI feedback, submit speaking attempts, request tutor review, etc.) within that window, you expressly request immediate access and acknowledge that the withdrawal right is reduced proportionally to the value of services consumed.',
       'Subscriptions purchased through Apple App Store or Google Play are subject to those stores’ refund policies and may need to be cancelled within the relevant store account.',
       'Disputed charges should first be raised with us via support@oetwithdrhesham.co.uk so we can investigate before any chargeback.',
     ],
@@ -98,12 +98,12 @@ const sections: LegalSection[] = [
   },
   {
     id: 'ai-and-experts',
-    title: 'AI feedback & expert review',
+    title: 'AI feedback & tutor review',
     lead:
-      'The Service uses a mix of automated AI feedback and human expert review to help you improve. Both are advisory and educational in nature.',
+      'The Service uses a mix of automated AI feedback and human tutor review to help you improve. Both are advisory and educational in nature.',
     bullets: [
       'AI-generated feedback (Writing, Speaking, Conversation, Pronunciation, Reading explanations, Grammar drafts) is grounded against our published rulebooks but may still contain mistakes. Treat it as a guided second opinion, not the final word.',
-      'Expert reviewers are qualified human experts under contract; their feedback represents their professional opinion based on the OET rubric. Turnaround windows shown at submission are targets, not guarantees.',
+      'Tutor reviewers are qualified human experts under contract; their feedback represents their professional opinion based on the OET rubric. Turnaround windows shown at submission are targets, not guarantees.',
       'Predicted scores, advisory bands, and readiness percentages are calibrated estimates — they do not guarantee any outcome on the official OET examination.',
       'You retain ownership of the work you submit (your essays, recordings, written responses). You grant us a non-exclusive, worldwide, royalty-free licence to process, store, and use that work for the purpose of operating the Service, generating feedback, training internal quality models on de-identified data, and improving the platform.',
     ],
@@ -141,7 +141,7 @@ const sections: LegalSection[] = [
     lead:
       'We process personal data under UK GDPR and the Data Protection Act 2018 (and equivalent regimes in your jurisdiction). Our Privacy Notice explains what we collect, why, how long we retain it, and your rights.',
     bullets: [
-      'Sensitive learner data — speaking recordings, written submissions, expert feedback — is stored encrypted at rest and is only accessed by personnel with a need-to-know basis.',
+      'Sensitive learner data — speaking recordings, written submissions, tutor feedback — is stored encrypted at rest and is only accessed by personnel with a need-to-know basis.',
       'You can request export or deletion of your account data at any time from Settings → Privacy or by emailing dpo@oetwithdrhesham.co.uk.',
       'Audio retention is controlled by the configurable Pronunciation/Conversation retention windows set out in the in-app Privacy Notice; defaults are 30 days unless you change them.',
     ],

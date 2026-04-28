@@ -74,7 +74,7 @@ export default function WritingExpertReviewRequest() {
 
   if (loading) {
     return (
-      <LearnerDashboardShell pageTitle="Request Expert Review">
+      <LearnerDashboardShell pageTitle="Request Tutor Review">
         <div className="space-y-6">
           <Skeleton className="h-24 rounded-2xl" />
           <Skeleton className="h-40 rounded-2xl" />
@@ -102,12 +102,12 @@ export default function WritingExpertReviewRequest() {
   }
 
   return (
-    <LearnerDashboardShell pageTitle="Request Expert Review">
+    <LearnerDashboardShell pageTitle="Request Tutor Review">
       {/* Sticky header */}
       <header className="bg-surface border-b border-border sticky top-0 z-30 px-4 sm:px-6 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
           <Link href={`/writing/result?id=${submissionId}`} className="text-muted hover:text-navy transition-colors p-2 -m-2 touch-target"><ChevronLeft className="w-5 h-5" /></Link>
-          <h1 className="font-bold text-lg text-navy leading-tight">Request Expert Review</h1>
+          <h1 className="font-bold text-lg text-navy leading-tight">Request Tutor Review</h1>
         </div>
       </header>
 
@@ -145,7 +145,7 @@ export default function WritingExpertReviewRequest() {
           {/* 2. Focus Areas */}
           <section>
             <h3 className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex items-center gap-2"><Target className="w-4 h-4" /> 2. Focus Areas</h3>
-            <p className="text-xs text-muted mb-4 italic">Select up to 3 areas you want the expert to prioritize.</p>
+            <p className="text-xs text-muted mb-4 italic">Select up to 3 areas you want the tutor to prioritize.</p>
             <div className="flex flex-wrap gap-2">
               {focusAreaOptions.map(area => {
                 const isSelected = selectedFocus.includes(area.id);
@@ -186,7 +186,7 @@ export default function WritingExpertReviewRequest() {
           {/* Disclaimer */}
           <div className="bg-background-light rounded-xl p-4 flex items-start gap-3">
             <Info className="w-5 h-5 text-muted/60 shrink-0 mt-0.5" />
-            <p className="text-xs text-muted leading-relaxed">Expert reviews are conducted by certified OET trainers. Unlike AI evaluations, these provide nuanced human judgment and specific pedagogical advice. Turnaround times are guaranteed.</p>
+            <p className="text-xs text-muted leading-relaxed">Tutor reviews are conducted by certified OET trainers. Unlike AI evaluations, these provide nuanced human judgment and specific pedagogical advice. Turnaround times are guaranteed.</p>
           </div>
 
           {/* Submit */}

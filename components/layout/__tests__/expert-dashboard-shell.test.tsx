@@ -25,7 +25,7 @@ describe('ExpertDashboardShell', () => {
   it('renders the learner-style workspace container inside AppShell and forwards the page title', () => {
     renderWithRouter(
       <ExpertDashboardShell pageTitle="Dashboard" workspaceClassName="space-y-8">
-        <div>Expert Workspace</div>
+        <div>Tutor Workspace</div>
       </ExpertDashboardShell>,
     );
 

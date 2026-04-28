@@ -498,7 +498,7 @@ export default function WritingPlayer() {
 
         {/* Submit Confirmation Modal */}
         <Modal open={showSubmitModal} onClose={() => setShowSubmitModal(false)} title="Submit Your Response?">
-          <p className="mb-4 text-sm text-muted">Once submitted, your response will be evaluated by our AI engine. You can request an expert human review later.</p>
+          <p className="mb-4 text-sm text-muted">Once submitted, your response will be evaluated by our AI engine. You can request a tutor human review later.</p>
           <p className="mb-6 text-sm font-semibold text-navy">Word count: {wordCount}</p>
           <div className="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
             <Button variant="secondary" onClick={() => setShowSubmitModal(false)}>Cancel</Button>

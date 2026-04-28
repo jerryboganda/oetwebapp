@@ -306,10 +306,10 @@ export default function ProgressDashboard() {
               className="bg-navy rounded-2xl p-6 sm:p-8 text-white shadow-lg relative overflow-hidden"
             >
               <div className="mb-6 relative z-10">
-                <p className="text-xs font-black uppercase tracking-widest text-white/60 mb-2">Expert Review Turnaround</p>
+                <p className="text-xs font-black uppercase tracking-widest text-white/60 mb-2">Tutor Review Turnaround</p>
                 <h2 className="text-xl font-black text-white">Keep human-feedback timing visible</h2>
                 <p className="text-sm text-white/70 mt-1">
-                  Expert review should feel like part of the same learner system, with clear operational expectations.
+                  Tutor review should feel like part of the same learner system, with clear operational expectations.
                 </p>
               </div>
               <div className="absolute top-0 right-0 w-64 h-64 bg-white opacity-5 rounded-full blur-3xl -translate-y-1/2 translate-x-1/3" />
@@ -318,7 +318,7 @@ export default function ProgressDashboard() {
                   <Clock className="w-5 h-5 text-white" />
                 </div>
                 <div>
-                  <h2 className="text-base font-black">Expert Review Turnaround</h2>
+                  <h2 className="text-base font-black">Tutor Review Turnaround</h2>
                   <p className="text-xs text-white/70">Average time from submission to feedback</p>
                 </div>
               </div>

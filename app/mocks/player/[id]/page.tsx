@@ -144,7 +144,7 @@ export default function MockPlayerPage() {
                 <LearnerSurfaceSectionHeader
                   eyebrow="Section States"
                   title="Every mock section now has a real launch path"
-                  description="See the section order, whether expert review is attached, and where each section starts."
+                  description="See the section order, whether tutor review is attached, and where each section starts."
                   className="mb-4"
                 />
 

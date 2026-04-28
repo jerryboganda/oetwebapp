@@ -117,7 +117,7 @@ export default function WritingResultSummary() {
           <MotionSection delayIndex={2} className="rounded-2xl border border-warning/30 bg-warning/10 p-4 flex items-start gap-3 shadow-sm">
             <ShieldAlert className="w-5 h-5 text-warning shrink-0 mt-0.5" />
             <p className="text-sm text-warning leading-relaxed">
-              Human review is recommended here because the AI score is still a practice estimate. Use expert review for higher-stakes decisions and borderline readiness calls.
+              Human review is recommended here because the AI score is still a practice estimate. Use tutor review for higher-stakes decisions and borderline readiness calls.
             </p>
           </MotionSection>
         ) : null}
@@ -151,7 +151,7 @@ export default function WritingResultSummary() {
         <LearnerSurfaceSectionHeader
           eyebrow="What to do next"
           title="Turn the summary into action"
-          description="Use the links below to inspect feedback, revise the submission, or send it to an expert reviewer."
+          description="Use the links below to inspect feedback, revise the submission, or send it to an tutor reviewer."
         />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
@@ -206,7 +206,7 @@ export default function WritingResultSummary() {
           </Link>
           <Link href={`/writing/expert-request?id=${resultId}`} className="group rounded-2xl border border-border bg-surface px-4 py-5 text-center text-navy transition-all shadow-sm hover:border-warning/30 hover:shadow-md">
             <Star className="w-6 h-6 mb-2 text-muted/60 group-hover:text-warning transition-colors" />
-            <span className="font-bold group-hover:text-warning transition-colors">Request Expert Review</span>
+            <span className="font-bold group-hover:text-warning transition-colors">Request Tutor Review</span>
             <span className="text-xs text-muted mt-1">Get human feedback</span>
           </Link>
         </MotionSection>
