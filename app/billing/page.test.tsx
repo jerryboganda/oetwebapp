@@ -1,4 +1,5 @@
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 const {
   mockFetchBilling,
   mockFetchBillingChangePreview,
@@ -99,7 +100,7 @@ describe('Billing page', () => {
           id: 'credits-5',
           code: 'credits-5',
           name: 'Review credits pack',
-          productType: 'addon_purchase',
+          productType: 'review_credits',
           quantity: 5,
           price: '$29',
           currency: 'AUD',
@@ -154,5 +155,27 @@ describe('Billing page', () => {
 
     expect(await screen.findByText('Manage subscriptions without billing surprises')).toBeInTheDocument();
     expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
+  });
+
+  it('passes the selected gateway into review credit checkout sessions', async () => {
+    const user = userEvent.setup();
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+
+    renderWithRouter(<BillingPage />);
+
+    expect(await screen.findByText('Manage subscriptions without billing surprises')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^paypal$/i }));
+    await user.click(screen.getByRole('button', { name: /purchase credits/i }));
+
+    await waitFor(() => {
+      expect(mockCreateBillingCheckoutSession).toHaveBeenCalledWith(expect.objectContaining({
+        productType: 'review_credits',
+        quantity: 5,
+        priceId: 'credits-5',
+        gateway: 'paypal',
+      }));
+    });
+
+    openSpy.mockRestore();
   });
 });

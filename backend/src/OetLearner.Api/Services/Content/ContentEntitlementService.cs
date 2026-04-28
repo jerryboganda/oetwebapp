@@ -123,8 +123,9 @@ public sealed class ContentEntitlementService(LearnerDbContext db) : IContentEnt
                 RequiredScope: $"subtest:{paper.SubtestCode}");
         }
 
+        var normalizedPlanId = sub.PlanId.ToLowerInvariant();
         var plan = await db.BillingPlans.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.Id == sub.PlanId, ct);
+            .FirstOrDefaultAsync(p => p.Id.ToLower() == normalizedPlanId || p.Code.ToLower() == normalizedPlanId, ct);
 
         var bundle = ParseBundle(plan?.EntitlementsJson, plan?.IncludedSubtestsJson);
         var currentTier = sub.Status == SubscriptionStatus.Trial ? "trial" : bundle.Tier;

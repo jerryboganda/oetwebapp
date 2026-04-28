@@ -2151,8 +2151,8 @@ public partial class LearnerService(
                       ["coupon_code"] = quoteEntity.CouponCode ?? string.Empty,
                       ["add_on_codes"] = string.Join(',', JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []))
                   },
-                  SuccessUrl: platformLinks.BuildWebUrl($"/subscriptions?payment=success&gateway={Uri.EscapeDataString(gatewayLabel)}"),
-                  CancelUrl: platformLinks.BuildWebUrl($"/subscriptions?payment=cancelled&gateway={Uri.EscapeDataString(gatewayLabel)}")),
+                  SuccessUrl: platformLinks.BuildWebUrl($"/billing?payment=success&gateway={Uri.EscapeDataString(gatewayLabel)}"),
+                  CancelUrl: platformLinks.BuildWebUrl($"/billing?payment=cancelled&gateway={Uri.EscapeDataString(gatewayLabel)}")),
               cancellationToken);
 
         quoteEntity.CheckoutSessionId = checkoutIntent.GatewayTransactionId;
@@ -4787,11 +4787,11 @@ public partial class LearnerService(
                     [new ApiFieldError("priceId", "required", "Choose the plan you want to switch to.")]);
             }
 
-            var targetPlan = await FindBillingPlanAsync(request.PriceId, cancellationToken)
+            var targetPlan = await FindPurchasableBillingPlanAsync(request.PriceId, cancellationToken)
                 ?? throw ApiException.Validation(
                     "unknown_plan",
                     $"Unknown billing plan '{request.PriceId}'.",
-                    [new ApiFieldError("priceId", "unknown", "Choose a supported billing plan.")]);
+                    [new ApiFieldError("priceId", "unknown", "Choose a published billing plan.")]);
 
             planCode = targetPlan.Code;
             var referencePlan = currentPlan ?? targetPlan;
@@ -4819,11 +4819,19 @@ public partial class LearnerService(
                     [new ApiFieldError("priceId", "required", "Choose the add-on you want to purchase.")]);
             }
 
-            var addOn = await FindBillingAddOnAsync(request.PriceId, cancellationToken)
+            var addOn = await FindPurchasableBillingAddOnAsync(request.PriceId, cancellationToken)
                 ?? throw ApiException.Validation(
                     "unknown_addon",
                     $"Unknown billing add-on '{request.PriceId}'.",
-                    [new ApiFieldError("priceId", "unknown", "Choose a supported add-on.")]);
+                    [new ApiFieldError("priceId", "unknown", "Choose a published add-on.")]);
+
+            if (!IsAddOnCompatibleWithPlan(addOn, currentPlan))
+            {
+                throw ApiException.Validation(
+                    "addon_incompatible",
+                    "The selected add-on is not available for your current plan.",
+                    [new ApiFieldError("priceId", "incompatible", "Choose an add-on that works with your current plan.")]);
+            }
 
             if (addOn.MaxQuantity is not null && request.Quantity > addOn.MaxQuantity.Value)
             {
@@ -4833,6 +4841,7 @@ public partial class LearnerService(
                     [new ApiFieldError("quantity", "max_exceeded", "Reduce the quantity and try again.")]);
             }
 
+            addOnCodes = NormalizeCodes([addOn.Code]);
             planCode = currentPlan?.Code;
             subtotal = Math.Round(addOn.Price * request.Quantity, 2, MidpointRounding.AwayFromZero);
             summary = $"{request.Quantity} x {addOn.Name}.";
@@ -4850,24 +4859,39 @@ public partial class LearnerService(
             BillingAddOn? reviewPack = null;
             if (!string.IsNullOrWhiteSpace(request.PriceId))
             {
-                reviewPack = await FindBillingAddOnAsync(request.PriceId, cancellationToken);
+                reviewPack = await FindPurchasableBillingAddOnAsync(request.PriceId, cancellationToken)
+                    ?? throw ApiException.Validation(
+                        "unknown_addon",
+                        $"Unknown billing add-on '{request.PriceId}'.",
+                        [new ApiFieldError("priceId", "unknown", "Choose a published review credit pack.")]);
+
+                if (!IsAddOnCompatibleWithPlan(reviewPack, currentPlan))
+                {
+                    throw ApiException.Validation(
+                        "addon_incompatible",
+                        "The selected review credit pack is not available for your current plan.",
+                        [new ApiFieldError("priceId", "incompatible", "Choose a review credit pack that works with your current plan.")]);
+                }
             }
 
-            reviewPack ??= await db.BillingAddOns.AsNoTracking()
+            reviewPack ??= (await db.BillingAddOns.AsNoTracking()
                 .Where(addOn => addOn.Status == BillingAddOnStatus.Active && addOn.GrantCredits == request.Quantity)
                 .OrderBy(addOn => addOn.DisplayOrder)
-                .FirstOrDefaultAsync(cancellationToken);
+                .ToListAsync(cancellationToken))
+                .FirstOrDefault(addOn => IsAddOnCompatibleWithPlan(addOn, currentPlan));
 
-            reviewPack ??= await db.BillingAddOns.AsNoTracking()
+            reviewPack ??= (await db.BillingAddOns.AsNoTracking()
                 .Where(addOn => addOn.Status == BillingAddOnStatus.Active && addOn.GrantCredits > 0)
                 .OrderBy(addOn => addOn.DisplayOrder)
                 .ThenBy(addOn => addOn.Price)
-                .FirstOrDefaultAsync(cancellationToken)
+                .ToListAsync(cancellationToken))
+                .FirstOrDefault(addOn => IsAddOnCompatibleWithPlan(addOn, currentPlan))
                 ?? throw ApiException.Validation(
                     "review_pack_unavailable",
                     "No review credit pack is available for the requested quantity.",
                     [new ApiFieldError("quantity", "unsupported", "Choose one of the available review credit packs.")]);
 
+            addOnCodes = NormalizeCodes([reviewPack.Code]);
             planCode = currentPlan?.Code;
             subtotal = Math.Round(reviewPack.Price, 2, MidpointRounding.AwayFromZero);
             summary = $"Review credit pack: {reviewPack.GrantCredits} credits.";
@@ -4944,13 +4968,15 @@ public partial class LearnerService(
                     [new ApiFieldError("couponCode", "not_applicable", "Choose a coupon that matches the selected plan.")]);
             }
 
-            if (addOnAllowList.Count > 0 && addOnCodes.Count > 0 && !addOnCodes.Any(code => addOnAllowList.Any(allowed => string.Equals(allowed, code, StringComparison.OrdinalIgnoreCase))))
+            if (addOnAllowList.Count > 0 && !addOnCodes.Any(code => addOnAllowList.Any(allowed => string.Equals(allowed, code, StringComparison.OrdinalIgnoreCase))))
             {
                 throw ApiException.Validation(
                     "coupon_not_applicable",
                     "The coupon does not apply to the selected add-on.",
                     [new ApiFieldError("couponCode", "not_applicable", "Choose a coupon that matches the selected add-on.")]);
             }
+
+            await ReleaseExpiredCouponReservationsAsync(coupon.Code, now, cancellationToken);
 
             var couponRedemptionCount = await db.BillingCouponRedemptions.CountAsync(redemption => redemption.CouponCode == coupon.Code && redemption.Status != BillingRedemptionStatus.Voided, cancellationToken);
             if (coupon.UsageLimitTotal is not null && couponRedemptionCount >= coupon.UsageLimitTotal.Value)
@@ -5046,8 +5072,12 @@ public partial class LearnerService(
                     RedeemedAt = now
                 });
 
-                coupon.RedemptionCount += 1;
-                coupon.UpdatedAt = now;
+                var trackedCoupon = await db.BillingCoupons.FirstOrDefaultAsync(x => x.Code == coupon.Code, cancellationToken);
+                if (trackedCoupon is not null)
+                {
+                    trackedCoupon.RedemptionCount += 1;
+                    trackedCoupon.UpdatedAt = now;
+                }
             }
 
             await db.SaveChangesAsync(cancellationToken);
@@ -5067,6 +5097,47 @@ public partial class LearnerService(
             quote.ExpiresAt,
             summary,
             validation);
+    }
+
+    private async Task ReleaseExpiredCouponReservationsAsync(string couponCode, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        var normalizedCouponCode = NormalizeBillingCode(couponCode);
+        if (string.IsNullOrWhiteSpace(normalizedCouponCode))
+        {
+            return;
+        }
+
+        var expiredReservations = await db.BillingCouponRedemptions
+            .Where(redemption => redemption.CouponCode.ToLower() == normalizedCouponCode && redemption.Status == BillingRedemptionStatus.Reserved)
+            .Join(db.BillingQuotes,
+                redemption => redemption.QuoteId,
+                quote => quote.Id,
+                (redemption, quote) => new { Redemption = redemption, Quote = quote })
+            .Where(row => row.Quote.ExpiresAt < now && row.Quote.Status == BillingQuoteStatus.Created)
+            .ToListAsync(cancellationToken);
+
+        if (expiredReservations.Count == 0)
+        {
+            return;
+        }
+
+        foreach (var row in expiredReservations)
+        {
+            row.Redemption.Status = BillingRedemptionStatus.Voided;
+            row.Quote.Status = BillingQuoteStatus.Expired;
+        }
+
+        var releasedCount = expiredReservations.Count;
+        var coupon = await db.BillingCoupons.FirstOrDefaultAsync(
+            item => item.Code.ToLower() == normalizedCouponCode || item.Id.ToLower() == normalizedCouponCode,
+            cancellationToken);
+        if (coupon is not null)
+        {
+            coupon.RedemptionCount = Math.Max(0, coupon.RedemptionCount - releasedCount);
+            coupon.UpdatedAt = now;
+        }
+
+        await db.SaveChangesAsync(cancellationToken);
     }
 
     private static string NormalizeMockReviewSelection(string mockType, string? subType, bool includeReview, string? reviewSelection)

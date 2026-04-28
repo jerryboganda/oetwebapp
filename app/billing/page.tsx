@@ -51,6 +51,10 @@ function prettyProductType(productType: BillingProductType) {
   return productType.replace(/_/g, ' ');
 }
 
+function billingAddOnCheckoutProductType(productType: string): BillingProductType {
+  return productType === 'review_credits' ? 'review_credits' : 'addon_purchase';
+}
+
 function formatPlanList(value: string[] | undefined): string {
   return value && value.length > 0 ? value.join(' / ') : 'None';
 }
@@ -245,7 +249,7 @@ export default function BillingPage() {
       const quoteResponse = await fetchBillingQuote({ productType, quantity, priceId, couponCode: coupon });
       setQuote(quoteResponse);
       setQuoteLabel(label ?? prettyProductType(productType));
-      const response = await createBillingCheckoutSession({ productType, quantity, priceId, couponCode: coupon, quoteId: quoteResponse.quoteId });
+      const response = await createBillingCheckoutSession({ productType, quantity, priceId, couponCode: coupon, quoteId: quoteResponse.quoteId, gateway: selectedGateway });
       window.open(response.checkoutUrl, '_blank', 'noopener,noreferrer');
       setSuccess(`${label ?? prettyProductType(productType)} checkout opened with a validated quote.`);
     } catch (err) {
@@ -600,26 +604,31 @@ export default function BillingPage() {
             <LearnerSurfaceSectionHeader eyebrow="Extras" title="Top up tutor review credits" description="Extras only add tutor review capacity for Writing and Speaking. They don't affect Listening or Reading scoring." className="mb-4" />
             {addOns.length > 0 ? (
               <div className="space-y-4">
-                {addOns.map((addOn) => (
-                  <div key={addOn.id} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-xs font-black uppercase tracking-widest text-muted">{addOn.productType.replace(/_/g, ' ')}</p>
-                        <h3 className="mt-2 text-lg font-black text-navy">{addOn.name}</h3>
-                        <p className="mt-2 text-sm text-muted">{addOn.description}</p>
+                {addOns.map((addOn) => {
+                  const checkoutProductType = billingAddOnCheckoutProductType(addOn.productType);
+                  const checkoutLabel = checkoutProductType === 'review_credits' ? 'Purchase credits' : 'Purchase add-on';
+
+                  return (
+                    <div key={addOn.id} className="rounded-2xl border border-border bg-surface p-5 shadow-sm">
+                      <div className="flex items-start justify-between gap-4">
+                        <div>
+                          <p className="text-xs font-black uppercase tracking-widest text-muted">{addOn.productType.replace(/_/g, ' ')}</p>
+                          <h3 className="mt-2 text-lg font-black text-navy">{addOn.name}</h3>
+                          <p className="mt-2 text-sm text-muted">{addOn.description}</p>
+                        </div>
+                        <div className="rounded-2xl bg-background-light px-4 py-3 text-sm font-black text-navy">{addOn.price}</div>
                       </div>
-                      <div className="rounded-2xl bg-background-light px-4 py-3 text-sm font-black text-navy">{addOn.price}</div>
+                      <div className="mt-4 flex flex-wrap gap-2 text-xs font-black uppercase tracking-widest text-muted">
+                        <span className="rounded-full bg-background-light px-3 py-1">{addOn.quantity} credits</span>
+                        <span className="rounded-full bg-background-light px-3 py-1">{addOn.interval}</span>
+                        {addOn.isRecurring ? <span className="rounded-full bg-background-light px-3 py-1">Recurring</span> : null}
+                      </div>
+                      <Button className="mt-4" fullWidth loading={busyKey === `${checkoutProductType}:${addOn.code}`} onClick={() => startCheckout(checkoutProductType, addOn.quantity, addOn.code, addOn.name)}>
+                        <ShoppingCart className="h-4 w-4" />{checkoutLabel}
+                      </Button>
                     </div>
-                    <div className="mt-4 flex flex-wrap gap-2 text-xs font-black uppercase tracking-widest text-muted">
-                      <span className="rounded-full bg-background-light px-3 py-1">{addOn.quantity} credits</span>
-                      <span className="rounded-full bg-background-light px-3 py-1">{addOn.interval}</span>
-                      {addOn.isRecurring ? <span className="rounded-full bg-background-light px-3 py-1">Recurring</span> : null}
-                    </div>
-                    <Button className="mt-4" fullWidth loading={busyKey === `addon_purchase:${addOn.code}`} onClick={() => startCheckout('addon_purchase', addOn.quantity, addOn.code, addOn.name)}>
-                      <ShoppingCart className="h-4 w-4" />Purchase add-on
-                    </Button>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             ) : (
               <div className="rounded-2xl border border-border bg-surface p-5 text-sm text-muted shadow-sm">

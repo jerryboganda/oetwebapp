@@ -2353,6 +2353,7 @@ export async function createBillingCheckoutSession(input: {
   couponCode?: string | null;
   addOnCodes?: string[];
   quoteId?: string | null;
+  gateway?: 'stripe' | 'paypal';
 }): Promise<{ checkoutUrl: string; checkoutSessionId: string; quoteId?: string | null; totalAmount?: number; currency?: string }> {
   const response = await apiRequest<ApiRecord>('/v1/billing/checkout-sessions', {
     method: 'POST',
@@ -2363,6 +2364,7 @@ export async function createBillingCheckoutSession(input: {
       couponCode: input.couponCode ?? null,
       addOnCodes: input.addOnCodes ?? null,
       quoteId: input.quoteId ?? null,
+      gateway: input.gateway ?? null,
       idempotencyKey: crypto.randomUUID?.() ?? String(Date.now()),
     }),
   });
