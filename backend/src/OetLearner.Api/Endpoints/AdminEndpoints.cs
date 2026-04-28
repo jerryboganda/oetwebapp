@@ -20,28 +20,28 @@ public static class AdminEndpoints
         admin.MapGet("/dashboard", async (AdminService service, CancellationToken ct)
             => Results.Ok(await service.GetDashboardSummaryAsync(ct)));
 
-        // ── Freeze Management (content:publish) ─────────────────
+        // ── Freeze Management (billing/user lifecycle) ─────────────────
         admin.MapGet("/freeze/overview", async (AdminService service, CancellationToken ct)
             => Results.Ok(await service.GetFreezeOverviewAsync(ct)))
-            .WithAdminRead("AdminContentPublish");
+            .WithAdminRead("AdminFreezeRead");
         admin.MapPut("/freeze/policy", async (HttpContext http, FreezePolicyRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.UpdateFreezePolicyAsync(http.AdminId(), http.AdminName(), request, ct)))
-            .WithAdminWrite("AdminContentPublish");
+            .WithAdminWrite("AdminFreezeWrite");
         admin.MapPost("/freeze/manual", async (HttpContext http, FreezeManualCreateRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.CreateManualFreezeAsync(http.AdminId(), http.AdminName(), request, ct)))
-            .WithAdminWrite("AdminContentPublish");
+            .WithAdminWrite("AdminFreezeWrite");
         admin.MapPost("/freeze/{freezeId}/approve", async (string freezeId, HttpContext http, FreezeActionRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.ApproveFreezeAsync(http.AdminId(), http.AdminName(), freezeId, request, ct)))
-            .WithAdminWrite("AdminContentPublish");
+            .WithAdminWrite("AdminFreezeWrite");
         admin.MapPost("/freeze/{freezeId}/reject", async (string freezeId, HttpContext http, FreezeActionRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.RejectFreezeAsync(http.AdminId(), http.AdminName(), freezeId, request, ct)))
-            .WithAdminWrite("AdminContentPublish");
+            .WithAdminWrite("AdminFreezeWrite");
         admin.MapPost("/freeze/{freezeId}/end", async (string freezeId, HttpContext http, FreezeActionRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.EndFreezeAsync(http.AdminId(), http.AdminName(), freezeId, request, ct)))
-            .WithAdminWrite("AdminContentPublish");
+            .WithAdminWrite("AdminFreezeWrite");
         admin.MapPost("/freeze/{freezeId}/force-end", async (string freezeId, HttpContext http, FreezeActionRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.ForceEndFreezeAsync(http.AdminId(), http.AdminName(), freezeId, request, ct)))
-            .WithAdminWrite("AdminContentPublish");
+            .WithAdminWrite("AdminFreezeWrite");
 
         // ── Content Management ──────────────────────────────
 

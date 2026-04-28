@@ -95,6 +95,28 @@ function getPaymentBanner(payment: string | null, gateway: string | null) {
   }
 }
 
+function normalizeFreezeStatus(status?: string | null) {
+  return String(status ?? '').toLowerCase();
+}
+
+function isFreezeEffective(freezeState: LearnerFreezeStatus | null) {
+  const currentFreeze = freezeState?.currentFreeze;
+  if (!currentFreeze) {
+    return false;
+  }
+
+  const status = normalizeFreezeStatus(currentFreeze.status);
+  if (status === 'active') {
+    return true;
+  }
+
+  if (status === 'scheduled' && currentFreeze.scheduledStartAt) {
+    return new Date(currentFreeze.scheduledStartAt).getTime() <= Date.now();
+  }
+
+  return false;
+}
+
 interface WalletData {
   balance: number;
   lastUpdatedAt?: string;
@@ -132,6 +154,7 @@ export default function BillingPage() {
   const [wallet, setWallet] = useState<WalletData | null>(null);
   const [walletLoading, setWalletLoading] = useState(true);
   const [freezeState, setFreezeState] = useState<LearnerFreezeStatus | null>(null);
+  const [freezeLoadFailed, setFreezeLoadFailed] = useState(false);
   const [selectedGateway, setSelectedGateway] = useState<'stripe' | 'paypal'>('stripe');
   const searchParams = useSearchParams();
   const paymentStatus = searchParams.get('payment');
@@ -140,7 +163,11 @@ export default function BillingPage() {
     () => getPaymentBanner(paymentStatus, paymentGateway),
     [paymentGateway, paymentStatus],
   );
-  const isFrozen = Boolean(freezeState?.currentFreeze);
+  const isFrozen = isFreezeEffective(freezeState);
+  const billingMutationsBlocked = freezeLoadFailed || isFrozen;
+  const billingBlockedMessage = freezeLoadFailed
+    ? 'Billing actions are temporarily paused because freeze status could not be verified. Refresh the page before checkout, plan changes, or top-ups.'
+    : 'Billing actions are read-only while your account is frozen.';
 
   const loadWallet = useCallback(async () => {
     setWalletLoading(true);
@@ -156,11 +183,21 @@ export default function BillingPage() {
 
   useEffect(() => {
     analytics.track('content_view', { page: 'subscriptions' });
-    Promise.all([fetchBilling(), fetchFreezeStatus().catch(() => null)])
-      .then(([result, freeze]) => {
-        setData(result);
-        setQuote(result.quote);
-        setFreezeState(freeze as LearnerFreezeStatus | null);
+    Promise.allSettled([fetchBilling(), fetchFreezeStatus()])
+      .then(([billingResult, freezeResult]) => {
+        if (billingResult.status === 'rejected') {
+          throw billingResult.reason;
+        }
+
+        setData(billingResult.value);
+        setQuote(billingResult.value.quote);
+        if (freezeResult.status === 'fulfilled') {
+          setFreezeState(freezeResult.value as LearnerFreezeStatus);
+          setFreezeLoadFailed(false);
+        } else {
+          setFreezeState(null);
+          setFreezeLoadFailed(true);
+        }
       })
       .catch((err) => setError(err instanceof Error ? err.message : 'Could not load billing data.'))
       .finally(() => setLoading(false));
@@ -236,8 +273,8 @@ export default function BillingPage() {
     priceId?: string | null,
     label?: string,
   ) => {
-    if (isFrozen) {
-      setError('Billing actions are read-only while your account is frozen.');
+    if (billingMutationsBlocked) {
+      setError(billingBlockedMessage);
       return;
     }
     const coupon = couponCode.trim() || null;
@@ -260,8 +297,8 @@ export default function BillingPage() {
   };
 
   const loadPreview = async (planId: string) => {
-    if (isFrozen) {
-      setError('Billing actions are read-only while your account is frozen.');
+    if (billingMutationsBlocked) {
+      setError(billingBlockedMessage);
       return;
     }
     setBusyKey(`preview:${planId}`);
@@ -298,8 +335,8 @@ export default function BillingPage() {
   };
 
   const handleTopUp = async (amount: number) => {
-    if (isFrozen) {
-      setError('Billing actions are read-only while your account is frozen.');
+    if (billingMutationsBlocked) {
+      setError(billingBlockedMessage);
       return;
     }
     setBusyKey(`topup:${amount}`);
@@ -374,6 +411,11 @@ export default function BillingPage() {
             Your account is frozen, so checkout, plan changes, and top-ups are paused. Billing history remains visible.
           </InlineAlert>
         ) : null}
+        {freezeLoadFailed ? (
+          <InlineAlert variant="error">
+            Freeze status could not be verified, so checkout, plan changes, and top-ups are paused until this page is refreshed successfully.
+          </InlineAlert>
+        ) : null}
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
         {success ? <InlineAlert variant="success">{success}</InlineAlert> : null}
 
@@ -409,7 +451,7 @@ export default function BillingPage() {
               </div>
               <div className="mt-6 grid grid-cols-2 gap-3">
                 {TOP_UP_TIERS.map((tier) => (
-                  <motion.button key={tier.amount} type="button" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} disabled={busyKey === `topup:${tier.amount}`} onClick={() => handleTopUp(tier.amount)} className={`relative rounded-2xl border p-4 text-left transition-all ${tier.popular ? 'border-emerald-300 bg-surface shadow-md' : 'border-border bg-background-light hover:border-emerald-200 hover:shadow-sm'}`}>
+                  <motion.button key={tier.amount} type="button" whileHover={{ scale: 1.02 }} whileTap={{ scale: 0.98 }} disabled={billingMutationsBlocked || busyKey === `topup:${tier.amount}`} onClick={() => handleTopUp(tier.amount)} className={`relative rounded-2xl border p-4 text-left transition-all disabled:cursor-not-allowed disabled:opacity-60 ${tier.popular ? 'border-emerald-300 bg-surface shadow-md' : 'border-border bg-background-light hover:border-emerald-200 hover:shadow-sm'}`}>
                     {tier.popular ? <span className="absolute -top-2 right-3 rounded-full bg-emerald-700 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-white">Popular</span> : null}
                     <p className="text-lg font-black text-navy">{tier.label}</p>
                     <p className="text-xs text-muted">{tier.credits} credits{tier.bonus > 0 ? <span className="ml-1 font-bold text-emerald-700">+{tier.bonus} bonus</span> : null}</p>
@@ -581,13 +623,13 @@ export default function BillingPage() {
                   </div>
                   {!isCurrent ? (
                     <div className="mt-5 space-y-3">
-                      <Button variant="outline" fullWidth loading={busyKey === `preview:${plan.id}`} onClick={() => loadPreview(plan.id)}>Preview {plan.changeDirection}</Button>
+                      <Button variant="outline" fullWidth loading={busyKey === `preview:${plan.id}`} disabled={billingMutationsBlocked} onClick={() => loadPreview(plan.id)}>Preview {plan.changeDirection}</Button>
                       {isPreviewing ? (
                         <div className="rounded-2xl border border-border bg-background-light p-4 text-sm text-muted">
                           <p className="font-bold text-navy">{preview.summary}</p>
                           <p className="mt-2">Prorated charge: {preview.proratedAmount}</p>
                           <p className="mt-1">Effective date: {new Date(preview.effectiveAt).toLocaleDateString()}</p>
-                          <Button className="mt-4" fullWidth loading={busyKey === `${plan.changeDirection}:${plan.code}`} onClick={() => startCheckout(plan.changeDirection === 'upgrade' ? 'plan_upgrade' : 'plan_downgrade', 1, plan.code, `${plan.label} ${plan.changeDirection}`)}>Continue to checkout</Button>
+                          <Button className="mt-4" fullWidth loading={busyKey === `${plan.changeDirection}:${plan.code}`} disabled={billingMutationsBlocked} onClick={() => startCheckout(plan.changeDirection === 'upgrade' ? 'plan_upgrade' : 'plan_downgrade', 1, plan.code, `${plan.label} ${plan.changeDirection}`)}>Continue to checkout</Button>
                         </div>
                       ) : null}
                     </div>
@@ -623,7 +665,7 @@ export default function BillingPage() {
                         <span className="rounded-full bg-background-light px-3 py-1">{addOn.interval}</span>
                         {addOn.isRecurring ? <span className="rounded-full bg-background-light px-3 py-1">Recurring</span> : null}
                       </div>
-                      <Button className="mt-4" fullWidth loading={busyKey === `${checkoutProductType}:${addOn.code}`} onClick={() => startCheckout(checkoutProductType, addOn.quantity, addOn.code, addOn.name)}>
+                      <Button className="mt-4" fullWidth loading={busyKey === `${checkoutProductType}:${addOn.code}`} disabled={billingMutationsBlocked} onClick={() => startCheckout(checkoutProductType, addOn.quantity, addOn.code, addOn.name)}>
                         <ShoppingCart className="h-4 w-4" />{checkoutLabel}
                       </Button>
                     </div>

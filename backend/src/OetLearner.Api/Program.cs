@@ -503,6 +503,12 @@ builder.Services.AddAuthorization(options =>
     options.AddPolicy("AdminBillingWrite", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:write", "system_admin")));
+    options.AddPolicy("AdminFreezeRead", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:read", "billing:write", "users:read", "users:write", "system_admin")));
+    options.AddPolicy("AdminFreezeWrite", policy => policy
+        .RequireAuthenticatedUser().RequireRole("admin")
+        .RequireAssertion(ctx => HasAdminPermission(ctx, "billing:write", "users:write", "system_admin")));
     options.AddPolicy("AdminUsersRead", policy => policy
         .RequireAuthenticatedUser().RequireRole("admin")
         .RequireAssertion(ctx => HasAdminPermission(ctx, "users:read", "system_admin")));

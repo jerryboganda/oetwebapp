@@ -58,6 +58,7 @@ import type {
   BillingProductType,
   Invoice,
 } from './billing-types';
+import type { FreezePolicy } from './types/freeze';
 import type {
   CalibrationCaseDetail,
   CalibrationCase,
@@ -3472,42 +3473,50 @@ export async function fetchAdminFreezeOverview() {
   return apiRequest('/v1/admin/freeze/overview');
 }
 
-export async function updateAdminFreezePolicy(payload: unknown) {
+export async function updateAdminFreezePolicy(payload: FreezePolicy) {
   return apiRequest('/v1/admin/freeze/policy', {
     method: 'PUT',
     body: JSON.stringify(payload),
   });
 }
 
-export async function createAdminManualFreeze(payload: unknown) {
+export async function createAdminManualFreeze(payload: {
+  userId: string;
+  startAt?: string | null;
+  endAt?: string | null;
+  reason?: string | null;
+  internalNotes?: string | null;
+  pauseEntitlementClock?: boolean | null;
+  overrideEligibility?: boolean | null;
+}) {
   return apiRequest('/v1/admin/freeze/manual', {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
-export async function approveAdminFreeze(freezeId: string, payload: unknown) {
+export async function approveAdminFreeze(freezeId: string, payload: { reason?: string | null; internalNotes?: string | null }) {
   return apiRequest(`/v1/admin/freeze/${encodeURIComponent(freezeId)}/approve`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
-export async function rejectAdminFreeze(freezeId: string, payload: unknown) {
+export async function rejectAdminFreeze(freezeId: string, payload: { reason?: string | null; internalNotes?: string | null }) {
   return apiRequest(`/v1/admin/freeze/${encodeURIComponent(freezeId)}/reject`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
-export async function endAdminFreeze(freezeId: string, payload: unknown) {
+export async function endAdminFreeze(freezeId: string, payload: { reason?: string | null; internalNotes?: string | null }) {
   return apiRequest(`/v1/admin/freeze/${encodeURIComponent(freezeId)}/end`, {
     method: 'POST',
     body: JSON.stringify(payload),
   });
 }
 
-export async function forceEndAdminFreeze(freezeId: string, payload: unknown) {
+export async function forceEndAdminFreeze(freezeId: string, payload: { reason?: string | null; internalNotes?: string | null }) {
   return apiRequest(`/v1/admin/freeze/${encodeURIComponent(freezeId)}/force-end`, {
     method: 'POST',
     body: JSON.stringify(payload),

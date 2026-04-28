@@ -9,8 +9,60 @@ import { Input } from '@/components/ui/form-controls';
 import { InlineAlert } from '@/components/ui/alert';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { analytics } from '@/lib/analytics';
-import { cancelFreeze, confirmFreeze, fetchFreezeStatus, requestFreeze } from '@/lib/api';
+import { cancelFreeze, fetchFreezeStatus, requestFreeze } from '@/lib/api';
 import type { LearnerFreezeStatus, FreezePolicy, FreezeEligibility } from '@/lib/types/freeze';
+
+const DEFAULT_POLICY: FreezePolicy = {
+  isEnabled: false,
+  selfServiceEnabled: false,
+  approvalMode: '',
+  accessMode: '',
+  minDurationDays: 1,
+  maxDurationDays: 365,
+  allowScheduling: false,
+  requireReason: true,
+  requireInternalNotes: false,
+  allowActivePaid: false,
+  allowGracePeriod: false,
+  allowTrial: false,
+  allowComplimentary: false,
+  allowCancelled: false,
+  allowExpired: false,
+  allowReviewOnly: false,
+  allowPastDue: false,
+  allowSuspended: false,
+};
+
+const FREEZE_REASON_LABELS: Record<string, string> = {
+  policy_disabled: 'Freeze requests are currently disabled by policy.',
+  self_service_disabled: 'Self-service freeze requests are currently disabled.',
+  current_freeze_exists: 'There is already an open freeze request for this account.',
+  self_service_entitlement_used: 'The one-time self-service freeze entitlement has already been used.',
+  reason_required: 'A reason is required before you can submit a freeze request.',
+  duration_invalid: 'The requested duration is outside the allowed policy window.',
+  date_range_invalid: 'The end time must be after the start time.',
+  scheduling_disabled: 'Future-dated freezes are not enabled under the current policy.',
+  subscription_missing: 'No active subscription record was found for this account.',
+  active_paid_excluded: 'Active paid subscriptions are excluded by the current policy.',
+  past_due_excluded: 'Past-due subscriptions are excluded by the current policy.',
+  trial_excluded: 'Trial plans are excluded by the current policy.',
+  cancelled_excluded: 'Cancelled subscriptions are excluded by the current policy.',
+  expired_excluded: 'Expired subscriptions are excluded by the current policy.',
+  suspended_excluded: 'Suspended accounts are excluded by the current policy.',
+  complimentary_excluded: 'Complimentary plans are excluded by the current policy.',
+};
+
+function normalizeFreezeStatus(status?: string | null) {
+  return String(status ?? '').toLowerCase();
+}
+
+function describeReasonCodes(reasonCodes?: string[]) {
+  if (!reasonCodes || reasonCodes.length === 0) {
+    return [];
+  }
+
+  return reasonCodes.map((code) => FREEZE_REASON_LABELS[code] ?? code.replace(/_/g, ' '));
+}
 
 function toIsoOrNull(value: string): string | null {
   if (!value) return null;
@@ -54,12 +106,17 @@ export default function FreezePage() {
     };
   }, []);
 
-  const policy: FreezePolicy = freezeState?.policy ?? { isEnabled: false, selfServiceEnabled: false, approvalMode: '', accessMode: '', minDurationDays: 0, maxDurationDays: 365 };
+  const policy: FreezePolicy = freezeState?.policy ?? DEFAULT_POLICY;
   const currentFreeze = freezeState?.currentFreeze ?? null;
   const eligibility: FreezeEligibility = freezeState?.eligibility ?? { eligible: false };
   const history = freezeState?.history ?? [];
+  const currentStatus = normalizeFreezeStatus(currentFreeze?.status);
   const isSelfServiceAvailable = Boolean(policy.selfServiceEnabled && policy.isEnabled);
-  const canRequest = Boolean(isSelfServiceAvailable && !currentFreeze && eligibility.eligible !== false);
+  const canSchedule = Boolean(eligibility.canSchedule ?? policy.allowScheduling);
+  const canRequest = Boolean(isSelfServiceAvailable && !currentFreeze && eligibility.eligible !== false && eligibility.canRequest !== false);
+  const canCancelCurrent = currentStatus === 'pendingapproval' || currentStatus === 'scheduled';
+  const canSubmit = canRequest && !loading && !busy;
+  const eligibilityMessages = describeReasonCodes(eligibility.reasonCodes);
 
   const highlights = useMemo(
     () => [
@@ -77,6 +134,29 @@ export default function FreezePage() {
       return;
     }
 
+    if (startAt && !canSchedule) {
+      setError('Future-dated freezes are not enabled under the current policy.');
+      return;
+    }
+
+    if (policy.requireReason && !reason.trim()) {
+      setError('Please add a reason for this freeze request.');
+      return;
+    }
+
+    const startDate = startAt ? new Date(startAt) : new Date();
+    const endDate = endAt ? new Date(endAt) : new Date(startDate.getTime() + (policy.minDurationDays ?? 1) * 24 * 60 * 60 * 1000);
+    if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime()) || endDate <= startDate) {
+      setError('Choose a valid end time after the start time.');
+      return;
+    }
+
+    const durationDays = Math.ceil((endDate.getTime() - startDate.getTime()) / (24 * 60 * 60 * 1000));
+    if (durationDays < (policy.minDurationDays ?? 1) || durationDays > Math.min(policy.maxDurationDays ?? 365, 365)) {
+      setError(`Freeze duration must be between ${policy.minDurationDays ?? 1} and ${Math.min(policy.maxDurationDays ?? 365, 365)} days.`);
+      return;
+    }
+
     setBusy(true);
     setError(null);
     setSuccess(null);
@@ -91,6 +171,8 @@ export default function FreezePage() {
       const refreshed = await fetchFreezeStatus();
       setFreezeState(refreshed as LearnerFreezeStatus);
       setReason('');
+      setStartAt('');
+      setEndAt('');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Could not submit freeze request.');
     } finally {
@@ -98,25 +180,8 @@ export default function FreezePage() {
     }
   };
 
-  const confirmCurrentFreeze = async () => {
-    if (!currentFreeze?.id) return;
-    setBusy(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      await confirmFreeze(currentFreeze.id);
-      const refreshed = await fetchFreezeStatus();
-      setFreezeState(refreshed as LearnerFreezeStatus);
-      setSuccess('Freeze confirmed.');
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Could not confirm the freeze.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
   const cancelCurrentFreeze = async () => {
-    if (!currentFreeze?.id) return;
+    if (!currentFreeze?.id || !canCancelCurrent) return;
     setBusy(true);
     setError(null);
     setSuccess(null);
@@ -147,10 +212,16 @@ export default function FreezePage() {
         {loading ? <InlineAlert variant="info">Loading freeze status...</InlineAlert> : null}
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
         {success ? <InlineAlert variant="success">{success}</InlineAlert> : null}
-        {currentFreeze ? (
+        {currentFreeze && currentStatus === 'active' ? (
           <InlineAlert variant="warning">
-            This learner is currently frozen. Study mutations are paused until the freeze ends.
+            This account is actively frozen. Study mutations are paused until the freeze ends.
           </InlineAlert>
+        ) : null}
+        {currentFreeze && currentStatus === 'pendingapproval' ? (
+          <InlineAlert variant="info">Your freeze request is waiting for admin approval. You can cancel it before approval.</InlineAlert>
+        ) : null}
+        {currentFreeze && currentStatus === 'scheduled' ? (
+          <InlineAlert variant="info">Your freeze is scheduled. You can cancel it before the start time.</InlineAlert>
         ) : null}
 
         <section className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
@@ -171,7 +242,8 @@ export default function FreezePage() {
                   type="datetime-local"
                   value={startAt}
                   onChange={(event) => setStartAt(event.target.value)}
-                  hint="Leave blank to start immediately."
+                  disabled={!canSchedule}
+                  hint={canSchedule ? 'Leave blank to start immediately.' : 'Future-dated scheduling is disabled by policy.'}
                 />
                 <Input
                   label="End at"
@@ -191,7 +263,7 @@ export default function FreezePage() {
               />
 
               <div className="flex flex-wrap gap-3">
-                <Button onClick={submitRequest} loading={busy} disabled={!canRequest}>
+                <Button onClick={submitRequest} loading={busy} disabled={!canSubmit}>
                   Submit Freeze Request
                 </Button>
                 <Link
@@ -222,22 +294,21 @@ export default function FreezePage() {
                   </div>
                   <div className="grid gap-3 sm:grid-cols-2">
                     <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Started</p>
-                      <p className="mt-1 text-sm text-navy">{currentFreeze.startedAt ? new Date(currentFreeze.startedAt).toLocaleString() : 'Pending'}</p>
+                      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Starts</p>
+                      <p className="mt-1 text-sm text-navy">{currentFreeze.startedAt ? new Date(currentFreeze.startedAt).toLocaleString() : currentFreeze.scheduledStartAt ? new Date(currentFreeze.scheduledStartAt).toLocaleString() : 'Pending'}</p>
                     </div>
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Ends</p>
                       <p className="mt-1 text-sm text-navy">{currentFreeze.endedAt ? new Date(currentFreeze.endedAt).toLocaleString() : 'Not set'}</p>
                     </div>
                   </div>
-                  <div className="flex flex-wrap gap-3">
-                    <Button onClick={confirmCurrentFreeze} loading={busy} disabled={!currentFreeze}>
-                      Confirm
-                    </Button>
-                    <Button variant="outline" onClick={cancelCurrentFreeze} loading={busy} disabled={!currentFreeze}>
-                      Cancel
-                    </Button>
-                  </div>
+                  {canCancelCurrent ? (
+                    <div className="flex flex-wrap gap-3">
+                      <Button variant="outline" onClick={cancelCurrentFreeze} loading={busy} disabled={!canCancelCurrent || busy}>
+                        Cancel
+                      </Button>
+                    </div>
+                  ) : null}
                 </div>
               ) : (
                 <div className="rounded-2xl border border-dashed border-border bg-background-light p-4 text-sm text-muted">
@@ -249,9 +320,14 @@ export default function FreezePage() {
                 <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted">Eligibility</p>
                 <p className="mt-2 text-sm text-navy">
                   {eligibility.eligible === false
-                    ? eligibility.reason ?? 'This account is not eligible under the current policy.'
+                    ? eligibility.reason ?? eligibilityMessages[0] ?? 'This account is not eligible under the current policy.'
                     : 'This account can request a freeze under the current policy.'}
                 </p>
+                {eligibilityMessages.length > 1 ? (
+                  <ul className="mt-3 list-disc space-y-1 pl-5 text-sm text-muted">
+                    {eligibilityMessages.slice(1).map((message) => <li key={message}>{message}</li>)}
+                  </ul>
+                ) : null}
               </div>
             </CardContent>
           </Card>
@@ -275,7 +351,7 @@ export default function FreezePage() {
                     </p>
                   </div>
                   <div className="text-sm text-muted">
-                    {record.startedAt ? `Started ${new Date(record.startedAt).toLocaleString()}` : 'Pending start'}
+                    {record.startedAt ? `Started ${new Date(record.startedAt).toLocaleString()}` : record.scheduledStartAt ? `Starts ${new Date(record.scheduledStartAt).toLocaleString()}` : 'Pending start'}
                     {record.endedAt ? ` · Ended ${new Date(record.endedAt).toLocaleString()}` : ''}
                   </div>
                 </CardContent>

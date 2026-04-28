@@ -5,6 +5,7 @@ const {
   mockFetchBillingChangePreview,
   mockFetchFreezeStatus,
   mockCreateBillingCheckoutSession,
+  mockCreateWalletTopUp,
   mockDownloadInvoice,
   mockFetchBillingQuote,
   mockTrack,
@@ -13,6 +14,7 @@ const {
   mockFetchBillingChangePreview: vi.fn(),
   mockFetchFreezeStatus: vi.fn(),
   mockCreateBillingCheckoutSession: vi.fn(),
+  mockCreateWalletTopUp: vi.fn(),
   mockDownloadInvoice: vi.fn(),
   mockFetchBillingQuote: vi.fn(),
   mockTrack: vi.fn(),
@@ -40,6 +42,7 @@ vi.mock('@/lib/api', () => ({
   fetchBillingChangePreview: mockFetchBillingChangePreview,
   fetchFreezeStatus: mockFetchFreezeStatus,
   createBillingCheckoutSession: mockCreateBillingCheckoutSession,
+  createWalletTopUp: mockCreateWalletTopUp,
   downloadInvoice: mockDownloadInvoice,
   fetchBillingQuote: mockFetchBillingQuote,
 }));
@@ -147,6 +150,7 @@ describe('Billing page', () => {
     });
     mockFetchFreezeStatus.mockResolvedValue(null);
     mockCreateBillingCheckoutSession.mockResolvedValue({ checkoutUrl: 'https://example.com/checkout' });
+    mockCreateWalletTopUp.mockResolvedValue({ checkoutUrl: 'https://example.com/top-up', totalCredits: 10 });
     mockDownloadInvoice.mockResolvedValue('blob:invoice');
   });
 
@@ -176,6 +180,43 @@ describe('Billing page', () => {
       }));
     });
 
+    openSpy.mockRestore();
+  });
+
+  it('fails closed for paid actions when freeze status cannot be verified', async () => {
+    mockFetchFreezeStatus.mockRejectedValueOnce(new Error('freeze unavailable'));
+
+    renderWithRouter(<BillingPage />);
+
+    expect(await screen.findByText('Manage subscriptions without billing surprises')).toBeInTheDocument();
+    expect(screen.getByText(/freeze status could not be verified/i)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /purchase credits/i })).toBeDisabled();
+  });
+
+  it('allows checkout when a freeze is scheduled for the future', async () => {
+    const user = userEvent.setup();
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(null);
+    mockFetchFreezeStatus.mockResolvedValueOnce({
+      currentFreeze: {
+        id: 'freeze-1',
+        userId: 'learner-1',
+        status: 'Scheduled',
+        requestedAt: '2026-01-01T00:00:00Z',
+        scheduledStartAt: '2999-01-01T00:00:00Z',
+        startedAt: null,
+        endedAt: '2999-01-08T00:00:00Z',
+      },
+      policy: {},
+      eligibility: { eligible: false },
+      history: [],
+    });
+
+    renderWithRouter(<BillingPage />);
+
+    expect(await screen.findByText('Manage subscriptions without billing surprises')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /purchase credits/i }));
+
+    await waitFor(() => expect(mockCreateBillingCheckoutSession).toHaveBeenCalled());
     openSpy.mockRestore();
   });
 });

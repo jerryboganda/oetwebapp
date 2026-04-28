@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Domain;
@@ -9,6 +10,12 @@ public partial class AdminService
     public async Task<object> GetFreezeOverviewAsync(CancellationToken ct)
     {
         var policy = await GetCurrentFreezePolicyAsync(ct);
+        var activeCount = await db.AccountFreezeRecords.CountAsync(x => x.Status == FreezeStatus.Active, ct);
+        var pendingCount = await db.AccountFreezeRecords.CountAsync(x => x.Status == FreezeStatus.PendingApproval, ct);
+        var scheduledCount = await db.AccountFreezeRecords.CountAsync(x => x.Status == FreezeStatus.Scheduled, ct);
+        var cancelledCount = await db.AccountFreezeRecords.CountAsync(x => x.Status == FreezeStatus.Cancelled, ct);
+        var rejectedCount = await db.AccountFreezeRecords.CountAsync(x => x.Status == FreezeStatus.Rejected, ct);
+        var endedCount = await db.AccountFreezeRecords.CountAsync(x => x.Status == FreezeStatus.Completed || x.Status == FreezeStatus.ForceEnded, ct);
         var records = await db.AccountFreezeRecords.AsNoTracking()
             .OrderByDescending(x => x.RequestedAt)
             .Take(100)
@@ -20,12 +27,12 @@ public partial class AdminService
             policy = MapFreezePolicy(policy),
             counts = new
             {
-                active = records.Count(x => x.Status == FreezeStatus.Active),
-                pending = records.Count(x => x.Status == FreezeStatus.PendingApproval),
-                scheduled = records.Count(x => x.Status == FreezeStatus.Scheduled),
-                cancelled = records.Count(x => x.Status == FreezeStatus.Cancelled),
-                rejected = records.Count(x => x.Status == FreezeStatus.Rejected),
-                ended = records.Count(x => x.Status is FreezeStatus.Completed or FreezeStatus.ForceEnded)
+                active = activeCount,
+                pending = pendingCount,
+                scheduled = scheduledCount,
+                cancelled = cancelledCount,
+                rejected = rejectedCount,
+                ended = endedCount
             },
             records = records.Select(MapFreezeRecord).ToList()
         };
@@ -78,7 +85,7 @@ public partial class AdminService
         nextPolicy.AllowPastDue = request.AllowPastDue;
         nextPolicy.AllowSuspended = request.AllowSuspended;
         nextPolicy.PolicyNotes = request.PolicyNotes ?? string.Empty;
-        nextPolicy.EligibilityReasonCodesJson = request.EligibilityReasonCodesJson ?? "[]";
+        nextPolicy.EligibilityReasonCodesJson = NormalizeEligibilityReasonCodesJson(request.EligibilityReasonCodesJson);
         nextPolicy.UpdatedByAdminId = adminId;
         nextPolicy.UpdatedByAdminName = adminName;
         nextPolicy.UpdatedAt = now;
@@ -118,10 +125,9 @@ public partial class AdminService
     {
         var target = await ResolveUserTargetAsync(request.UserId, ct);
         var policy = await GetCurrentFreezePolicyAsync(ct);
+        EnsureInternalNotesPolicy(policy, request.InternalNotes);
         var currentFreeze = await db.AccountFreezeRecords.AsNoTracking()
             .FirstOrDefaultAsync(x => x.UserId == request.UserId && x.IsCurrent, ct);
-        var entitlement = await db.AccountFreezeEntitlements.AsNoTracking()
-            .FirstOrDefaultAsync(x => x.UserId == request.UserId, ct);
 
         if (currentFreeze is not null && currentFreeze.Status is FreezeStatus.Active or FreezeStatus.PendingApproval or FreezeStatus.Scheduled)
         {
@@ -129,7 +135,17 @@ public partial class AdminService
         }
 
         var startAt = request.StartAt ?? timeProvider.GetUtcNow();
+        if (request.StartAt is not null && startAt > timeProvider.GetUtcNow() && !policy.AllowScheduling && !request.OverrideEligibility.GetValueOrDefault())
+        {
+            throw ApiException.Validation("freeze_scheduling_disabled", "Future-dated freezes are not enabled under the current policy.");
+        }
+
         var endAt = request.EndAt ?? startAt.AddDays(policy.MinDurationDays);
+        if (endAt <= startAt)
+        {
+            throw ApiException.Validation("freeze_date_range_invalid", "Freeze end time must be after the start time.");
+        }
+
         var durationDays = Math.Max(1, (int)Math.Ceiling((endAt - startAt).TotalDays));
         if (durationDays < policy.MinDurationDays || durationDays > policy.MaxDurationDays || durationDays > 365)
         {
@@ -140,7 +156,6 @@ public partial class AdminService
             request.UserId,
             policy,
             currentFreeze,
-            entitlement,
             new FreezeRequestRequest(startAt, endAt, request.Reason, request.PauseEntitlementClock),
             ct);
 
@@ -179,8 +194,8 @@ public partial class AdminService
         };
 
         db.AccountFreezeRecords.Add(record);
-        await db.SaveChangesAsync(ct);
         await QueueFreezeLifecycleJobsAsync(record, ct);
+        await db.SaveChangesAsync(ct);
 
         await LogAuditAsync(
             adminId,
@@ -229,6 +244,8 @@ public partial class AdminService
             throw ApiException.Conflict("freeze_not_pending", "Only pending freeze requests can be approved.");
         }
 
+        var policy = await GetCurrentFreezePolicyAsync(ct);
+        EnsureInternalNotesPolicy(policy, request.InternalNotes);
         var now = timeProvider.GetUtcNow();
         record.ApprovedByAdminId = adminId;
         record.ApprovedByAdminName = adminName;
@@ -242,9 +259,13 @@ public partial class AdminService
         {
             record.InternalNotes = request.InternalNotes.Trim();
         }
+        if (record.Status == FreezeStatus.Active)
+        {
+            await ConsumeSelfServiceFreezeEntitlementAsync(record, now, ct);
+        }
 
-        await db.SaveChangesAsync(ct);
         await QueueFreezeLifecycleJobsAsync(record, ct);
+        await db.SaveChangesAsync(ct);
 
         await LogAuditAsync(adminId, adminName, "Approved Freeze", nameof(AccountFreezeRecord), record.Id, $"Approved freeze for user {record.UserId}.", ct);
 
@@ -281,11 +302,13 @@ public partial class AdminService
         var record = await db.AccountFreezeRecords.FirstOrDefaultAsync(x => x.Id == freezeId, ct)
             ?? throw ApiException.NotFound("freeze_not_found", "Freeze record not found.");
 
-        if (record.Status is FreezeStatus.Completed or FreezeStatus.ForceEnded)
+        if (record.Status is not FreezeStatus.PendingApproval)
         {
-            throw ApiException.Conflict("freeze_finalized", "This freeze has already ended.");
+            throw ApiException.Conflict("freeze_not_pending", "Only pending freeze requests can be rejected.");
         }
 
+        var policy = await GetCurrentFreezePolicyAsync(ct);
+        EnsureInternalNotesPolicy(policy, request.InternalNotes);
         record.RejectedByAdminId = adminId;
         record.RejectedByAdminName = adminName;
         record.RejectionReason = request.Reason?.Trim();
@@ -296,6 +319,7 @@ public partial class AdminService
         {
             record.InternalNotes = request.InternalNotes.Trim();
         }
+        await ReleaseSelfServiceFreezeEntitlementAsync(record, adminId, adminName, "Rejected by administrator before activation", ct);
 
         await db.SaveChangesAsync(ct);
         await LogAuditAsync(adminId, adminName, "Rejected Freeze", nameof(AccountFreezeRecord), record.Id, $"Rejected freeze for user {record.UserId}.", ct);
@@ -348,6 +372,8 @@ public partial class AdminService
             return await GetFreezeOverviewAsync(ct);
         }
 
+        var policy = await GetCurrentFreezePolicyAsync(ct);
+        EnsureInternalNotesPolicy(policy, request.InternalNotes);
         record.EndedByAdminId = adminId;
         record.EndedByAdminName = adminName;
         record.EndReason = request.Reason?.Trim();
@@ -359,6 +385,7 @@ public partial class AdminService
         {
             record.InternalNotes = request.InternalNotes.Trim();
         }
+        await ReleaseSelfServiceFreezeEntitlementAsync(record, adminId, adminName, "Ended by administrator before activation", ct);
 
         await db.SaveChangesAsync(ct);
         await LogAuditAsync(adminId, adminName, finalStatus == FreezeStatus.ForceEnded ? "Force End Freeze" : "End Freeze", nameof(AccountFreezeRecord), record.Id, $"Ended freeze for user {record.UserId}.", ct);
@@ -454,7 +481,6 @@ public partial class AdminService
             job.RetryAfterMs = null;
         }
 
-        await db.SaveChangesAsync(ct);
     }
 
     private async Task<AccountFreezePolicy> GetCurrentFreezePolicyAsync(CancellationToken ct)
@@ -496,22 +522,29 @@ public partial class AdminService
         string userId,
         AccountFreezePolicy policy,
         AccountFreezeRecord? currentFreeze,
-        AccountFreezeEntitlement? entitlement,
         FreezeRequestRequest? request,
         CancellationToken ct)
     {
-        var subscription = await db.Subscriptions.AsNoTracking().FirstAsync(x => x.UserId == userId, ct);
+        var subscription = await db.Subscriptions.AsNoTracking().FirstOrDefaultAsync(x => x.UserId == userId, ct);
+        if (subscription is null)
+        {
+            return new FreezeEligibilityResult(
+                false,
+                policy.AllowScheduling,
+                policy.MaxDurationDays,
+                policy.MinDurationDays,
+                "unknown",
+                ["subscription_missing"],
+                policy.Version);
+        }
+
         var currentPlan = await db.BillingPlans.AsNoTracking().FirstOrDefaultAsync(x => x.Code == subscription.PlanId, ct);
         var reasonCodes = new List<string>();
+        var now = timeProvider.GetUtcNow();
 
         if (!policy.IsEnabled)
         {
             reasonCodes.Add("policy_disabled");
-        }
-
-        if (!policy.SelfServiceEnabled)
-        {
-            reasonCodes.Add("self_service_disabled");
         }
 
         if (currentFreeze is not null && currentFreeze.Status is FreezeStatus.Active or FreezeStatus.PendingApproval or FreezeStatus.Scheduled)
@@ -519,14 +552,30 @@ public partial class AdminService
             reasonCodes.Add("current_freeze_exists");
         }
 
-        if (entitlement is not null && entitlement.ConsumedAt is not null && entitlement.ResetAt is null)
-        {
-            reasonCodes.Add("self_service_entitlement_used");
-        }
-
         if (request is not null && policy.RequireReason && string.IsNullOrWhiteSpace(request.Reason))
         {
             reasonCodes.Add("reason_required");
+        }
+
+        if (request is not null)
+        {
+            var startAt = request.StartAt ?? now;
+            var endAt = request.EndAt ?? startAt.AddDays(policy.MinDurationDays);
+            if (request.StartAt is not null && startAt > now && !policy.AllowScheduling)
+            {
+                reasonCodes.Add("scheduling_disabled");
+            }
+
+            if (endAt <= startAt)
+            {
+                reasonCodes.Add("date_range_invalid");
+            }
+
+            var durationDays = Math.Max(1, (int)Math.Ceiling((endAt - startAt).TotalDays));
+            if (durationDays < policy.MinDurationDays || durationDays > policy.MaxDurationDays || durationDays > 365)
+            {
+                reasonCodes.Add("duration_invalid");
+            }
         }
 
         if (subscription.Status == SubscriptionStatus.Active && !policy.AllowActivePaid)
@@ -642,4 +691,88 @@ public partial class AdminService
         string SubscriptionState,
         IReadOnlyCollection<string> ReasonCodes,
         int PolicyVersion);
+
+    private static string NormalizeEligibilityReasonCodesJson(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "[]";
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(value);
+            if (document.RootElement.ValueKind != JsonValueKind.Array || document.RootElement.EnumerateArray().Any(item => item.ValueKind != JsonValueKind.String))
+            {
+                throw ApiException.Validation("freeze_policy_invalid", "Eligibility reason codes must be a JSON array of strings.");
+            }
+
+            return document.RootElement.GetRawText();
+        }
+        catch (JsonException)
+        {
+            throw ApiException.Validation("freeze_policy_invalid", "Eligibility reason codes must be valid JSON.");
+        }
+    }
+
+    private static void EnsureInternalNotesPolicy(AccountFreezePolicy policy, string? internalNotes)
+    {
+        if (policy.RequireInternalNotes && string.IsNullOrWhiteSpace(internalNotes))
+        {
+            throw ApiException.Validation("freeze_internal_notes_required", "Internal notes are required for admin freeze actions under the current policy.");
+        }
+    }
+
+    private async Task ConsumeSelfServiceFreezeEntitlementAsync(AccountFreezeRecord record, DateTimeOffset consumedAt, CancellationToken ct)
+    {
+        if (!record.IsSelfService || record.EntitlementConsumed)
+        {
+            return;
+        }
+
+        var entitlement = await db.AccountFreezeEntitlements.FirstOrDefaultAsync(x => x.UserId == record.UserId, ct);
+        if (entitlement is null)
+        {
+            db.AccountFreezeEntitlements.Add(new AccountFreezeEntitlement
+            {
+                Id = $"FZE-{Guid.NewGuid():N}",
+                UserId = record.UserId,
+                FreezeRecordId = record.Id,
+                ConsumedAt = consumedAt,
+                ResetAt = null
+            });
+        }
+        else
+        {
+            entitlement.FreezeRecordId = record.Id;
+            entitlement.ConsumedAt = consumedAt;
+            entitlement.ResetAt = null;
+            entitlement.ResetByAdminId = null;
+            entitlement.ResetByAdminName = null;
+            entitlement.ResetReason = null;
+        }
+
+        record.EntitlementConsumed = true;
+    }
+
+    private async Task ReleaseSelfServiceFreezeEntitlementAsync(AccountFreezeRecord record, string? adminId, string? adminName, string reason, CancellationToken ct)
+    {
+        if (!record.IsSelfService || record.EntitlementConsumed)
+        {
+            return;
+        }
+
+        var entitlement = await db.AccountFreezeEntitlements.FirstOrDefaultAsync(x => x.UserId == record.UserId, ct);
+        if (entitlement is null || entitlement.FreezeRecordId != record.Id)
+        {
+            return;
+        }
+
+        entitlement.ResetAt = timeProvider.GetUtcNow();
+        entitlement.ResetByAdminId = adminId;
+        entitlement.ResetByAdminName = adminName;
+        entitlement.ResetReason = reason;
+        entitlement.ConsumedAt = null;
+        record.EntitlementConsumed = false;
+    }
 }

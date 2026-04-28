@@ -60,8 +60,24 @@ public partial class LearnerService
             throw ApiException.Forbidden("freeze_unavailable", "Freezes are not available for self-service right now.");
         }
 
-        var startAt = request.StartAt ?? DateTimeOffset.UtcNow;
+        var now = DateTimeOffset.UtcNow;
+        var startAt = request.StartAt ?? now;
+        if (request.StartAt is not null && startAt > now && !policy.AllowScheduling)
+        {
+            throw ApiException.Validation("freeze_scheduling_disabled", "Future-dated freezes are not enabled under the current policy.");
+        }
+
         var endAt = request.EndAt ?? startAt.AddDays(policy.MinDurationDays);
+        if (endAt <= startAt)
+        {
+            throw ApiException.Validation("freeze_date_range_invalid", "Freeze end time must be after the start time.");
+        }
+
+        if (policy.RequireReason && string.IsNullOrWhiteSpace(request.Reason))
+        {
+            throw ApiException.Validation("freeze_reason_required", "A reason is required for freeze requests under the current policy.");
+        }
+
         var durationDays = Math.Max(1, (int)Math.Ceiling((endAt - startAt).TotalDays));
         if (durationDays < policy.MinDurationDays || durationDays > policy.MaxDurationDays || durationDays > 365)
         {
@@ -69,7 +85,7 @@ public partial class LearnerService
         }
 
         var currentFreeze = await GetCurrentFreezeRecordAsync(userId, cancellationToken);
-        if (currentFreeze is not null && currentFreeze.Status is FreezeStatus.Active or FreezeStatus.PendingApproval or FreezeStatus.Scheduled)
+        if (currentFreeze is not null && IsOpenFreezeStatus(currentFreeze.Status))
         {
             throw ApiException.Conflict("freeze_exists", "There is already an active or pending freeze for this learner.");
         }
@@ -86,7 +102,6 @@ public partial class LearnerService
             throw ApiException.Forbidden("freeze_ineligible", "This learner is not eligible for a self-service freeze.");
         }
 
-        var now = DateTimeOffset.UtcNow;
         var status = policy.ApprovalMode == FreezeApprovalMode.AdminApprovalRequired
             ? FreezeStatus.PendingApproval
             : startAt > now
@@ -101,7 +116,7 @@ public partial class LearnerService
             Status = status,
             IsCurrent = true,
             IsSelfService = true,
-            EntitlementConsumed = true,
+            EntitlementConsumed = status == FreezeStatus.Active,
             EntitlementReset = request.PauseEntitlementClock ?? (policy.EntitlementPauseMode == FreezeEntitlementPauseMode.InternalClock),
             IsOverride = false,
             RequestedAt = now,
@@ -121,14 +136,32 @@ public partial class LearnerService
         };
 
         db.AccountFreezeRecords.Add(record);
-        db.AccountFreezeEntitlements.Add(new AccountFreezeEntitlement
+        var trackedEntitlement = await db.AccountFreezeEntitlements.FirstOrDefaultAsync(x => x.UserId == userId, cancellationToken);
+        if (trackedEntitlement is null)
         {
-            Id = $"FZE-{Guid.NewGuid():N}",
-            UserId = userId,
-            FreezeRecordId = record.Id,
-            ConsumedAt = now,
-            ResetAt = null
-        });
+            db.AccountFreezeEntitlements.Add(new AccountFreezeEntitlement
+            {
+                Id = $"FZE-{Guid.NewGuid():N}",
+                UserId = userId,
+                FreezeRecordId = record.Id,
+                ConsumedAt = status == FreezeStatus.Active ? now : null,
+                ResetAt = null
+            });
+        }
+        else
+        {
+            trackedEntitlement.FreezeRecordId = record.Id;
+            trackedEntitlement.ConsumedAt = status == FreezeStatus.Active ? now : null;
+            trackedEntitlement.ResetAt = null;
+            trackedEntitlement.ResetByAdminId = null;
+            trackedEntitlement.ResetByAdminName = null;
+            trackedEntitlement.ResetReason = null;
+        }
+
+        if (record.Status is FreezeStatus.Active or FreezeStatus.Scheduled)
+        {
+            await QueueFreezeLifecycleJobsAsync(record, cancellationToken);
+        }
 
         try
         {
@@ -137,11 +170,6 @@ public partial class LearnerService
         catch (DbUpdateException)
         {
             throw ApiException.Conflict("freeze_limit_reached", "A self-service freeze has already been claimed for this learner.");
-        }
-
-        if (record.Status is FreezeStatus.Active or FreezeStatus.Scheduled)
-        {
-            await QueueFreezeLifecycleJobsAsync(record, cancellationToken);
         }
 
         await RecordEventAsync(userId, "freeze_requested", new
@@ -166,6 +194,21 @@ public partial class LearnerService
                 {
                     ["freezeId"] = record.Id,
                     ["message"] = "Your freeze is now active."
+                },
+                cancellationToken);
+        }
+        else if (status == FreezeStatus.Scheduled)
+        {
+            await notifications.CreateForLearnerAsync(
+                NotificationEventKey.LearnerFreezeApproved,
+                userId,
+                nameof(AccountFreezeRecord),
+                record.Id,
+                record.PolicyVersionSnapshot.ToString(),
+                new Dictionary<string, object?>
+                {
+                    ["freezeId"] = record.Id,
+                    ["message"] = "Your freeze has been scheduled."
                 },
                 cancellationToken);
         }
@@ -195,6 +238,8 @@ public partial class LearnerService
                 cancellationToken);
         }
 
+        await db.SaveChangesAsync(cancellationToken);
+
         return await GetFreezeStatusAsync(userId, cancellationToken);
     }
 
@@ -211,20 +256,27 @@ public partial class LearnerService
             throw ApiException.Conflict("freeze_finalized", "This freeze request can no longer be confirmed.");
         }
 
+        if (record.Status == FreezeStatus.PendingApproval)
+        {
+            throw ApiException.Conflict("freeze_requires_admin_approval", "This freeze request must be approved by an administrator before it can start.");
+        }
+
         var now = DateTimeOffset.UtcNow;
-        record.Status = record.ScheduledStartAt is not null && record.ScheduledStartAt > now
-            ? FreezeStatus.Scheduled
-            : FreezeStatus.Active;
-        record.IsCurrent = true;
-        record.StartedAt ??= record.Status == FreezeStatus.Active ? now : null;
+        if (record.Status == FreezeStatus.Scheduled && record.ScheduledStartAt is not null && record.ScheduledStartAt <= now)
+        {
+            record.Status = FreezeStatus.Active;
+            record.StartedAt ??= record.ScheduledStartAt;
+            await ConsumeSelfServiceFreezeEntitlementAsync(record, now, cancellationToken);
+        }
+
         record.UpdatedAt = now;
 
-        await db.SaveChangesAsync(cancellationToken);
         if (record.Status is FreezeStatus.Active or FreezeStatus.Scheduled)
         {
             await QueueFreezeLifecycleJobsAsync(record, cancellationToken);
         }
         await RecordEventAsync(userId, "freeze_confirmed", new { freezeId = record.Id, status = record.Status }, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
         return await GetFreezeStatusAsync(userId, cancellationToken);
     }
 
@@ -252,9 +304,10 @@ public partial class LearnerService
             ? "Cancelled by learner"
             : record.CancellationReason;
         record.UpdatedAt = DateTimeOffset.UtcNow;
+        await ReleaseSelfServiceFreezeEntitlementAsync(record, null, null, "Cancelled by learner before activation", cancellationToken);
 
-        await db.SaveChangesAsync(cancellationToken);
         await RecordEventAsync(userId, "freeze_cancelled", new { freezeId = record.Id }, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
         return await GetFreezeStatusAsync(userId, cancellationToken);
     }
 
@@ -332,7 +385,6 @@ public partial class LearnerService
         job.Retryable = true;
         job.RetryCount = 0;
         job.RetryAfterMs = null;
-        await db.SaveChangesAsync(cancellationToken);
     }
 
     private async Task EnsureLearnerMutationAllowedAsync(string userId, CancellationToken cancellationToken)
@@ -343,7 +395,7 @@ public partial class LearnerService
             return;
         }
 
-        if (currentFreeze.Status is FreezeStatus.Active or FreezeStatus.Scheduled or FreezeStatus.PendingApproval)
+        if (IsFreezeActiveForMutation(currentFreeze))
         {
             throw ApiException.Forbidden("account_frozen", "This learner account is frozen and read-only.");
         }
@@ -462,6 +514,16 @@ public partial class LearnerService
 
             var startAt = request.StartAt ?? now;
             var endAt = request.EndAt ?? startAt.AddDays(policy.MinDurationDays);
+            if (request.StartAt is not null && startAt > now && !policy.AllowScheduling)
+            {
+                reasonCodes.Add("scheduling_disabled");
+            }
+
+            if (endAt <= startAt)
+            {
+                reasonCodes.Add("date_range_invalid");
+            }
+
             var durationDays = Math.Max(1, (int)Math.Ceiling((endAt - startAt).TotalDays));
             if (durationDays < policy.MinDurationDays || durationDays > policy.MaxDurationDays || durationDays > 365)
             {
@@ -583,4 +645,66 @@ public partial class LearnerService
         string SubscriptionState,
         IReadOnlyCollection<string> ReasonCodes,
         int PolicyVersion);
+
+    private static bool IsOpenFreezeStatus(FreezeStatus status)
+        => status is FreezeStatus.Active or FreezeStatus.PendingApproval or FreezeStatus.Scheduled;
+
+    private static bool IsFreezeActiveForMutation(AccountFreezeRecord record)
+        => record.Status == FreezeStatus.Active
+            || (record.Status == FreezeStatus.Scheduled
+                && record.ScheduledStartAt is not null
+                && record.ScheduledStartAt <= DateTimeOffset.UtcNow);
+
+    private async Task ConsumeSelfServiceFreezeEntitlementAsync(AccountFreezeRecord record, DateTimeOffset consumedAt, CancellationToken cancellationToken)
+    {
+        if (!record.IsSelfService || record.EntitlementConsumed)
+        {
+            return;
+        }
+
+        var entitlement = await db.AccountFreezeEntitlements.FirstOrDefaultAsync(x => x.UserId == record.UserId, cancellationToken);
+        if (entitlement is null)
+        {
+            db.AccountFreezeEntitlements.Add(new AccountFreezeEntitlement
+            {
+                Id = $"FZE-{Guid.NewGuid():N}",
+                UserId = record.UserId,
+                FreezeRecordId = record.Id,
+                ConsumedAt = consumedAt,
+                ResetAt = null
+            });
+        }
+        else
+        {
+            entitlement.FreezeRecordId = record.Id;
+            entitlement.ConsumedAt = consumedAt;
+            entitlement.ResetAt = null;
+            entitlement.ResetByAdminId = null;
+            entitlement.ResetByAdminName = null;
+            entitlement.ResetReason = null;
+        }
+
+        record.EntitlementConsumed = true;
+    }
+
+    private async Task ReleaseSelfServiceFreezeEntitlementAsync(AccountFreezeRecord record, string? adminId, string? adminName, string reason, CancellationToken cancellationToken)
+    {
+        if (!record.IsSelfService || record.EntitlementConsumed)
+        {
+            return;
+        }
+
+        var entitlement = await db.AccountFreezeEntitlements.FirstOrDefaultAsync(x => x.UserId == record.UserId, cancellationToken);
+        if (entitlement is null || entitlement.FreezeRecordId != record.Id)
+        {
+            return;
+        }
+
+        entitlement.ResetAt = DateTimeOffset.UtcNow;
+        entitlement.ResetByAdminId = adminId;
+        entitlement.ResetByAdminName = adminName;
+        entitlement.ResetReason = reason;
+        entitlement.ConsumedAt = null;
+        record.EntitlementConsumed = false;
+    }
 }

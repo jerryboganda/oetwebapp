@@ -205,6 +205,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         record.IsCurrent = true;
         record.StartedAt ??= record.ScheduledStartAt ?? now;
         record.UpdatedAt = now;
+        await ConsumeFreezeEntitlementOnStartAsync(db, record, now, cancellationToken);
 
         await db.SaveChangesAsync(cancellationToken);
 
@@ -293,6 +294,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 record.StartedAt ??= record.ScheduledStartAt ?? now;
                 record.UpdatedAt = now;
                 changed = true;
+                await ConsumeFreezeEntitlementOnStartAsync(db, record, now, cancellationToken);
 
                 await notifications.CreateForLearnerAsync(
                     NotificationEventKey.LearnerFreezeStarted,
@@ -337,6 +339,38 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         {
             await db.SaveChangesAsync(cancellationToken);
         }
+    }
+
+    private static async Task ConsumeFreezeEntitlementOnStartAsync(LearnerDbContext db, AccountFreezeRecord record, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (!record.IsSelfService || record.EntitlementConsumed)
+        {
+            return;
+        }
+
+        var entitlement = await db.AccountFreezeEntitlements.FirstOrDefaultAsync(x => x.UserId == record.UserId, cancellationToken);
+        if (entitlement is null)
+        {
+            db.AccountFreezeEntitlements.Add(new AccountFreezeEntitlement
+            {
+                Id = $"FZE-{Guid.NewGuid():N}",
+                UserId = record.UserId,
+                FreezeRecordId = record.Id,
+                ConsumedAt = now,
+                ResetAt = null
+            });
+        }
+        else
+        {
+            entitlement.FreezeRecordId = record.Id;
+            entitlement.ConsumedAt = now;
+            entitlement.ResetAt = null;
+            entitlement.ResetByAdminId = null;
+            entitlement.ResetByAdminName = null;
+            entitlement.ResetReason = null;
+        }
+
+        record.EntitlementConsumed = true;
     }
 
     private static async Task CompleteWritingEvaluationAsync(LearnerDbContext db, NotificationService notifications, BackgroundJobItem job, CancellationToken cancellationToken)
