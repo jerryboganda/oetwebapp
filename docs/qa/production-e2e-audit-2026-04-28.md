@@ -38,15 +38,17 @@ Local validation passed after the fixes:
 | --- | --- | --- |
 | Learner | Blocked | Missing dedicated production learner credentials. |
 | Tutor/expert | Blocked | Missing dedicated production tutor/expert credentials. |
-| Admin | Blocked | Missing dedicated production admin credentials. |
-| Sponsor | Blocked | Missing dedicated production sponsor credentials. |
-| Expired account | Blocked | Missing dedicated expired-account credentials or fixture strategy. |
+| Admin | Harness added, execution blocked | Missing dedicated production admin credentials. |
+| Sponsor | Harness added, execution blocked | Missing dedicated production sponsor credentials. |
+| Expired account | Harness added, execution blocked | Missing dedicated expired-account credentials. |
 
 ## Required Production Test Secrets
 
 Configure these as local/VPS secrets before the credentialed production matrix runs. Do not commit them.
 
 ```text
+RUN_PROD_PRIVILEGED_SMOKE=1
+
 PROD_LEARNER_EMAIL=
 PROD_LEARNER_PASSWORD=
 
@@ -72,3 +74,14 @@ PROD_EXPIRED_PASSWORD=
 5. Re-check landmarks, accessible names, keyboard flow, touch targets, console errors, API 5xxs, and role-based route guards across authenticated shells.
 6. Capture any production-only failures with commit, route, role, browser, expected/actual behavior, and reproduction notes.
 7. Fix locally, run the normal quality gates, push after `git fetch`/rebase, then redeploy with a fresh production backup.
+
+## Added Credential-Gated Harness
+
+`tests/e2e/prod-smoke-privileged.spec.ts` now covers read-only smoke walks for admin, sponsor, and expired-account credentials. The normal Playwright matrix ignores this file; it runs only through `playwright.prod-privileged.config.ts`. The tests skip unless `RUN_PROD_PRIVILEGED_SMOKE=1` and the matching `PROD_*` secrets are present. They seed auth through the production API, visit only non-destructive surfaces, and fail on unexpected redirects, document access failures, API/non-API 5xxs, missing main landmarks, uncaught page errors, request failures, or console errors.
+
+Run the privileged production harness explicitly:
+
+```powershell
+$env:RUN_PROD_PRIVILEGED_SMOKE = "1"
+npm run test:e2e:prod-privileged -- --workers=1
+```
