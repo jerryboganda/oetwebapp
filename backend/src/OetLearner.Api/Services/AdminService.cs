@@ -1,6 +1,7 @@
 using System.ComponentModel.DataAnnotations;
-using System.Text;
 using System.Linq.Expressions;
+using System.Text;
+using System.Text.Json;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
@@ -21,6 +22,25 @@ public partial class AdminService(
     private const string ActiveUserStatus = "active";
     private const string SuspendedUserStatus = "suspended";
     private const string DeletedUserStatus = "deleted";
+    private const int CatalogJsonMaxLength = 2048;
+
+    private static readonly HashSet<string> PlanIntervals = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "month",
+        "monthly",
+        "year",
+        "yearly"
+    };
+
+    private static readonly HashSet<string> AddOnIntervals = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "one_time",
+        "one-time",
+        "month",
+        "monthly",
+        "year",
+        "yearly"
+    };
 
     // ════════════════════════════════════════════
     //  Transaction + Audit helpers
@@ -204,8 +224,685 @@ public partial class AdminService(
     private static BillingCouponStatus ParseBillingCouponStatus(string? status, BillingCouponStatus fallback = BillingCouponStatus.Active)
         => Enum.TryParse<BillingCouponStatus>(status, true, out var parsed) ? parsed : fallback;
 
-    private static BillingDiscountType ParseBillingDiscountType(string? status)
-        => Enum.TryParse<BillingDiscountType>(status, true, out var parsed) ? parsed : BillingDiscountType.Percentage;
+    private sealed record BillingPlanCatalogInput(
+        string Code,
+        string Name,
+        string Description,
+        decimal Price,
+        string Currency,
+        string Interval,
+        int DurationMonths,
+        int IncludedCredits,
+        int DisplayOrder,
+        bool IsVisible,
+        bool IsRenewable,
+        int TrialDays,
+        string? Status,
+        string? IncludedSubtestsJson,
+        string? EntitlementsJson);
+
+    private sealed record BillingAddOnCatalogInput(
+        string Code,
+        string Name,
+        string Description,
+        decimal Price,
+        string Currency,
+        string Interval,
+        int DurationDays,
+        int GrantCredits,
+        int DisplayOrder,
+        bool IsRecurring,
+        bool AppliesToAllPlans,
+        bool IsStackable,
+        int QuantityStep,
+        int? MaxQuantity,
+        string? Status,
+        string? CompatiblePlanCodesJson,
+        string? GrantEntitlementsJson);
+
+    private sealed record BillingCouponCatalogInput(
+        string Code,
+        string Name,
+        string Description,
+        string DiscountType,
+        decimal DiscountValue,
+        string Currency,
+        DateTimeOffset? StartsAt,
+        DateTimeOffset? EndsAt,
+        int? UsageLimitTotal,
+        int? UsageLimitPerUser,
+        decimal? MinimumSubtotal,
+        bool IsStackable,
+        string? Status,
+        string? ApplicablePlanCodesJson,
+        string? ApplicableAddOnCodesJson,
+        string? Notes);
+
+    private sealed record CatalogStringArray(string Json, IReadOnlyList<string> Values);
+
+    private sealed record ValidatedBillingPlanCatalog(
+        string Code,
+        string Name,
+        string Description,
+        decimal Price,
+        string Currency,
+        string Interval,
+        int DurationMonths,
+        int IncludedCredits,
+        int DisplayOrder,
+        bool IsVisible,
+        bool IsRenewable,
+        int TrialDays,
+        BillingPlanStatus Status,
+        string IncludedSubtestsJson,
+        string EntitlementsJson);
+
+    private sealed record ValidatedBillingAddOnCatalog(
+        string Code,
+        string Name,
+        string Description,
+        decimal Price,
+        string Currency,
+        string Interval,
+        int DurationDays,
+        int GrantCredits,
+        int DisplayOrder,
+        bool IsRecurring,
+        bool AppliesToAllPlans,
+        bool IsStackable,
+        int QuantityStep,
+        int? MaxQuantity,
+        BillingAddOnStatus Status,
+        string CompatiblePlanCodesJson,
+        string GrantEntitlementsJson);
+
+    private sealed record ValidatedBillingCouponCatalog(
+        string Code,
+        string Name,
+        string Description,
+        BillingDiscountType DiscountType,
+        decimal DiscountValue,
+        string Currency,
+        DateTimeOffset? StartsAt,
+        DateTimeOffset? EndsAt,
+        int? UsageLimitTotal,
+        int? UsageLimitPerUser,
+        decimal? MinimumSubtotal,
+        bool IsStackable,
+        BillingCouponStatus Status,
+        string ApplicablePlanCodesJson,
+        string ApplicableAddOnCodesJson,
+        string? Notes);
+
+    private static BillingPlanCatalogInput ToBillingPlanCatalogInput(AdminBillingPlanCreateRequest request) => new(
+        request.Code,
+        request.Name,
+        request.Description,
+        request.Price,
+        request.Currency,
+        request.Interval,
+        request.DurationMonths,
+        request.IncludedCredits,
+        request.DisplayOrder,
+        request.IsVisible,
+        request.IsRenewable,
+        request.TrialDays,
+        request.Status,
+        request.IncludedSubtestsJson,
+        request.EntitlementsJson);
+
+    private static BillingPlanCatalogInput ToBillingPlanCatalogInput(AdminBillingPlanUpdateRequest request) => new(
+        request.Code,
+        request.Name,
+        request.Description,
+        request.Price,
+        request.Currency,
+        request.Interval,
+        request.DurationMonths,
+        request.IncludedCredits,
+        request.DisplayOrder,
+        request.IsVisible,
+        request.IsRenewable,
+        request.TrialDays,
+        request.Status,
+        request.IncludedSubtestsJson,
+        request.EntitlementsJson);
+
+    private static BillingAddOnCatalogInput ToBillingAddOnCatalogInput(AdminBillingAddOnCreateRequest request) => new(
+        request.Code,
+        request.Name,
+        request.Description,
+        request.Price,
+        request.Currency,
+        request.Interval,
+        request.DurationDays,
+        request.GrantCredits,
+        request.DisplayOrder,
+        request.IsRecurring,
+        request.AppliesToAllPlans,
+        request.IsStackable,
+        request.QuantityStep,
+        request.MaxQuantity,
+        request.Status,
+        request.CompatiblePlanCodesJson,
+        request.GrantEntitlementsJson);
+
+    private static BillingAddOnCatalogInput ToBillingAddOnCatalogInput(AdminBillingAddOnUpdateRequest request) => new(
+        request.Code,
+        request.Name,
+        request.Description,
+        request.Price,
+        request.Currency,
+        request.Interval,
+        request.DurationDays,
+        request.GrantCredits,
+        request.DisplayOrder,
+        request.IsRecurring,
+        request.AppliesToAllPlans,
+        request.IsStackable,
+        request.QuantityStep,
+        request.MaxQuantity,
+        request.Status,
+        request.CompatiblePlanCodesJson,
+        request.GrantEntitlementsJson);
+
+    private static BillingCouponCatalogInput ToBillingCouponCatalogInput(AdminBillingCouponCreateRequest request) => new(
+        request.Code,
+        request.Name,
+        request.Description,
+        request.DiscountType,
+        request.DiscountValue,
+        request.Currency,
+        request.StartsAt,
+        request.EndsAt,
+        request.UsageLimitTotal,
+        request.UsageLimitPerUser,
+        request.MinimumSubtotal,
+        request.IsStackable,
+        request.Status,
+        request.ApplicablePlanCodesJson,
+        request.ApplicableAddOnCodesJson,
+        request.Notes);
+
+    private static BillingCouponCatalogInput ToBillingCouponCatalogInput(AdminBillingCouponUpdateRequest request) => new(
+        request.Code,
+        request.Name,
+        request.Description,
+        request.DiscountType,
+        request.DiscountValue,
+        request.Currency,
+        request.StartsAt,
+        request.EndsAt,
+        request.UsageLimitTotal,
+        request.UsageLimitPerUser,
+        request.MinimumSubtotal,
+        request.IsStackable,
+        request.Status,
+        request.ApplicablePlanCodesJson,
+        request.ApplicableAddOnCodesJson,
+        request.Notes);
+
+    private static string MapBillingDiscountType(BillingDiscountType discountType)
+        => discountType == BillingDiscountType.FixedAmount ? "fixed" : "percentage";
+
+    private static void AddCatalogError(List<ApiFieldError> errors, string field, string code, string message)
+        => errors.Add(new ApiFieldError(field, code, message));
+
+    private static void ThrowIfCatalogInvalid(List<ApiFieldError> errors, string errorCode, string message)
+    {
+        if (errors.Count > 0)
+        {
+            throw ApiException.Validation(errorCode, message, errors);
+        }
+    }
+
+    private static string ValidateCatalogText(List<ApiFieldError> errors, string field, string? value, int maxLength, bool required = true)
+    {
+        var trimmed = value?.Trim() ?? string.Empty;
+        if (required && string.IsNullOrWhiteSpace(trimmed))
+        {
+            AddCatalogError(errors, field, "required", $"{field} is required.");
+        }
+
+        if (trimmed.Length > maxLength)
+        {
+            AddCatalogError(errors, field, "too_long", $"{field} must be {maxLength} characters or fewer.");
+        }
+
+        return trimmed;
+    }
+
+    private static string ValidateCatalogCode(List<ApiFieldError> errors, string field, string? value)
+    {
+        var code = ValidateCatalogText(errors, field, value, 64);
+        if (code.Any(char.IsWhiteSpace))
+        {
+            AddCatalogError(errors, field, "format", $"{field} must not contain whitespace.");
+        }
+
+        return code;
+    }
+
+    private static string ValidateCatalogCurrency(List<ApiFieldError> errors, string? value)
+    {
+        var currency = ValidateCatalogText(errors, "currency", value, 8).ToUpperInvariant();
+        if (currency.Length is < 3 or > 8 || currency.Any(character => character is < 'A' or > 'Z'))
+        {
+            AddCatalogError(errors, "currency", "invalid", "Currency must use 3 to 8 uppercase letters.");
+        }
+
+        return currency;
+    }
+
+    private static string ValidateCatalogInterval(List<ApiFieldError> errors, string? value, IReadOnlySet<string> allowedIntervals)
+    {
+        var interval = ValidateCatalogText(errors, "interval", value, 32).ToLowerInvariant();
+        if (!allowedIntervals.Contains(interval))
+        {
+            AddCatalogError(errors, "interval", "invalid", "Choose a supported billing interval.");
+        }
+
+        return interval;
+    }
+
+    private static TEnum ValidateCatalogEnum<TEnum>(List<ApiFieldError> errors, string field, string? value, TEnum fallback)
+        where TEnum : struct, Enum
+    {
+        var trimmed = value?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed))
+        {
+            return fallback;
+        }
+
+        var matchingName = Enum.GetNames<TEnum>()
+            .FirstOrDefault(name => string.Equals(name, trimmed, StringComparison.OrdinalIgnoreCase));
+        if (matchingName is not null && Enum.TryParse<TEnum>(matchingName, out var parsed))
+        {
+            return parsed;
+        }
+
+        AddCatalogError(errors, field, "invalid", $"{field} is not supported.");
+        return fallback;
+    }
+
+    private static BillingDiscountType ValidateBillingDiscountType(List<ApiFieldError> errors, string? value)
+    {
+        var normalized = (value ?? string.Empty).Trim().Replace("_", string.Empty, StringComparison.Ordinal).Replace("-", string.Empty, StringComparison.Ordinal).ToLowerInvariant();
+        return normalized switch
+        {
+            "percentage" => BillingDiscountType.Percentage,
+            "fixed" or "fixedamount" => BillingDiscountType.FixedAmount,
+            _ => AddInvalidDiscountType(errors)
+        };
+
+        static BillingDiscountType AddInvalidDiscountType(List<ApiFieldError> errors)
+        {
+            AddCatalogError(errors, "discountType", "invalid", "Discount type must be percentage or fixed.");
+            return BillingDiscountType.Percentage;
+        }
+    }
+
+    private static CatalogStringArray ValidateCatalogStringArrayJson(List<ApiFieldError> errors, string field, string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return new CatalogStringArray("[]", []);
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Array)
+            {
+                AddCatalogError(errors, field, "invalid_json_shape", $"{field} must be a JSON array of strings.");
+                return new CatalogStringArray("[]", []);
+            }
+
+            var values = new List<string>();
+            var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var item in document.RootElement.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.String)
+                {
+                    AddCatalogError(errors, field, "invalid_json_shape", $"{field} must only contain strings.");
+                    continue;
+                }
+
+                var itemValue = item.GetString()?.Trim() ?? string.Empty;
+                if (string.IsNullOrWhiteSpace(itemValue))
+                {
+                    AddCatalogError(errors, field, "empty_item", $"{field} must not contain empty values.");
+                    continue;
+                }
+
+                if (!seen.Add(itemValue))
+                {
+                    AddCatalogError(errors, field, "duplicate_item", $"{field} must not contain duplicate values.");
+                    continue;
+                }
+
+                values.Add(itemValue);
+            }
+
+            var serialized = JsonSupport.Serialize(values);
+            if (serialized.Length > CatalogJsonMaxLength)
+            {
+                AddCatalogError(errors, field, "too_long", $"{field} is too large.");
+            }
+
+            return new CatalogStringArray(serialized, values);
+        }
+        catch (JsonException)
+        {
+            AddCatalogError(errors, field, "invalid_json", $"{field} must be valid JSON.");
+            return new CatalogStringArray("[]", []);
+        }
+    }
+
+    private static string ValidateCatalogObjectJson(List<ApiFieldError> errors, string field, string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return "{}";
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(json);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                AddCatalogError(errors, field, "invalid_json_shape", $"{field} must be a JSON object.");
+                return "{}";
+            }
+
+            var serialized = JsonSerializer.Serialize(document.RootElement, JsonSupport.Options);
+            if (serialized.Length > CatalogJsonMaxLength)
+            {
+                AddCatalogError(errors, field, "too_long", $"{field} is too large.");
+            }
+
+            return serialized;
+        }
+        catch (JsonException)
+        {
+            AddCatalogError(errors, field, "invalid_json", $"{field} must be valid JSON.");
+            return "{}";
+        }
+    }
+
+    private static void ValidateCatalogReferenceCodes(List<ApiFieldError> errors, string field, IEnumerable<string> codes, IReadOnlySet<string> knownCodes, string catalogLabel)
+    {
+        foreach (var code in codes)
+        {
+            if (!knownCodes.Contains(code))
+            {
+                AddCatalogError(errors, field, "unknown_reference", $"Unknown {catalogLabel} code '{code}'.");
+            }
+        }
+    }
+
+    private async Task<ValidatedBillingPlanCatalog> ValidateBillingPlanCatalogAsync(
+        BillingPlanCatalogInput request,
+        string? existingPlanId,
+        BillingPlanStatus fallbackStatus,
+        CancellationToken ct)
+    {
+        var errors = new List<ApiFieldError>();
+        var code = ValidateCatalogCode(errors, "code", request.Code);
+        var name = ValidateCatalogText(errors, "name", request.Name, 128);
+        var description = ValidateCatalogText(errors, "description", request.Description, 1024, required: false);
+        var currency = ValidateCatalogCurrency(errors, request.Currency);
+        var interval = ValidateCatalogInterval(errors, request.Interval, PlanIntervals);
+        var status = ValidateCatalogEnum(errors, "status", request.Status, fallbackStatus);
+        var includedSubtests = ValidateCatalogStringArrayJson(errors, "includedSubtestsJson", request.IncludedSubtestsJson);
+        var entitlementsJson = ValidateCatalogObjectJson(errors, "entitlementsJson", request.EntitlementsJson);
+
+        if (request.Price < 0)
+        {
+            AddCatalogError(errors, "price", "negative", "Price cannot be negative.");
+        }
+
+        if (request.DurationMonths < 0)
+        {
+            AddCatalogError(errors, "durationMonths", "negative", "Duration months cannot be negative.");
+        }
+
+        if (request.IncludedCredits < 0)
+        {
+            AddCatalogError(errors, "includedCredits", "negative", "Included credits cannot be negative.");
+        }
+
+        if (request.TrialDays < 0)
+        {
+            AddCatalogError(errors, "trialDays", "negative", "Trial days cannot be negative.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(code))
+        {
+            var normalizedCode = code.ToLowerInvariant();
+            var duplicateExists = await db.BillingPlans.AsNoTracking().AnyAsync(
+                plan => plan.Code.ToLower() == normalizedCode && (existingPlanId == null || plan.Id != existingPlanId),
+                ct);
+            if (duplicateExists)
+            {
+                AddCatalogError(errors, "code", "duplicate", "A plan with this code already exists.");
+            }
+        }
+
+        ThrowIfCatalogInvalid(errors, "billing_plan_invalid", "Billing plan catalog data is invalid.");
+
+        return new ValidatedBillingPlanCatalog(
+            code,
+            name,
+            description,
+            request.Price,
+            currency,
+            interval,
+            request.DurationMonths,
+            request.IncludedCredits,
+            request.DisplayOrder,
+            request.IsVisible,
+            request.IsRenewable,
+            request.TrialDays,
+            status,
+            includedSubtests.Json,
+            entitlementsJson);
+    }
+
+    private async Task<ValidatedBillingAddOnCatalog> ValidateBillingAddOnCatalogAsync(
+        BillingAddOnCatalogInput request,
+        string? existingAddOnId,
+        BillingAddOnStatus fallbackStatus,
+        CancellationToken ct)
+    {
+        var errors = new List<ApiFieldError>();
+        var code = ValidateCatalogCode(errors, "code", request.Code);
+        var name = ValidateCatalogText(errors, "name", request.Name, 128);
+        var description = ValidateCatalogText(errors, "description", request.Description, 1024, required: false);
+        var currency = ValidateCatalogCurrency(errors, request.Currency);
+        var interval = ValidateCatalogInterval(errors, request.Interval, AddOnIntervals);
+        var status = ValidateCatalogEnum(errors, "status", request.Status, fallbackStatus);
+        var compatiblePlanCodes = ValidateCatalogStringArrayJson(errors, "compatiblePlanCodesJson", request.CompatiblePlanCodesJson);
+        var grantEntitlementsJson = ValidateCatalogObjectJson(errors, "grantEntitlementsJson", request.GrantEntitlementsJson);
+
+        if (request.Price < 0)
+        {
+            AddCatalogError(errors, "price", "negative", "Price cannot be negative.");
+        }
+
+        if (request.DurationDays < 0)
+        {
+            AddCatalogError(errors, "durationDays", "negative", "Duration days cannot be negative.");
+        }
+
+        if (request.GrantCredits < 0)
+        {
+            AddCatalogError(errors, "grantCredits", "negative", "Grant credits cannot be negative.");
+        }
+
+        if (request.QuantityStep < 1)
+        {
+            AddCatalogError(errors, "quantityStep", "min", "Quantity step must be at least 1.");
+        }
+
+        if (request.MaxQuantity is not null && request.MaxQuantity.Value < request.QuantityStep)
+        {
+            AddCatalogError(errors, "maxQuantity", "min", "Max quantity must be greater than or equal to the quantity step.");
+        }
+
+        if (!request.AppliesToAllPlans && compatiblePlanCodes.Values.Count == 0)
+        {
+            AddCatalogError(errors, "compatiblePlanCodesJson", "required", "Restricted add-ons must list at least one compatible plan code.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(code))
+        {
+            var normalizedCode = code.ToLowerInvariant();
+            var duplicateExists = await db.BillingAddOns.AsNoTracking().AnyAsync(
+                addOn => addOn.Code.ToLower() == normalizedCode && (existingAddOnId == null || addOn.Id != existingAddOnId),
+                ct);
+            if (duplicateExists)
+            {
+                AddCatalogError(errors, "code", "duplicate", "An add-on with this code already exists.");
+            }
+        }
+
+        var knownPlanCodes = await db.BillingPlans.AsNoTracking()
+            .Select(plan => plan.Code)
+            .ToListAsync(ct);
+        ValidateCatalogReferenceCodes(
+            errors,
+            "compatiblePlanCodesJson",
+            compatiblePlanCodes.Values,
+            new HashSet<string>(knownPlanCodes, StringComparer.OrdinalIgnoreCase),
+            "plan");
+
+        ThrowIfCatalogInvalid(errors, "billing_addon_invalid", "Billing add-on catalog data is invalid.");
+
+        return new ValidatedBillingAddOnCatalog(
+            code,
+            name,
+            description,
+            request.Price,
+            currency,
+            interval,
+            request.DurationDays,
+            request.GrantCredits,
+            request.DisplayOrder,
+            request.IsRecurring,
+            request.AppliesToAllPlans,
+            request.IsStackable,
+            request.QuantityStep,
+            request.MaxQuantity,
+            status,
+            compatiblePlanCodes.Json,
+            grantEntitlementsJson);
+    }
+
+    private async Task<ValidatedBillingCouponCatalog> ValidateBillingCouponCatalogAsync(
+        BillingCouponCatalogInput request,
+        string? existingCouponId,
+        BillingCouponStatus fallbackStatus,
+        CancellationToken ct)
+    {
+        var errors = new List<ApiFieldError>();
+        var code = ValidateCatalogCode(errors, "code", request.Code);
+        var name = ValidateCatalogText(errors, "name", request.Name, 128);
+        var description = ValidateCatalogText(errors, "description", request.Description, 1024, required: false);
+        var notes = ValidateCatalogText(errors, "notes", request.Notes, 1024, required: false);
+        var currency = ValidateCatalogCurrency(errors, request.Currency);
+        var status = ValidateCatalogEnum(errors, "status", request.Status, fallbackStatus);
+        var discountType = ValidateBillingDiscountType(errors, request.DiscountType);
+        var applicablePlanCodes = ValidateCatalogStringArrayJson(errors, "applicablePlanCodesJson", request.ApplicablePlanCodesJson);
+        var applicableAddOnCodes = ValidateCatalogStringArrayJson(errors, "applicableAddOnCodesJson", request.ApplicableAddOnCodesJson);
+
+        if (request.DiscountValue <= 0)
+        {
+            AddCatalogError(errors, "discountValue", "min", "Discount value must be greater than zero.");
+        }
+
+        if (discountType == BillingDiscountType.Percentage && request.DiscountValue > 100)
+        {
+            AddCatalogError(errors, "discountValue", "max", "Percentage discounts cannot exceed 100%.");
+        }
+
+        if (request.StartsAt is not null && request.EndsAt is not null && request.StartsAt >= request.EndsAt)
+        {
+            AddCatalogError(errors, "endsAt", "range", "Coupon end date must be later than the start date.");
+        }
+
+        if (request.UsageLimitTotal is not null && request.UsageLimitTotal.Value <= 0)
+        {
+            AddCatalogError(errors, "usageLimitTotal", "min", "Total usage limit must be greater than zero.");
+        }
+
+        if (request.UsageLimitPerUser is not null && request.UsageLimitPerUser.Value <= 0)
+        {
+            AddCatalogError(errors, "usageLimitPerUser", "min", "Per-user usage limit must be greater than zero.");
+        }
+
+        if (request.UsageLimitTotal is not null && request.UsageLimitPerUser is not null && request.UsageLimitPerUser.Value > request.UsageLimitTotal.Value)
+        {
+            AddCatalogError(errors, "usageLimitPerUser", "max", "Per-user usage limit cannot exceed the total usage limit.");
+        }
+
+        if (request.MinimumSubtotal is not null && request.MinimumSubtotal.Value < 0)
+        {
+            AddCatalogError(errors, "minimumSubtotal", "negative", "Minimum subtotal cannot be negative.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(code))
+        {
+            var normalizedCode = code.ToLowerInvariant();
+            var duplicateExists = await db.BillingCoupons.AsNoTracking().AnyAsync(
+                coupon => coupon.Code.ToLower() == normalizedCode && (existingCouponId == null || coupon.Id != existingCouponId),
+                ct);
+            if (duplicateExists)
+            {
+                AddCatalogError(errors, "code", "duplicate", "A coupon with this code already exists.");
+            }
+        }
+
+        var knownPlanCodes = await db.BillingPlans.AsNoTracking()
+            .Select(plan => plan.Code)
+            .ToListAsync(ct);
+        ValidateCatalogReferenceCodes(
+            errors,
+            "applicablePlanCodesJson",
+            applicablePlanCodes.Values,
+            new HashSet<string>(knownPlanCodes, StringComparer.OrdinalIgnoreCase),
+            "plan");
+
+        var knownAddOnCodes = await db.BillingAddOns.AsNoTracking()
+            .Select(addOn => addOn.Code)
+            .ToListAsync(ct);
+        ValidateCatalogReferenceCodes(
+            errors,
+            "applicableAddOnCodesJson",
+            applicableAddOnCodes.Values,
+            new HashSet<string>(knownAddOnCodes, StringComparer.OrdinalIgnoreCase),
+            "add-on");
+
+        ThrowIfCatalogInvalid(errors, "billing_coupon_invalid", "Billing coupon catalog data is invalid.");
+
+        return new ValidatedBillingCouponCatalog(
+            code,
+            name,
+            description,
+            discountType,
+            request.DiscountValue,
+            currency,
+            request.StartsAt,
+            request.EndsAt,
+            request.UsageLimitTotal,
+            request.UsageLimitPerUser,
+            request.MinimumSubtotal,
+            request.IsStackable,
+            status,
+            applicablePlanCodes.Json,
+            applicableAddOnCodes.Json,
+            string.IsNullOrWhiteSpace(notes) ? null : notes);
+    }
 
     private async Task<List<TItem>> ToOrderedListDescendingAsync<TItem, TKey>(
         IQueryable<TItem> query,
@@ -315,7 +1012,7 @@ public partial class AdminService(
         code = coupon.Code,
         coupon.Name,
         coupon.Description,
-        discountType = coupon.DiscountType.ToString().ToLowerInvariant(),
+        discountType = MapBillingDiscountType(coupon.DiscountType),
         coupon.DiscountValue,
         coupon.Currency,
         coupon.StartsAt,
@@ -2461,35 +3158,31 @@ public partial class AdminService(
     public async Task<object> CreateBillingPlanAsync(string adminId, string adminName,
         AdminBillingPlanCreateRequest request, CancellationToken ct)
     {
-        if (await db.BillingPlans.AnyAsync(plan => plan.Code == request.Code, ct))
-        {
-            throw ApiException.Validation("billing_plan_code_exists", "A plan with this code already exists.");
-        }
+        var validated = await ValidateBillingPlanCatalogAsync(ToBillingPlanCatalogInput(request), existingPlanId: null, BillingPlanStatus.Active, ct);
 
         var idValue = $"plan-{Guid.NewGuid():N}";
         var id = idValue[..Math.Min(64, idValue.Length)];
         var now = DateTimeOffset.UtcNow;
-        var status = ParseBillingPlanStatus(request.Status, BillingPlanStatus.Active);
 
         var plan = new BillingPlan
         {
             Id = id,
-            Code = request.Code.Trim(),
-            Name = request.Name,
-            Description = request.Description,
-            Price = request.Price,
-            Currency = request.Currency,
-            Interval = request.Interval,
-            DurationMonths = request.DurationMonths,
-            IncludedCredits = request.IncludedCredits,
-            DisplayOrder = request.DisplayOrder,
-            IsVisible = request.IsVisible,
-            IsRenewable = request.IsRenewable,
-            TrialDays = request.TrialDays,
-            IncludedSubtestsJson = request.IncludedSubtestsJson ?? "[]",
-            EntitlementsJson = request.EntitlementsJson ?? "{}",
+            Code = validated.Code,
+            Name = validated.Name,
+            Description = validated.Description,
+            Price = validated.Price,
+            Currency = validated.Currency,
+            Interval = validated.Interval,
+            DurationMonths = validated.DurationMonths,
+            IncludedCredits = validated.IncludedCredits,
+            DisplayOrder = validated.DisplayOrder,
+            IsVisible = validated.IsVisible,
+            IsRenewable = validated.IsRenewable,
+            TrialDays = validated.TrialDays,
+            IncludedSubtestsJson = validated.IncludedSubtestsJson,
+            EntitlementsJson = validated.EntitlementsJson,
             ActiveSubscribers = 0,
-            Status = status,
+            Status = validated.Status,
             CreatedAt = now,
             UpdatedAt = now
         };
@@ -2497,7 +3190,7 @@ public partial class AdminService(
         db.BillingPlans.Add(plan);
         await db.SaveChangesAsync(ct);
 
-        await LogAuditAsync(adminId, adminName, "Created", "BillingPlan", id, $"Created plan: {request.Name}", ct);
+        await LogAuditAsync(adminId, adminName, "Created", "BillingPlan", id, $"Created plan: {validated.Name}", ct);
         return MapBillingPlan(plan);
     }
 
@@ -2506,27 +3199,28 @@ public partial class AdminService(
         var plan = await db.BillingPlans.FirstOrDefaultAsync(p => p.Id == planId || p.Code == planId, ct)
             ?? throw ApiException.NotFound("billing_plan_not_found", "Billing plan not found.");
 
+        var validated = await ValidateBillingPlanCatalogAsync(ToBillingPlanCatalogInput(request), plan.Id, plan.Status, ct);
         var now = DateTimeOffset.UtcNow;
-        plan.Code = request.Code.Trim();
-        plan.Name = request.Name;
-        plan.Description = request.Description;
-        plan.Price = request.Price;
-        plan.Currency = request.Currency;
-        plan.Interval = request.Interval;
-        plan.DurationMonths = request.DurationMonths;
-        plan.IncludedCredits = request.IncludedCredits;
-        plan.DisplayOrder = request.DisplayOrder;
-        plan.IsVisible = request.IsVisible;
-        plan.IsRenewable = request.IsRenewable;
-        plan.TrialDays = request.TrialDays;
-        plan.IncludedSubtestsJson = request.IncludedSubtestsJson ?? "[]";
-        plan.EntitlementsJson = request.EntitlementsJson ?? "{}";
-        plan.Status = ParseBillingPlanStatus(request.Status, plan.Status);
+        plan.Code = validated.Code;
+        plan.Name = validated.Name;
+        plan.Description = validated.Description;
+        plan.Price = validated.Price;
+        plan.Currency = validated.Currency;
+        plan.Interval = validated.Interval;
+        plan.DurationMonths = validated.DurationMonths;
+        plan.IncludedCredits = validated.IncludedCredits;
+        plan.DisplayOrder = validated.DisplayOrder;
+        plan.IsVisible = validated.IsVisible;
+        plan.IsRenewable = validated.IsRenewable;
+        plan.TrialDays = validated.TrialDays;
+        plan.IncludedSubtestsJson = validated.IncludedSubtestsJson;
+        plan.EntitlementsJson = validated.EntitlementsJson;
+        plan.Status = validated.Status;
         plan.ArchivedAt = plan.Status == BillingPlanStatus.Archived ? now : plan.ArchivedAt;
         plan.UpdatedAt = now;
 
         await db.SaveChangesAsync(ct);
-        await LogAuditAsync(adminId, adminName, "Updated", "BillingPlan", plan.Id, $"Updated plan: {request.Name}", ct);
+        await LogAuditAsync(adminId, adminName, "Updated", "BillingPlan", plan.Id, $"Updated plan: {validated.Name}", ct);
         return MapBillingPlan(plan);
     }
 
@@ -2561,10 +3255,7 @@ public partial class AdminService(
 
     public async Task<object> CreateBillingAddOnAsync(string adminId, string adminName, AdminBillingAddOnCreateRequest request, CancellationToken ct)
     {
-        if (await db.BillingAddOns.AnyAsync(addOn => addOn.Code == request.Code, ct))
-        {
-            throw ApiException.Validation("billing_addon_code_exists", "An add-on with this code already exists.");
-        }
+        var validated = await ValidateBillingAddOnCatalogAsync(ToBillingAddOnCatalogInput(request), existingAddOnId: null, BillingAddOnStatus.Active, ct);
 
         var addOnIdValue = $"addon-{Guid.NewGuid():N}";
         var id = addOnIdValue[..Math.Min(64, addOnIdValue.Length)];
@@ -2572,30 +3263,30 @@ public partial class AdminService(
         var addOn = new BillingAddOn
         {
             Id = id,
-            Code = request.Code.Trim(),
-            Name = request.Name,
-            Description = request.Description,
-            Price = request.Price,
-            Currency = request.Currency,
-            Interval = request.Interval,
-            DurationDays = request.DurationDays,
-            GrantCredits = request.GrantCredits,
-            DisplayOrder = request.DisplayOrder,
-            IsRecurring = request.IsRecurring,
-            AppliesToAllPlans = request.AppliesToAllPlans,
-            IsStackable = request.IsStackable,
-            QuantityStep = request.QuantityStep,
-            MaxQuantity = request.MaxQuantity,
-            Status = ParseBillingAddOnStatus(request.Status, BillingAddOnStatus.Active),
-            CompatiblePlanCodesJson = request.CompatiblePlanCodesJson ?? "[]",
-            GrantEntitlementsJson = request.GrantEntitlementsJson ?? "{}",
+            Code = validated.Code,
+            Name = validated.Name,
+            Description = validated.Description,
+            Price = validated.Price,
+            Currency = validated.Currency,
+            Interval = validated.Interval,
+            DurationDays = validated.DurationDays,
+            GrantCredits = validated.GrantCredits,
+            DisplayOrder = validated.DisplayOrder,
+            IsRecurring = validated.IsRecurring,
+            AppliesToAllPlans = validated.AppliesToAllPlans,
+            IsStackable = validated.IsStackable,
+            QuantityStep = validated.QuantityStep,
+            MaxQuantity = validated.MaxQuantity,
+            Status = validated.Status,
+            CompatiblePlanCodesJson = validated.CompatiblePlanCodesJson,
+            GrantEntitlementsJson = validated.GrantEntitlementsJson,
             CreatedAt = now,
             UpdatedAt = now
         };
 
         db.BillingAddOns.Add(addOn);
         await db.SaveChangesAsync(ct);
-        await LogAuditAsync(adminId, adminName, "Created", "BillingAddOn", addOn.Id, $"Created add-on: {request.Name}", ct);
+        await LogAuditAsync(adminId, adminName, "Created", "BillingAddOn", addOn.Id, $"Created add-on: {validated.Name}", ct);
         return MapBillingAddOn(addOn);
     }
 
@@ -2604,28 +3295,29 @@ public partial class AdminService(
         var addOn = await db.BillingAddOns.FirstOrDefaultAsync(addOn => addOn.Id == addOnId || addOn.Code == addOnId, ct)
             ?? throw ApiException.NotFound("billing_addon_not_found", "Billing add-on not found.");
 
+        var validated = await ValidateBillingAddOnCatalogAsync(ToBillingAddOnCatalogInput(request), addOn.Id, addOn.Status, ct);
         var now = DateTimeOffset.UtcNow;
-        addOn.Code = request.Code.Trim();
-        addOn.Name = request.Name;
-        addOn.Description = request.Description;
-        addOn.Price = request.Price;
-        addOn.Currency = request.Currency;
-        addOn.Interval = request.Interval;
-        addOn.DurationDays = request.DurationDays;
-        addOn.GrantCredits = request.GrantCredits;
-        addOn.DisplayOrder = request.DisplayOrder;
-        addOn.IsRecurring = request.IsRecurring;
-        addOn.AppliesToAllPlans = request.AppliesToAllPlans;
-        addOn.IsStackable = request.IsStackable;
-        addOn.QuantityStep = request.QuantityStep;
-        addOn.MaxQuantity = request.MaxQuantity;
-        addOn.Status = ParseBillingAddOnStatus(request.Status, addOn.Status);
-        addOn.CompatiblePlanCodesJson = request.CompatiblePlanCodesJson ?? "[]";
-        addOn.GrantEntitlementsJson = request.GrantEntitlementsJson ?? "{}";
+        addOn.Code = validated.Code;
+        addOn.Name = validated.Name;
+        addOn.Description = validated.Description;
+        addOn.Price = validated.Price;
+        addOn.Currency = validated.Currency;
+        addOn.Interval = validated.Interval;
+        addOn.DurationDays = validated.DurationDays;
+        addOn.GrantCredits = validated.GrantCredits;
+        addOn.DisplayOrder = validated.DisplayOrder;
+        addOn.IsRecurring = validated.IsRecurring;
+        addOn.AppliesToAllPlans = validated.AppliesToAllPlans;
+        addOn.IsStackable = validated.IsStackable;
+        addOn.QuantityStep = validated.QuantityStep;
+        addOn.MaxQuantity = validated.MaxQuantity;
+        addOn.Status = validated.Status;
+        addOn.CompatiblePlanCodesJson = validated.CompatiblePlanCodesJson;
+        addOn.GrantEntitlementsJson = validated.GrantEntitlementsJson;
         addOn.UpdatedAt = now;
 
         await db.SaveChangesAsync(ct);
-        await LogAuditAsync(adminId, adminName, "Updated", "BillingAddOn", addOn.Id, $"Updated add-on: {request.Name}", ct);
+        await LogAuditAsync(adminId, adminName, "Updated", "BillingAddOn", addOn.Id, $"Updated add-on: {validated.Name}", ct);
         return MapBillingAddOn(addOn);
     }
 
@@ -2646,10 +3338,7 @@ public partial class AdminService(
 
     public async Task<object> CreateBillingCouponAsync(string adminId, string adminName, AdminBillingCouponCreateRequest request, CancellationToken ct)
     {
-        if (await db.BillingCoupons.AnyAsync(coupon => coupon.Code == request.Code, ct))
-        {
-            throw ApiException.Validation("billing_coupon_code_exists", "A coupon with this code already exists.");
-        }
+        var validated = await ValidateBillingCouponCatalogAsync(ToBillingCouponCatalogInput(request), existingCouponId: null, BillingCouponStatus.Active, ct);
 
         var couponIdValue = $"coupon-{Guid.NewGuid():N}";
         var id = couponIdValue[..Math.Min(64, couponIdValue.Length)];
@@ -2657,29 +3346,29 @@ public partial class AdminService(
         var coupon = new BillingCoupon
         {
             Id = id,
-            Code = request.Code.Trim(),
-            Name = request.Name,
-            Description = request.Description,
-            DiscountType = ParseBillingDiscountType(request.DiscountType),
-            DiscountValue = request.DiscountValue,
-            Currency = request.Currency,
-            StartsAt = request.StartsAt,
-            EndsAt = request.EndsAt,
-            UsageLimitTotal = request.UsageLimitTotal,
-            UsageLimitPerUser = request.UsageLimitPerUser,
-            MinimumSubtotal = request.MinimumSubtotal,
-            IsStackable = request.IsStackable,
-            Status = ParseBillingCouponStatus(request.Status, BillingCouponStatus.Active),
-            ApplicablePlanCodesJson = request.ApplicablePlanCodesJson ?? "[]",
-            ApplicableAddOnCodesJson = request.ApplicableAddOnCodesJson ?? "[]",
-            Notes = request.Notes,
+            Code = validated.Code,
+            Name = validated.Name,
+            Description = validated.Description,
+            DiscountType = validated.DiscountType,
+            DiscountValue = validated.DiscountValue,
+            Currency = validated.Currency,
+            StartsAt = validated.StartsAt,
+            EndsAt = validated.EndsAt,
+            UsageLimitTotal = validated.UsageLimitTotal,
+            UsageLimitPerUser = validated.UsageLimitPerUser,
+            MinimumSubtotal = validated.MinimumSubtotal,
+            IsStackable = validated.IsStackable,
+            Status = validated.Status,
+            ApplicablePlanCodesJson = validated.ApplicablePlanCodesJson,
+            ApplicableAddOnCodesJson = validated.ApplicableAddOnCodesJson,
+            Notes = validated.Notes,
             CreatedAt = now,
             UpdatedAt = now
         };
 
         db.BillingCoupons.Add(coupon);
         await db.SaveChangesAsync(ct);
-        await LogAuditAsync(adminId, adminName, "Created", "BillingCoupon", coupon.Id, $"Created coupon: {request.Code}", ct);
+        await LogAuditAsync(adminId, adminName, "Created", "BillingCoupon", coupon.Id, $"Created coupon: {validated.Code}", ct);
         return MapBillingCoupon(coupon);
     }
 
@@ -2688,27 +3377,28 @@ public partial class AdminService(
         var coupon = await db.BillingCoupons.FirstOrDefaultAsync(coupon => coupon.Id == couponId || coupon.Code == couponId, ct)
             ?? throw ApiException.NotFound("billing_coupon_not_found", "Billing coupon not found.");
 
+        var validated = await ValidateBillingCouponCatalogAsync(ToBillingCouponCatalogInput(request), coupon.Id, coupon.Status, ct);
         var now = DateTimeOffset.UtcNow;
-        coupon.Code = request.Code.Trim();
-        coupon.Name = request.Name;
-        coupon.Description = request.Description;
-        coupon.DiscountType = ParseBillingDiscountType(request.DiscountType);
-        coupon.DiscountValue = request.DiscountValue;
-        coupon.Currency = request.Currency;
-        coupon.StartsAt = request.StartsAt;
-        coupon.EndsAt = request.EndsAt;
-        coupon.UsageLimitTotal = request.UsageLimitTotal;
-        coupon.UsageLimitPerUser = request.UsageLimitPerUser;
-        coupon.MinimumSubtotal = request.MinimumSubtotal;
-        coupon.IsStackable = request.IsStackable;
-        coupon.Status = ParseBillingCouponStatus(request.Status, coupon.Status);
-        coupon.ApplicablePlanCodesJson = request.ApplicablePlanCodesJson ?? "[]";
-        coupon.ApplicableAddOnCodesJson = request.ApplicableAddOnCodesJson ?? "[]";
-        coupon.Notes = request.Notes;
+        coupon.Code = validated.Code;
+        coupon.Name = validated.Name;
+        coupon.Description = validated.Description;
+        coupon.DiscountType = validated.DiscountType;
+        coupon.DiscountValue = validated.DiscountValue;
+        coupon.Currency = validated.Currency;
+        coupon.StartsAt = validated.StartsAt;
+        coupon.EndsAt = validated.EndsAt;
+        coupon.UsageLimitTotal = validated.UsageLimitTotal;
+        coupon.UsageLimitPerUser = validated.UsageLimitPerUser;
+        coupon.MinimumSubtotal = validated.MinimumSubtotal;
+        coupon.IsStackable = validated.IsStackable;
+        coupon.Status = validated.Status;
+        coupon.ApplicablePlanCodesJson = validated.ApplicablePlanCodesJson;
+        coupon.ApplicableAddOnCodesJson = validated.ApplicableAddOnCodesJson;
+        coupon.Notes = validated.Notes;
         coupon.UpdatedAt = now;
 
         await db.SaveChangesAsync(ct);
-        await LogAuditAsync(adminId, adminName, "Updated", "BillingCoupon", coupon.Id, $"Updated coupon: {request.Code}", ct);
+        await LogAuditAsync(adminId, adminName, "Updated", "BillingCoupon", coupon.Id, $"Updated coupon: {validated.Code}", ct);
         return MapBillingCoupon(coupon);
     }
 

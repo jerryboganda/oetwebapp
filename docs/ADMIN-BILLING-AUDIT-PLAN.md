@@ -68,6 +68,8 @@ Known residual risk:
 
 ### Phase 2: Catalog Validation And Versioning
 
+Status: Phase 2A admin catalog validation hardening is implemented after Phase 1. Full immutable version tables remain Phase 2B because they require schema changes, backfill, and checkout/webhook/subscription history rewiring.
+
 - Add typed server validation for plan, add-on, coupon, and entitlement payloads.
 - Add immutable plan, add-on, price, and coupon version snapshots.
 - Store version references on quotes, subscriptions, invoices, and subscription items.
@@ -78,6 +80,10 @@ Acceptance criteria:
 - Historical subscriptions and invoices remain stable after catalog edits.
 - Invalid catalog data returns structured 400 responses.
 - Admins can archive catalog entries without deleting business evidence.
+
+Phase 2A residual risk:
+
+- Server validation now prevents bad catalog mutations, but historical quote, subscription, invoice, and webhook completion evidence can still drift when mutable catalog rows are edited. That historical-stability goal belongs to Phase 2B immutable catalog versioning.
 
 ### Phase 3: Payment Ledger And Webhook Inbox
 
