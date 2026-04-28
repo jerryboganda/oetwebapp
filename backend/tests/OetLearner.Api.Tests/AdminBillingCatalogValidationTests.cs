@@ -190,6 +190,94 @@ public class AdminBillingCatalogValidationTests : IClassFixture<FirstPartyAuthTe
     }
 
     [Fact]
+    public async Task AdminBillingCatalog_VersionEndpointsReturnLatestFirstHistoryAndListMetadata()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var planCode = $"phase2b-history-plan-{suffix}";
+        var addOnCode = $"phase2b-history-addon-{suffix}";
+        var couponCode = $"PHASE2BHISTORY{suffix}".ToUpperInvariant();
+        var planId = await CreatePlanAsync(planCode);
+        var addOnId = await CreateAddOnAsync(addOnCode, planCode);
+        var couponResponse = await _client.PostAsJsonAsync("/v1/admin/billing/coupons", ValidCouponPayload(couponCode, "percentage", 10m, [planCode], [addOnCode]));
+        couponResponse.EnsureSuccessStatusCode();
+        using var couponCreateJson = JsonDocument.Parse(await couponResponse.Content.ReadAsStringAsync());
+        var couponId = couponCreateJson.RootElement.GetProperty("id").GetString()!;
+
+        var planUpdate = await _client.PutAsJsonAsync($"/v1/admin/billing/plans/{Uri.EscapeDataString(planId)}", new
+        {
+            code = planCode,
+            name = $"Plan {planCode} v2",
+            description = "Updated plan history payload.",
+            price = 89m,
+            currency = "AUD",
+            interval = "month",
+            durationMonths = 2,
+            includedCredits = 11,
+            displayOrder = 9,
+            isVisible = true,
+            isRenewable = true,
+            trialDays = 3,
+            status = "active",
+            includedSubtestsJson = JsonSerializer.Serialize(new[] { "writing", "speaking", "reading" }),
+            entitlementsJson = JsonSerializer.Serialize(new { tier = "history", invoiceDownloadsAvailable = true })
+        });
+        planUpdate.EnsureSuccessStatusCode();
+
+        var addOnUpdate = await _client.PutAsJsonAsync($"/v1/admin/billing/add-ons/{Uri.EscapeDataString(addOnId)}", new
+        {
+            code = addOnCode,
+            name = $"Add-on {addOnCode} v2",
+            description = "Updated add-on history payload.",
+            price = 29m,
+            currency = "AUD",
+            interval = "one_time",
+            durationDays = 60,
+            grantCredits = 5,
+            displayOrder = 8,
+            isRecurring = false,
+            appliesToAllPlans = false,
+            isStackable = true,
+            quantityStep = 1,
+            maxQuantity = 4,
+            status = "active",
+            compatiblePlanCodesJson = JsonSerializer.Serialize(new[] { planCode }),
+            grantEntitlementsJson = JsonSerializer.Serialize(new { reviewCredits = 5 })
+        });
+        addOnUpdate.EnsureSuccessStatusCode();
+
+        var couponUpdate = await _client.PutAsJsonAsync($"/v1/admin/billing/coupons/{Uri.EscapeDataString(couponId)}", ValidCouponPayload(couponCode, "percentage", 15m, [planCode], [addOnCode]));
+        couponUpdate.EnsureSuccessStatusCode();
+
+        await AssertVersionHistoryAsync($"/v1/admin/billing/plans/{Uri.EscapeDataString(planId)}/versions", "plan", planId, "includedCredits", 11);
+        await AssertVersionHistoryAsync($"/v1/admin/billing/add-ons/{Uri.EscapeDataString(addOnId)}/versions", "add_on", addOnId, "grantCredits", 5);
+        await AssertVersionHistoryAsync(
+            $"/v1/admin/billing/coupons/{Uri.EscapeDataString(couponId)}/versions",
+            "coupon",
+            couponId,
+            "discountValue",
+            15,
+            ["parentRedemptionCount", "invoiceId", "paymentTransactionId", "checkoutSessionId"]);
+
+        using var plansJson = JsonDocument.Parse(await (await _client.GetAsync($"/v1/admin/billing/plans?status=all")).Content.ReadAsStringAsync());
+        var plan = plansJson.RootElement.EnumerateArray().Single(item => item.GetProperty("id").GetString() == planId);
+        Assert.Equal(2, plan.GetProperty("versionCount").GetInt32());
+        Assert.Equal(2, plan.GetProperty("activeVersionNumber").GetInt32());
+        Assert.Equal(plan.GetProperty("activeVersionId").GetString(), plan.GetProperty("latestVersionId").GetString());
+
+        using var addOnsJson = JsonDocument.Parse(await (await _client.GetAsync($"/v1/admin/billing/add-ons?status=all")).Content.ReadAsStringAsync());
+        var addOn = addOnsJson.RootElement.EnumerateArray().Single(item => item.GetProperty("id").GetString() == addOnId);
+        Assert.Equal(2, addOn.GetProperty("versionCount").GetInt32());
+        Assert.Equal(2, addOn.GetProperty("activeVersionNumber").GetInt32());
+        Assert.Equal(addOn.GetProperty("activeVersionId").GetString(), addOn.GetProperty("latestVersionId").GetString());
+
+        using var couponsJson = JsonDocument.Parse(await (await _client.GetAsync($"/v1/admin/billing/coupons?status=all")).Content.ReadAsStringAsync());
+        var coupon = couponsJson.RootElement.EnumerateArray().Single(item => item.GetProperty("id").GetString() == couponId);
+        Assert.Equal(2, coupon.GetProperty("versionCount").GetInt32());
+        Assert.Equal(2, coupon.GetProperty("activeVersionNumber").GetInt32());
+        Assert.Equal(coupon.GetProperty("activeVersionId").GetString(), coupon.GetProperty("latestVersionId").GetString());
+    }
+
+    [Fact]
     public async Task AdminBillingAddOn_CreateRejectsInvalidReferencesAndQuantityRules()
     {
         var suffix = Guid.NewGuid().ToString("N")[..8];
@@ -360,6 +448,42 @@ public class AdminBillingCatalogValidationTests : IClassFixture<FirstPartyAuthTe
             .EnumerateArray()
             .Select(error => error.GetProperty("field").GetString()!)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    private async Task AssertVersionHistoryAsync(
+        string url,
+        string expectedKind,
+        string expectedSubjectId,
+        string summaryField,
+        int expectedLatestValue,
+        string[]? forbiddenSummaryFields = null)
+    {
+        var response = await _client.GetAsync(url);
+        response.EnsureSuccessStatusCode();
+
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        var subject = json.RootElement.GetProperty("subject");
+        Assert.Equal(expectedKind, subject.GetProperty("kind").GetString());
+        Assert.Equal(expectedSubjectId, subject.GetProperty("id").GetString());
+        Assert.Equal(2, subject.GetProperty("versionCount").GetInt32());
+        Assert.Equal(2, subject.GetProperty("activeVersionNumber").GetInt32());
+        Assert.Equal(2, subject.GetProperty("latestVersionNumber").GetInt32());
+
+        var items = json.RootElement.GetProperty("items").EnumerateArray().ToList();
+        Assert.Equal(2, items.Count);
+        Assert.Equal(2, items[0].GetProperty("versionNumber").GetInt32());
+        Assert.True(items[0].GetProperty("isActive").GetBoolean());
+        Assert.True(items[0].GetProperty("isLatest").GetBoolean());
+        Assert.False(items[1].GetProperty("isActive").GetBoolean());
+        Assert.False(items[1].GetProperty("isLatest").GetBoolean());
+        Assert.False(string.IsNullOrWhiteSpace(items[0].GetProperty("createdByAdminId").GetString()));
+        var latestSummary = items[0].GetProperty("summary");
+        Assert.Equal(expectedLatestValue, latestSummary.GetProperty(summaryField).GetInt32());
+
+        foreach (var field in forbiddenSummaryFields ?? [])
+        {
+            Assert.False(latestSummary.TryGetProperty(field, out _), $"Catalog version summary should not include mutable commerce field '{field}'.");
+        }
+    }
 
     private static async Task AssertCodeImmutableAsync(HttpResponseMessage response, string expectedCode)
     {

@@ -1,5 +1,6 @@
 ﻿import type { ReactNode } from 'react';
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 const navigation = vi.hoisted(() => ({
   pathname: '/admin',
   searchParams: new URLSearchParams(),
@@ -27,8 +28,11 @@ const admin = vi.hoisted(() => ({
   getAdminTaxonomyImpactData: vi.fn(),
   getAdminUsersPageData: vi.fn(),
   getAdminBillingPlanData: vi.fn(),
+  getAdminBillingPlanVersionHistoryData: vi.fn(),
   getAdminBillingAddOnData: vi.fn(),
+  getAdminBillingAddOnVersionHistoryData: vi.fn(),
   getAdminBillingCouponData: vi.fn(),
+  getAdminBillingCouponVersionHistoryData: vi.fn(),
   getAdminBillingCouponRedemptionData: vi.fn(),
   getAdminBillingInvoiceData: vi.fn(),
   getAdminBillingSubscriptionData: vi.fn(),
@@ -151,8 +155,11 @@ vi.mock('@/lib/admin', () => ({
   getAdminTaxonomyImpactData: admin.getAdminTaxonomyImpactData,
   getAdminUsersPageData: admin.getAdminUsersPageData,
   getAdminBillingPlanData: admin.getAdminBillingPlanData,
+  getAdminBillingPlanVersionHistoryData: admin.getAdminBillingPlanVersionHistoryData,
   getAdminBillingAddOnData: admin.getAdminBillingAddOnData,
+  getAdminBillingAddOnVersionHistoryData: admin.getAdminBillingAddOnVersionHistoryData,
   getAdminBillingCouponData: admin.getAdminBillingCouponData,
+  getAdminBillingCouponVersionHistoryData: admin.getAdminBillingCouponVersionHistoryData,
   getAdminBillingCouponRedemptionData: admin.getAdminBillingCouponRedemptionData,
   getAdminBillingInvoiceData: admin.getAdminBillingInvoiceData,
   getAdminBillingSubscriptionData: admin.getAdminBillingSubscriptionData,
@@ -472,11 +479,17 @@ describe('Admin Non-Editor Pages', () => {
     expect(screen.getAllByText('Dr Amina Khan').length).toBeGreaterThan(0);
   });
 
-  it('renders the billing page inside the learner-style route surface', async () => {
+  it('renders the billing page inside the learner-style route surface and opens catalog history', async () => {
+    const user = userEvent.setup();
     admin.getAdminBillingPlanData.mockResolvedValue([
       {
         id: 'plan-1',
         code: 'starter',
+        activeVersionId: 'plan-version-2',
+        activeVersionNumber: 2,
+        latestVersionId: 'plan-version-2',
+        latestVersionNumber: 2,
+        versionCount: 2,
         name: 'Starter',
         description: 'Starter plan',
         price: 49,
@@ -498,6 +511,11 @@ describe('Admin Non-Editor Pages', () => {
       {
         id: 'addon-1',
         code: 'credits-5',
+        activeVersionId: 'addon-version-1',
+        activeVersionNumber: 1,
+        latestVersionId: 'addon-version-1',
+        latestVersionNumber: 1,
+        versionCount: 1,
         name: 'Credits 5',
         description: 'Five extra credits',
         price: 15,
@@ -520,6 +538,11 @@ describe('Admin Non-Editor Pages', () => {
       {
         id: 'coupon-1',
         code: 'WELCOME10',
+        activeVersionId: 'coupon-version-1',
+        activeVersionNumber: 1,
+        latestVersionId: 'coupon-version-1',
+        latestVersionNumber: 1,
+        versionCount: 1,
         name: 'Welcome 10',
         description: 'Ten percent off',
         discountType: 'percentage',
@@ -541,6 +564,51 @@ describe('Admin Non-Editor Pages', () => {
     admin.getAdminBillingSubscriptionData.mockResolvedValue({ items: [] });
     admin.getAdminBillingCouponRedemptionData.mockResolvedValue({ items: [] });
     admin.getAdminBillingInvoiceData.mockResolvedValue({ items: [] });
+    admin.getAdminBillingPlanVersionHistoryData.mockResolvedValue({
+      subject: {
+        kind: 'plan',
+        id: 'plan-1',
+        code: 'starter',
+        name: 'Starter',
+        activeVersionId: 'plan-version-2',
+        activeVersionNumber: 2,
+        latestVersionId: 'plan-version-2',
+        latestVersionNumber: 2,
+        versionCount: 2,
+      },
+      items: [
+        {
+          id: 'plan-version-2',
+          parentId: 'plan-1',
+          versionNumber: 2,
+          code: 'starter',
+          name: 'Starter',
+          description: 'Starter plan',
+          status: 'active',
+          isActive: true,
+          isLatest: true,
+          createdByAdminId: 'admin-1',
+          createdByAdminName: 'Admin User',
+          createdAt: '2026-04-01T10:00:00.000Z',
+          summary: { price: 49, currency: 'AUD', interval: 'month', includedCredits: 4 },
+        },
+        {
+          id: 'plan-version-1',
+          parentId: 'plan-1',
+          versionNumber: 1,
+          code: 'starter',
+          name: 'Starter legacy',
+          description: 'Starter plan v1',
+          status: 'active',
+          isActive: false,
+          isLatest: false,
+          createdByAdminId: 'admin-1',
+          createdByAdminName: 'Admin User',
+          createdAt: '2026-03-01T10:00:00.000Z',
+          summary: { price: 39, currency: 'AUD', interval: 'month', includedCredits: 3 },
+        },
+      ],
+    });
 
     renderPage(<BillingPage />);
 
@@ -548,6 +616,14 @@ describe('Admin Non-Editor Pages', () => {
     expect((await screen.findAllByText('Starter')).length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: /^billing operations$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^subscription plans$/i })).toBeInTheDocument();
+    expect(screen.getAllByText('2 versions').length).toBeGreaterThan(0);
+
+    await user.click(screen.getAllByRole('button', { name: /view version history for starter/i })[0]);
+
+    expect(await screen.findByRole('heading', { name: /catalog version history/i })).toBeInTheDocument();
+    expect(admin.getAdminBillingPlanVersionHistoryData).toHaveBeenCalledWith('plan-1');
+    expect(screen.getByText('Active v2')).toBeInTheDocument();
+    expect(screen.getAllByText('Admin User').length).toBeGreaterThan(0);
   });
 
   it('renders the notifications page inside the learner-style route surface', async () => {

@@ -68,7 +68,7 @@ Known residual risk:
 
 ### Phase 2: Catalog Validation And Versioning
 
-Status: Phase 2A admin catalog validation hardening, Phase 2B-1 quote-time fulfillment snapshots, and Phase 2B-2A immutable billing catalog version anchors are implemented. The current model creates immutable plan, add-on, and coupon version rows, backfills baseline v1 rows during migration, stores active/latest version pointers on mutable catalog rows, and writes version references onto quotes, subscriptions, subscription items, invoices, payment transactions, and coupon redemptions. Fulfillment still treats the quote snapshot as the source of truth; version references are audit/reporting anchors and correlation evidence, not the authority for what gets granted after checkout.
+Status: Phase 2A admin catalog validation hardening, Phase 2B-1 quote-time fulfillment snapshots, Phase 2B-2A immutable billing catalog version anchors, and Phase 2B-2B admin catalog version history are implemented. The current model creates immutable plan, add-on, and coupon version rows, backfills baseline v1 rows during migration, stores active/latest version pointers on mutable catalog rows, writes version references onto quotes, subscriptions, subscription items, invoices, payment transactions, and coupon redemptions, and exposes read-only admin history timelines for catalog operators. Fulfillment still treats the quote snapshot as the source of truth; version references are audit/reporting anchors and correlation evidence, not the authority for what gets granted after checkout.
 
 Implemented scope:
 
@@ -78,6 +78,7 @@ Implemented scope:
 - Append a new catalog version on each admin catalog update while preserving prior version rows.
 - Treat catalog codes as immutable after creation; mutable display, pricing, entitlement, and status fields move forward through appended versions.
 - Keep checkout completion fulfillment based on `BillingQuote.SnapshotJson`, with version IDs retained for audit and downstream reporting.
+- Expose read-only plan, add-on, and coupon version-history endpoints plus an admin drawer timeline that lazy-loads the selected catalog item's history.
 
 Migration/deploy preflight:
 
@@ -93,10 +94,11 @@ Acceptance criteria:
 - Admins can archive catalog entries without deleting business evidence.
 - New catalog edits append immutable versions rather than mutating prior version evidence.
 - New checkout, payment, invoice, subscription, and coupon redemption rows retain quote/version audit anchors.
+- Admin billing operators can inspect catalog version history newest-first, including active/latest markers and compact catalog-field summaries, without mixing in mutable payment or redemption evidence.
 
-Residual risk after Phase 2B-2A:
+Residual risk after Phase 2B-2B:
 
-- Provider price mapping, admin version-history UI, and version-aware reporting/backfill are still incomplete.
+- Provider price mapping, transaction-level evidence views, and version-aware reporting/backfill are still incomplete.
 - Database-level immutability hardening is not yet enforced with triggers, restrictive permissions, or append-only database constraints; immutability is currently application-enforced.
 - Coupon usage limits are improved with parent coupon/version references, but true race-safe coupon inventory still needs a larger transactional design, provider event reconciliation, and concurrency tests.
 

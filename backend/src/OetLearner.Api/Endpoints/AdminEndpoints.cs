@@ -262,6 +262,10 @@ public static class AdminEndpoints
             => Results.Ok(await service.UpdateBillingPlanAsync(http.AdminId(), http.AdminName(), planId, request, ct)))
             .WithAdminWrite("AdminBillingWrite");
 
+        admin.MapGet("/billing/plans/{planId}/versions", async (string planId, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GetBillingPlanVersionsAsync(planId, ct)))
+            .WithAdminRead("AdminBillingRead");
+
         admin.MapGet("/billing/add-ons", async (AdminService service, CancellationToken ct, string? status)
             => Results.Ok(await service.GetBillingAddOnsAsync(status, ct)))
             .WithAdminRead("AdminBillingRead");
@@ -274,6 +278,10 @@ public static class AdminEndpoints
             => Results.Ok(await service.UpdateBillingAddOnAsync(http.AdminId(), http.AdminName(), addOnId, request, ct)))
             .WithAdminWrite("AdminBillingWrite");
 
+        admin.MapGet("/billing/add-ons/{addOnId}/versions", async (string addOnId, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GetBillingAddOnVersionsAsync(addOnId, ct)))
+            .WithAdminRead("AdminBillingRead");
+
         admin.MapGet("/billing/coupons", async (AdminService service, CancellationToken ct, string? status)
             => Results.Ok(await service.GetBillingCouponsAsync(status, ct)))
             .WithAdminRead("AdminBillingRead");
@@ -285,6 +293,10 @@ public static class AdminEndpoints
         admin.MapPut("/billing/coupons/{couponId}", async (string couponId, HttpContext http, AdminBillingCouponUpdateRequest request, AdminService service, CancellationToken ct)
             => Results.Ok(await service.UpdateBillingCouponAsync(http.AdminId(), http.AdminName(), couponId, request, ct)))
             .WithAdminWrite("AdminBillingWrite");
+
+        admin.MapGet("/billing/coupons/{couponId}/versions", async (string couponId, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GetBillingCouponVersionsAsync(couponId, ct)))
+            .WithAdminRead("AdminBillingRead");
 
         admin.MapGet("/billing/subscriptions", async (AdminService service, CancellationToken ct, string? status, string? search, int? page, int? pageSize)
             => Results.Ok(await service.GetBillingSubscriptionsAsync(status, search, page ?? 1, pageSize ?? 20, ct)))

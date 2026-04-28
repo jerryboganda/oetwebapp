@@ -3034,6 +3034,10 @@ export async function fetchAdminBillingPlans(params?: { status?: string }) {
   return apiRequest(`/v1/admin/billing/plans${qs}`);
 }
 
+export async function fetchAdminBillingPlanVersions(planId: string) {
+  return apiRequest(`/v1/admin/billing/plans/${encodeURIComponent(planId)}/versions`);
+}
+
 function normalizeBillingCode(value: string): string {
   return value
     .trim()
@@ -3126,6 +3130,10 @@ export async function fetchAdminBillingAddOns(params?: { status?: string }) {
   return apiRequest(`/v1/admin/billing/add-ons${qs}`);
 }
 
+export async function fetchAdminBillingAddOnVersions(addOnId: string) {
+  return apiRequest(`/v1/admin/billing/add-ons/${encodeURIComponent(addOnId)}/versions`);
+}
+
 export async function createAdminBillingAddOn(payload: {
   code?: string;
   name: string;
@@ -3215,6 +3223,10 @@ export async function updateAdminBillingAddOn(addOnId: string, payload: {
 export async function fetchAdminBillingCoupons(params?: { status?: string }) {
   const qs = params?.status ? `?status=${encodeURIComponent(params.status)}` : '';
   return apiRequest(`/v1/admin/billing/coupons${qs}`);
+}
+
+export async function fetchAdminBillingCouponVersions(couponId: string) {
+  return apiRequest(`/v1/admin/billing/coupons/${encodeURIComponent(couponId)}/versions`);
 }
 
 export async function createAdminBillingCoupon(payload: {

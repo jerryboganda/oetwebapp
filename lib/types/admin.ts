@@ -271,6 +271,11 @@ export interface AdminUsersPageData {
 export interface AdminBillingPlan {
   id: string;
   code?: string;
+  activeVersionId?: string | null;
+  activeVersionNumber?: number | null;
+  latestVersionId?: string | null;
+  latestVersionNumber?: number | null;
+  versionCount?: number;
   name: string;
   description?: string;
   price: number;
@@ -305,6 +310,11 @@ export interface AdminBillingInvoice {
 export interface AdminBillingAddOn {
   id: string;
   code: string;
+  activeVersionId?: string | null;
+  activeVersionNumber?: number | null;
+  latestVersionId?: string | null;
+  latestVersionNumber?: number | null;
+  versionCount?: number;
   name: string;
   description: string;
   price: number;
@@ -328,6 +338,11 @@ export interface AdminBillingAddOn {
 export interface AdminBillingCoupon {
   id: string;
   code: string;
+  activeVersionId?: string | null;
+  activeVersionNumber?: number | null;
+  latestVersionId?: string | null;
+  latestVersionNumber?: number | null;
+  versionCount?: number;
   name: string;
   description: string;
   discountType: 'percentage' | 'fixed';
@@ -346,6 +361,39 @@ export interface AdminBillingCoupon {
   notes: string | null;
   createdAt: string;
   updatedAt: string;
+}
+
+export interface AdminBillingCatalogSubject {
+  kind: 'plan' | 'add_on' | 'coupon';
+  id: string;
+  code: string;
+  name: string;
+  activeVersionId: string | null;
+  activeVersionNumber: number | null;
+  latestVersionId: string | null;
+  latestVersionNumber: number | null;
+  versionCount: number;
+}
+
+export interface AdminBillingCatalogVersion {
+  id: string;
+  parentId: string;
+  versionNumber: number;
+  code: string;
+  name: string;
+  description: string;
+  status: string;
+  isActive: boolean;
+  isLatest: boolean;
+  createdByAdminId: string | null;
+  createdByAdminName: string | null;
+  createdAt: string;
+  summary: Record<string, unknown>;
+}
+
+export interface AdminBillingCatalogVersionHistory {
+  subject: AdminBillingCatalogSubject;
+  items: AdminBillingCatalogVersion[];
 }
 
 export interface AdminBillingSubscription {

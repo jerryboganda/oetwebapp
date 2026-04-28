@@ -86,3 +86,33 @@ public record BillingCouponUpsertRequest(
     string? ApplicablePlanCodesJson = null,
     string? ApplicableAddOnCodesJson = null,
     string? Notes = null);
+
+public record AdminBillingCatalogSubjectResponse(
+    string Kind,
+    string Id,
+    string Code,
+    string Name,
+    string? ActiveVersionId,
+    int? ActiveVersionNumber,
+    string? LatestVersionId,
+    int? LatestVersionNumber,
+    int VersionCount);
+
+public record AdminBillingCatalogVersionResponse(
+    string Id,
+    string ParentId,
+    int VersionNumber,
+    string Code,
+    string Name,
+    string Description,
+    string Status,
+    bool IsActive,
+    bool IsLatest,
+    string? CreatedByAdminId,
+    string? CreatedByAdminName,
+    DateTimeOffset CreatedAt,
+    Dictionary<string, object?> Summary);
+
+public record AdminBillingCatalogVersionHistoryResponse(
+    AdminBillingCatalogSubjectResponse Subject,
+    IReadOnlyList<AdminBillingCatalogVersionResponse> Items);

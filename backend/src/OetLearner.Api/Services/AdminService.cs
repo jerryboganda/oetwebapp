@@ -969,12 +969,113 @@ public partial class AdminService(
             .Max();
     }
 
-    private static object MapBillingPlan(BillingPlan plan) => new
+    private sealed record BillingCatalogVersionMetadata(int VersionCount, int? ActiveVersionNumber, int? LatestVersionNumber);
+
+    private static readonly BillingCatalogVersionMetadata EmptyBillingCatalogVersionMetadata = new(0, null, null);
+
+    private static BillingCatalogVersionMetadata CreateCatalogVersionMetadata(
+        IEnumerable<(string Id, int VersionNumber)> versions,
+        string? activeVersionId,
+        string? latestVersionId)
+    {
+        var items = versions.ToList();
+        var activeVersionNumber = string.IsNullOrWhiteSpace(activeVersionId)
+            ? null
+            : items.Where(version => version.Id == activeVersionId).Select(version => (int?)version.VersionNumber).FirstOrDefault();
+        var latestVersionNumber = string.IsNullOrWhiteSpace(latestVersionId)
+            ? null
+            : items.Where(version => version.Id == latestVersionId).Select(version => (int?)version.VersionNumber).FirstOrDefault();
+
+        return new BillingCatalogVersionMetadata(items.Count, activeVersionNumber, latestVersionNumber);
+    }
+
+    private async Task<Dictionary<string, BillingCatalogVersionMetadata>> GetBillingPlanVersionMetadataAsync(
+        IReadOnlyCollection<BillingPlan> plans,
+        CancellationToken ct)
+    {
+        if (plans.Count == 0)
+        {
+            return [];
+        }
+
+        var planIds = plans.Select(plan => plan.Id).ToList();
+        var planPointers = plans.ToDictionary(plan => plan.Id, plan => (plan.ActiveVersionId, plan.LatestVersionId));
+        var versionRows = await db.BillingPlanVersions.AsNoTracking()
+            .Where(version => planIds.Contains(version.PlanId))
+            .Select(version => new { version.PlanId, version.Id, version.VersionNumber })
+            .ToListAsync(ct);
+
+        return versionRows
+            .GroupBy(version => version.PlanId)
+            .ToDictionary(
+                group => group.Key,
+                group => CreateCatalogVersionMetadata(
+                    group.Select(version => (version.Id, version.VersionNumber)),
+                    planPointers[group.Key].ActiveVersionId,
+                    planPointers[group.Key].LatestVersionId));
+    }
+
+    private async Task<Dictionary<string, BillingCatalogVersionMetadata>> GetBillingAddOnVersionMetadataAsync(
+        IReadOnlyCollection<BillingAddOn> addOns,
+        CancellationToken ct)
+    {
+        if (addOns.Count == 0)
+        {
+            return [];
+        }
+
+        var addOnIds = addOns.Select(addOn => addOn.Id).ToList();
+        var addOnPointers = addOns.ToDictionary(addOn => addOn.Id, addOn => (addOn.ActiveVersionId, addOn.LatestVersionId));
+        var versionRows = await db.BillingAddOnVersions.AsNoTracking()
+            .Where(version => addOnIds.Contains(version.AddOnId))
+            .Select(version => new { version.AddOnId, version.Id, version.VersionNumber })
+            .ToListAsync(ct);
+
+        return versionRows
+            .GroupBy(version => version.AddOnId)
+            .ToDictionary(
+                group => group.Key,
+                group => CreateCatalogVersionMetadata(
+                    group.Select(version => (version.Id, version.VersionNumber)),
+                    addOnPointers[group.Key].ActiveVersionId,
+                    addOnPointers[group.Key].LatestVersionId));
+    }
+
+    private async Task<Dictionary<string, BillingCatalogVersionMetadata>> GetBillingCouponVersionMetadataAsync(
+        IReadOnlyCollection<BillingCoupon> coupons,
+        CancellationToken ct)
+    {
+        if (coupons.Count == 0)
+        {
+            return [];
+        }
+
+        var couponIds = coupons.Select(coupon => coupon.Id).ToList();
+        var couponPointers = coupons.ToDictionary(coupon => coupon.Id, coupon => (coupon.ActiveVersionId, coupon.LatestVersionId));
+        var versionRows = await db.BillingCouponVersions.AsNoTracking()
+            .Where(version => couponIds.Contains(version.CouponId))
+            .Select(version => new { version.CouponId, version.Id, version.VersionNumber })
+            .ToListAsync(ct);
+
+        return versionRows
+            .GroupBy(version => version.CouponId)
+            .ToDictionary(
+                group => group.Key,
+                group => CreateCatalogVersionMetadata(
+                    group.Select(version => (version.Id, version.VersionNumber)),
+                    couponPointers[group.Key].ActiveVersionId,
+                    couponPointers[group.Key].LatestVersionId));
+    }
+
+    private static object MapBillingPlan(BillingPlan plan, BillingCatalogVersionMetadata? versionMetadata = null) => new
     {
         plan.Id,
         code = plan.Code,
-        plan.ActiveVersionId,
-        plan.LatestVersionId,
+        activeVersionId = plan.ActiveVersionId,
+        activeVersionNumber = versionMetadata?.ActiveVersionNumber,
+        latestVersionId = plan.LatestVersionId,
+        latestVersionNumber = versionMetadata?.LatestVersionNumber,
+        versionCount = versionMetadata?.VersionCount ?? 0,
         plan.Name,
         plan.Description,
         plan.Price,
@@ -995,12 +1096,15 @@ public partial class AdminService(
         plan.CreatedAt
     };
 
-    private static object MapBillingAddOn(BillingAddOn addOn) => new
+    private static object MapBillingAddOn(BillingAddOn addOn, BillingCatalogVersionMetadata? versionMetadata = null) => new
     {
         addOn.Id,
         code = addOn.Code,
-        addOn.ActiveVersionId,
-        addOn.LatestVersionId,
+        activeVersionId = addOn.ActiveVersionId,
+        activeVersionNumber = versionMetadata?.ActiveVersionNumber,
+        latestVersionId = addOn.LatestVersionId,
+        latestVersionNumber = versionMetadata?.LatestVersionNumber,
+        versionCount = versionMetadata?.VersionCount ?? 0,
         addOn.Name,
         addOn.Description,
         addOn.Price,
@@ -1021,12 +1125,15 @@ public partial class AdminService(
         addOn.UpdatedAt
     };
 
-    private static object MapBillingCoupon(BillingCoupon coupon) => new
+    private static object MapBillingCoupon(BillingCoupon coupon, BillingCatalogVersionMetadata? versionMetadata = null) => new
     {
         coupon.Id,
         code = coupon.Code,
-        coupon.ActiveVersionId,
-        coupon.LatestVersionId,
+        activeVersionId = coupon.ActiveVersionId,
+        activeVersionNumber = versionMetadata?.ActiveVersionNumber,
+        latestVersionId = coupon.LatestVersionId,
+        latestVersionNumber = versionMetadata?.LatestVersionNumber,
+        versionCount = versionMetadata?.VersionCount ?? 0,
         coupon.Name,
         coupon.Description,
         discountType = MapBillingDiscountType(coupon.DiscountType),
@@ -3305,7 +3412,10 @@ public partial class AdminService(
                 .ToList();
         }
 
-        return plans.Select(MapBillingPlan);
+        var versionMetadata = await GetBillingPlanVersionMetadataAsync(plans, ct);
+        return plans.Select(plan => MapBillingPlan(
+            plan,
+            versionMetadata.TryGetValue(plan.Id, out var metadata) ? metadata : EmptyBillingCatalogVersionMetadata));
     }
 
     public async Task<object> CreateBillingPlanAsync(string adminId, string adminName,
@@ -3415,7 +3525,10 @@ public partial class AdminService(
                 .ToList();
         }
 
-        return addOns.Select(MapBillingAddOn);
+        var versionMetadata = await GetBillingAddOnVersionMetadataAsync(addOns, ct);
+        return addOns.Select(addOn => MapBillingAddOn(
+            addOn,
+            versionMetadata.TryGetValue(addOn.Id, out var metadata) ? metadata : EmptyBillingCatalogVersionMetadata));
     }
 
     public async Task<object> CreateBillingAddOnAsync(string adminId, string adminName, AdminBillingAddOnCreateRequest request, CancellationToken ct)
@@ -3510,7 +3623,10 @@ public partial class AdminService(
 
         var coupons = await ToOrderedListDescendingAsync(query, coupon => coupon.CreatedAt, ct);
 
-        return coupons.Select(MapBillingCoupon);
+        var versionMetadata = await GetBillingCouponVersionMetadataAsync(coupons, ct);
+        return coupons.Select(coupon => MapBillingCoupon(
+            coupon,
+            versionMetadata.TryGetValue(coupon.Id, out var metadata) ? metadata : EmptyBillingCatalogVersionMetadata));
     }
 
     public async Task<object> CreateBillingCouponAsync(string adminId, string adminName, AdminBillingCouponCreateRequest request, CancellationToken ct)
@@ -3590,6 +3706,190 @@ public partial class AdminService(
         await LogAuditAsync(adminId, adminName, "Updated", "BillingCoupon", coupon.Id, $"Updated coupon: {validated.Code}", ct);
         return MapBillingCoupon(coupon);
     }
+
+    public async Task<AdminBillingCatalogVersionHistoryResponse> GetBillingPlanVersionsAsync(string planId, CancellationToken ct)
+    {
+        var plan = await db.BillingPlans.AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == planId || item.Code == planId, ct)
+            ?? throw ApiException.NotFound("billing_plan_not_found", "Billing plan not found.");
+
+        var versions = await db.BillingPlanVersions.AsNoTracking()
+            .Where(version => version.PlanId == plan.Id)
+            .OrderByDescending(version => version.VersionNumber)
+            .ToListAsync(ct);
+
+        var metadata = CreateCatalogVersionMetadata(
+            versions.Select(version => (version.Id, version.VersionNumber)),
+            plan.ActiveVersionId,
+            plan.LatestVersionId);
+
+        var subject = new AdminBillingCatalogSubjectResponse(
+            "plan",
+            plan.Id,
+            plan.Code,
+            plan.Name,
+            plan.ActiveVersionId,
+            metadata.ActiveVersionNumber,
+            plan.LatestVersionId,
+            metadata.LatestVersionNumber,
+            metadata.VersionCount);
+
+        return new AdminBillingCatalogVersionHistoryResponse(
+            subject,
+            versions.Select(version => MapBillingPlanVersion(plan, version)).ToList());
+    }
+
+    public async Task<AdminBillingCatalogVersionHistoryResponse> GetBillingAddOnVersionsAsync(string addOnId, CancellationToken ct)
+    {
+        var addOn = await db.BillingAddOns.AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == addOnId || item.Code == addOnId, ct)
+            ?? throw ApiException.NotFound("billing_addon_not_found", "Billing add-on not found.");
+
+        var versions = await db.BillingAddOnVersions.AsNoTracking()
+            .Where(version => version.AddOnId == addOn.Id)
+            .OrderByDescending(version => version.VersionNumber)
+            .ToListAsync(ct);
+
+        var metadata = CreateCatalogVersionMetadata(
+            versions.Select(version => (version.Id, version.VersionNumber)),
+            addOn.ActiveVersionId,
+            addOn.LatestVersionId);
+
+        var subject = new AdminBillingCatalogSubjectResponse(
+            "add_on",
+            addOn.Id,
+            addOn.Code,
+            addOn.Name,
+            addOn.ActiveVersionId,
+            metadata.ActiveVersionNumber,
+            addOn.LatestVersionId,
+            metadata.LatestVersionNumber,
+            metadata.VersionCount);
+
+        return new AdminBillingCatalogVersionHistoryResponse(
+            subject,
+            versions.Select(version => MapBillingAddOnVersion(addOn, version)).ToList());
+    }
+
+    public async Task<AdminBillingCatalogVersionHistoryResponse> GetBillingCouponVersionsAsync(string couponId, CancellationToken ct)
+    {
+        var coupon = await db.BillingCoupons.AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id == couponId || item.Code == couponId, ct)
+            ?? throw ApiException.NotFound("billing_coupon_not_found", "Billing coupon not found.");
+
+        var versions = await db.BillingCouponVersions.AsNoTracking()
+            .Where(version => version.CouponId == coupon.Id)
+            .OrderByDescending(version => version.VersionNumber)
+            .ToListAsync(ct);
+
+        var metadata = CreateCatalogVersionMetadata(
+            versions.Select(version => (version.Id, version.VersionNumber)),
+            coupon.ActiveVersionId,
+            coupon.LatestVersionId);
+
+        var subject = new AdminBillingCatalogSubjectResponse(
+            "coupon",
+            coupon.Id,
+            coupon.Code,
+            coupon.Name,
+            coupon.ActiveVersionId,
+            metadata.ActiveVersionNumber,
+            coupon.LatestVersionId,
+            metadata.LatestVersionNumber,
+            metadata.VersionCount);
+
+        return new AdminBillingCatalogVersionHistoryResponse(
+            subject,
+            versions.Select(version => MapBillingCouponVersion(coupon, version)).ToList());
+    }
+
+    private static AdminBillingCatalogVersionResponse MapBillingPlanVersion(BillingPlan plan, BillingPlanVersion version) => new(
+        version.Id,
+        version.PlanId,
+        version.VersionNumber,
+        version.Code,
+        version.Name,
+        version.Description,
+        version.Status.ToString().ToLowerInvariant(),
+        string.Equals(version.Id, plan.ActiveVersionId, StringComparison.Ordinal),
+        string.Equals(version.Id, plan.LatestVersionId, StringComparison.Ordinal),
+        version.CreatedByAdminId,
+        version.CreatedByAdminName,
+        version.CreatedAt,
+        new Dictionary<string, object?>
+        {
+            ["price"] = version.Price,
+            ["currency"] = version.Currency,
+            ["interval"] = version.Interval,
+            ["durationMonths"] = version.DurationMonths,
+            ["includedCredits"] = version.IncludedCredits,
+            ["displayOrder"] = version.DisplayOrder,
+            ["isVisible"] = version.IsVisible,
+            ["isRenewable"] = version.IsRenewable,
+            ["trialDays"] = version.TrialDays,
+            ["includedSubtests"] = JsonSupport.Deserialize<List<string>>(version.IncludedSubtestsJson, []),
+            ["entitlements"] = JsonSupport.Deserialize<Dictionary<string, object?>>(version.EntitlementsJson, new Dictionary<string, object?>()),
+            ["archivedAt"] = version.ArchivedAt
+        });
+
+    private static AdminBillingCatalogVersionResponse MapBillingAddOnVersion(BillingAddOn addOn, BillingAddOnVersion version) => new(
+        version.Id,
+        version.AddOnId,
+        version.VersionNumber,
+        version.Code,
+        version.Name,
+        version.Description,
+        version.Status.ToString().ToLowerInvariant(),
+        string.Equals(version.Id, addOn.ActiveVersionId, StringComparison.Ordinal),
+        string.Equals(version.Id, addOn.LatestVersionId, StringComparison.Ordinal),
+        version.CreatedByAdminId,
+        version.CreatedByAdminName,
+        version.CreatedAt,
+        new Dictionary<string, object?>
+        {
+            ["price"] = version.Price,
+            ["currency"] = version.Currency,
+            ["interval"] = version.Interval,
+            ["durationDays"] = version.DurationDays,
+            ["grantCredits"] = version.GrantCredits,
+            ["displayOrder"] = version.DisplayOrder,
+            ["isRecurring"] = version.IsRecurring,
+            ["appliesToAllPlans"] = version.AppliesToAllPlans,
+            ["isStackable"] = version.IsStackable,
+            ["quantityStep"] = version.QuantityStep,
+            ["maxQuantity"] = version.MaxQuantity,
+            ["compatiblePlanCodes"] = JsonSupport.Deserialize<List<string>>(version.CompatiblePlanCodesJson, []),
+            ["grantEntitlements"] = JsonSupport.Deserialize<Dictionary<string, object?>>(version.GrantEntitlementsJson, new Dictionary<string, object?>())
+        });
+
+    private static AdminBillingCatalogVersionResponse MapBillingCouponVersion(BillingCoupon coupon, BillingCouponVersion version) => new(
+        version.Id,
+        version.CouponId,
+        version.VersionNumber,
+        version.Code,
+        version.Name,
+        version.Description,
+        version.Status.ToString().ToLowerInvariant(),
+        string.Equals(version.Id, coupon.ActiveVersionId, StringComparison.Ordinal),
+        string.Equals(version.Id, coupon.LatestVersionId, StringComparison.Ordinal),
+        version.CreatedByAdminId,
+        version.CreatedByAdminName,
+        version.CreatedAt,
+        new Dictionary<string, object?>
+        {
+            ["discountType"] = MapBillingDiscountType(version.DiscountType),
+            ["discountValue"] = version.DiscountValue,
+            ["currency"] = version.Currency,
+            ["startsAt"] = version.StartsAt,
+            ["endsAt"] = version.EndsAt,
+            ["usageLimitTotal"] = version.UsageLimitTotal,
+            ["usageLimitPerUser"] = version.UsageLimitPerUser,
+            ["minimumSubtotal"] = version.MinimumSubtotal,
+            ["isStackable"] = version.IsStackable,
+            ["applicablePlanCodes"] = JsonSupport.Deserialize<List<string>>(version.ApplicablePlanCodesJson, []),
+            ["applicableAddOnCodes"] = JsonSupport.Deserialize<List<string>>(version.ApplicableAddOnCodesJson, []),
+            ["notes"] = version.Notes
+        });
 
     public async Task<object> GetBillingSubscriptionsAsync(string? status, string? search, int page, int pageSize, CancellationToken ct)
     {

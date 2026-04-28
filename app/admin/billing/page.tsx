@@ -1,7 +1,7 @@
 'use client';
 
-import { type Dispatch, type SetStateAction, useEffect, useMemo, useState } from 'react';
-import { CreditCard, DollarSign, Package, Receipt, Search, Ticket, Users } from 'lucide-react';
+import { type Dispatch, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
+import { CreditCard, DollarSign, History as HistoryIcon, Package, Receipt, Search, Ticket, Users } from 'lucide-react';
 import { AdminRouteSummaryCard, AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -11,7 +11,7 @@ import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox, Input, Select, Textarea } from '@/components/ui/form-controls';
-import { Modal } from '@/components/ui/modal';
+import { Drawer, Modal } from '@/components/ui/modal';
 import { ContentScopePanel } from '@/components/domain/ContentScopePanel';
 import {
   createAdminBillingAddOn,
@@ -23,15 +23,19 @@ import {
 } from '@/lib/api';
 import {
   getAdminBillingAddOnData,
+  getAdminBillingAddOnVersionHistoryData,
   getAdminBillingCouponData,
   getAdminBillingCouponRedemptionData,
+  getAdminBillingCouponVersionHistoryData,
   getAdminBillingInvoiceData,
   getAdminBillingPlanData,
+  getAdminBillingPlanVersionHistoryData,
   getAdminBillingSubscriptionData,
 } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
 import type {
   AdminBillingAddOn,
+  AdminBillingCatalogVersionHistory,
   AdminBillingCoupon,
   AdminBillingCouponRedemption,
   AdminBillingInvoice,
@@ -41,6 +45,13 @@ import type {
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
+type CatalogHistoryKind = 'plan' | 'add_on' | 'coupon';
+type CatalogHistoryTarget = { kind: CatalogHistoryKind; id: string; name: string; code: string };
+type CatalogVersionMetadata = {
+  activeVersionNumber?: number | null;
+  latestVersionNumber?: number | null;
+  versionCount?: number;
+};
 
 interface BillingPlanFormState {
   code: string;
@@ -196,6 +207,34 @@ function toNumber(value: string, fallback = 0): number {
   return Number.isFinite(numeric) ? numeric : fallback;
 }
 
+function renderCatalogVersionMeta(item: CatalogVersionMetadata) {
+  const versionCount = item.versionCount ?? 0;
+  if (versionCount <= 0) return null;
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <Badge variant="info">v{item.activeVersionNumber ?? item.latestVersionNumber ?? versionCount}</Badge>
+      <span className="text-xs text-muted">{versionCount} {versionCount === 1 ? 'version' : 'versions'}</span>
+    </div>
+  );
+}
+
+function formatSummaryValue(value: unknown): string {
+  if (value == null || value === '') return 'N/A';
+  if (typeof value === 'boolean') return value ? 'Yes' : 'No';
+  if (typeof value === 'number') return value.toLocaleString();
+  if (Array.isArray(value)) return value.length > 0 ? value.join(', ') : 'None';
+  if (typeof value === 'object') return `${Object.keys(value).length} fields`;
+  return String(value);
+}
+
+function labelSummaryKey(key: string): string {
+  return key
+    .replace(/([a-z0-9])([A-Z])/g, '$1 $2')
+    .replace(/_/g, ' ')
+    .replace(/^./, (char) => char.toUpperCase());
+}
+
 function jsonList(value: string): string {
   return JSON.stringify(splitList(value));
 }
@@ -312,6 +351,10 @@ export default function BillingPage() {
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [editingAddOnId, setEditingAddOnId] = useState<string | null>(null);
   const [editingCouponId, setEditingCouponId] = useState<string | null>(null);
+  const [catalogHistoryTarget, setCatalogHistoryTarget] = useState<CatalogHistoryTarget | null>(null);
+  const [catalogHistory, setCatalogHistory] = useState<AdminBillingCatalogVersionHistory | null>(null);
+  const [catalogHistoryStatus, setCatalogHistoryStatus] = useState<PageStatus>('empty');
+  const catalogHistoryRequestRef = useRef(0);
   const [toast, setToast] = useState<ToastState>(null);
 
   const selectedPlanStatus = planFilters.status?.[0];
@@ -399,6 +442,7 @@ export default function BillingPage() {
         <div className="space-y-1">
           <p className="font-medium text-navy">{plan.name}</p>
           <p className="text-xs uppercase tracking-[0.12em] text-muted">{plan.code ?? plan.id}</p>
+          {renderCatalogVersionMeta(plan)}
           {plan.description ? <p className="text-sm text-muted">{plan.description}</p> : null}
         </div>
       ),
@@ -436,9 +480,15 @@ export default function BillingPage() {
       key: 'actions',
       header: '',
       render: (plan) => (
-        <Button variant="outline" size="sm" onClick={() => openPlanEditor(plan)}>
-          Edit
-        </Button>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" className="gap-2" aria-label={`View version history for ${plan.name}`} onClick={() => openCatalogHistory({ kind: 'plan', id: plan.id, name: plan.name, code: plan.code ?? plan.id })}>
+            <HistoryIcon className="h-4 w-4" />
+            History
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => openPlanEditor(plan)}>
+            Edit
+          </Button>
+        </div>
       ),
     },
   ];
@@ -451,6 +501,7 @@ export default function BillingPage() {
         <div className="space-y-1">
           <p className="font-medium text-navy">{addOn.name}</p>
           <p className="text-xs uppercase tracking-[0.12em] text-muted">{addOn.code}</p>
+          {renderCatalogVersionMeta(addOn)}
           {addOn.description ? <p className="text-sm text-muted">{addOn.description}</p> : null}
         </div>
       ),
@@ -488,9 +539,15 @@ export default function BillingPage() {
       key: 'actions',
       header: '',
       render: (addOn) => (
-        <Button variant="outline" size="sm" onClick={() => openAddOnEditor(addOn)}>
-          Edit
-        </Button>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" className="gap-2" aria-label={`View version history for ${addOn.name}`} onClick={() => openCatalogHistory({ kind: 'add_on', id: addOn.id, name: addOn.name, code: addOn.code })}>
+            <HistoryIcon className="h-4 w-4" />
+            History
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => openAddOnEditor(addOn)}>
+            Edit
+          </Button>
+        </div>
       ),
     },
   ];
@@ -503,6 +560,7 @@ export default function BillingPage() {
         <div className="space-y-1">
           <p className="font-medium text-navy">{coupon.code}</p>
           <p className="text-sm text-muted">{coupon.name}</p>
+          {renderCatalogVersionMeta(coupon)}
         </div>
       ),
     },
@@ -539,9 +597,15 @@ export default function BillingPage() {
       key: 'actions',
       header: '',
       render: (coupon) => (
-        <Button variant="outline" size="sm" onClick={() => openCouponEditor(coupon)}>
-          Edit
-        </Button>
+        <div className="flex justify-end gap-2">
+          <Button variant="outline" size="sm" className="gap-2" aria-label={`View version history for ${coupon.code}`} onClick={() => openCatalogHistory({ kind: 'coupon', id: coupon.id, name: coupon.name, code: coupon.code })}>
+            <HistoryIcon className="h-4 w-4" />
+            History
+          </Button>
+          <Button variant="outline" size="sm" onClick={() => openCouponEditor(coupon)}>
+            Edit
+          </Button>
+        </div>
       ),
     },
   ];
@@ -660,6 +724,7 @@ export default function BillingPage() {
         <div className="min-w-0">
           <p className="truncate font-semibold text-navy">{plan.name}</p>
           <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{plan.code ?? plan.id}</p>
+          <div className="mt-1">{renderCatalogVersionMeta(plan)}</div>
         </div>
         <Badge variant={plan.status === 'active' ? 'success' : plan.status === 'archived' ? 'danger' : 'muted'}>
           {plan.status}
@@ -687,7 +752,11 @@ export default function BillingPage() {
         </div>
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex flex-col justify-end gap-2 sm:flex-row">
+        <Button variant="outline" size="sm" className="w-full gap-2 sm:w-auto" aria-label={`View version history for ${plan.name}`} onClick={() => openCatalogHistory({ kind: 'plan', id: plan.id, name: plan.name, code: plan.code ?? plan.id })}>
+          <HistoryIcon className="h-4 w-4" />
+          History
+        </Button>
         <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => openPlanEditor(plan)}>
           Edit
         </Button>
@@ -701,6 +770,7 @@ export default function BillingPage() {
         <div className="min-w-0">
           <p className="truncate font-semibold text-navy">{addOn.name}</p>
           <p className="truncate text-xs uppercase tracking-[0.12em] text-muted">{addOn.code}</p>
+          <div className="mt-1">{renderCatalogVersionMeta(addOn)}</div>
         </div>
         <Badge variant={addOn.status === 'active' ? 'success' : addOn.status === 'archived' ? 'danger' : 'muted'}>
           {addOn.status}
@@ -728,7 +798,11 @@ export default function BillingPage() {
         </div>
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex flex-col justify-end gap-2 sm:flex-row">
+        <Button variant="outline" size="sm" className="w-full gap-2 sm:w-auto" aria-label={`View version history for ${addOn.name}`} onClick={() => openCatalogHistory({ kind: 'add_on', id: addOn.id, name: addOn.name, code: addOn.code })}>
+          <HistoryIcon className="h-4 w-4" />
+          History
+        </Button>
         <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => openAddOnEditor(addOn)}>
           Edit
         </Button>
@@ -742,6 +816,7 @@ export default function BillingPage() {
         <div className="min-w-0">
           <p className="truncate font-semibold text-navy">{coupon.code}</p>
           <p className="truncate text-sm text-muted">{coupon.name}</p>
+          <div className="mt-1">{renderCatalogVersionMeta(coupon)}</div>
         </div>
         <Badge variant={coupon.status === 'active' ? 'success' : coupon.status === 'archived' ? 'danger' : 'muted'}>
           {coupon.status}
@@ -773,7 +848,11 @@ export default function BillingPage() {
         </div>
       </div>
 
-      <div className="flex justify-end">
+      <div className="flex flex-col justify-end gap-2 sm:flex-row">
+        <Button variant="outline" size="sm" className="w-full gap-2 sm:w-auto" aria-label={`View version history for ${coupon.code}`} onClick={() => openCatalogHistory({ kind: 'coupon', id: coupon.id, name: coupon.name, code: coupon.code })}>
+          <HistoryIcon className="h-4 w-4" />
+          History
+        </Button>
         <Button variant="outline" size="sm" className="w-full sm:w-auto" onClick={() => openCouponEditor(coupon)}>
           Edit
         </Button>
@@ -1010,6 +1089,45 @@ export default function BillingPage() {
     setEditingCouponId(coupon?.id ?? null);
     setCouponForm(coupon ? toCouponForm(coupon) : defaultCouponForm);
     setIsCouponModalOpen(true);
+  }
+
+  async function openCatalogHistory(target: CatalogHistoryTarget) {
+    const requestId = catalogHistoryRequestRef.current + 1;
+    catalogHistoryRequestRef.current = requestId;
+    setCatalogHistoryTarget(target);
+    setCatalogHistory(null);
+    setCatalogHistoryStatus('loading');
+
+    try {
+      const history = target.kind === 'plan'
+        ? await getAdminBillingPlanVersionHistoryData(target.id)
+        : target.kind === 'add_on'
+          ? await getAdminBillingAddOnVersionHistoryData(target.id)
+          : await getAdminBillingCouponVersionHistoryData(target.id);
+
+      if (catalogHistoryRequestRef.current !== requestId) return;
+
+      if (history.subject.id !== target.id || history.subject.kind !== target.kind) {
+        setCatalogHistoryStatus('error');
+        setToast({ variant: 'error', message: 'Loaded catalog history did not match the selected item.' });
+        return;
+      }
+
+      setCatalogHistory(history);
+      setCatalogHistoryStatus(history.items.length > 0 ? 'success' : 'empty');
+    } catch (error) {
+      if (catalogHistoryRequestRef.current !== requestId) return;
+      console.error(error);
+      setCatalogHistoryStatus('error');
+      setToast({ variant: 'error', message: 'Unable to load catalog version history.' });
+    }
+  }
+
+  function closeCatalogHistory() {
+    catalogHistoryRequestRef.current += 1;
+    setCatalogHistoryTarget(null);
+    setCatalogHistory(null);
+    setCatalogHistoryStatus('empty');
   }
 
   async function handleSavePlan() {
@@ -1250,6 +1368,97 @@ export default function BillingPage() {
           <DataTable columns={invoiceColumns} data={invoices} keyExtractor={(invoice) => invoice.id} mobileCardRender={invoiceMobileCardRender} />
         </AdminRoutePanel>
       </AsyncStateWrapper>
+
+      <Drawer
+        open={catalogHistoryTarget !== null}
+        onClose={closeCatalogHistory}
+        title="Catalog Version History"
+        className="sm:max-w-2xl"
+      >
+        {catalogHistoryTarget ? (
+          <div className="space-y-5">
+            <div className="border-b border-border pb-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline">{catalogHistory?.subject.kind.replace('_', ' ') ?? catalogHistoryTarget.kind.replace('_', ' ')}</Badge>
+                {catalogHistory?.subject.activeVersionNumber ? <Badge variant="info">Active v{catalogHistory.subject.activeVersionNumber}</Badge> : null}
+                {catalogHistory?.subject.versionCount ? <Badge variant="muted">{catalogHistory.subject.versionCount} versions</Badge> : null}
+              </div>
+              <h2 className="mt-3 text-lg font-semibold text-navy">{catalogHistory?.subject.name ?? catalogHistoryTarget.name}</h2>
+              <p className="mt-1 text-xs uppercase tracking-[0.12em] text-muted">{catalogHistory?.subject.code ?? catalogHistoryTarget.code}</p>
+            </div>
+
+            {catalogHistoryStatus === 'loading' ? (
+              <div className="space-y-3" role="status" aria-live="polite">
+                {[0, 1, 2].map((item) => (
+                  <div key={item} className="h-24 animate-pulse rounded-lg bg-background-light" />
+                ))}
+              </div>
+            ) : null}
+
+            {catalogHistoryStatus === 'error' ? (
+              <EmptyState
+                icon={<HistoryIcon className="h-10 w-10 text-muted" />}
+                title="Version history unavailable"
+                description="Refresh the page or try the selected catalog item again."
+              />
+            ) : null}
+
+            {catalogHistoryStatus === 'empty' ? (
+              <EmptyState
+                icon={<HistoryIcon className="h-10 w-10 text-muted" />}
+                title="No versions found"
+                description="This catalog item does not have recorded version rows yet."
+              />
+            ) : null}
+
+            {catalogHistoryStatus === 'success' && catalogHistory ? (
+              <div className="space-y-4">
+                {catalogHistory.items.map((version) => {
+                  const summaryEntries = Object.entries(version.summary)
+                    .filter(([, value]) => value !== null && value !== undefined && value !== '')
+                    .slice(0, 6);
+
+                  return (
+                    <div key={version.id} className="relative border-l border-border pl-4">
+                      <span className="absolute -left-1.5 top-2 h-3 w-3 rounded-full border-2 border-white bg-primary" aria-hidden="true" />
+                      <div className="space-y-3 rounded-lg border border-border bg-white p-4 shadow-sm">
+                        <div className="flex flex-wrap items-start justify-between gap-3">
+                          <div>
+                            <div className="flex flex-wrap items-center gap-2">
+                              <Badge variant={version.isActive ? 'success' : 'muted'}>v{version.versionNumber}</Badge>
+                              {version.isLatest ? <Badge variant="info">Latest</Badge> : null}
+                              <Badge variant={version.status === 'active' ? 'success' : version.status === 'archived' ? 'danger' : 'muted'}>{version.status}</Badge>
+                            </div>
+                            <p className="mt-2 font-medium text-navy">{version.name}</p>
+                            <p className="text-xs uppercase tracking-[0.12em] text-muted">{version.code}</p>
+                          </div>
+                          <div className="text-right text-xs text-muted">
+                            <p>{new Date(version.createdAt).toLocaleString()}</p>
+                            <p>{version.createdByAdminName ?? version.createdByAdminId ?? 'System'}</p>
+                          </div>
+                        </div>
+
+                        {version.description ? <p className="text-sm text-muted">{version.description}</p> : null}
+
+                        {summaryEntries.length > 0 ? (
+                          <dl className="grid gap-2 text-sm sm:grid-cols-2">
+                            {summaryEntries.map(([key, value]) => (
+                              <div key={key} className="rounded-lg bg-background-light px-3 py-2">
+                                <dt className="text-[11px] uppercase tracking-[0.12em] text-muted">{labelSummaryKey(key)}</dt>
+                                <dd className="mt-1 break-words font-medium text-navy">{formatSummaryValue(value)}</dd>
+                              </div>
+                            ))}
+                          </dl>
+                        ) : null}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </Drawer>
 
       <Modal
         open={isPlanModalOpen}

@@ -4,10 +4,13 @@ import {
   fetchAdminAuditLogDetail,
   fetchAdminAuditLogs,
   fetchAdminBillingAddOns,
+  fetchAdminBillingAddOnVersions,
   fetchAdminBillingCouponRedemptions,
   fetchAdminBillingCoupons,
+  fetchAdminBillingCouponVersions,
   fetchAdminBillingInvoices,
   fetchAdminBillingPlans,
+  fetchAdminBillingPlanVersions,
   fetchAdminBillingSubscriptions,
   fetchAdminContent,
   fetchAdminContentEffectiveness,
@@ -38,6 +41,9 @@ import type {
   AdminAuditLogDetail,
   AdminAuditLogRow,
   AdminBillingAddOn,
+  AdminBillingCatalogSubject,
+  AdminBillingCatalogVersion,
+  AdminBillingCatalogVersionHistory,
   AdminBillingInvoice,
   AdminBillingCoupon,
   AdminBillingCouponRedemption,
@@ -94,6 +100,12 @@ function toNullableString(value: unknown): string | null {
 function toNumberValue(value: unknown, fallback = 0): number {
   const numeric = Number(value);
   return Number.isFinite(numeric) ? numeric : fallback;
+}
+
+function toNullableNumber(value: unknown): number | null {
+  if (value == null) return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
 }
 
 function toBooleanValue(value: unknown): boolean {
@@ -517,6 +529,11 @@ export async function getAdminBillingPlanData(params?: Parameters<typeof fetchAd
   return asArray(raw).map((item) => ({
     id: toStringValue(item.id),
     code: toNullableString(item.code) ?? toStringValue(item.id),
+    activeVersionId: toNullableString(item.activeVersionId),
+    activeVersionNumber: toNullableNumber(item.activeVersionNumber),
+    latestVersionId: toNullableString(item.latestVersionId),
+    latestVersionNumber: toNullableNumber(item.latestVersionNumber),
+    versionCount: toNumberValue(item.versionCount),
     name: toStringValue(item.name),
     description: toNullableString(item.description) ?? '',
     price: toNumberValue(item.price),
@@ -543,6 +560,11 @@ export async function getAdminBillingAddOnData(params?: Parameters<typeof fetchA
   return asArray(raw).map((item) => ({
     id: toStringValue(item.id),
     code: toStringValue(item.code),
+    activeVersionId: toNullableString(item.activeVersionId),
+    activeVersionNumber: toNullableNumber(item.activeVersionNumber),
+    latestVersionId: toNullableString(item.latestVersionId),
+    latestVersionNumber: toNullableNumber(item.latestVersionNumber),
+    versionCount: toNumberValue(item.versionCount),
     name: toStringValue(item.name),
     description: toStringValue(item.description),
     price: toNumberValue(item.price),
@@ -569,6 +591,11 @@ export async function getAdminBillingCouponData(params?: Parameters<typeof fetch
   return asArray(raw).map((item) => ({
     id: toStringValue(item.id),
     code: toStringValue(item.code),
+    activeVersionId: toNullableString(item.activeVersionId),
+    activeVersionNumber: toNullableNumber(item.activeVersionNumber),
+    latestVersionId: toNullableString(item.latestVersionId),
+    latestVersionNumber: toNullableNumber(item.latestVersionNumber),
+    versionCount: toNumberValue(item.versionCount),
     name: toStringValue(item.name),
     description: toStringValue(item.description),
     discountType: toStringValue(item.discountType, 'percentage') as 'percentage' | 'fixed',
@@ -588,6 +615,59 @@ export async function getAdminBillingCouponData(params?: Parameters<typeof fetch
     createdAt: toStringValue(item.createdAt),
     updatedAt: toStringValue(item.updatedAt),
   }));
+}
+
+function mapBillingCatalogSubject(raw: ApiRecord): AdminBillingCatalogSubject {
+  const kind = toStringValue(raw.kind, 'plan');
+  return {
+    kind: kind === 'add_on' || kind === 'coupon' ? kind : 'plan',
+    id: toStringValue(raw.id),
+    code: toStringValue(raw.code),
+    name: toStringValue(raw.name),
+    activeVersionId: toNullableString(raw.activeVersionId),
+    activeVersionNumber: toNullableNumber(raw.activeVersionNumber),
+    latestVersionId: toNullableString(raw.latestVersionId),
+    latestVersionNumber: toNullableNumber(raw.latestVersionNumber),
+    versionCount: toNumberValue(raw.versionCount),
+  };
+}
+
+function mapBillingCatalogVersion(raw: ApiRecord): AdminBillingCatalogVersion {
+  return {
+    id: toStringValue(raw.id),
+    parentId: toStringValue(raw.parentId),
+    versionNumber: toNumberValue(raw.versionNumber),
+    code: toStringValue(raw.code),
+    name: toStringValue(raw.name),
+    description: toStringValue(raw.description),
+    status: toStringValue(raw.status),
+    isActive: toBooleanValue(raw.isActive),
+    isLatest: toBooleanValue(raw.isLatest),
+    createdByAdminId: toNullableString(raw.createdByAdminId),
+    createdByAdminName: toNullableString(raw.createdByAdminName),
+    createdAt: toStringValue(raw.createdAt),
+    summary: asRecord(raw.summary),
+  };
+}
+
+function mapBillingCatalogVersionHistory(raw: unknown): AdminBillingCatalogVersionHistory {
+  const record = asRecord(raw);
+  return {
+    subject: mapBillingCatalogSubject(asRecord(record.subject)),
+    items: asArray(record.items).map(mapBillingCatalogVersion),
+  };
+}
+
+export async function getAdminBillingPlanVersionHistoryData(planId: string): Promise<AdminBillingCatalogVersionHistory> {
+  return mapBillingCatalogVersionHistory(await fetchAdminBillingPlanVersions(planId));
+}
+
+export async function getAdminBillingAddOnVersionHistoryData(addOnId: string): Promise<AdminBillingCatalogVersionHistory> {
+  return mapBillingCatalogVersionHistory(await fetchAdminBillingAddOnVersions(addOnId));
+}
+
+export async function getAdminBillingCouponVersionHistoryData(couponId: string): Promise<AdminBillingCatalogVersionHistory> {
+  return mapBillingCatalogVersionHistory(await fetchAdminBillingCouponVersions(couponId));
 }
 
 export async function getAdminBillingInvoiceData(params?: Parameters<typeof fetchAdminBillingInvoices>[0]) {
