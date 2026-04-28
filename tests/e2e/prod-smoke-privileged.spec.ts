@@ -86,8 +86,13 @@ function shouldMockExpectedProductionMutation(url: string) {
   try {
     const requestUrl = new URL(url);
     const apiUrl = new URL(API_URL);
+    const appUrl = new URL(PROD_URL);
 
-    return requestUrl.origin === apiUrl.origin && requestUrl.pathname === '/v1/analytics/events';
+    return (
+      requestUrl.origin === apiUrl.origin && requestUrl.pathname === '/v1/analytics/events'
+    ) || (
+      requestUrl.origin === appUrl.origin && requestUrl.pathname === '/api/backend/v1/analytics/events'
+    );
   } catch {
     return false;
   }
