@@ -49,7 +49,7 @@ public sealed class MockService(LearnerDbContext db)
                     pendingReviews = 0,
                     completedReviews = 0,
                     reviewTurnaroundHours = 48,
-                    reviewSlaLabel = "Expert review turnaround: within 48 hours"
+                    reviewSlaLabel = "Tutor review turnaround: within 48 hours"
                 },
                 collections = new
                 {
@@ -206,10 +206,10 @@ public sealed class MockService(LearnerDbContext db)
                 consumedCredits = await db.MockReviewReservations.AsNoTracking().Where(x => x.UserId == userId).SumAsync(x => x.ConsumedCredits, ct),
                 pendingReviews = reviewStates.Count(x => x is ReviewRequestState.Queued or ReviewRequestState.InReview or ReviewRequestState.AwaitingPayment),
                 completedReviews = reviewStates.Count(x => x == ReviewRequestState.Completed),
-                // Standard expert review SLA surfaced so learners know turnaround up-front (OET business req):
-                // writing + speaking expert reviews are committed to 48h under current operations policy.
+                // Standard tutor review SLA surfaced so learners know turnaround up-front (OET business req):
+                // writing + speaking tutor reviews are committed to 48h under current operations policy.
                 reviewTurnaroundHours = 48,
-                reviewSlaLabel = "Expert review turnaround: within 48 hours"
+                reviewSlaLabel = "Tutor review turnaround: within 48 hours"
             },
             collections = new
             {
@@ -314,7 +314,7 @@ public sealed class MockService(LearnerDbContext db)
         {
             throw ApiException.PaymentRequired(
                 "insufficient_review_credits",
-                "You do not have enough review credits to reserve the selected expert review.");
+                "You do not have enough review credits to reserve the selected tutor review.");
         }
 
         var id = $"mock-attempt-{Guid.NewGuid():N}";
@@ -383,7 +383,7 @@ public sealed class MockService(LearnerDbContext db)
                 BalanceAfter = wallet.CreditBalance,
                 ReferenceType = "mock",
                 ReferenceId = attempt.Id,
-                Description = $"Reserved {reviewCost} expert review credit(s) for {bundle.Title}.",
+                Description = $"Reserved {reviewCost} tutor review credit(s) for {bundle.Title}.",
                 CreatedBy = userId,
                 CreatedAt = now
             });
@@ -941,7 +941,7 @@ public sealed class MockService(LearnerDbContext db)
             State = ReviewRequestState.Queued,
             TurnaroundOption = string.IsNullOrWhiteSpace(turnaroundOption) ? "standard" : turnaroundOption,
             FocusAreasJson = "[]",
-            LearnerNotes = $"Expert review requested from mock attempt {attempt.Id}.",
+            LearnerNotes = $"Tutor review requested from mock attempt {attempt.Id}.",
             PaymentSource = "mock_reserved_credits",
             PriceSnapshot = 1,
             CreatedAt = now,

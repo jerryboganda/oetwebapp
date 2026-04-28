@@ -109,7 +109,7 @@ export default function LearnersIndexPage() {
             icon={Sparkles}
             accent="primary"
             title="Assigned Learners"
-            description="Browse only the learners connected to your current or historical expert reviews. Search by learner, profession, sub-test context, or review-state relevance."
+            description="Browse only the learners connected to your current or historical tutor reviews. Search by learner, profession, sub-test context, or review-state relevance."
             highlights={[
               { icon: Users, label: 'Learners in scope', value: String(directory?.totalCount ?? 0) },
               { icon: CheckCircle2, label: 'Active review context', value: String(activeCount) },

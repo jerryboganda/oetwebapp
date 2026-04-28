@@ -56,7 +56,7 @@ export default function ProgramBrowserPage() {
     <LearnerDashboardShell>
       <LearnerPageHero
         title="Learning Programs"
-        description="Structured courses designed by OET experts to maximise your exam readiness."
+        description="Structured courses designed by OET tutors to maximise your exam readiness."
       />
 
       {/* Filters */}

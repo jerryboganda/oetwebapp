@@ -782,7 +782,7 @@ async function resolveReviewTarget(submissionId: string): Promise<{ attemptId: s
     return { attemptId: match.submissionId, subtest: String(match.subtest).toLowerCase() === 'speaking' ? 'speaking' : 'writing' };
   }
 
-  return { attemptId: 'wa-001', subtest: 'writing' };
+  throw new ApiError(404, 'not_found', 'Submission not found.', false);
 }
 
 function mapWritingTask(item: ApiRecord): WritingTask {

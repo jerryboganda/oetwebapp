@@ -694,7 +694,7 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
         context.ReviewRequest.State = ReviewRequestState.InReview;
         context.ActiveAssignment.ClaimState = ExpertAssignmentState.Claimed;
 
-        await LogExpertAuditAsync(reviewerId, context.Expert.DisplayName, "Saved Review Draft", reviewRequestId, "Expert review draft saved.", ct);
+        await LogExpertAuditAsync(reviewerId, context.Expert.DisplayName, "Saved Review Draft", reviewRequestId, "Tutor review draft saved.", ct);
         await RecordExpertEventAsync(reviewerId, "expert_review_draft_saved", new { reviewRequestId, version = draft.Version }, ct);
         await db.SaveChangesAsync(ct);
 
@@ -1744,7 +1744,7 @@ public class ExpertService(LearnerDbContext db, ILogger<ExpertService> logger, M
                 ["attemptId"] = context.Attempt.Id,
                 ["reviewRequestId"] = context.ReviewRequest.Id,
                 ["subtest"] = context.ReviewRequest.SubtestCode,
-                ["message"] = $"Your {context.ReviewRequest.SubtestCode} expert review is now ready."
+                ["message"] = $"Your {context.ReviewRequest.SubtestCode} tutor review is now ready."
             },
             ct);
 

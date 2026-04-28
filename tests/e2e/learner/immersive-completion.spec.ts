@@ -92,7 +92,7 @@ test.describe('Learner immersive completion workflows @learner', () => {
     await expect(page).toHaveURL(/\/writing\/result\?id=/, { timeout: 60000 });
     await waitForSessionGuardToClear(page);
     await expect(page.getByRole('heading', { name: /evaluation summary/i })).toBeVisible({ timeout: 60000 });
-    await expect(page.getByRole('link', { name: /request expert review/i })).toBeVisible({ timeout: 60000 });
+    await expect(page.getByRole('link', { name: /request tutor review/i })).toBeVisible({ timeout: 60000 });
 
     expectNoSevereClientIssues(diagnostics);
     diagnostics.detach();
@@ -144,7 +144,7 @@ test.describe('Learner immersive completion workflows @learner', () => {
     await expect(page).toHaveURL(/\/speaking\/results\//, { timeout: 60000 });
     await expect(page.getByRole('heading', { name: /performance summary/i })).toBeVisible({ timeout: 60000 });
     await expect(page.getByRole('link', { name: /review transcript/i })).toBeVisible({ timeout: 60000 });
-    await expect(page.getByRole('link', { name: /request expert review/i })).toBeVisible({ timeout: 60000 });
+    await expect(page.getByRole('link', { name: /request tutor review/i })).toBeVisible({ timeout: 60000 });
 
     expectNoSevereClientIssues(diagnostics);
     diagnostics.detach();

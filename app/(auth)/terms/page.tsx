@@ -91,7 +91,7 @@ const sections: LegalSection[] = [
     lead:
       'Eligible learners on qualifying plans may enrol in our Score Guarantee programme, which provides additional preparation support if a target sub-score is not met on a qualifying official OET attempt.',
     bullets: [
-      'Eligibility, qualifying activity (mocks, expert reviews, study-plan completion), and the redemption process are set out in the Score Guarantee Terms shown at enrolment and in Billing → Score Guarantee.',
+      'Eligibility, qualifying activity (mocks, tutor reviews, study-plan completion), and the redemption process are set out in the Score Guarantee Terms shown at enrolment and in Billing → Score Guarantee.',
       'The Score Guarantee is a preparation-support pledge — it is not a refund of fees paid to CBLA, immigration regulators, or third parties, and it is not a guarantee of registration with any regulatory body.',
       'Fraudulent activity (account sharing, falsified score reports, manipulated practice data) voids Score Guarantee eligibility immediately.',
     ],
@@ -169,7 +169,7 @@ const sections: LegalSection[] = [
     id: 'disclaimers',
     title: 'Disclaimers',
     bullets: [
-      'The Service is provided on an "as is" and "as available" basis. Predicted scores, readiness percentages, AI feedback, and expert reviews are educational guidance and do not guarantee any specific outcome on the official OET, with any regulator, or for any registration, employment, immigration, or visa decision.',
+      'The Service is provided on an "as is" and "as available" basis. Predicted scores, readiness percentages, AI feedback, and tutor reviews are educational guidance and do not guarantee any specific outcome on the official OET, with any regulator, or for any registration, employment, immigration, or visa decision.',
       'We are not a medical, legal, immigration, or registration adviser. Decisions you make based on your preparation experience are your own.',
       'We do our best to maintain availability but cannot guarantee uninterrupted access. Planned maintenance and incidents are communicated via the in-app status banner where possible.',
     ],

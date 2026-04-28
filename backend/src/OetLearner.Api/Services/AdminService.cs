@@ -3237,11 +3237,48 @@ public partial class AdminService(
 
         review.State = ReviewRequestState.Cancelled;
         review.CompletedAt = DateTimeOffset.UtcNow;
+        var refundedCredits = 0;
+        if (string.Equals(review.PaymentSource, "credits", StringComparison.OrdinalIgnoreCase) && review.PriceSnapshot > 0)
+        {
+            var reviewCreditCost = (int)review.PriceSnapshot;
+            var attempt = await db.Attempts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == review.AttemptId, ct);
+            var wallet = attempt is null
+                ? null
+                : await db.Wallets.FirstOrDefaultAsync(w => w.UserId == attempt.UserId, ct);
+            if (wallet is not null)
+            {
+                var existingRefund = await db.WalletTransactions.AsNoTracking().AnyAsync(
+                    tx => tx.WalletId == wallet.Id
+                          && tx.TransactionType == "refund"
+                          && tx.ReferenceType == "review"
+                          && tx.ReferenceId == review.Id,
+                    ct);
+                if (!existingRefund)
+                {
+                    wallet.CreditBalance += reviewCreditCost;
+                    wallet.LastUpdatedAt = DateTimeOffset.UtcNow;
+                    refundedCredits = reviewCreditCost;
+                    db.WalletTransactions.Add(new WalletTransaction
+                    {
+                        Id = Guid.NewGuid(),
+                        WalletId = wallet.Id,
+                        TransactionType = "refund",
+                        Amount = reviewCreditCost,
+                        BalanceAfter = wallet.CreditBalance,
+                        ReferenceType = "review",
+                        ReferenceId = review.Id,
+                        Description = $"Tutor review cancelled by admin: {request.Reason}",
+                        CreatedBy = adminId,
+                        CreatedAt = wallet.LastUpdatedAt
+                    });
+                }
+            }
+        }
         await db.SaveChangesAsync(ct);
 
         await LogAuditAsync(adminId, adminName, "Cancelled Review", "ReviewRequest", reviewRequestId,
-            $"Cancelled: {request.Reason}", ct);
-        return new { id = reviewRequestId, status = "cancelled" };
+            refundedCredits > 0 ? $"Cancelled: {request.Reason}. Refunded {refundedCredits} review credit(s)." : $"Cancelled: {request.Reason}", ct);
+        return new { id = reviewRequestId, status = "cancelled", refundedCredits };
     }
 
     public async Task<object> ReopenReviewAsync(string adminId, string adminName,
@@ -3254,13 +3291,60 @@ public partial class AdminService(
             throw ApiException.Conflict("review_not_reopenable",
                 $"Only cancelled or failed reviews can be reopened. Current: {review.State}.");
 
-        review.State = ReviewRequestState.Queued;
+        var paymentSource = (review.PaymentSource ?? string.Empty).Trim().ToLowerInvariant();
+        if (paymentSource == "credits" && review.PriceSnapshot > 0)
+        {
+            var reviewCreditCost = (int)review.PriceSnapshot;
+            var attempt = await db.Attempts.AsNoTracking().FirstOrDefaultAsync(a => a.Id == review.AttemptId, ct)
+                ?? throw ApiException.NotFound("attempt_not_found", "Review attempt not found.");
+            var wallet = await db.Wallets.FirstOrDefaultAsync(w => w.UserId == attempt.UserId, ct)
+                ?? throw ApiException.NotFound("wallet_not_found", "Learner wallet not found.");
+            var wasRefunded = await db.WalletTransactions.AsNoTracking().AnyAsync(
+                tx => tx.WalletId == wallet.Id
+                      && tx.TransactionType == "refund"
+                      && tx.ReferenceType == "review"
+                      && tx.ReferenceId == review.Id,
+                ct);
+            var alreadyRecharged = await db.WalletTransactions.AsNoTracking().AnyAsync(
+                tx => tx.WalletId == wallet.Id
+                      && tx.TransactionType == "review_reopen_deduction"
+                      && tx.ReferenceType == "review"
+                      && tx.ReferenceId == review.Id,
+                ct);
+            if (wasRefunded && !alreadyRecharged)
+            {
+                if (wallet.CreditBalance < reviewCreditCost)
+                {
+                    throw ApiException.Conflict("insufficient_credits_to_reopen", "The learner no longer has enough review credits to reopen this tutor review.");
+                }
+
+                wallet.CreditBalance -= reviewCreditCost;
+                wallet.LastUpdatedAt = DateTimeOffset.UtcNow;
+                db.WalletTransactions.Add(new WalletTransaction
+                {
+                    Id = Guid.NewGuid(),
+                    WalletId = wallet.Id,
+                    TransactionType = "review_reopen_deduction",
+                    Amount = -reviewCreditCost,
+                    BalanceAfter = wallet.CreditBalance,
+                    ReferenceType = "review",
+                    ReferenceId = review.Id,
+                    Description = "Tutor review reopened by admin.",
+                    CreatedBy = adminId,
+                    CreatedAt = wallet.LastUpdatedAt
+                });
+            }
+        }
+
+        review.State = paymentSource is "credits" or "mock_reserved_credits"
+            ? ReviewRequestState.Queued
+            : ReviewRequestState.AwaitingPayment;
         review.CompletedAt = null;
         await db.SaveChangesAsync(ct);
 
         await LogAuditAsync(adminId, adminName, "Reopened Review", "ReviewRequest", reviewRequestId,
             request.Reason ?? "Reopened by admin", ct);
-        return new { id = reviewRequestId, status = "queued" };
+        return new { id = reviewRequestId, status = review.State == ReviewRequestState.Queued ? "queued" : "awaiting_payment" };
     }
 
     // ════════════════════════════════════════════
@@ -4335,7 +4419,7 @@ public partial class AdminService(
 
         var reviewer = await db.ApplicationUserAccounts.AsNoTracking()
             .FirstOrDefaultAsync(u => u.Id == request.SecondReviewerId && u.Role == ApplicationUserRoles.Expert, ct)
-            ?? throw ApiException.NotFound("reviewer_not_found", "Expert reviewer not found.");
+            ?? throw ApiException.NotFound("reviewer_not_found", "Tutor reviewer not found.");
 
         esc.SecondReviewerId = request.SecondReviewerId;
         esc.Status = "assigned";

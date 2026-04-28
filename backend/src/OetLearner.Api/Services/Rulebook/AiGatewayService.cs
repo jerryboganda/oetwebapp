@@ -684,7 +684,7 @@ public sealed class RulebookPromptBuilder(IRulebookLoader loader)
                 sb.AppendLine("  \"estimatedGrade\": \"B\",");
                 sb.AppendLine("  \"passed\": true,");
                 sb.AppendLine("  \"passRequires\": { \"scaled\": 0, \"grade\": \"B\" },");
-                sb.AppendLine("  \"advisory\": \"AI-generated — pending expert review\"");
+                sb.AppendLine("  \"advisory\": \"AI-generated — pending tutor review\"");
                 sb.AppendLine("}");
                 sb.AppendLine("```");
                 break;

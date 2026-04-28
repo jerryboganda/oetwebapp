@@ -159,8 +159,8 @@ public sealed class SpeakingEvaluationPipeline(
         evaluation.GeneratedAt = DateTimeOffset.UtcNow;
         evaluation.ModelExplanationSafe = "This advisory estimate uses the Speaking rulebook, rule-cited transcript markers, and the universal 350/500 Speaking pass anchor.";
         evaluation.LearnerDisclaimer = ReadTranscriptionProvider(attempt.AnalysisJson) == "mock-dev"
-            ? "Training estimate only. This run used mock development ASR provenance, so treat transcript evidence as a workflow preview and request expert review for grading confidence."
-            : "Training estimate only. This is not an official OET result; request expert review for grading confidence.";
+            ? "Training estimate only. This run used mock development ASR provenance, so treat transcript evidence as a workflow preview and request tutor review for grading confidence."
+            : "Training estimate only. This is not an official OET result; request tutor review for grading confidence.";
         evaluation.StatusReasonCode = ReadTranscriptionProvider(attempt.AnalysisJson) == "mock-dev"
             ? "completed_mock_asr"
             : "completed";
@@ -446,7 +446,7 @@ public sealed class SpeakingEvaluationPipeline(
 
         if (issues.Count == 0)
         {
-            issues.Add("No major rulebook issue was detected; use transcript replay or expert review for finer speaking nuance.");
+            issues.Add("No major rulebook issue was detected; use transcript replay or tutor review for finer speaking nuance.");
         }
 
         return issues.Take(4).ToList();

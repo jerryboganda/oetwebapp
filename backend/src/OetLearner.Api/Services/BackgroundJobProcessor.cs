@@ -383,7 +383,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
         });
         evaluation.GeneratedAt = DateTimeOffset.UtcNow;
         evaluation.ModelExplanationSafe = "This training estimate is based on criterion-level writing signals and is not an official OET result.";
-        evaluation.LearnerDisclaimer = "Use expert review when you need a higher-trust external check.";
+        evaluation.LearnerDisclaimer = "Use tutor review when you need a higher-trust external check.";
         evaluation.StatusReasonCode = "completed";
         evaluation.StatusMessage = "Writing evaluation completed.";
         evaluation.RetryAfterMs = null;
@@ -732,7 +732,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 OccurredAt = DateTimeOffset.UtcNow
             });
 
-            // Trigger study plan regeneration after expert review completes
+            // Trigger study plan regeneration after tutor review completes
             var readiness = await RefreshReadinessAsync(db, attempt.UserId, cancellationToken);
             await LearnerWorkflowCoordinator.QueueStudyPlanRegenerationAsync(db, attempt.UserId, cancellationToken);
             await notifications.CreateForLearnerAsync(
@@ -743,7 +743,7 @@ public class BackgroundJobProcessor(IServiceScopeFactory scopeFactory, ILogger<B
                 readiness.Version.ToString(),
                 new Dictionary<string, object?>
                 {
-                    ["message"] = "Your readiness snapshot was updated after expert review feedback was applied."
+                    ["message"] = "Your readiness snapshot was updated after tutor review feedback was applied."
                 },
                 cancellationToken);
         }

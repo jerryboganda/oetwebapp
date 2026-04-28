@@ -331,7 +331,7 @@ public static partial class SeedData
                 Id = "aud-exp-demo-001",
                 OccurredAt = now.AddDays(-1),
                 ActorId = "expert-001",
-                ActorName = "Expert Reviewer",
+                ActorName = "Tutor Reviewer",
                 Action = "Submitted Writing Review",
                 ResourceType = "ExpertReview",
                 ResourceId = "review-001",
@@ -342,7 +342,7 @@ public static partial class SeedData
                 Id = "aud-exp-demo-002",
                 OccurredAt = now.AddHours(-7),
                 ActorId = "expert-001",
-                ActorName = "Expert Reviewer",
+                ActorName = "Tutor Reviewer",
                 Action = "Claimed Review",
                 ResourceType = "ExpertReview",
                 ResourceId = "review-queue-001",
@@ -353,7 +353,7 @@ public static partial class SeedData
                 Id = "aud-exp-demo-003",
                 OccurredAt = now.AddHours(-5),
                 ActorId = "expert-001",
-                ActorName = "Expert Reviewer",
+                ActorName = "Tutor Reviewer",
                 Action = "Claimed Review",
                 ResourceType = "ExpertReview",
                 ResourceId = "review-queue-002",
@@ -364,11 +364,11 @@ public static partial class SeedData
                 Id = "aud-exp-demo-004",
                 OccurredAt = now.AddMinutes(-90),
                 ActorId = "expert-001",
-                ActorName = "Expert Reviewer",
+                ActorName = "Tutor Reviewer",
                 Action = "Saved Review Draft",
                 ResourceType = "ExpertReview",
                 ResourceId = "review-queue-002",
-                Details = "Expert review draft saved."
+                Details = "Tutor review draft saved."
             });
 
         await db.SaveChangesAsync(cancellationToken);
@@ -488,7 +488,7 @@ public static partial class SeedData
             {
                 Id = "expert-unauthorised",
                 Role = ApplicationUserRoles.Expert,
-                DisplayName = "Expert Reviewer Two",
+                DisplayName = "Tutor Reviewer Two",
                 Email = ExpertSecondaryEmail,
                 SpecialtiesJson = JsonSupport.Serialize(new[] { "nursing" }),
                 Timezone = "Australia/Sydney",
@@ -1048,7 +1048,7 @@ public static partial class SeedData
                 }),
                 GeneratedAt = now.AddDays(-4).AddHours(1),
                 ModelExplanationSafe = "This is a training estimate based on criterion-level patterns in your response, not an official OET score.",
-                LearnerDisclaimer = "Estimated performance only. Use expert review for a higher-trust external check.",
+                LearnerDisclaimer = "Estimated performance only. Use tutor review for a higher-trust external check.",
                 StatusReasonCode = "completed",
                 StatusMessage = "Evaluation completed successfully.",
                 LastTransitionAt = now.AddDays(-4).AddHours(1)
@@ -1208,7 +1208,7 @@ public static partial class SeedData
             LedgerSummaryJson = JsonSupport.Serialize(new[]
             {
                 new { id = "wl-1", type = "credit_purchase", delta = 5, balanceAfter = 5, createdAt = now.AddDays(-14), note = "Purchased review credits" },
-                new { id = "wl-2", type = "credit_consumed", delta = -2, balanceAfter = 3, createdAt = now.AddDays(-7), note = "Expert reviews requested" }
+                new { id = "wl-2", type = "credit_consumed", delta = -2, balanceAfter = 3, createdAt = now.AddDays(-7), note = "Tutor reviews requested" }
             })
         });
 
@@ -1306,7 +1306,7 @@ public static partial class SeedData
         {
             Id = "expert-001",
             Role = "expert",
-            DisplayName = "Expert Reviewer",
+            DisplayName = "Tutor Reviewer",
             Email = "expert@oet-prep.dev",
             SpecialtiesJson = JsonSupport.Serialize(new[] { "nursing", "medicine" }),
             Timezone = "Australia/Sydney",
@@ -1492,7 +1492,7 @@ public static partial class SeedData
             // ── Existing operational flags ──
             new FeatureFlag { Id = "flg-001", Name = "AI Scoring V2", Key = "ai_scoring_v2", FlagType = FeatureFlagType.Release, Enabled = true, RolloutPercentage = 100, Description = "Enable AI scoring V2 pipeline for all subtests.", Owner = "Platform Team", CreatedAt = now.AddDays(-60), UpdatedAt = now.AddDays(-5) },
             new FeatureFlag { Id = "flg-002", Name = "Mock Exam Timer", Key = "mock_exam_timer", FlagType = FeatureFlagType.Release, Enabled = true, RolloutPercentage = 100, Description = "Show countdown timers in full mock exams.", Owner = "Product", CreatedAt = now.AddDays(-45), UpdatedAt = now.AddDays(-10) },
-            new FeatureFlag { Id = "flg-003", Name = "Expert Double Review", Key = "expert_double_review", FlagType = FeatureFlagType.Experiment, Enabled = false, RolloutPercentage = 25, Description = "A/B test: assign two expert reviewers to each writing submission.", Owner = "QA Team", CreatedAt = now.AddDays(-14), UpdatedAt = now.AddDays(-1) },
+            new FeatureFlag { Id = "flg-003", Name = "Tutor Double Review", Key = "expert_double_review", FlagType = FeatureFlagType.Experiment, Enabled = false, RolloutPercentage = 25, Description = "A/B test: assign two tutor reviewers to each writing submission.", Owner = "QA Team", CreatedAt = now.AddDays(-14), UpdatedAt = now.AddDays(-1) },
             new FeatureFlag { Id = "flg-004", Name = "Maintenance Banner", Key = "maintenance_banner", FlagType = FeatureFlagType.Operational, Enabled = false, RolloutPercentage = 0, Description = "Show maintenance notice banner across the platform.", Owner = "DevOps", CreatedAt = now.AddDays(-90), UpdatedAt = now.AddDays(-30) },
             // ── Phase 1 new feature flags ──
             new FeatureFlag { Id = "flg-005", Name = "Multi-Exam Foundation", Key = "multi_exam_foundation", FlagType = FeatureFlagType.Release, Enabled = false, RolloutPercentage = 0, Description = "Enable multi-exam support (IELTS, PTE, Cambridge, TOEFL) alongside OET.", Owner = "Platform Team", CreatedAt = now, UpdatedAt = now },
@@ -1576,8 +1576,8 @@ public static partial class SeedData
         }
 
         db.BillingAddOns.AddRange(
-            new BillingAddOn { Id = "addon-credits-3", Code = "credits-3", Name = "3 Review Credits", Description = "Pack of 3 expert review credits.", Price = 29.99m, Currency = "AUD", Interval = "one_time", Status = BillingAddOnStatus.Active, IsRecurring = false, DurationDays = 0, GrantCredits = 3, GrantEntitlementsJson = JsonSupport.Serialize(new { reviewCredits = 3 }), CompatiblePlanCodesJson = JsonSupport.Serialize(new[] { "basic-monthly", "premium-monthly", "premium-yearly", "intensive-monthly" }), AppliesToAllPlans = true, IsStackable = true, QuantityStep = 1, MaxQuantity = 5, DisplayOrder = 10, CreatedAt = now.AddMonths(-8), UpdatedAt = now.AddDays(-4) },
-            new BillingAddOn { Id = "addon-credits-5", Code = "credits-5", Name = "5 Review Credits", Description = "Pack of 5 expert review credits.", Price = 44.99m, Currency = "AUD", Interval = "one_time", Status = BillingAddOnStatus.Active, IsRecurring = false, DurationDays = 0, GrantCredits = 5, GrantEntitlementsJson = JsonSupport.Serialize(new { reviewCredits = 5 }), CompatiblePlanCodesJson = JsonSupport.Serialize(new[] { "basic-monthly", "premium-monthly", "premium-yearly", "intensive-monthly" }), AppliesToAllPlans = true, IsStackable = true, QuantityStep = 1, MaxQuantity = 5, DisplayOrder = 20, CreatedAt = now.AddMonths(-8), UpdatedAt = now.AddDays(-4) },
+            new BillingAddOn { Id = "addon-credits-3", Code = "credits-3", Name = "3 Review Credits", Description = "Pack of 3 tutor review credits.", Price = 29.99m, Currency = "AUD", Interval = "one_time", Status = BillingAddOnStatus.Active, IsRecurring = false, DurationDays = 0, GrantCredits = 3, GrantEntitlementsJson = JsonSupport.Serialize(new { reviewCredits = 3 }), CompatiblePlanCodesJson = JsonSupport.Serialize(new[] { "basic-monthly", "premium-monthly", "premium-yearly", "intensive-monthly" }), AppliesToAllPlans = true, IsStackable = true, QuantityStep = 1, MaxQuantity = 5, DisplayOrder = 10, CreatedAt = now.AddMonths(-8), UpdatedAt = now.AddDays(-4) },
+            new BillingAddOn { Id = "addon-credits-5", Code = "credits-5", Name = "5 Review Credits", Description = "Pack of 5 tutor review credits.", Price = 44.99m, Currency = "AUD", Interval = "one_time", Status = BillingAddOnStatus.Active, IsRecurring = false, DurationDays = 0, GrantCredits = 5, GrantEntitlementsJson = JsonSupport.Serialize(new { reviewCredits = 5 }), CompatiblePlanCodesJson = JsonSupport.Serialize(new[] { "basic-monthly", "premium-monthly", "premium-yearly", "intensive-monthly" }), AppliesToAllPlans = true, IsStackable = true, QuantityStep = 1, MaxQuantity = 5, DisplayOrder = 20, CreatedAt = now.AddMonths(-8), UpdatedAt = now.AddDays(-4) },
             new BillingAddOn { Id = "addon-priority-review", Code = "priority-review", Name = "Priority Review Pack", Description = "Temporary priority review handling for one request.", Price = 14.99m, Currency = "AUD", Interval = "one_time", Status = BillingAddOnStatus.Active, IsRecurring = false, DurationDays = 30, GrantCredits = 0, GrantEntitlementsJson = JsonSupport.Serialize(new { priorityReview = true }), CompatiblePlanCodesJson = JsonSupport.Serialize(new[] { "premium-monthly", "premium-yearly", "intensive-monthly" }), AppliesToAllPlans = false, IsStackable = true, QuantityStep = 1, MaxQuantity = 1, DisplayOrder = 30, CreatedAt = now.AddMonths(-6), UpdatedAt = now.AddDays(-2) }
         );
 
@@ -1997,7 +1997,7 @@ public static partial class SeedData
             new ForumCategory { Id = "fcat-006", ExamTypeCode = null, Name = "Study Groups", Description = "Find and organise study partners and virtual study groups.", SortOrder = 60, Status = "active" },
             new ForumCategory { Id = "fcat-007", ExamTypeCode = null, Name = "Exam Experiences", Description = "Share your exam day experiences, scores, and re-sit strategies.", SortOrder = 70, Status = "active" },
             new ForumCategory { Id = "fcat-008", ExamTypeCode = null, Name = "Resources & Tools", Description = "Share helpful resources, books, videos, and preparation tools.", SortOrder = 80, Status = "active" },
-            new ForumCategory { Id = "fcat-009", ExamTypeCode = null, Name = "Ask an Expert", Description = "Post your OET preparation questions and get verified answers from certified expert reviewers.", SortOrder = 5, Status = "active" }
+            new ForumCategory { Id = "fcat-009", ExamTypeCode = null, Name = "Ask a Tutor", Description = "Post your OET preparation questions and get verified answers from certified tutor reviewers.", SortOrder = 5, Status = "active" }
         );
     }
 

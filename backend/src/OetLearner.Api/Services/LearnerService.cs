@@ -721,7 +721,7 @@ public partial class LearnerService(
                 new { day = "Day 2", action = "Speaking fluency drill with roleplay", route = "/speaking/task/st-001" },
                 new { day = "Day 3", action = "Reading detail extraction practice", route = "/reading/task/rt-001" }
             },
-            upgradePrompt = new { shouldShow = true, reason = "Expert review can validate your highest-priority writing and speaking gaps." },
+            upgradePrompt = new { shouldShow = true, reason = "Tutor review can validate your highest-priority writing and speaking gaps." },
             studyPlan = new
             {
                 planId = plan.Id,
@@ -2439,14 +2439,32 @@ public partial class LearnerService(
         }
 
         var attempt = await GetAttemptOwnedByUserAsync(userId, request.AttemptId, cancellationToken);
-        var cost = request.TurnaroundOption == "express" ? 2 : 1;
+        var turnaroundOption = (request.TurnaroundOption ?? string.Empty).Trim().ToLowerInvariant();
+        if (turnaroundOption is not ("standard" or "express"))
+        {
+            throw ApiException.Validation(
+                "invalid_turnaround_option",
+                "Choose a valid tutor review turnaround option.",
+                [new ApiFieldError("turnaroundOption", "invalid", "Turnaround must be standard or express.")]);
+        }
+
+        var paymentSource = (request.PaymentSource ?? string.Empty).Trim().ToLowerInvariant();
+        if (paymentSource != "credits")
+        {
+            throw ApiException.Validation(
+                "unsupported_payment_source",
+                "Tutor review requests currently use review credits.",
+                [new ApiFieldError("paymentSource", "unsupported", "Only review credits are supported for tutor review requests.")]);
+        }
+
+        var cost = turnaroundOption == "express" ? 2 : 1;
 
         if (attempt.SubtestCode is not ("writing" or "speaking") || attempt.State != AttemptState.Completed)
         {
             throw ApiException.Validation(
                 "review_not_eligible",
-                "This attempt is not eligible for expert review.",
-                [new ApiFieldError("attemptId", "not_eligible", "Only completed writing and speaking attempts can be sent for review.")]);
+                "This attempt is not eligible for tutor review.",
+                [new ApiFieldError("attemptId", "not_eligible", "Only completed writing and speaking attempts can be sent for tutor review.")]);
         }
 
         if (!string.Equals(request.Subtest, attempt.SubtestCode, StringComparison.OrdinalIgnoreCase))
@@ -2457,10 +2475,21 @@ public partial class LearnerService(
                 [new ApiFieldError("subtest", "mismatch", "Use the same subtest as the selected attempt.")]);
         }
 
-        var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId, cancellationToken);
-        var paymentByCredits = string.Equals(request.PaymentSource, "credits", StringComparison.OrdinalIgnoreCase);
+        var existingActiveReview = await db.ReviewRequests.AsNoTracking()
+            .FirstOrDefaultAsync(x => x.AttemptId == request.AttemptId
+                                      && x.State != ReviewRequestState.Completed
+                                      && x.State != ReviewRequestState.Failed
+                                      && x.State != ReviewRequestState.Cancelled,
+                cancellationToken);
+        if (existingActiveReview is not null)
+        {
+            throw ApiException.Conflict(
+                "review_already_active",
+                "This attempt already has an active tutor review request.");
+        }
 
-        if (paymentByCredits && wallet.CreditBalance < cost)
+        var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId, cancellationToken);
+        if (wallet.CreditBalance < cost)
         {
             throw ApiException.Validation(
                 "insufficient_credits",
@@ -2468,37 +2497,45 @@ public partial class LearnerService(
                 [new ApiFieldError("paymentSource", "insufficient_credits", "Buy more credits or choose a different payment flow.")]);
         }
 
-        if (paymentByCredits)
+        var now = DateTimeOffset.UtcNow;
+        var reviewId = $"review-{Guid.NewGuid():N}";
+        wallet.CreditBalance -= cost;
+        wallet.LastUpdatedAt = now;
+        db.WalletTransactions.Add(new WalletTransaction
         {
-            wallet.CreditBalance -= cost;
-            wallet.LastUpdatedAt = DateTimeOffset.UtcNow;
-        }
+            Id = Guid.NewGuid(),
+            WalletId = wallet.Id,
+            TransactionType = "review_deduction",
+            Amount = -cost,
+            BalanceAfter = wallet.CreditBalance,
+            ReferenceType = "review",
+            ReferenceId = reviewId,
+            Description = $"Tutor review request for {attempt.SubtestCode} attempt {attempt.Id}.",
+            CreatedBy = userId,
+            CreatedAt = now
+        });
 
         db.Entry(user).Property(x => x.AccountStatus).IsModified = true;
 
-        var state = paymentByCredits
-            ? ReviewRequestState.Queued
-            : ReviewRequestState.AwaitingPayment;
-
         var review = new ReviewRequest
         {
-            Id = $"review-{Guid.NewGuid():N}",
+            Id = reviewId,
             AttemptId = request.AttemptId,
             SubtestCode = request.Subtest,
-            State = state,
-            TurnaroundOption = request.TurnaroundOption,
+            State = ReviewRequestState.Queued,
+            TurnaroundOption = turnaroundOption,
             FocusAreasJson = JsonSupport.Serialize(request.FocusAreas),
             LearnerNotes = request.LearnerNotes ?? string.Empty,
-            PaymentSource = request.PaymentSource,
+            PaymentSource = paymentSource,
             PriceSnapshot = cost,
-            CreatedAt = DateTimeOffset.UtcNow,
+            CreatedAt = now,
             EligibilitySnapshotJson = JsonSupport.Serialize(new { canRequestReview = true, availableCredits = wallet.CreditBalance })
         };
 
         db.ReviewRequests.Add(review);
 
         await RecordEventAsync(userId, "review_requested", new { reviewRequestId = review.Id, attemptId = review.AttemptId, subtest = review.SubtestCode, turnaroundOption = review.TurnaroundOption }, cancellationToken);
-        LogAudit(userId, "Created", "ReviewRequest", review.Id, $"Expert review requested for {review.SubtestCode} attempt {review.AttemptId}, cost={cost} credits");
+        LogAudit(userId, "Created", "ReviewRequest", review.Id, $"Tutor review requested for {review.SubtestCode} attempt {review.AttemptId}, cost={cost} credits");
         if (!string.IsNullOrWhiteSpace(request.IdempotencyKey))
         {
             await SaveIdempotentResponseAsync("review-request", request.IdempotencyKey, new { reviewRequestId = review.Id }, cancellationToken);
@@ -2516,9 +2553,7 @@ public partial class LearnerService(
                 ["attemptId"] = review.AttemptId,
                 ["reviewRequestId"] = review.Id,
                 ["subtest"] = review.SubtestCode,
-                ["message"] = paymentByCredits
-                    ? "Your expert review request is queued and we will notify you when feedback is ready."
-                    : "Your expert review request was created and will move ahead once payment is confirmed."
+                ["message"] = $"Your tutor review request is queued. {cost} review credit{(cost == 1 ? string.Empty : "s")} used."
             },
             cancellationToken);
         await notifications.CreateForAdminsAsync(
@@ -2530,7 +2565,7 @@ public partial class LearnerService(
             {
                 ["reviewRequestId"] = review.Id,
                 ["attemptId"] = review.AttemptId,
-                ["message"] = $"Learner {user.DisplayName} requested a {review.SubtestCode} expert review with {review.TurnaroundOption} turnaround."
+                ["message"] = $"Learner {user.DisplayName} requested a {review.SubtestCode} tutor review with {review.TurnaroundOption} turnaround."
             },
             cancellationToken);
         return await GetReviewRequestAsync(userId, review.Id, cancellationToken);
@@ -2782,8 +2817,8 @@ public partial class LearnerService(
     {
         items = new[]
         {
-            new { id = "standard", label = "Standard Review", turnaround = "48-72 hours", price = 1, currency = "credit", description = "Detailed expert review with criterion-level notes." },
-            new { id = "express", label = "Express Review", turnaround = "24 hours", price = 2, currency = "credit", description = "Priority expert review returned within a day." }
+            new { id = "standard", label = "Standard Review", turnaround = "48-72 hours", price = 1, currency = "credit", description = "Detailed tutor review with criterion-level notes." },
+            new { id = "express", label = "Express Review", turnaround = "24 hours", price = 2, currency = "credit", description = "Priority tutor review returned within a day." }
         }
     };
     public async Task<object> GetMocksAsync(string userId, CancellationToken cancellationToken)
@@ -2943,8 +2978,8 @@ public partial class LearnerService(
     {
         items = new[]
         {
-            new { id = "credits-3", productType = "review_credits", quantity = 3, price = 29.99m, currency = "AUD", description = "Pack of 3 expert review credits." },
-            new { id = "credits-5", productType = "review_credits", quantity = 5, price = 44.99m, currency = "AUD", description = "Pack of 5 expert review credits." }
+            new { id = "credits-3", productType = "review_credits", quantity = 3, price = 29.99m, currency = "AUD", description = "Pack of 3 tutor review credits." },
+            new { id = "credits-5", productType = "review_credits", quantity = 5, price = 44.99m, currency = "AUD", description = "Pack of 5 tutor review credits." }
         }
     };
 
@@ -6650,7 +6685,7 @@ public partial class LearnerService(
             }
         }
 
-        // 2. Check for pending reviews (expert feedback ready)
+        // 2. Check for pending reviews (tutor feedback ready)
         var pendingReviews = await db.ReviewRequests
             .Where(r => r.State == ReviewRequestState.Completed)
             .Join(db.Attempts, r => r.AttemptId, a => a.Id, (r, a) => new { r, a })
@@ -6665,7 +6700,7 @@ public partial class LearnerService(
             {
                 type = "review_ready",
                 priority = "medium",
-                title = $"Expert review ready: {pr.r.SubtestCode}",
+                title = $"Tutor review ready: {pr.r.SubtestCode}",
                 subtitle = "Review your personalized feedback",
                 actionUrl = $"/feedback/{pr.r.Id}",
                 subtestCode = pr.r.SubtestCode
@@ -7190,7 +7225,7 @@ public partial class LearnerService(
             },
             plans = planComparison,
             recommendation = currentPlan is null
-                ? "Start with a plan to unlock expert reviews, mock exams, and AI-powered feedback."
+                ? "Start with a plan to unlock tutor reviews, mock exams, and AI-powered feedback."
                 : reviewsUsedThisMonth >= (currentPlan.IncludedCredits * 0.8)
                     ? "You've used most of your included reviews. Consider upgrading for more credits."
                     : "Your current plan is meeting your usage needs."

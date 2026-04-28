@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
 import { MotionPage } from '@/components/ui/motion-primitives';
-import { fetchFocusAreas, fetchTurnaroundOptions, fetchBilling, submitReviewRequest } from '@/lib/api';
+import { fetchFocusAreas, fetchTurnaroundOptions, fetchBilling, isApiError, submitReviewRequest } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { TurnaroundOption } from '@/lib/mock-data';
 
@@ -27,6 +27,7 @@ function ExpertReviewRequestContent() {
   const [credits, setCredits] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   // --- Form State ---
   const [selectedFocus, setSelectedFocus] = useState<string[]>([]);
@@ -34,6 +35,7 @@ function ExpertReviewRequestContent() {
   const [turnaroundId, setTurnaroundId] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [estimatedDelivery, setEstimatedDelivery] = useState<string | null>(null);
 
   useEffect(() => {
     Promise.all([fetchFocusAreas('speaking'), fetchTurnaroundOptions(), fetchBilling()])
@@ -54,14 +56,26 @@ function ExpertReviewRequestContent() {
   };
 
   const selectedTurnaround = turnaroundOptions.find(t => t.id === turnaroundId);
+  const selectedCost = selectedTurnaround?.cost ?? 1;
+  const hasEnoughCredits = credits >= selectedCost;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setSubmitError(null);
+
+    if (!hasEnoughCredits) {
+      setSubmitError('You need more review credits before this tutor review can be requested.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      await submitReviewRequest({ submissionId: id, turnaroundId, focusAreas: selectedFocus, notes });
+      const response = await submitReviewRequest({ submissionId: id, turnaroundId, focusAreas: selectedFocus, notes });
       analytics.track('review_requested', { submissionId: id, subtest: 'speaking', turnaroundId, focusCount: selectedFocus.length });
+      setEstimatedDelivery(response.estimatedDelivery);
       setIsSuccess(true);
+    } catch (err) {
+      setSubmitError(isApiError(err) ? err.userMessage : err instanceof Error ? err.message : 'Failed to submit the tutor review request. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -77,7 +91,7 @@ function ExpertReviewRequestContent() {
             </div>
             <h1 className="text-3xl font-black text-navy mb-4 tracking-tight">Request Submitted</h1>
             <p className="text-muted mb-10 leading-relaxed">
-              Your recording has been sent to our OET experts. You will be notified via email once your detailed feedback is ready.
+              Your recording has been queued for tutor review. {selectedCost} review credit{selectedCost > 1 ? 's were' : ' was'} used, and the estimated turnaround is {estimatedDelivery ?? '48-72 hours'}.
             </p>
             <Link href="/speaking">
               <Button size="lg">
@@ -125,7 +139,7 @@ function ExpertReviewRequestContent() {
               <div>
                 <h2 className="text-sm font-bold text-info uppercase tracking-widest mb-1">Beyond AI Evaluation</h2>
                 <p className="text-sm text-info/80 leading-relaxed">
-                  While our AI provides immediate insights, an Tutor Review offers deep clinical nuance, specific OET grading, and personalized coaching from certified healthcare educators.
+                  While our AI provides immediate insights, a Tutor Review offers deep clinical nuance, specific OET grading, and personalized coaching from certified healthcare educators.
                 </p>
               </div>
             </div>
@@ -208,13 +222,13 @@ function ExpertReviewRequestContent() {
             </div>
           </Card>
 
-          {/* Payment Info */}
+          {/* Review Credits */}
           <Card className="p-8">
             <div className="flex items-center gap-3 mb-6">
               <div className="w-10 h-10 rounded-xl bg-primary/5 flex items-center justify-center">
                 <CreditCard className="w-5 h-5 text-primary" />
               </div>
-              <h2 className="text-lg font-black text-navy">Payment</h2>
+              <h2 className="text-lg font-black text-navy">Review Credits</h2>
             </div>
 
             <div className="flex items-center justify-between p-6 rounded-2xl border-2 border-primary bg-primary/5">
@@ -223,10 +237,19 @@ function ExpertReviewRequestContent() {
                 <p className="text-xs text-muted">You have {credits} credit{credits !== 1 ? 's' : ''} remaining</p>
               </div>
               <div className="text-xs font-bold text-primary uppercase tracking-widest">
-                -{selectedTurnaround?.cost ?? 1} Credit{(selectedTurnaround?.cost ?? 1) > 1 ? 's' : ''}
+                -{selectedCost} Credit{selectedCost > 1 ? 's' : ''}
               </div>
             </div>
+            {!hasEnoughCredits ? (
+              <div className="mt-4">
+                <InlineAlert variant="warning">
+                  This tutor review needs {selectedCost} credit{selectedCost > 1 ? 's' : ''}. <Link href="/billing" className="font-bold underline">Top up review credits</Link> before submitting.
+                </InlineAlert>
+              </div>
+            ) : null}
           </Card>
+
+          {submitError ? <InlineAlert variant="error">{submitError}</InlineAlert> : null}
 
           {/* Submit Button */}
           <Button
@@ -234,10 +257,10 @@ function ExpertReviewRequestContent() {
             fullWidth
             size="lg"
             loading={isSubmitting}
-            disabled={isSubmitting || selectedFocus.length === 0}
+            disabled={isSubmitting || selectedFocus.length === 0 || !turnaroundId || !hasEnoughCredits}
           >
             {isSubmitting ? 'Submitting Request...' : (
-              <>Submit Review Request <ArrowRight className="w-5 h-5" /></>
+              <>Submit Tutor Review Request <ArrowRight className="w-5 h-5" /></>
             )}
           </Button>
 

@@ -2,7 +2,7 @@ import { expect, test } from '@playwright/test';
 import { attachDiagnostics, expectNoSevereClientIssues, observePage } from '../fixtures/diagnostics';
 import { createDisposableSpeakingReviewRequest, createDisposableWritingReviewRequest } from '../fixtures/api-auth';
 
-test.describe('Expert review workflows @expert @smoke', () => {
+test.describe('Tutor review workflows @expert @smoke', () => {
   test('writing review supports rubric edits and draft saves', async ({ page, request }, testInfo) => {
     if (testInfo.project.name !== 'chromium-expert') {
       test.skip();

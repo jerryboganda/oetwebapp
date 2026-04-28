@@ -321,7 +321,7 @@ export default function ReadinessCenter() {
             <LearnerSurfaceSectionHeader
               eyebrow="Evidence"
               title="Show what the estimate is based on"
-              description="Readiness should feel earned by visible practice, mock, and expert-review evidence."
+              description="Readiness should feel earned by visible practice, mock, and tutor-review evidence."
               className="mb-4"
             />
             <MotionSection
@@ -329,7 +329,7 @@ export default function ReadinessCenter() {
               className="bg-surface rounded-[24px] border border-border p-6 sm:p-8 shadow-sm"
             >
               <p className="text-sm text-muted mb-6 leading-relaxed">
-                Readiness estimates are calculated using your recent performance data, weighted by full mocks and expert reviews.
+                Readiness estimates are calculated using your recent performance data, weighted by full mocks and tutor reviews.
               </p>
               <div className="space-y-4">
                 <div className="flex items-center justify-between py-3 border-b border-border">

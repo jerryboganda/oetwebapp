@@ -126,7 +126,7 @@ export default function AnnotationTemplatesPage() {
 
       <LearnerPageHero
         title="Annotation Templates"
-        description="Manage reusable feedback templates for your expert reviews."
+        description="Manage reusable feedback templates for your tutor reviews."
         icon={<FileEdit className="w-7 h-7" />}
       />
 

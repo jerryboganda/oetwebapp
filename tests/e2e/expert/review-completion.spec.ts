@@ -15,7 +15,7 @@ async function fillAllRubricScores(page: Page, value = '5') {
   }
 }
 
-test.describe('Expert review completion workflows @expert', () => {
+test.describe('Tutor review completion workflows @expert', () => {
   test('writing review validates missing fields, supports shortcut save, and submits successfully', async ({ page, request }, testInfo) => {
     if (testInfo.project.name !== 'chromium-expert') {
       test.skip();

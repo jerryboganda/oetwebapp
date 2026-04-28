@@ -98,7 +98,7 @@ export default function PerformanceMetricsPage() {
               <ExpertRouteSummaryCard
                 label="Total Completed"
                 value={metrics?.totalReviewsCompleted ?? '-'}
-                hint="Completed expert reviews in the selected window."
+                hint="Completed tutor reviews in the selected window."
                 icon={TrendingUp}
               />
               <ExpertRouteSummaryCard

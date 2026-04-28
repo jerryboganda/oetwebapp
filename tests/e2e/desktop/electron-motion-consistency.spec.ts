@@ -266,7 +266,7 @@ test.describe('Desktop motion consistency @desktop-motion', () => {
     }
   });
 
-  test('desktop expert review surfaces render with motion without errors', async ({ request }, testInfo) => {
+  test('desktop tutor review surfaces render with motion without errors', async ({ request }, testInfo) => {
     let app: ElectronApp | null = null;
     const appDataRoot = await createAppDataRoot();
 

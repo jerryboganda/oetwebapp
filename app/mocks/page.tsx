@@ -426,7 +426,7 @@ export default function MockCenter() {
       ];
 
   return (
-    <LearnerDashboardShell pageTitle="Mock Center" subtitle="Your hub for full exams, sub-test practice, and expert reviews.">
+    <LearnerDashboardShell pageTitle="Mock Center" subtitle="Your hub for full exams, sub-test practice, and tutor reviews.">
       <div className="space-y-10">
         <LearnerPageHero
           eyebrow="Module Focus"
@@ -708,9 +708,9 @@ export default function MockCenter() {
                 <div className="space-y-10">
                   <section>
                     <LearnerSurfaceSectionHeader
-                      eyebrow="Expert Reviews"
+                      eyebrow="Tutor Reviews"
                       title="Keep review readiness explicit"
-                      description="Track the status of any expert reviews attached to your mocks."
+                      description="Track the status of any tutor reviews attached to your mocks."
                       className="mb-4"
                     />
                     <LearnerSurfaceCard card={reviewCard} />

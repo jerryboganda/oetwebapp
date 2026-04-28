@@ -43,13 +43,16 @@ function Highlight({ id, children, active, onToggle }: { id: string; children: R
 
 export default function WritingDetailedFeedback() {
   const searchParams = useSearchParams();
-  const resultId = searchParams?.get('id') ?? 'wr-001';
+  const resultId = searchParams?.get('id') ?? '';
   const [result, setResult] = useState<WritingResult | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeComment, setActiveComment] = useState<string | null>(null);
 
   useEffect(() => {
     analytics.track('content_view', { content: 'feedback', resultId, subtest: 'writing' });
+    if (!resultId) {
+      return;
+    }
     fetchWritingResult(resultId).then(setResult).finally(() => setLoading(false));
   }, [resultId]);
 
@@ -64,6 +67,10 @@ export default function WritingDetailedFeedback() {
     });
     return issues;
   }, [result]);
+
+  if (!resultId) {
+    return <AppShell pageTitle="Not Found"><div className="p-10 text-center text-muted">Open feedback from a completed writing result.</div></AppShell>;
+  }
 
   if (loading) {
     return (

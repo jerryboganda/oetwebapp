@@ -143,8 +143,8 @@ export default function TestDayPrepPage() {
       <MotionSection className="mt-8">
         <LearnerSurfaceSectionHeader
           icon={<AlertTriangle className="w-5 h-5" />}
-          title="Expert Tips"
-          description="Key advice from OET experts and past high-scorers."
+          title="Tutor Tips"
+          description="Key advice from OET tutors and past high-scorers."
         />
         <div className="grid gap-3 sm:grid-cols-2 mt-3">
           {TIPS.map((tip, i) => (

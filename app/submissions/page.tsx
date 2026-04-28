@@ -198,7 +198,7 @@ export default function SubmissionHistory() {
                         disabled={!canRequest || !sub.actions.requestReviewRoute}
                       >
                         <Send className="w-4 h-4" />
-                        Request Review
+                        Request Tutor Review
                       </Button>
                     </div>
                   </MotionItem>

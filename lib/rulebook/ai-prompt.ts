@@ -207,7 +207,7 @@ function renderReplyFormat(ctx: AiGroundingContext): string {
         '  "estimatedGrade": "B",',
         '  "passed": true,',
         '  "passRequires": { "scaled": 0, "grade": "B" },',
-        '  "advisory": "AI-generated — pending expert review"',
+        '  "advisory": "AI-generated — pending tutor review"',
         '}',
         '```',
       ].join('\n');

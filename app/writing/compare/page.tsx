@@ -20,7 +20,7 @@ type ViewMode = 'side-by-side' | 'overlay';
 
 export default function WritingComparePage() {
   const searchParams = useSearchParams();
-  const resultId = searchParams?.get('id') ?? 'wr-001';
+  const resultId = searchParams?.get('id') ?? '';
   const taskId = searchParams?.get('taskId') ?? '';
 
   const [result, setResult] = useState<WritingResult | null>(null);
@@ -31,6 +31,9 @@ export default function WritingComparePage() {
 
   useEffect(() => {
     analytics.track('content_view', { page: 'writing-compare', resultId });
+    if (!resultId) {
+      return;
+    }
     Promise.allSettled([fetchWritingResult(resultId), taskId ? fetchModelAnswer(taskId) : Promise.resolve(null)])
       .then(([resR, modelR]) => {
         if (resR.status === 'fulfilled') setResult(resR.value);
@@ -47,6 +50,16 @@ export default function WritingComparePage() {
     const modelWords = modelText?.split(/\s+/).filter(Boolean).length ?? 0;
     return { learner: learnerWords, model: modelWords };
   }, [result, model]);
+
+  if (!resultId) {
+    return (
+      <LearnerDashboardShell pageTitle="Compare Attempts">
+        <div className="p-6">
+          <InlineAlert variant="warning">Open compare from a completed writing result.</InlineAlert>
+        </div>
+      </LearnerDashboardShell>
+    );
+  }
 
   if (loading) {
     return (

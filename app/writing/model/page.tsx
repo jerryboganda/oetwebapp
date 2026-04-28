@@ -60,8 +60,8 @@ export default function ModelAnswerExplainer() {
             { icon: Target, label: 'Goal', value: 'High-scoring writing' },
           ]}
           aside={
-            <Link href={`/writing/result?id=wr-001`} className="inline-flex items-center justify-center rounded-xl border border-border bg-surface px-4 py-2 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-background-light">
-              Back to result
+            <Link href="/writing" className="inline-flex items-center justify-center rounded-xl border border-border bg-surface px-4 py-2 text-sm font-medium text-navy shadow-sm transition-colors hover:border-primary/30 hover:bg-background-light">
+              Back to writing
             </Link>
           }
         />

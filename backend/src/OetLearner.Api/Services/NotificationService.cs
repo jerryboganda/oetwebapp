@@ -2489,7 +2489,7 @@ public sealed class NotificationService(
             ["attemptId"] = "att-sample-001",
             ["mockAttemptId"] = "mock-sample-001",
             ["reviewRequestId"] = "review-sample-001",
-            ["subtest"] = string.Equals(audienceRole, ApplicationUserRoles.Expert, StringComparison.OrdinalIgnoreCase) ? "expert review" : "writing",
+            ["subtest"] = string.Equals(audienceRole, ApplicationUserRoles.Expert, StringComparison.OrdinalIgnoreCase) ? "tutor review" : "writing",
             ["itemTitle"] = "Complete your next timed writing task",
             ["dueLabel"] = "tomorrow at 6:00 PM",
             ["message"] = "This is a preview of the notification copy and delivery layout."

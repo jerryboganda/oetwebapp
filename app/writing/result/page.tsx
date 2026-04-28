@@ -16,11 +16,15 @@ import type { WritingResult } from '@/lib/mock-data';
 
 export default function WritingResultSummary() {
   const searchParams = useSearchParams();
-  const resultId = searchParams?.get('id') ?? 'wr-001';
+  const resultId = searchParams?.get('id') ?? '';
   const [result, setResult] = useState<WritingResult | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    if (!resultId) {
+      return;
+    }
+
     let cancelled = false;
 
     const poll = async () => {
@@ -46,6 +50,14 @@ export default function WritingResultSummary() {
 
     return () => { cancelled = true; };
   }, [resultId]);
+
+  if (!resultId) {
+    return (
+      <LearnerDashboardShell pageTitle="Not Found">
+        <div className="p-10 text-center text-muted">Open results from a completed writing submission.</div>
+      </LearnerDashboardShell>
+    );
+  }
 
   if (loading) {
     return (
@@ -151,7 +163,7 @@ export default function WritingResultSummary() {
         <LearnerSurfaceSectionHeader
           eyebrow="What to do next"
           title="Turn the summary into action"
-          description="Use the links below to inspect feedback, revise the submission, or send it to an tutor reviewer."
+          description="Use the links below to inspect feedback, revise the submission, or send it to a tutor reviewer."
         />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">

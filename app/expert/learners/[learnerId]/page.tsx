@@ -209,9 +209,9 @@ export default function AssignedLearnerPage() {
 
               <section className="space-y-4">
                 <ExpertRouteSectionHeader
-                  eyebrow="Prior Expert Reviews"
+                  eyebrow="Prior Tutor Reviews"
                   title="Historical feedback"
-                  description="Keep earlier expert comments visible so the current review stays consistent with prior context."
+                  description="Keep earlier tutor comments visible so the current review stays consistent with prior context."
                 />
                 <div className="grid grid-cols-1 gap-4">
                   {learner.priorReviews.length === 0 ? (

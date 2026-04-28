@@ -382,7 +382,7 @@ export default function BillingPage() {
           <LearnerSurfaceSectionHeader
             eyebrow="Wallet"
             title="Review credit balance and top up anytime"
-            description="Credits are used for expert reviews and premium features. Top-up tiers include bonus credits at higher amounts."
+            description="Credits are used for tutor reviews and premium features. Top-up tiers include bonus credits at higher amounts."
             className="mb-4"
           />
           <div className="grid gap-6 lg:grid-cols-[1fr_1.5fr]">

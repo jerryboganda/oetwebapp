@@ -18,7 +18,7 @@ const TOUR_STEPS = [
     bg: 'bg-amber-50/60',
     title: 'Welcome to OET Prep!',
     description: 'Your personalised path to OET success starts here. This quick tour will show you the key features.',
-    detail: 'OET Prep combines AI-powered practice, expert reviews, and adaptive learning to help healthcare professionals pass the OET exam with confidence.',
+    detail: 'OET Prep combines AI-powered practice, tutor reviews, and adaptive learning to help healthcare professionals pass the OET exam with confidence.',
   },
   {
     id: 'practice',
@@ -52,9 +52,9 @@ const TOUR_STEPS = [
     icon: MessageSquare,
     color: 'text-rose-500',
     bg: 'bg-rose-50',
-    title: 'Expert Reviews & AI Feedback',
-    description: 'Get instant AI feedback plus expert reviews from certified OET assessors.',
-    detail: 'AI evaluations give immediate scores and suggestions. Expert reviews provide detailed criterion-by-criterion feedback with actionable improvement notes. Use credits from your plan to request reviews.',
+    title: 'Tutor Reviews & AI Feedback',
+    description: 'Get instant AI feedback plus tutor reviews from certified OET assessors.',
+    detail: 'AI evaluations give immediate scores and suggestions. Tutor reviews provide detailed criterion-by-criterion feedback with actionable improvement notes. Use credits from your plan to request reviews.',
   },
 ];
 

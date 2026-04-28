@@ -19,35 +19,38 @@ import { LearnerDashboardShell } from '@/components/layout';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
-import { fetchTurnaroundOptions, fetchFocusAreas, fetchBilling, submitReviewRequest } from '@/lib/api';
+import { InlineAlert } from '@/components/ui/alert';
+import { fetchTurnaroundOptions, fetchFocusAreas, fetchBilling, isApiError, submitReviewRequest } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { TurnaroundOption, FocusArea } from '@/lib/mock-data';
 
 export default function WritingExpertReviewRequest() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const submissionId = searchParams?.get('id') ?? 'we-001';
+  const submissionId = searchParams?.get('id');
   const [turnaroundOptions, setTurnaroundOptions] = useState<TurnaroundOption[]>([]);
   const [focusAreaOptions, setFocusAreaOptions] = useState<FocusArea[]>([]);
   const [availableCredits, setAvailableCredits] = useState(0);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   const [speed, setSpeed] = useState('');
   const [selectedFocus, setSelectedFocus] = useState<string[]>([]);
   const [notes, setNotes] = useState('');
-  const [payment, setPayment] = useState('credit');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [estimatedDelivery, setEstimatedDelivery] = useState<string | null>(null);
 
   useEffect(() => {
     analytics.track('content_view', { content: 'expert_request', subtest: 'writing' });
-    Promise.all([fetchTurnaroundOptions(), fetchFocusAreas(), fetchBilling()])
+    Promise.all([fetchTurnaroundOptions(), fetchFocusAreas('writing'), fetchBilling()])
       .then(([t, f, b]) => {
         setTurnaroundOptions(t);
         setFocusAreaOptions(f);
         setAvailableCredits(b.reviewCredits);
         if (t.length) setSpeed(t[0].id);
       })
+      .catch(() => setError('Failed to load review request options. Please try again.'))
       .finally(() => setLoading(false));
   }, []);
 
@@ -58,15 +61,31 @@ export default function WritingExpertReviewRequest() {
   };
 
   const selectedCost = turnaroundOptions.find(o => o.id === speed)?.cost ?? 1;
+  const hasEnoughCredits = availableCredits >= selectedCost;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError(null);
+
+    if (!submissionId) {
+      setError('Open tutor review requests from a completed writing result so we can attach the correct submission.');
+      return;
+    }
+
+    if (!hasEnoughCredits) {
+      setError('You need more review credits before this tutor review can be requested.');
+      return;
+    }
+
     setIsSubmitting(true);
     try {
-      await submitReviewRequest({ submissionId, turnaroundId: speed, focusAreas: selectedFocus, notes });
+      const response = await submitReviewRequest({ submissionId, turnaroundId: speed, focusAreas: selectedFocus, notes });
       analytics.track('review_requested', { turnaround: speed, focusCount: selectedFocus.length, subtest: 'writing' });
+      setEstimatedDelivery(response.estimatedDelivery);
       setIsSuccess(true);
       setTimeout(() => router.push(`/writing/result?id=${submissionId}`), 3000);
+    } catch (err) {
+      setError(isApiError(err) ? err.userMessage : err instanceof Error ? err.message : 'Failed to submit the tutor review request. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
@@ -92,7 +111,7 @@ export default function WritingExpertReviewRequest() {
             <Card className="p-8 max-w-md w-full text-center">
               <div className="w-20 h-20 bg-success/10 text-success rounded-full flex items-center justify-center mx-auto mb-6"><CheckCircle2 className="w-10 h-10" /></div>
               <h1 className="text-2xl font-bold text-navy mb-2">Request Submitted!</h1>
-              <p className="text-muted mb-8">Your submission has been sent to our expert panel. You will receive a notification once the review is complete.</p>
+              <p className="text-muted mb-8">Your submission has been queued for tutor review. {selectedCost} review credit{selectedCost > 1 ? 's were' : ' was'} used, and the estimated turnaround is {estimatedDelivery ?? '48-72 hours'}.</p>
               <div className="text-sm text-muted/60 animate-pulse">Redirecting to results…</div>
             </Card>
           </MotionPage>
@@ -106,7 +125,7 @@ export default function WritingExpertReviewRequest() {
       {/* Sticky header */}
       <header className="bg-surface border-b border-border sticky top-0 z-30 px-4 sm:px-6 py-4 flex items-center justify-between shadow-sm">
         <div className="flex items-center gap-4">
-          <Link href={`/writing/result?id=${submissionId}`} className="text-muted hover:text-navy transition-colors p-2 -m-2 touch-target"><ChevronLeft className="w-5 h-5" /></Link>
+          <Link href={submissionId ? `/writing/result?id=${submissionId}` : '/writing'} className="text-muted hover:text-navy transition-colors p-2 -m-2 touch-target"><ChevronLeft className="w-5 h-5" /></Link>
           <h1 className="font-bold text-lg text-navy leading-tight">Request Tutor Review</h1>
         </div>
       </header>
@@ -121,6 +140,14 @@ export default function WritingExpertReviewRequest() {
             <div className="text-sm text-info/70">{availableCredits} credits available</div>
           </div>
         </div>
+
+        {!submissionId ? (
+          <div className="mb-6">
+            <InlineAlert variant="warning">
+              Open tutor review requests from a completed writing result or your submissions history so the correct attempt is attached. <Link href="/submissions" className="font-bold underline">Go to submissions</Link>
+            </InlineAlert>
+          </div>
+        ) : null}
 
         <form onSubmit={handleSubmit} className="space-y-8">
           {/* 1. Turnaround Speed */}
@@ -166,21 +193,23 @@ export default function WritingExpertReviewRequest() {
             <textarea value={notes} onChange={e => setNotes(e.target.value)} placeholder="e.g., I'm struggling with the discharge plan structure…" className="w-full h-32 p-4 rounded-xl border-2 border-border focus:border-primary focus:ring-4 focus:ring-primary/5 outline-none transition-all resize-none text-sm" />
           </section>
 
-          {/* 4. Payment */}
+          {/* 4. Credits */}
           <section>
-            <h3 className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex items-center gap-2"><CreditCard className="w-4 h-4" /> 4. Payment Method</h3>
-            <div className="space-y-3">
-              {[{ id: 'credit', label: 'Use Expert Credit', balance: `${availableCredits} Credits available`, value: `${selectedCost} Credit${selectedCost > 1 ? 's' : ''}` },
-                { id: 'pay', label: 'Pay Per Review', balance: '$15.00', value: '$15.00' }].map(option => (
-                <label key={option.id} className={`flex items-center justify-between p-4 rounded-xl border-2 cursor-pointer transition-all ${payment === option.id ? 'border-primary bg-primary/5' : 'border-border bg-surface hover:border-border-hover'}`}>
-                  <div className="flex items-center gap-3">
-                    <input type="radio" name="payment" className="w-4 h-4 text-primary focus:ring-primary" checked={payment === option.id} onChange={() => setPayment(option.id)} />
-                    <div><div className="font-bold text-navy">{option.label}</div><div className="text-xs text-muted">{option.balance}</div></div>
-                  </div>
-                  <div className="font-black text-navy">{option.value}</div>
-                </label>
-              ))}
+            <h3 className="text-sm font-bold text-muted uppercase tracking-wider mb-4 flex items-center gap-2"><CreditCard className="w-4 h-4" /> 4. Review Credits</h3>
+            <div className={`flex items-center justify-between p-4 rounded-xl border-2 ${hasEnoughCredits ? 'border-primary bg-primary/5' : 'border-warning/40 bg-warning/10'}`}>
+              <div>
+                <div className="font-bold text-navy">Use Review Credits</div>
+                <div className="text-xs text-muted">{availableCredits} credits available</div>
+              </div>
+              <div className="font-black text-navy">{selectedCost} Credit{selectedCost > 1 ? 's' : ''}</div>
             </div>
+            {!hasEnoughCredits ? (
+              <div className="mt-3">
+                <InlineAlert variant="warning">
+                  This tutor review needs {selectedCost} credit{selectedCost > 1 ? 's' : ''}. <Link href="/billing" className="font-bold underline">Top up review credits</Link> before submitting.
+                </InlineAlert>
+              </div>
+            ) : null}
           </section>
 
           {/* Disclaimer */}
@@ -189,9 +218,11 @@ export default function WritingExpertReviewRequest() {
             <p className="text-xs text-muted leading-relaxed">Tutor reviews are conducted by certified OET trainers. Unlike AI evaluations, these provide nuanced human judgment and specific pedagogical advice. Turnaround times are guaranteed.</p>
           </div>
 
+          {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+
           {/* Submit */}
-          <Button type="submit" fullWidth loading={isSubmitting} disabled={payment === 'credit' && availableCredits < selectedCost}>
-            Submit Review Request ({selectedCost} Credit{selectedCost > 1 ? 's' : ''})
+          <Button type="submit" fullWidth loading={isSubmitting} disabled={isSubmitting || !submissionId || !speed || !hasEnoughCredits}>
+            Submit Tutor Review Request ({selectedCost} Credit{selectedCost > 1 ? 's' : ''})
           </Button>
         </form>
       </main>
