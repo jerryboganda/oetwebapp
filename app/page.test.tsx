@@ -120,4 +120,22 @@ describe('Dashboard page', () => {
     expect(await screen.findByText("Keep today's priorities and exam signals in view")).toBeInTheDocument();
     expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
   });
+
+  it('does not crash when readiness evidence is missing', async () => {
+    mockFetchReadiness.mockResolvedValueOnce({
+      targetDate: '2026-06-27',
+      weeksRemaining: 13,
+      overallRisk: 'Moderate',
+      recommendedStudyHours: 8,
+      weakestLink: 'Conciseness & Clarity',
+      subTests: [
+        { id: 'writing', name: 'Writing', readiness: 62, target: 70, status: 'improving', color: '#ef4444', bg: '#fee2e2', barColor: 'danger', isWeakest: true },
+      ],
+      blockers: [],
+    } as any);
+
+    renderWithRouter(<DashboardPage />, { router: { push: mockPush } });
+
+    expect(await screen.findByText('Trend data will appear after more practice.')).toBeInTheDocument();
+  });
 });

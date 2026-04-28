@@ -5,8 +5,9 @@ import { seedProdAuth } from './fixtures/prod-auth';
  * Production smoke — privileged and edge-case roles.
  *
  * These tests are deliberately read-only. They seed a real production session,
- * walk key role surfaces, and fail only on document 5xx, API 5xx, console
- * errors, or unexpected access failures for the configured role.
+ * walk key role surfaces, block unexpected client-side mutations after auth,
+ * and fail only on document 5xx, API 5xx, console errors, mutation attempts,
+ * or unexpected access failures for the configured role.
  *
  * Run examples:
  *   $env:RUN_PROD_PRIVILEGED_SMOKE="1"
@@ -17,6 +18,9 @@ import { seedProdAuth } from './fixtures/prod-auth';
  */
 
 const PROD_URL = process.env.PROD_URL ?? 'https://app.oetwithdrhesham.co.uk';
+const API_URL = process.env.PROD_API_URL ?? 'https://api.oetwithdrhesham.co.uk';
+
+const MUTATING_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
 interface ProdRoleCredentials {
   email?: string;
@@ -64,6 +68,31 @@ const EXPIRED_SURFACES: Surface[] = [
   { path: '/settings', label: 'expired settings', allowedPathPattern: /^\/(settings|billing|billing\/upgrade)$/ },
 ];
 
+function isAllowedProductionMutation(url: string) {
+  try {
+    const requestUrl = new URL(url);
+    const apiUrl = new URL(API_URL);
+
+    return requestUrl.origin === apiUrl.origin && [
+      '/v1/auth/sign-in',
+      '/v1/auth/refresh',
+    ].includes(requestUrl.pathname);
+  } catch {
+    return false;
+  }
+}
+
+function shouldMockExpectedProductionMutation(url: string) {
+  try {
+    const requestUrl = new URL(url);
+    const apiUrl = new URL(API_URL);
+
+    return requestUrl.origin === apiUrl.origin && requestUrl.pathname === '/v1/analytics/events';
+  } catch {
+    return false;
+  }
+}
+
 test.describe.configure({ mode: 'serial' });
 
 test.beforeEach(({}, testInfo) => {
@@ -89,7 +118,34 @@ async function runReadOnlySurfaceSmoke(
   const pageErrors: string[] = [];
   const serverFailures: string[] = [];
   const documentFailures: string[] = [];
+  const mutationAttempts: string[] = [];
   let currentSurface = 'seed auth';
+
+  await page.route('**/*', async (route) => {
+    const request = route.request();
+    const method = request.method().toUpperCase();
+
+    if (MUTATING_METHODS.has(method) && shouldMockExpectedProductionMutation(request.url())) {
+      await route.fulfill({
+        status: 202,
+        contentType: 'application/json',
+        body: JSON.stringify({ accepted: true, mockedByProductionSmoke: true }),
+      });
+      return;
+    }
+
+    if (MUTATING_METHODS.has(method) && !isAllowedProductionMutation(request.url())) {
+      mutationAttempts.push(`[${currentSurface}] ${method} ${request.url()}`);
+      await route.fulfill({
+        status: 405,
+        contentType: 'application/json',
+        body: JSON.stringify({ error: 'Blocked by production smoke mutation guard.' }),
+      });
+      return;
+    }
+
+    await route.continue();
+  });
 
   page.on('console', (msg: ConsoleMessage) => {
     if (msg.type() !== 'error') return;
@@ -146,6 +202,7 @@ async function runReadOnlySurfaceSmoke(
   expect(documentFailures, 'no unexpected document access/status failures').toEqual([]);
   expect(apiFailures, 'no API 5xx responses').toEqual([]);
   expect(serverFailures, 'no non-API 5xx responses').toEqual([]);
+  expect(mutationAttempts, 'no unexpected client-side mutations after auth').toEqual([]);
   expect(pageErrors, 'no uncaught page errors').toEqual([]);
   expect(requestFailures, 'no unexpected request failures').toEqual([]);
   expect(consoleErrors, 'no console errors').toEqual([]);

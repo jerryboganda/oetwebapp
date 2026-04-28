@@ -1955,13 +1955,16 @@ export async function cancelMockSession(sessionId: string): Promise<MockSession>
 
 export async function fetchReadiness(): Promise<ReadinessData> {
   const readiness = await apiRequest<ApiRecord>('/v1/readiness');
+  const evidence = asRecord(readiness.evidence);
+  const computedAt = toNullableString(readiness.computedAt);
+
   return {
     targetDate: readiness.targetDate,
     weeksRemaining: readiness.weeksRemaining,
     overallRisk: titleCase(readiness.overallRisk) as ReadinessData['overallRisk'],
     recommendedStudyHours: readiness.recommendedStudyHours,
     weakestLink: readiness.weakestLink,
-    subTests: (readiness.subTests ?? []).map((item: ApiRecord) => ({
+    subTests: asArray(readiness.subTests).map((item: ApiRecord) => ({
       id: item.id,
       name: item.name,
       readiness: item.readiness,
@@ -1972,8 +1975,18 @@ export async function fetchReadiness(): Promise<ReadinessData> {
       barColor: item.name === 'Writing' ? '#fb7185' : item.name === 'Speaking' ? '#a78bfa' : item.name === 'Reading' ? '#60a5fa' : '#818cf8',
       isWeakest: Boolean(item.isWeakest),
     })),
-    blockers: readiness.blockers ?? [],
-    evidence: readiness.evidence,
+    blockers: Array.isArray(readiness.blockers) ? readiness.blockers : [],
+    evidence: {
+      mocksCompleted: Number(evidence.mocksCompleted ?? 0),
+      practiceQuestions: Number(evidence.practiceQuestions ?? 0),
+      expertReviews: Number(evidence.expertReviews ?? 0),
+      recentTrend: typeof evidence.recentTrend === 'string' && evidence.recentTrend.length > 0
+        ? evidence.recentTrend
+        : 'Trend data will appear after more practice.',
+      lastUpdated: typeof evidence.lastUpdated === 'string' && evidence.lastUpdated.length > 0
+        ? evidence.lastUpdated
+        : computedAt?.slice(0, 10) ?? 'Unknown',
+    },
   };
 }
 

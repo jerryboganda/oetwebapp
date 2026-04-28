@@ -102,6 +102,45 @@ describe('learner route normalization', () => {
   });
 });
 
+describe('readiness mapping', () => {
+  const originalFetch = globalThis.fetch;
+
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    vi.resetModules();
+  });
+
+  it('fills safe evidence defaults when readiness evidence is missing', async () => {
+    globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
+      targetDate: '2026-06-27',
+      weeksRemaining: 8,
+      overallRisk: 'moderate',
+      recommendedStudyHours: 8,
+      weakestLink: 'Writing - conciseness',
+      subTests: [
+        { id: 'rd-w', name: 'Writing', readiness: 60, target: 80, status: 'Needs attention', isWeakest: true },
+      ],
+      blockers: null,
+      computedAt: '2026-04-28T04:32:53Z',
+    }), {
+      status: 200,
+      headers: { 'content-type': 'application/json' },
+    }));
+
+    const { fetchReadiness } = await import('../api');
+    const payload = await fetchReadiness();
+
+    expect(payload.blockers).toEqual([]);
+    expect(payload.evidence).toEqual({
+      mocksCompleted: 0,
+      practiceQuestions: 0,
+      expertReviews: 0,
+      recentTrend: 'Trend data will appear after more practice.',
+      lastUpdated: '2026-04-28',
+    });
+  });
+});
+
 describe('API retry logic', () => {
   const originalFetch = globalThis.fetch;
   const env = process.env as Record<string, string | undefined>;

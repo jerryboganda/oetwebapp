@@ -62,6 +62,11 @@ export default function Dashboard() {
   const completedToday = todayTasks.filter((task) => task.status === 'completed').length;
   const nextAction = todayTasks.find((task) => task.status !== 'completed');
   const asyncStatus = status === 'loading' ? 'loading' : status === 'error' ? 'error' : !profile ? 'empty' : 'success' as const;
+  const readinessSubTests = readiness?.subTests ?? [];
+  const readinessAverage = readinessSubTests.length > 0
+    ? Math.round(readinessSubTests.reduce((sum, subTest) => sum + subTest.readiness, 0) / readinessSubTests.length)
+    : 0;
+  const readinessRecentTrend = readiness?.evidence?.recentTrend ?? 'Trend data will appear after more practice.';
 
   const dashboardHeroHighlights = [
     {
@@ -301,12 +306,12 @@ export default function Dashboard() {
                   </CardHeader>
                   <CardContent className="flex flex-col items-center space-y-3 text-center">
                     <ReadinessMeter
-                      value={Math.round(readiness.subTests.reduce((sum, subTest) => sum + subTest.readiness, 0) / readiness.subTests.length)}
+                      value={readinessAverage}
                       size={120}
                     />
                     <p className="flex items-center gap-1 text-sm font-semibold text-emerald-700">
                       <TrendingUp className="h-4 w-4" />
-                      {readiness.evidence.recentTrend}
+                      {readinessRecentTrend}
                     </p>
                     <p className="text-xs text-muted">
                       {readiness.weeksRemaining} weeks to exam · {readiness.overallRisk} risk

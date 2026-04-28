@@ -16,9 +16,10 @@ export default defineConfig({
     timeout: 10_000,
   },
   use: {
-    trace: 'on-first-retry',
-    screenshot: 'only-on-failure',
-    video: 'retain-on-failure',
+    trace: 'off',
+    screenshot: 'off',
+    video: 'off',
+    serviceWorkers: 'block',
     viewport: { width: 1366, height: 900 },
   },
   projects: [
