@@ -41,6 +41,12 @@ public class BillingAddOn
     [MaxLength(2048)]
     public string CompatiblePlanCodesJson { get; set; } = "[]";
 
+    [MaxLength(64)]
+    public string? ActiveVersionId { get; set; }
+
+    [MaxLength(64)]
+    public string? LatestVersionId { get; set; }
+
     public bool AppliesToAllPlans { get; set; } = true;
 
     public bool IsStackable { get; set; } = true;
@@ -54,6 +60,68 @@ public class BillingAddOn
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>Immutable managed add-on catalog snapshot.</summary>
+public class BillingAddOnVersion
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string AddOnId { get; set; } = default!;
+
+    public int VersionNumber { get; set; }
+
+    [MaxLength(64)]
+    public string Code { get; set; } = default!;
+
+    [MaxLength(128)]
+    public string Name { get; set; } = default!;
+
+    [MaxLength(1024)]
+    public string Description { get; set; } = string.Empty;
+
+    public decimal Price { get; set; }
+
+    [MaxLength(8)]
+    public string Currency { get; set; } = "AUD";
+
+    [MaxLength(32)]
+    public string Interval { get; set; } = "one_time";
+
+    public BillingAddOnStatus Status { get; set; } = BillingAddOnStatus.Active;
+
+    public bool IsRecurring { get; set; }
+
+    public int DurationDays { get; set; }
+
+    public int GrantCredits { get; set; }
+
+    [MaxLength(2048)]
+    public string GrantEntitlementsJson { get; set; } = "{}";
+
+    [MaxLength(2048)]
+    public string CompatiblePlanCodesJson { get; set; } = "[]";
+
+    public bool AppliesToAllPlans { get; set; } = true;
+
+    public bool IsStackable { get; set; } = true;
+
+    public int QuantityStep { get; set; } = 1;
+
+    public int? MaxQuantity { get; set; }
+
+    public int DisplayOrder { get; set; }
+
+    [MaxLength(64)]
+    public string? CreatedByAdminId { get; set; }
+
+    [MaxLength(128)]
+    public string? CreatedByAdminName { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
 }
 
 /// <summary>Promo code or discount rule that can be applied at checkout.</summary>
@@ -97,6 +165,12 @@ public class BillingCoupon
     [MaxLength(2048)]
     public string ApplicableAddOnCodesJson { get; set; } = "[]";
 
+    [MaxLength(64)]
+    public string? ActiveVersionId { get; set; }
+
+    [MaxLength(64)]
+    public string? LatestVersionId { get; set; }
+
     public bool IsStackable { get; set; }
 
     [MaxLength(1024)]
@@ -109,6 +183,66 @@ public class BillingCoupon
     public DateTimeOffset UpdatedAt { get; set; }
 }
 
+/// <summary>Immutable promo code or discount rule catalog snapshot.</summary>
+public class BillingCouponVersion
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string CouponId { get; set; } = default!;
+
+    public int VersionNumber { get; set; }
+
+    [MaxLength(64)]
+    public string Code { get; set; } = default!;
+
+    [MaxLength(128)]
+    public string Name { get; set; } = default!;
+
+    [MaxLength(1024)]
+    public string Description { get; set; } = string.Empty;
+
+    public BillingDiscountType DiscountType { get; set; } = BillingDiscountType.Percentage;
+
+    public decimal DiscountValue { get; set; }
+
+    [MaxLength(8)]
+    public string Currency { get; set; } = "AUD";
+
+    public BillingCouponStatus Status { get; set; } = BillingCouponStatus.Draft;
+
+    public DateTimeOffset? StartsAt { get; set; }
+
+    public DateTimeOffset? EndsAt { get; set; }
+
+    public int? UsageLimitTotal { get; set; }
+
+    public int? UsageLimitPerUser { get; set; }
+
+    public decimal? MinimumSubtotal { get; set; }
+
+    [MaxLength(2048)]
+    public string ApplicablePlanCodesJson { get; set; } = "[]";
+
+    [MaxLength(2048)]
+    public string ApplicableAddOnCodesJson { get; set; } = "[]";
+
+    public bool IsStackable { get; set; }
+
+    [MaxLength(1024)]
+    public string? Notes { get; set; }
+
+    [MaxLength(64)]
+    public string? CreatedByAdminId { get; set; }
+
+    [MaxLength(128)]
+    public string? CreatedByAdminName { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+}
+
 /// <summary>Redemption record for a coupon applied to a checkout or billing quote.</summary>
 public class BillingCouponRedemption
 {
@@ -118,6 +252,12 @@ public class BillingCouponRedemption
 
     [MaxLength(64)]
     public string CouponCode { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string? CouponId { get; set; }
+
+    [MaxLength(64)]
+    public string? CouponVersionId { get; set; }
 
     [MaxLength(64)]
     public string UserId { get; set; } = default!;
@@ -157,11 +297,20 @@ public class BillingQuote
     [MaxLength(64)]
     public string? PlanCode { get; set; }
 
+    [MaxLength(64)]
+    public string? PlanVersionId { get; set; }
+
     [MaxLength(1024)]
     public string AddOnCodesJson { get; set; } = "[]";
 
+    [MaxLength(1024)]
+    public string AddOnVersionIdsJson { get; set; } = "{}";
+
     [MaxLength(64)]
     public string? CouponCode { get; set; }
+
+    [MaxLength(64)]
+    public string? CouponVersionId { get; set; }
 
     [MaxLength(8)]
     public string Currency { get; set; } = "AUD";
@@ -234,6 +383,9 @@ public class SubscriptionItem
 
     [MaxLength(64)]
     public string ItemType { get; set; } = "addon";
+
+    [MaxLength(64)]
+    public string? AddOnVersionId { get; set; }
 
     public int Quantity { get; set; } = 1;
 
@@ -324,6 +476,18 @@ public class PaymentTransaction
 
     [MaxLength(128)]
     public string? ProductId { get; set; }
+
+    [MaxLength(64)]
+    public string? QuoteId { get; set; }
+
+    [MaxLength(64)]
+    public string? PlanVersionId { get; set; }
+
+    [MaxLength(1024)]
+    public string AddOnVersionIdsJson { get; set; } = "{}";
+
+    [MaxLength(64)]
+    public string? CouponVersionId { get; set; }
 
     public string? MetadataJson { get; set; }
 

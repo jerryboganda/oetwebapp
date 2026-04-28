@@ -601,6 +601,9 @@ public class Subscription
     [MaxLength(64)]
     public string PlanId { get; set; } = default!;
 
+    [MaxLength(64)]
+    public string? PlanVersionId { get; set; }
+
     public SubscriptionStatus Status { get; set; }
     public DateTimeOffset NextRenewalAt { get; set; }
     public DateTimeOffset StartedAt { get; set; }
@@ -638,6 +641,21 @@ public class Invoice
     public string Currency { get; set; } = "AUD";
     public string Status { get; set; } = "Paid";
     public string Description { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string? PlanVersionId { get; set; }
+
+    [MaxLength(1024)]
+    public string AddOnVersionIdsJson { get; set; } = "{}";
+
+    [MaxLength(64)]
+    public string? CouponVersionId { get; set; }
+
+    [MaxLength(64)]
+    public string? QuoteId { get; set; }
+
+    [MaxLength(64)]
+    public string? CheckoutSessionId { get; set; }
 }
 
 public class UploadSession

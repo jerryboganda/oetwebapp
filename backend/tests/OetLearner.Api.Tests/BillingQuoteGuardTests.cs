@@ -319,13 +319,14 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
         using var client = await CreateClientForUserAsync(userId);
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var planCode = $"snapshot-plan-{suffix}";
+        var planVersionId = $"plan-version-{suffix}-v1";
 
         await using (var scope = _factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
             await db.Database.EnsureCreatedAsync();
             var now = DateTimeOffset.UtcNow;
-            db.BillingPlans.Add(new BillingPlan
+            var plan = new BillingPlan
             {
                 Id = $"plan-{suffix}",
                 Code = planCode,
@@ -343,7 +344,12 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
                 Status = BillingPlanStatus.Active,
                 CreatedAt = now,
                 UpdatedAt = now
-            });
+            };
+            var version = CreatePlanVersion(plan, planVersionId, 1, now);
+            plan.ActiveVersionId = version.Id;
+            plan.LatestVersionId = version.Id;
+            db.BillingPlans.Add(plan);
+            db.BillingPlanVersions.Add(version);
             await db.SaveChangesAsync();
         }
 
@@ -384,6 +390,9 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
         {
             var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
             var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId);
+            var quote = await db.BillingQuotes.FirstAsync(x => x.CheckoutSessionId == checkoutSessionId);
+            var paymentTransaction = await db.PaymentTransactions.FirstAsync(x => x.GatewayTransactionId == checkoutSessionId);
+            var invoice = await db.Invoices.FirstAsync(x => x.QuoteId == quote.Id);
             var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId);
             var walletTransaction = await db.WalletTransactions
                 .Where(x => x.WalletId == wallet.Id && x.TransactionType == "plan_grant")
@@ -391,12 +400,25 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
                 .FirstAsync();
 
             Assert.Equal(planCode, subscription.PlanId);
+            Assert.Equal(planVersionId, subscription.PlanVersionId);
             Assert.Equal(180m, subscription.PriceAmount);
             Assert.Equal("AUD", subscription.Currency);
             Assert.Equal("month", subscription.Interval);
             Assert.InRange(subscription.NextRenewalAt, completionStartedAt.AddMonths(2).AddSeconds(-5), completionFinishedAt.AddMonths(2).AddSeconds(5));
             Assert.Equal(7, walletTransaction.Amount);
             Assert.Equal("Included credits for Snapshot Plan Original", walletTransaction.Description);
+            Assert.Equal(planVersionId, quote.PlanVersionId);
+            Assert.Equal(quote.Id, paymentTransaction.QuoteId);
+            Assert.Equal(planVersionId, paymentTransaction.PlanVersionId);
+            Assert.Equal(planVersionId, invoice.PlanVersionId);
+            Assert.Equal(quote.Id, invoice.QuoteId);
+            Assert.Equal(checkoutSessionId, invoice.CheckoutSessionId);
+
+            using var snapshotJson = JsonDocument.Parse(quote.SnapshotJson);
+            var catalog = snapshotJson.RootElement.GetProperty("catalog");
+            Assert.Equal(2, catalog.GetProperty("schemaVersion").GetInt32());
+            Assert.Equal(planVersionId, catalog.GetProperty("plan").GetProperty("versionId").GetString());
+            Assert.Equal(1, catalog.GetProperty("plan").GetProperty("versionNumber").GetInt32());
         }
     }
 
@@ -407,13 +429,14 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
         using var client = await CreateClientForUserAsync(userId);
         var suffix = Guid.NewGuid().ToString("N")[..8];
         var addOnCode = $"snapshot-addon-{suffix}";
+        var addOnVersionId = $"addon-version-{suffix}-v1";
 
         await using (var scope = _factory.Services.CreateAsyncScope())
         {
             var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
             await db.Database.EnsureCreatedAsync();
             var now = DateTimeOffset.UtcNow;
-            db.BillingAddOns.Add(new BillingAddOn
+            var addOn = new BillingAddOn
             {
                 Id = $"addon-{suffix}",
                 Code = addOnCode,
@@ -433,7 +456,12 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
                 Status = BillingAddOnStatus.Active,
                 CreatedAt = now,
                 UpdatedAt = now
-            });
+            };
+            var version = CreateAddOnVersion(addOn, addOnVersionId, 1, now);
+            addOn.ActiveVersionId = version.Id;
+            addOn.LatestVersionId = version.Id;
+            db.BillingAddOns.Add(addOn);
+            db.BillingAddOnVersions.Add(version);
             await db.SaveChangesAsync();
         }
 
@@ -469,6 +497,9 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
             var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
             var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId);
             var subscriptionItem = await db.SubscriptionItems.FirstAsync(x => x.SubscriptionId == subscription.Id && x.ItemCode == addOnCode);
+            var quote = await db.BillingQuotes.FirstAsync(x => x.CheckoutSessionId == checkoutSessionId);
+            var paymentTransaction = await db.PaymentTransactions.FirstAsync(x => x.GatewayTransactionId == checkoutSessionId);
+            var invoice = await db.Invoices.FirstAsync(x => x.QuoteId == quote.Id);
             var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId);
             var walletTransaction = await db.WalletTransactions
                 .Where(x => x.WalletId == wallet.Id && x.TransactionType == "credit_purchase")
@@ -476,13 +507,207 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
                 .FirstAsync();
 
             Assert.Equal("addon", subscriptionItem.ItemType);
+            Assert.Equal(addOnVersionId, subscriptionItem.AddOnVersionId);
             Assert.Equal(2, subscriptionItem.Quantity);
             Assert.NotNull(subscriptionItem.EndsAt);
             Assert.InRange(subscriptionItem.EndsAt!.Value, subscriptionItem.StartsAt.AddDays(30).AddSeconds(-5), subscriptionItem.StartsAt.AddDays(30).AddSeconds(5));
             Assert.Equal(8, walletTransaction.Amount);
             Assert.Equal("Snapshot Add-on Original credits", walletTransaction.Description);
+            var quoteAddOnVersionIds = JsonSerializer.Deserialize<Dictionary<string, string>>(quote.AddOnVersionIdsJson)!;
+            Assert.Equal(addOnVersionId, quoteAddOnVersionIds[addOnCode]);
+            Assert.Equal(quote.Id, paymentTransaction.QuoteId);
+            Assert.Equal(addOnVersionId, JsonSerializer.Deserialize<Dictionary<string, string>>(paymentTransaction.AddOnVersionIdsJson)![addOnCode]);
+            Assert.Equal(addOnVersionId, JsonSerializer.Deserialize<Dictionary<string, string>>(invoice.AddOnVersionIdsJson)![addOnCode]);
+            Assert.Equal(quote.Id, invoice.QuoteId);
+            Assert.Equal(checkoutSessionId, invoice.CheckoutSessionId);
+
+            using var snapshotJson = JsonDocument.Parse(quote.SnapshotJson);
+            var addOnSnapshot = snapshotJson.RootElement.GetProperty("catalog").GetProperty("addOns")[0];
+            Assert.Equal(addOnVersionId, addOnSnapshot.GetProperty("versionId").GetString());
+            Assert.Equal(1, addOnSnapshot.GetProperty("versionNumber").GetInt32());
         }
     }
+
+    [Fact]
+    public async Task BillingQuote_CouponUsageLimitStaysParentWideAfterCouponVersionUpdate()
+    {
+        var firstUserId = $"billing-coupon-v1-{Guid.NewGuid():N}";
+        var secondUserId = $"billing-coupon-v2-{Guid.NewGuid():N}";
+        using var firstClient = await CreateClientForUserAsync(firstUserId);
+        using var secondClient = await CreateClientForUserAsync(secondUserId);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var packCode = $"version-pack-{suffix}";
+        var couponCode = $"VERSION{suffix}".ToUpperInvariant();
+        var couponVersion1Id = $"coupon-version-{suffix}-v1";
+        var couponVersion2Id = $"coupon-version-{suffix}-v2";
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            await db.Database.EnsureCreatedAsync();
+            var now = DateTimeOffset.UtcNow;
+            var addOn = new BillingAddOn
+            {
+                Id = $"addon-{suffix}",
+                Code = packCode,
+                Name = "Versioned Coupon Pack",
+                Description = "Pack used by coupon parent-wide limit tests.",
+                Price = 30m,
+                Currency = "AUD",
+                Interval = "one_time",
+                DurationDays = 0,
+                GrantCredits = 17,
+                AppliesToAllPlans = true,
+                IsStackable = true,
+                QuantityStep = 1,
+                CompatiblePlanCodesJson = "[]",
+                GrantEntitlementsJson = "{}",
+                Status = BillingAddOnStatus.Active,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            var addOnVersion = CreateAddOnVersion(addOn, $"addon-version-{suffix}-v1", 1, now);
+            addOn.ActiveVersionId = addOnVersion.Id;
+            addOn.LatestVersionId = addOnVersion.Id;
+
+            var coupon = new BillingCoupon
+            {
+                Id = $"coupon-{suffix}",
+                Code = couponCode,
+                Name = "Versioned Coupon",
+                Description = "Limited coupon used by parent-wide limit tests.",
+                DiscountType = BillingDiscountType.Percentage,
+                DiscountValue = 10m,
+                Currency = "AUD",
+                UsageLimitTotal = 1,
+                IsStackable = false,
+                ApplicablePlanCodesJson = "[]",
+                ApplicableAddOnCodesJson = JsonSerializer.Serialize(new[] { packCode }),
+                Status = BillingCouponStatus.Active,
+                CreatedAt = now,
+                UpdatedAt = now
+            };
+            var couponVersion = CreateCouponVersion(coupon, couponVersion1Id, 1, now);
+            coupon.ActiveVersionId = couponVersion.Id;
+            coupon.LatestVersionId = couponVersion.Id;
+
+            db.BillingAddOns.Add(addOn);
+            db.BillingAddOnVersions.Add(addOnVersion);
+            db.BillingCoupons.Add(coupon);
+            db.BillingCouponVersions.Add(couponVersion);
+            await db.SaveChangesAsync();
+        }
+
+        var firstResponse = await firstClient.GetAsync($"/v1/billing/quote?productType=review_credits&quantity=17&couponCode={Uri.EscapeDataString(couponCode)}");
+        var firstBody = await firstResponse.Content.ReadAsStringAsync();
+        Assert.True(firstResponse.IsSuccessStatusCode, firstBody);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var coupon = await db.BillingCoupons.FirstAsync(x => x.Code == couponCode);
+            coupon.Name = "Versioned Coupon Updated";
+            coupon.DiscountValue = 15m;
+            coupon.UpdatedAt = DateTimeOffset.UtcNow;
+            var version = CreateCouponVersion(coupon, couponVersion2Id, 2, coupon.UpdatedAt);
+            coupon.ActiveVersionId = version.Id;
+            coupon.LatestVersionId = version.Id;
+            db.BillingCouponVersions.Add(version);
+            await db.SaveChangesAsync();
+        }
+
+        var secondResponse = await secondClient.GetAsync($"/v1/billing/quote?productType=review_credits&quantity=17&couponCode={Uri.EscapeDataString(couponCode)}");
+        Assert.Equal(HttpStatusCode.BadRequest, secondResponse.StatusCode);
+        using (var secondJson = JsonDocument.Parse(await secondResponse.Content.ReadAsStringAsync()))
+        {
+            Assert.Equal("coupon_exhausted", secondJson.RootElement.GetProperty("code").GetString());
+        }
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var coupon = await db.BillingCoupons.AsNoTracking().FirstAsync(x => x.Code == couponCode);
+            var redemption = await db.BillingCouponRedemptions.AsNoTracking().SingleAsync(x => x.CouponId == coupon.Id);
+
+            Assert.Equal(1, coupon.RedemptionCount);
+            Assert.Equal(couponVersion1Id, redemption.CouponVersionId);
+            Assert.Equal(couponVersion2Id, coupon.ActiveVersionId);
+            Assert.Equal(couponVersion2Id, coupon.LatestVersionId);
+        }
+    }
+
+    private static BillingPlanVersion CreatePlanVersion(BillingPlan plan, string versionId, int versionNumber, DateTimeOffset createdAt) => new()
+    {
+        Id = versionId,
+        PlanId = plan.Id,
+        VersionNumber = versionNumber,
+        Code = plan.Code,
+        Name = plan.Name,
+        Description = plan.Description,
+        Price = plan.Price,
+        Currency = plan.Currency,
+        Interval = plan.Interval,
+        DurationMonths = plan.DurationMonths,
+        IsVisible = plan.IsVisible,
+        IsRenewable = plan.IsRenewable,
+        TrialDays = plan.TrialDays,
+        DisplayOrder = plan.DisplayOrder,
+        IncludedCredits = plan.IncludedCredits,
+        IncludedSubtestsJson = plan.IncludedSubtestsJson,
+        EntitlementsJson = plan.EntitlementsJson,
+        Status = plan.Status,
+        ArchivedAt = plan.ArchivedAt,
+        CreatedAt = createdAt
+    };
+
+    private static BillingAddOnVersion CreateAddOnVersion(BillingAddOn addOn, string versionId, int versionNumber, DateTimeOffset createdAt) => new()
+    {
+        Id = versionId,
+        AddOnId = addOn.Id,
+        VersionNumber = versionNumber,
+        Code = addOn.Code,
+        Name = addOn.Name,
+        Description = addOn.Description,
+        Price = addOn.Price,
+        Currency = addOn.Currency,
+        Interval = addOn.Interval,
+        Status = addOn.Status,
+        IsRecurring = addOn.IsRecurring,
+        DurationDays = addOn.DurationDays,
+        GrantCredits = addOn.GrantCredits,
+        GrantEntitlementsJson = addOn.GrantEntitlementsJson,
+        CompatiblePlanCodesJson = addOn.CompatiblePlanCodesJson,
+        AppliesToAllPlans = addOn.AppliesToAllPlans,
+        IsStackable = addOn.IsStackable,
+        QuantityStep = addOn.QuantityStep,
+        MaxQuantity = addOn.MaxQuantity,
+        DisplayOrder = addOn.DisplayOrder,
+        CreatedAt = createdAt
+    };
+
+    private static BillingCouponVersion CreateCouponVersion(BillingCoupon coupon, string versionId, int versionNumber, DateTimeOffset createdAt) => new()
+    {
+        Id = versionId,
+        CouponId = coupon.Id,
+        VersionNumber = versionNumber,
+        Code = coupon.Code,
+        Name = coupon.Name,
+        Description = coupon.Description,
+        DiscountType = coupon.DiscountType,
+        DiscountValue = coupon.DiscountValue,
+        Currency = coupon.Currency,
+        Status = coupon.Status,
+        StartsAt = coupon.StartsAt,
+        EndsAt = coupon.EndsAt,
+        UsageLimitTotal = coupon.UsageLimitTotal,
+        UsageLimitPerUser = coupon.UsageLimitPerUser,
+        MinimumSubtotal = coupon.MinimumSubtotal,
+        ApplicablePlanCodesJson = coupon.ApplicablePlanCodesJson,
+        ApplicableAddOnCodesJson = coupon.ApplicableAddOnCodesJson,
+        IsStackable = coupon.IsStackable,
+        Notes = coupon.Notes,
+        CreatedAt = createdAt
+    };
 
     private static async Task CompletePayPalCheckoutAsync(HttpClient client, string checkoutSessionId)
     {

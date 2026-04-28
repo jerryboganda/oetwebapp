@@ -2141,19 +2141,22 @@ public partial class LearnerService(
                 ProductType: normalizedProductType,
                 ProductId: quoteEntity.Id,
                 Description: quoteResponse.Summary,
-                  Metadata: new Dictionary<string, string>
-                  {
-                      ["quote_id"] = quoteEntity.Id,
-                      ["product_type"] = normalizedProductType,
-                      ["purchase_target"] = purchaseTarget ?? string.Empty,
-                    ["user_id"] = userId,
-                      ["plan_code"] = quoteEntity.PlanCode ?? string.Empty,
-                      ["coupon_code"] = quoteEntity.CouponCode ?? string.Empty,
-                      ["add_on_codes"] = string.Join(',', JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []))
-                  },
-                  SuccessUrl: platformLinks.BuildWebUrl($"/billing?payment=success&gateway={Uri.EscapeDataString(gatewayLabel)}"),
-                  CancelUrl: platformLinks.BuildWebUrl($"/billing?payment=cancelled&gateway={Uri.EscapeDataString(gatewayLabel)}")),
-              cancellationToken);
+                                Metadata: new Dictionary<string, string>
+                                {
+                                        ["quote_id"] = quoteEntity.Id,
+                                        ["product_type"] = normalizedProductType,
+                                        ["purchase_target"] = purchaseTarget ?? string.Empty,
+                                        ["user_id"] = userId,
+                                        ["plan_code"] = quoteEntity.PlanCode ?? string.Empty,
+                                        ["coupon_code"] = quoteEntity.CouponCode ?? string.Empty,
+                                        ["add_on_codes"] = string.Join(',', JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, [])),
+                                        ["plan_version_id"] = quoteEntity.PlanVersionId ?? string.Empty,
+                                        ["add_on_version_ids"] = quoteEntity.AddOnVersionIdsJson,
+                                        ["coupon_version_id"] = quoteEntity.CouponVersionId ?? string.Empty
+                                },
+                                SuccessUrl: platformLinks.BuildWebUrl($"/billing?payment=success&gateway={Uri.EscapeDataString(gatewayLabel)}"),
+                                CancelUrl: platformLinks.BuildWebUrl($"/billing?payment=cancelled&gateway={Uri.EscapeDataString(gatewayLabel)}")),
+                        cancellationToken);
 
         quoteEntity.CheckoutSessionId = checkoutIntent.GatewayTransactionId;
         quoteEntity.Status = BillingQuoteStatus.Applied;
@@ -2178,6 +2181,10 @@ public partial class LearnerService(
                 Currency = quoteEntity.Currency,
                 ProductType = normalizedProductType is "plan_upgrade" or "plan_downgrade" ? "plan" : "addon",
                 ProductId = purchaseTarget ?? quoteEntity.Id,
+                QuoteId = quoteEntity.Id,
+                PlanVersionId = quoteEntity.PlanVersionId,
+                AddOnVersionIdsJson = quoteEntity.AddOnVersionIdsJson,
+                CouponVersionId = quoteEntity.CouponVersionId,
                 MetadataJson = JsonSupport.Serialize(new
                 {
                     quoteId = quoteEntity.Id,
@@ -2185,13 +2192,33 @@ public partial class LearnerService(
                     purchaseTarget,
                     addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
                     planCode = quoteEntity.PlanCode,
-                    couponCode = quoteEntity.CouponCode
+                    couponCode = quoteEntity.CouponCode,
+                    planVersionId = quoteEntity.PlanVersionId,
+                    addOnVersionIds = DeserializeAddOnVersionIds(quoteEntity),
+                    couponVersionId = quoteEntity.CouponVersionId
                 }),
                 CreatedAt = now,
                 UpdatedAt = now
             };
             db.PaymentTransactions.Add(paymentTransaction);
         }
+
+        paymentTransaction.QuoteId = quoteEntity.Id;
+        paymentTransaction.PlanVersionId = quoteEntity.PlanVersionId;
+        paymentTransaction.AddOnVersionIdsJson = quoteEntity.AddOnVersionIdsJson;
+        paymentTransaction.CouponVersionId = quoteEntity.CouponVersionId;
+        paymentTransaction.MetadataJson = JsonSupport.Serialize(new
+        {
+            quoteId = quoteEntity.Id,
+            productType = normalizedProductType,
+            purchaseTarget,
+            addOnCodes = JsonSupport.Deserialize<List<string>>(quoteEntity.AddOnCodesJson, []),
+            planCode = quoteEntity.PlanCode,
+            couponCode = quoteEntity.CouponCode,
+            planVersionId = quoteEntity.PlanVersionId,
+            addOnVersionIds = DeserializeAddOnVersionIds(quoteEntity),
+            couponVersionId = quoteEntity.CouponVersionId
+        });
 
         var reservedRedemptions = await db.BillingCouponRedemptions
             .Where(redemption => redemption.QuoteId == quoteEntity.Id && redemption.Status == BillingRedemptionStatus.Reserved)
@@ -4729,6 +4756,155 @@ public partial class LearnerService(
           return compatiblePlanCodes.Any(code => string.Equals(code, plan.Code, StringComparison.OrdinalIgnoreCase));
       }
 
+      private async Task<BillingCatalogVersionRef?> ResolvePlanVersionRefAsync(BillingPlan plan, CancellationToken cancellationToken)
+      {
+          BillingPlanVersion? version = null;
+          if (!string.IsNullOrWhiteSpace(plan.ActiveVersionId))
+          {
+              version = await db.BillingPlanVersions.AsNoTracking()
+                  .FirstOrDefaultAsync(item => item.PlanId == plan.Id && item.Id == plan.ActiveVersionId, cancellationToken);
+          }
+
+          if (version is null && !string.IsNullOrWhiteSpace(plan.LatestVersionId))
+          {
+              version = await db.BillingPlanVersions.AsNoTracking()
+                  .FirstOrDefaultAsync(item => item.PlanId == plan.Id && item.Id == plan.LatestVersionId, cancellationToken);
+          }
+
+          version ??= await db.BillingPlanVersions.AsNoTracking()
+              .Where(item => item.PlanId == plan.Id)
+              .OrderByDescending(item => item.VersionNumber)
+              .FirstOrDefaultAsync(cancellationToken);
+
+          return version is not null && BillingPlanMatchesVersion(plan, version)
+              ? new BillingCatalogVersionRef(version.Id, version.VersionNumber)
+              : null;
+      }
+
+      private async Task<BillingCatalogVersionRef?> ResolveAddOnVersionRefAsync(BillingAddOn addOn, CancellationToken cancellationToken)
+      {
+          BillingAddOnVersion? version = null;
+          if (!string.IsNullOrWhiteSpace(addOn.ActiveVersionId))
+          {
+              version = await db.BillingAddOnVersions.AsNoTracking()
+                  .FirstOrDefaultAsync(item => item.AddOnId == addOn.Id && item.Id == addOn.ActiveVersionId, cancellationToken);
+          }
+
+          if (version is null && !string.IsNullOrWhiteSpace(addOn.LatestVersionId))
+          {
+              version = await db.BillingAddOnVersions.AsNoTracking()
+                  .FirstOrDefaultAsync(item => item.AddOnId == addOn.Id && item.Id == addOn.LatestVersionId, cancellationToken);
+          }
+
+          version ??= await db.BillingAddOnVersions.AsNoTracking()
+              .Where(item => item.AddOnId == addOn.Id)
+              .OrderByDescending(item => item.VersionNumber)
+              .FirstOrDefaultAsync(cancellationToken);
+
+          return version is not null && BillingAddOnMatchesVersion(addOn, version)
+              ? new BillingCatalogVersionRef(version.Id, version.VersionNumber)
+              : null;
+      }
+
+      private async Task<BillingCatalogVersionRef?> ResolveCouponVersionRefAsync(BillingCoupon coupon, CancellationToken cancellationToken)
+      {
+          BillingCouponVersion? version = null;
+          if (!string.IsNullOrWhiteSpace(coupon.ActiveVersionId))
+          {
+              version = await db.BillingCouponVersions.AsNoTracking()
+                  .FirstOrDefaultAsync(item => item.CouponId == coupon.Id && item.Id == coupon.ActiveVersionId, cancellationToken);
+          }
+
+          if (version is null && !string.IsNullOrWhiteSpace(coupon.LatestVersionId))
+          {
+              version = await db.BillingCouponVersions.AsNoTracking()
+                  .FirstOrDefaultAsync(item => item.CouponId == coupon.Id && item.Id == coupon.LatestVersionId, cancellationToken);
+          }
+
+          version ??= await db.BillingCouponVersions.AsNoTracking()
+              .Where(item => item.CouponId == coupon.Id)
+              .OrderByDescending(item => item.VersionNumber)
+              .FirstOrDefaultAsync(cancellationToken);
+
+          return version is not null && BillingCouponMatchesVersion(coupon, version)
+              ? new BillingCatalogVersionRef(version.Id, version.VersionNumber)
+              : null;
+      }
+
+      private static bool BillingPlanMatchesVersion(BillingPlan plan, BillingPlanVersion version)
+          => string.Equals(plan.Code, version.Code, StringComparison.Ordinal)
+             && string.Equals(plan.Name, version.Name, StringComparison.Ordinal)
+             && string.Equals(plan.Description, version.Description, StringComparison.Ordinal)
+             && plan.Price == version.Price
+             && string.Equals(plan.Currency, version.Currency, StringComparison.Ordinal)
+             && string.Equals(plan.Interval, version.Interval, StringComparison.Ordinal)
+             && plan.DurationMonths == version.DurationMonths
+             && plan.IsVisible == version.IsVisible
+             && plan.IsRenewable == version.IsRenewable
+             && plan.TrialDays == version.TrialDays
+             && plan.DisplayOrder == version.DisplayOrder
+             && plan.IncludedCredits == version.IncludedCredits
+             && string.Equals(plan.IncludedSubtestsJson, version.IncludedSubtestsJson, StringComparison.Ordinal)
+             && string.Equals(plan.EntitlementsJson, version.EntitlementsJson, StringComparison.Ordinal)
+             && plan.Status == version.Status
+             && plan.ArchivedAt == version.ArchivedAt;
+
+      private static bool BillingAddOnMatchesVersion(BillingAddOn addOn, BillingAddOnVersion version)
+          => string.Equals(addOn.Code, version.Code, StringComparison.Ordinal)
+             && string.Equals(addOn.Name, version.Name, StringComparison.Ordinal)
+             && string.Equals(addOn.Description, version.Description, StringComparison.Ordinal)
+             && addOn.Price == version.Price
+             && string.Equals(addOn.Currency, version.Currency, StringComparison.Ordinal)
+             && string.Equals(addOn.Interval, version.Interval, StringComparison.Ordinal)
+             && addOn.Status == version.Status
+             && addOn.IsRecurring == version.IsRecurring
+             && addOn.DurationDays == version.DurationDays
+             && addOn.GrantCredits == version.GrantCredits
+             && string.Equals(addOn.GrantEntitlementsJson, version.GrantEntitlementsJson, StringComparison.Ordinal)
+             && string.Equals(addOn.CompatiblePlanCodesJson, version.CompatiblePlanCodesJson, StringComparison.Ordinal)
+             && addOn.AppliesToAllPlans == version.AppliesToAllPlans
+             && addOn.IsStackable == version.IsStackable
+             && addOn.QuantityStep == version.QuantityStep
+             && addOn.MaxQuantity == version.MaxQuantity
+             && addOn.DisplayOrder == version.DisplayOrder;
+
+      private static bool BillingCouponMatchesVersion(BillingCoupon coupon, BillingCouponVersion version)
+          => string.Equals(coupon.Code, version.Code, StringComparison.Ordinal)
+             && string.Equals(coupon.Name, version.Name, StringComparison.Ordinal)
+             && string.Equals(coupon.Description, version.Description, StringComparison.Ordinal)
+             && coupon.DiscountType == version.DiscountType
+             && coupon.DiscountValue == version.DiscountValue
+             && string.Equals(coupon.Currency, version.Currency, StringComparison.Ordinal)
+             && coupon.Status == version.Status
+             && coupon.StartsAt == version.StartsAt
+             && coupon.EndsAt == version.EndsAt
+             && coupon.UsageLimitTotal == version.UsageLimitTotal
+             && coupon.UsageLimitPerUser == version.UsageLimitPerUser
+             && coupon.MinimumSubtotal == version.MinimumSubtotal
+             && string.Equals(coupon.ApplicablePlanCodesJson, version.ApplicablePlanCodesJson, StringComparison.Ordinal)
+             && string.Equals(coupon.ApplicableAddOnCodesJson, version.ApplicableAddOnCodesJson, StringComparison.Ordinal)
+             && coupon.IsStackable == version.IsStackable
+             && string.Equals(coupon.Notes, version.Notes, StringComparison.Ordinal);
+
+      private async Task<int> CountCouponRedemptionsAsync(BillingCoupon coupon, string? userId, CancellationToken cancellationToken)
+      {
+          var normalizedCouponCode = NormalizeBillingCode(coupon.Code);
+          var query = db.BillingCouponRedemptions.Where(redemption =>
+              redemption.Status != BillingRedemptionStatus.Voided
+              && (redemption.CouponId == coupon.Id
+                  || (redemption.CouponId == null && redemption.CouponCode.ToLower() == normalizedCouponCode)));
+
+          if (!string.IsNullOrWhiteSpace(userId))
+          {
+              query = query.Where(redemption => redemption.UserId == userId);
+          }
+
+          return await query.CountAsync(cancellationToken);
+      }
+
+      private static Dictionary<string, string> DeserializeAddOnVersionIds(BillingQuote quote)
+          => new(JsonSupport.Deserialize<Dictionary<string, string>>(quote.AddOnVersionIdsJson, new Dictionary<string, string>()), StringComparer.OrdinalIgnoreCase);
+
       private static string NormalizeBillingCode(string? value)
           => (value ?? string.Empty).Trim().ToLowerInvariant();
 
@@ -4764,9 +4940,11 @@ public partial class LearnerService(
             validation);
     }
 
+    private sealed record BillingCatalogVersionRef(string Id, int VersionNumber);
+
     private sealed class BillingQuoteCatalogSnapshot
     {
-        public int SchemaVersion { get; set; } = 1;
+        public int SchemaVersion { get; set; } = 2;
         public DateTimeOffset CapturedAt { get; set; }
         public BillingQuotePlanSnapshot? Plan { get; set; }
         public List<BillingQuoteAddOnSnapshot> AddOns { get; set; } = [];
@@ -4776,6 +4954,8 @@ public partial class LearnerService(
     private sealed class BillingQuotePlanSnapshot
     {
         public string Code { get; set; } = string.Empty;
+        public string? VersionId { get; set; }
+        public int? VersionNumber { get; set; }
         public string Name { get; set; } = string.Empty;
         public decimal Price { get; set; }
         public string Currency { get; set; } = "AUD";
@@ -4787,6 +4967,8 @@ public partial class LearnerService(
     private sealed class BillingQuoteAddOnSnapshot
     {
         public string Code { get; set; } = string.Empty;
+        public string? VersionId { get; set; }
+        public int? VersionNumber { get; set; }
         public string Name { get; set; } = string.Empty;
         public decimal Price { get; set; }
         public string Currency { get; set; } = "AUD";
@@ -4799,6 +4981,8 @@ public partial class LearnerService(
     private sealed class BillingQuoteCouponSnapshot
     {
         public string Code { get; set; } = string.Empty;
+        public string? VersionId { get; set; }
+        public int? VersionNumber { get; set; }
         public string Name { get; set; } = string.Empty;
         public string DiscountType { get; set; } = string.Empty;
         public decimal DiscountValue { get; set; }
@@ -4809,18 +4993,23 @@ public partial class LearnerService(
     private static BillingQuoteCatalogSnapshot BuildQuoteCatalogSnapshot(
         DateTimeOffset capturedAt,
         BillingPlan? plan,
+        BillingCatalogVersionRef? planVersion,
         IEnumerable<BillingAddOn> addOns,
+        IReadOnlyDictionary<string, BillingCatalogVersionRef> addOnVersions,
         BillingCoupon? coupon,
+        BillingCatalogVersionRef? couponVersion,
         decimal discountAmount)
         => new()
         {
-            SchemaVersion = 1,
+            SchemaVersion = 2,
             CapturedAt = capturedAt,
             Plan = plan is null
                 ? null
                 : new BillingQuotePlanSnapshot
                 {
                     Code = plan.Code,
+                    VersionId = planVersion?.Id,
+                    VersionNumber = planVersion?.VersionNumber,
                     Name = plan.Name,
                     Price = plan.Price,
                     Currency = plan.Currency,
@@ -4831,6 +5020,8 @@ public partial class LearnerService(
             AddOns = addOns.Select(addOn => new BillingQuoteAddOnSnapshot
             {
                 Code = addOn.Code,
+                VersionId = addOnVersions.TryGetValue(addOn.Code, out var addOnVersion) ? addOnVersion.Id : null,
+                VersionNumber = addOnVersions.TryGetValue(addOn.Code, out addOnVersion) ? addOnVersion.VersionNumber : null,
                 Name = addOn.Name,
                 Price = addOn.Price,
                 Currency = addOn.Currency,
@@ -4844,6 +5035,8 @@ public partial class LearnerService(
                 : new BillingQuoteCouponSnapshot
                 {
                     Code = coupon.Code,
+                    VersionId = couponVersion?.Id,
+                    VersionNumber = couponVersion?.VersionNumber,
                     Name = coupon.Name,
                     DiscountType = coupon.DiscountType.ToString(),
                     DiscountValue = coupon.DiscountValue,
@@ -5118,9 +5311,9 @@ public partial class LearnerService(
                     [new ApiFieldError("couponCode", "not_applicable", "Choose a coupon that matches the selected add-on.")]);
             }
 
-            await ReleaseExpiredCouponReservationsAsync(coupon.Code, now, cancellationToken);
+            await ReleaseExpiredCouponReservationsAsync(coupon, now, cancellationToken);
 
-            var couponRedemptionCount = await db.BillingCouponRedemptions.CountAsync(redemption => redemption.CouponCode == coupon.Code && redemption.Status != BillingRedemptionStatus.Voided, cancellationToken);
+            var couponRedemptionCount = await CountCouponRedemptionsAsync(coupon, userId: null, cancellationToken);
             if (coupon.UsageLimitTotal is not null && couponRedemptionCount >= coupon.UsageLimitTotal.Value)
             {
                 throw ApiException.Validation(
@@ -5129,7 +5322,7 @@ public partial class LearnerService(
                     [new ApiFieldError("couponCode", "usage_limit", "Choose a different coupon.")]);
             }
 
-            var perUserRedemptionCount = await db.BillingCouponRedemptions.CountAsync(redemption => redemption.CouponCode == coupon.Code && redemption.UserId == userId && redemption.Status != BillingRedemptionStatus.Voided, cancellationToken);
+            var perUserRedemptionCount = await CountCouponRedemptionsAsync(coupon, userId, cancellationToken);
             if (coupon.UsageLimitPerUser is not null && perUserRedemptionCount >= coupon.UsageLimitPerUser.Value)
             {
                 throw ApiException.Validation(
@@ -5155,6 +5348,19 @@ public partial class LearnerService(
         }
 
         var total = Math.Max(0m, Math.Round(subtotal - discount, 2, MidpointRounding.AwayFromZero));
+        var planVersion = snapshotPlan is null ? null : await ResolvePlanVersionRefAsync(snapshotPlan, cancellationToken);
+        var addOnVersions = new Dictionary<string, BillingCatalogVersionRef>(StringComparer.OrdinalIgnoreCase);
+        foreach (var snapshotAddOn in snapshotAddOns)
+        {
+            var addOnVersion = await ResolveAddOnVersionRefAsync(snapshotAddOn, cancellationToken);
+            if (addOnVersion is not null)
+            {
+                addOnVersions[snapshotAddOn.Code] = addOnVersion;
+            }
+        }
+
+        var couponVersion = coupon is null ? null : await ResolveCouponVersionRefAsync(coupon, cancellationToken);
+        var addOnVersionIdsJson = JsonSupport.Serialize(addOnVersions.ToDictionary(item => item.Key, item => item.Value.Id, StringComparer.OrdinalIgnoreCase));
         var quoteIdValue = $"quote-{Guid.NewGuid():N}";
         var quoteId = quoteIdValue[..Math.Min(64, quoteIdValue.Length)];
         var quote = new BillingQuote
@@ -5163,8 +5369,11 @@ public partial class LearnerService(
             UserId = userId,
             SubscriptionId = subscription.Id,
             PlanCode = planCode,
+            PlanVersionId = planVersion?.Id,
             AddOnCodesJson = JsonSupport.Serialize(addOnCodes),
+            AddOnVersionIdsJson = addOnVersionIdsJson,
             CouponCode = coupon?.Code,
+            CouponVersionId = couponVersion?.Id,
             Currency = items.FirstOrDefault()?.Currency ?? subscription.Currency,
             SubtotalAmount = subtotal,
             DiscountAmount = discount,
@@ -5175,7 +5384,7 @@ public partial class LearnerService(
             SnapshotJson = JsonSupport.Serialize(new
             {
                 items,
-                catalog = BuildQuoteCatalogSnapshot(now, snapshotPlan, snapshotAddOns, coupon, discount),
+                catalog = BuildQuoteCatalogSnapshot(now, snapshotPlan, planVersion, snapshotAddOns, addOnVersions, coupon, couponVersion, discount),
                 validation,
                 summary,
                 subtotal,
@@ -5207,6 +5416,8 @@ public partial class LearnerService(
                 {
                     Id = redemptionIdValue[..Math.Min(64, redemptionIdValue.Length)],
                     CouponCode = coupon.Code,
+                    CouponId = coupon.Id,
+                    CouponVersionId = couponVersion?.Id,
                     UserId = userId,
                     QuoteId = quote.Id,
                     DiscountAmount = discount,
@@ -5242,16 +5453,17 @@ public partial class LearnerService(
             validation);
     }
 
-    private async Task ReleaseExpiredCouponReservationsAsync(string couponCode, DateTimeOffset now, CancellationToken cancellationToken)
+    private async Task ReleaseExpiredCouponReservationsAsync(BillingCoupon coupon, DateTimeOffset now, CancellationToken cancellationToken)
     {
-        var normalizedCouponCode = NormalizeBillingCode(couponCode);
+        var normalizedCouponCode = NormalizeBillingCode(coupon.Code);
         if (string.IsNullOrWhiteSpace(normalizedCouponCode))
         {
             return;
         }
 
         var expiredReservations = await db.BillingCouponRedemptions
-            .Where(redemption => redemption.CouponCode.ToLower() == normalizedCouponCode && redemption.Status == BillingRedemptionStatus.Reserved)
+            .Where(redemption => (redemption.CouponId == coupon.Id || (redemption.CouponId == null && redemption.CouponCode.ToLower() == normalizedCouponCode))
+                && redemption.Status == BillingRedemptionStatus.Reserved)
             .Join(db.BillingQuotes,
                 redemption => redemption.QuoteId,
                 quote => quote.Id,
@@ -5271,13 +5483,13 @@ public partial class LearnerService(
         }
 
         var releasedCount = expiredReservations.Count;
-        var coupon = await db.BillingCoupons.FirstOrDefaultAsync(
-            item => item.Code.ToLower() == normalizedCouponCode || item.Id.ToLower() == normalizedCouponCode,
+        var trackedCoupon = await db.BillingCoupons.FirstOrDefaultAsync(
+            item => item.Id == coupon.Id || item.Code.ToLower() == normalizedCouponCode,
             cancellationToken);
-        if (coupon is not null)
+        if (trackedCoupon is not null)
         {
-            coupon.RedemptionCount = Math.Max(0, coupon.RedemptionCount - releasedCount);
-            coupon.UpdatedAt = now;
+            trackedCoupon.RedemptionCount = Math.Max(0, trackedCoupon.RedemptionCount - releasedCount);
+            trackedCoupon.UpdatedAt = now;
         }
 
         await db.SaveChangesAsync(cancellationToken);
@@ -6077,6 +6289,7 @@ public partial class LearnerService(
         var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == transaction.LearnerUserId, ct);
         var quoteResponse = DeserializeQuoteResponse(quote);
         var catalogSnapshot = DeserializeQuoteCatalogSnapshot(quote);
+        var addOnVersionIds = DeserializeAddOnVersionIds(quote);
         var now = DateTimeOffset.UtcNow;
 
         if (!string.IsNullOrWhiteSpace(quote.PlanCode) && string.Equals(transaction.TransactionType, "subscription_payment", StringComparison.OrdinalIgnoreCase))
@@ -6103,6 +6316,7 @@ public partial class LearnerService(
             if (targetPlan is not null)
             {
                 subscription.PlanId = targetPlan.Code;
+                subscription.PlanVersionId = quote.PlanVersionId;
                 subscription.Status = SubscriptionStatus.Active;
                 subscription.PriceAmount = targetPlan.Price;
                 subscription.Currency = targetPlan.Currency;
@@ -6172,6 +6386,7 @@ public partial class LearnerService(
                     SubscriptionId = subscription.Id,
                     ItemCode = addOn.Code,
                     ItemType = addOn.IsRecurring ? "recurring_addon" : "addon",
+                    AddOnVersionId = addOn.VersionId ?? (addOnVersionIds.TryGetValue(addOn.Code, out var addOnVersionId) ? addOnVersionId : null),
                     Quantity = Math.Max(1, item.Quantity),
                     Status = SubscriptionItemStatus.Active,
                     StartsAt = now,
@@ -6205,6 +6420,12 @@ public partial class LearnerService(
             redemption.Status = BillingRedemptionStatus.Applied;
             redemption.CheckoutSessionId = transaction.GatewayTransactionId;
             redemption.SubscriptionId = subscription.Id;
+            redemption.CouponVersionId ??= quote.CouponVersionId;
+            if (string.IsNullOrWhiteSpace(redemption.CouponId) && !string.IsNullOrWhiteSpace(quote.CouponCode))
+            {
+                var coupon = await FindBillingCouponAsync(quote.CouponCode, ct);
+                redemption.CouponId = coupon?.Id;
+            }
         }
 
         var invoiceId = TruncateIdentifier($"inv-{quote.Id}");
@@ -6219,8 +6440,24 @@ public partial class LearnerService(
                 Amount = quote.TotalAmount,
                 Currency = quote.Currency,
                 Status = "Paid",
-                Description = quoteResponse.Summary
+                Description = quoteResponse.Summary,
+                PlanVersionId = quote.PlanVersionId,
+                AddOnVersionIdsJson = quote.AddOnVersionIdsJson,
+                CouponVersionId = quote.CouponVersionId,
+                QuoteId = quote.Id,
+                CheckoutSessionId = transaction.GatewayTransactionId
             });
+        }
+        else
+        {
+            existingInvoice.PlanVersionId ??= quote.PlanVersionId;
+            if (string.IsNullOrWhiteSpace(existingInvoice.AddOnVersionIdsJson) || existingInvoice.AddOnVersionIdsJson == "{}")
+            {
+                existingInvoice.AddOnVersionIdsJson = quote.AddOnVersionIdsJson;
+            }
+            existingInvoice.CouponVersionId ??= quote.CouponVersionId;
+            existingInvoice.QuoteId ??= quote.Id;
+            existingInvoice.CheckoutSessionId ??= transaction.GatewayTransactionId;
         }
 
         quote.Status = BillingQuoteStatus.Completed;
@@ -6276,7 +6513,9 @@ public partial class LearnerService(
             redemption.Status = BillingRedemptionStatus.Voided;
             redemption.CheckoutSessionId = transaction.GatewayTransactionId;
 
-            var coupon = await db.BillingCoupons.FirstOrDefaultAsync(x => x.Code == redemption.CouponCode, ct);
+            var coupon = !string.IsNullOrWhiteSpace(redemption.CouponId)
+                ? await db.BillingCoupons.FirstOrDefaultAsync(x => x.Id == redemption.CouponId, ct)
+                : await db.BillingCoupons.FirstOrDefaultAsync(x => x.Code == redemption.CouponCode, ct);
             if (coupon is not null && coupon.RedemptionCount > 0)
             {
                 coupon.RedemptionCount -= 1;
@@ -6350,6 +6589,15 @@ public partial class LearnerService(
 
     private async Task<BillingQuote?> GetQuoteForTransactionAsync(PaymentTransaction transaction, CancellationToken ct)
     {
+        if (!string.IsNullOrWhiteSpace(transaction.QuoteId))
+        {
+            var quoteByTransactionRef = await db.BillingQuotes.FirstOrDefaultAsync(x => x.Id == transaction.QuoteId, ct);
+            if (quoteByTransactionRef is not null)
+            {
+                return quoteByTransactionRef;
+            }
+        }
+
         var metadata = ReadObject(JsonSupport.Deserialize<object?>(transaction.MetadataJson ?? "{}", null));
         var quoteId = ReadString(metadata?.GetValueOrDefault("quoteId"))
             ?? ReadString(metadata?.GetValueOrDefault("quote_id"));

@@ -1,6 +1,10 @@
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using OetLearner.Api.Data;
+using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Tests.Infrastructure;
 
@@ -10,9 +14,11 @@ namespace OetLearner.Api.Tests;
 public class AdminBillingCatalogValidationTests : IClassFixture<FirstPartyAuthTestWebApplicationFactory>
 {
     private readonly HttpClient _client;
+    private readonly FirstPartyAuthTestWebApplicationFactory _factory;
 
     public AdminBillingCatalogValidationTests(FirstPartyAuthTestWebApplicationFactory factory)
     {
+        _factory = factory;
         _client = factory.CreateAuthenticatedClient(SeedData.AdminEmail, SeedData.LocalSeedPassword, expectedRole: "admin");
     }
 
@@ -99,6 +105,88 @@ public class AdminBillingCatalogValidationTests : IClassFixture<FirstPartyAuthTe
         using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
         Assert.Equal("billing_plan_invalid", json.RootElement.GetProperty("code").GetString());
         Assert.Contains("code", ReadFieldErrorFields(json));
+    }
+
+    [Fact]
+    public async Task AdminBillingPlan_UpdateAppendsVersionAndKeepsV1Immutable()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var planCode = $"phase2b-version-{suffix}";
+        var planId = await CreatePlanAsync(planCode);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var plan = await db.BillingPlans.AsNoTracking().FirstAsync(x => x.Id == planId);
+            var v1 = await db.BillingPlanVersions.AsNoTracking().SingleAsync(x => x.PlanId == planId && x.VersionNumber == 1);
+
+            Assert.Equal(v1.Id, plan.ActiveVersionId);
+            Assert.Equal(v1.Id, plan.LatestVersionId);
+            Assert.Equal(49m, v1.Price);
+            Assert.Equal(4, v1.IncludedCredits);
+        }
+
+        var updateResponse = await _client.PutAsJsonAsync($"/v1/admin/billing/plans/{Uri.EscapeDataString(planId)}", new
+        {
+            code = planCode,
+            name = $"Plan {planCode} v2",
+            description = "Updated plan used by immutable version tests.",
+            price = 79m,
+            currency = "AUD",
+            interval = "month",
+            durationMonths = 3,
+            includedCredits = 9,
+            displayOrder = 12,
+            isVisible = true,
+            isRenewable = true,
+            trialDays = 7,
+            status = "active",
+            includedSubtestsJson = JsonSerializer.Serialize(new[] { "writing", "speaking", "reading" }),
+            entitlementsJson = JsonSerializer.Serialize(new { tier = "phase-2b", invoiceDownloadsAvailable = true })
+        });
+        updateResponse.EnsureSuccessStatusCode();
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var plan = await db.BillingPlans.AsNoTracking().FirstAsync(x => x.Id == planId);
+            var versions = await db.BillingPlanVersions.AsNoTracking()
+                .Where(x => x.PlanId == planId)
+                .OrderBy(x => x.VersionNumber)
+                .ToListAsync();
+
+            Assert.Equal(2, versions.Count);
+            Assert.Equal(49m, versions[0].Price);
+            Assert.Equal(4, versions[0].IncludedCredits);
+            Assert.Equal(79m, versions[1].Price);
+            Assert.Equal(9, versions[1].IncludedCredits);
+            Assert.Equal(versions[1].Id, plan.ActiveVersionId);
+            Assert.Equal(versions[1].Id, plan.LatestVersionId);
+        }
+    }
+
+    [Fact]
+    public async Task AdminBillingCatalog_UpdateRejectsCodeChanges()
+    {
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var planCode = $"phase2b-code-plan-{suffix}";
+        var addOnCode = $"phase2b-code-addon-{suffix}";
+        var couponCode = $"PHASE2BCODE{suffix}".ToUpperInvariant();
+        var planId = await CreatePlanAsync(planCode);
+        var addOnId = await CreateAddOnAsync(addOnCode, planCode);
+        var couponResponse = await _client.PostAsJsonAsync("/v1/admin/billing/coupons", ValidCouponPayload(couponCode, "percentage", 10m, [planCode], [addOnCode]));
+        couponResponse.EnsureSuccessStatusCode();
+        using var couponJson = JsonDocument.Parse(await couponResponse.Content.ReadAsStringAsync());
+        var couponId = couponJson.RootElement.GetProperty("id").GetString()!;
+
+        var planResponse = await _client.PutAsJsonAsync($"/v1/admin/billing/plans/{Uri.EscapeDataString(planId)}", ValidPlanPayload($"{planCode}-changed"));
+        await AssertCodeImmutableAsync(planResponse, "billing_plan_invalid");
+
+        var addOnResponse = await _client.PutAsJsonAsync($"/v1/admin/billing/add-ons/{Uri.EscapeDataString(addOnId)}", ValidAddOnPayload($"{addOnCode}-changed", planCode));
+        await AssertCodeImmutableAsync(addOnResponse, "billing_addon_invalid");
+
+        var couponResponseChanged = await _client.PutAsJsonAsync($"/v1/admin/billing/coupons/{Uri.EscapeDataString(couponId)}", ValidCouponPayload($"{couponCode}X", "percentage", 10m, [planCode], [addOnCode]));
+        await AssertCodeImmutableAsync(couponResponseChanged, "billing_coupon_invalid");
     }
 
     [Fact]
@@ -272,4 +360,12 @@ public class AdminBillingCatalogValidationTests : IClassFixture<FirstPartyAuthTe
             .EnumerateArray()
             .Select(error => error.GetProperty("field").GetString()!)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+    private static async Task AssertCodeImmutableAsync(HttpResponseMessage response, string expectedCode)
+    {
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        Assert.Equal(expectedCode, json.RootElement.GetProperty("code").GetString());
+        Assert.Contains("code", ReadFieldErrorFields(json));
+    }
 }

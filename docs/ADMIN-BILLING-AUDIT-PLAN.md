@@ -68,26 +68,37 @@ Known residual risk:
 
 ### Phase 2: Catalog Validation And Versioning
 
-Status: Phase 2A admin catalog validation hardening is implemented after Phase 1. Phase 2B-1 now starts the historical-stability work by making new checkout completion fulfill from quote-time catalog snapshots. Full immutable version tables remain Phase 2B-2 because they require schema changes, backfill, and checkout/webhook/subscription history rewiring.
+Status: Phase 2A admin catalog validation hardening, Phase 2B-1 quote-time fulfillment snapshots, and Phase 2B-2A immutable billing catalog version anchors are implemented. The current model creates immutable plan, add-on, and coupon version rows, backfills baseline v1 rows during migration, stores active/latest version pointers on mutable catalog rows, and writes version references onto quotes, subscriptions, subscription items, invoices, payment transactions, and coupon redemptions. Fulfillment still treats the quote snapshot as the source of truth; version references are audit/reporting anchors and correlation evidence, not the authority for what gets granted after checkout.
+
+Implemented scope:
 
 - Add typed server validation for plan, add-on, coupon, and entitlement payloads.
-- Add immutable plan, add-on, price, and coupon version snapshots.
-- Store version references on quotes, subscriptions, invoices, and subscription items.
-- Add before/after audit diffs for catalog changes.
+- Add immutable plan, add-on, and coupon version tables with baseline backfill.
+- Store catalog version references on quote, subscription, invoice, payment transaction, subscription item, and coupon redemption records.
+- Append a new catalog version on each admin catalog update while preserving prior version rows.
+- Treat catalog codes as immutable after creation; mutable display, pricing, entitlement, and status fields move forward through appended versions.
+- Keep checkout completion fulfillment based on `BillingQuote.SnapshotJson`, with version IDs retained for audit and downstream reporting.
+
+Migration/deploy preflight:
+
+- Apply and inspect `20260428120000_AddBillingImmutableCatalogVersioning` against a production-like database before deploy.
+- Confirm existing plans, add-ons, and coupons receive v1 version rows and matching `ActiveVersionId` / `LatestVersionId` values.
+- Confirm new nullable version-reference columns and `{}` JSON defaults do not break existing subscriptions, invoices, payment transactions, or coupon redemptions.
+- Take a database backup before production migration, then run backend tests and a checkout smoke path after deploy.
 
 Acceptance criteria:
 
 - Historical subscriptions and invoices remain stable after catalog edits.
 - Invalid catalog data returns structured 400 responses.
 - Admins can archive catalog entries without deleting business evidence.
+- New catalog edits append immutable versions rather than mutating prior version evidence.
+- New checkout, payment, invoice, subscription, and coupon redemption rows retain quote/version audit anchors.
 
-Phase 2B-1 scope:
+Residual risk after Phase 2B-2A:
 
-- Persist the plan/add-on/coupon facts needed for fulfillment inside `BillingQuote.SnapshotJson`, then make payment webhook completion prefer those quote-time facts over mutable current catalog rows. This protects new in-flight checkouts from price, duration, credit, and display-name drift between quote creation and payment completion.
-
-Residual risk after Phase 2B-1:
-
-- Historical rows created before quote-time catalog snapshots still need fallback behavior, and full immutable catalog version tables are still required for durable reporting, backfill, provider price mapping, and admin version history.
+- Provider price mapping, admin version-history UI, and version-aware reporting/backfill are still incomplete.
+- Database-level immutability hardening is not yet enforced with triggers, restrictive permissions, or append-only database constraints; immutability is currently application-enforced.
+- Coupon usage limits are improved with parent coupon/version references, but true race-safe coupon inventory still needs a larger transactional design, provider event reconciliation, and concurrency tests.
 
 ### Phase 3: Payment Ledger And Webhook Inbox
 

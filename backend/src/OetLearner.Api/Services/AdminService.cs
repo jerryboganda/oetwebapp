@@ -456,6 +456,17 @@ public partial class AdminService(
         }
     }
 
+    private static void ThrowIfCatalogCodeChanged(string? requestedCode, string existingCode, string errorCode, string message)
+    {
+        if (!string.Equals(requestedCode?.Trim() ?? string.Empty, existingCode, StringComparison.Ordinal))
+        {
+            throw ApiException.Validation(
+                errorCode,
+                message,
+                [new ApiFieldError("code", "immutable", "Catalog code cannot be changed after creation.")]);
+        }
+    }
+
     private static string ValidateCatalogText(List<ApiFieldError> errors, string field, string? value, int maxLength, bool required = true)
     {
         var trimmed = value?.Trim() ?? string.Empty;
@@ -962,6 +973,8 @@ public partial class AdminService(
     {
         plan.Id,
         code = plan.Code,
+        plan.ActiveVersionId,
+        plan.LatestVersionId,
         plan.Name,
         plan.Description,
         plan.Price,
@@ -986,6 +999,8 @@ public partial class AdminService(
     {
         addOn.Id,
         code = addOn.Code,
+        addOn.ActiveVersionId,
+        addOn.LatestVersionId,
         addOn.Name,
         addOn.Description,
         addOn.Price,
@@ -1010,6 +1025,8 @@ public partial class AdminService(
     {
         coupon.Id,
         code = coupon.Code,
+        coupon.ActiveVersionId,
+        coupon.LatestVersionId,
         coupon.Name,
         coupon.Description,
         discountType = MapBillingDiscountType(coupon.DiscountType),
@@ -1029,6 +1046,142 @@ public partial class AdminService(
         coupon.CreatedAt,
         coupon.UpdatedAt
     };
+
+    private static BillingPlanVersion CreateBillingPlanVersion(BillingPlan plan, int versionNumber, string? adminId, string? adminName, DateTimeOffset createdAt) => new()
+    {
+        Id = GenerateDomainId("plan-version"),
+        PlanId = plan.Id,
+        VersionNumber = versionNumber,
+        Code = plan.Code,
+        Name = plan.Name,
+        Description = plan.Description,
+        Price = plan.Price,
+        Currency = plan.Currency,
+        Interval = plan.Interval,
+        DurationMonths = plan.DurationMonths,
+        IsVisible = plan.IsVisible,
+        IsRenewable = plan.IsRenewable,
+        TrialDays = plan.TrialDays,
+        DisplayOrder = plan.DisplayOrder,
+        IncludedCredits = plan.IncludedCredits,
+        IncludedSubtestsJson = plan.IncludedSubtestsJson,
+        EntitlementsJson = plan.EntitlementsJson,
+        Status = plan.Status,
+        ArchivedAt = plan.ArchivedAt,
+        CreatedByAdminId = adminId,
+        CreatedByAdminName = adminName,
+        CreatedAt = createdAt
+    };
+
+    private static BillingAddOnVersion CreateBillingAddOnVersion(BillingAddOn addOn, int versionNumber, string? adminId, string? adminName, DateTimeOffset createdAt) => new()
+    {
+        Id = GenerateDomainId("addon-version"),
+        AddOnId = addOn.Id,
+        VersionNumber = versionNumber,
+        Code = addOn.Code,
+        Name = addOn.Name,
+        Description = addOn.Description,
+        Price = addOn.Price,
+        Currency = addOn.Currency,
+        Interval = addOn.Interval,
+        Status = addOn.Status,
+        IsRecurring = addOn.IsRecurring,
+        DurationDays = addOn.DurationDays,
+        GrantCredits = addOn.GrantCredits,
+        GrantEntitlementsJson = addOn.GrantEntitlementsJson,
+        CompatiblePlanCodesJson = addOn.CompatiblePlanCodesJson,
+        AppliesToAllPlans = addOn.AppliesToAllPlans,
+        IsStackable = addOn.IsStackable,
+        QuantityStep = addOn.QuantityStep,
+        MaxQuantity = addOn.MaxQuantity,
+        DisplayOrder = addOn.DisplayOrder,
+        CreatedByAdminId = adminId,
+        CreatedByAdminName = adminName,
+        CreatedAt = createdAt
+    };
+
+    private static BillingCouponVersion CreateBillingCouponVersion(BillingCoupon coupon, int versionNumber, string? adminId, string? adminName, DateTimeOffset createdAt) => new()
+    {
+        Id = GenerateDomainId("coupon-version"),
+        CouponId = coupon.Id,
+        VersionNumber = versionNumber,
+        Code = coupon.Code,
+        Name = coupon.Name,
+        Description = coupon.Description,
+        DiscountType = coupon.DiscountType,
+        DiscountValue = coupon.DiscountValue,
+        Currency = coupon.Currency,
+        Status = coupon.Status,
+        StartsAt = coupon.StartsAt,
+        EndsAt = coupon.EndsAt,
+        UsageLimitTotal = coupon.UsageLimitTotal,
+        UsageLimitPerUser = coupon.UsageLimitPerUser,
+        MinimumSubtotal = coupon.MinimumSubtotal,
+        ApplicablePlanCodesJson = coupon.ApplicablePlanCodesJson,
+        ApplicableAddOnCodesJson = coupon.ApplicableAddOnCodesJson,
+        IsStackable = coupon.IsStackable,
+        Notes = coupon.Notes,
+        CreatedByAdminId = adminId,
+        CreatedByAdminName = adminName,
+        CreatedAt = createdAt
+    };
+
+    private async Task<int> EnsureBillingPlanVersionBaselineAsync(BillingPlan plan, string adminId, string adminName, DateTimeOffset now, CancellationToken ct)
+    {
+        var latestVersionNumber = await db.BillingPlanVersions
+            .Where(version => version.PlanId == plan.Id)
+            .Select(version => (int?)version.VersionNumber)
+            .MaxAsync(ct) ?? 0;
+        if (latestVersionNumber > 0)
+        {
+            return latestVersionNumber;
+        }
+
+        var createdAt = plan.CreatedAt == default ? now : plan.CreatedAt;
+        var baseline = CreateBillingPlanVersion(plan, 1, adminId, adminName, createdAt);
+        db.BillingPlanVersions.Add(baseline);
+        plan.ActiveVersionId = baseline.Id;
+        plan.LatestVersionId = baseline.Id;
+        return 1;
+    }
+
+    private async Task<int> EnsureBillingAddOnVersionBaselineAsync(BillingAddOn addOn, string adminId, string adminName, DateTimeOffset now, CancellationToken ct)
+    {
+        var latestVersionNumber = await db.BillingAddOnVersions
+            .Where(version => version.AddOnId == addOn.Id)
+            .Select(version => (int?)version.VersionNumber)
+            .MaxAsync(ct) ?? 0;
+        if (latestVersionNumber > 0)
+        {
+            return latestVersionNumber;
+        }
+
+        var createdAt = addOn.CreatedAt == default ? now : addOn.CreatedAt;
+        var baseline = CreateBillingAddOnVersion(addOn, 1, adminId, adminName, createdAt);
+        db.BillingAddOnVersions.Add(baseline);
+        addOn.ActiveVersionId = baseline.Id;
+        addOn.LatestVersionId = baseline.Id;
+        return 1;
+    }
+
+    private async Task<int> EnsureBillingCouponVersionBaselineAsync(BillingCoupon coupon, string adminId, string adminName, DateTimeOffset now, CancellationToken ct)
+    {
+        var latestVersionNumber = await db.BillingCouponVersions
+            .Where(version => version.CouponId == coupon.Id)
+            .Select(version => (int?)version.VersionNumber)
+            .MaxAsync(ct) ?? 0;
+        if (latestVersionNumber > 0)
+        {
+            return latestVersionNumber;
+        }
+
+        var createdAt = coupon.CreatedAt == default ? now : coupon.CreatedAt;
+        var baseline = CreateBillingCouponVersion(coupon, 1, adminId, adminName, createdAt);
+        db.BillingCouponVersions.Add(baseline);
+        coupon.ActiveVersionId = baseline.Id;
+        coupon.LatestVersionId = baseline.Id;
+        return 1;
+    }
 
     public async Task<object> GetDashboardSummaryAsync(CancellationToken ct)
     {
@@ -3187,7 +3340,12 @@ public partial class AdminService(
             UpdatedAt = now
         };
 
+        var version = CreateBillingPlanVersion(plan, 1, adminId, adminName, now);
+        plan.ActiveVersionId = version.Id;
+        plan.LatestVersionId = version.Id;
+
         db.BillingPlans.Add(plan);
+        db.BillingPlanVersions.Add(version);
         await db.SaveChangesAsync(ct);
 
         await LogAuditAsync(adminId, adminName, "Created", "BillingPlan", id, $"Created plan: {validated.Name}", ct);
@@ -3199,8 +3357,10 @@ public partial class AdminService(
         var plan = await db.BillingPlans.FirstOrDefaultAsync(p => p.Id == planId || p.Code == planId, ct)
             ?? throw ApiException.NotFound("billing_plan_not_found", "Billing plan not found.");
 
+        ThrowIfCatalogCodeChanged(request.Code, plan.Code, "billing_plan_invalid", "Billing plan catalog data is invalid.");
         var validated = await ValidateBillingPlanCatalogAsync(ToBillingPlanCatalogInput(request), plan.Id, plan.Status, ct);
         var now = DateTimeOffset.UtcNow;
+        var latestVersionNumber = await EnsureBillingPlanVersionBaselineAsync(plan, adminId, adminName, now, ct);
         plan.Code = validated.Code;
         plan.Name = validated.Name;
         plan.Description = validated.Description;
@@ -3218,6 +3378,11 @@ public partial class AdminService(
         plan.Status = validated.Status;
         plan.ArchivedAt = plan.Status == BillingPlanStatus.Archived ? now : plan.ArchivedAt;
         plan.UpdatedAt = now;
+
+        var version = CreateBillingPlanVersion(plan, latestVersionNumber + 1, adminId, adminName, now);
+        plan.ActiveVersionId = version.Id;
+        plan.LatestVersionId = version.Id;
+        db.BillingPlanVersions.Add(version);
 
         await db.SaveChangesAsync(ct);
         await LogAuditAsync(adminId, adminName, "Updated", "BillingPlan", plan.Id, $"Updated plan: {validated.Name}", ct);
@@ -3284,7 +3449,12 @@ public partial class AdminService(
             UpdatedAt = now
         };
 
+        var version = CreateBillingAddOnVersion(addOn, 1, adminId, adminName, now);
+        addOn.ActiveVersionId = version.Id;
+        addOn.LatestVersionId = version.Id;
+
         db.BillingAddOns.Add(addOn);
+        db.BillingAddOnVersions.Add(version);
         await db.SaveChangesAsync(ct);
         await LogAuditAsync(adminId, adminName, "Created", "BillingAddOn", addOn.Id, $"Created add-on: {validated.Name}", ct);
         return MapBillingAddOn(addOn);
@@ -3295,8 +3465,10 @@ public partial class AdminService(
         var addOn = await db.BillingAddOns.FirstOrDefaultAsync(addOn => addOn.Id == addOnId || addOn.Code == addOnId, ct)
             ?? throw ApiException.NotFound("billing_addon_not_found", "Billing add-on not found.");
 
+        ThrowIfCatalogCodeChanged(request.Code, addOn.Code, "billing_addon_invalid", "Billing add-on catalog data is invalid.");
         var validated = await ValidateBillingAddOnCatalogAsync(ToBillingAddOnCatalogInput(request), addOn.Id, addOn.Status, ct);
         var now = DateTimeOffset.UtcNow;
+        var latestVersionNumber = await EnsureBillingAddOnVersionBaselineAsync(addOn, adminId, adminName, now, ct);
         addOn.Code = validated.Code;
         addOn.Name = validated.Name;
         addOn.Description = validated.Description;
@@ -3315,6 +3487,11 @@ public partial class AdminService(
         addOn.CompatiblePlanCodesJson = validated.CompatiblePlanCodesJson;
         addOn.GrantEntitlementsJson = validated.GrantEntitlementsJson;
         addOn.UpdatedAt = now;
+
+        var version = CreateBillingAddOnVersion(addOn, latestVersionNumber + 1, adminId, adminName, now);
+        addOn.ActiveVersionId = version.Id;
+        addOn.LatestVersionId = version.Id;
+        db.BillingAddOnVersions.Add(version);
 
         await db.SaveChangesAsync(ct);
         await LogAuditAsync(adminId, adminName, "Updated", "BillingAddOn", addOn.Id, $"Updated add-on: {validated.Name}", ct);
@@ -3366,7 +3543,12 @@ public partial class AdminService(
             UpdatedAt = now
         };
 
+        var version = CreateBillingCouponVersion(coupon, 1, adminId, adminName, now);
+        coupon.ActiveVersionId = version.Id;
+        coupon.LatestVersionId = version.Id;
+
         db.BillingCoupons.Add(coupon);
+        db.BillingCouponVersions.Add(version);
         await db.SaveChangesAsync(ct);
         await LogAuditAsync(adminId, adminName, "Created", "BillingCoupon", coupon.Id, $"Created coupon: {validated.Code}", ct);
         return MapBillingCoupon(coupon);
@@ -3377,8 +3559,10 @@ public partial class AdminService(
         var coupon = await db.BillingCoupons.FirstOrDefaultAsync(coupon => coupon.Id == couponId || coupon.Code == couponId, ct)
             ?? throw ApiException.NotFound("billing_coupon_not_found", "Billing coupon not found.");
 
+        ThrowIfCatalogCodeChanged(request.Code, coupon.Code, "billing_coupon_invalid", "Billing coupon catalog data is invalid.");
         var validated = await ValidateBillingCouponCatalogAsync(ToBillingCouponCatalogInput(request), coupon.Id, coupon.Status, ct);
         var now = DateTimeOffset.UtcNow;
+        var latestVersionNumber = await EnsureBillingCouponVersionBaselineAsync(coupon, adminId, adminName, now, ct);
         coupon.Code = validated.Code;
         coupon.Name = validated.Name;
         coupon.Description = validated.Description;
@@ -3396,6 +3580,11 @@ public partial class AdminService(
         coupon.ApplicableAddOnCodesJson = validated.ApplicableAddOnCodesJson;
         coupon.Notes = validated.Notes;
         coupon.UpdatedAt = now;
+
+        var version = CreateBillingCouponVersion(coupon, latestVersionNumber + 1, adminId, adminName, now);
+        coupon.ActiveVersionId = version.Id;
+        coupon.LatestVersionId = version.Id;
+        db.BillingCouponVersions.Add(version);
 
         await db.SaveChangesAsync(ct);
         await LogAuditAsync(adminId, adminName, "Updated", "BillingCoupon", coupon.Id, $"Updated coupon: {validated.Code}", ct);

@@ -54,7 +54,9 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<MobilePushToken> MobilePushTokens => Set<MobilePushToken>();
     public DbSet<SubscriptionItem> SubscriptionItems => Set<SubscriptionItem>();
     public DbSet<BillingAddOn> BillingAddOns => Set<BillingAddOn>();
+    public DbSet<BillingAddOnVersion> BillingAddOnVersions => Set<BillingAddOnVersion>();
     public DbSet<BillingCoupon> BillingCoupons => Set<BillingCoupon>();
+    public DbSet<BillingCouponVersion> BillingCouponVersions => Set<BillingCouponVersion>();
     public DbSet<BillingCouponRedemption> BillingCouponRedemptions => Set<BillingCouponRedemption>();
     public DbSet<BillingQuote> BillingQuotes => Set<BillingQuote>();
     public DbSet<BillingEvent> BillingEvents => Set<BillingEvent>();
@@ -208,6 +210,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<ReadingPolicy> ReadingPolicies => Set<ReadingPolicy>();
     public DbSet<ReadingUserPolicyOverride> ReadingUserPolicyOverrides => Set<ReadingUserPolicyOverride>();
     public DbSet<BillingPlan> BillingPlans => Set<BillingPlan>();
+    public DbSet<BillingPlanVersion> BillingPlanVersions => Set<BillingPlanVersion>();
     public DbSet<AdminPermissionGrant> AdminPermissionGrants => Set<AdminPermissionGrant>();
     public DbSet<AdminUser> AdminUsers => Set<AdminUser>();
     public DbSet<PermissionTemplate> PermissionTemplates => Set<PermissionTemplate>();
@@ -478,17 +481,35 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<NotificationDeliveryAttempt>().HasIndex(x => new { x.Status, x.AttemptedAt });
         modelBuilder.Entity<SubscriptionItem>().HasIndex(x => new { x.SubscriptionId, x.Status });
         modelBuilder.Entity<SubscriptionItem>().HasIndex(x => new { x.ItemCode, x.SubscriptionId });
+        modelBuilder.Entity<SubscriptionItem>().HasIndex(x => x.AddOnVersionId);
         modelBuilder.Entity<BillingPlan>().HasIndex(x => x.Code).IsUnique();
         modelBuilder.Entity<BillingPlan>().HasIndex(x => new { x.Status, x.DisplayOrder });
+        modelBuilder.Entity<BillingPlanVersion>().HasIndex(x => new { x.PlanId, x.VersionNumber }).IsUnique();
+        modelBuilder.Entity<BillingPlanVersion>().HasIndex(x => x.Code);
         modelBuilder.Entity<BillingAddOn>().HasIndex(x => x.Code).IsUnique();
         modelBuilder.Entity<BillingAddOn>().HasIndex(x => new { x.Status, x.DisplayOrder });
+        modelBuilder.Entity<BillingAddOnVersion>().HasIndex(x => new { x.AddOnId, x.VersionNumber }).IsUnique();
+        modelBuilder.Entity<BillingAddOnVersion>().HasIndex(x => x.Code);
         modelBuilder.Entity<BillingCoupon>().HasIndex(x => x.Code).IsUnique();
         modelBuilder.Entity<BillingCoupon>().HasIndex(x => new { x.Status, x.EndsAt });
+        modelBuilder.Entity<BillingCouponVersion>().HasIndex(x => new { x.CouponId, x.VersionNumber }).IsUnique();
+        modelBuilder.Entity<BillingCouponVersion>().HasIndex(x => x.Code);
         modelBuilder.Entity<BillingCouponRedemption>().HasIndex(x => new { x.CouponCode, x.UserId, x.RedeemedAt });
+        modelBuilder.Entity<BillingCouponRedemption>().HasIndex(x => new { x.CouponId, x.UserId, x.RedeemedAt });
+        modelBuilder.Entity<BillingCouponRedemption>().HasIndex(x => x.CouponVersionId);
         modelBuilder.Entity<BillingQuote>().HasIndex(x => new { x.UserId, x.CreatedAt });
         modelBuilder.Entity<BillingQuote>().HasIndex(x => new { x.Status, x.ExpiresAt });
+        modelBuilder.Entity<BillingQuote>().HasIndex(x => x.PlanVersionId);
+        modelBuilder.Entity<BillingQuote>().HasIndex(x => x.CouponVersionId);
         modelBuilder.Entity<BillingEvent>().HasIndex(x => new { x.EntityType, x.EntityId, x.OccurredAt });
         modelBuilder.Entity<BillingEvent>().HasIndex(x => new { x.UserId, x.OccurredAt });
+        modelBuilder.Entity<Subscription>().HasIndex(x => x.PlanVersionId);
+        modelBuilder.Entity<Invoice>().HasIndex(x => x.PlanVersionId);
+        modelBuilder.Entity<Invoice>().HasIndex(x => x.QuoteId);
+        modelBuilder.Entity<Invoice>().HasIndex(x => x.CheckoutSessionId);
+        modelBuilder.Entity<PaymentTransaction>().HasIndex(x => x.QuoteId);
+        modelBuilder.Entity<PaymentTransaction>().HasIndex(x => x.PlanVersionId);
+        modelBuilder.Entity<PaymentTransaction>().HasIndex(x => x.CouponVersionId);
 
         // Multi-exam indexes
         modelBuilder.Entity<ExamFamily>().HasIndex(x => new { x.IsActive, x.SortOrder });
