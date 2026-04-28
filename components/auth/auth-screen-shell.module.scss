@@ -428,14 +428,20 @@
   display: inline-flex;
   align-items: center;
   gap: 0.55rem;
+  min-height: 2rem;
+  padding: 0.1rem 0;
 }
 
 .checkbox input {
-  width: 1.05rem;
-  height: 1.05rem;
+  width: 1.5rem;
+  height: 1.5rem;
+  flex-shrink: 0;
 }
 
 .link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 1.75rem;
   color: var(--auth-text);
   text-decoration: none;
   font-weight: 600;

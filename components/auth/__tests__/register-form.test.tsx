@@ -43,6 +43,7 @@ describe('RegisterForm', () => {
     const lastNameInput = screen.getByLabelText(/last name/i);
     const emailInput = screen.getByLabelText(/email address/i);
     const mobileInput = screen.getByLabelText(/mobile number/i);
+    const countryCodeSelect = screen.getByRole('combobox', { name: /country calling code/i });
 
     expect(firstNameInput).toHaveAttribute('autocomplete', 'given-name');
     expect(lastNameInput).toHaveAttribute('autocomplete', 'family-name');
@@ -54,5 +55,6 @@ describe('RegisterForm', () => {
 
     expect(mobileInput).toHaveAttribute('autocomplete', 'tel-national');
     expect(mobileInput).toHaveAttribute('inputmode', 'numeric');
+    expect(countryCodeSelect).toBeInTheDocument();
   });
 });

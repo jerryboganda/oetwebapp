@@ -96,12 +96,14 @@ interface CountryCodeSelectProps {
   value: string;
   onChange: (value: CountryCodeOption) => void;
   inputId?: string;
+  ariaLabel?: string;
 }
 
 export default function CountryCodeSelect({
   value,
   onChange,
   inputId = "country-code-select",
+  ariaLabel = "Country calling code",
 }: CountryCodeSelectProps) {
   const selectedOption = useMemo(
     () =>
@@ -114,6 +116,7 @@ export default function CountryCodeSelect({
     <Select<CountryCodeOption, false, GroupBase<CountryCodeOption>>
       inputId={inputId}
       instanceId={inputId}
+      aria-label={ariaLabel}
       options={countryOptions}
       value={selectedOption}
       onChange={(option: SingleValue<CountryCodeOption>) => {

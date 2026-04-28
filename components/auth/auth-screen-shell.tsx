@@ -55,7 +55,7 @@ export function AuthScreenShell({
       <div className={`${styles.shape} ${styles.blobLeft}`} />
       <div className={`${styles.shape} ${styles.blobRight}`} />
 
-      <div className={styles.content}>
+      <main className={styles.content}>
         <div className={`${styles.stack} ${stackClassName ?? ''}`.trim()}>
           <Link className={styles.brand} href={brandHref} aria-label={brandLabel}>
             <Image
@@ -113,7 +113,7 @@ export function AuthScreenShell({
             {terms ? <div className={styles.terms}>{terms}</div> : null}
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
