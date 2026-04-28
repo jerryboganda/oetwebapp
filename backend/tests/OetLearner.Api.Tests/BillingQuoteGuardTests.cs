@@ -1,4 +1,6 @@
 using System.Net;
+using System.Net.Http.Json;
+using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -308,6 +310,206 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
             Assert.Equal(BillingQuoteStatus.Applied, appliedQuote.Status);
             Assert.Equal(1, coupon.RedemptionCount);
         }
+    }
+
+    [Fact]
+    public async Task CheckoutCompletion_UsesQuoteTimePlanSnapshotAfterCatalogMutation()
+    {
+        var userId = $"billing-plan-snapshot-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var planCode = $"snapshot-plan-{suffix}";
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            await db.Database.EnsureCreatedAsync();
+            var now = DateTimeOffset.UtcNow;
+            db.BillingPlans.Add(new BillingPlan
+            {
+                Id = $"plan-{suffix}",
+                Code = planCode,
+                Name = "Snapshot Plan Original",
+                Description = "Original plan terms used by quote snapshot tests.",
+                Price = 180m,
+                Currency = "AUD",
+                Interval = "month",
+                DurationMonths = 2,
+                IncludedCredits = 7,
+                IncludedSubtestsJson = JsonSerializer.Serialize(new[] { "writing" }),
+                EntitlementsJson = "{}",
+                IsVisible = true,
+                IsRenewable = true,
+                Status = BillingPlanStatus.Active,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var checkoutResponse = await client.PostAsJsonAsync("/v1/billing/checkout-sessions", new
+        {
+            productType = "plan_upgrade",
+            quantity = 1,
+            priceId = planCode,
+            gateway = "paypal"
+        });
+        var checkoutBody = await checkoutResponse.Content.ReadAsStringAsync();
+        Assert.True(checkoutResponse.IsSuccessStatusCode, checkoutBody);
+        using var checkoutJson = JsonDocument.Parse(checkoutBody);
+        var checkoutSessionId = checkoutJson.RootElement.GetProperty("checkoutSessionId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(checkoutSessionId));
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var plan = await db.BillingPlans.FirstAsync(x => x.Code == planCode);
+            var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId);
+            subscription.NextRenewalAt = DateTimeOffset.UtcNow.AddMinutes(-5);
+            plan.Name = "Snapshot Plan Mutated";
+            plan.Price = 999m;
+            plan.Currency = "USD";
+            plan.Interval = "year";
+            plan.DurationMonths = 12;
+            plan.IncludedCredits = 99;
+            plan.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync();
+        }
+
+        var completionStartedAt = DateTimeOffset.UtcNow;
+        await CompletePayPalCheckoutAsync(client, checkoutSessionId!);
+        var completionFinishedAt = DateTimeOffset.UtcNow;
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId);
+            var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId);
+            var walletTransaction = await db.WalletTransactions
+                .Where(x => x.WalletId == wallet.Id && x.TransactionType == "plan_grant")
+                .OrderByDescending(x => x.CreatedAt)
+                .FirstAsync();
+
+            Assert.Equal(planCode, subscription.PlanId);
+            Assert.Equal(180m, subscription.PriceAmount);
+            Assert.Equal("AUD", subscription.Currency);
+            Assert.Equal("month", subscription.Interval);
+            Assert.InRange(subscription.NextRenewalAt, completionStartedAt.AddMonths(2).AddSeconds(-5), completionFinishedAt.AddMonths(2).AddSeconds(5));
+            Assert.Equal(7, walletTransaction.Amount);
+            Assert.Equal("Included credits for Snapshot Plan Original", walletTransaction.Description);
+        }
+    }
+
+    [Fact]
+    public async Task CheckoutCompletion_UsesQuoteTimeAddOnSnapshotAfterCatalogMutation()
+    {
+        var userId = $"billing-addon-snapshot-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var addOnCode = $"snapshot-addon-{suffix}";
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            await db.Database.EnsureCreatedAsync();
+            var now = DateTimeOffset.UtcNow;
+            db.BillingAddOns.Add(new BillingAddOn
+            {
+                Id = $"addon-{suffix}",
+                Code = addOnCode,
+                Name = "Snapshot Add-on Original",
+                Description = "Original add-on terms used by quote snapshot tests.",
+                Price = 15m,
+                Currency = "AUD",
+                Interval = "one_time",
+                DurationDays = 30,
+                GrantCredits = 4,
+                AppliesToAllPlans = true,
+                IsRecurring = false,
+                IsStackable = true,
+                QuantityStep = 1,
+                CompatiblePlanCodesJson = "[]",
+                GrantEntitlementsJson = "{}",
+                Status = BillingAddOnStatus.Active,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var checkoutResponse = await client.PostAsJsonAsync("/v1/billing/checkout-sessions", new
+        {
+            productType = "addon_purchase",
+            quantity = 2,
+            priceId = addOnCode,
+            gateway = "paypal"
+        });
+        var checkoutBody = await checkoutResponse.Content.ReadAsStringAsync();
+        Assert.True(checkoutResponse.IsSuccessStatusCode, checkoutBody);
+        using var checkoutJson = JsonDocument.Parse(checkoutBody);
+        var checkoutSessionId = checkoutJson.RootElement.GetProperty("checkoutSessionId").GetString();
+        Assert.False(string.IsNullOrWhiteSpace(checkoutSessionId));
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var addOn = await db.BillingAddOns.FirstAsync(x => x.Code == addOnCode);
+            addOn.Name = "Snapshot Add-on Mutated";
+            addOn.DurationDays = 365;
+            addOn.GrantCredits = 99;
+            addOn.IsRecurring = true;
+            addOn.UpdatedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync();
+        }
+
+        await CompletePayPalCheckoutAsync(client, checkoutSessionId!);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId);
+            var subscriptionItem = await db.SubscriptionItems.FirstAsync(x => x.SubscriptionId == subscription.Id && x.ItemCode == addOnCode);
+            var wallet = await db.Wallets.FirstAsync(x => x.UserId == userId);
+            var walletTransaction = await db.WalletTransactions
+                .Where(x => x.WalletId == wallet.Id && x.TransactionType == "credit_purchase")
+                .OrderByDescending(x => x.CreatedAt)
+                .FirstAsync();
+
+            Assert.Equal("addon", subscriptionItem.ItemType);
+            Assert.Equal(2, subscriptionItem.Quantity);
+            Assert.NotNull(subscriptionItem.EndsAt);
+            Assert.InRange(subscriptionItem.EndsAt!.Value, subscriptionItem.StartsAt.AddDays(30).AddSeconds(-5), subscriptionItem.StartsAt.AddDays(30).AddSeconds(5));
+            Assert.Equal(8, walletTransaction.Amount);
+            Assert.Equal("Snapshot Add-on Original credits", walletTransaction.Description);
+        }
+    }
+
+    private static async Task CompletePayPalCheckoutAsync(HttpClient client, string checkoutSessionId)
+    {
+        var payload = JsonSerializer.Serialize(new
+        {
+            id = $"evt-{Guid.NewGuid():N}",
+            event_type = "PAYMENT.CAPTURE.COMPLETED",
+            resource = new
+            {
+                supplementary_data = new
+                {
+                    related_ids = new
+                    {
+                        order_id = checkoutSessionId
+                    }
+                }
+            }
+        });
+
+        using var response = await client.PostAsync(
+            "/v1/payment/webhooks/paypal",
+            new StringContent(payload, Encoding.UTF8, "application/json"));
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, body);
+
+        using var json = JsonDocument.Parse(body);
+        Assert.Equal("completed", json.RootElement.GetProperty("state").GetString());
     }
 
     private async Task<HttpClient> CreateClientForUserAsync(string userId)

@@ -4764,6 +4764,108 @@ public partial class LearnerService(
             validation);
     }
 
+    private sealed class BillingQuoteCatalogSnapshot
+    {
+        public int SchemaVersion { get; set; } = 1;
+        public DateTimeOffset CapturedAt { get; set; }
+        public BillingQuotePlanSnapshot? Plan { get; set; }
+        public List<BillingQuoteAddOnSnapshot> AddOns { get; set; } = [];
+        public BillingQuoteCouponSnapshot? Coupon { get; set; }
+    }
+
+    private sealed class BillingQuotePlanSnapshot
+    {
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public decimal Price { get; set; }
+        public string Currency { get; set; } = "AUD";
+        public string Interval { get; set; } = "month";
+        public int DurationMonths { get; set; }
+        public int IncludedCredits { get; set; }
+    }
+
+    private sealed class BillingQuoteAddOnSnapshot
+    {
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public decimal Price { get; set; }
+        public string Currency { get; set; } = "AUD";
+        public string Interval { get; set; } = "one_time";
+        public bool IsRecurring { get; set; }
+        public int DurationDays { get; set; }
+        public int GrantCredits { get; set; }
+    }
+
+    private sealed class BillingQuoteCouponSnapshot
+    {
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string DiscountType { get; set; } = string.Empty;
+        public decimal DiscountValue { get; set; }
+        public decimal DiscountAmount { get; set; }
+        public string Currency { get; set; } = "AUD";
+    }
+
+    private static BillingQuoteCatalogSnapshot BuildQuoteCatalogSnapshot(
+        DateTimeOffset capturedAt,
+        BillingPlan? plan,
+        IEnumerable<BillingAddOn> addOns,
+        BillingCoupon? coupon,
+        decimal discountAmount)
+        => new()
+        {
+            SchemaVersion = 1,
+            CapturedAt = capturedAt,
+            Plan = plan is null
+                ? null
+                : new BillingQuotePlanSnapshot
+                {
+                    Code = plan.Code,
+                    Name = plan.Name,
+                    Price = plan.Price,
+                    Currency = plan.Currency,
+                    Interval = plan.Interval,
+                    DurationMonths = plan.DurationMonths,
+                    IncludedCredits = plan.IncludedCredits
+                },
+            AddOns = addOns.Select(addOn => new BillingQuoteAddOnSnapshot
+            {
+                Code = addOn.Code,
+                Name = addOn.Name,
+                Price = addOn.Price,
+                Currency = addOn.Currency,
+                Interval = addOn.Interval,
+                IsRecurring = addOn.IsRecurring,
+                DurationDays = addOn.DurationDays,
+                GrantCredits = addOn.GrantCredits
+            }).ToList(),
+            Coupon = coupon is null
+                ? null
+                : new BillingQuoteCouponSnapshot
+                {
+                    Code = coupon.Code,
+                    Name = coupon.Name,
+                    DiscountType = coupon.DiscountType.ToString(),
+                    DiscountValue = coupon.DiscountValue,
+                    DiscountAmount = discountAmount,
+                    Currency = coupon.Currency
+                }
+        };
+
+    private static BillingQuoteCatalogSnapshot? DeserializeQuoteCatalogSnapshot(BillingQuote quote)
+    {
+        var snapshot = JsonSupport.Deserialize<Dictionary<string, object?>>(quote.SnapshotJson, new Dictionary<string, object?>());
+        if (!snapshot.TryGetValue("catalog", out var catalogValue) || catalogValue is null)
+        {
+            return null;
+        }
+
+        var catalog = JsonSupport.Deserialize<BillingQuoteCatalogSnapshot?>(JsonSupport.Serialize(catalogValue), null);
+        return catalog is null || (catalog.Plan is null && catalog.AddOns.Count == 0 && catalog.Coupon is null)
+            ? null
+            : catalog;
+    }
+
     private async Task<BillingQuoteResponse> BuildBillingQuoteAsync(
         string userId,
         BillingQuoteRequest request,
@@ -4808,6 +4910,8 @@ public partial class LearnerService(
         var currentPlan = await FindBillingPlanAsync(subscription.PlanId, cancellationToken);
         var addOnCodes = NormalizeCodes(request.AddOnCodes);
         var items = new List<BillingQuoteLineItem>();
+        BillingPlan? snapshotPlan = null;
+        var snapshotAddOns = new List<BillingAddOn>();
         decimal subtotal;
         string? planCode = null;
         string summary;
@@ -4829,6 +4933,7 @@ public partial class LearnerService(
                     [new ApiFieldError("priceId", "unknown", "Choose a published billing plan.")]);
 
             planCode = targetPlan.Code;
+            snapshotPlan = targetPlan;
             var referencePlan = currentPlan ?? targetPlan;
             var delta = targetPlan.Price - referencePlan.Price;
             subtotal = Math.Round(Math.Abs(delta) / 2m, 2, MidpointRounding.AwayFromZero);
@@ -4877,6 +4982,7 @@ public partial class LearnerService(
             }
 
             addOnCodes = NormalizeCodes([addOn.Code]);
+            snapshotAddOns.Add(addOn);
             planCode = currentPlan?.Code;
             subtotal = Math.Round(addOn.Price * request.Quantity, 2, MidpointRounding.AwayFromZero);
             summary = $"{request.Quantity} x {addOn.Name}.";
@@ -4927,6 +5033,7 @@ public partial class LearnerService(
                     [new ApiFieldError("quantity", "unsupported", "Choose one of the available review credit packs.")]);
 
             addOnCodes = NormalizeCodes([reviewPack.Code]);
+            snapshotAddOns.Add(reviewPack);
             planCode = currentPlan?.Code;
             subtotal = Math.Round(reviewPack.Price, 2, MidpointRounding.AwayFromZero);
             summary = $"Review credit pack: {reviewPack.GrantCredits} credits.";
@@ -5068,6 +5175,7 @@ public partial class LearnerService(
             SnapshotJson = JsonSupport.Serialize(new
             {
                 items,
+                catalog = BuildQuoteCatalogSnapshot(now, snapshotPlan, snapshotAddOns, coupon, discount),
                 validation,
                 summary,
                 subtotal,
@@ -5968,11 +6076,30 @@ public partial class LearnerService(
         var user = await EnsureUserAsync(transaction.LearnerUserId, ct);
         var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == transaction.LearnerUserId, ct);
         var quoteResponse = DeserializeQuoteResponse(quote);
+        var catalogSnapshot = DeserializeQuoteCatalogSnapshot(quote);
         var now = DateTimeOffset.UtcNow;
 
         if (!string.IsNullOrWhiteSpace(quote.PlanCode) && string.Equals(transaction.TransactionType, "subscription_payment", StringComparison.OrdinalIgnoreCase))
         {
-            var targetPlan = await FindBillingPlanAsync(quote.PlanCode, ct);
+            var targetPlan = catalogSnapshot?.Plan;
+            if (targetPlan is null)
+            {
+                var livePlan = await FindBillingPlanAsync(quote.PlanCode, ct);
+                if (livePlan is not null)
+                {
+                    targetPlan = new BillingQuotePlanSnapshot
+                    {
+                        Code = livePlan.Code,
+                        Name = livePlan.Name,
+                        Price = livePlan.Price,
+                        Currency = livePlan.Currency,
+                        Interval = livePlan.Interval,
+                        DurationMonths = livePlan.DurationMonths,
+                        IncludedCredits = livePlan.IncludedCredits
+                    };
+                }
+            }
+
             if (targetPlan is not null)
             {
                 subscription.PlanId = targetPlan.Code;
@@ -6009,10 +6136,26 @@ public partial class LearnerService(
 
         foreach (var item in quoteResponse.Items.Where(x => string.Equals(x.Kind, "addon", StringComparison.OrdinalIgnoreCase)))
         {
-            var addOn = await FindBillingAddOnAsync(item.Code, ct);
+            var addOn = catalogSnapshot?.AddOns.FirstOrDefault(snapshot => string.Equals(snapshot.Code, item.Code, StringComparison.OrdinalIgnoreCase));
             if (addOn is null)
             {
-                continue;
+                var liveAddOn = await FindBillingAddOnAsync(item.Code, ct);
+                if (liveAddOn is null)
+                {
+                    continue;
+                }
+
+                addOn = new BillingQuoteAddOnSnapshot
+                {
+                    Code = liveAddOn.Code,
+                    Name = liveAddOn.Name,
+                    Price = liveAddOn.Price,
+                    Currency = liveAddOn.Currency,
+                    Interval = liveAddOn.Interval,
+                    IsRecurring = liveAddOn.IsRecurring,
+                    DurationDays = liveAddOn.DurationDays,
+                    GrantCredits = liveAddOn.GrantCredits
+                };
             }
 
             var existingItem = await db.SubscriptionItems.FirstOrDefaultAsync(
