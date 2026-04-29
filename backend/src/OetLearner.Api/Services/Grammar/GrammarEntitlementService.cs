@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services.Grammar;
 
@@ -34,7 +35,9 @@ public sealed record GrammarEntitlement(
     DateTimeOffset? ResetAt,
     string Reason);
 
-public sealed class GrammarEntitlementService(LearnerDbContext db) : IGrammarEntitlementService
+public sealed class GrammarEntitlementService(
+    LearnerDbContext db,
+    IEffectiveEntitlementResolver entitlementResolver) : IGrammarEntitlementService
 {
     public const int FreeTierWeeklyLimit = 3;
     public const int WindowDays = 7;
@@ -55,16 +58,12 @@ public sealed class GrammarEntitlementService(LearnerDbContext db) : IGrammarEnt
 
         var now = DateTimeOffset.UtcNow;
 
-        var activeSubscription = await db.Subscriptions
-            .Where(s => s.UserId == userId
-                && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial))
-            .FirstOrDefaultAsync(ct);
-
-        if (activeSubscription is not null)
+        var entitlement = await entitlementResolver.ResolveAsync(userId, ct);
+        if (entitlement.HasEligibleSubscription)
         {
             return new GrammarEntitlement(
                 Allowed: true,
-                Tier: activeSubscription.Status == SubscriptionStatus.Trial ? "trial" : "paid",
+                Tier: entitlement.IsTrial ? "trial" : "paid",
                 Remaining: int.MaxValue,
                 LimitPerWindow: int.MaxValue,
                 WindowDays: WindowDays,

@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services.AiManagement;
 
@@ -82,7 +83,11 @@ public sealed record AiUserPolicySnapshot(
     bool KillSwitchActive,
     AiKillSwitchScope KillSwitchScope);
 
-public sealed class AiQuotaService(LearnerDbContext db, IMemoryCache cache, ILogger<AiQuotaService> logger)
+public sealed class AiQuotaService(
+    LearnerDbContext db,
+    IMemoryCache cache,
+    ILogger<AiQuotaService> logger,
+    IEffectiveEntitlementResolver entitlementResolver)
     : IAiQuotaService
 {
     private const string DefaultPlanCode = "free";
@@ -412,24 +417,19 @@ public sealed class AiQuotaService(LearnerDbContext db, IMemoryCache cache, ILog
         // Precedence: admin force → active subscription → default
         if (!string.IsNullOrWhiteSpace(userOverride?.ForcePlanCode))
         {
+            var forcePlanCode = userOverride.ForcePlanCode.Trim().ToLowerInvariant();
             return await db.AiQuotaPlans.AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Code == userOverride.ForcePlanCode && p.IsActive, ct);
+                .FirstOrDefaultAsync(p => p.Code.ToLower() == forcePlanCode && p.IsActive, ct);
         }
 
-        // Derive from the user's active subscription if present. The billing
-        // plan code is expected to match the AI plan code by convention.
-        var activeSub = await db.Subscriptions.AsNoTracking()
-            .FirstOrDefaultAsync(s => s.UserId == userId, ct);
-        if (activeSub is not null && !string.IsNullOrWhiteSpace(activeSub.PlanId))
+        // Derive from the user's effective Active/Trial subscription if present.
+        // The billing plan code is expected to match the AI plan code by convention.
+        var entitlement = await entitlementResolver.ResolveAsync(userId, ct);
+        if (entitlement.HasEligibleSubscription && !string.IsNullOrWhiteSpace(entitlement.PlanCode))
         {
-            var billingPlan = await db.BillingPlans.AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Id == activeSub.PlanId, ct);
-            if (billingPlan is not null && !string.IsNullOrWhiteSpace(billingPlan.Code))
-            {
-                var match = await db.AiQuotaPlans.AsNoTracking()
-                    .FirstOrDefaultAsync(p => p.Code == billingPlan.Code && p.IsActive, ct);
-                if (match is not null) return match;
-            }
+            var match = await db.AiQuotaPlans.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Code == entitlement.PlanCode && p.IsActive, ct);
+            if (match is not null) return match;
         }
 
         return await db.AiQuotaPlans.AsNoTracking()

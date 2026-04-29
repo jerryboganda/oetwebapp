@@ -3,6 +3,7 @@ using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services.Pronunciation;
 
@@ -33,7 +34,8 @@ public sealed record PronunciationEntitlement(
 
 public sealed class PronunciationEntitlementService(
     LearnerDbContext db,
-    IOptions<PronunciationOptions> options) : IPronunciationEntitlementService
+    IOptions<PronunciationOptions> options,
+    IEffectiveEntitlementResolver entitlementResolver) : IPronunciationEntitlementService
 {
     public async Task<PronunciationEntitlement> CheckAsync(string? userId, CancellationToken ct)
     {
@@ -54,15 +56,12 @@ public sealed class PronunciationEntitlementService(
 
         var now = DateTimeOffset.UtcNow;
 
-        var activeSub = await db.Subscriptions
-            .Where(s => s.UserId == userId
-                && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial))
-            .FirstOrDefaultAsync(ct);
-        if (activeSub is not null)
+        var entitlement = await entitlementResolver.ResolveAsync(userId, ct);
+        if (entitlement.HasEligibleSubscription)
         {
             return new PronunciationEntitlement(
                 Allowed: true,
-                Tier: activeSub.Status == SubscriptionStatus.Trial ? "trial" : "paid",
+                Tier: entitlement.IsTrial ? "trial" : "paid",
                 Remaining: int.MaxValue,
                 LimitPerWindow: int.MaxValue,
                 WindowDays: windowDays,

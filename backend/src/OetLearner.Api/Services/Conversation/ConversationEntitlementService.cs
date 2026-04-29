@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services.Conversation;
 
@@ -15,7 +16,8 @@ public sealed record ConversationEntitlement(
 
 public sealed class ConversationEntitlementService(
     LearnerDbContext db,
-    IConversationOptionsProvider optionsProvider) : IConversationEntitlementService
+    IConversationOptionsProvider optionsProvider,
+    IEffectiveEntitlementResolver entitlementResolver) : IConversationEntitlementService
 {
     public async Task<ConversationEntitlement> CheckAsync(string? userId, CancellationToken ct)
     {
@@ -30,12 +32,10 @@ public sealed class ConversationEntitlementService(
             return new ConversationEntitlement(false, "anonymous", 0, 0, windowDays, null,
                 "Sign in to practise with the AI partner.");
 
-        var activeSub = await db.Subscriptions
-            .Where(s => s.UserId == userId && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial))
-            .FirstOrDefaultAsync(ct);
-        if (activeSub is not null)
+        var entitlement = await entitlementResolver.ResolveAsync(userId, ct);
+        if (entitlement.HasEligibleSubscription)
             return new ConversationEntitlement(true,
-                activeSub.Status == SubscriptionStatus.Trial ? "trial" : "paid",
+                entitlement.IsTrial ? "trial" : "paid",
                 int.MaxValue, int.MaxValue, windowDays, null,
                 "Active subscription — unlimited practice.");
 

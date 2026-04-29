@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Entitlements;
 using OetLearner.Api.Services.Grammar;
 using OetLearner.Api.Services.Rulebook;
 using Xunit;
@@ -158,7 +159,7 @@ public class GrammarServiceTests
     {
         var options = NewInMemoryOptions();
         await using var db = new LearnerDbContext(options);
-        var service = new GrammarEntitlementService(db);
+        var service = new GrammarEntitlementService(db, new EffectiveEntitlementResolver(db));
 
         var result = await service.CheckAsync(null, default);
 
@@ -182,7 +183,7 @@ public class GrammarServiceTests
         });
         await db.SaveChangesAsync();
 
-        var service = new GrammarEntitlementService(db);
+        var service = new GrammarEntitlementService(db, new EffectiveEntitlementResolver(db));
         var result = await service.CheckAsync("user-pro", default);
 
         Assert.True(result.Allowed);
@@ -211,7 +212,7 @@ public class GrammarServiceTests
         }
         await db.SaveChangesAsync();
 
-        var service = new GrammarEntitlementService(db);
+        var service = new GrammarEntitlementService(db, new EffectiveEntitlementResolver(db));
         var result = await service.CheckAsync("user-free", default);
 
         Assert.False(result.Allowed);
@@ -238,7 +239,7 @@ public class GrammarServiceTests
         });
         await db.SaveChangesAsync();
 
-        var service = new GrammarEntitlementService(db);
+        var service = new GrammarEntitlementService(db, new EffectiveEntitlementResolver(db));
         var result = await service.CheckAsync("user-free-2", default);
 
         Assert.True(result.Allowed);

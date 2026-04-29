@@ -140,8 +140,21 @@ Acceptance criteria:
 
 ### Phase 4: Entitlement Resolver
 
-- Introduce one entitlement resolver for learner plan, add-ons, free tier, trial, sponsor seat, freeze state, and resource scope.
-- Replace module-specific subscription checks in content, grammar, AI quota, pronunciation, conversation, and review flows.
+Status: Phase 4 Slice 1 backend effective entitlement resolver is implemented. The first slice is intentionally code-only because EF migration snapshot drift makes avoidable schema churn risky. It centralizes the current direct-subscription rule for compact quota gates: the latest learner subscription is eligible only when its status is `Active` or `Trial`; inactive latest rows fall back to free-tier behavior. The resolver also returns normalized plan code, active add-on codes, and active freeze overlay facts for follow-on slices, but this first slice does not yet change content package, media, review, sponsor, or provider lifecycle behavior.
+
+Implemented scope:
+
+- Add an internal `IEffectiveEntitlementResolver` that resolves latest subscription status, billing plan by ID or code, active subscription-item add-ons, and active/due account freeze overlays without adding new tables or migrations.
+- Wire `GrammarEntitlementService`, `PronunciationEntitlementService`, and `ConversationEntitlementService` through the resolver while preserving their existing free-tier window counters and learner-facing messages.
+- Wire `AiQuotaService` through the resolver so cancelled, expired, pending, suspended, or past-due subscriptions no longer unlock paid AI quota plans.
+- Add regression coverage for resolver subscription precedence, plan code normalization, active add-on visibility, freeze overlay visibility, AI free-plan fallback, and existing module entitlement behavior.
+
+Remaining scope:
+
+- Extend the resolver into `ContentEntitlementService`, video lessons, strategy guides, media access, and review-credit flows after reconciling package rules versus plan entitlement JSON.
+- Add explicit sponsor billing/seat grants before treating sponsor links as paid access inheritance; current sponsor entities do not carry a beneficiary-scoped paid plan or add-on allocation.
+- Add provider-authoritative subscription cancellation/paid-through semantics before modelling cancelled-but-paid-through access.
+- Decide how freeze `EntitlementPauseMode` affects rolling quota windows, AI counters, and recurring entitlement clocks.
 
 Acceptance criteria:
 

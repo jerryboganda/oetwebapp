@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiManagement;
+using OetLearner.Api.Services.Entitlements;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Tests;
@@ -80,7 +81,8 @@ public class AiQuotaServiceTests
         var quota = new AiQuotaService(
             db,
             new MemoryCache(new MemoryCacheOptions()),
-            NullLogger<AiQuotaService>.Instance);
+            NullLogger<AiQuotaService>.Instance,
+            new EffectiveEntitlementResolver(db));
         return (db, quota);
     }
 
@@ -237,6 +239,130 @@ public class AiQuotaServiceTests
     }
 
     [Fact]
+    public async Task CancelledSubscription_FallsBackToFreePlan()
+    {
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+        await using var db = new LearnerDbContext(options);
+        var now = DateTimeOffset.UtcNow;
+
+        db.AiGlobalPolicies.Add(new AiGlobalPolicy { Id = "global", UpdatedAt = now });
+        db.AiQuotaPlans.AddRange(
+            new AiQuotaPlan
+            {
+                Id = "quota-free",
+                Code = "free",
+                Name = "Free",
+                MonthlyTokenCap = 50,
+                DailyTokenCap = 10,
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+            },
+            new AiQuotaPlan
+            {
+                Id = "quota-pro",
+                Code = "pro",
+                Name = "Pro",
+                MonthlyTokenCap = 10_000,
+                DailyTokenCap = 2_500,
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        db.BillingPlans.Add(new BillingPlan { Id = "plan-pro", Code = "pro", Name = "Pro" });
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "sub-cancelled",
+            UserId = "user-cancelled",
+            PlanId = "plan-pro",
+            Status = SubscriptionStatus.Cancelled,
+            StartedAt = now.AddMonths(-2),
+            ChangedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var quota = new AiQuotaService(
+            db,
+            new MemoryCache(new MemoryCacheOptions()),
+            NullLogger<AiQuotaService>.Instance,
+            new EffectiveEntitlementResolver(db));
+
+        var decision = await quota.TryReserveAsync("user-cancelled", AiFeatureCodes.WritingGrade, AiKeySource.Platform, default);
+        var policy = await quota.GetUserPolicyAsync("user-cancelled", default);
+
+        Assert.True(decision.Allowed);
+        Assert.Equal("free", decision.Plan?.Code);
+        Assert.Equal(50, decision.TokensCapThisPeriod);
+        Assert.Equal("free", policy.PlanCode);
+        Assert.Equal(50, policy.MonthlyTokenCap);
+    }
+
+    [Fact]
+    public async Task ForcePlanCode_WinsOverCancelledSubscription()
+    {
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+        await using var db = new LearnerDbContext(options);
+        var now = DateTimeOffset.UtcNow;
+
+        db.AiGlobalPolicies.Add(new AiGlobalPolicy { Id = "global", UpdatedAt = now });
+        db.AiQuotaPlans.AddRange(
+            new AiQuotaPlan
+            {
+                Id = "quota-free",
+                Code = "free",
+                Name = "Free",
+                MonthlyTokenCap = 50,
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+            },
+            new AiQuotaPlan
+            {
+                Id = "quota-pro",
+                Code = "pro",
+                Name = "Pro",
+                MonthlyTokenCap = 10_000,
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        db.AiUserQuotaOverrides.Add(new AiUserQuotaOverride
+        {
+            UserId = "user-override",
+            ForcePlanCode = " PRO ",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.BillingPlans.Add(new BillingPlan { Id = "plan-pro", Code = "pro", Name = "Pro" });
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "sub-cancelled",
+            UserId = "user-override",
+            PlanId = "plan-pro",
+            Status = SubscriptionStatus.Cancelled,
+            StartedAt = now.AddMonths(-2),
+            ChangedAt = now,
+        });
+        await db.SaveChangesAsync();
+
+        var quota = new AiQuotaService(
+            db,
+            new MemoryCache(new MemoryCacheOptions()),
+            NullLogger<AiQuotaService>.Instance,
+            new EffectiveEntitlementResolver(db));
+
+        var decision = await quota.TryReserveAsync("user-override", AiFeatureCodes.WritingGrade, AiKeySource.Platform, default);
+
+        Assert.True(decision.Allowed);
+        Assert.Equal("pro", decision.Plan?.Code);
+        Assert.Equal(10_000, decision.TokensCapThisPeriod);
+    }
+
+    [Fact]
     public async Task Anonymous_Bypasses_Quota()
     {
         var (db, quota) = Build();
@@ -293,7 +419,7 @@ public class AiGatewayQuotaIntegrationTests
 
         var provider = new TokenReportingProvider(prompt: 120, completion: 80);
         var recorder = new AiUsageRecorder(db, NullLogger<AiUsageRecorder>.Instance);
-        var quota = new AiQuotaService(db, new MemoryCache(new MemoryCacheOptions()), NullLogger<AiQuotaService>.Instance);
+        var quota = new AiQuotaService(db, new MemoryCache(new MemoryCacheOptions()), NullLogger<AiQuotaService>.Instance, new EffectiveEntitlementResolver(db));
         var resolver = new AiCredentialResolver(db, quota, vault);
         var gateway = new AiGatewayService(_loader, new[] { (IAiModelProvider)provider }, recorder, quota, resolver);
 
@@ -357,7 +483,7 @@ public class AiGatewayQuotaIntegrationTests
         await db.SaveChangesAsync();
 
         var recorder = new AiUsageRecorder(db, NullLogger<AiUsageRecorder>.Instance);
-        var quota = new AiQuotaService(db, new MemoryCache(new MemoryCacheOptions()), NullLogger<AiQuotaService>.Instance);
+        var quota = new AiQuotaService(db, new MemoryCache(new MemoryCacheOptions()), NullLogger<AiQuotaService>.Instance, new EffectiveEntitlementResolver(db));
         var gateway = new AiGatewayService(_loader, new[] { (IAiModelProvider)new MockAiProvider() }, recorder, quota);
 
         var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
@@ -409,7 +535,7 @@ public class AiGatewayQuotaIntegrationTests
         // Provider that reports actual usage so Commit has something to add.
         var provider = new FakeUsageProvider(promptTokens: 120, completionTokens: 80);
         var recorder = new AiUsageRecorder(db, NullLogger<AiUsageRecorder>.Instance);
-        var quota = new AiQuotaService(db, new MemoryCache(new MemoryCacheOptions()), NullLogger<AiQuotaService>.Instance);
+        var quota = new AiQuotaService(db, new MemoryCache(new MemoryCacheOptions()), NullLogger<AiQuotaService>.Instance, new EffectiveEntitlementResolver(db));
         var gateway = new AiGatewayService(_loader, new[] { (IAiModelProvider)provider }, recorder, quota);
 
         var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext

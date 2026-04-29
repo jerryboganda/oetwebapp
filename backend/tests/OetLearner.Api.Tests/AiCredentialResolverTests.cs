@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiManagement;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Tests;
 
@@ -43,7 +44,7 @@ public class AiCredentialResolverTests
         var dpProvider = DataProtectionProvider.Create(nameof(AiCredentialResolverTests));
         var httpFactory = new StubHttpClientFactory();
         var vault = new AiCredentialVault(db, dpProvider, httpFactory, NullLogger<AiCredentialVault>.Instance);
-        var quota = new AiQuotaService(db, new MemoryCache(new MemoryCacheOptions()), NullLogger<AiQuotaService>.Instance);
+        var quota = new AiQuotaService(db, new MemoryCache(new MemoryCacheOptions()), NullLogger<AiQuotaService>.Instance, new EffectiveEntitlementResolver(db));
         var resolver = new AiCredentialResolver(db, quota, vault);
 
         if (hasByokKey)
