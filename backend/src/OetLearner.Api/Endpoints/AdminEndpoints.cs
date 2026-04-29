@@ -320,6 +320,20 @@ public static class AdminEndpoints
             => Results.Ok(await service.GetBillingPaymentTransactionsAsync(status, gateway, transactionType, search, page ?? 1, pageSize ?? 20, ct)))
             .WithAdminRead("AdminBillingRead");
 
+        admin.MapGet("/billing/operations", async (AdminService service, CancellationToken ct,
+            string? operationType, string? status, string? userId, string? search, int? page, int? pageSize)
+            => Results.Ok(await service.GetBillingOperationsAsync(operationType, status, userId, search, page ?? 1, pageSize ?? 20, ct)))
+            .WithAdminRead("AdminBillingRead");
+
+        admin.MapPost("/billing/operations", async (HttpContext http, AdminBillingOperationCreateRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.CreateBillingOperationAsync(http.AdminId(), http.AdminName(), request, ct)))
+            .WithAdminWrite("AdminBillingWrite");
+
+        admin.MapPost("/billing/operations/{operationId}/resolve", async (string operationId, HttpContext http,
+            AdminBillingOperationResolveRequest request, AdminService service, CancellationToken ct)
+            => Results.Ok(await service.ResolveBillingOperationAsync(http.AdminId(), http.AdminName(), operationId, request, ct)))
+            .WithAdminWrite("AdminBillingWrite");
+
         // ── Review Ops ──────────────────────────────────────
 
         admin.MapGet("/review-ops/summary", async (AdminService service, CancellationToken ct)

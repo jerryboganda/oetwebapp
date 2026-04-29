@@ -3,10 +3,14 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services;
 
-public sealed class VideoLessonService(LearnerDbContext db, MediaNormalizationService mediaService)
+public sealed class VideoLessonService(
+    LearnerDbContext db,
+    MediaNormalizationService mediaService,
+    ILearnerEntitlementResolver entitlementResolver)
 {
     private const string FeatureFlagKey = "video_lessons";
     private const string LessonType = "video_lesson";
@@ -44,9 +48,10 @@ public sealed class VideoLessonService(LearnerDbContext db, MediaNormalizationSe
 
         var progress = await LoadProgressAsync(userId, rows.Select(row => row.Lesson.Id).Concat(legacy.Select(l => l.Id)), ct);
         var access = await LoadAccessScopeAsync(userId, ct);
+        var hasFullAccess = await ResolveHasFullAccessAsync(userId, ct);
 
         var items = rows
-            .Select(row => ToListItem(row, access, GetProgress(progress, row.Lesson.Id, DurationFor(row))))
+            .Select(row => ToListItem(row, access, hasFullAccess, GetProgress(progress, row.Lesson.Id, DurationFor(row))))
             .Concat(legacy.Select(lesson => ToLegacyListItem(lesson, GetProgress(progress, lesson.Id, lesson.DurationSeconds))))
             .OrderBy(item => item.SortOrder)
             .ThenBy(item => item.Title, StringComparer.OrdinalIgnoreCase)
@@ -66,7 +71,8 @@ public sealed class VideoLessonService(LearnerDbContext db, MediaNormalizationSe
         {
             var progress = await LoadProgressAsync(userId, [row.Lesson.Id], ct);
             var access = await LoadAccessScopeAsync(userId, ct);
-            var accessState = ResolveAccess(row, access);
+            var hasFullAccess = await ResolveHasFullAccessAsync(userId, ct);
+            var accessState = ResolveAccess(row, access, hasFullAccess);
             var duration = DurationFor(row);
             var mediaAssetId = row.Lesson.MediaAssetId;
             var mediaAccess = accessState.IsAccessible && mediaAssetId is not null && row.Media?.Status == MediaAssetStatus.Ready
@@ -169,8 +175,9 @@ public sealed class VideoLessonService(LearnerDbContext db, MediaNormalizationSe
 
         var progress = await LoadProgressAsync(userId, rows.Select(row => row.Lesson.Id), ct);
         var access = await LoadAccessScopeAsync(userId, ct);
+        var hasFullAccess = await ResolveHasFullAccessAsync(userId, ct);
         var listItems = rows
-            .Select(row => new { Row = row, Item = ToListItem(row, access, GetProgress(progress, row.Lesson.Id, DurationFor(row))) })
+            .Select(row => new { Row = row, Item = ToListItem(row, access, hasFullAccess, GetProgress(progress, row.Lesson.Id, DurationFor(row))) })
             .ToList();
 
         var tracks = listItems
@@ -404,17 +411,11 @@ public sealed class VideoLessonService(LearnerDbContext db, MediaNormalizationSe
         };
     }
 
-    private static LessonAccess ResolveAccess(HierarchyLessonRow row, AccessScope scope)
+    private static LessonAccess ResolveAccess(HierarchyLessonRow row, AccessScope scope, bool hasFullAccess)
     {
         var isPreview = row.Item?.IsPreviewEligible == true
             || row.Lesson.ContentItemId is not null && scope.FreePreviewContentItems.Contains(row.Lesson.ContentItemId)
             || row.Lesson.MediaAssetId is not null && scope.FreePreviewMediaAssets.Contains(row.Lesson.MediaAssetId);
-
-        var included = scope.IncludedPrograms.Contains(row.Program.Id)
-            || scope.IncludedTracks.Contains(row.Track.Id)
-            || scope.IncludedModules.Contains(row.Module.Id)
-            || scope.IncludedLessons.Contains(row.Lesson.Id)
-            || row.Lesson.ContentItemId is not null && scope.IncludedContentItems.Contains(row.Lesson.ContentItemId);
 
         var excluded = scope.ExcludedPrograms.Contains(row.Program.Id)
             || scope.ExcludedTracks.Contains(row.Track.Id)
@@ -422,12 +423,33 @@ public sealed class VideoLessonService(LearnerDbContext db, MediaNormalizationSe
             || scope.ExcludedLessons.Contains(row.Lesson.Id)
             || row.Lesson.ContentItemId is not null && scope.ExcludedContentItems.Contains(row.Lesson.ContentItemId);
 
+        // Paid / trial / sponsor-seat learners get full access via the central
+        // entitlement resolver, regardless of package-rule scope. Explicit
+        // package-level excludes still win.
+        if (hasFullAccess && !excluded)
+        {
+            return new LessonAccess(true, isPreview, false, "entitled");
+        }
+
+        var included = scope.IncludedPrograms.Contains(row.Program.Id)
+            || scope.IncludedTracks.Contains(row.Track.Id)
+            || scope.IncludedModules.Contains(row.Module.Id)
+            || scope.IncludedLessons.Contains(row.Lesson.Id)
+            || row.Lesson.ContentItemId is not null && scope.IncludedContentItems.Contains(row.Lesson.ContentItemId);
+
         var accessible = !excluded && (included || isPreview);
         var reason = accessible
             ? included ? "entitled" : "preview"
             : excluded ? "excluded" : "locked";
 
         return new LessonAccess(accessible, isPreview, !accessible, reason);
+    }
+
+    private async Task<bool> ResolveHasFullAccessAsync(string userId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(userId)) return false;
+        var resolution = await entitlementResolver.ResolveAsync(userId, LearnerEntitlementResources.Content, ct);
+        return resolution.HasPaidOrSponsoredAccess;
     }
 
     private async Task<Dictionary<string, LearnerVideoProgress>> LoadProgressAsync(
@@ -466,9 +488,10 @@ public sealed class VideoLessonService(LearnerDbContext db, MediaNormalizationSe
     private VideoLessonListItemDto ToListItem(
         HierarchyLessonRow row,
         AccessScope scope,
+        bool hasFullAccess,
         VideoLessonProgressDto progress)
     {
-        var access = ResolveAccess(row, scope);
+        var access = ResolveAccess(row, scope, hasFullAccess);
         return new VideoLessonListItemDto(
             row.Lesson.Id,
             "content_hierarchy",

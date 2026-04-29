@@ -2,12 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { MotionSection, MotionItem } from '@/components/ui/motion-primitives';
-import { GraduationCap, Calendar, Star, Plus } from 'lucide-react';
+import { GraduationCap, Calendar, Star, Plus, Info } from 'lucide-react';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { fetchTutoringSessions, bookTutoringSession, rateTutoringSession } from '@/lib/api';
+import { fetchTutoringSessions, bookTutoringSession, rateTutoringSession, ApiError } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 
 type TutoringSession = {
@@ -34,6 +34,10 @@ export default function TutoringPage() {
   const [booking, setBooking] = useState(false);
   const [ratingSession, setRatingSession] = useState<string | null>(null);
   const [ratingValue, setRatingValue] = useState(5);
+  // Tracks expert ids whose rates have been confirmed unavailable by the
+  // backend (`expert_rates_unavailable` 409). We disable the submit button
+  // for those experts until the learner picks a different one.
+  const [ratesUnavailableFor, setRatesUnavailableFor] = useState<Set<string>>(() => new Set());
   const [bookForm, setBookForm] = useState({
     expertUserId: '',
     examTypeCode: 'oet',
@@ -41,7 +45,6 @@ export default function TutoringPage() {
     scheduledAt: '',
     durationMinutes: 60,
     learnerNotes: '',
-    price: 50,
   });
 
   useEffect(() => {
@@ -55,17 +58,39 @@ export default function TutoringPage() {
     });
   }, []);
 
+  const ratesUnavailable = bookForm.expertUserId.trim().length > 0
+    && ratesUnavailableFor.has(bookForm.expertUserId.trim());
+
   async function handleBook(e: React.FormEvent) {
     e.preventDefault();
-    if (!bookForm.expertUserId || !bookForm.scheduledAt || booking) return;
+    if (!bookForm.expertUserId || !bookForm.scheduledAt || booking || ratesUnavailable) return;
     setBooking(true);
+    setError(null);
     try {
-      await bookTutoringSession({ expertUserId: bookForm.expertUserId, examTypeCode: bookForm.examTypeCode, subtestFocus: bookForm.subtestFocus || undefined, scheduledAt: bookForm.scheduledAt, durationMinutes: bookForm.durationMinutes, learnerNotes: bookForm.learnerNotes || undefined, price: bookForm.price });
+      // Note: price is intentionally not sent. The backend derives it from
+      // ExpertOnboardingProgress.RatesJson and ignores any client value.
+      await bookTutoringSession({
+        expertUserId: bookForm.expertUserId,
+        examTypeCode: bookForm.examTypeCode,
+        subtestFocus: bookForm.subtestFocus || undefined,
+        scheduledAt: bookForm.scheduledAt,
+        durationMinutes: bookForm.durationMinutes,
+        learnerNotes: bookForm.learnerNotes || undefined,
+      });
       const data = await fetchTutoringSessions() as TutoringSession[];
       setSessions(data);
       setShowBook(false);
-    } catch {
-      setError('Could not book session.');
+    } catch (err) {
+      if (err instanceof ApiError && err.code === 'expert_rates_unavailable') {
+        setRatesUnavailableFor(prev => {
+          const next = new Set(prev);
+          next.add(bookForm.expertUserId.trim());
+          return next;
+        });
+        setError('This expert has not set their tutoring rates yet. Please choose another expert.');
+      } else {
+        setError('Could not book session.');
+      }
     } finally {
       setBooking(false);
     }
@@ -104,7 +129,9 @@ export default function TutoringPage() {
         <MotionSection className="bg-surface rounded-xl border border-primary/30 p-5 mb-6">
           <h3 className="font-semibold text-navy mb-4">Book a Tutoring Session</h3>
           <form onSubmit={handleBook} className="space-y-3">
+            <label htmlFor="tutoring-expert-id" className="sr-only">Expert user id or username</label>
             <input
+              id="tutoring-expert-id"
               type="text"
               placeholder="Expert User ID or username"
               value={bookForm.expertUserId}
@@ -113,12 +140,12 @@ export default function TutoringPage() {
               className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-surface text-navy focus:outline-none focus:ring-2 focus:ring-primary/40"
             />
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <select value={bookForm.examTypeCode} onChange={e => setBookForm(p => ({ ...p, examTypeCode: e.target.value }))} className="px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy">
+              <select aria-label="Exam type" value={bookForm.examTypeCode} onChange={e => setBookForm(p => ({ ...p, examTypeCode: e.target.value }))} className="px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy">
                 <option value="oet">OET</option>
                 <option value="ielts">IELTS</option>
                 <option value="pte">PTE</option>
               </select>
-              <select value={bookForm.subtestFocus} onChange={e => setBookForm(p => ({ ...p, subtestFocus: e.target.value }))} className="px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy">
+              <select aria-label="Subtest focus" value={bookForm.subtestFocus} onChange={e => setBookForm(p => ({ ...p, subtestFocus: e.target.value }))} className="px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy">
                 <option value="">Any subtest</option>
                 <option value="writing">Writing</option>
                 <option value="speaking">Speaking</option>
@@ -126,28 +153,35 @@ export default function TutoringPage() {
                 <option value="listening">Listening</option>
               </select>
             </div>
+            <label htmlFor="tutoring-scheduled-at" className="sr-only">Scheduled date and time</label>
             <input
+              id="tutoring-scheduled-at"
               type="datetime-local"
               value={bookForm.scheduledAt}
               onChange={e => setBookForm(p => ({ ...p, scheduledAt: e.target.value }))}
               required
               className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-surface text-navy focus:outline-none focus:ring-2 focus:ring-primary/40"
             />
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="text-xs text-muted mb-1 block">Duration (minutes)</label>
-                <select value={bookForm.durationMinutes} onChange={e => setBookForm(p => ({ ...p, durationMinutes: Number(e.target.value) }))} className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy">
-                  <option value={30}>30 min</option>
-                  <option value={60}>60 min</option>
-                  <option value={90}>90 min</option>
-                </select>
-              </div>
-              <div>
-                <label className="text-xs text-muted mb-1 block">Price (credits)</label>
-                <input type="number" min={0} value={bookForm.price} onChange={e => setBookForm(p => ({ ...p, price: Number(e.target.value) }))} className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-surface text-navy" />
-              </div>
+            <div>
+              <label htmlFor="tutoring-duration" className="text-xs text-muted mb-1 block">Duration (minutes)</label>
+              <select id="tutoring-duration" value={bookForm.durationMinutes} onChange={e => setBookForm(p => ({ ...p, durationMinutes: Number(e.target.value) }))} className="w-full px-3 py-2 border border-border rounded-lg text-sm bg-surface text-navy">
+                <option value={30}>30 min</option>
+                <option value={60}>60 min</option>
+                <option value={90}>90 min</option>
+              </select>
             </div>
+            <div className="flex items-start gap-2 rounded-lg bg-background-light px-3 py-2 text-xs text-muted" role="note">
+              <Info className="mt-0.5 h-3.5 w-3.5 flex-shrink-0" aria-hidden="true" />
+              <span>Pricing is set by the expert and confirmed at booking based on the duration you choose.</span>
+            </div>
+            {ratesUnavailable && (
+              <InlineAlert variant="warning">
+                This expert has not set their tutoring rates yet. Please choose another expert.
+              </InlineAlert>
+            )}
+            <label htmlFor="tutoring-notes" className="sr-only">Notes for the tutor</label>
             <textarea
+              id="tutoring-notes"
               placeholder="Notes for the tutor (optional)"
               value={bookForm.learnerNotes}
               onChange={e => setBookForm(p => ({ ...p, learnerNotes: e.target.value }))}
@@ -155,7 +189,12 @@ export default function TutoringPage() {
               className="w-full px-3 py-2.5 border border-border rounded-lg text-sm bg-surface text-navy resize-none focus:outline-none"
             />
             <div className="flex gap-2 pt-1">
-              <button type="submit" disabled={booking} className="px-5 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium disabled:opacity-50">
+              <button
+                type="submit"
+                disabled={booking || ratesUnavailable}
+                aria-disabled={booking || ratesUnavailable}
+                className="px-5 py-2 bg-primary hover:bg-primary/90 text-white rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+              >
                 {booking ? 'Booking...' : 'Confirm Booking'}
               </button>
               <button type="button" onClick={() => setShowBook(false)} className="px-5 py-2 border border-border rounded-lg text-sm text-muted">

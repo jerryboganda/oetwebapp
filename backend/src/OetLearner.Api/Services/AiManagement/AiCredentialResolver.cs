@@ -34,8 +34,9 @@ public sealed class AiCredentialResolver(
     IAiQuotaService quotaService,
     IAiCredentialVault vault) : IAiCredentialResolver
 {
-    /// <summary>Feature codes classified as scoring-critical. These calls
-    /// are governed by §1 <c>AllowByokOnScoringFeatures</c>. Mirrors
+    /// <summary>Feature codes classified as scoring-critical. Platform-only
+    /// scoring rows are still listed here; the platform-only guard below takes
+    /// precedence over §1 <c>AllowByokOnScoringFeatures</c>. Mirrors
     /// docs/AI-USAGE-POLICY.md §5.</summary>
     private static readonly HashSet<string> ScoringCriticalFeatures = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -43,13 +44,21 @@ public sealed class AiCredentialResolver(
         AiFeatureCodes.WritingSampleScore,
         AiFeatureCodes.SpeakingGrade,
         AiFeatureCodes.MockFullGrade,
+        AiFeatureCodes.PronunciationScore,
+        AiFeatureCodes.ConversationEvaluation,
     };
 
-    /// <summary>Admin-only features that must never use BYOK.</summary>
+    /// <summary>Features that must never use BYOK.</summary>
     private static readonly HashSet<string> PlatformOnlyFeatures = new(StringComparer.OrdinalIgnoreCase)
     {
+        AiFeatureCodes.PronunciationScore,
+        AiFeatureCodes.PronunciationFeedback,
+        AiFeatureCodes.ConversationEvaluation,
         AiFeatureCodes.AdminContentGeneration,
         AiFeatureCodes.AdminGrammarDraft,
+        AiFeatureCodes.AdminPronunciationDraft,
+        AiFeatureCodes.AdminVocabularyDraft,
+        AiFeatureCodes.AdminConversationDraft,
     };
 
     public async Task<AiCredentialResolution> ResolveAsync(

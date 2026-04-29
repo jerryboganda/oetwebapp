@@ -195,7 +195,7 @@ public sealed class WhisperPronunciationAsrProvider(
                 Model = "auto",
                 Temperature = 0.2,
                 MaxTokens = 900,
-                UserId = null,
+                UserId = request.UserId,
                 FeatureCode = AiFeatureCodes.PronunciationScore,
                 PromptTemplateId = "pronunciation.whisper.score.v1",
             }, ct);

@@ -299,7 +299,8 @@ public class PronunciationService(
                 Locale: "en-GB",
                 TargetRuleId: drill.PrimaryRuleId,
                 RulebookProfession: drill.Profession == "all" ? "medicine" : drill.Profession,
-                AudioBytes: bytes
+                AudioBytes: bytes,
+                UserId: userId
             ), ct);
         }
         catch (PronunciationAsrException ex)

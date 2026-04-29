@@ -3,6 +3,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Tests;
 
@@ -173,7 +174,7 @@ public sealed class StrategyGuideServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options;
         var db = new LearnerDbContext(options);
-        var service = new StrategyGuideService(db);
+        var service = new StrategyGuideService(db, new LearnerEntitlementResolver(db));
         return (db, service);
     }
 

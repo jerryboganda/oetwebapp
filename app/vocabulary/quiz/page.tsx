@@ -2,24 +2,31 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { MotionSection } from '@/components/ui/motion-primitives';
-import { HelpCircle, CheckCircle2, XCircle, ArrowLeft, RotateCcw, Volume2 } from 'lucide-react';
+import { HelpCircle, CheckCircle2, XCircle, ArrowLeft, RotateCcw, Volume2, Lock } from 'lucide-react';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { LearnerDashboardShell } from '@/components/layout';
 import { LearnerPageHero, LearnerSurfaceSectionHeader } from '@/components/domain';
 import { Card } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { InlineAlert } from '@/components/ui/alert';
-import { fetchVocabQuiz, submitVocabQuiz } from '@/lib/api';
+import { fetchVocabQuiz, fetchVocabularyEntitlement, submitVocabQuiz } from '@/lib/api';
 import { analytics } from '@/lib/analytics';
 import type { VocabularyQuizQuestion, VocabularyQuizResult } from '@/lib/types/vocabulary';
 
+// `definition_match` is the always-free baseline. Every other format is
+// gated by the backend (`VocabularyService.HasPremiumAccessAsync`). We mirror
+// that gate in the UI off the `/v1/vocabulary/entitlement` response — never
+// off a hard-coded client-side flag.
+const FREE_FORMAT: QuizFormatId = 'definition_match';
+
 const QUIZ_FORMATS = [
-  { id: 'definition_match', label: 'Definition Match', free: true },
-  { id: 'fill_blank', label: 'Fill the Blank', free: false },
-  { id: 'synonym_match', label: 'Synonym Match', free: false },
-  { id: 'context_usage', label: 'Context Usage', free: false },
-  { id: 'audio_recognition', label: 'Audio Recognition', free: false },
+  { id: 'definition_match', label: 'Definition Match' },
+  { id: 'fill_blank', label: 'Fill the Blank' },
+  { id: 'synonym_match', label: 'Synonym Match' },
+  { id: 'context_usage', label: 'Context Usage' },
+  { id: 'audio_recognition', label: 'Audio Recognition' },
 ] as const;
 
 type QuizFormatId = typeof QUIZ_FORMATS[number]['id'];
@@ -39,9 +46,21 @@ export default function VocabQuizPage() {
   const [result, setResult] = useState<VocabularyQuizResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [premiumBlock, setPremiumBlock] = useState<string | null>(null);
+  const [hasPremium, setHasPremium] = useState<boolean | null>(null);
   const [revealed, setRevealed] = useState(false);
 
   const startedAtRef = useRef<number>(0);
+
+  // Resolve the learner's entitlement once on mount. Failure (e.g. older
+  // backend without the endpoint) defaults to "no premium" so locked options
+  // stay disabled — the existing 402 fallback in `loadQuiz` is the safety net.
+  useEffect(() => {
+    let cancelled = false;
+    fetchVocabularyEntitlement()
+      .then(res => { if (!cancelled) setHasPremium(Boolean(res?.hasPremium)); })
+      .catch(() => { if (!cancelled) setHasPremium(false); });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     analytics.track('vocab_quiz_viewed', { format });
@@ -177,21 +196,35 @@ export default function VocabQuizPage() {
       {/* Format picker */}
       <Card className="mb-4 border-border bg-surface p-4">
         <div className="mb-2 text-xs font-medium uppercase text-muted">Quiz format</div>
-        <div className="flex flex-wrap gap-2">
-          {QUIZ_FORMATS.map(fmt => (
-            <button
-              key={fmt.id}
-              onClick={() => setFormat(fmt.id)}
-              className={`rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
-                format === fmt.id
-                  ? 'bg-primary text-white'
-                  : 'border border-border bg-background-light text-navy hover:border-primary/30'
-              }`}
-            >
-              {fmt.label}
-              {!fmt.free && <span className="ml-1 opacity-75">• Premium</span>}
-            </button>
-          ))}
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Quiz format">
+          {QUIZ_FORMATS.map(fmt => {
+            const locked = fmt.id !== FREE_FORMAT && hasPremium === false;
+            const isActive = format === fmt.id;
+            return (
+              <button
+                key={fmt.id}
+                type="button"
+                onClick={() => { if (!locked) setFormat(fmt.id); }}
+                disabled={locked}
+                aria-disabled={locked}
+                aria-pressed={isActive}
+                title={locked ? 'Premium quiz format — upgrade to unlock' : undefined}
+                className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium transition-colors ${
+                  isActive
+                    ? 'bg-primary text-white'
+                    : locked
+                      ? 'cursor-not-allowed border border-border bg-background-light text-muted/70 opacity-70'
+                      : 'border border-border bg-background-light text-navy hover:border-primary/30'
+                }`}
+              >
+                {locked && <Lock className="h-3 w-3" aria-hidden="true" />}
+                {fmt.label}
+                {locked && (
+                  <Badge variant="muted" size="sm" className="ml-1">Premium</Badge>
+                )}
+              </button>
+            );
+          })}
         </div>
       </Card>
 

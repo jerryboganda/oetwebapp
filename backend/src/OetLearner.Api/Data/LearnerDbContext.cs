@@ -60,6 +60,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<BillingCouponRedemption> BillingCouponRedemptions => Set<BillingCouponRedemption>();
     public DbSet<BillingQuote> BillingQuotes => Set<BillingQuote>();
     public DbSet<BillingEvent> BillingEvents => Set<BillingEvent>();
+    public DbSet<BillingOperation> BillingOperations => Set<BillingOperation>();
 
     // Multi-exam reference entities
     public DbSet<ExamType> ExamTypes => Set<ExamType>();
@@ -503,6 +504,11 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<BillingQuote>().HasIndex(x => x.CouponVersionId);
         modelBuilder.Entity<BillingEvent>().HasIndex(x => new { x.EntityType, x.EntityId, x.OccurredAt });
         modelBuilder.Entity<BillingEvent>().HasIndex(x => new { x.UserId, x.OccurredAt });
+        modelBuilder.Entity<BillingOperation>().HasIndex(x => new { x.UserId, x.Status, x.CreatedAt });
+        modelBuilder.Entity<BillingOperation>().HasIndex(x => new { x.OperationType, x.Status, x.CreatedAt });
+        modelBuilder.Entity<BillingOperation>().HasIndex(x => x.InvoiceId);
+        modelBuilder.Entity<BillingOperation>().HasIndex(x => x.PaymentTransactionId);
+        modelBuilder.Entity<BillingOperation>().HasIndex(x => x.GatewayReference);
         modelBuilder.Entity<Subscription>().HasIndex(x => x.PlanVersionId);
         modelBuilder.Entity<Invoice>().HasIndex(x => x.PlanVersionId);
         modelBuilder.Entity<Invoice>().HasIndex(x => x.QuoteId);

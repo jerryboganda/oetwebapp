@@ -126,12 +126,13 @@ public static class MediaEndpoints
         string id,
         HttpContext http,
         LearnerDbContext db,
+        IContentEntitlementService contentEntitlementService,
         CancellationToken ct)
     {
         var asset = await db.MediaAssets.FindAsync([id], ct);
         if (asset is null)
             return Results.NotFound(new { code = "media_not_found", message = "Media asset not found." });
-        if (!await CanAccessMediaAsync(http, db, asset, ct))
+        if (!await CanAccessMediaAsync(http, db, contentEntitlementService, asset, ct))
             return Results.NotFound(new { code = "media_not_found", message = "Media asset not found." });
 
         return Results.Ok(new
@@ -221,13 +222,14 @@ public static class MediaEndpoints
         HttpContext http,
         LearnerDbContext db,
         OetLearner.Api.Services.Content.IFileStorage storage,
+        IContentEntitlementService contentEntitlementService,
         CancellationToken ct)
     {
         var media = await db.MediaAssets.AsNoTracking().FirstOrDefaultAsync(m => m.Id == id, ct);
         if (media is null) return Results.NotFound();
         if (media.Status != MediaAssetStatus.Ready) return Results.NotFound();
         if (string.IsNullOrWhiteSpace(media.StoragePath)) return Results.NotFound();
-        if (!await CanAccessMediaAsync(http, db, media, ct)) return Results.NotFound();
+        if (!await CanAccessMediaAsync(http, db, contentEntitlementService, media, ct)) return Results.NotFound();
 
         if (!storage.Exists(media.StoragePath)) return Results.NotFound();
         var stream = await storage.OpenReadAsync(media.StoragePath, ct);
@@ -237,6 +239,7 @@ public static class MediaEndpoints
     private static async Task<bool> CanAccessMediaAsync(
         HttpContext http,
         LearnerDbContext db,
+        IContentEntitlementService contentEntitlementService,
         MediaAsset media,
         CancellationToken ct)
     {
@@ -259,11 +262,6 @@ public static class MediaEndpoints
             return true;
         }
 
-        if (!await HasActiveLearnerEntitlementAsync(db, userId, ct))
-        {
-            return false;
-        }
-
         var profession = http.User.FindFirstValue("prof") ?? http.User.FindFirstValue("profession");
         if (string.IsNullOrWhiteSpace(profession))
         {
@@ -275,28 +273,35 @@ public static class MediaEndpoints
         }
 
         var normalizedProfession = profession?.Trim().ToLowerInvariant();
-        return await db.ContentPaperAssets
+        var linkedPaperAssets = await db.ContentPaperAssets
             .AsNoTracking()
-            .AnyAsync(asset =>
+            .Include(asset => asset.Paper)
+            .Where(asset =>
                 asset.MediaAssetId == media.Id
                 && asset.IsPrimary
                 && asset.Paper != null
                 && asset.Paper.Status == ContentStatus.Published
                 && (asset.Paper.AppliesToAllProfessions
                     || (!string.IsNullOrWhiteSpace(normalizedProfession)
-                        && asset.Paper.ProfessionId == normalizedProfession)), ct);
-    }
+                        && asset.Paper.ProfessionId == normalizedProfession)))
+            .ToListAsync(ct);
 
-    private static Task<bool> HasActiveLearnerEntitlementAsync(
-        LearnerDbContext db,
-        string userId,
-        CancellationToken ct)
-        => db.Subscriptions
-            .AsNoTracking()
-            .AnyAsync(subscription =>
-                subscription.UserId == userId
-                && (subscription.Status == SubscriptionStatus.Active
-                    || subscription.Status == SubscriptionStatus.Trial), ct);
+        foreach (var asset in linkedPaperAssets)
+        {
+            if (asset.Paper is null)
+            {
+                continue;
+            }
+
+            var access = await contentEntitlementService.AllowAccessAsync(userId, asset.Paper, ct);
+            if (access.Allowed)
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
 
     private static Task<bool> IsPublishedFreePreviewMediaAsync(
         LearnerDbContext db,

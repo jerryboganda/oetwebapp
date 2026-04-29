@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiManagement;
+using OetLearner.Api.Services.Entitlements;
 using OetLearner.Api.Services.Rulebook;
 
 namespace OetLearner.Api.Tests;
@@ -77,12 +78,15 @@ public class AiQuotaServiceTests
 
         db.SaveChanges();
 
-        var quota = new AiQuotaService(
-            db,
-            new MemoryCache(new MemoryCacheOptions()),
-            NullLogger<AiQuotaService>.Instance);
+        var quota = CreateQuota(db);
         return (db, quota);
     }
+
+    private static AiQuotaService CreateQuota(LearnerDbContext db) => new(
+        db,
+        new MemoryCache(new MemoryCacheOptions()),
+        NullLogger<AiQuotaService>.Instance,
+        new LearnerEntitlementResolver(db));
 
     [Fact]
     public async Task Allows_WhenWithinQuota()
@@ -236,6 +240,78 @@ public class AiQuotaServiceTests
         await db.DisposeAsync();
     }
 
+    [Theory]
+    [InlineData(SubscriptionStatus.Pending)]
+    [InlineData(SubscriptionStatus.PastDue)]
+    [InlineData(SubscriptionStatus.Suspended)]
+    [InlineData(SubscriptionStatus.Cancelled)]
+    [InlineData(SubscriptionStatus.Expired)]
+    public async Task ResolvePlan_UsesDefaultPlan_WhenOnlySubscriptionIsNotEligible(SubscriptionStatus invalidStatus)
+    {
+        var (db, quota) = Build(planCode: "pro");
+        db.AiQuotaPlans.Add(new AiQuotaPlan
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Code = "free",
+            Name = "free",
+            MonthlyTokenCap = 500,
+            DailyTokenCap = 100,
+            OveragePolicy = AiOveragePolicy.Deny,
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        var subscription = await db.Subscriptions.SingleAsync(s => s.UserId == "user-001");
+        subscription.Status = invalidStatus;
+        await db.SaveChangesAsync();
+
+        var decision = await quota.TryReserveAsync("user-001", AiFeatureCodes.WritingGrade, AiKeySource.Platform, default);
+
+        Assert.True(decision.Allowed);
+        Assert.Equal("free", decision.Plan?.Code);
+        Assert.Equal(500, decision.TokensCapThisPeriod);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task ResolvePlan_IgnoresOlderCancelledSubscription_WhenActiveSubscriptionExists()
+    {
+        var (db, quota) = Build(planCode: "pro");
+        db.AiQuotaPlans.Add(new AiQuotaPlan
+        {
+            Id = Guid.NewGuid().ToString("N"),
+            Code = "basic",
+            Name = "basic",
+            MonthlyTokenCap = 1_000,
+            DailyTokenCap = 200,
+            OveragePolicy = AiOveragePolicy.Deny,
+            IsActive = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        db.BillingPlans.Add(new BillingPlan { Id = "plan-basic", Code = "basic", Name = "basic" });
+        var subscription = await db.Subscriptions.SingleAsync(s => s.UserId == "user-001");
+        subscription.Status = SubscriptionStatus.Cancelled;
+        subscription.StartedAt = DateTimeOffset.UtcNow.AddMonths(-2);
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "sub-active-basic",
+            UserId = "user-001",
+            PlanId = "plan-basic",
+            Status = SubscriptionStatus.Active,
+            StartedAt = DateTimeOffset.UtcNow,
+            ChangedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+
+        var decision = await quota.TryReserveAsync("user-001", AiFeatureCodes.WritingGrade, AiKeySource.Platform, default);
+
+        Assert.True(decision.Allowed);
+        Assert.Equal("basic", decision.Plan?.Code);
+        Assert.Equal(1_000, decision.TokensCapThisPeriod);
+        await db.DisposeAsync();
+    }
+
     [Fact]
     public async Task Anonymous_Bypasses_Quota()
     {
@@ -250,6 +326,12 @@ public class AiQuotaServiceTests
 public class AiGatewayQuotaIntegrationTests
 {
     private readonly RulebookLoader _loader = new();
+
+    private static AiQuotaService CreateQuota(LearnerDbContext db) => new(
+        db,
+        new MemoryCache(new MemoryCacheOptions()),
+        NullLogger<AiQuotaService>.Instance,
+        new LearnerEntitlementResolver(db));
 
     [Fact]
     public async Task Gateway_DoesNotDebit_WhenCallIsByok()
@@ -293,7 +375,7 @@ public class AiGatewayQuotaIntegrationTests
 
         var provider = new TokenReportingProvider(prompt: 120, completion: 80);
         var recorder = new AiUsageRecorder(db, NullLogger<AiUsageRecorder>.Instance);
-        var quota = new AiQuotaService(db, new MemoryCache(new MemoryCacheOptions()), NullLogger<AiQuotaService>.Instance);
+        var quota = CreateQuota(db);
         var resolver = new AiCredentialResolver(db, quota, vault);
         var gateway = new AiGatewayService(_loader, new[] { (IAiModelProvider)provider }, recorder, quota, resolver);
 
@@ -357,7 +439,7 @@ public class AiGatewayQuotaIntegrationTests
         await db.SaveChangesAsync();
 
         var recorder = new AiUsageRecorder(db, NullLogger<AiUsageRecorder>.Instance);
-        var quota = new AiQuotaService(db, new MemoryCache(new MemoryCacheOptions()), NullLogger<AiQuotaService>.Instance);
+        var quota = CreateQuota(db);
         var gateway = new AiGatewayService(_loader, new[] { (IAiModelProvider)new MockAiProvider() }, recorder, quota);
 
         var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext
@@ -409,7 +491,7 @@ public class AiGatewayQuotaIntegrationTests
         // Provider that reports actual usage so Commit has something to add.
         var provider = new FakeUsageProvider(promptTokens: 120, completionTokens: 80);
         var recorder = new AiUsageRecorder(db, NullLogger<AiUsageRecorder>.Instance);
-        var quota = new AiQuotaService(db, new MemoryCache(new MemoryCacheOptions()), NullLogger<AiQuotaService>.Instance);
+        var quota = CreateQuota(db);
         var gateway = new AiGatewayService(_loader, new[] { (IAiModelProvider)provider }, recorder, quota);
 
         var prompt = gateway.BuildGroundedPrompt(new AiGroundingContext

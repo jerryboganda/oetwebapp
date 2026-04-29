@@ -54,6 +54,40 @@ public class MediaEndpointSecurityTests(TestWebApplicationFactory factory) : ICl
     }
 
     [Fact]
+    public async Task Download_denies_published_paper_media_when_active_plan_does_not_grant_paper()
+    {
+        var mediaId = $"media-{Guid.NewGuid():N}";
+        var learnerId = $"learner-{Guid.NewGuid():N}";
+        await SeedPublishedPaperMediaAsync(
+            mediaId,
+            learnerId,
+            hasActiveSubscription: true,
+            planId: $"listening-only-{Guid.NewGuid():N}",
+            entitlementsJson: "{\"content\":{\"tier\":\"free\",\"subtests\":[\"listening\"],\"papers\":[]}}",
+            includedSubtestsJson: "[\"listening\"]");
+
+        using var client = CreateLearnerClient(learnerId);
+        var response = await client.GetAsync($"/v1/media/{mediaId}/content");
+
+        Assert.Equal(HttpStatusCode.NotFound, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task Download_allows_published_paper_media_for_sponsor_seat_learner()
+    {
+        var mediaId = $"media-{Guid.NewGuid():N}";
+        var learnerId = $"learner-{Guid.NewGuid():N}";
+        await SeedPublishedPaperMediaAsync(mediaId, learnerId, hasActiveSubscription: false);
+        await SeedActiveSponsorshipAsync(learnerId);
+
+        using var client = CreateLearnerClient(learnerId);
+        var response = await client.GetAsync($"/v1/media/{mediaId}/content");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("application/pdf", response.Content.Headers.ContentType?.MediaType);
+    }
+
+    [Fact]
     public async Task Download_allows_published_free_preview_media_without_subscription()
     {
         var mediaId = $"media-{Guid.NewGuid():N}";
@@ -92,7 +126,13 @@ public class MediaEndpointSecurityTests(TestWebApplicationFactory factory) : ICl
         return client;
     }
 
-    private async Task SeedPublishedPaperMediaAsync(string mediaId, string learnerId, bool hasActiveSubscription)
+    private async Task SeedPublishedPaperMediaAsync(
+        string mediaId,
+        string learnerId,
+        bool hasActiveSubscription,
+        string planId = "premium-monthly",
+        string? entitlementsJson = null,
+        string? includedSubtestsJson = null)
     {
         await SeedStandaloneMediaAsync(mediaId, uploadedBy: "admin-1");
 
@@ -116,11 +156,28 @@ public class MediaEndpointSecurityTests(TestWebApplicationFactory factory) : ICl
 
         if (hasActiveSubscription)
         {
+            if (entitlementsJson is not null || includedSubtestsJson is not null)
+            {
+                db.BillingPlans.Add(new BillingPlan
+                {
+                    Id = planId,
+                    Code = planId,
+                    Name = "Scoped media entitlement plan",
+                    Description = "Scoped media entitlement plan",
+                    Price = 49.99m,
+                    Currency = "AUD",
+                    Interval = "monthly",
+                    DurationMonths = 1,
+                    EntitlementsJson = entitlementsJson ?? "{}",
+                    IncludedSubtestsJson = includedSubtestsJson ?? "[]"
+                });
+            }
+
             db.Subscriptions.Add(new Subscription
             {
                 Id = $"sub-{Guid.NewGuid():N}",
                 UserId = learnerId,
-                PlanId = "premium-monthly",
+                PlanId = planId,
                 Status = SubscriptionStatus.Active,
                 StartedAt = now,
                 ChangedAt = now,
@@ -182,6 +239,24 @@ public class MediaEndpointSecurityTests(TestWebApplicationFactory factory) : ICl
             UploadedBy = uploadedBy,
             UploadedAt = DateTimeOffset.UtcNow,
             ProcessedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+    }
+
+    private async Task SeedActiveSponsorshipAsync(string learnerId)
+    {
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        await db.Database.EnsureCreatedAsync();
+
+        db.Sponsorships.Add(new Sponsorship
+        {
+            Id = Guid.NewGuid(),
+            SponsorUserId = $"sponsor-{Guid.NewGuid():N}",
+            LearnerUserId = learnerId,
+            LearnerEmail = $"{learnerId}@example.test",
+            Status = "Active",
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-1)
         });
         await db.SaveChangesAsync();
     }

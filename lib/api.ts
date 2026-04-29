@@ -3365,6 +3365,65 @@ export async function fetchAdminBillingPaymentTransactions(params?: { status?: s
   return apiRequest(`/v1/admin/billing/payment-transactions${q ? `?${q}` : ''}`);
 }
 
+export async function fetchAdminBillingOperations(params?: { operationType?: string; status?: string; userId?: string; search?: string; page?: number; pageSize?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.operationType) qs.set('operationType', params.operationType);
+  if (params?.status) qs.set('status', params.status);
+  if (params?.userId) qs.set('userId', params.userId);
+  if (params?.search) qs.set('search', params.search);
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
+  const q = qs.toString();
+  return apiRequest(`/v1/admin/billing/operations${q ? `?${q}` : ''}`);
+}
+
+export async function createAdminBillingOperation(payload: {
+  userId: string;
+  operationType: string;
+  amount?: number | null;
+  currency?: string | null;
+  creditDelta?: number | null;
+  paymentTransactionId?: string | null;
+  invoiceId?: string | null;
+  subscriptionId?: string | null;
+  quoteId?: string | null;
+  gateway?: string | null;
+  gatewayReference?: string | null;
+  evidenceUrl?: string | null;
+  reason: string;
+  adminNotes?: string | null;
+}) {
+  return apiRequest('/v1/admin/billing/operations', {
+    method: 'POST',
+    body: JSON.stringify({
+      userId: payload.userId,
+      operationType: payload.operationType,
+      amount: payload.amount ?? null,
+      currency: payload.currency ?? null,
+      creditDelta: payload.creditDelta ?? null,
+      paymentTransactionId: payload.paymentTransactionId ?? null,
+      invoiceId: payload.invoiceId ?? null,
+      subscriptionId: payload.subscriptionId ?? null,
+      quoteId: payload.quoteId ?? null,
+      gateway: payload.gateway ?? null,
+      gatewayReference: payload.gatewayReference ?? null,
+      evidenceUrl: payload.evidenceUrl ?? null,
+      reason: payload.reason,
+      adminNotes: payload.adminNotes ?? null,
+    }),
+  });
+}
+
+export async function resolveAdminBillingOperation(operationId: string, payload: { status: string; resolutionNotes?: string | null }) {
+  return apiRequest(`/v1/admin/billing/operations/${encodeURIComponent(operationId)}/resolve`, {
+    method: 'POST',
+    body: JSON.stringify({
+      status: payload.status,
+      resolutionNotes: payload.resolutionNotes ?? null,
+    }),
+  });
+}
+
 export async function fetchAdminReviewOpsSummary() {
   return apiRequest('/v1/admin/review-ops/summary');
 }
@@ -3852,6 +3911,23 @@ export async function submitFlashcardReview(lvId: string, quality: number) {
 
 export async function fetchVocabQuiz(count = 10, format: string = 'definition_match') {
   return apiRequest(`/v1/vocabulary/quiz?count=${count}&format=${encodeURIComponent(format)}`);
+}
+
+/**
+ * Vocabulary entitlement.
+ *
+ * `hasPremium` is the single source of truth for whether the learner can pick
+ * non-default quiz formats / exceed the free word-bank cap. Backed server-side
+ * by `VocabularyService.HasPremiumAccessAsync` (paid + sponsored + add-on +
+ * freeze). The endpoint is best-effort — callers should fall back to a free
+ * profile on error so the page still renders.
+ */
+export interface VocabularyEntitlement {
+  hasPremium: boolean;
+}
+
+export async function fetchVocabularyEntitlement(): Promise<VocabularyEntitlement> {
+  return apiRequest<VocabularyEntitlement>('/v1/vocabulary/entitlement');
 }
 
 // ── Admin: Content Hierarchy Management ──
@@ -5690,7 +5766,9 @@ export async function fetchTutoringSessions() {
   return apiRequest('/v1/tutoring/sessions');
 }
 
-export async function bookTutoringSession(payload: { expertUserId: string; examTypeCode: string; subtestFocus?: string; scheduledAt: string; durationMinutes: number; learnerNotes?: string; price: number }) {
+export async function bookTutoringSession(payload: { expertUserId: string; examTypeCode: string; subtestFocus?: string; scheduledAt: string; durationMinutes: number; learnerNotes?: string }) {
+  // Price is derived server-side from ExpertOnboardingProgress.RatesJson and any
+  // client-supplied price is ignored (see SocialEndpoints.ResolveTutoringPriceAsync).
   return apiRequest('/v1/tutoring/sessions', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -6509,14 +6587,48 @@ export interface SponsoredLearner {
   revokedAt: string | null;
 }
 
+export interface SponsorInvoice {
+  id: string;
+  invoiceId: string;
+  learnerUserId: string;
+  learnerEmail: string | null;
+  description: string;
+  amount: number;
+  currency: string;
+  status: string;
+  issuedAt: string;
+  quoteId: string | null;
+  checkoutSessionId: string | null;
+  downloadAvailable: boolean;
+}
+
+export interface SponsorSeatUsage {
+  capacity: number;
+  assigned: number;
+  active: number;
+  pending: number;
+  consented: number;
+  remaining: number;
+  capacityTracked: boolean;
+}
+
 export interface SponsorBillingData {
   sponsorName: string;
   organizationName: string | null;
+  activeSponsorships: number;
+  pendingSponsorships: number;
+  sponsoredLearnerCount: number;
   totalSponsorships: number;
   totalSpend: number;
   currentMonthSpend: number;
   billingCycle: string;
-  invoices: Array<Record<string, unknown>>;
+  currency: string;
+  currencies: string[];
+  seats: SponsorSeatUsage;
+  invoiceCount: number;
+  paidInvoiceCount: number;
+  lastInvoiceAt: string | null;
+  invoices: SponsorInvoice[];
 }
 
 export async function fetchSponsorDashboard(): Promise<SponsorDashboardData> {
@@ -6546,6 +6658,10 @@ export async function removeSponsoredLearner(id: string): Promise<{ revoked: boo
 
 export async function fetchSponsorBilling(): Promise<SponsorBillingData> {
   return apiRequest<SponsorBillingData>('/v1/sponsor/billing');
+}
+
+export async function downloadSponsorInvoice(invoiceId: string): Promise<string> {
+  return fetchAuthorizedObjectUrl(`/v1/sponsor/billing/invoices/${encodeURIComponent(invoiceId)}/download`);
 }
 
 

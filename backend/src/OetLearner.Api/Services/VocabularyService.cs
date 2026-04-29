@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services;
 
@@ -14,6 +15,7 @@ namespace OetLearner.Api.Services;
 public class VocabularyService(
     LearnerDbContext db,
     ISpacedRepetitionScheduler scheduler,
+    ILearnerEntitlementResolver entitlementResolver,
     GamificationService? gamification = null)
 {
     private const int FreeListSizeCap = 500;
@@ -141,7 +143,6 @@ public class VocabularyService(
         string userId,
         string termId,
         string? sourceRef,
-        bool isPremium,
         CancellationToken ct)
     {
         var term = await db.VocabularyTerms.FindAsync([termId], ct)
@@ -154,7 +155,7 @@ public class VocabularyService(
             return new MyVocabularyAddResponse(false, ToMyItem(existing, term));
         }
 
-        if (!isPremium)
+        if (!await HasPremiumAccessAsync(userId, ct))
         {
             var currentCount = await db.LearnerVocabularies.CountAsync(lv => lv.UserId == userId, ct);
             if (currentCount >= FreeListSizeCap)
@@ -182,6 +183,12 @@ public class VocabularyService(
         await db.SaveChangesAsync(ct);
         await TryEvaluateAchievementsAsync(userId, "vocab_added", ct);
         return new MyVocabularyAddResponse(true, ToMyItem(lv, term));
+    }
+
+    public async Task<bool> HasPremiumAccessAsync(string? userId, CancellationToken ct)
+    {
+        var entitlement = await entitlementResolver.ResolveAsync(userId, LearnerEntitlementResources.Vocabulary, ct);
+        return entitlement.HasPaidOrSponsoredAccess || entitlement.HasActiveAddOn || entitlement.HasCurrentFreeze;
     }
 
     public async Task<object> RemoveFromMyVocabularyAsync(string userId, string termId, CancellationToken ct)

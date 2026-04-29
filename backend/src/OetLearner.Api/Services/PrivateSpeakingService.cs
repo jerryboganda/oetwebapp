@@ -7,6 +7,7 @@ using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services;
 
@@ -17,7 +18,8 @@ public sealed class PrivateSpeakingService(
     ZoomMeetingService zoomService,
     TimeProvider timeProvider,
     IOptions<BillingOptions> billingOptions,
-    ILogger<PrivateSpeakingService> logger)
+    ILogger<PrivateSpeakingService> logger,
+    ILearnerEntitlementResolver entitlementResolver)
 {
     // ── Config ──────────────────────────────────────────────────────────
 
@@ -428,6 +430,16 @@ public sealed class PrivateSpeakingService(
 
         var priceMinorUnits = profile.PriceOverrideMinorUnits ?? config.DefaultPriceMinorUnits;
 
+        // ── Entitlement-covered booking ──────────────────────────────────
+        // Server-authoritative: consult the central entitlement resolver to
+        // decide whether this learner already has paid coverage (currently
+        // sponsor seats). Covered bookings skip Stripe entirely. The price
+        // is NEVER taken from the client request — it is always derived
+        // server-side from the tutor profile and config above.
+        var entitlement = await entitlementResolver.ResolveAsync(
+            learnerUserId, LearnerEntitlementResources.Conversation, ct);
+        var coverageReason = ResolvePrivateSpeakingCoverageReason(entitlement);
+
         var booking = new PrivateSpeakingBooking
         {
             Id = $"psb-{Guid.NewGuid():N}",
@@ -461,6 +473,49 @@ public sealed class PrivateSpeakingService(
 
         await AuditAsync(booking.Id, learnerUserId, "learner", "booking_reserved",
             $"Tutor: {tutorProfileId}, Time: {sessionStartUtc:O}", ct);
+
+        if (coverageReason is not null)
+        {
+            // Covered by entitlement (sponsor seat / addon). Confirm without
+            // creating a Stripe checkout session and queue the same downstream
+            // jobs that ConfirmBookingPaymentAsync would queue.
+            booking.PaymentStatus = PrivateSpeakingPaymentStatus.Succeeded;
+            booking.PaymentConfirmedAt = now;
+            booking.Status = PrivateSpeakingBookingStatus.Confirmed;
+            booking.ReservationExpiresAt = null;
+            booking.UpdatedAt = now;
+
+            db.BackgroundJobs.Add(new BackgroundJobItem
+            {
+                Id = $"bgj-{Guid.NewGuid():N}",
+                Type = JobType.PrivateSpeakingZoomCreate,
+                ResourceId = booking.Id,
+                State = AsyncState.Queued,
+                AvailableAt = now,
+                CreatedAt = now
+            });
+            db.BackgroundJobs.Add(new BackgroundJobItem
+            {
+                Id = $"bgj-{Guid.NewGuid():N}",
+                Type = JobType.PrivateSpeakingBookingConfirmation,
+                ResourceId = booking.Id,
+                State = AsyncState.Queued,
+                AvailableAt = now,
+                CreatedAt = now
+            });
+
+            await db.SaveChangesAsync(ct);
+            await AuditAsync(booking.Id, learnerUserId, "learner",
+                "booking_covered_by_entitlement",
+                $"Reason: {coverageReason}", ct);
+
+            return new BookingCheckoutResult(
+                Success: true,
+                Error: null,
+                BookingId: booking.Id,
+                CheckoutSessionId: null,
+                CheckoutUrl: null);
+        }
 
         // Create Stripe checkout session
         var billing = billingOptions.Value;
@@ -1080,6 +1135,33 @@ public sealed class PrivateSpeakingService(
     }
 
     // ── Private Helpers ─────────────────────────────────────────────────
+
+    /// <summary>
+    /// Determine whether the learner's current entitlement covers a private
+    /// speaking session without payment. Returns a clear reason string when
+    /// covered, or <c>null</c> when the learner must pay via Stripe.
+    /// </summary>
+    private static string? ResolvePrivateSpeakingCoverageReason(LearnerEntitlementResolution entitlement)
+    {
+        if (entitlement.HasSponsorSeat)
+        {
+            return "sponsor_seat";
+        }
+
+        // Reserved hook for a future "private_speaking" add-on item code.
+        // We deliberately do NOT cover plain HasDirectActiveSubscription /
+        // HasDirectTrialSubscription here — content subscriptions do not
+        // include 1:1 tutor sessions; those are an upsell.
+        var addOn = entitlement.ActiveAddOns.FirstOrDefault(a =>
+            a.ItemCode.Contains("private_speaking", StringComparison.OrdinalIgnoreCase) ||
+            a.ItemCode.Contains("private-speaking", StringComparison.OrdinalIgnoreCase));
+        if (addOn is not null)
+        {
+            return $"addon:{addOn.ItemCode}";
+        }
+
+        return null;
+    }
 
     private async Task AuditAsync(
         string? bookingId, string actorId, string actorRole,

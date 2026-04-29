@@ -6,6 +6,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Content;
+using OetLearner.Api.Services.Entitlements;
 using OetLearner.Api.Services.Reading;
 
 namespace OetLearner.Api.Tests;
@@ -34,7 +35,8 @@ public class ReadingAuthoringTests
         var structure = new ReadingStructureService(db);
         var policy = new ReadingPolicyService(db, cache);
         var grader = new ReadingGradingService(db, policy, NullLogger<ReadingGradingService>.Instance);
-        var entitlements = new ContentEntitlementService(db);
+        var entitlementResolver = new LearnerEntitlementResolver(db);
+        var entitlements = new ContentEntitlementService(db, entitlementResolver);
         var attempt = new ReadingAttemptService(db, policy, grader, entitlements, NullLogger<ReadingAttemptService>.Instance);
         return (db, structure, policy, grader, attempt);
     }

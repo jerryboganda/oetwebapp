@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services.Grammar;
 
@@ -34,7 +35,7 @@ public sealed record GrammarEntitlement(
     DateTimeOffset? ResetAt,
     string Reason);
 
-public sealed class GrammarEntitlementService(LearnerDbContext db) : IGrammarEntitlementService
+public sealed class GrammarEntitlementService(LearnerDbContext db, ILearnerEntitlementResolver entitlementResolver) : IGrammarEntitlementService
 {
     public const int FreeTierWeeklyLimit = 3;
     public const int WindowDays = 7;
@@ -55,21 +56,30 @@ public sealed class GrammarEntitlementService(LearnerDbContext db) : IGrammarEnt
 
         var now = DateTimeOffset.UtcNow;
 
-        var activeSubscription = await db.Subscriptions
-            .Where(s => s.UserId == userId
-                && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial))
-            .FirstOrDefaultAsync(ct);
+        var resolvedEntitlement = await entitlementResolver.ResolveAsync(userId, LearnerEntitlementResources.Grammar, ct);
 
-        if (activeSubscription is not null)
+        if (resolvedEntitlement.HasPaidOrSponsoredAccess)
         {
+            var tier = resolvedEntitlement.HasDirectTrialSubscription
+                && !resolvedEntitlement.HasDirectActiveSubscription
+                && !resolvedEntitlement.HasSponsorSeat
+                    ? "trial"
+                    : "paid";
+
+            var reason = resolvedEntitlement.HasSponsorSeat
+                && !resolvedEntitlement.HasDirectActiveSubscription
+                && !resolvedEntitlement.HasDirectTrialSubscription
+                    ? "Sponsor seat — unlimited grammar lessons."
+                    : "Active subscription — unlimited grammar lessons.";
+
             return new GrammarEntitlement(
                 Allowed: true,
-                Tier: activeSubscription.Status == SubscriptionStatus.Trial ? "trial" : "paid",
+                Tier: tier,
                 Remaining: int.MaxValue,
                 LimitPerWindow: int.MaxValue,
                 WindowDays: WindowDays,
                 ResetAt: null,
-                Reason: "Active subscription — unlimited grammar lessons.");
+                Reason: reason);
         }
 
         var windowStart = now - TimeSpan.FromDays(WindowDays);

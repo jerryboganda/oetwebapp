@@ -456,6 +456,41 @@ export interface AdminBillingPaymentTransactionResponse {
   items: AdminBillingPaymentTransaction[];
 }
 
+export interface AdminBillingOperation {
+  id: string;
+  userId: string;
+  learnerName: string;
+  operationType: 'manual_payment' | 'refund_request' | 'credit_adjustment' | 'reconciliation_note';
+  status: 'open' | 'approved' | 'rejected' | 'completed' | 'cancelled';
+  amount: number | null;
+  currency: string | null;
+  creditDelta: number | null;
+  paymentTransactionId: string | null;
+  invoiceId: string | null;
+  subscriptionId: string | null;
+  quoteId: string | null;
+  gateway: string | null;
+  gatewayReference: string | null;
+  evidenceUrl: string | null;
+  reason: string;
+  adminNotes: string | null;
+  resolutionNotes: string | null;
+  createdByAdminId: string;
+  createdByAdminName: string;
+  createdAt: string;
+  updatedAt: string;
+  resolvedByAdminId: string | null;
+  resolvedByAdminName: string | null;
+  resolvedAt: string | null;
+}
+
+export interface AdminBillingOperationResponse {
+  total: number;
+  page: number;
+  pageSize: number;
+  items: AdminBillingOperation[];
+}
+
 export interface AdminBillingAddOn {
   id: string;
   code: string;

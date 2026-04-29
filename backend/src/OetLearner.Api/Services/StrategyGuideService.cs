@@ -5,10 +5,11 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services;
 
-public sealed class StrategyGuideService(LearnerDbContext db)
+public sealed class StrategyGuideService(LearnerDbContext db, ILearnerEntitlementResolver entitlementResolver)
 {
     private const string FeatureFlagKey = "strategy_guides";
     private const string LessonType = "strategy_guide";
@@ -44,10 +45,11 @@ public sealed class StrategyGuideService(LearnerDbContext db)
         var progress = await LoadProgressAsync(userId, guides.Select(guide => guide.Id), ct);
         var hierarchy = await LoadHierarchyRowsAsync(guides.Select(guide => guide.ContentLessonId), ct);
         var access = await LoadAccessScopeAsync(userId, ct);
+        var hasFullAccess = await ResolveHasFullAccessAsync(userId, ct);
         var weakSubtests = await LoadWeakSubtestsAsync(userId, examTypeCode ?? "oet", ct);
 
         var allItems = guides
-            .Select(guide => ToListItem(guide, progress, hierarchy, access, weakSubtests))
+            .Select(guide => ToListItem(guide, progress, hierarchy, access, hasFullAccess, weakSubtests))
             .ToList();
 
         var recommended = allItems
@@ -92,8 +94,9 @@ public sealed class StrategyGuideService(LearnerDbContext db)
         var progress = await LoadProgressAsync(userId, [guide.Id], ct);
         var hierarchy = await LoadHierarchyRowsAsync([guide.ContentLessonId], ct);
         var access = await LoadAccessScopeAsync(userId, ct);
+        var hasFullAccess = await ResolveHasFullAccessAsync(userId, ct);
         var weakSubtests = await LoadWeakSubtestsAsync(userId, guide.ExamTypeCode, ct);
-        var accessState = ResolveAccess(guide, hierarchy, access);
+        var accessState = ResolveAccess(guide, hierarchy, access, hasFullAccess);
         var hierarchyRow = TryGetHierarchyRow(guide, hierarchy);
 
         var (previousGuideId, nextGuideId) = await GetAdjacentGuideIdsAsync(guide, ct);
@@ -405,10 +408,11 @@ public sealed class StrategyGuideService(LearnerDbContext db)
         IReadOnlyDictionary<string, LearnerStrategyProgress> progress,
         IReadOnlyDictionary<string, StrategyHierarchyRow> hierarchy,
         AccessScope access,
+        bool hasFullAccess,
         IReadOnlySet<string> weakSubtests)
     {
         var itemProgress = GetProgress(progress, guide.Id);
-        var accessState = ResolveAccess(guide, hierarchy, access);
+        var accessState = ResolveAccess(guide, hierarchy, access, hasFullAccess);
         var row = TryGetHierarchyRow(guide, hierarchy);
 
         return new StrategyGuideListItemDto(
@@ -591,10 +595,18 @@ public sealed class StrategyGuideService(LearnerDbContext db)
         };
     }
 
+    private async Task<bool> ResolveHasFullAccessAsync(string userId, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(userId)) return false;
+        var resolution = await entitlementResolver.ResolveAsync(userId, LearnerEntitlementResources.Content, ct);
+        return resolution.HasPaidOrSponsoredAccess;
+    }
+
     private static GuideAccess ResolveAccess(
         StrategyGuide guide,
         IReadOnlyDictionary<string, StrategyHierarchyRow> hierarchy,
-        AccessScope scope)
+        AccessScope scope,
+        bool hasFullAccess)
     {
         var row = TryGetHierarchyRow(guide, hierarchy);
         if (row is null)
@@ -602,17 +614,25 @@ public sealed class StrategyGuideService(LearnerDbContext db)
             return new GuideAccess(true, guide.IsPreviewEligible, false, "legacy_access");
         }
 
-        var included = scope.IncludedPrograms.Contains(row.Program.Id)
-            || scope.IncludedTracks.Contains(row.Track.Id)
-            || scope.IncludedModules.Contains(row.Module.Id)
-            || scope.IncludedLessons.Contains(row.Lesson.Id)
-            || row.Lesson.ContentItemId is not null && scope.IncludedContentItems.Contains(row.Lesson.ContentItemId);
-
         var excluded = scope.ExcludedPrograms.Contains(row.Program.Id)
             || scope.ExcludedTracks.Contains(row.Track.Id)
             || scope.ExcludedModules.Contains(row.Module.Id)
             || scope.ExcludedLessons.Contains(row.Lesson.Id)
             || row.Lesson.ContentItemId is not null && scope.ExcludedContentItems.Contains(row.Lesson.ContentItemId);
+
+        // Paid / trial / sponsor-seat learners get full access via the central
+        // entitlement resolver, regardless of package-rule scope. Explicit
+        // package-level excludes still win.
+        if (hasFullAccess && !excluded)
+        {
+            return new GuideAccess(true, guide.IsPreviewEligible, false, "entitled");
+        }
+
+        var included = scope.IncludedPrograms.Contains(row.Program.Id)
+            || scope.IncludedTracks.Contains(row.Track.Id)
+            || scope.IncludedModules.Contains(row.Module.Id)
+            || scope.IncludedLessons.Contains(row.Lesson.Id)
+            || row.Lesson.ContentItemId is not null && scope.IncludedContentItems.Contains(row.Lesson.ContentItemId);
 
         var accessible = !excluded && (included || guide.IsPreviewEligible);
         var reason = accessible
@@ -663,7 +683,8 @@ public sealed class StrategyGuideService(LearnerDbContext db)
         var progress = await LoadProgressAsync(userId, guides.Select(guide => guide.Id), ct);
         var hierarchy = await LoadHierarchyRowsAsync(guides.Select(guide => guide.ContentLessonId), ct);
         var access = await LoadAccessScopeAsync(userId, ct);
-        return guides.Select(guide => ToListItem(guide, progress, hierarchy, access, weakSubtests)).ToList();
+        var hasFullAccess = await ResolveHasFullAccessAsync(userId, ct);
+        return guides.Select(guide => ToListItem(guide, progress, hierarchy, access, hasFullAccess, weakSubtests)).ToList();
     }
 
     private async Task<StrategyGuidePublishValidationDto> ValidateGuideForPublishAsync(StrategyGuide guide, CancellationToken ct)

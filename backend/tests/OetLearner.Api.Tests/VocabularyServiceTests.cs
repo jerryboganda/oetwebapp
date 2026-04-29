@@ -3,6 +3,7 @@ using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Tests;
 
@@ -14,7 +15,22 @@ public class VocabularyServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options;
         var db = new LearnerDbContext(options);
-        return (db, new VocabularyService(db, new Sm2Scheduler()));
+        return (db, new VocabularyService(db, new Sm2Scheduler(), new LearnerEntitlementResolver(db)));
+    }
+
+    private static Subscription Subscription(string id, string userId, SubscriptionStatus status)
+    {
+        var now = DateTimeOffset.UtcNow;
+        return new Subscription
+        {
+            Id = id,
+            UserId = userId,
+            PlanId = "premium-monthly",
+            Status = status,
+            StartedAt = now.AddDays(-10),
+            ChangedAt = now.AddDays(-10),
+            NextRenewalAt = now.AddDays(20)
+        };
     }
 
     private static async Task SeedAsync(LearnerDbContext db, int count = 5, string category = "medical")
@@ -58,8 +74,8 @@ public class VocabularyServiceTests
         var (db, svc) = Build();
         await SeedAsync(db, 1);
 
-        var r1 = await svc.AddToMyVocabularyAsync("user-1", "vt-001", null, false, default);
-        var r2 = await svc.AddToMyVocabularyAsync("user-1", "vt-001", null, false, default);
+        var r1 = await svc.AddToMyVocabularyAsync("user-1", "vt-001", null, default);
+        var r2 = await svc.AddToMyVocabularyAsync("user-1", "vt-001", null, default);
 
         Assert.True(r1.Added);
         Assert.False(r2.Added);
@@ -76,11 +92,11 @@ public class VocabularyServiceTests
         // Seed 500 cards → next add should 402.
         for (var i = 1; i <= 500; i++)
         {
-            await svc.AddToMyVocabularyAsync("user-cap", $"vt-{i:000}", null, false, default);
+            await svc.AddToMyVocabularyAsync("user-cap", $"vt-{i:000}", null, default);
         }
 
         var ex = await Assert.ThrowsAsync<ApiException>(() =>
-            svc.AddToMyVocabularyAsync("user-cap", "vt-501", null, false, default));
+            svc.AddToMyVocabularyAsync("user-cap", "vt-501", null, default));
 
         Assert.Equal("VOCAB_FREE_CAP_REACHED", ex.ErrorCode);
         Assert.Equal(402, ex.StatusCode);
@@ -92,14 +108,69 @@ public class VocabularyServiceTests
     {
         var (db, svc) = Build();
         await SeedAsync(db, 501);
+        db.Subscriptions.Add(Subscription("sub-premium", "user-premium", SubscriptionStatus.Active));
+        await db.SaveChangesAsync();
 
         for (var i = 1; i <= 500; i++)
         {
-            await svc.AddToMyVocabularyAsync("user-premium", $"vt-{i:000}", null, true, default);
+            await svc.AddToMyVocabularyAsync("user-premium", $"vt-{i:000}", null, default);
         }
 
-        var r = await svc.AddToMyVocabularyAsync("user-premium", "vt-501", null, true, default);
+        var r = await svc.AddToMyVocabularyAsync("user-premium", "vt-501", null, default);
         Assert.True(r.Added);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task HasPremiumAccessAsync_allows_resolver_paid_trial_sponsor_add_on_and_freeze()
+    {
+        var (db, svc) = Build();
+        var now = DateTimeOffset.UtcNow;
+
+        db.Subscriptions.AddRange(
+            Subscription("sub-paid", "user-paid", SubscriptionStatus.Active),
+            Subscription("sub-trial", "user-trial", SubscriptionStatus.Trial),
+            Subscription("sub-addon", "user-addon", SubscriptionStatus.Expired));
+        db.SubscriptionItems.Add(new SubscriptionItem
+        {
+            Id = "item-addon",
+            SubscriptionId = "sub-addon",
+            ItemCode = "vocabulary-premium",
+            ItemType = "addon",
+            Status = SubscriptionItemStatus.Active,
+            StartsAt = now.AddDays(-1),
+            CreatedAt = now.AddDays(-1),
+            UpdatedAt = now.AddDays(-1)
+        });
+        db.AccountFreezeRecords.Add(new AccountFreezeRecord
+        {
+            Id = "freeze-active",
+            UserId = "user-freeze",
+            Status = FreezeStatus.Active,
+            IsCurrent = true,
+            RequestedAt = now.AddDays(-2),
+            StartedAt = now.AddDays(-1),
+            DurationDays = 7,
+            UpdatedAt = now.AddDays(-1)
+        });
+        db.Sponsorships.Add(new Sponsorship
+        {
+            Id = Guid.NewGuid(),
+            SponsorUserId = "sponsor-user",
+            LearnerUserId = "user-sponsor",
+            LearnerEmail = "learner@example.test",
+            Status = "Active",
+            CreatedAt = now.AddDays(-1)
+        });
+        await db.SaveChangesAsync();
+
+        Assert.True(await svc.HasPremiumAccessAsync("user-paid", default));
+        Assert.True(await svc.HasPremiumAccessAsync("user-trial", default));
+        Assert.True(await svc.HasPremiumAccessAsync("user-sponsor", default));
+        Assert.True(await svc.HasPremiumAccessAsync("user-addon", default));
+        Assert.True(await svc.HasPremiumAccessAsync("user-freeze", default));
+        Assert.False(await svc.HasPremiumAccessAsync("user-free", default));
+        Assert.False(await svc.HasPremiumAccessAsync(null, default));
         await db.DisposeAsync();
     }
 
@@ -108,7 +179,7 @@ public class VocabularyServiceTests
     {
         var (db, svc) = Build();
         await SeedAsync(db, 1);
-        var added = await svc.AddToMyVocabularyAsync("u1", "vt-001", null, false, default);
+        var added = await svc.AddToMyVocabularyAsync("u1", "vt-001", null, default);
 
         var res = await svc.SubmitFlashcardReviewAsync("u1", added.Item.Id, quality: 4, default);
 
@@ -124,7 +195,7 @@ public class VocabularyServiceTests
     {
         var (db, svc) = Build();
         await SeedAsync(db, 1);
-        var added = await svc.AddToMyVocabularyAsync("u1", "vt-001", null, false, default);
+        var added = await svc.AddToMyVocabularyAsync("u1", "vt-001", null, default);
 
         // Push the learner to the edge of "mastered": 9 correct reviews.
         for (var i = 0; i < 9; i++)
@@ -246,7 +317,7 @@ public class VocabularyServiceTests
     {
         var (db, svc) = Build();
         await SeedAsync(db, 1);
-        await svc.AddToMyVocabularyAsync("u1", "vt-001", null, false, default);
+        await svc.AddToMyVocabularyAsync("u1", "vt-001", null, default);
 
         await svc.RemoveFromMyVocabularyAsync("u1", "vt-001", default);
 

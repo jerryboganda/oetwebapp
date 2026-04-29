@@ -28,6 +28,12 @@ public static class SponsorEndpoints
         sponsor.MapGet("/billing", async (HttpContext http, SponsorService service, CancellationToken ct)
             => Results.Ok(await service.GetBillingAsync(http.SponsorId(), ct)));
 
+        sponsor.MapGet("/billing/invoices/{invoiceId}/download", async (string invoiceId, HttpContext http, SponsorService service, CancellationToken ct) =>
+        {
+            var file = await service.GetInvoiceDownloadAsync(http.SponsorId(), invoiceId, ct);
+            return Results.File(file.Stream, file.ContentType, fileDownloadName: file.FileName);
+        });
+
         return app;
     }
 

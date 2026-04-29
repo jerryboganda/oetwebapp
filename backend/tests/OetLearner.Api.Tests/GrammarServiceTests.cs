@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Entitlements;
 using OetLearner.Api.Services.Grammar;
 using OetLearner.Api.Services.Rulebook;
 using Xunit;
@@ -24,6 +25,9 @@ public class GrammarServiceTests
         => new DbContextOptionsBuilder<LearnerDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options;
+
+    private static GrammarEntitlementService NewGrammarEntitlementService(LearnerDbContext db)
+        => new(db, new LearnerEntitlementResolver(db));
 
     // ── Grounding ───────────────────────────────────────────────────────
 
@@ -158,7 +162,7 @@ public class GrammarServiceTests
     {
         var options = NewInMemoryOptions();
         await using var db = new LearnerDbContext(options);
-        var service = new GrammarEntitlementService(db);
+        var service = NewGrammarEntitlementService(db);
 
         var result = await service.CheckAsync(null, default);
 
@@ -182,12 +186,77 @@ public class GrammarServiceTests
         });
         await db.SaveChangesAsync();
 
-        var service = new GrammarEntitlementService(db);
+        var service = NewGrammarEntitlementService(db);
         var result = await service.CheckAsync("user-pro", default);
 
         Assert.True(result.Allowed);
         Assert.Equal("paid", result.Tier);
         Assert.Equal(int.MaxValue, result.Remaining);
+    }
+
+    [Fact]
+    public async Task Entitlement_TrialSubscriberUnlimited()
+    {
+        var options = NewInMemoryOptions();
+        await using var db = new LearnerDbContext(options);
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "sub-trial",
+            UserId = "user-trial",
+            PlanId = "trial",
+            Status = SubscriptionStatus.Trial,
+            StartedAt = DateTimeOffset.UtcNow.AddDays(-3),
+            ChangedAt = DateTimeOffset.UtcNow.AddDays(-3),
+            NextRenewalAt = DateTimeOffset.UtcNow.AddDays(11)
+        });
+        await db.SaveChangesAsync();
+
+        var service = NewGrammarEntitlementService(db);
+        var result = await service.CheckAsync("user-trial", default);
+
+        Assert.True(result.Allowed);
+        Assert.Equal("trial", result.Tier);
+        Assert.Equal(int.MaxValue, result.Remaining);
+    }
+
+    [Fact]
+    public async Task Entitlement_SponsorSeatUnlimitedWhenFreeQuotaConsumed()
+    {
+        var options = NewInMemoryOptions();
+        await using var db = new LearnerDbContext(options);
+
+        for (var i = 0; i < 3; i++)
+        {
+            db.LearnerGrammarProgress.Add(new LearnerGrammarProgress
+            {
+                Id = Guid.NewGuid(),
+                UserId = "user-sponsored",
+                LessonId = $"grm-sponsored-{i}",
+                Status = "completed",
+                StartedAt = DateTimeOffset.UtcNow.AddHours(-i - 1),
+                CompletedAt = DateTimeOffset.UtcNow.AddHours(-i),
+                ExerciseScore = 80,
+            });
+        }
+
+        db.Sponsorships.Add(new Sponsorship
+        {
+            Id = Guid.NewGuid(),
+            SponsorUserId = "sponsor-user",
+            LearnerUserId = "user-sponsored",
+            LearnerEmail = "user-sponsored@example.test",
+            Status = "Active",
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-2)
+        });
+        await db.SaveChangesAsync();
+
+        var service = NewGrammarEntitlementService(db);
+        var result = await service.CheckAsync("user-sponsored", default);
+
+        Assert.True(result.Allowed);
+        Assert.Equal("paid", result.Tier);
+        Assert.Equal(int.MaxValue, result.Remaining);
+        Assert.Equal(int.MaxValue, result.LimitPerWindow);
     }
 
     [Fact]
@@ -211,7 +280,7 @@ public class GrammarServiceTests
         }
         await db.SaveChangesAsync();
 
-        var service = new GrammarEntitlementService(db);
+        var service = NewGrammarEntitlementService(db);
         var result = await service.CheckAsync("user-free", default);
 
         Assert.False(result.Allowed);
@@ -238,7 +307,7 @@ public class GrammarServiceTests
         });
         await db.SaveChangesAsync();
 
-        var service = new GrammarEntitlementService(db);
+        var service = NewGrammarEntitlementService(db);
         var result = await service.CheckAsync("user-free-2", default);
 
         Assert.True(result.Allowed);

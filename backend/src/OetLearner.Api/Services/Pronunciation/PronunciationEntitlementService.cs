@@ -2,7 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
-using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services.Pronunciation;
 
@@ -12,7 +12,8 @@ namespace OetLearner.Api.Services.Pronunciation;
 ///   - Unauthenticated: blocked entirely at the middleware layer.
 ///   - Authenticated free tier: capped at <c>FreeTierWeeklyAttemptLimit</c>
 ///     submitted attempts per rolling <c>FreeTierWindowDays</c>-day window.
-///   - Authenticated subscribers (Active or Trial): unlimited.
+///   - Authenticated resolver-granted access (Active, Trial, sponsor seat,
+///     add-on, or current freeze): unlimited.
 ///
 /// Evaluated on every <c>POST /v1/pronunciation/drills/{id}/attempt/upload/init</c>
 /// so learners see the paywall before they record, not after.
@@ -33,6 +34,7 @@ public sealed record PronunciationEntitlement(
 
 public sealed class PronunciationEntitlementService(
     LearnerDbContext db,
+    ILearnerEntitlementResolver entitlementResolver,
     IOptions<PronunciationOptions> options) : IPronunciationEntitlementService
 {
     public async Task<PronunciationEntitlement> CheckAsync(string? userId, CancellationToken ct)
@@ -54,20 +56,17 @@ public sealed class PronunciationEntitlementService(
 
         var now = DateTimeOffset.UtcNow;
 
-        var activeSub = await db.Subscriptions
-            .Where(s => s.UserId == userId
-                && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial))
-            .FirstOrDefaultAsync(ct);
-        if (activeSub is not null)
+        var resolvedEntitlement = await entitlementResolver.ResolveAsync(userId, LearnerEntitlementResources.Pronunciation, ct);
+        if (HasUnlimitedAccess(resolvedEntitlement))
         {
             return new PronunciationEntitlement(
                 Allowed: true,
-                Tier: activeSub.Status == SubscriptionStatus.Trial ? "trial" : "paid",
+                Tier: ResolveUnlimitedTier(resolvedEntitlement),
                 Remaining: int.MaxValue,
                 LimitPerWindow: int.MaxValue,
                 WindowDays: windowDays,
                 ResetAt: null,
-                Reason: "Active subscription — unlimited pronunciation practice.");
+                Reason: ResolveUnlimitedReason(resolvedEntitlement));
         }
 
         if (opts.FreeTierWeeklyAttemptLimit < 0)
@@ -119,5 +118,31 @@ public sealed class PronunciationEntitlementService(
             WindowDays: windowDays,
             ResetAt: resetAt,
             Reason: $"{remaining} of {opts.FreeTierWeeklyAttemptLimit} free pronunciation attempts remaining this week.");
+    }
+
+    private static bool HasUnlimitedAccess(LearnerEntitlementResolution entitlement)
+        => entitlement.HasPaidOrSponsoredAccess || entitlement.HasActiveAddOn || entitlement.HasCurrentFreeze;
+
+    private static string ResolveUnlimitedTier(LearnerEntitlementResolution entitlement)
+        => entitlement.HasDirectTrialSubscription && !entitlement.HasDirectActiveSubscription ? "trial" : "paid";
+
+    private static string ResolveUnlimitedReason(LearnerEntitlementResolution entitlement)
+    {
+        if (entitlement.HasDirectActiveSubscription || entitlement.HasDirectTrialSubscription)
+        {
+            return "Active subscription — unlimited pronunciation practice.";
+        }
+
+        if (entitlement.HasSponsorSeat)
+        {
+            return "Sponsor seat — unlimited pronunciation practice.";
+        }
+
+        if (entitlement.HasActiveAddOn)
+        {
+            return "Active add-on — unlimited pronunciation practice.";
+        }
+
+        return "Account freeze — unlimited pronunciation practice.";
     }
 }

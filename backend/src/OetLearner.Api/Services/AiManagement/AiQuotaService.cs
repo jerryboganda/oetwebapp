@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Caching.Memory;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services.AiManagement;
 
@@ -82,7 +83,11 @@ public sealed record AiUserPolicySnapshot(
     bool KillSwitchActive,
     AiKillSwitchScope KillSwitchScope);
 
-public sealed class AiQuotaService(LearnerDbContext db, IMemoryCache cache, ILogger<AiQuotaService> logger)
+public sealed class AiQuotaService(
+    LearnerDbContext db,
+    IMemoryCache cache,
+    ILogger<AiQuotaService> logger,
+    ILearnerEntitlementResolver entitlementResolver)
     : IAiQuotaService
 {
     private const string DefaultPlanCode = "free";
@@ -409,17 +414,17 @@ public sealed class AiQuotaService(LearnerDbContext db, IMemoryCache cache, ILog
         AiUserQuotaOverride? userOverride,
         CancellationToken ct)
     {
-        // Precedence: admin force → active subscription → default
+        // Precedence: admin force → eligible direct subscription → default
         if (!string.IsNullOrWhiteSpace(userOverride?.ForcePlanCode))
         {
             return await db.AiQuotaPlans.AsNoTracking()
                 .FirstOrDefaultAsync(p => p.Code == userOverride.ForcePlanCode && p.IsActive, ct);
         }
 
-        // Derive from the user's active subscription if present. The billing
-        // plan code is expected to match the AI plan code by convention.
-        var activeSub = await db.Subscriptions.AsNoTracking()
-            .FirstOrDefaultAsync(s => s.UserId == userId, ct);
+        // Derive from the user's current direct subscription entitlement if present.
+        // The billing plan code is expected to match the AI plan code by convention.
+        var entitlement = await entitlementResolver.ResolveAsync(userId, LearnerEntitlementResources.AiQuota, ct);
+        var activeSub = entitlement.DirectSubscription;
         if (activeSub is not null && !string.IsNullOrWhiteSpace(activeSub.PlanId))
         {
             var billingPlan = await db.BillingPlans.AsNoTracking()

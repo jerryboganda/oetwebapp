@@ -43,6 +43,33 @@ public partial class AdminService(
         "yearly"
     };
 
+    private const string BillingOperationStatusOpen = "open";
+
+    private static readonly HashSet<string> BillingOperationTypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "manual_payment",
+        "refund_request",
+        "credit_adjustment",
+        "reconciliation_note"
+    };
+
+    private static readonly HashSet<string> BillingOperationStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        BillingOperationStatusOpen,
+        "approved",
+        "rejected",
+        "completed",
+        "cancelled"
+    };
+
+    private static readonly HashSet<string> BillingOperationResolutionStatuses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "approved",
+        "rejected",
+        "completed",
+        "cancelled"
+    };
+
     // ════════════════════════════════════════════
     //  Transaction + Audit helpers
     // ════════════════════════════════════════════
@@ -334,6 +361,22 @@ public partial class AdminService(
         string ApplicablePlanCodesJson,
         string ApplicableAddOnCodesJson,
         string? Notes);
+
+    private sealed record ValidatedBillingOperationCreate(
+        string UserId,
+        string OperationType,
+        decimal? Amount,
+        string Currency,
+        int? CreditDelta,
+        string? PaymentTransactionId,
+        string? InvoiceId,
+        string? SubscriptionId,
+        string? QuoteId,
+        string? Gateway,
+        string? GatewayReference,
+        string? EvidenceUrl,
+        string Reason,
+        string? AdminNotes);
 
     private static BillingPlanCatalogInput ToBillingPlanCatalogInput(AdminBillingPlanCreateRequest request) => new(
         request.Code,
@@ -4081,6 +4124,336 @@ public partial class AdminService(
         return new AdminBillingPaymentTransactionListResponse(total, normalizedPage, normalizedPageSize, items);
     }
 
+    public async Task<AdminBillingOperationListResponse> GetBillingOperationsAsync(
+        string? operationType,
+        string? status,
+        string? userId,
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken ct)
+    {
+        var normalizedPage = Math.Max(page, 1);
+        var normalizedPageSize = Math.Clamp(pageSize, 1, 100);
+        var query = db.BillingOperations.AsNoTracking().AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(operationType) && !string.Equals(operationType, "all", StringComparison.OrdinalIgnoreCase))
+        {
+            var normalizedOperationType = operationType.Trim().ToLowerInvariant();
+            if (!BillingOperationTypes.Contains(normalizedOperationType))
+            {
+                throw ApiException.Validation(
+                    "billing_operation_filter_invalid",
+                    "Billing operation filters are invalid.",
+                    [new ApiFieldError("operationType", "invalid", "Choose a supported billing operation type.")]);
+            }
+
+            query = query.Where(operation => operation.OperationType == normalizedOperationType);
+        }
+
+        if (!string.IsNullOrWhiteSpace(status) && !string.Equals(status, "all", StringComparison.OrdinalIgnoreCase))
+        {
+            var normalizedStatus = status.Trim().ToLowerInvariant();
+            if (!BillingOperationStatuses.Contains(normalizedStatus))
+            {
+                throw ApiException.Validation(
+                    "billing_operation_filter_invalid",
+                    "Billing operation filters are invalid.",
+                    [new ApiFieldError("status", "invalid", "Choose a supported billing operation status.")]);
+            }
+
+            query = query.Where(operation => operation.Status == normalizedStatus);
+        }
+
+        if (!string.IsNullOrWhiteSpace(userId))
+        {
+            var normalizedUserId = userId.Trim();
+            query = query.Where(operation => operation.UserId == normalizedUserId);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var normalizedSearch = search.Trim();
+            query = query.Where(operation =>
+                operation.Id.Contains(normalizedSearch)
+                || operation.UserId.Contains(normalizedSearch)
+                || operation.Reason.Contains(normalizedSearch)
+                || (operation.AdminNotes != null && operation.AdminNotes.Contains(normalizedSearch))
+                || (operation.PaymentTransactionId != null && operation.PaymentTransactionId.Contains(normalizedSearch))
+                || (operation.InvoiceId != null && operation.InvoiceId.Contains(normalizedSearch))
+                || (operation.SubscriptionId != null && operation.SubscriptionId.Contains(normalizedSearch))
+                || (operation.QuoteId != null && operation.QuoteId.Contains(normalizedSearch))
+                || (operation.GatewayReference != null && operation.GatewayReference.Contains(normalizedSearch))
+                || db.Users.AsNoTracking().Any(user => user.Id == operation.UserId && user.DisplayName.Contains(normalizedSearch)));
+        }
+
+        var total = await query.CountAsync(ct);
+        var operations = await GetOrderedBillingOperationsPageAsync(query, normalizedPage, normalizedPageSize, ct);
+        var userIds = operations.Select(operation => operation.UserId).Distinct().ToList();
+        var learnerNames = await db.Users.AsNoTracking()
+            .Where(user => userIds.Contains(user.Id))
+            .ToDictionaryAsync(user => user.Id, user => user.DisplayName, ct);
+
+        var items = operations.Select(operation => MapBillingOperation(
+            operation,
+            learnerNames.TryGetValue(operation.UserId, out var learnerName) ? learnerName : operation.UserId)).ToList();
+
+        return new AdminBillingOperationListResponse(total, normalizedPage, normalizedPageSize, items);
+    }
+
+    public async Task<AdminBillingOperationResponse> CreateBillingOperationAsync(
+        string adminId,
+        string adminName,
+        AdminBillingOperationCreateRequest request,
+        CancellationToken ct)
+    {
+        var validated = ValidateBillingOperationCreateRequest(request);
+        var learner = await db.Users.AsNoTracking()
+            .Where(user => user.Id == validated.UserId)
+            .Select(user => new { user.Id, user.DisplayName })
+            .FirstOrDefaultAsync(ct)
+            ?? throw ApiException.NotFound("billing_operation_user_not_found", "Learner user not found.");
+
+        var now = DateTimeOffset.UtcNow;
+        var operation = new BillingOperation
+        {
+            Id = GenerateDomainId("bop"),
+            UserId = validated.UserId,
+            OperationType = validated.OperationType,
+            Status = BillingOperationStatusOpen,
+            Amount = validated.Amount,
+            Currency = validated.Currency,
+            CreditDelta = validated.CreditDelta,
+            PaymentTransactionId = validated.PaymentTransactionId,
+            InvoiceId = validated.InvoiceId,
+            SubscriptionId = validated.SubscriptionId,
+            QuoteId = validated.QuoteId,
+            Gateway = validated.Gateway,
+            GatewayReference = validated.GatewayReference,
+            EvidenceUrl = validated.EvidenceUrl,
+            Reason = validated.Reason,
+            AdminNotes = validated.AdminNotes,
+            CreatedByAdminId = adminId,
+            CreatedByAdminName = adminName,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        db.BillingOperations.Add(operation);
+        AddBillingOperationEvent(operation, "billing_operation_created", now);
+        await db.SaveChangesAsync(ct);
+
+        await LogAuditAsync(adminId, adminName, "Created Billing Operation", "BillingOperation", operation.Id,
+            $"Created {operation.OperationType} billing operation for user {operation.UserId}.", ct);
+
+        return MapBillingOperation(operation, learner.DisplayName);
+    }
+
+    public async Task<AdminBillingOperationResponse> ResolveBillingOperationAsync(
+        string adminId,
+        string adminName,
+        string operationId,
+        AdminBillingOperationResolveRequest request,
+        CancellationToken ct)
+    {
+        var normalizedOperationId = operationId.Trim();
+        var operation = await db.BillingOperations.FirstOrDefaultAsync(item => item.Id == normalizedOperationId, ct)
+            ?? throw ApiException.NotFound("billing_operation_not_found", "Billing operation not found.");
+
+        var (status, resolutionNotes) = ValidateBillingOperationResolveRequest(request);
+        if (!string.Equals(operation.Status, BillingOperationStatusOpen, StringComparison.OrdinalIgnoreCase))
+        {
+            throw ApiException.Conflict("billing_operation_already_resolved", "Billing operation has already been resolved.");
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        operation.Status = status;
+        operation.ResolutionNotes = resolutionNotes;
+        operation.ResolvedByAdminId = adminId;
+        operation.ResolvedByAdminName = adminName;
+        operation.ResolvedAt = now;
+        operation.UpdatedAt = now;
+
+        AddBillingOperationEvent(operation, "billing_operation_resolved", now);
+        await db.SaveChangesAsync(ct);
+
+        await LogAuditAsync(adminId, adminName, "Resolved Billing Operation", "BillingOperation", operation.Id,
+            $"Resolved {operation.OperationType} billing operation as {operation.Status} for user {operation.UserId}.", ct);
+
+        var learnerName = await db.Users.AsNoTracking()
+            .Where(user => user.Id == operation.UserId)
+            .Select(user => user.DisplayName)
+            .FirstOrDefaultAsync(ct) ?? operation.UserId;
+
+        return MapBillingOperation(operation, learnerName);
+    }
+
+    private async Task<List<BillingOperation>> GetOrderedBillingOperationsPageAsync(
+        IQueryable<BillingOperation> query,
+        int page,
+        int pageSize,
+        CancellationToken ct)
+    {
+        var skip = (page - 1) * pageSize;
+        if (!db.Database.IsSqlite())
+        {
+            return await query
+                .OrderByDescending(operation => operation.CreatedAt)
+                .ThenByDescending(operation => operation.Id)
+                .Skip(skip)
+                .Take(pageSize)
+                .ToListAsync(ct);
+        }
+
+        return (await query.ToListAsync(ct))
+            .OrderByDescending(operation => operation.CreatedAt)
+            .ThenByDescending(operation => operation.Id)
+            .Skip(skip)
+            .Take(pageSize)
+            .ToList();
+    }
+
+    private static ValidatedBillingOperationCreate ValidateBillingOperationCreateRequest(AdminBillingOperationCreateRequest request)
+    {
+        var errors = new List<ApiFieldError>();
+        var userId = ValidateCatalogText(errors, "userId", request.UserId, 64);
+        var operationType = ValidateCatalogText(errors, "operationType", request.OperationType, 32).ToLowerInvariant();
+        if (!string.IsNullOrWhiteSpace(operationType) && !BillingOperationTypes.Contains(operationType))
+        {
+            AddCatalogError(errors, "operationType", "invalid", "Choose a supported billing operation type.");
+        }
+
+        var requestedStatus = NormalizeBillingOperationOptionalText(errors, "status", request.Status, 32)?.ToLowerInvariant();
+        if (!string.IsNullOrWhiteSpace(requestedStatus) && !string.Equals(requestedStatus, BillingOperationStatusOpen, StringComparison.Ordinal))
+        {
+            AddCatalogError(errors, "status", "invalid", "New billing operations must start open.");
+        }
+
+        var currency = ValidateCatalogCurrency(errors, string.IsNullOrWhiteSpace(request.Currency) ? "AUD" : request.Currency);
+        var reason = ValidateCatalogText(errors, "reason", request.Reason, 1024);
+        var paymentTransactionId = NormalizeBillingOperationOptionalText(errors, "paymentTransactionId", request.PaymentTransactionId, 128);
+        var invoiceId = NormalizeBillingOperationOptionalText(errors, "invoiceId", request.InvoiceId, 64);
+        var subscriptionId = NormalizeBillingOperationOptionalText(errors, "subscriptionId", request.SubscriptionId, 64);
+        var quoteId = NormalizeBillingOperationOptionalText(errors, "quoteId", request.QuoteId, 64);
+        var gateway = NormalizeBillingOperationOptionalText(errors, "gateway", request.Gateway, 32)?.ToLowerInvariant();
+        var gatewayReference = NormalizeBillingOperationOptionalText(errors, "gatewayReference", request.GatewayReference, 256);
+        var evidenceUrl = NormalizeBillingOperationOptionalText(errors, "evidenceUrl", request.EvidenceUrl, 512);
+        var adminNotes = NormalizeBillingOperationOptionalText(errors, "adminNotes", request.AdminNotes, 2048);
+
+        switch (operationType)
+        {
+            case "manual_payment":
+            case "refund_request":
+                if (request.Amount is null or <= 0m)
+                {
+                    AddCatalogError(errors, "amount", "required", "Amount must be greater than zero for payment and refund operations.");
+                }
+
+                if (request.CreditDelta is not null)
+                {
+                    AddCatalogError(errors, "creditDelta", "not_allowed", "Credit delta is only allowed for credit adjustment operations.");
+                }
+                break;
+
+            case "credit_adjustment":
+                if (request.CreditDelta is null or 0)
+                {
+                    AddCatalogError(errors, "creditDelta", "required", "Credit delta must be nonzero for credit adjustment operations.");
+                }
+
+                if (request.Amount is not null)
+                {
+                    AddCatalogError(errors, "amount", "not_allowed", "Amount is only allowed for payment and refund operations.");
+                }
+                break;
+
+            case "reconciliation_note":
+                if (request.Amount is not null)
+                {
+                    AddCatalogError(errors, "amount", "not_allowed", "Amount is only allowed for payment and refund operations.");
+                }
+
+                if (request.CreditDelta is not null)
+                {
+                    AddCatalogError(errors, "creditDelta", "not_allowed", "Credit delta is only allowed for credit adjustment operations.");
+                }
+                break;
+        }
+
+        ThrowIfCatalogInvalid(errors, "billing_operation_invalid", "Billing operation payload is invalid.");
+        return new ValidatedBillingOperationCreate(
+            userId,
+            operationType,
+            request.Amount,
+            currency,
+            request.CreditDelta,
+            paymentTransactionId,
+            invoiceId,
+            subscriptionId,
+            quoteId,
+            gateway,
+            gatewayReference,
+            evidenceUrl,
+            reason,
+            adminNotes);
+    }
+
+    private static (string Status, string? ResolutionNotes) ValidateBillingOperationResolveRequest(AdminBillingOperationResolveRequest request)
+    {
+        var errors = new List<ApiFieldError>();
+        var status = ValidateCatalogText(errors, "status", request.Status, 32).ToLowerInvariant();
+        if (!string.IsNullOrWhiteSpace(status) && !BillingOperationResolutionStatuses.Contains(status))
+        {
+            AddCatalogError(errors, "status", "invalid", "Choose a supported billing operation resolution status.");
+        }
+
+        var resolutionNotes = NormalizeBillingOperationOptionalText(errors, "resolutionNotes", request.ResolutionNotes, 2048);
+        ThrowIfCatalogInvalid(errors, "billing_operation_resolution_invalid", "Billing operation resolution payload is invalid.");
+        return (status, resolutionNotes);
+    }
+
+    private static string? NormalizeBillingOperationOptionalText(List<ApiFieldError> errors, string field, string? value, int maxLength)
+    {
+        var trimmed = value?.Trim();
+        if (string.IsNullOrWhiteSpace(trimmed)) return null;
+        if (trimmed.Length > maxLength)
+        {
+            AddCatalogError(errors, field, "too_long", $"{field} must be {maxLength} characters or fewer.");
+        }
+
+        return trimmed;
+    }
+
+    private void AddBillingOperationEvent(BillingOperation operation, string eventType, DateTimeOffset occurredAt)
+    {
+        db.BillingEvents.Add(new BillingEvent
+        {
+            Id = GenerateDomainId("bevt"),
+            UserId = operation.UserId,
+            SubscriptionId = operation.SubscriptionId,
+            QuoteId = operation.QuoteId,
+            EventType = eventType,
+            EntityType = "BillingOperation",
+            EntityId = operation.Id,
+            PayloadJson = JsonSupport.Serialize(new
+            {
+                operationId = operation.Id,
+                operationType = operation.OperationType,
+                status = operation.Status,
+                amount = operation.Amount,
+                currency = operation.Currency,
+                creditDelta = operation.CreditDelta,
+                paymentTransactionId = operation.PaymentTransactionId,
+                invoiceId = operation.InvoiceId,
+                subscriptionId = operation.SubscriptionId,
+                quoteId = operation.QuoteId,
+                gateway = operation.Gateway,
+                gatewayReference = operation.GatewayReference
+            }),
+            OccurredAt = occurredAt
+        });
+    }
+
     private async Task<List<PaymentTransaction>> GetOrderedPaymentTransactionsPageAsync(
         IQueryable<PaymentTransaction> query,
         int page,
@@ -4281,6 +4654,34 @@ public partial class AdminService(
             payment.CouponVersionId,
             payment.CreatedAt,
             payment.UpdatedAt);
+
+    private static AdminBillingOperationResponse MapBillingOperation(BillingOperation operation, string learnerName)
+        => new(
+            operation.Id,
+            operation.UserId,
+            learnerName,
+            operation.OperationType,
+            operation.Status,
+            operation.Amount,
+            operation.Currency,
+            operation.CreditDelta,
+            operation.PaymentTransactionId,
+            operation.InvoiceId,
+            operation.SubscriptionId,
+            operation.QuoteId,
+            operation.Gateway,
+            operation.GatewayReference,
+            operation.EvidenceUrl,
+            operation.Reason,
+            operation.AdminNotes,
+            operation.ResolutionNotes,
+            operation.CreatedByAdminId,
+            operation.CreatedByAdminName,
+            operation.CreatedAt,
+            operation.UpdatedAt,
+            operation.ResolvedByAdminId,
+            operation.ResolvedByAdminName,
+            operation.ResolvedAt);
 
     private static AdminBillingInvoiceEvidenceRedemptionResponse MapInvoiceEvidenceRedemption(BillingCouponRedemption redemption)
         => new(

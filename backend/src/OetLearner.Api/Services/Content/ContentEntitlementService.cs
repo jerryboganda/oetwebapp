@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services.Content;
 
@@ -65,8 +66,8 @@ public interface IContentEntitlementService
 
 public sealed record ContentEntitlementResult(
     bool Allowed,
-    string Reason,            // "free_paper" | "admin" | "plan_grants_tier" | "plan_grants_subtest" | "plan_grants_paper" | "no_active_subscription" | "plan_does_not_grant"
-    string? CurrentTier,      // null if anonymous-equivalent; "free"|"premium"|"trial"
+    string Reason,            // "free_paper" | "admin" | "plan_grants_tier" | "plan_grants_subtest" | "plan_grants_paper" | "sponsor_seat" | "no_active_subscription" | "plan_does_not_grant"
+    string? CurrentTier,      // null if anonymous-equivalent; "free"|"premium"|"trial"|"sponsor"
     string? RequiredScope);   // e.g. "subtest:listening" | "tier:premium" | "paper:<id>"
 
 /// <summary>Strongly-typed projection of the BillingPlan EntitlementsJson.content node.</summary>
@@ -75,7 +76,7 @@ public sealed record ContentEntitlementBundle(
     IReadOnlySet<string> GrantedSubtests,         // lowercased, e.g. {"listening","reading"}
     IReadOnlySet<string> GrantedPaperIds);
 
-public sealed class ContentEntitlementService(LearnerDbContext db) : IContentEntitlementService
+public sealed class ContentEntitlementService(LearnerDbContext db, ILearnerEntitlementResolver entitlementResolver) : IContentEntitlementService
 {
     private const string AccessFreeTag = "access:free";
     private const string AccessPremiumTag = "access:premium";
@@ -108,14 +109,10 @@ public sealed class ContentEntitlementService(LearnerDbContext db) : IContentEnt
                 RequiredScope: $"subtest:{paper.SubtestCode}");
         }
 
-        // 3. Active or Trial Subscription with plan grants.
-        var sub = await db.Subscriptions.AsNoTracking()
-            .Where(s => s.UserId == userId
-                && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial))
-            .OrderByDescending(s => s.StartedAt)
-            .FirstOrDefaultAsync(ct);
+        // 3. Active or Trial Subscription with plan grants, or sponsor-seat evidence.
+        var resolvedEntitlement = await entitlementResolver.ResolveAsync(userId, LearnerEntitlementResources.Content, ct);
 
-        if (sub is null)
+        if (!resolvedEntitlement.HasPaidOrSponsoredAccess)
         {
             return new ContentEntitlementResult(
                 Allowed: false, Reason: "no_active_subscription",
@@ -123,38 +120,53 @@ public sealed class ContentEntitlementService(LearnerDbContext db) : IContentEnt
                 RequiredScope: $"subtest:{paper.SubtestCode}");
         }
 
-        var normalizedPlanId = sub.PlanId.ToLowerInvariant();
-        var plan = await db.BillingPlans.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.Id.ToLower() == normalizedPlanId || p.Code.ToLower() == normalizedPlanId, ct);
-
-        var bundle = ParseBundle(plan?.EntitlementsJson, plan?.IncludedSubtestsJson);
-        var currentTier = sub.Status == SubscriptionStatus.Trial ? "trial" : bundle.Tier;
-
-        if (string.Equals(bundle.Tier, "premium", StringComparison.OrdinalIgnoreCase))
+        if (resolvedEntitlement.DirectSubscription is not null)
         {
-            return new ContentEntitlementResult(
-                Allowed: true, Reason: "plan_grants_tier",
-                CurrentTier: currentTier, RequiredScope: null);
+            var normalizedPlanId = resolvedEntitlement.DirectSubscription.PlanId.ToLowerInvariant();
+            var plan = await db.BillingPlans.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Id.ToLower() == normalizedPlanId || p.Code.ToLower() == normalizedPlanId, ct);
+
+            var bundle = ParseBundle(plan?.EntitlementsJson, plan?.IncludedSubtestsJson);
+            var currentTier = resolvedEntitlement.DirectSubscription.Status == SubscriptionStatus.Trial ? "trial" : bundle.Tier;
+
+            if (string.Equals(bundle.Tier, "premium", StringComparison.OrdinalIgnoreCase))
+            {
+                return new ContentEntitlementResult(
+                    Allowed: true, Reason: "plan_grants_tier",
+                    CurrentTier: currentTier, RequiredScope: null);
+            }
+
+            if (bundle.GrantedPaperIds.Contains(paper.Id))
+            {
+                return new ContentEntitlementResult(
+                    Allowed: true, Reason: "plan_grants_paper",
+                    CurrentTier: currentTier, RequiredScope: null);
+            }
+
+            if (bundle.GrantedSubtests.Contains(paper.SubtestCode.ToLowerInvariant()))
+            {
+                return new ContentEntitlementResult(
+                    Allowed: true, Reason: "plan_grants_subtest",
+                    CurrentTier: currentTier, RequiredScope: null);
+            }
+
+            if (!resolvedEntitlement.HasSponsorSeat)
+            {
+                return new ContentEntitlementResult(
+                    Allowed: false, Reason: "plan_does_not_grant",
+                    CurrentTier: currentTier,
+                    RequiredScope: $"subtest:{paper.SubtestCode}");
+            }
         }
 
-        if (bundle.GrantedPaperIds.Contains(paper.Id))
-        {
-            return new ContentEntitlementResult(
-                Allowed: true, Reason: "plan_grants_paper",
-                CurrentTier: currentTier, RequiredScope: null);
-        }
-
-        if (bundle.GrantedSubtests.Contains(paper.SubtestCode.ToLowerInvariant()))
-        {
-            return new ContentEntitlementResult(
-                Allowed: true, Reason: "plan_grants_subtest",
-                CurrentTier: currentTier, RequiredScope: null);
-        }
-
-        return new ContentEntitlementResult(
-            Allowed: false, Reason: "plan_does_not_grant",
-            CurrentTier: currentTier,
-            RequiredScope: $"subtest:{paper.SubtestCode}");
+        return resolvedEntitlement.HasSponsorSeat
+            ? new ContentEntitlementResult(
+                Allowed: true, Reason: "sponsor_seat",
+                CurrentTier: "sponsor", RequiredScope: null)
+            : new ContentEntitlementResult(
+                Allowed: false, Reason: "no_active_subscription",
+                CurrentTier: "free",
+                RequiredScope: $"subtest:{paper.SubtestCode}");
     }
 
     public async Task RequireAccessAsync(string? userId, ContentPaper paper, CancellationToken ct)

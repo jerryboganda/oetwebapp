@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Tests;
 
@@ -167,7 +168,7 @@ public sealed class VideoLessonServiceTests
             .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
             .Options;
         var db = new LearnerDbContext(options);
-        var service = new VideoLessonService(db, new MediaNormalizationService(db));
+        var service = new VideoLessonService(db, new MediaNormalizationService(db), new LearnerEntitlementResolver(db));
         return (db, service);
     }
 

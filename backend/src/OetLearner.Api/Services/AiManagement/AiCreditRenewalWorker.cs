@@ -58,6 +58,22 @@ public sealed class AiCreditRenewalWorker(
 
         // ── 1. Monthly renewals ─────────────────────────────────────────────
         // Join active subscriptions → billing plan → AI quota plan.
+        //
+        // ⚠ Intentional divergence from `ILearnerEntitlementResolver`:
+        //    AI credits renew ONLY for learners with a direct, paid, ACTIVE
+        //    subscription (`SubscriptionStatus.Active`). We deliberately do
+        //    NOT renew credits for:
+        //      • Trial subscriptions (`SubscriptionStatus.Trial`) — trials use
+        //        a one-shot grant at the start of the trial; renewing here
+        //        would silently extend the trial allowance.
+        //      • Sponsor seats / consented sponsor links — sponsorship grants
+        //        sit on a separate ledger keyed to the sponsor's contract,
+        //        not the platform's monthly billing cycle.
+        //      • Add-ons — add-ons top up credits explicitly; they do not
+        //        carry a monthly cap to renew here.
+        //    Use `ILearnerEntitlementResolver.HasPaidOrSponsoredAccess` for
+        //    READ-time gating; this worker remains direct-active-only by
+        //    design.
         var subs = await db.Subscriptions.AsNoTracking()
             .Where(s => s.Status == SubscriptionStatus.Active)
             .ToListAsync(ct);

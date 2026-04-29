@@ -49,8 +49,7 @@ public static class VocabularyEndpoints
 
         vocab.MapPost("/my-list/{termId}", async (HttpContext http, string termId, AddToMyVocabularyRequest? body, VocabularyService svc, CancellationToken ct) =>
         {
-            var isPremium = http.IsPremium();
-            return Results.Ok(await svc.AddToMyVocabularyAsync(http.UserId(), termId, body?.SourceRef, isPremium, ct));
+            return Results.Ok(await svc.AddToMyVocabularyAsync(http.UserId(), termId, body?.SourceRef, ct));
         });
 
         vocab.MapDelete("/my-list/{termId}", async (HttpContext http, string termId, VocabularyService svc, CancellationToken ct) =>
@@ -71,11 +70,16 @@ public static class VocabularyEndpoints
         vocab.MapGet("/stats", async (HttpContext http, VocabularyService svc, CancellationToken ct) =>
             Results.Ok(await svc.GetStatsAsync(http.UserId(), ct)));
 
+        // ── Entitlement (drives premium-locked UI) ───────────────────────
+        vocab.MapGet("/entitlement", async (HttpContext http, VocabularyService svc, CancellationToken ct) =>
+            Results.Ok(new { hasPremium = await svc.HasPremiumAccessAsync(http.UserId(), ct) }));
+
         // ── Quiz ─────────────────────────────────────────────────────────
         vocab.MapGet("/quiz", async (HttpContext http, [FromQuery] int count, [FromQuery] string? format, VocabularyService svc, CancellationToken ct) =>
         {
+            var userId = http.UserId();
             var resolvedFormat = string.IsNullOrWhiteSpace(format) ? "definition_match" : format.ToLowerInvariant();
-            if (!http.IsPremium() && resolvedFormat != "definition_match")
+            if (resolvedFormat != "definition_match" && !await svc.HasPremiumAccessAsync(userId, ct))
             {
                 return Results.Json(new
                 {
@@ -84,7 +88,7 @@ public static class VocabularyEndpoints
                     freeFormat = "definition_match",
                 }, statusCode: 402);
             }
-            return Results.Ok(await svc.GetQuizAsync(http.UserId(), count <= 0 ? 10 : Math.Min(count, 25), resolvedFormat, ct));
+            return Results.Ok(await svc.GetQuizAsync(userId, count <= 0 ? 10 : Math.Min(count, 25), resolvedFormat, ct));
         });
 
         vocab.MapPost("/quiz/submit", async (HttpContext http, VocabQuizSubmissionV2 submission, VocabularyService svc, CancellationToken ct) =>
@@ -111,25 +115,4 @@ file static class VocabularyHttpContextExtensions
     internal static string UserId(this HttpContext httpContext)
         => httpContext.User.FindFirstValue(ClaimTypes.NameIdentifier)
            ?? throw new InvalidOperationException("Authenticated user id is required.");
-
-    /// <summary>
-    /// Heuristic premium check that tolerates environments where the premium
-    /// claim isn't wired yet. Accepts any of:
-    ///   - claim "subscription_tier" in {premium, pro, sponsor}
-    ///   - claim "entitlements" containing "vocabulary_premium"
-    ///   - role "admin" (admins bypass the premium gate)
-    /// Falls back to <c>false</c> when nothing matches.
-    /// </summary>
-    internal static bool IsPremium(this HttpContext httpContext)
-    {
-        var user = httpContext.User;
-        if (user.IsInRole("admin") || user.IsInRole("Admin")) return true;
-        var tier = user.FindFirstValue("subscription_tier")?.ToLowerInvariant();
-        if (tier is "premium" or "pro" or "sponsor" or "paid") return true;
-        var entitlements = user.FindAll("entitlement").Select(c => c.Value)
-            .Concat(user.FindAll("entitlements").SelectMany(c => (c.Value ?? "").Split(',')))
-            .Select(s => s.Trim())
-            .ToList();
-        return entitlements.Contains("vocabulary_premium", StringComparer.OrdinalIgnoreCase);
-    }
 }

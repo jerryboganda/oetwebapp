@@ -1,13 +1,17 @@
 using System.Security.Claims;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services;
 
 namespace OetLearner.Api.Endpoints;
 
 public static class SocialEndpoints
 {
+    private const int MaxTutoringDurationMinutes = 240;
+
     public static IEndpointRouteBuilder MapSocialEndpoints(this IEndpointRouteBuilder app)
     {
         var v1 = app.MapGroup("/v1").RequireAuthorization("LearnerOnly");
@@ -133,6 +137,8 @@ public static class SocialEndpoints
 
         tutoring.MapPost("/sessions", async (HttpContext http, BookTutoringRequest req, LearnerDbContext db, CancellationToken ct) =>
         {
+            var price = await ResolveTutoringPriceAsync(req, db, ct);
+
             var session = new TutoringSession
             {
                 Id = $"ts-{Guid.NewGuid():N}",
@@ -144,7 +150,7 @@ public static class SocialEndpoints
                 DurationMinutes = req.DurationMinutes,
                 State = "booked",
                 LearnerNotes = req.LearnerNotes,
-                Price = req.Price,
+                Price = price,
                 PaymentSource = "credits",
                 CreatedAt = DateTimeOffset.UtcNow
             };
@@ -181,6 +187,61 @@ public static class SocialEndpoints
         totalCreditsEarned = rc.TotalCreditsEarned,
         createdAt = rc.CreatedAt
     };
+
+    private static async Task<decimal> ResolveTutoringPriceAsync(BookTutoringRequest req, LearnerDbContext db, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(req.ExpertUserId))
+        {
+            throw ApiException.Validation(
+                "expert_required",
+                "Expert user id is required.",
+                [new ApiFieldError("expertUserId", "required", "Expert user id is required.")]);
+        }
+
+        if (req.DurationMinutes <= 0 || req.DurationMinutes > MaxTutoringDurationMinutes)
+        {
+            throw ApiException.Validation(
+                "invalid_tutoring_duration",
+                $"Tutoring duration must be between 1 and {MaxTutoringDurationMinutes} minutes.",
+                [new ApiFieldError("durationMinutes", "out_of_range", $"Duration must be between 1 and {MaxTutoringDurationMinutes} minutes.")]);
+        }
+
+        var expertIsActive = await db.ExpertUsers
+            .AsNoTracking()
+            .AnyAsync(expert => expert.Id == req.ExpertUserId && expert.IsActive, ct);
+        if (!expertIsActive)
+        {
+            throw ApiException.NotFound("expert_unavailable", "Expert is unavailable for tutoring.");
+        }
+
+        var onboarding = await db.ExpertOnboardingProgresses
+            .AsNoTracking()
+            .FirstOrDefaultAsync(progress => progress.ExpertUserId == req.ExpertUserId, ct);
+        if (onboarding is null || !onboarding.IsComplete)
+        {
+            throw ExpertRatesUnavailable();
+        }
+
+        var rates = JsonSupport.Deserialize<ExpertOnboardingRatesDto?>(onboarding.RatesJson, null);
+        if (rates is null || rates.HourlyRateMinorUnits < 0 || rates.SessionRateMinorUnits < 0)
+        {
+            throw ExpertRatesUnavailable();
+        }
+
+        return CalculateTutoringPrice(rates, req.DurationMinutes);
+    }
+
+    private static decimal CalculateTutoringPrice(ExpertOnboardingRatesDto rates, int durationMinutes)
+    {
+        var minorUnits = rates.SessionRateMinorUnits > 0
+            ? rates.SessionRateMinorUnits
+            : (decimal)rates.HourlyRateMinorUnits * durationMinutes / 60m;
+
+        return minorUnits / 100m;
+    }
+
+    private static ApiException ExpertRatesUnavailable()
+        => ApiException.Conflict("expert_rates_unavailable", "Expert tutoring rates are not available.");
 }
 
 public record ApplyReferralRequest(string Code);

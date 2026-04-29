@@ -368,6 +368,78 @@ public class BillingEvent
     public DateTimeOffset OccurredAt { get; set; }
 }
 
+/// <summary>Admin-only local ledger for support and finance billing operations.</summary>
+public class BillingOperation
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string UserId { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string OperationType { get; set; } = default!;
+
+    [MaxLength(32)]
+    public string Status { get; set; } = "open";
+
+    public decimal? Amount { get; set; }
+
+    [MaxLength(8)]
+    public string Currency { get; set; } = "AUD";
+
+    public int? CreditDelta { get; set; }
+
+    [MaxLength(128)]
+    public string? PaymentTransactionId { get; set; }
+
+    [MaxLength(64)]
+    public string? InvoiceId { get; set; }
+
+    [MaxLength(64)]
+    public string? SubscriptionId { get; set; }
+
+    [MaxLength(64)]
+    public string? QuoteId { get; set; }
+
+    [MaxLength(32)]
+    public string? Gateway { get; set; }
+
+    [MaxLength(256)]
+    public string? GatewayReference { get; set; }
+
+    [MaxLength(512)]
+    public string? EvidenceUrl { get; set; }
+
+    [MaxLength(1024)]
+    public string Reason { get; set; } = default!;
+
+    [MaxLength(2048)]
+    public string? AdminNotes { get; set; }
+
+    [MaxLength(2048)]
+    public string? ResolutionNotes { get; set; }
+
+    [MaxLength(64)]
+    public string CreatedByAdminId { get; set; } = default!;
+
+    [MaxLength(128)]
+    public string CreatedByAdminName { get; set; } = default!;
+
+    public DateTimeOffset CreatedAt { get; set; }
+
+    public DateTimeOffset UpdatedAt { get; set; }
+
+    [MaxLength(64)]
+    public string? ResolvedByAdminId { get; set; }
+
+    [MaxLength(128)]
+    public string? ResolvedByAdminName { get; set; }
+
+    public DateTimeOffset? ResolvedAt { get; set; }
+}
+
 /// <summary>Attached billing item such as an add-on on top of an active subscription.</summary>
 public class SubscriptionItem
 {

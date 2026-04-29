@@ -10,6 +10,7 @@ import {
   fetchAdminBillingCouponVersions,
   fetchAdminBillingInvoiceEvidence,
   fetchAdminBillingInvoices,
+  fetchAdminBillingOperations,
   fetchAdminBillingPaymentTransactions,
   fetchAdminBillingPlans,
   fetchAdminBillingPlanVersions,
@@ -48,6 +49,8 @@ import type {
   AdminBillingCatalogVersionHistory,
   AdminBillingInvoice,
   AdminBillingInvoiceEvidence,
+  AdminBillingOperation,
+  AdminBillingOperationResponse,
   AdminBillingPaymentTransaction,
   AdminBillingPaymentTransactionResponse,
   AdminBillingCoupon,
@@ -843,6 +846,44 @@ export async function getAdminBillingPaymentTransactionData(
       couponVersionId: toNullableString(payment.couponVersionId),
       createdAt: toStringValue(payment.createdAt),
       updatedAt: toStringValue(payment.updatedAt),
+    })),
+  };
+}
+
+export async function getAdminBillingOperationData(
+  params?: Parameters<typeof fetchAdminBillingOperations>[0],
+): Promise<AdminBillingOperationResponse> {
+  const raw = asRecord(await fetchAdminBillingOperations(params));
+  return {
+    total: toNumberValue(raw.total),
+    page: toNumberValue(raw.page, 1),
+    pageSize: toNumberValue(raw.pageSize, 20),
+    items: asArray(raw.items).map<AdminBillingOperation>((op) => ({
+      id: toStringValue(op.id),
+      userId: toStringValue(op.userId),
+      learnerName: toStringValue(op.learnerName, toStringValue(op.userId)),
+      operationType: toStringValue(op.operationType) as AdminBillingOperation['operationType'],
+      status: toStringValue(op.status) as AdminBillingOperation['status'],
+      amount: op.amount != null ? toNumberValue(op.amount) : null,
+      currency: op.currency != null ? toStringValue(op.currency).trim().toUpperCase() : null,
+      creditDelta: op.creditDelta != null ? toNumberValue(op.creditDelta) : null,
+      paymentTransactionId: toNullableString(op.paymentTransactionId),
+      invoiceId: toNullableString(op.invoiceId),
+      subscriptionId: toNullableString(op.subscriptionId),
+      quoteId: toNullableString(op.quoteId),
+      gateway: toNullableString(op.gateway),
+      gatewayReference: toNullableString(op.gatewayReference),
+      evidenceUrl: toNullableString(op.evidenceUrl),
+      reason: toStringValue(op.reason),
+      adminNotes: toNullableString(op.adminNotes),
+      resolutionNotes: toNullableString(op.resolutionNotes),
+      createdByAdminId: toStringValue(op.createdByAdminId),
+      createdByAdminName: toStringValue(op.createdByAdminName),
+      createdAt: toStringValue(op.createdAt),
+      updatedAt: toStringValue(op.updatedAt),
+      resolvedByAdminId: toNullableString(op.resolvedByAdminId),
+      resolvedByAdminName: toNullableString(op.resolvedByAdminName),
+      resolvedAt: toNullableString(op.resolvedAt),
     })),
   };
 }

@@ -245,3 +245,36 @@ public record AdminBillingPaymentTransactionListResponse(
     int Page,
     int PageSize,
     IReadOnlyList<AdminBillingPaymentTransactionResponse> Items);
+
+public record AdminBillingOperationResponse(
+    string Id,
+    string UserId,
+    string LearnerName,
+    string OperationType,
+    string Status,
+    decimal? Amount,
+    string Currency,
+    int? CreditDelta,
+    string? PaymentTransactionId,
+    string? InvoiceId,
+    string? SubscriptionId,
+    string? QuoteId,
+    string? Gateway,
+    string? GatewayReference,
+    string? EvidenceUrl,
+    string Reason,
+    string? AdminNotes,
+    string? ResolutionNotes,
+    string CreatedByAdminId,
+    string CreatedByAdminName,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt,
+    string? ResolvedByAdminId,
+    string? ResolvedByAdminName,
+    DateTimeOffset? ResolvedAt);
+
+public record AdminBillingOperationListResponse(
+    int Total,
+    int Page,
+    int PageSize,
+    IReadOnlyList<AdminBillingOperationResponse> Items);

@@ -38,7 +38,8 @@ public sealed record AsrRequest(
     string Locale,
     string? TargetRuleId,
     string RulebookProfession,
-    long? AudioBytes);
+    long? AudioBytes,
+    string? UserId = null);
 
 public sealed record AsrResult(
     double AccuracyScore,

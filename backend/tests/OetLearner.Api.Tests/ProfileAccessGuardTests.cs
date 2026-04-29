@@ -93,7 +93,10 @@ public class ProfileAccessGuardTests
             NullLogger<OetLearner.Api.Services.Pronunciation.PronunciationAsrProviderSelector>.Instance);
         var nullFeedback = new StubPronunciationFeedbackService();
         var scheduler = new OetLearner.Api.Services.Pronunciation.PronunciationSchedulerService(db);
-        var entitlement = new OetLearner.Api.Services.Pronunciation.PronunciationEntitlementService(db, pronOpts);
+        var entitlement = new OetLearner.Api.Services.Pronunciation.PronunciationEntitlementService(
+            db,
+            new OetLearner.Api.Services.Entitlements.LearnerEntitlementResolver(db),
+            pronOpts);
         return new PronunciationService(db, selector, nullFeedback, scheduler, entitlement, fileStorage, pronOpts,
             NullLogger<PronunciationService>.Instance);
     }

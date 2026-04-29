@@ -5,6 +5,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiManagement;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Tests;
 
@@ -43,7 +44,11 @@ public class AiCredentialResolverTests
         var dpProvider = DataProtectionProvider.Create(nameof(AiCredentialResolverTests));
         var httpFactory = new StubHttpClientFactory();
         var vault = new AiCredentialVault(db, dpProvider, httpFactory, NullLogger<AiCredentialVault>.Instance);
-        var quota = new AiQuotaService(db, new MemoryCache(new MemoryCacheOptions()), NullLogger<AiQuotaService>.Instance);
+        var quota = new AiQuotaService(
+            db,
+            new MemoryCache(new MemoryCacheOptions()),
+            NullLogger<AiQuotaService>.Instance,
+            new LearnerEntitlementResolver(db));
         var resolver = new AiCredentialResolver(db, quota, vault);
 
         if (hasByokKey)
@@ -86,6 +91,15 @@ public class AiCredentialResolverTests
     }
 
     [Fact]
+    public async Task Resolves_Byok_ForConversationOpening_ByDefault()
+    {
+        var (db, resolver, _) = await BuildAsync(hasByokKey: true);
+        var r = await resolver.ResolveAsync("u1", AiFeatureCodes.ConversationOpening, null, default);
+        Assert.Equal(AiKeySource.Byok, r.KeySource);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Resolves_Platform_ForNonScoring_WhenNoKeyStored()
     {
         var (db, resolver, _) = await BuildAsync(hasByokKey: false);
@@ -116,13 +130,53 @@ public class AiCredentialResolverTests
         await db.DisposeAsync();
     }
 
-    [Fact]
-    public async Task Resolves_Platform_ForAdminFeature_AlwaysRegardlessOfKey()
+    [Theory]
+    [InlineData(AiFeatureCodes.AdminContentGeneration)]
+    [InlineData(AiFeatureCodes.AdminGrammarDraft)]
+    [InlineData(AiFeatureCodes.AdminPronunciationDraft)]
+    [InlineData(AiFeatureCodes.AdminConversationDraft)]
+    [InlineData(AiFeatureCodes.AdminVocabularyDraft)]
+    public async Task Resolves_Platform_ForAdminFeature_AlwaysRegardlessOfKey(string featureCode)
     {
         var (db, resolver, _) = await BuildAsync(mode: AiCredentialMode.ByokOnly, hasByokKey: true);
-        var r = await resolver.ResolveAsync("u1", AiFeatureCodes.AdminContentGeneration, null, default);
+        var r = await resolver.ResolveAsync("u1", featureCode, null, default);
         Assert.Equal(AiKeySource.Platform, r.KeySource);
-        Assert.Contains("platform_only", r.PolicyTrace);
+        Assert.Contains($"feature.{featureCode}.platform_only", r.PolicyTrace);
+        await db.DisposeAsync();
+    }
+
+    [Theory]
+    [InlineData(AiFeatureCodes.PronunciationScore)]
+    [InlineData(AiFeatureCodes.ConversationEvaluation)]
+    public async Task Resolves_Platform_ForPlatformOnlyScoringFeatures_EvenWhenScoringByokEnabled(string featureCode)
+    {
+        var (db, resolver, _) = await BuildAsync(
+            allowByokOnScoring: true,
+            mode: AiCredentialMode.ByokOnly,
+            hasByokKey: true);
+
+        var r = await resolver.ResolveAsync("u1", featureCode, null, default);
+
+        Assert.Equal(AiKeySource.Platform, r.KeySource);
+        Assert.Equal("digitalocean-serverless", r.ProviderCode);
+        Assert.Null(r.ApiKeyPlaintext);
+        Assert.Contains($"feature.{featureCode}.platform_only", r.PolicyTrace);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Resolves_Platform_ForPronunciationFeedback_ByPolicy()
+    {
+        var (db, resolver, _) = await BuildAsync(
+            allowByokOnNonScoring: true,
+            mode: AiCredentialMode.ByokOnly,
+            hasByokKey: true);
+
+        var r = await resolver.ResolveAsync("u1", AiFeatureCodes.PronunciationFeedback, null, default);
+
+        Assert.Equal(AiKeySource.Platform, r.KeySource);
+        Assert.Null(r.ApiKeyPlaintext);
+        Assert.Contains($"feature.{AiFeatureCodes.PronunciationFeedback}.platform_only", r.PolicyTrace);
         await db.DisposeAsync();
     }
 

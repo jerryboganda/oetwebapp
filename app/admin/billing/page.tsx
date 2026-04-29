@@ -1,7 +1,7 @@
 'use client';
 
 import { type Dispatch, type ReactNode, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
-import { CreditCard, DollarSign, FileSearch, History as HistoryIcon, Package, Receipt, Search, Ticket, Users } from 'lucide-react';
+import { CreditCard, DollarSign, FileSearch, History as HistoryIcon, Package, Receipt, Search, Ticket, Users, FileText } from 'lucide-react';
 import { AdminRouteSummaryCard, AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -17,7 +17,9 @@ import { ContentScopePanel } from '@/components/domain/ContentScopePanel';
 import {
   createAdminBillingAddOn,
   createAdminBillingCoupon,
+  createAdminBillingOperation,
   createAdminBillingPlan,
+  resolveAdminBillingOperation,
   updateAdminBillingAddOn,
   updateAdminBillingCoupon,
   updateAdminBillingPlan,
@@ -30,6 +32,7 @@ import {
   getAdminBillingCouponVersionHistoryData,
   getAdminBillingInvoiceEvidenceData,
   getAdminBillingInvoiceData,
+  getAdminBillingOperationData,
   getAdminBillingPaymentTransactionData,
   getAdminBillingPlanData,
   getAdminBillingPlanVersionHistoryData,
@@ -43,6 +46,7 @@ import type {
   AdminBillingCouponRedemption,
   AdminBillingInvoice,
   AdminBillingInvoiceEvidence,
+  AdminBillingOperation,
   AdminBillingPaymentTransaction,
   AdminBillingPlan,
   AdminBillingSubscription,
@@ -173,6 +177,50 @@ const defaultCouponForm: BillingCouponFormState = {
   notes: '',
 };
 
+interface BillingOperationFormState {
+  userId: string;
+  operationType: 'manual_payment' | 'refund_request' | 'credit_adjustment' | 'reconciliation_note';
+  amount: string;
+  currency: string;
+  creditDelta: string;
+  paymentTransactionId: string;
+  invoiceId: string;
+  subscriptionId: string;
+  quoteId: string;
+  gateway: string;
+  gatewayReference: string;
+  evidenceUrl: string;
+  reason: string;
+  adminNotes: string;
+}
+
+interface OperationResolveFormState {
+  status: 'approved' | 'rejected' | 'completed' | 'cancelled';
+  resolutionNotes: string;
+}
+
+const defaultOperationForm: BillingOperationFormState = {
+  userId: '',
+  operationType: 'manual_payment',
+  amount: '',
+  currency: 'AUD',
+  creditDelta: '',
+  paymentTransactionId: '',
+  invoiceId: '',
+  subscriptionId: '',
+  quoteId: '',
+  gateway: '',
+  gatewayReference: '',
+  evidenceUrl: '',
+  reason: '',
+  adminNotes: '',
+};
+
+const defaultResolveForm: OperationResolveFormState = {
+  status: 'completed',
+  resolutionNotes: '',
+};
+
 function formatCurrency(amount: number, currency = 'AUD') {
   return new Intl.NumberFormat('en-AU', {
     style: 'currency',
@@ -272,6 +320,23 @@ function paymentTypeLabel(value: string): string {
 function paymentProductLabel(payment: AdminBillingPaymentTransaction): string {
   const productType = payment.productType ? labelSummaryKey(payment.productType) : 'Not recorded';
   return payment.productId ? `${productType}: ${payment.productId}` : productType;
+}
+
+function operationTypeLabel(value: string): string {
+  const labels: Record<string, string> = {
+    manual_payment: 'Manual payment',
+    refund_request: 'Refund request',
+    credit_adjustment: 'Credit adjustment',
+    reconciliation_note: 'Reconciliation note',
+  };
+  return labels[value] ?? labelSummaryKey(value);
+}
+
+function operationStatusVariant(status: string): 'success' | 'danger' | 'warning' | 'muted' | 'info' {
+  if (status === 'approved' || status === 'completed') return 'success';
+  if (status === 'rejected' || status === 'cancelled') return 'danger';
+  if (status === 'open') return 'warning';
+  return 'muted';
 }
 
 function EvidenceSection({ title, children }: { title: string; children: ReactNode }) {
@@ -430,6 +495,18 @@ export default function BillingPage() {
   const [invoiceEvidenceStatus, setInvoiceEvidenceStatus] = useState<PageStatus>('empty');
   const invoiceEvidenceRequestRef = useRef(0);
   const [toast, setToast] = useState<ToastState>(null);
+  const [operationFilters, setOperationFilters] = useState<Record<string, string[]>>({ operationType: [], status: [] });
+  const [operationSearch, setOperationSearch] = useState('');
+  const [operationPage, setOperationPage] = useState(1);
+  const [operationPageSize, setOperationPageSize] = useState(50);
+  const [operationTotal, setOperationTotal] = useState(0);
+  const [operations, setOperations] = useState<AdminBillingOperation[]>([]);
+  const [isOperationModalOpen, setIsOperationModalOpen] = useState(false);
+  const [operationForm, setOperationForm] = useState<BillingOperationFormState>(defaultOperationForm);
+  const [isSavingOperation, setIsSavingOperation] = useState(false);
+  const [resolveOperationTarget, setResolveOperationTarget] = useState<AdminBillingOperation | null>(null);
+  const [resolveForm, setResolveForm] = useState<OperationResolveFormState>(defaultResolveForm);
+  const [isResolvingOperation, setIsResolvingOperation] = useState(false);
 
   const selectedPlanStatus = planFilters.status?.[0];
   const selectedAddOnStatus = addOnFilters.status?.[0];
@@ -440,10 +517,16 @@ export default function BillingPage() {
   const selectedPaymentStatus = paymentFilters.status?.[0];
   const selectedPaymentGateway = paymentFilters.gateway?.[0];
   const selectedPaymentTransactionType = paymentFilters.transactionType?.[0];
+  const selectedOperationType = operationFilters.operationType?.[0];
+  const selectedOperationStatus = operationFilters.status?.[0];
 
   useEffect(() => {
     setPaymentPage(1);
   }, [selectedPaymentStatus, selectedPaymentGateway, selectedPaymentTransactionType, paymentSearch]);
+
+  useEffect(() => {
+    setOperationPage(1);
+  }, [selectedOperationType, selectedOperationStatus, operationSearch]);
 
   useEffect(() => {
     let cancelled = false;
@@ -451,7 +534,7 @@ export default function BillingPage() {
     async function loadBilling() {
       setPageStatus('loading');
       try {
-        const [planItems, addOnItems, couponItems, subscriptionResult, redemptionResult, invoiceResult, paymentResult] = await Promise.all([
+        const [planItems, addOnItems, couponItems, subscriptionResult, redemptionResult, invoiceResult, paymentResult, operationResult] = await Promise.all([
           getAdminBillingPlanData({ status: selectedPlanStatus }),
           getAdminBillingAddOnData({ status: selectedAddOnStatus }),
           getAdminBillingCouponData({ status: selectedCouponStatus }),
@@ -470,6 +553,13 @@ export default function BillingPage() {
             page: paymentPage,
             pageSize: paymentPageSize,
           }),
+          getAdminBillingOperationData({
+            operationType: selectedOperationType,
+            status: selectedOperationStatus,
+            search: operationSearch || undefined,
+            page: operationPage,
+            pageSize: operationPageSize,
+          }),
         ]);
 
         if (cancelled) return;
@@ -484,6 +574,8 @@ export default function BillingPage() {
         setInvoices(invoiceResult.items);
         setPaymentTransactions(paymentResult.items);
         setPaymentTotal(paymentResult.total);
+        setOperations(operationResult.items);
+        setOperationTotal(operationResult.total);
         setPageStatus(
           planItems.length > 0 ||
           addOnItems.length > 0 ||
@@ -491,7 +583,8 @@ export default function BillingPage() {
           subscriptionResult.items.length > 0 ||
           redemptionItems.length > 0 ||
           invoiceResult.items.length > 0 ||
-          paymentResult.items.length > 0
+          paymentResult.items.length > 0 ||
+          operationResult.items.length > 0
             ? 'success'
             : 'empty',
         );
@@ -509,7 +602,7 @@ export default function BillingPage() {
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [selectedPlanStatus, selectedAddOnStatus, selectedCouponStatus, selectedSubscriptionStatus, selectedRedemptionStatus, subscriptionSearch, redemptionSearch, selectedInvoiceStatus, invoiceSearch, selectedPaymentStatus, selectedPaymentGateway, selectedPaymentTransactionType, paymentSearch, paymentPage, paymentPageSize]);
+  }, [selectedPlanStatus, selectedAddOnStatus, selectedCouponStatus, selectedSubscriptionStatus, selectedRedemptionStatus, subscriptionSearch, redemptionSearch, selectedInvoiceStatus, invoiceSearch, selectedPaymentStatus, selectedPaymentGateway, selectedPaymentTransactionType, paymentSearch, paymentPage, paymentPageSize, selectedOperationType, selectedOperationStatus, operationSearch, operationPage, operationPageSize]);
 
   const metrics = useMemo(() => {
     const totalMRR = plans
@@ -874,6 +967,118 @@ export default function BillingPage() {
       render: (payment) => <span className="font-mono text-xs text-muted">{payment.quoteId ?? 'N/A'}</span>,
     },
   ];
+
+  const operationColumns: Column<AdminBillingOperation>[] = [
+    {
+      key: 'createdAt',
+      header: 'Created',
+      render: (op) => <span className="text-sm text-muted">{formatDateTime(op.createdAt)}</span>,
+    },
+    {
+      key: 'learner',
+      header: 'Learner',
+      render: (op) => (
+        <div className="space-y-1">
+          <p className="font-medium text-navy">{op.learnerName}</p>
+          <p className="text-xs uppercase tracking-[0.12em] text-muted">{op.userId}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'operationType',
+      header: 'Type',
+      render: (op) => <Badge variant="outline">{operationTypeLabel(op.operationType)}</Badge>,
+    },
+    {
+      key: 'amounts',
+      header: 'Amount / Credit Delta',
+      render: (op) => (
+        <div className="space-y-1 text-muted">
+          {op.amount != null && op.currency ? <p>{formatCurrency(op.amount, op.currency)}</p> : <p className="text-xs">—</p>}
+          {op.creditDelta != null ? <p className="text-xs">{op.creditDelta > 0 ? `+${op.creditDelta}` : op.creditDelta} credits</p> : null}
+        </div>
+      ),
+    },
+    {
+      key: 'references',
+      header: 'Linked Reference',
+      render: (op) => (
+        <div className="max-w-[200px] space-y-1 font-mono text-xs text-muted">
+          {op.paymentTransactionId ? <p className="truncate" title={op.paymentTransactionId}>Payment {op.paymentTransactionId}</p> : null}
+          {op.invoiceId ? <p className="truncate" title={op.invoiceId}>Invoice {op.invoiceId}</p> : null}
+          {op.subscriptionId ? <p className="truncate" title={op.subscriptionId}>Sub {op.subscriptionId}</p> : null}
+          {!op.paymentTransactionId && !op.invoiceId && !op.subscriptionId ? <span className="text-xs">—</span> : null}
+        </div>
+      ),
+    },
+    {
+      key: 'reason',
+      header: 'Reason',
+      render: (op) => <p className="max-w-xs truncate text-sm text-muted" title={op.reason}>{op.reason}</p>,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (op) => <Badge variant={operationStatusVariant(op.status)}>{op.status}</Badge>,
+    },
+    {
+      key: 'actions',
+      header: '',
+      render: (op) =>
+        op.status === 'open' ? (
+          <div className="flex justify-end">
+            <Button variant="outline" size="sm" onClick={() => openOperationResolver(op)}>
+              Resolve
+            </Button>
+          </div>
+        ) : null,
+    },
+  ];
+
+  const operationMobileCardRender = (op: AdminBillingOperation) => (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-navy">{op.learnerName}</p>
+          <p className="truncate font-mono text-xs text-muted">{op.userId}</p>
+        </div>
+        <Badge variant={operationStatusVariant(op.status)}>{op.status}</Badge>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Type</p>
+          <p className="mt-1 font-medium text-navy">{operationTypeLabel(op.operationType)}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Amount</p>
+          <p className="mt-1 font-medium text-navy">{op.amount != null && op.currency ? formatCurrency(op.amount, op.currency) : '—'}</p>
+        </div>
+        {op.creditDelta != null ? (
+          <div className="rounded-2xl bg-background-light px-3 py-2">
+            <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Credit Delta</p>
+            <p className="mt-1 font-medium text-navy">{op.creditDelta > 0 ? `+${op.creditDelta}` : op.creditDelta}</p>
+          </div>
+        ) : null}
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Created</p>
+          <p className="mt-1 font-medium text-navy">{formatDateTime(op.createdAt)}</p>
+        </div>
+      </div>
+
+      <div className="space-y-1 text-xs text-muted">
+        <p className="break-all">{op.reason}</p>
+        {op.paymentTransactionId ? <p className="break-all font-mono">Payment {op.paymentTransactionId}</p> : null}
+        {op.invoiceId ? <p className="break-all font-mono">Invoice {op.invoiceId}</p> : null}
+      </div>
+
+      {op.status === 'open' ? (
+        <Button variant="outline" size="sm" className="w-full" onClick={() => openOperationResolver(op)}>
+          Resolve
+        </Button>
+      ) : null}
+    </div>
+  );
 
   const planMobileCardRender = (plan: AdminBillingPlan) => (
     <div className="space-y-3">
@@ -1258,6 +1463,30 @@ export default function BillingPage() {
     },
   ];
 
+  const operationFilterGroups: FilterGroup[] = [
+    {
+      id: 'operationType',
+      label: 'Operation Type',
+      options: [
+        { id: 'manual_payment', label: 'Manual payment' },
+        { id: 'refund_request', label: 'Refund request' },
+        { id: 'credit_adjustment', label: 'Credit adjustment' },
+        { id: 'reconciliation_note', label: 'Reconciliation note' },
+      ],
+    },
+    {
+      id: 'status',
+      label: 'Status',
+      options: [
+        { id: 'open', label: 'Open' },
+        { id: 'approved', label: 'Approved' },
+        { id: 'completed', label: 'Completed' },
+        { id: 'rejected', label: 'Rejected' },
+        { id: 'cancelled', label: 'Cancelled' },
+      ],
+    },
+  ];
+
   function handleSingleFilterChange(
     setter: Dispatch<SetStateAction<Record<string, string[]>>>,
     groupId: string,
@@ -1270,7 +1499,7 @@ export default function BillingPage() {
   }
 
   async function reloadBilling() {
-    const [planItems, addOnItems, couponItems, subscriptionResult, redemptionResult, invoiceResult, paymentResult] = await Promise.all([
+    const [planItems, addOnItems, couponItems, subscriptionResult, redemptionResult, invoiceResult, paymentResult, operationResult] = await Promise.all([
       getAdminBillingPlanData({ status: selectedPlanStatus }),
       getAdminBillingAddOnData({ status: selectedAddOnStatus }),
       getAdminBillingCouponData({ status: selectedCouponStatus }),
@@ -1289,6 +1518,13 @@ export default function BillingPage() {
         page: paymentPage,
         pageSize: paymentPageSize,
       }),
+      getAdminBillingOperationData({
+        operationType: selectedOperationType,
+        status: selectedOperationStatus,
+        search: operationSearch || undefined,
+        page: operationPage,
+        pageSize: operationPageSize,
+      }),
     ]);
 
     const redemptionItems = selectedRedemptionStatus ? redemptionResult.items.filter((item) => item.status === selectedRedemptionStatus) : redemptionResult.items;
@@ -1301,6 +1537,8 @@ export default function BillingPage() {
     setInvoices(invoiceResult.items);
     setPaymentTransactions(paymentResult.items);
     setPaymentTotal(paymentResult.total);
+    setOperations(operationResult.items);
+    setOperationTotal(operationResult.total);
     setPageStatus(
       planItems.length > 0 ||
       addOnItems.length > 0 ||
@@ -1308,7 +1546,8 @@ export default function BillingPage() {
       subscriptionResult.items.length > 0 ||
       redemptionItems.length > 0 ||
       invoiceResult.items.length > 0 ||
-      paymentResult.items.length > 0
+      paymentResult.items.length > 0 ||
+      operationResult.items.length > 0
         ? 'success'
         : 'empty',
     );
@@ -1330,6 +1569,16 @@ export default function BillingPage() {
     setEditingCouponId(coupon?.id ?? null);
     setCouponForm(coupon ? toCouponForm(coupon) : defaultCouponForm);
     setIsCouponModalOpen(true);
+  }
+
+  function openOperationEditor() {
+    setOperationForm(defaultOperationForm);
+    setIsOperationModalOpen(true);
+  }
+
+  function openOperationResolver(operation: AdminBillingOperation) {
+    setResolveOperationTarget(operation);
+    setResolveForm(defaultResolveForm);
   }
 
   async function openCatalogHistory(target: CatalogHistoryTarget) {
@@ -1528,6 +1777,63 @@ export default function BillingPage() {
     }
   }
 
+  async function handleSaveOperation() {
+    const isMoneyOperation = operationForm.operationType === 'manual_payment' || operationForm.operationType === 'refund_request';
+    const isCreditOperation = operationForm.operationType === 'credit_adjustment';
+
+    setIsSavingOperation(true);
+    try {
+      await createAdminBillingOperation({
+        userId: operationForm.userId.trim(),
+        operationType: operationForm.operationType,
+        amount: isMoneyOperation && operationForm.amount.trim() ? toNumber(operationForm.amount) : null,
+        currency: isMoneyOperation ? operationForm.currency.trim() || null : null,
+        creditDelta: isCreditOperation && operationForm.creditDelta.trim() ? toNumber(operationForm.creditDelta) : null,
+        paymentTransactionId: operationForm.paymentTransactionId.trim() || null,
+        invoiceId: operationForm.invoiceId.trim() || null,
+        subscriptionId: operationForm.subscriptionId.trim() || null,
+        quoteId: operationForm.quoteId.trim() || null,
+        gateway: operationForm.gateway.trim() || null,
+        gatewayReference: operationForm.gatewayReference.trim() || null,
+        evidenceUrl: operationForm.evidenceUrl.trim() || null,
+        reason: operationForm.reason.trim(),
+        adminNotes: operationForm.adminNotes.trim() || null,
+      });
+
+      await reloadBilling();
+      setIsOperationModalOpen(false);
+      setOperationForm(defaultOperationForm);
+      setToast({ variant: 'success', message: 'Billing operation recorded successfully.' });
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: 'Unable to save this billing operation.' });
+    } finally {
+      setIsSavingOperation(false);
+    }
+  }
+
+  async function handleResolveOperation() {
+    if (!resolveOperationTarget) return;
+
+    setIsResolvingOperation(true);
+    try {
+      await resolveAdminBillingOperation(resolveOperationTarget.id, {
+        status: resolveForm.status,
+        resolutionNotes: resolveForm.resolutionNotes.trim() || null,
+      });
+
+      await reloadBilling();
+      setResolveOperationTarget(null);
+      setResolveForm(defaultResolveForm);
+      setToast({ variant: 'success', message: 'Billing operation resolved successfully.' });
+    } catch (error) {
+      console.error(error);
+      setToast({ variant: 'error', message: 'Unable to resolve this billing operation.' });
+    } finally {
+      setIsResolvingOperation(false);
+    }
+  }
+
   if (!isAuthenticated || role !== 'admin') return null;
 
   return (
@@ -1539,7 +1845,11 @@ export default function BillingPage() {
         description="Manage subscription plans, add-ons, coupons, subscriptions, and invoices with live backend data."
         actions={
           <>
-            <Button onClick={() => openPlanEditor()} className="gap-2">
+            <Button onClick={() => openOperationEditor()} className="gap-2">
+              <FileText className="h-4 w-4" />
+              Record Operation
+            </Button>
+            <Button variant="outline" onClick={() => openPlanEditor()} className="gap-2">
               <CreditCard className="h-4 w-4" />
               Create Plan
             </Button>
@@ -1673,6 +1983,43 @@ export default function BillingPage() {
             pageSizeOptions={[20, 50, 100]}
             itemLabel="payment transaction"
             itemLabelPlural="payment transactions"
+          />
+        </AdminRoutePanel>
+
+        <AdminRoutePanel
+          title="Billing Operations"
+          description="Audited ledger of manual payments, refunds, credit adjustments, and reconciliation notes. Entries require admin resolution."
+          actions={<Button variant="outline" size="sm" onClick={() => openOperationEditor()}>Record Operation</Button>}
+        >
+          <div className="max-w-md">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+              <Input placeholder="Search learner, reason, or reference ID" value={operationSearch} onChange={(event) => setOperationSearch(event.target.value)} className="pl-9" />
+            </div>
+          </div>
+          <FilterBar
+            groups={operationFilterGroups}
+            selected={operationFilters}
+            onChange={(groupId, optionId) => handleSingleFilterChange(setOperationFilters, groupId, optionId)}
+            onClear={() => { setOperationFilters({ operationType: [], status: [] }); setOperationSearch(''); }}
+          />
+          <DataTable
+            aria-label="Billing operations"
+            columns={operationColumns}
+            data={operations}
+            keyExtractor={(op) => op.id}
+            mobileCardRender={operationMobileCardRender}
+            emptyMessage={operationSearch || selectedOperationType || selectedOperationStatus ? 'No billing operations match the current filters.' : 'No billing operations recorded yet.'}
+          />
+          <Pagination
+            page={operationPage}
+            pageSize={operationPageSize}
+            total={operationTotal}
+            onPageChange={setOperationPage}
+            onPageSizeChange={setOperationPageSize}
+            pageSizeOptions={[20, 50, 100]}
+            itemLabel="billing operation"
+            itemLabelPlural="billing operations"
           />
         </AdminRoutePanel>
       </AsyncStateWrapper>
@@ -2183,6 +2530,161 @@ export default function BillingPage() {
           </div>
         </div>
       </Modal>
+
+      <Modal
+        open={isOperationModalOpen}
+        onClose={() => {
+          setIsOperationModalOpen(false);
+          setOperationForm(defaultOperationForm);
+        }}
+        title="Record Billing Operation"
+      >
+        <div className="space-y-4 py-2">
+          <div className="grid gap-4 md:grid-cols-2">
+            <Input label="User ID" value={operationForm.userId} onChange={(event) => setOperationForm((current) => ({ ...current, userId: event.target.value }))} hint="Learner user ID" />
+            <Select
+              label="Operation Type"
+              value={operationForm.operationType}
+              onChange={(event) => setOperationForm((current) => ({ ...current, operationType: event.target.value as BillingOperationFormState['operationType'] }))}
+              options={[
+                { value: 'manual_payment', label: 'Manual payment' },
+                { value: 'refund_request', label: 'Refund request' },
+                { value: 'credit_adjustment', label: 'Credit adjustment' },
+                { value: 'reconciliation_note', label: 'Reconciliation note' },
+              ]}
+            />
+          </div>
+
+          {(operationForm.operationType === 'manual_payment' || operationForm.operationType === 'refund_request') ? (
+            <div className="grid gap-4 md:grid-cols-2">
+              <Input label="Amount" type="number" min={0} step="0.01" value={operationForm.amount} onChange={(event) => setOperationForm((current) => ({ ...current, amount: event.target.value }))} />
+              <Input label="Currency" value={operationForm.currency} onChange={(event) => setOperationForm((current) => ({ ...current, currency: event.target.value.toUpperCase() }))} />
+            </div>
+          ) : null}
+
+          {operationForm.operationType === 'credit_adjustment' ? (
+            <Input label="Credit Delta" type="number" step={1} value={operationForm.creditDelta} onChange={(event) => setOperationForm((current) => ({ ...current, creditDelta: event.target.value }))} hint="Positive or negative integer" />
+          ) : null}
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Input label="Payment Transaction ID" value={operationForm.paymentTransactionId} onChange={(event) => setOperationForm((current) => ({ ...current, paymentTransactionId: event.target.value }))} hint="Optional" />
+            <Input label="Invoice ID" value={operationForm.invoiceId} onChange={(event) => setOperationForm((current) => ({ ...current, invoiceId: event.target.value }))} hint="Optional" />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Input label="Subscription ID" value={operationForm.subscriptionId} onChange={(event) => setOperationForm((current) => ({ ...current, subscriptionId: event.target.value }))} hint="Optional" />
+            <Input label="Quote ID" value={operationForm.quoteId} onChange={(event) => setOperationForm((current) => ({ ...current, quoteId: event.target.value }))} hint="Optional" />
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2">
+            <Input label="Gateway" value={operationForm.gateway} onChange={(event) => setOperationForm((current) => ({ ...current, gateway: event.target.value }))} hint="e.g., stripe, paypal" />
+            <Input label="Gateway Reference" value={operationForm.gatewayReference} onChange={(event) => setOperationForm((current) => ({ ...current, gatewayReference: event.target.value }))} hint="Optional" />
+          </div>
+
+          <Input label="Evidence URL" value={operationForm.evidenceUrl} onChange={(event) => setOperationForm((current) => ({ ...current, evidenceUrl: event.target.value }))} hint="Link to supporting documentation" />
+
+          <Textarea label="Reason" value={operationForm.reason} onChange={(event) => setOperationForm((current) => ({ ...current, reason: event.target.value }))} hint="Required. Explain why this operation is being recorded." />
+
+          <Textarea label="Admin Notes" value={operationForm.adminNotes} onChange={(event) => setOperationForm((current) => ({ ...current, adminNotes: event.target.value }))} hint="Optional internal notes" />
+
+          <div className="flex justify-end gap-3 border-t border-border pt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setIsOperationModalOpen(false);
+                setOperationForm(defaultOperationForm);
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={handleSaveOperation} loading={isSavingOperation}>
+              Save Operation
+            </Button>
+          </div>
+        </div>
+      </Modal>
+
+      <Drawer
+        open={resolveOperationTarget !== null}
+        onClose={() => {
+          setResolveOperationTarget(null);
+          setResolveForm(defaultResolveForm);
+        }}
+        title="Resolve Billing Operation"
+        className="sm:max-w-lg"
+      >
+        {resolveOperationTarget ? (
+          <div className="space-y-5">
+            <div className="border-b border-border pb-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge variant="outline">{operationTypeLabel(resolveOperationTarget.operationType)}</Badge>
+                <Badge variant={operationStatusVariant(resolveOperationTarget.status)}>{resolveOperationTarget.status}</Badge>
+              </div>
+              <h2 className="mt-3 text-lg font-semibold text-navy">{resolveOperationTarget.learnerName}</h2>
+              <p className="mt-1 text-xs uppercase tracking-[0.12em] text-muted">{resolveOperationTarget.userId}</p>
+            </div>
+
+            <div className="space-y-3">
+              <div className="rounded-lg bg-background-light px-3 py-2">
+                <dt className="text-[11px] uppercase tracking-[0.12em] text-muted">Reason</dt>
+                <dd className="mt-1 text-sm text-navy">{resolveOperationTarget.reason}</dd>
+              </div>
+
+              {resolveOperationTarget.adminNotes ? (
+                <div className="rounded-lg bg-background-light px-3 py-2">
+                  <dt className="text-[11px] uppercase tracking-[0.12em] text-muted">Admin Notes</dt>
+                  <dd className="mt-1 text-sm text-navy">{resolveOperationTarget.adminNotes}</dd>
+                </div>
+              ) : null}
+
+              {resolveOperationTarget.amount != null && resolveOperationTarget.currency ? (
+                <div className="rounded-lg bg-background-light px-3 py-2">
+                  <dt className="text-[11px] uppercase tracking-[0.12em] text-muted">Amount</dt>
+                  <dd className="mt-1 text-sm font-medium text-navy">{formatCurrency(resolveOperationTarget.amount, resolveOperationTarget.currency)}</dd>
+                </div>
+              ) : null}
+
+              {resolveOperationTarget.creditDelta != null ? (
+                <div className="rounded-lg bg-background-light px-3 py-2">
+                  <dt className="text-[11px] uppercase tracking-[0.12em] text-muted">Credit Delta</dt>
+                  <dd className="mt-1 text-sm font-medium text-navy">{resolveOperationTarget.creditDelta > 0 ? `+${resolveOperationTarget.creditDelta}` : resolveOperationTarget.creditDelta}</dd>
+                </div>
+              ) : null}
+            </div>
+
+            <div className="space-y-4 border-t border-border pt-4">
+              <Select
+                label="Resolution Status"
+                value={resolveForm.status}
+                onChange={(event) => setResolveForm((current) => ({ ...current, status: event.target.value as OperationResolveFormState['status'] }))}
+                options={[
+                  { value: 'completed', label: 'Completed' },
+                  { value: 'approved', label: 'Approved' },
+                  { value: 'rejected', label: 'Rejected' },
+                  { value: 'cancelled', label: 'Cancelled' },
+                ]}
+              />
+
+              <Textarea label="Resolution Notes" value={resolveForm.resolutionNotes} onChange={(event) => setResolveForm((current) => ({ ...current, resolutionNotes: event.target.value }))} hint="Optional. Explain the resolution decision." />
+
+              <div className="flex justify-end gap-3 border-t border-border pt-4">
+                <Button
+                  variant="outline"
+                  onClick={() => {
+                    setResolveOperationTarget(null);
+                    setResolveForm(defaultResolveForm);
+                  }}
+                >
+                  Cancel
+                </Button>
+                <Button onClick={handleResolveOperation} loading={isResolvingOperation}>
+                  Resolve Operation
+                </Button>
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </Drawer>
     </AdminRouteWorkspace>
   );
 }

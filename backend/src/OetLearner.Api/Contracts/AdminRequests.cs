@@ -229,6 +229,27 @@ public record AdminBillingCouponUpdateRequest(
     string? ApplicableAddOnCodesJson = null,
     string? Notes = null);
 
+public record AdminBillingOperationCreateRequest(
+    string UserId,
+    string OperationType,
+    decimal? Amount,
+    string? Currency,
+    int? CreditDelta,
+    string? PaymentTransactionId,
+    string? InvoiceId,
+    string? SubscriptionId,
+    string? QuoteId,
+    string? Gateway,
+    string? GatewayReference,
+    string? EvidenceUrl,
+    string Reason,
+    string? AdminNotes,
+    string? Status = null);
+
+public record AdminBillingOperationResolveRequest(
+    string Status,
+    string? ResolutionNotes);
+
 // ── Review Ops ──
 
 public record AdminReviewAssignRequest(string ExpertId, string? Reason);
