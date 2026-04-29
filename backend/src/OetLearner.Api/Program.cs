@@ -540,6 +540,7 @@ builder.Services.AddScoped<MockDiagnosticService>();
 builder.Services.AddScoped<ContentImportService>();
 builder.Services.AddScoped<ContentSearchService>();
 builder.Services.AddScoped<MediaNormalizationService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Content.MediaAssetAccessService>();
 builder.Services.AddScoped<VideoLessonService>();
 builder.Services.AddScoped<StrategyGuideService>();
 builder.Services.AddScoped<NotificationService>();

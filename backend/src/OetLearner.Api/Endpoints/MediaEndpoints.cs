@@ -126,12 +126,13 @@ public static class MediaEndpoints
         string id,
         HttpContext http,
         LearnerDbContext db,
+        MediaAssetAccessService access,
         CancellationToken ct)
     {
         var asset = await db.MediaAssets.FindAsync([id], ct);
         if (asset is null)
             return Results.NotFound(new { code = "media_not_found", message = "Media asset not found." });
-        if (!await CanAccessMediaAsync(http, db, asset, ct))
+        if (!await access.CanAccessAsync(http.User, asset, ct))
             return Results.NotFound(new { code = "media_not_found", message = "Media asset not found." });
 
         return Results.Ok(new
@@ -221,92 +222,20 @@ public static class MediaEndpoints
         HttpContext http,
         LearnerDbContext db,
         OetLearner.Api.Services.Content.IFileStorage storage,
+        MediaAssetAccessService access,
         CancellationToken ct)
     {
         var media = await db.MediaAssets.AsNoTracking().FirstOrDefaultAsync(m => m.Id == id, ct);
         if (media is null) return Results.NotFound();
         if (media.Status != MediaAssetStatus.Ready) return Results.NotFound();
         if (string.IsNullOrWhiteSpace(media.StoragePath)) return Results.NotFound();
-        if (!await CanAccessMediaAsync(http, db, media, ct)) return Results.NotFound();
+        if (!await access.CanAccessAsync(http.User, media, ct)) return Results.NotFound();
 
         if (!storage.Exists(media.StoragePath)) return Results.NotFound();
         var stream = await storage.OpenReadAsync(media.StoragePath, ct);
         return Results.Stream(stream, media.MimeType, media.OriginalFilename);
     }
 
-    private static async Task<bool> CanAccessMediaAsync(
-        HttpContext http,
-        LearnerDbContext db,
-        MediaAsset media,
-        CancellationToken ct)
-    {
-        var userId = http.MediaUserId();
-        var role = http.User.FindFirstValue(ClaimTypes.Role) ?? string.Empty;
-
-        if (string.Equals(role, ApplicationUserRoles.Admin, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(media.UploadedBy, userId, StringComparison.OrdinalIgnoreCase))
-        {
-            return true;
-        }
-
-        if (!string.Equals(role, ApplicationUserRoles.Learner, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-
-        if (await IsPublishedFreePreviewMediaAsync(db, media.Id, ct))
-        {
-            return true;
-        }
-
-        if (!await HasActiveLearnerEntitlementAsync(db, userId, ct))
-        {
-            return false;
-        }
-
-        var profession = http.User.FindFirstValue("prof") ?? http.User.FindFirstValue("profession");
-        if (string.IsNullOrWhiteSpace(profession))
-        {
-            profession = await db.Users
-                .AsNoTracking()
-                .Where(u => u.Id == userId)
-                .Select(u => u.ActiveProfessionId)
-                .SingleOrDefaultAsync(ct);
-        }
-
-        var normalizedProfession = profession?.Trim().ToLowerInvariant();
-        return await db.ContentPaperAssets
-            .AsNoTracking()
-            .AnyAsync(asset =>
-                asset.MediaAssetId == media.Id
-                && asset.IsPrimary
-                && asset.Paper != null
-                && asset.Paper.Status == ContentStatus.Published
-                && (asset.Paper.AppliesToAllProfessions
-                    || (!string.IsNullOrWhiteSpace(normalizedProfession)
-                        && asset.Paper.ProfessionId == normalizedProfession)), ct);
-    }
-
-    private static Task<bool> HasActiveLearnerEntitlementAsync(
-        LearnerDbContext db,
-        string userId,
-        CancellationToken ct)
-        => db.Subscriptions
-            .AsNoTracking()
-            .AnyAsync(subscription =>
-                subscription.UserId == userId
-                && (subscription.Status == SubscriptionStatus.Active
-                    || subscription.Status == SubscriptionStatus.Trial), ct);
-
-    private static Task<bool> IsPublishedFreePreviewMediaAsync(
-        LearnerDbContext db,
-        string mediaAssetId,
-        CancellationToken ct)
-        => db.FreePreviewAssets
-            .AsNoTracking()
-            .AnyAsync(preview =>
-                preview.MediaAssetId == mediaAssetId
-                && preview.Status == ContentStatus.Published, ct);
 }
 
 file static class MediaHttpContextExtensions

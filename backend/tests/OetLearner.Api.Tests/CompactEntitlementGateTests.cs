@@ -4,6 +4,7 @@ using OetLearner.Api.Configuration;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.Conversation;
+using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Entitlements;
 using OetLearner.Api.Services.Pronunciation;
 
@@ -134,6 +135,169 @@ public class CompactEntitlementGateTests
         Assert.Equal("trial", result.Tier);
         Assert.Equal(int.MaxValue, result.Remaining);
     }
+
+    [Fact]
+    public async Task ContentEntitlement_LatestCancelledSubscriptionDeniesPremiumContent()
+    {
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "plan-content-pro",
+            Code = "content-pro",
+            Name = "Content Pro",
+            EntitlementsJson = System.Text.Json.JsonSerializer.Serialize(new { content = new { tier = "premium" } }),
+            IncludedSubtestsJson = "[]"
+        });
+        db.Subscriptions.AddRange(
+            new Subscription
+            {
+                Id = "sub-old-active-content",
+                UserId = "learner-content-cancelled",
+                PlanId = "content-pro",
+                Status = SubscriptionStatus.Active,
+                StartedAt = now.AddMonths(-2),
+                ChangedAt = now.AddMonths(-2)
+            },
+            new Subscription
+            {
+                Id = "sub-latest-cancelled-content",
+                UserId = "learner-content-cancelled",
+                PlanId = "content-pro",
+                Status = SubscriptionStatus.Cancelled,
+                StartedAt = now.AddMonths(-1),
+                ChangedAt = now
+            });
+        await db.SaveChangesAsync();
+
+        var service = new ContentEntitlementService(db, new EffectiveEntitlementResolver(db));
+        var result = await service.AllowAccessAsync("learner-content-cancelled", PremiumPaper("paper-content-cancelled", "reading"), default);
+
+        Assert.False(result.Allowed);
+        Assert.Equal("no_active_subscription", result.Reason);
+    }
+
+    [Fact]
+    public async Task ContentEntitlement_UsesPlanVersionGrantWhenLivePlanMutates()
+    {
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "plan-versioned-content",
+            Code = "versioned-content",
+            Name = "Versioned Content",
+            EntitlementsJson = System.Text.Json.JsonSerializer.Serialize(new { content = new { tier = "free", subtests = new[] { "writing" } } }),
+            IncludedSubtestsJson = "[]"
+        });
+        db.BillingPlanVersions.Add(new BillingPlanVersion
+        {
+            Id = "plan-versioned-content-v1",
+            PlanId = "plan-versioned-content",
+            VersionNumber = 1,
+            Code = "versioned-content",
+            Name = "Versioned Content v1",
+            EntitlementsJson = System.Text.Json.JsonSerializer.Serialize(new { content = new { tier = "free", subtests = new[] { "reading" } } }),
+            IncludedSubtestsJson = "[]",
+            CreatedAt = now.AddDays(-7)
+        });
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "sub-versioned-content",
+            UserId = "learner-versioned-content",
+            PlanId = "versioned-content",
+            PlanVersionId = "plan-versioned-content-v1",
+            Status = SubscriptionStatus.Active,
+            StartedAt = now.AddDays(-6),
+            ChangedAt = now.AddDays(-6)
+        });
+        await db.SaveChangesAsync();
+
+        var service = new ContentEntitlementService(db, new EffectiveEntitlementResolver(db));
+        var result = await service.AllowAccessAsync("learner-versioned-content", PremiumPaper("paper-versioned-reading", "reading"), default);
+
+        Assert.True(result.Allowed);
+        Assert.Equal("plan_grants_subtest", result.Reason);
+    }
+
+    [Fact]
+    public async Task ContentEntitlement_MissingPlanVersionAnchorFailsClosed()
+    {
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "plan-live-premium-content",
+            Code = "live-premium-content",
+            Name = "Live Premium Content",
+            EntitlementsJson = System.Text.Json.JsonSerializer.Serialize(new { content = new { tier = "premium" } }),
+            IncludedSubtestsJson = "[]"
+        });
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "sub-broken-anchor-content",
+            UserId = "learner-broken-anchor-content",
+            PlanId = "live-premium-content",
+            PlanVersionId = "missing-version-anchor",
+            Status = SubscriptionStatus.Active,
+            StartedAt = now,
+            ChangedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var service = new ContentEntitlementService(db, new EffectiveEntitlementResolver(db));
+        var result = await service.AllowAccessAsync("learner-broken-anchor-content", PremiumPaper("paper-broken-anchor", "reading"), default);
+
+        Assert.False(result.Allowed);
+        Assert.Equal("plan_does_not_grant", result.Reason);
+    }
+
+    [Fact]
+    public async Task ContentEntitlement_MissingLivePlanWithoutSnapshotFailsClosed()
+    {
+        await using var db = CreateDb();
+        var now = DateTimeOffset.UtcNow;
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "sub-missing-live-plan-content",
+            UserId = "learner-missing-live-plan-content",
+            PlanId = "missing-live-plan",
+            Status = SubscriptionStatus.Active,
+            StartedAt = now,
+            ChangedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var service = new ContentEntitlementService(db, new EffectiveEntitlementResolver(db));
+        var result = await service.AllowAccessAsync("learner-missing-live-plan-content", PremiumPaper("paper-missing-live-plan", "reading"), default);
+
+        Assert.False(result.Allowed);
+        Assert.Equal("plan_does_not_grant", result.Reason);
+    }
+
+    [Fact]
+    public void ContentBundle_ExplicitContentIgnoresLegacyIncludedSubtests()
+    {
+        var bundle = ContentEntitlementService.ParseBundle(
+            System.Text.Json.JsonSerializer.Serialize(new { content = new { tier = "free", subtests = new[] { "writing" } } }),
+            System.Text.Json.JsonSerializer.Serialize(new[] { "reading" }));
+
+        Assert.Contains("writing", bundle.GrantedSubtests);
+        Assert.DoesNotContain("reading", bundle.GrantedSubtests);
+        Assert.Equal("free", bundle.Tier);
+    }
+
+    private static ContentPaper PremiumPaper(string id, string subtestCode) => new()
+    {
+        Id = id,
+        SubtestCode = subtestCode,
+        Title = $"{subtestCode} premium paper",
+        Slug = id,
+        Status = ContentStatus.Published,
+        TagsCsv = "access:premium",
+        CreatedAt = DateTimeOffset.UtcNow,
+        UpdatedAt = DateTimeOffset.UtcNow
+    };
 
     private sealed class StaticConversationOptionsProvider(ConversationOptions options) : IConversationOptionsProvider
     {

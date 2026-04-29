@@ -17,11 +17,15 @@ public sealed class ListeningLearnerService(
     public async Task<object> GetHomeAsync(string userId, CancellationToken ct)
     {
         await EnsureLearnerAsync(userId, ct);
+        var profession = await GetLearnerProfessionAsync(userId, ct);
 
         var papers = await db.ContentPapers.AsNoTracking()
             .Include(p => p.Assets.Where(a => a.IsPrimary))
                 .ThenInclude(a => a.MediaAsset)
-            .Where(p => p.Status == ContentStatus.Published && p.SubtestCode == Subtest)
+            .Where(p => p.Status == ContentStatus.Published
+                && p.SubtestCode == Subtest
+                && (p.AppliesToAllProfessions
+                    || (!string.IsNullOrWhiteSpace(profession) && p.ProfessionId == profession)))
             .OrderByDescending(p => p.Priority)
             .ThenByDescending(p => p.PublishedAt)
             .ThenBy(p => p.Title)
@@ -190,6 +194,7 @@ public sealed class ListeningLearnerService(
     public async Task<object> GetSessionAsync(string userId, string paperId, string? mode, string? attemptId, CancellationToken ct)
     {
         await EnsureLearnerAsync(userId, ct);
+        await RequirePaperAccessIfAuthoredAsync(userId, paperId, ct);
         var source = await ResolveSourceAsync(paperId, ct);
         var normalizedMode = NormalizeMode(mode);
         Attempt? attempt = null;
@@ -251,16 +256,7 @@ public sealed class ListeningLearnerService(
     {
         await EnsureLearnerMutationAllowedAsync(userId, ct);
 
-        // Subscription gate (Phase 3). Only applies to authored ContentPaper rows;
-        // legacy ContentItem-backed seed/diagnostic tasks (e.g. "lt-001") have no
-        // ContentPaper row and remain ungated until they migrate to the paper
-        // schema. Free papers (tagged "access:free") and admins bypass automatically.
-        var paperEntity = await db.ContentPapers.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.Id == paperId, ct);
-        if (paperEntity is not null)
-        {
-            await entitlements.RequireAccessAsync(userId, paperEntity, ct);
-        }
+        await RequirePaperAccessIfAuthoredAsync(userId, paperId, ct);
 
         var source = await ResolveSourceAsync(paperId, ct);
         if (source.Questions.Count == 0)
@@ -459,6 +455,47 @@ public sealed class ListeningLearnerService(
             ?? throw ApiException.NotFound("listening_paper_not_found", "Listening paper not found.");
         return BuildLegacySource(legacy);
     }
+
+    private async Task RequirePaperAccessIfAuthoredAsync(string userId, string paperId, CancellationToken ct)
+    {
+        var paper = await db.ContentPapers.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == paperId && p.SubtestCode == Subtest, ct);
+        if (paper is null)
+        {
+            return;
+        }
+
+        if (paper.Status != ContentStatus.Published)
+        {
+            throw ApiException.NotFound("listening_paper_not_found", "Listening paper not found.");
+        }
+
+        if (!await CanLearnerSeePaperAsync(userId, paper, ct))
+        {
+            throw ApiException.NotFound("listening_paper_not_found", "Listening paper not found.");
+        }
+
+        await entitlements.RequireAccessAsync(userId, paper, ct);
+    }
+
+    private async Task<bool> CanLearnerSeePaperAsync(string userId, ContentPaper paper, CancellationToken ct)
+    {
+        if (paper.AppliesToAllProfessions)
+        {
+            return true;
+        }
+
+        var profession = await GetLearnerProfessionAsync(userId, ct);
+        return !string.IsNullOrWhiteSpace(profession)
+            && string.Equals(paper.ProfessionId, profession, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private Task<string?> GetLearnerProfessionAsync(string userId, CancellationToken ct)
+        => db.Users
+            .AsNoTracking()
+            .Where(user => user.Id == userId)
+            .Select(user => user.ActiveProfessionId)
+            .SingleOrDefaultAsync(ct);
 
     private static ListeningSource BuildPaperSource(ContentPaper paper)
     {

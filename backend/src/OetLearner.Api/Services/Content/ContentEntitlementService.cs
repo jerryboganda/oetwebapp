@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services.Content;
 
@@ -32,9 +33,9 @@ namespace OetLearner.Api.Services.Content;
 //       }
 //     }
 //
-//   A learner with an Active or Trial Subscription is granted whatever the
-//   plan says. Subscription add-ons are not yet inspected here (scope kept
-//   tight for Phase 3 — extending to add-ons is a one-line change).
+//   Subscription eligibility comes from IEffectiveEntitlementResolver so this
+//   gate follows the same latest-subscription semantics as compact AI and
+//   practice gates. Subscription add-ons are not yet inspected here.
 //
 //   Admins always pass.
 //
@@ -75,7 +76,7 @@ public sealed record ContentEntitlementBundle(
     IReadOnlySet<string> GrantedSubtests,         // lowercased, e.g. {"listening","reading"}
     IReadOnlySet<string> GrantedPaperIds);
 
-public sealed class ContentEntitlementService(LearnerDbContext db) : IContentEntitlementService
+public sealed class ContentEntitlementService(LearnerDbContext db, IEffectiveEntitlementResolver entitlementResolver) : IContentEntitlementService
 {
     private const string AccessFreeTag = "access:free";
     private const string AccessPremiumTag = "access:premium";
@@ -108,14 +109,8 @@ public sealed class ContentEntitlementService(LearnerDbContext db) : IContentEnt
                 RequiredScope: $"subtest:{paper.SubtestCode}");
         }
 
-        // 3. Active or Trial Subscription with plan grants.
-        var sub = await db.Subscriptions.AsNoTracking()
-            .Where(s => s.UserId == userId
-                && (s.Status == SubscriptionStatus.Active || s.Status == SubscriptionStatus.Trial))
-            .OrderByDescending(s => s.StartedAt)
-            .FirstOrDefaultAsync(ct);
-
-        if (sub is null)
+        var entitlement = await entitlementResolver.ResolveAsync(userId, ct);
+        if (!entitlement.HasEligibleSubscription)
         {
             return new ContentEntitlementResult(
                 Allowed: false, Reason: "no_active_subscription",
@@ -123,12 +118,18 @@ public sealed class ContentEntitlementService(LearnerDbContext db) : IContentEnt
                 RequiredScope: $"subtest:{paper.SubtestCode}");
         }
 
-        var normalizedPlanId = sub.PlanId.ToLowerInvariant();
-        var plan = await db.BillingPlans.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.Id.ToLower() == normalizedPlanId || p.Code.ToLower() == normalizedPlanId, ct);
+        var planShape = await ResolveContentPlanShapeAsync(entitlement, ct);
+        if (planShape.AnchorBroken)
+        {
+            return new ContentEntitlementResult(
+                Allowed: false,
+                Reason: "plan_does_not_grant",
+                CurrentTier: entitlement.Tier,
+                RequiredScope: $"subtest:{paper.SubtestCode}");
+        }
 
-        var bundle = ParseBundle(plan?.EntitlementsJson, plan?.IncludedSubtestsJson);
-        var currentTier = sub.Status == SubscriptionStatus.Trial ? "trial" : bundle.Tier;
+        var bundle = ParseBundle(planShape.EntitlementsJson, planShape.IncludedSubtestsJson);
+        var currentTier = entitlement.IsTrial ? "trial" : bundle.Tier;
 
         if (string.Equals(bundle.Tier, "premium", StringComparison.OrdinalIgnoreCase))
         {
@@ -187,14 +188,56 @@ public sealed class ContentEntitlementService(LearnerDbContext db) : IContentEnt
 
     /// <summary>Parses the plan's EntitlementsJson + IncludedSubtestsJson into a
     /// strongly-typed projection. Tolerates legacy plans (no "content" key) by
-    /// falling back to IncludedSubtestsJson and a default tier of "premium" — any
+    /// falling back to IncludedSubtestsJson and a default tier of "premium"; any
     /// active paid subscription is assumed to grant general access until an admin
-    /// chooses to scope it down via the new schema.</summary>
+    /// chooses to scope it down via the new schema. Once a "content" object is
+    /// present, it owns scoped access and legacy IncludedSubtestsJson is ignored.</summary>
     public static ContentEntitlementBundle ParseBundle(string? entitlementsJson, string? includedSubtestsJson)
     {
         string tier = "premium"; // legacy plans grant premium by default
         var subtests = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var papers = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        JsonElement? contentNode = null;
+
+        if (!string.IsNullOrWhiteSpace(entitlementsJson))
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(entitlementsJson);
+                if (doc.RootElement.ValueKind == JsonValueKind.Object
+                    && doc.RootElement.TryGetProperty("content", out var content)
+                    && content.ValueKind == JsonValueKind.Object)
+                {
+                    contentNode = content.Clone();
+                }
+            }
+            catch (JsonException) { /* tolerate malformed JSON; treat as legacy */ }
+        }
+
+        if (contentNode is not null)
+        {
+            tier = "free";
+            var content = contentNode.Value;
+            if (content.TryGetProperty("tier", out var t) && t.ValueKind == JsonValueKind.String)
+            {
+                var raw = t.GetString();
+                if (!string.IsNullOrWhiteSpace(raw)) tier = raw.Trim().ToLowerInvariant();
+            }
+            if (content.TryGetProperty("subtests", out var st) && st.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var el in st.EnumerateArray())
+                    if (el.ValueKind == JsonValueKind.String)
+                        subtests.Add((el.GetString() ?? string.Empty).Trim().ToLowerInvariant());
+            }
+            if (content.TryGetProperty("papers", out var pp) && pp.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var el in pp.EnumerateArray())
+                    if (el.ValueKind == JsonValueKind.String)
+                        papers.Add((el.GetString() ?? string.Empty).Trim());
+            }
+
+            return new ContentEntitlementBundle(tier, subtests, papers);
+        }
 
         // includedSubtestsJson is the legacy ["writing","speaking"] array.
         if (!string.IsNullOrWhiteSpace(includedSubtestsJson))
@@ -207,37 +250,44 @@ public sealed class ContentEntitlementService(LearnerDbContext db) : IContentEnt
             catch (JsonException) { /* tolerate */ }
         }
 
-        if (!string.IsNullOrWhiteSpace(entitlementsJson))
-        {
-            try
-            {
-                using var doc = JsonDocument.Parse(entitlementsJson);
-                if (doc.RootElement.ValueKind == JsonValueKind.Object
-                    && doc.RootElement.TryGetProperty("content", out var content)
-                    && content.ValueKind == JsonValueKind.Object)
-                {
-                    if (content.TryGetProperty("tier", out var t) && t.ValueKind == JsonValueKind.String)
-                    {
-                        var raw = t.GetString();
-                        if (!string.IsNullOrWhiteSpace(raw)) tier = raw.Trim().ToLowerInvariant();
-                    }
-                    if (content.TryGetProperty("subtests", out var st) && st.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var el in st.EnumerateArray())
-                            if (el.ValueKind == JsonValueKind.String)
-                                subtests.Add((el.GetString() ?? string.Empty).Trim().ToLowerInvariant());
-                    }
-                    if (content.TryGetProperty("papers", out var pp) && pp.ValueKind == JsonValueKind.Array)
-                    {
-                        foreach (var el in pp.EnumerateArray())
-                            if (el.ValueKind == JsonValueKind.String)
-                                papers.Add((el.GetString() ?? string.Empty).Trim());
-                    }
-                }
-            }
-            catch (JsonException) { /* tolerate malformed JSON; treat as legacy */ }
-        }
-
         return new ContentEntitlementBundle(tier, subtests, papers);
     }
+
+    private async Task<ContentPlanShape> ResolveContentPlanShapeAsync(EffectiveEntitlementSnapshot entitlement, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(entitlement.PlanVersionId))
+        {
+            var version = await db.BillingPlanVersions.AsNoTracking()
+                .FirstOrDefaultAsync(item => item.Id == entitlement.PlanVersionId, ct);
+            if (version is null || !MatchesSubscriptionPlan(version, entitlement.PlanId, entitlement.PlanCode))
+            {
+                return new ContentPlanShape(null, null, AnchorBroken: true);
+            }
+
+            return new ContentPlanShape(version.EntitlementsJson, version.IncludedSubtestsJson, AnchorBroken: false);
+        }
+
+        var lookup = entitlement.PlanId ?? entitlement.PlanCode;
+        if (string.IsNullOrWhiteSpace(lookup))
+        {
+            return new ContentPlanShape(null, null, AnchorBroken: true);
+        }
+
+        var normalizedPlan = lookup.Trim().ToLowerInvariant();
+        var plan = await db.BillingPlans.AsNoTracking()
+            .FirstOrDefaultAsync(item => item.Id.ToLower() == normalizedPlan || item.Code.ToLower() == normalizedPlan, ct);
+
+        return plan is null
+            ? new ContentPlanShape(null, null, AnchorBroken: true)
+            : new ContentPlanShape(plan.EntitlementsJson, plan.IncludedSubtestsJson, AnchorBroken: false);
+    }
+
+    private static bool MatchesSubscriptionPlan(BillingPlanVersion version, string? planId, string? planCode)
+        => (!string.IsNullOrWhiteSpace(planId)
+                && (string.Equals(version.PlanId, planId, StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(version.Code, planId, StringComparison.OrdinalIgnoreCase)))
+            || (!string.IsNullOrWhiteSpace(planCode)
+                && string.Equals(version.Code, planCode, StringComparison.OrdinalIgnoreCase));
+
+    private sealed record ContentPlanShape(string? EntitlementsJson, string? IncludedSubtestsJson, bool AnchorBroken);
 }

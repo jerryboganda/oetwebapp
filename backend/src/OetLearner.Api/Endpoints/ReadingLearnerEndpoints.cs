@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
+using OetLearner.Api.Services.Content;
 using OetLearner.Api.Services.Reading;
 
 namespace OetLearner.Api.Endpoints;
@@ -32,13 +33,22 @@ public static class ReadingLearnerEndpoints
         // ── Fetch structure (no answers, no explanations) ───────────────────
         group.MapGet("/papers/{paperId}/structure", async (
             string paperId,
+            HttpContext http,
             LearnerDbContext db,
+            IContentEntitlementService entitlements,
             CancellationToken ct) =>
         {
             var paper = await db.ContentPapers.AsNoTracking()
                 .FirstOrDefaultAsync(p => p.Id == paperId && p.Status == ContentStatus.Published, ct);
             if (paper is null || !string.Equals(paper.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
                 return Results.NotFound();
+
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+            if (!await CanLearnerSeePaperAsync(db, http, userId, paper, ct))
+                return Results.NotFound();
+
+            await entitlements.RequireAccessAsync(userId, paper, ct);
 
             var parts = await db.ReadingParts.AsNoTracking()
                 .Where(p => p.PaperId == paperId)
@@ -414,6 +424,32 @@ public static class ReadingLearnerEndpoints
             AllowMultipleConcurrentAttempts: false,
             AllowPausingAttempt: false,
             AllowResumeAfterExpiry: false);
+    }
+
+    private static async Task<bool> CanLearnerSeePaperAsync(
+        LearnerDbContext db,
+        HttpContext http,
+        string userId,
+        ContentPaper paper,
+        CancellationToken ct)
+    {
+        if (paper.AppliesToAllProfessions)
+        {
+            return true;
+        }
+
+        var profession = http.User.FindFirstValue("prof") ?? http.User.FindFirstValue("profession");
+        if (string.IsNullOrWhiteSpace(profession))
+        {
+            profession = await db.Users
+                .AsNoTracking()
+                .Where(user => user.Id == userId)
+                .Select(user => user.ActiveProfessionId)
+                .SingleOrDefaultAsync(ct);
+        }
+
+        return !string.IsNullOrWhiteSpace(profession)
+            && string.Equals(paper.ProfessionId, profession, StringComparison.OrdinalIgnoreCase);
     }
 
     private sealed record ReadingReviewItem(

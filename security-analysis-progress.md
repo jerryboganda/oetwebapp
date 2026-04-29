@@ -25,7 +25,9 @@ Status: critical P1 remediation implemented and verified.
   - Sign-out clears web storage, platform secure storage, the indicator cookie, and revokes the current refresh-token family.
 
 - [x] P1 - Media download lacks entitlement checks.
-  - Media download and metadata access now enforce admin/owner access, published free-preview access, learner subscription/trial status, paper publication, and profession match.
+  - Media download, metadata access, and signed media URL generation now enforce admin/owner access, published free-preview access, learner-visible paper asset roles, paper publication, profession match, and the same plan-scoped content entitlement gate used by practice/reading flows.
+  - Content entitlement checks now resolve eligibility through `EffectiveEntitlementResolver`, honor `PlanVersionId` snapshots when present, fail closed on broken version anchors or missing live plans, and treat explicit `entitlementsJson.content` scopes as authoritative over legacy `IncludedSubtestsJson`.
+  - Paper list/detail, Reading structure/start, and Listening home/session/start endpoints now apply stored active-profession visibility before returning learner stimuli, questions, asset metadata, or attempts.
   - Unauthorized media access returns not found, avoiding asset-existence disclosure.
 
 - [x] P1 - Direct media uploads bypass scanner validation.
@@ -198,6 +200,8 @@ Recommendation:
 ### Findings
 
 #### D1 - High - Media asset download lacks per-asset authorization
+
+Status: remediated in the P1 hardening pass. Media download, metadata, and signed URL endpoints now use shared media authorization based on admin/owner access, published free previews, learner-visible paper asset roles, paper publication/profession checks, and plan-scoped content entitlement resolution.
 
 Evidence:
 - `MediaEndpoints.cs` protects the media group with generic authentication.

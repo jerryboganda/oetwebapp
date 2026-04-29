@@ -6,6 +6,7 @@ using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services;
 using OetLearner.Api.Services.Content;
+using OetLearner.Api.Services.Entitlements;
 using OetLearner.Api.Services.Reading;
 
 namespace OetLearner.Api.Tests;
@@ -34,7 +35,7 @@ public class ReadingAuthoringTests
         var structure = new ReadingStructureService(db);
         var policy = new ReadingPolicyService(db, cache);
         var grader = new ReadingGradingService(db, policy, NullLogger<ReadingGradingService>.Instance);
-        var entitlements = new ContentEntitlementService(db);
+        var entitlements = new ContentEntitlementService(db, new EffectiveEntitlementResolver(db));
         var attempt = new ReadingAttemptService(db, policy, grader, entitlements, NullLogger<ReadingAttemptService>.Instance);
         return (db, structure, policy, grader, attempt);
     }
@@ -352,6 +353,50 @@ public class ReadingAuthoringTests
         var ex = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
             attemptSvc.StartAsync("u1", "p1", default));
         Assert.Equal("reading_structure_invalid", ex.Code);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Start_blocks_non_published_paper()
+    {
+        var (db, _, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1", ContentStatus.Draft);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            attemptSvc.StartAsync("u1", "p1", default));
+
+        Assert.Equal("Paper not found.", ex.Message);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Start_blocks_cross_profession_paper()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        var paper = await db.ContentPapers.FirstAsync(p => p.Id == "p1");
+        paper.AppliesToAllProfessions = false;
+        paper.ProfessionId = "nursing";
+        db.Users.Add(new LearnerUser
+        {
+            Id = "u1",
+            DisplayName = "Learner One",
+            Email = "u1@example.test",
+            ActiveProfessionId = "medicine",
+            AccountStatus = "active",
+            Timezone = "UTC",
+            Locale = "en-AU",
+            CreatedAt = DateTimeOffset.UtcNow,
+            LastActiveAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            attemptSvc.StartAsync("u1", "p1", default));
+
+        Assert.Equal("Paper not found.", ex.Message);
         await db.DisposeAsync();
     }
 

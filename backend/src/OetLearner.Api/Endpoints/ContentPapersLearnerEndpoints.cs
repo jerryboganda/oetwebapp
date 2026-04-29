@@ -29,6 +29,18 @@ public static class ContentPapersLearnerEndpoints
             string? search, int? page, int? pageSize) =>
         {
             var profession = http.User.FindFirstValue("prof") ?? http.User.FindFirstValue("profession");
+            if (string.IsNullOrWhiteSpace(profession))
+            {
+                var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
+                if (!string.IsNullOrWhiteSpace(userId))
+                {
+                    profession = await db.Users
+                        .AsNoTracking()
+                        .Where(user => user.Id == userId)
+                        .Select(user => user.ActiveProfessionId)
+                        .SingleOrDefaultAsync(ct);
+                }
+            }
 
             var q = db.ContentPapers.AsNoTracking()
                 .Where(p => p.Status == ContentStatus.Published);
@@ -77,7 +89,12 @@ public static class ContentPapersLearnerEndpoints
 
         // ── Detail — includes primary assets (with storage keys, never raw paths). ─
         group.MapGet("/{slugOrId}", async (
-            string slugOrId, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
+            string slugOrId,
+            LearnerDbContext db,
+            HttpContext http,
+            IContentEntitlementService entitlements,
+            MediaAssetAccessService mediaAccess,
+            CancellationToken ct) =>
         {
             var paper = await db.ContentPapers.AsNoTracking()
                 .Include(p => p.Assets.Where(a => a.IsPrimary))
@@ -87,13 +104,49 @@ public static class ContentPapersLearnerEndpoints
                     && p.Status == ContentStatus.Published, ct);
             if (paper is null) return Results.NotFound();
 
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier);
             var profession = http.User.FindFirstValue("prof") ?? http.User.FindFirstValue("profession");
+            if (string.IsNullOrWhiteSpace(profession) && !string.IsNullOrWhiteSpace(userId))
+            {
+                profession = await db.Users
+                    .AsNoTracking()
+                    .Where(user => user.Id == userId)
+                    .Select(user => user.ActiveProfessionId)
+                    .SingleOrDefaultAsync(ct);
+            }
+
             if (!paper.AppliesToAllProfessions
-                && !string.IsNullOrWhiteSpace(profession)
-                && !string.Equals(paper.ProfessionId, profession, StringComparison.OrdinalIgnoreCase))
+                && (string.IsNullOrWhiteSpace(profession)
+                    || !string.Equals(paper.ProfessionId, profession, StringComparison.OrdinalIgnoreCase)))
             {
                 // Paper exists but not visible to this profession.
                 return Results.NotFound();
+            }
+
+            var isAdmin = entitlements.IsAdmin(http.User);
+            if (!isAdmin)
+            {
+                await entitlements.RequireAccessAsync(userId ?? throw new InvalidOperationException("auth required"), paper, ct);
+            }
+
+            var visibleAssets = new List<ContentPaperAsset>();
+            foreach (var asset in paper.Assets)
+            {
+                if (isAdmin)
+                {
+                    visibleAssets.Add(asset);
+                    continue;
+                }
+
+                if (!IsLearnerVisiblePaperAssetRole(asset.Role))
+                {
+                    continue;
+                }
+
+                if (asset.MediaAsset is null || await mediaAccess.CanAccessAsync(http.User, asset.MediaAsset, ct))
+                {
+                    visibleAssets.Add(asset);
+                }
             }
 
             return Results.Ok(new
@@ -103,7 +156,7 @@ public static class ContentPapersLearnerEndpoints
                 paper.Difficulty, paper.EstimatedDurationMinutes,
                 paper.CardType, paper.LetterType, paper.TagsCsv,
                 paper.PublishedAt,
-                assets = paper.Assets.Select(a => new
+                assets = visibleAssets.Select(a => new
                 {
                     a.Id, role = a.Role.ToString(), a.Part, a.Title,
                     media = a.MediaAsset is null ? null : new
@@ -124,4 +177,11 @@ public static class ContentPapersLearnerEndpoints
 
         return app;
     }
+
+    private static bool IsLearnerVisiblePaperAssetRole(PaperAssetRole role)
+        => role is PaperAssetRole.Audio
+            or PaperAssetRole.QuestionPaper
+            or PaperAssetRole.CaseNotes
+            or PaperAssetRole.RoleCard
+            or PaperAssetRole.WarmUpQuestions;
 }

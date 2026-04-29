@@ -60,8 +60,11 @@ public sealed class ReadingAttemptService(
         if (string.IsNullOrWhiteSpace(userId)) throw new ArgumentException("userId required");
 
         var paper = await db.ContentPapers.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.Id == paperId, ct)
+            .FirstOrDefaultAsync(p => p.Id == paperId && p.Status == ContentStatus.Published, ct)
             ?? throw new InvalidOperationException("Paper not found.");
+
+        if (!await CanLearnerSeePaperAsync(userId, paper, ct))
+            throw new InvalidOperationException("Paper not found.");
 
         // Gate 0 (Phase 3): subscription / content entitlement. Throws
         // ApiException.PaymentRequired with code "content_locked" when the
@@ -390,5 +393,22 @@ public sealed class ReadingAttemptService(
             AllowMultipleConcurrentAttempts: false,
             AllowPausingAttempt: false,
             AllowResumeAfterExpiry: false);
+    }
+
+    private async Task<bool> CanLearnerSeePaperAsync(string userId, ContentPaper paper, CancellationToken ct)
+    {
+        if (paper.AppliesToAllProfessions)
+        {
+            return true;
+        }
+
+        var profession = await db.Users
+            .AsNoTracking()
+            .Where(user => user.Id == userId)
+            .Select(user => user.ActiveProfessionId)
+            .SingleOrDefaultAsync(ct);
+
+        return !string.IsNullOrWhiteSpace(profession)
+            && string.Equals(paper.ProfessionId, profession, StringComparison.OrdinalIgnoreCase);
     }
 }

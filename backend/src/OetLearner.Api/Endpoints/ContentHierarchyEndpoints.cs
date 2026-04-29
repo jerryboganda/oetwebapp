@@ -289,8 +289,11 @@ public static class ContentHierarchyEndpoints
         // ── Phase 11: Media Normalization ──
 
         learner.MapGet("/media/{assetId}/url", async (string assetId, HttpContext http,
-            MediaNormalizationService mediaService, CancellationToken ct)
-            => Results.Ok(await mediaService.GetSignedMediaUrlAsync(assetId, UserId(http), ct)));
+            MediaNormalizationService mediaService, OetLearner.Api.Services.Content.MediaAssetAccessService access, CancellationToken ct) =>
+        {
+            if (!await access.CanAccessAsync(http.User, assetId, ct)) return Results.NotFound();
+            return Results.Ok(await mediaService.GetSignedMediaUrlAsync(assetId, UserId(http), ct));
+        });
 
         admin.MapPost("/media/{assetId}/process", async (string assetId, MediaNormalizationService mediaService, CancellationToken ct)
             => Results.Ok(await mediaService.EnqueueForProcessingAsync(assetId, ct)))
