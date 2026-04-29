@@ -1,7 +1,11 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.Sqlite;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
 using OetLearner.Api.Services.AiManagement;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Tests;
 
@@ -72,4 +76,141 @@ public class AiCreditServiceTests
             credits.GrantAsync("u1", 0, 0m, AiCreditSource.Promo, null, null, null, null, default));
         await db.DisposeAsync();
     }
+
+    [Fact]
+    public async Task RenewalWorker_UsesMappedQuotaPlanForSeededBillingCodes()
+    {
+        var databaseName = Guid.NewGuid().ToString("N");
+        var services = new ServiceCollection();
+        services.AddDbContext<LearnerDbContext>(options => options.UseInMemoryDatabase(databaseName));
+        services.AddScoped<IAiCreditService, AiCreditService>();
+        services.AddScoped<IEffectiveEntitlementResolver, EffectiveEntitlementResolver>();
+        await using var provider = services.BuildServiceProvider();
+
+        var now = DateTimeOffset.UtcNow;
+        using (var scope = provider.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            db.AiQuotaPlans.AddRange(
+                new AiQuotaPlan
+                {
+                    Id = "quota-free",
+                    Code = "free",
+                    Name = "Free",
+                    MonthlyTokenCap = 50,
+                    IsActive = true,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                },
+                new AiQuotaPlan
+                {
+                    Id = "quota-pro",
+                    Code = "pro",
+                    Name = "Pro",
+                    MonthlyTokenCap = 1_000_000,
+                    IsActive = true,
+                    CreatedAt = now,
+                    UpdatedAt = now,
+                });
+            db.BillingPlans.Add(new BillingPlan
+            {
+                Id = "plan-premium-monthly",
+                Code = "premium-monthly",
+                Name = "Premium Monthly",
+                EntitlementsJson = "{}",
+            });
+            db.Subscriptions.Add(new Subscription
+            {
+                Id = "sub-premium",
+                UserId = "learner-premium",
+                PlanId = "plan-premium-monthly",
+                Status = SubscriptionStatus.Active,
+                StartedAt = now.AddMonths(-1),
+                ChangedAt = now,
+            });
+            await db.SaveChangesAsync();
+        }
+
+        var worker = new AiCreditRenewalWorker(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<AiCreditRenewalWorker>.Instance);
+
+        var result = await worker.RunOnceAsync(default);
+
+        using (var scope = provider.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var entry = await db.AiCreditLedger.SingleAsync();
+            Assert.Equal((1, 0), result);
+            Assert.Equal("learner-premium", entry.UserId);
+            Assert.Equal(1_000_000, entry.TokensDelta);
+            Assert.Contains("pro", entry.Description, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    [Fact]
+    public void AiCreditLedger_PlanRenewalReference_IsUniqueInModel()
+    {
+        var (db, _) = Build();
+        var entity = db.Model.FindEntityType(typeof(AiCreditLedgerEntry));
+
+        Assert.NotNull(entity);
+        var index = entity!.GetIndexes().Single(i => i.GetDatabaseName() == "UX_AiCreditLedger_PlanRenewal_ReferenceId");
+        Assert.True(index.IsUnique);
+        Assert.Equal("\"ReferenceId\" IS NOT NULL AND \"Source\" = 0", index.GetFilter());
+        Assert.Equal(new[] { nameof(AiCreditLedgerEntry.ReferenceId) }, index.Properties.Select(p => p.Name).ToArray());
+        db.Dispose();
+    }
+
+    [Fact]
+    public async Task AiCreditLedger_DuplicatePlanRenewalReference_IsRejectedByDatabase()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using (var db = new LearnerDbContext(options))
+        {
+            await db.Database.EnsureCreatedAsync();
+            db.AiCreditLedger.Add(CreateLedgerEntry("entry-1", AiCreditSource.PlanRenewal, "renewal:u1:month:2026-04"));
+            await db.SaveChangesAsync();
+
+            db.AiCreditLedger.Add(CreateLedgerEntry("entry-2", AiCreditSource.PlanRenewal, "renewal:u1:month:2026-04"));
+            await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        }
+    }
+
+    [Fact]
+    public async Task AiCreditLedger_DuplicateNonRenewalReference_IsAllowedByDatabase()
+    {
+        using var connection = new SqliteConnection("Data Source=:memory:");
+        await connection.OpenAsync();
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseSqlite(connection)
+            .Options;
+
+        await using var db = new LearnerDbContext(options);
+        await db.Database.EnsureCreatedAsync();
+        db.AiCreditLedger.Add(CreateLedgerEntry("entry-1", AiCreditSource.Promo, "promo:welcome"));
+        db.AiCreditLedger.Add(CreateLedgerEntry("entry-2", AiCreditSource.Promo, "promo:welcome"));
+
+        await db.SaveChangesAsync();
+
+        Assert.Equal(2, await db.AiCreditLedger.CountAsync());
+    }
+
+    private static AiCreditLedgerEntry CreateLedgerEntry(string id, AiCreditSource source, string? referenceId)
+        => new()
+        {
+            Id = id,
+            UserId = "u1",
+            TokensDelta = 100,
+            CostDeltaUsd = 0m,
+            Source = source,
+            Description = source.ToString(),
+            ReferenceId = referenceId,
+            CreatedAt = DateTimeOffset.UtcNow,
+        };
 }

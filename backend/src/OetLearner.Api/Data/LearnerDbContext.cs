@@ -630,6 +630,13 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
             .IsUnique()
             .HasFilter("\"ReferenceId\" IS NOT NULL AND ((\"TransactionType\" = 'top_up' AND \"ReferenceType\" = 'payment') OR (\"TransactionType\" = 'plan_grant' AND \"ReferenceType\" = 'subscription') OR (\"TransactionType\" = 'credit_purchase' AND \"ReferenceType\" = 'addon'))");
 
+        // AI renewal idempotence: one monthly plan-renewal grant per reference key.
+        modelBuilder.Entity<AiCreditLedgerEntry>()
+            .HasIndex(x => x.ReferenceId)
+            .IsUnique()
+            .HasDatabaseName("UX_AiCreditLedger_PlanRenewal_ReferenceId")
+            .HasFilter("\"ReferenceId\" IS NOT NULL AND \"Source\" = 0");
+
         // Payment indexes
         modelBuilder.Entity<PaymentTransaction>().HasIndex(x => new { x.LearnerUserId, x.CreatedAt });
         modelBuilder.Entity<PaymentTransaction>().HasIndex(x => new { x.Status, x.CreatedAt });

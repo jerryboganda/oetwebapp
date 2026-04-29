@@ -363,6 +363,224 @@ public class AiQuotaServiceTests
     }
 
     [Fact]
+    public async Task BillingPlanAiEntitlement_ResolvesMappedQuotaPlan()
+    {
+        var (db, quota) = BuildAiMappingScenario(
+            billingPlanCode: "basic-monthly",
+            billingEntitlementsJson: System.Text.Json.JsonSerializer.Serialize(new { ai = new { quotaPlanCode = "starter" } }));
+
+        var decision = await quota.TryReserveAsync("mapped-user", AiFeatureCodes.WritingGrade, AiKeySource.Platform, default);
+
+        Assert.True(decision.Allowed);
+        Assert.Equal("starter", decision.Plan?.Code);
+        Assert.Equal(200_000, decision.TokensCapThisPeriod);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task SeededBillingPlanCode_FallsBackToCompatibleAiQuotaPlan()
+    {
+        var (db, quota) = BuildAiMappingScenario(
+            billingPlanCode: "premium-monthly",
+            billingEntitlementsJson: "{}");
+
+        var decision = await quota.TryReserveAsync("mapped-user", AiFeatureCodes.WritingGrade, AiKeySource.Platform, default);
+
+        Assert.True(decision.Allowed);
+        Assert.Equal("pro", decision.Plan?.Code);
+        Assert.Equal(1_000_000, decision.TokensCapThisPeriod);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task InvalidExplicitAiQuotaPlan_FallsBackToFreeInsteadOfLegacyMap()
+    {
+        var (db, quota) = BuildAiMappingScenario(
+            billingPlanCode: "premium-monthly",
+            billingEntitlementsJson: System.Text.Json.JsonSerializer.Serialize(new { ai = new { quotaPlanCode = "missing-plan" } }));
+
+        var decision = await quota.TryReserveAsync("mapped-user", AiFeatureCodes.ConversationReply, AiKeySource.Platform, default);
+
+        Assert.True(decision.Allowed);
+        Assert.Equal("free", decision.Plan?.Code);
+        Assert.Equal(50, decision.TokensCapThisPeriod);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task BlankExplicitAiQuotaPlan_FallsBackToFreeInsteadOfLegacyMap()
+    {
+        var (db, quota) = BuildAiMappingScenario(
+            billingPlanCode: "premium-monthly",
+            billingEntitlementsJson: System.Text.Json.JsonSerializer.Serialize(new { ai = new { quotaPlanCode = "   " } }));
+
+        var decision = await quota.TryReserveAsync("mapped-user", AiFeatureCodes.ConversationReply, AiKeySource.Platform, default);
+
+        Assert.True(decision.Allowed);
+        Assert.Equal("free", decision.Plan?.Code);
+        Assert.Equal(50, decision.TokensCapThisPeriod);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task InactiveExplicitAiQuotaPlan_FallsBackToFreeInsteadOfLegacyMap()
+    {
+        var (db, quota) = BuildAiMappingScenario(
+            billingPlanCode: "premium-monthly",
+            billingEntitlementsJson: System.Text.Json.JsonSerializer.Serialize(new { ai = new { quotaPlanCode = "pro" } }),
+            proQuotaPlanActive: false);
+
+        var decision = await quota.TryReserveAsync("mapped-user", AiFeatureCodes.ConversationReply, AiKeySource.Platform, default);
+
+        Assert.True(decision.Allowed);
+        Assert.Equal("free", decision.Plan?.Code);
+        Assert.Equal(50, decision.TokensCapThisPeriod);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task NonStringExplicitAiQuotaPlan_FallsBackToFreeInsteadOfLegacyMap()
+    {
+        var (db, quota) = BuildAiMappingScenario(
+            billingPlanCode: "premium-monthly",
+            billingEntitlementsJson: "{\"ai\":{\"quotaPlanCode\":123}}");
+
+        var decision = await quota.TryReserveAsync("mapped-user", AiFeatureCodes.ConversationReply, AiKeySource.Platform, default);
+
+        Assert.True(decision.Allowed);
+        Assert.Equal("free", decision.Plan?.Code);
+        Assert.Equal(50, decision.TokensCapThisPeriod);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task MalformedExplicitAiQuotaPlan_FallsBackToFreeInsteadOfLegacyMap()
+    {
+        var (db, quota) = BuildAiMappingScenario(
+            billingPlanCode: "premium-monthly",
+            billingEntitlementsJson: "{\"ai\":{\"quotaPlanCode\":");
+
+        var decision = await quota.TryReserveAsync("mapped-user", AiFeatureCodes.ConversationReply, AiKeySource.Platform, default);
+
+        Assert.True(decision.Allowed);
+        Assert.Equal("free", decision.Plan?.Code);
+        Assert.Equal(50, decision.TokensCapThisPeriod);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task DirectAlignedBillingCode_WinsBeforeSeededFallbackMap()
+    {
+        var (db, quota) = BuildAiMappingScenario(
+            billingPlanCode: "premium-monthly",
+            billingEntitlementsJson: "{}",
+            includeDirectBillingQuotaPlan: true);
+
+        var decision = await quota.TryReserveAsync("mapped-user", AiFeatureCodes.WritingGrade, AiKeySource.Platform, default);
+
+        Assert.True(decision.Allowed);
+        Assert.Equal("premium-monthly", decision.Plan?.Code);
+        Assert.Equal(750_000, decision.TokensCapThisPeriod);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task AlignedBillingAndAiCodes_StillResolveDirectly()
+    {
+        var (db, quota) = BuildAiMappingScenario(
+            billingPlanCode: "pro",
+            billingEntitlementsJson: "{}");
+
+        var decision = await quota.TryReserveAsync("mapped-user", AiFeatureCodes.WritingGrade, AiKeySource.Platform, default);
+        Assert.True(decision.Allowed);
+        Assert.Equal("pro", decision.Plan?.Code);
+        await db.DisposeAsync();
+    }
+
+    private static (LearnerDbContext db, AiQuotaService quota) BuildAiMappingScenario(
+        string billingPlanCode,
+        string billingEntitlementsJson,
+        bool proQuotaPlanActive = true,
+        bool includeDirectBillingQuotaPlan = false)
+    {
+        var options = new DbContextOptionsBuilder<LearnerDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+            .Options;
+        var db = new LearnerDbContext(options);
+        var now = DateTimeOffset.UtcNow;
+
+        db.AiGlobalPolicies.Add(new AiGlobalPolicy { Id = "global", UpdatedAt = now });
+        db.AiQuotaPlans.AddRange(
+            new AiQuotaPlan
+            {
+                Id = "quota-free",
+                Code = "free",
+                Name = "Free",
+                MonthlyTokenCap = 50,
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+            },
+            new AiQuotaPlan
+            {
+                Id = "quota-starter",
+                Code = "starter",
+                Name = "Starter",
+                MonthlyTokenCap = 200_000,
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+            },
+            new AiQuotaPlan
+            {
+                Id = "quota-pro",
+                Code = "pro",
+                Name = "Pro",
+                MonthlyTokenCap = 1_000_000,
+                IsActive = proQuotaPlanActive,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        if (includeDirectBillingQuotaPlan)
+        {
+            db.AiQuotaPlans.Add(new AiQuotaPlan
+            {
+                Id = "quota-direct-billing",
+                Code = billingPlanCode,
+                Name = billingPlanCode,
+                MonthlyTokenCap = 750_000,
+                IsActive = true,
+                CreatedAt = now,
+                UpdatedAt = now,
+            });
+        }
+        db.BillingPlans.Add(new BillingPlan
+        {
+            Id = "billing-plan",
+            Code = billingPlanCode,
+            Name = billingPlanCode,
+            EntitlementsJson = billingEntitlementsJson,
+        });
+        db.Subscriptions.Add(new Subscription
+        {
+            Id = "subscription",
+            UserId = "mapped-user",
+            PlanId = "billing-plan",
+            Status = SubscriptionStatus.Active,
+            StartedAt = now.AddMonths(-1),
+            ChangedAt = now,
+        });
+        db.SaveChanges();
+
+        var quota = new AiQuotaService(
+            db,
+            new MemoryCache(new MemoryCacheOptions()),
+            NullLogger<AiQuotaService>.Instance,
+            new EffectiveEntitlementResolver(db));
+        return (db, quota);
+    }
+
+    [Fact]
     public async Task Anonymous_Bypasses_Quota()
     {
         var (db, quota) = Build();

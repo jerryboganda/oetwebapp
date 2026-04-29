@@ -55,12 +55,12 @@ public class EffectiveEntitlementResolverTests
     {
         await using var db = CreateDb();
         var now = DateTimeOffset.UtcNow;
-        db.BillingPlans.Add(new BillingPlan { Id = "plan-pro", Code = "pro", Name = "Pro" });
+        db.BillingPlans.Add(new BillingPlan { Id = "plan-pro", Code = "Premium-Monthly", Name = "Pro" });
         db.Subscriptions.Add(new Subscription
         {
             Id = "sub-active",
             UserId = "learner-2",
-            PlanId = "PRO",
+            PlanId = "PREMIUM-MONTHLY",
             Status = SubscriptionStatus.Trial,
             StartedAt = now.AddDays(-2),
             ChangedAt = now.AddDays(-2),
@@ -94,7 +94,9 @@ public class EffectiveEntitlementResolverTests
         Assert.True(snapshot.HasEligibleSubscription);
         Assert.True(snapshot.IsTrial);
         Assert.Equal("trial", snapshot.Tier);
-        Assert.Equal("pro", snapshot.PlanCode);
+        Assert.Equal("premium-monthly", snapshot.PlanCode);
+        Assert.Equal("pro", snapshot.AiQuotaPlanCode);
+        Assert.Equal("fallback", snapshot.AiQuotaPlanCodeSource);
         Assert.Equal(new[] { "review_booster" }, snapshot.ActiveAddOnCodes);
     }
 

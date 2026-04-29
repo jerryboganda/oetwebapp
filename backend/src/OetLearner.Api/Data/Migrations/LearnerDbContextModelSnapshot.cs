@@ -574,6 +574,11 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.HasIndex("ExpiresAt");
 
+                    b.HasIndex("ReferenceId")
+                        .IsUnique()
+                        .HasDatabaseName("UX_AiCreditLedger_PlanRenewal_ReferenceId")
+                        .HasFilter("\"ReferenceId\" IS NOT NULL AND \"Source\" = 0");
+
                     b.HasIndex("UserId", "CreatedAt");
 
                     b.ToTable("AiCreditLedger");

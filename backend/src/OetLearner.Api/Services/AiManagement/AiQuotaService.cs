@@ -423,18 +423,48 @@ public sealed class AiQuotaService(
         }
 
         // Derive from the user's effective Active/Trial subscription if present.
-        // The billing plan code is expected to match the AI plan code by convention.
         var entitlement = await entitlementResolver.ResolveAsync(userId, ct);
+        if (entitlement.HasEligibleSubscription
+            && string.Equals(entitlement.AiQuotaPlanCodeSource, "explicit-invalid", StringComparison.OrdinalIgnoreCase))
+        {
+            return await ResolveDefaultPlanAsync(ct);
+        }
+
+        if (entitlement.HasEligibleSubscription
+            && string.Equals(entitlement.AiQuotaPlanCodeSource, "explicit", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(entitlement.AiQuotaPlanCode))
+        {
+            var mappedPlanCode = entitlement.AiQuotaPlanCode.Trim().ToLowerInvariant();
+            var mappedMatch = await db.AiQuotaPlans.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Code.ToLower() == mappedPlanCode && p.IsActive, ct);
+            if (mappedMatch is not null) return mappedMatch;
+
+            return await ResolveDefaultPlanAsync(ct);
+        }
+
         if (entitlement.HasEligibleSubscription && !string.IsNullOrWhiteSpace(entitlement.PlanCode))
         {
             var match = await db.AiQuotaPlans.AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Code == entitlement.PlanCode && p.IsActive, ct);
+                .FirstOrDefaultAsync(p => p.Code.ToLower() == entitlement.PlanCode && p.IsActive, ct);
             if (match is not null) return match;
         }
 
-        return await db.AiQuotaPlans.AsNoTracking()
-            .FirstOrDefaultAsync(p => p.Code == DefaultPlanCode && p.IsActive, ct);
+        if (entitlement.HasEligibleSubscription
+            && string.Equals(entitlement.AiQuotaPlanCodeSource, "fallback", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(entitlement.AiQuotaPlanCode))
+        {
+            var mappedPlanCode = entitlement.AiQuotaPlanCode.Trim().ToLowerInvariant();
+            var mappedMatch = await db.AiQuotaPlans.AsNoTracking()
+                .FirstOrDefaultAsync(p => p.Code.ToLower() == mappedPlanCode && p.IsActive, ct);
+            if (mappedMatch is not null) return mappedMatch;
+        }
+
+        return await ResolveDefaultPlanAsync(ct);
     }
+
+    private Task<AiQuotaPlan?> ResolveDefaultPlanAsync(CancellationToken ct)
+        => db.AiQuotaPlans.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Code == DefaultPlanCode && p.IsActive, ct);
 
     private static bool FeatureAllowedByPlan(AiQuotaPlan plan, string featureCode)
     {

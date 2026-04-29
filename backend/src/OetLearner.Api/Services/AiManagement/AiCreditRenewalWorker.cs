@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services.AiManagement;
 
@@ -20,6 +22,7 @@ public sealed class AiCreditRenewalWorker(
     ILogger<AiCreditRenewalWorker> logger) : BackgroundService
 {
     private static readonly TimeSpan Interval = TimeSpan.FromHours(1);
+    private const string RenewalReferenceIndexName = "UX_AiCreditLedger_PlanRenewal_ReferenceId";
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -52,30 +55,33 @@ public sealed class AiCreditRenewalWorker(
         using var scope = scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
         var credits = scope.ServiceProvider.GetRequiredService<IAiCreditService>();
+        var entitlementResolver = scope.ServiceProvider.GetRequiredService<IEffectiveEntitlementResolver>();
 
         var now = DateTimeOffset.UtcNow;
         var periodKey = $"month:{now:yyyy-MM}";
 
         // ── 1. Monthly renewals ─────────────────────────────────────────────
-        // Join active subscriptions → billing plan → AI quota plan.
-        var subs = await db.Subscriptions.AsNoTracking()
+        var userIds = await db.Subscriptions.AsNoTracking()
             .Where(s => s.Status == SubscriptionStatus.Active)
+            .Select(s => s.UserId)
+            .Distinct()
             .ToListAsync(ct);
 
         int renewedCount = 0;
-        foreach (var sub in subs)
+        foreach (var userId in userIds)
         {
-            var billingPlan = await db.BillingPlans.AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Id == sub.PlanId, ct);
-            if (billingPlan is null) continue;
+            var entitlement = await entitlementResolver.ResolveAsync(userId, ct);
+            if (!entitlement.HasEligibleSubscription || entitlement.SubscriptionStatus != SubscriptionStatus.Active)
+            {
+                continue;
+            }
 
-            var aiPlan = await db.AiQuotaPlans.AsNoTracking()
-                .FirstOrDefaultAsync(p => p.Code == billingPlan.Code && p.IsActive, ct);
+            var aiPlan = await ResolveMappedAiPlanAsync(db, entitlement, ct);
             if (aiPlan is null || aiPlan.MonthlyTokenCap <= 0) continue;
 
-            var referenceId = $"renewal:{sub.UserId}:{periodKey}";
+            var referenceId = $"renewal:{userId}:{periodKey}";
             var alreadyGranted = await db.AiCreditLedger.AsNoTracking()
-                .AnyAsync(x => x.ReferenceId == referenceId, ct);
+                .AnyAsync(x => x.Source == AiCreditSource.PlanRenewal && x.ReferenceId == referenceId, ct);
             if (alreadyGranted) continue;
 
             DateTimeOffset? expiresAt = aiPlan.RolloverPolicy switch
@@ -86,17 +92,27 @@ public sealed class AiCreditRenewalWorker(
                 _ => EndOfMonth(now),
             };
 
-            await credits.GrantAsync(
-                userId: sub.UserId,
-                tokens: aiPlan.MonthlyTokenCap,
-                costUsd: 0m,
-                source: AiCreditSource.PlanRenewal,
-                description: $"Monthly renewal for plan {aiPlan.Code}",
-                referenceId: referenceId,
-                expiresAt: expiresAt,
-                adminId: null,
-                ct: ct);
-            renewedCount++;
+            try
+            {
+                await credits.GrantAsync(
+                    userId: userId,
+                    tokens: aiPlan.MonthlyTokenCap,
+                    costUsd: 0m,
+                    source: AiCreditSource.PlanRenewal,
+                    description: $"Monthly renewal for plan {aiPlan.Code}",
+                    referenceId: referenceId,
+                    expiresAt: expiresAt,
+                    adminId: null,
+                    ct: ct);
+                renewedCount++;
+            }
+            catch (DbUpdateException ex) when (IsUniqueConstraintViolation(ex))
+            {
+                db.ChangeTracker.Clear();
+                logger.LogInformation(
+                    "AI credit renewal {ReferenceId} was already granted by a concurrent worker.",
+                    referenceId);
+            }
         }
 
         // ── 2. Expiration sweep ─────────────────────────────────────────────
@@ -110,6 +126,61 @@ public sealed class AiCreditRenewalWorker(
 
         return (renewedCount, expiredCount);
     }
+
+    private static async Task<AiQuotaPlan?> ResolveMappedAiPlanAsync(
+        LearnerDbContext db,
+        EffectiveEntitlementSnapshot entitlement,
+        CancellationToken ct)
+    {
+        if (string.Equals(entitlement.AiQuotaPlanCodeSource, "explicit-invalid", StringComparison.OrdinalIgnoreCase))
+        {
+            return await ResolveDefaultPlanAsync(db, ct);
+        }
+
+        if (string.Equals(entitlement.AiQuotaPlanCodeSource, "explicit", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(entitlement.AiQuotaPlanCode))
+        {
+            var explicitPlan = await ResolveActiveAiPlanAsync(db, entitlement.AiQuotaPlanCode, ct);
+            return explicitPlan ?? await ResolveDefaultPlanAsync(db, ct);
+        }
+
+        if (!string.IsNullOrWhiteSpace(entitlement.PlanCode))
+        {
+            var directPlan = await ResolveActiveAiPlanAsync(db, entitlement.PlanCode, ct);
+            if (directPlan is not null) return directPlan;
+        }
+
+        if (string.Equals(entitlement.AiQuotaPlanCodeSource, "fallback", StringComparison.OrdinalIgnoreCase)
+            && !string.IsNullOrWhiteSpace(entitlement.AiQuotaPlanCode))
+        {
+            var fallbackPlan = await ResolveActiveAiPlanAsync(db, entitlement.AiQuotaPlanCode, ct);
+            if (fallbackPlan is not null) return fallbackPlan;
+        }
+
+        return await ResolveDefaultPlanAsync(db, ct);
+    }
+
+    private static Task<AiQuotaPlan?> ResolveActiveAiPlanAsync(
+        LearnerDbContext db,
+        string planCode,
+        CancellationToken ct)
+    {
+        var normalizedPlanCode = planCode.Trim().ToLowerInvariant();
+        return db.AiQuotaPlans.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Code.ToLower() == normalizedPlanCode && p.IsActive, ct);
+    }
+
+    private static Task<AiQuotaPlan?> ResolveDefaultPlanAsync(LearnerDbContext db, CancellationToken ct)
+        => db.AiQuotaPlans.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Code == "free" && p.IsActive, ct);
+
+    private static bool IsUniqueConstraintViolation(DbUpdateException exception)
+        => exception.InnerException is PostgresException
+            {
+                SqlState: PostgresErrorCodes.UniqueViolation,
+                ConstraintName: RenewalReferenceIndexName,
+            }
+            || (exception.InnerException?.Message.Contains("UNIQUE constraint failed", StringComparison.OrdinalIgnoreCase) ?? false);
 
     private static DateTimeOffset EndOfMonth(DateTimeOffset from)
     {

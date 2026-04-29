@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -18,6 +19,8 @@ public sealed record EffectiveEntitlementSnapshot(
     SubscriptionStatus? SubscriptionStatus,
     string? PlanId,
     string? PlanCode,
+    string? AiQuotaPlanCode,
+    string? AiQuotaPlanCodeSource,
     IReadOnlyList<string> ActiveAddOnCodes,
     bool IsFrozen,
     IReadOnlyList<string> Trace);
@@ -48,6 +51,8 @@ public sealed class EffectiveEntitlementResolver(LearnerDbContext db) : IEffecti
                 SubscriptionStatus: null,
                 PlanId: null,
                 PlanCode: null,
+                AiQuotaPlanCode: null,
+                AiQuotaPlanCodeSource: null,
                 ActiveAddOnCodes: Array.Empty<string>(),
                 IsFrozen: isFrozen,
                 Trace: trace);
@@ -67,6 +72,7 @@ public sealed class EffectiveEntitlementResolver(LearnerDbContext db) : IEffecti
         var addOnCodes = eligible
             ? await ResolveActiveAddOnCodesAsync(subscription.Id, ct)
             : Array.Empty<string>();
+        var aiQuotaMapping = eligible ? ResolveAiQuotaPlanCode(plan) : null;
 
         if (addOnCodes.Count > 0)
         {
@@ -87,6 +93,8 @@ public sealed class EffectiveEntitlementResolver(LearnerDbContext db) : IEffecti
             SubscriptionStatus: subscription.Status,
             PlanId: eligible ? subscription.PlanId : null,
             PlanCode: NormalizeCode(plan?.Code),
+            AiQuotaPlanCode: aiQuotaMapping?.Code,
+            AiQuotaPlanCodeSource: aiQuotaMapping?.Source,
             ActiveAddOnCodes: addOnCodes,
             IsFrozen: isFrozen,
             Trace: trace);
@@ -101,6 +109,8 @@ public sealed class EffectiveEntitlementResolver(LearnerDbContext db) : IEffecti
         SubscriptionStatus: null,
         PlanId: null,
         PlanCode: null,
+        AiQuotaPlanCode: null,
+        AiQuotaPlanCodeSource: null,
         ActiveAddOnCodes: Array.Empty<string>(),
         IsFrozen: false,
         Trace: new[] { trace });
@@ -127,6 +137,75 @@ public sealed class EffectiveEntitlementResolver(LearnerDbContext db) : IEffecti
 
     private static string? NormalizeCode(string? code)
         => string.IsNullOrWhiteSpace(code) ? null : code.Trim().ToLowerInvariant();
+
+    private static AiQuotaPlanMapping? ResolveAiQuotaPlanCode(BillingPlan? plan)
+    {
+        var explicitMapping = TryReadExplicitAiQuotaPlanCode(plan?.EntitlementsJson);
+        if (explicitMapping is not null)
+        {
+            return explicitMapping;
+        }
+
+        var fallbackCode = plan?.Code?.Trim().ToLowerInvariant() switch
+        {
+            "basic-monthly" => "starter",
+            "premium-monthly" => "pro",
+            "premium-yearly" => "pro",
+            "intensive-monthly" => "pro",
+            "legacy-trial" => "free",
+            _ => null,
+        };
+
+        return string.IsNullOrWhiteSpace(fallbackCode)
+            ? null
+            : new AiQuotaPlanMapping(fallbackCode, "fallback");
+    }
+
+    private static AiQuotaPlanMapping? TryReadExplicitAiQuotaPlanCode(string? entitlementsJson)
+    {
+        if (string.IsNullOrWhiteSpace(entitlementsJson))
+        {
+            return null;
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(entitlementsJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object
+                || !document.RootElement.TryGetProperty("ai", out var ai))
+            {
+                return null;
+            }
+
+            if (ai.ValueKind != JsonValueKind.Object)
+            {
+                return new AiQuotaPlanMapping(null, "explicit-invalid");
+            }
+
+            if (!ai.TryGetProperty("quotaPlanCode", out var quotaPlanCode))
+            {
+                return null;
+            }
+
+            if (quotaPlanCode.ValueKind != JsonValueKind.String)
+            {
+                return new AiQuotaPlanMapping(null, "explicit-invalid");
+            }
+
+            var code = NormalizeCode(quotaPlanCode.GetString());
+            return string.IsNullOrWhiteSpace(code)
+                ? new AiQuotaPlanMapping(null, "explicit-invalid")
+                : new AiQuotaPlanMapping(code, "explicit");
+        }
+        catch (JsonException)
+        {
+            return entitlementsJson.Contains("quotaPlanCode", StringComparison.OrdinalIgnoreCase)
+                ? new AiQuotaPlanMapping(null, "explicit-invalid")
+                : null;
+        }
+    }
+
+    private sealed record AiQuotaPlanMapping(string? Code, string Source);
 
     private async Task<IReadOnlyList<string>> ResolveActiveAddOnCodesAsync(string subscriptionId, CancellationToken ct)
     {
