@@ -272,3 +272,45 @@ public record AdminBillingPaymentTransactionListResponse(
     int Page,
     int PageSize,
     IReadOnlyList<AdminBillingPaymentTransactionResponse> Items);
+
+public record AdminBillingProviderLifecycleSignalsSummaryResponse(
+    int TotalSignals,
+    int FailedSignals,
+    int UnverifiedSignals,
+    int UnmatchedSignals,
+    int RefundSignals,
+    int DisputeSignals,
+    int CancellationSignals);
+
+public record AdminBillingProviderLifecycleLocalIdsResponse(
+    IReadOnlyList<string> PaymentTransactionIds,
+    IReadOnlyList<string> InvoiceIds,
+    IReadOnlyList<string> QuoteIds,
+    IReadOnlyList<string> SubscriptionIds,
+    IReadOnlyList<string> BillingEventIds);
+
+public record AdminBillingProviderLifecycleSignalResponse(
+    string Id,
+    string Source,
+    string Category,
+    string CorrelationStatus,
+    string Confidence,
+    string Gateway,
+    string EventType,
+    string MaskedProviderEventId,
+    string? MaskedProviderTransactionId,
+    string ProcessingStatus,
+    string VerificationStatus,
+    string? NormalizedStatus,
+    DateTimeOffset ReceivedAt,
+    DateTimeOffset? ProcessedAt,
+    AdminBillingProviderLifecycleLocalIdsResponse LinkedLocalIds,
+    int BillingEventCount,
+    IReadOnlyList<string> IntegrityFlags);
+
+public record AdminBillingProviderLifecycleSignalsResponse(
+    int Total,
+    int Page,
+    int PageSize,
+    AdminBillingProviderLifecycleSignalsSummaryResponse Summary,
+    IReadOnlyList<AdminBillingProviderLifecycleSignalResponse> Items);

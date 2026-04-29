@@ -3369,6 +3369,19 @@ export async function fetchAdminBillingPaymentTransactions(params?: { status?: s
   return apiRequest(`/v1/admin/billing/payment-transactions${q ? `?${q}` : ''}`);
 }
 
+export async function fetchAdminBillingProviderLifecycleSignals(params?: { gateway?: string; category?: string; processingStatus?: string; verificationStatus?: string; search?: string; page?: number; pageSize?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.gateway) qs.set('gateway', params.gateway);
+  if (params?.category) qs.set('category', params.category);
+  if (params?.processingStatus) qs.set('processingStatus', params.processingStatus);
+  if (params?.verificationStatus) qs.set('verificationStatus', params.verificationStatus);
+  if (params?.search) qs.set('search', params.search);
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
+  const q = qs.toString();
+  return apiRequest(`/v1/admin/billing/provider-lifecycle-signals${q ? `?${q}` : ''}`);
+}
+
 export async function fetchAdminReviewOpsSummary() {
   return apiRequest('/v1/admin/review-ops/summary');
 }

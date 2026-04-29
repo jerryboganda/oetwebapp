@@ -1,7 +1,7 @@
 'use client';
 
 import { type Dispatch, type ReactNode, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
-import { AlertTriangle, CreditCard, DollarSign, FileSearch, History as HistoryIcon, Package, Receipt, Search, Ticket, Users } from 'lucide-react';
+import { Activity, AlertTriangle, CreditCard, DollarSign, FileSearch, History as HistoryIcon, Package, Receipt, Search, Ticket, Users } from 'lucide-react';
 import { AdminRouteSummaryCard, AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
@@ -34,6 +34,7 @@ import {
   getAdminBillingPaymentTransactionData,
   getAdminBillingPlanData,
   getAdminBillingPlanVersionHistoryData,
+  getAdminBillingProviderLifecycleSignalsData,
   getAdminBillingSubscriptionData,
 } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
@@ -46,6 +47,8 @@ import type {
   AdminBillingInvoice,
   AdminBillingInvoiceEvidence,
   AdminBillingPaymentTransaction,
+  AdminBillingProviderLifecycleSignal,
+  AdminBillingProviderLifecycleSignalsSummary,
   AdminBillingPlan,
   AdminBillingSubscription,
 } from '@/lib/types/admin';
@@ -176,6 +179,16 @@ const defaultCouponForm: BillingCouponFormState = {
   notes: '',
 };
 
+const emptyProviderLifecycleSummary: AdminBillingProviderLifecycleSignalsSummary = {
+  totalSignals: 0,
+  failedSignals: 0,
+  unverifiedSignals: 0,
+  unmatchedSignals: 0,
+  refundSignals: 0,
+  disputeSignals: 0,
+  cancellationSignals: 0,
+};
+
 function formatCurrency(amount: number, currency = 'AUD') {
   return new Intl.NumberFormat('en-AU', {
     style: 'currency',
@@ -284,6 +297,60 @@ function paymentTypeLabel(value: string): string {
 function paymentProductLabel(payment: AdminBillingPaymentTransaction): string {
   const productType = payment.productType ? labelSummaryKey(payment.productType) : 'Not recorded';
   return payment.productId ? `${productType}: ${payment.productId}` : productType;
+}
+
+function providerSignalStatusVariant(status: string): 'success' | 'danger' | 'warning' | 'muted' | 'info' {
+  if (status === 'completed') return 'success';
+  if (status === 'failed') return 'danger';
+  if (status === 'processing' || status === 'received') return 'warning';
+  if (status === 'ignored') return 'muted';
+  return 'info';
+}
+
+function providerSignalVerificationVariant(status: string): 'success' | 'danger' | 'warning' | 'muted' | 'info' {
+  if (status === 'verified') return 'success';
+  if (status === 'failed') return 'danger';
+  if (status === 'legacy') return 'warning';
+  return 'muted';
+}
+
+function providerSignalCorrelationVariant(status: string): 'success' | 'danger' | 'warning' | 'muted' | 'info' {
+  if (status === 'linked') return 'success';
+  if (status === 'ambiguous') return 'danger';
+  if (status === 'unmatched') return 'warning';
+  return 'muted';
+}
+
+function providerSignalCategoryVariant(category: string): 'success' | 'danger' | 'warning' | 'muted' | 'info' | 'outline' {
+  if (category === 'refund' || category === 'dispute') return 'danger';
+  if (category === 'cancellation') return 'warning';
+  if (category === 'unknown') return 'muted';
+  if (category === 'invoice') return 'info';
+  return 'outline';
+}
+
+function renderLinkedLocalIds(signal: AdminBillingProviderLifecycleSignal) {
+  const groups = [
+    { label: 'Payments', values: signal.linkedLocalIds.paymentTransactionIds },
+    { label: 'Invoices', values: signal.linkedLocalIds.invoiceIds },
+    { label: 'Quotes', values: signal.linkedLocalIds.quoteIds },
+    { label: 'Subscriptions', values: signal.linkedLocalIds.subscriptionIds },
+    { label: 'Events', values: signal.linkedLocalIds.billingEventIds },
+  ].filter((group) => group.values.length > 0);
+
+  if (groups.length === 0) {
+    return <span className="text-muted">No local evidence</span>;
+  }
+
+  return (
+    <div className="max-w-[320px] space-y-1">
+      {groups.map((group) => (
+        <p key={group.label} className="break-words text-xs text-muted">
+          <span className="font-semibold text-navy">{group.label}:</span> {group.values.join(', ')}
+        </p>
+      ))}
+    </div>
+  );
 }
 
 function EvidenceSection({ title, children }: { title: string; children: ReactNode }) {
@@ -407,13 +474,20 @@ export default function BillingPage() {
   const [redemptionFilters, setRedemptionFilters] = useState<Record<string, string[]>>({ status: [] });
   const [invoiceFilters, setInvoiceFilters] = useState<Record<string, string[]>>({ status: [] });
   const [paymentFilters, setPaymentFilters] = useState<Record<string, string[]>>({ status: [], gateway: [], transactionType: [] });
+  const [providerSignalFilters, setProviderSignalFilters] = useState<Record<string, string[]>>({ category: [], gateway: [], processingStatus: [], verificationStatus: [] });
   const [subscriptionSearch, setSubscriptionSearch] = useState('');
   const [redemptionSearch, setRedemptionSearch] = useState('');
   const [invoiceSearch, setInvoiceSearch] = useState('');
   const [paymentSearch, setPaymentSearch] = useState('');
+  const [providerSignalSearch, setProviderSignalSearch] = useState('');
   const [paymentPage, setPaymentPage] = useState(1);
   const [paymentPageSize, setPaymentPageSize] = useState(50);
   const [paymentTotal, setPaymentTotal] = useState(0);
+  const [providerSignalPage, setProviderSignalPage] = useState(1);
+  const [providerSignalPageSize, setProviderSignalPageSize] = useState(20);
+  const [providerSignalTotal, setProviderSignalTotal] = useState(0);
+  const [providerSignalStatus, setProviderSignalStatus] = useState<PageStatus>('loading');
+  const [providerSignalSummary, setProviderSignalSummary] = useState<AdminBillingProviderLifecycleSignalsSummary>(emptyProviderLifecycleSummary);
   const [plans, setPlans] = useState<AdminBillingPlan[]>([]);
   const [addOns, setAddOns] = useState<AdminBillingAddOn[]>([]);
   const [coupons, setCoupons] = useState<AdminBillingCoupon[]>([]);
@@ -421,6 +495,7 @@ export default function BillingPage() {
   const [redemptions, setRedemptions] = useState<AdminBillingCouponRedemption[]>([]);
   const [invoices, setInvoices] = useState<AdminBillingInvoice[]>([]);
   const [paymentTransactions, setPaymentTransactions] = useState<AdminBillingPaymentTransaction[]>([]);
+  const [providerSignals, setProviderSignals] = useState<AdminBillingProviderLifecycleSignal[]>([]);
   const [entitlementDiagnostics, setEntitlementDiagnostics] = useState<AdminBillingEntitlementDiagnostics | null>(null);
   const [entitlementDiagnosticsStatus, setEntitlementDiagnosticsStatus] = useState<PageStatus>('loading');
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
@@ -454,10 +529,18 @@ export default function BillingPage() {
   const selectedPaymentStatus = paymentFilters.status?.[0];
   const selectedPaymentGateway = paymentFilters.gateway?.[0];
   const selectedPaymentTransactionType = paymentFilters.transactionType?.[0];
+  const selectedProviderSignalCategory = providerSignalFilters.category?.[0];
+  const selectedProviderSignalGateway = providerSignalFilters.gateway?.[0];
+  const selectedProviderSignalProcessingStatus = providerSignalFilters.processingStatus?.[0];
+  const selectedProviderSignalVerificationStatus = providerSignalFilters.verificationStatus?.[0];
 
   useEffect(() => {
     setPaymentPage(1);
   }, [selectedPaymentStatus, selectedPaymentGateway, selectedPaymentTransactionType, paymentSearch]);
+
+  useEffect(() => {
+    setProviderSignalPage(1);
+  }, [selectedProviderSignalCategory, selectedProviderSignalGateway, selectedProviderSignalProcessingStatus, selectedProviderSignalVerificationStatus, providerSignalSearch]);
 
   useEffect(() => {
     let cancelled = false;
@@ -528,6 +611,45 @@ export default function BillingPage() {
   useEffect(() => {
     let cancelled = false;
 
+    async function loadProviderSignals() {
+      setProviderSignalStatus('loading');
+      try {
+        const result = await getAdminBillingProviderLifecycleSignalsData({
+          category: selectedProviderSignalCategory,
+          gateway: selectedProviderSignalGateway,
+          processingStatus: selectedProviderSignalProcessingStatus,
+          verificationStatus: selectedProviderSignalVerificationStatus,
+          search: providerSignalSearch || undefined,
+          page: providerSignalPage,
+          pageSize: providerSignalPageSize,
+        });
+
+        if (cancelled) return;
+        setProviderSignals(result.items);
+        setProviderSignalTotal(result.total);
+        setProviderSignalSummary(result.summary);
+        setProviderSignalStatus(result.total > 0 ? 'success' : 'empty');
+      } catch (error) {
+        console.error(error);
+        if (!cancelled) {
+          setProviderSignals([]);
+          setProviderSignalTotal(0);
+          setProviderSignalSummary(emptyProviderLifecycleSummary);
+          setProviderSignalStatus('error');
+        }
+      }
+    }
+
+    const handle = window.setTimeout(loadProviderSignals, 200);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(handle);
+    };
+  }, [selectedProviderSignalCategory, selectedProviderSignalGateway, selectedProviderSignalProcessingStatus, selectedProviderSignalVerificationStatus, providerSignalSearch, providerSignalPage, providerSignalPageSize]);
+
+  useEffect(() => {
+    let cancelled = false;
+
     async function loadDiagnostics() {
       setEntitlementDiagnosticsStatus('loading');
       const diagnosticsResult = await loadEntitlementDiagnostics();
@@ -571,6 +693,16 @@ export default function BillingPage() {
       { label: 'Legacy content shape', value: summary?.legacyContentShape ?? 0, tone: 'warning' as const },
     ];
   }, [entitlementDiagnostics]);
+
+  const providerSignalSummaryItems = useMemo(() => [
+    { label: 'Total signals', value: providerSignalSummary.totalSignals, tone: 'default' as const, icon: <Activity className="h-4 w-4" aria-hidden="true" /> },
+    { label: 'Failed', value: providerSignalSummary.failedSignals, tone: providerSignalSummary.failedSignals > 0 ? 'danger' as const : 'default' as const, icon: null },
+    { label: 'Unverified', value: providerSignalSummary.unverifiedSignals, tone: providerSignalSummary.unverifiedSignals > 0 ? 'warning' as const : 'default' as const, icon: null },
+    { label: 'Unmatched', value: providerSignalSummary.unmatchedSignals, tone: providerSignalSummary.unmatchedSignals > 0 ? 'warning' as const : 'default' as const, icon: null },
+    { label: 'Refunds', value: providerSignalSummary.refundSignals, tone: providerSignalSummary.refundSignals > 0 ? 'danger' as const : 'default' as const, icon: null },
+    { label: 'Disputes', value: providerSignalSummary.disputeSignals, tone: providerSignalSummary.disputeSignals > 0 ? 'danger' as const : 'default' as const, icon: null },
+    { label: 'Cancellations', value: providerSignalSummary.cancellationSignals, tone: providerSignalSummary.cancellationSignals > 0 ? 'warning' as const : 'default' as const, icon: null },
+  ], [providerSignalSummary]);
 
   const planColumns: Column<AdminBillingPlan>[] = [
     {
@@ -921,6 +1053,87 @@ export default function BillingPage() {
     },
   ];
 
+  const providerSignalColumns: Column<AdminBillingProviderLifecycleSignal>[] = [
+    {
+      key: 'receivedAt',
+      header: 'Received',
+      render: (signal) => (
+        <div className="space-y-1 text-sm text-muted">
+          <p>{formatDateTime(signal.receivedAt)}</p>
+          <p className="text-xs">Processed {formatDateTime(signal.processedAt)}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'eventType',
+      header: 'Provider Signal',
+      render: (signal) => (
+        <div className="space-y-1">
+          <p className="font-medium text-navy">{signal.eventType}</p>
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge variant={providerSignalCategoryVariant(signal.category)}>{labelSummaryKey(signal.category)}</Badge>
+            <span className="text-xs text-muted">{labelSummaryKey(signal.source)}</span>
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: 'providerIds',
+      header: 'Provider IDs',
+      render: (signal) => (
+        <div className="max-w-[220px] space-y-1">
+          <Badge variant="outline">{signal.gateway || 'unknown'}</Badge>
+          <p className="truncate font-mono text-xs text-muted" title={signal.maskedProviderEventId}>{signal.maskedProviderEventId}</p>
+          <p className="truncate font-mono text-xs text-muted" title={signal.maskedProviderTransactionId ?? undefined}>{signal.maskedProviderTransactionId ?? 'No transaction id'}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (signal) => (
+        <div className="space-y-1">
+          <Badge variant={providerSignalStatusVariant(signal.processingStatus)}>{signal.processingStatus}</Badge>
+          <div>
+            <Badge variant={providerSignalVerificationVariant(signal.verificationStatus)}>{signal.verificationStatus}</Badge>
+          </div>
+          {signal.normalizedStatus ? <p className="text-xs text-muted">{signal.normalizedStatus}</p> : null}
+        </div>
+      ),
+    },
+    {
+      key: 'correlation',
+      header: 'Local Evidence',
+      render: (signal) => (
+        <div className="space-y-2">
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Badge variant={providerSignalCorrelationVariant(signal.correlationStatus)}>{labelSummaryKey(signal.correlationStatus)}</Badge>
+            <Badge variant="outline">{labelSummaryKey(signal.confidence)} confidence</Badge>
+          </div>
+          {renderLinkedLocalIds(signal)}
+        </div>
+      ),
+    },
+    {
+      key: 'flags',
+      header: 'Flags',
+      render: (signal) => (
+        <div className="space-y-1 text-xs text-muted">
+          <p>{signal.billingEventCount} billing events</p>
+          {signal.integrityFlags.length > 0 ? (
+            <div className="flex max-w-[220px] flex-wrap gap-1">
+              {signal.integrityFlags.map((flag) => (
+                <Badge key={`${signal.id}-${flag}`} variant="warning">{labelSummaryKey(flag)}</Badge>
+              ))}
+            </div>
+          ) : (
+            <span>No flags</span>
+          )}
+        </div>
+      ),
+    },
+  ];
+
   const planMobileCardRender = (plan: AdminBillingPlan) => (
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
@@ -1191,6 +1404,46 @@ export default function BillingPage() {
     </div>
   );
 
+  const providerSignalMobileCardRender = (signal: AdminBillingProviderLifecycleSignal) => (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-navy">{signal.eventType}</p>
+          <p className="truncate font-mono text-xs text-muted">{signal.maskedProviderTransactionId ?? signal.maskedProviderEventId}</p>
+        </div>
+        <Badge variant={providerSignalCorrelationVariant(signal.correlationStatus)}>{labelSummaryKey(signal.correlationStatus)}</Badge>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Category</p>
+          <p className="mt-1 font-medium text-navy">{labelSummaryKey(signal.category)}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Gateway</p>
+          <p className="mt-1 font-medium text-navy">{signal.gateway || 'unknown'}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Processing</p>
+          <p className="mt-1 font-medium text-navy">{signal.processingStatus}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Received</p>
+          <p className="mt-1 font-medium text-navy">{formatDateTime(signal.receivedAt)}</p>
+        </div>
+      </div>
+
+      <div className="space-y-2 text-xs text-muted">
+        <div className="flex flex-wrap gap-1.5">
+          <Badge variant={providerSignalVerificationVariant(signal.verificationStatus)}>{signal.verificationStatus}</Badge>
+          <Badge variant="outline">{labelSummaryKey(signal.confidence)} confidence</Badge>
+        </div>
+        {renderLinkedLocalIds(signal)}
+        {signal.integrityFlags.length > 0 ? <p className="break-words">Flags: {signal.integrityFlags.map(labelSummaryKey).join(', ')}</p> : null}
+      </div>
+    </div>
+  );
+
   const planFilterGroups: FilterGroup[] = [
     {
       id: 'status',
@@ -1300,6 +1553,51 @@ export default function BillingPage() {
         { id: 'one_time_purchase', label: 'One-time purchase' },
         { id: 'wallet_top_up', label: 'Wallet top-up' },
         { id: 'refund', label: 'Refund' },
+      ],
+    },
+  ];
+
+  const providerSignalFilterGroups: FilterGroup[] = [
+    {
+      id: 'category',
+      label: 'Category',
+      options: [
+        { id: 'checkout', label: 'Checkout' },
+        { id: 'payment', label: 'Payment' },
+        { id: 'subscription', label: 'Subscription' },
+        { id: 'invoice', label: 'Invoice' },
+        { id: 'refund', label: 'Refund' },
+        { id: 'dispute', label: 'Dispute' },
+        { id: 'cancellation', label: 'Cancellation' },
+        { id: 'unknown', label: 'Unknown' },
+      ],
+    },
+    {
+      id: 'gateway',
+      label: 'Gateway',
+      options: [
+        { id: 'stripe', label: 'Stripe' },
+        { id: 'paypal', label: 'PayPal' },
+      ],
+    },
+    {
+      id: 'processingStatus',
+      label: 'Processing',
+      options: [
+        { id: 'received', label: 'Received' },
+        { id: 'processing', label: 'Processing' },
+        { id: 'completed', label: 'Completed' },
+        { id: 'failed', label: 'Failed' },
+        { id: 'ignored', label: 'Ignored' },
+      ],
+    },
+    {
+      id: 'verificationStatus',
+      label: 'Verification',
+      options: [
+        { id: 'verified', label: 'Verified' },
+        { id: 'failed', label: 'Failed' },
+        { id: 'legacy', label: 'Legacy' },
       ],
     },
   ];
@@ -1814,6 +2112,89 @@ export default function BillingPage() {
             itemLabel="payment transaction"
             itemLabelPlural="payment transactions"
           />
+        </AdminRoutePanel>
+
+        <AdminRoutePanel title="Provider Lifecycle Signals" description="Read-only provider webhook lifecycle signals correlated against local billing evidence.">
+          <div className="max-w-md">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+              <Input placeholder="Search event, provider ID, or normalized status" value={providerSignalSearch} onChange={(event) => setProviderSignalSearch(event.target.value)} className="pl-9" />
+            </div>
+          </div>
+          <FilterBar
+            groups={providerSignalFilterGroups}
+            selected={providerSignalFilters}
+            onChange={(groupId, optionId) => handleSingleFilterChange(setProviderSignalFilters, groupId, optionId)}
+            onClear={() => { setProviderSignalFilters({ category: [], gateway: [], processingStatus: [], verificationStatus: [] }); setProviderSignalSearch(''); }}
+          />
+
+          {providerSignalStatus === 'loading' ? (
+            <div className="rounded-lg border border-dashed border-border bg-background-light px-4 py-5 text-sm text-muted" role="status" aria-live="polite">
+              Loading provider lifecycle signals...
+            </div>
+          ) : null}
+
+          {providerSignalStatus === 'error' ? (
+            <InlineAlert variant="warning" title="Provider signals unavailable">
+              Billing operations loaded, but provider lifecycle signals could not be refreshed.
+            </InlineAlert>
+          ) : null}
+
+          {providerSignalStatus === 'success' || providerSignalStatus === 'empty' ? (
+            <>
+              <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                {providerSignalSummaryItems.map((item) => (
+                  <div
+                    key={item.label}
+                    className={item.tone === 'danger'
+                      ? 'rounded-lg border border-red-200 bg-red-50 px-4 py-3'
+                      : item.tone === 'warning'
+                        ? 'rounded-lg border border-amber-200 bg-amber-50 px-4 py-3'
+                        : 'rounded-lg border border-border bg-background-light px-4 py-3'}
+                  >
+                    <div className="flex items-center gap-2">
+                      {item.icon}
+                      <p className={item.tone === 'danger'
+                        ? 'text-2xl font-bold text-red-700'
+                        : item.tone === 'warning'
+                          ? 'text-2xl font-bold text-amber-700'
+                          : 'text-2xl font-bold text-navy'}
+                      >
+                        {item.value.toLocaleString()}
+                      </p>
+                    </div>
+                    <p className={item.tone === 'danger'
+                      ? 'mt-1 text-xs font-semibold text-red-800'
+                      : item.tone === 'warning'
+                        ? 'mt-1 text-xs font-semibold text-amber-800'
+                        : 'mt-1 text-xs font-semibold text-muted'}
+                    >
+                      {item.label}
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <DataTable
+                aria-label="Provider lifecycle signals"
+                columns={providerSignalColumns}
+                data={providerSignals}
+                keyExtractor={(signal) => signal.id}
+                mobileCardRender={providerSignalMobileCardRender}
+                emptyMessage={providerSignalSearch || selectedProviderSignalCategory || selectedProviderSignalGateway || selectedProviderSignalProcessingStatus || selectedProviderSignalVerificationStatus ? 'No provider lifecycle signals match the current filters.' : 'No provider lifecycle signals recorded yet.'}
+              />
+              <Pagination
+                page={providerSignalPage}
+                pageSize={providerSignalPageSize}
+                total={providerSignalTotal}
+                onPageChange={setProviderSignalPage}
+                onPageSizeChange={setProviderSignalPageSize}
+                pageSizeOptions={[20, 50, 100]}
+                itemLabel="provider signal"
+                itemLabelPlural="provider signals"
+              />
+            </>
+          ) : null}
         </AdminRoutePanel>
       </AsyncStateWrapper>
 

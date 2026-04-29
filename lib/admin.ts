@@ -14,6 +14,7 @@ import {
   fetchAdminBillingPaymentTransactions,
   fetchAdminBillingPlans,
   fetchAdminBillingPlanVersions,
+  fetchAdminBillingProviderLifecycleSignals,
   fetchAdminBillingSubscriptions,
   fetchAdminContent,
   fetchAdminContentEffectiveness,
@@ -54,6 +55,8 @@ import type {
   AdminBillingInvoiceEvidence,
   AdminBillingPaymentTransaction,
   AdminBillingPaymentTransactionResponse,
+  AdminBillingProviderLifecycleSignal,
+  AdminBillingProviderLifecycleSignalsResponse,
   AdminBillingCoupon,
   AdminBillingCouponRedemption,
   AdminBillingPlan,
@@ -848,6 +851,56 @@ export async function getAdminBillingPaymentTransactionData(
       createdAt: toStringValue(payment.createdAt),
       updatedAt: toStringValue(payment.updatedAt),
     })),
+  };
+}
+
+export async function getAdminBillingProviderLifecycleSignalsData(
+  params?: Parameters<typeof fetchAdminBillingProviderLifecycleSignals>[0],
+): Promise<AdminBillingProviderLifecycleSignalsResponse> {
+  const raw = asRecord(await fetchAdminBillingProviderLifecycleSignals(params));
+  const summary = asRecord(raw.summary);
+
+  return {
+    total: toNumberValue(raw.total),
+    page: toNumberValue(raw.page, 1),
+    pageSize: toNumberValue(raw.pageSize, 20),
+    summary: {
+      totalSignals: toNumberValue(summary.totalSignals),
+      failedSignals: toNumberValue(summary.failedSignals),
+      unverifiedSignals: toNumberValue(summary.unverifiedSignals),
+      unmatchedSignals: toNumberValue(summary.unmatchedSignals),
+      refundSignals: toNumberValue(summary.refundSignals),
+      disputeSignals: toNumberValue(summary.disputeSignals),
+      cancellationSignals: toNumberValue(summary.cancellationSignals),
+    },
+    items: asArray(raw.items).map<AdminBillingProviderLifecycleSignal>((signal) => {
+      const linkedLocalIds = asRecord(signal.linkedLocalIds);
+      return {
+        id: toStringValue(signal.id),
+        source: toStringValue(signal.source, 'payment_webhook_event'),
+        category: toStringValue(signal.category, 'unknown').toLowerCase(),
+        correlationStatus: toStringValue(signal.correlationStatus, 'not_recorded').toLowerCase(),
+        confidence: toStringValue(signal.confidence, 'low').toLowerCase(),
+        gateway: toStringValue(signal.gateway).toLowerCase(),
+        eventType: toStringValue(signal.eventType),
+        maskedProviderEventId: toStringValue(signal.maskedProviderEventId, 'not_recorded'),
+        maskedProviderTransactionId: toNullableString(signal.maskedProviderTransactionId),
+        processingStatus: toStringValue(signal.processingStatus, 'received').toLowerCase(),
+        verificationStatus: toStringValue(signal.verificationStatus, 'legacy').toLowerCase(),
+        normalizedStatus: toNullableString(signal.normalizedStatus),
+        receivedAt: toStringValue(signal.receivedAt),
+        processedAt: toNullableString(signal.processedAt),
+        linkedLocalIds: {
+          paymentTransactionIds: parseJsonArray(linkedLocalIds.paymentTransactionIds),
+          invoiceIds: parseJsonArray(linkedLocalIds.invoiceIds),
+          quoteIds: parseJsonArray(linkedLocalIds.quoteIds),
+          subscriptionIds: parseJsonArray(linkedLocalIds.subscriptionIds),
+          billingEventIds: parseJsonArray(linkedLocalIds.billingEventIds),
+        },
+        billingEventCount: toNumberValue(signal.billingEventCount),
+        integrityFlags: parseJsonArray(signal.integrityFlags),
+      };
+    }),
   };
 }
 

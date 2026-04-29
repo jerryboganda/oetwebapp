@@ -324,6 +324,11 @@ public static class AdminEndpoints
             => Results.Ok(await service.GetBillingPaymentTransactionsAsync(status, gateway, transactionType, search, page ?? 1, pageSize ?? 20, ct)))
             .WithAdminRead("AdminBillingRead");
 
+        admin.MapGet("/billing/provider-lifecycle-signals", async (AdminService service, CancellationToken ct,
+            string? gateway, string? category, string? processingStatus, string? verificationStatus, string? search, int? page, int? pageSize)
+            => Results.Ok(await service.GetBillingProviderLifecycleSignalsAsync(gateway, category, processingStatus, verificationStatus, search, page ?? 1, pageSize ?? 20, ct)))
+            .WithAdminRead("AdminBillingRead");
+
         // ── Review Ops ──────────────────────────────────────
 
         admin.MapGet("/review-ops/summary", async (AdminService service, CancellationToken ct)

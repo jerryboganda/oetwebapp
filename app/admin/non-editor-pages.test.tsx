@@ -38,6 +38,7 @@ const admin = vi.hoisted(() => ({
   getAdminBillingInvoiceData: vi.fn(),
   getAdminBillingInvoiceEvidenceData: vi.fn(),
   getAdminBillingPaymentTransactionData: vi.fn(),
+  getAdminBillingProviderLifecycleSignalsData: vi.fn(),
   getAdminBillingSubscriptionData: vi.fn(),
   getAdminWebhookEventsData: vi.fn(),
   getAdminWebhookSummaryData: vi.fn(),
@@ -171,6 +172,7 @@ vi.mock('@/lib/admin', () => ({
   getAdminBillingInvoiceData: admin.getAdminBillingInvoiceData,
   getAdminBillingInvoiceEvidenceData: admin.getAdminBillingInvoiceEvidenceData,
   getAdminBillingPaymentTransactionData: admin.getAdminBillingPaymentTransactionData,
+  getAdminBillingProviderLifecycleSignalsData: admin.getAdminBillingProviderLifecycleSignalsData,
   getAdminBillingSubscriptionData: admin.getAdminBillingSubscriptionData,
   getAdminWebhookEventsData: admin.getAdminWebhookEventsData,
   getAdminWebhookSummaryData: admin.getAdminWebhookSummaryData,
@@ -617,6 +619,48 @@ describe('Admin Non-Editor Pages', () => {
         },
       ],
     });
+    admin.getAdminBillingProviderLifecycleSignalsData.mockResolvedValue({
+      total: 1,
+      page: 1,
+      pageSize: 20,
+      summary: {
+        totalSignals: 1,
+        failedSignals: 0,
+        unverifiedSignals: 0,
+        unmatchedSignals: 0,
+        refundSignals: 0,
+        disputeSignals: 0,
+        cancellationSignals: 0,
+      },
+      items: [
+        {
+          id: 'webhook-1',
+          source: 'payment_webhook_event',
+          category: 'checkout',
+          correlationStatus: 'linked',
+          confidence: 'high',
+          gateway: 'paypal',
+          eventType: 'checkout.session.completed',
+          maskedProviderEventId: 'evt_ch...1234',
+          maskedProviderTransactionId: 'checko...0001',
+          processingStatus: 'completed',
+          verificationStatus: 'verified',
+          normalizedStatus: 'completed',
+          receivedAt: '2026-04-01T11:59:00.000Z',
+          processedAt: '2026-04-01T12:00:00.000Z',
+          linkedLocalIds: {
+            paymentTransactionIds: ['payment-1'],
+            invoiceIds: ['invoice-1'],
+            quoteIds: ['quote-1'],
+            subscriptionIds: ['subscription-1'],
+            billingEventIds: ['event-1'],
+          },
+          billingEventCount: 1,
+          integrityFlags: [],
+          rawPayload: 'SHOULD_NOT_RENDER_PROVIDER_LIFECYCLE_RAW_PAYLOAD',
+        },
+      ],
+    });
     admin.getAdminBillingEntitlementDiagnosticsData.mockResolvedValue({
       generatedAt: '2026-04-01T12:05:00.000Z',
       summary: {
@@ -822,6 +866,19 @@ describe('Admin Non-Editor Pages', () => {
     expect(screen.getByText(/Showing 1.50 of 75 payment transactions/)).toBeInTheDocument();
     expect(screen.getByText('Page 1 of 2')).toBeInTheDocument();
     expect(screen.queryByText('SHOULD_NOT_RENDER_RAW_PROVIDER_METADATA')).not.toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: /^provider lifecycle signals$/i })).toBeInTheDocument();
+    expect(screen.getAllByText('checkout.session.completed').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('evt_ch...1234').length).toBeGreaterThan(0);
+    expect(admin.getAdminBillingProviderLifecycleSignalsData).toHaveBeenCalledWith({
+      category: undefined,
+      gateway: undefined,
+      processingStatus: undefined,
+      verificationStatus: undefined,
+      search: undefined,
+      page: 1,
+      pageSize: 20,
+    });
+    expect(screen.queryByText('SHOULD_NOT_RENDER_PROVIDER_LIFECYCLE_RAW_PAYLOAD')).not.toBeInTheDocument();
     expect(screen.getAllByText('2 versions').length).toBeGreaterThan(0);
 
     await user.click(screen.getAllByRole('button', { name: /view version history for starter/i })[0]);

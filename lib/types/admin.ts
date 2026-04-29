@@ -456,6 +456,52 @@ export interface AdminBillingPaymentTransactionResponse {
   items: AdminBillingPaymentTransaction[];
 }
 
+export interface AdminBillingProviderLifecycleSignalsSummary {
+  totalSignals: number;
+  failedSignals: number;
+  unverifiedSignals: number;
+  unmatchedSignals: number;
+  refundSignals: number;
+  disputeSignals: number;
+  cancellationSignals: number;
+}
+
+export interface AdminBillingProviderLifecycleLocalIds {
+  paymentTransactionIds: string[];
+  invoiceIds: string[];
+  quoteIds: string[];
+  subscriptionIds: string[];
+  billingEventIds: string[];
+}
+
+export interface AdminBillingProviderLifecycleSignal {
+  id: string;
+  source: string;
+  category: string;
+  correlationStatus: string;
+  confidence: string;
+  gateway: string;
+  eventType: string;
+  maskedProviderEventId: string;
+  maskedProviderTransactionId: string | null;
+  processingStatus: string;
+  verificationStatus: string;
+  normalizedStatus: string | null;
+  receivedAt: string;
+  processedAt: string | null;
+  linkedLocalIds: AdminBillingProviderLifecycleLocalIds;
+  billingEventCount: number;
+  integrityFlags: string[];
+}
+
+export interface AdminBillingProviderLifecycleSignalsResponse {
+  total: number;
+  page: number;
+  pageSize: number;
+  summary: AdminBillingProviderLifecycleSignalsSummary;
+  items: AdminBillingProviderLifecycleSignal[];
+}
+
 export interface AdminBillingAddOn {
   id: string;
   code: string;
