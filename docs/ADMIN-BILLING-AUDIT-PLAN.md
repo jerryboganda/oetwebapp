@@ -108,13 +108,25 @@ Residual risk after Phase 2B-2C:
 
 ### Phase 3: Payment Ledger And Webhook Inbox
 
+Status: Phase 3A read-only admin payment transaction ledger is implemented. The Billing Ops page now exposes sanitized local `PaymentTransaction` activity with filters for status, gateway, transaction type, and search. This is an operational payment-attempt ledger, not revenue recognition or provider reconciliation, and it intentionally excludes raw payment metadata and webhook payloads.
+
+Implemented scope:
+
+- Add `/v1/admin/billing/payment-transactions` behind `AdminBillingRead`.
+- Return a strict allow-list of payment activity fields: learner reference, gateway transaction ID, type, status, amount, product/quote/version anchors, and timestamps.
+- Paginate and clamp page sizes server-side for the higher-volume payment activity table.
+- Add the read-only Payment Transactions panel to `/admin/billing` with compact desktop and mobile views.
+- Add regression coverage for filtering, paging clamps, newest-first ordering, learner-name resolution, and raw metadata/webhook payload non-exposure.
+
+Remaining scope:
+
 - Add a first-class webhook inbox processor with retry, idempotency, replay protection, and operator visibility.
 - Add provider customer, provider subscription, provider invoice, invoice line, refund, and dispute read models.
 - Move recurring subscriptions to provider-authoritative lifecycle handling where available.
 
 Acceptance criteria:
 
-- Admins can answer who paid, what was granted, which coupon applied, and which provider event caused the state change.
+- Admins can answer who paid from local payment activity; grant/coupon/provider-event causality is completed only when invoice evidence and the Phase 3B webhook inbox are used together.
 - Failed webhook processing is retryable, audited, and idempotent.
 - Refunds and cancellations are provider-first operations with clear local state transitions.
 

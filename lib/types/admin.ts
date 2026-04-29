@@ -429,6 +429,33 @@ export interface AdminBillingInvoiceEvidence {
   integrityFlags: string[];
 }
 
+export interface AdminBillingPaymentTransaction {
+  id: string;
+  learnerUserId: string;
+  learnerName: string;
+  gateway: string;
+  gatewayTransactionId: string;
+  transactionType: string;
+  status: string;
+  amount: number;
+  currency: string;
+  productType: string;
+  productId: string;
+  quoteId: string | null;
+  planVersionId: string | null;
+  addOnVersionIds: Record<string, string>;
+  couponVersionId: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AdminBillingPaymentTransactionResponse {
+  total: number;
+  page: number;
+  pageSize: number;
+  items: AdminBillingPaymentTransaction[];
+}
+
 export interface AdminBillingAddOn {
   id: string;
   code: string;

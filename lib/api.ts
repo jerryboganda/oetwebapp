@@ -3345,6 +3345,18 @@ export async function fetchAdminBillingInvoiceEvidence(invoiceId: string) {
   return apiRequest(`/v1/admin/billing/invoices/${encodeURIComponent(invoiceId)}/evidence`);
 }
 
+export async function fetchAdminBillingPaymentTransactions(params?: { status?: string; gateway?: string; transactionType?: string; search?: string; page?: number; pageSize?: number }) {
+  const qs = new URLSearchParams();
+  if (params?.status) qs.set('status', params.status);
+  if (params?.gateway) qs.set('gateway', params.gateway);
+  if (params?.transactionType) qs.set('transactionType', params.transactionType);
+  if (params?.search) qs.set('search', params.search);
+  if (params?.page) qs.set('page', String(params.page));
+  if (params?.pageSize) qs.set('pageSize', String(params.pageSize));
+  const q = qs.toString();
+  return apiRequest(`/v1/admin/billing/payment-transactions${q ? `?${q}` : ''}`);
+}
+
 export async function fetchAdminReviewOpsSummary() {
   return apiRequest('/v1/admin/review-ops/summary');
 }

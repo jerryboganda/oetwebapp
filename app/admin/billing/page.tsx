@@ -7,6 +7,7 @@ import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
+import { Pagination } from '@/components/ui/pagination';
 import { Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -29,6 +30,7 @@ import {
   getAdminBillingCouponVersionHistoryData,
   getAdminBillingInvoiceEvidenceData,
   getAdminBillingInvoiceData,
+  getAdminBillingPaymentTransactionData,
   getAdminBillingPlanData,
   getAdminBillingPlanVersionHistoryData,
   getAdminBillingSubscriptionData,
@@ -41,6 +43,7 @@ import type {
   AdminBillingCouponRedemption,
   AdminBillingInvoice,
   AdminBillingInvoiceEvidence,
+  AdminBillingPaymentTransaction,
   AdminBillingPlan,
   AdminBillingSubscription,
 } from '@/lib/types/admin';
@@ -248,6 +251,29 @@ function evidenceGapLabel(value: string): string {
   return labels[value] ?? labelSummaryKey(value);
 }
 
+function paymentStatusVariant(status: string): 'success' | 'danger' | 'warning' | 'muted' | 'info' {
+  if (status === 'completed') return 'success';
+  if (status === 'failed' || status === 'disputed') return 'danger';
+  if (status === 'pending') return 'warning';
+  if (status === 'refunded') return 'info';
+  return 'muted';
+}
+
+function paymentTypeLabel(value: string): string {
+  const labels: Record<string, string> = {
+    subscription_payment: 'Subscription payment',
+    one_time_purchase: 'One-time purchase',
+    wallet_top_up: 'Wallet top-up',
+    refund: 'Refund',
+  };
+  return labels[value] ?? labelSummaryKey(value);
+}
+
+function paymentProductLabel(payment: AdminBillingPaymentTransaction): string {
+  const productType = payment.productType ? labelSummaryKey(payment.productType) : 'Not recorded';
+  return payment.productId ? `${productType}: ${payment.productId}` : productType;
+}
+
 function EvidenceSection({ title, children }: { title: string; children: ReactNode }) {
   return (
     <section className="space-y-3 border-t border-border pt-4">
@@ -368,15 +394,21 @@ export default function BillingPage() {
   const [subscriptionFilters, setSubscriptionFilters] = useState<Record<string, string[]>>({ status: [] });
   const [redemptionFilters, setRedemptionFilters] = useState<Record<string, string[]>>({ status: [] });
   const [invoiceFilters, setInvoiceFilters] = useState<Record<string, string[]>>({ status: [] });
+  const [paymentFilters, setPaymentFilters] = useState<Record<string, string[]>>({ status: [], gateway: [], transactionType: [] });
   const [subscriptionSearch, setSubscriptionSearch] = useState('');
   const [redemptionSearch, setRedemptionSearch] = useState('');
   const [invoiceSearch, setInvoiceSearch] = useState('');
+  const [paymentSearch, setPaymentSearch] = useState('');
+  const [paymentPage, setPaymentPage] = useState(1);
+  const [paymentPageSize, setPaymentPageSize] = useState(50);
+  const [paymentTotal, setPaymentTotal] = useState(0);
   const [plans, setPlans] = useState<AdminBillingPlan[]>([]);
   const [addOns, setAddOns] = useState<AdminBillingAddOn[]>([]);
   const [coupons, setCoupons] = useState<AdminBillingCoupon[]>([]);
   const [subscriptions, setSubscriptions] = useState<AdminBillingSubscription[]>([]);
   const [redemptions, setRedemptions] = useState<AdminBillingCouponRedemption[]>([]);
   const [invoices, setInvoices] = useState<AdminBillingInvoice[]>([]);
+  const [paymentTransactions, setPaymentTransactions] = useState<AdminBillingPaymentTransaction[]>([]);
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
   const [isAddOnModalOpen, setIsAddOnModalOpen] = useState(false);
   const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
@@ -405,6 +437,13 @@ export default function BillingPage() {
   const selectedSubscriptionStatus = subscriptionFilters.status?.[0];
   const selectedRedemptionStatus = redemptionFilters.status?.[0];
   const selectedInvoiceStatus = invoiceFilters.status?.[0];
+  const selectedPaymentStatus = paymentFilters.status?.[0];
+  const selectedPaymentGateway = paymentFilters.gateway?.[0];
+  const selectedPaymentTransactionType = paymentFilters.transactionType?.[0];
+
+  useEffect(() => {
+    setPaymentPage(1);
+  }, [selectedPaymentStatus, selectedPaymentGateway, selectedPaymentTransactionType, paymentSearch]);
 
   useEffect(() => {
     let cancelled = false;
@@ -412,7 +451,7 @@ export default function BillingPage() {
     async function loadBilling() {
       setPageStatus('loading');
       try {
-        const [planItems, addOnItems, couponItems, subscriptionResult, redemptionResult, invoiceResult] = await Promise.all([
+        const [planItems, addOnItems, couponItems, subscriptionResult, redemptionResult, invoiceResult, paymentResult] = await Promise.all([
           getAdminBillingPlanData({ status: selectedPlanStatus }),
           getAdminBillingAddOnData({ status: selectedAddOnStatus }),
           getAdminBillingCouponData({ status: selectedCouponStatus }),
@@ -422,6 +461,14 @@ export default function BillingPage() {
             status: selectedInvoiceStatus,
             search: invoiceSearch || undefined,
             pageSize: 100,
+          }),
+          getAdminBillingPaymentTransactionData({
+            status: selectedPaymentStatus,
+            gateway: selectedPaymentGateway,
+            transactionType: selectedPaymentTransactionType,
+            search: paymentSearch || undefined,
+            page: paymentPage,
+            pageSize: paymentPageSize,
           }),
         ]);
 
@@ -435,13 +482,16 @@ export default function BillingPage() {
         setSubscriptions(subscriptionResult.items);
         setRedemptions(redemptionItems);
         setInvoices(invoiceResult.items);
+        setPaymentTransactions(paymentResult.items);
+        setPaymentTotal(paymentResult.total);
         setPageStatus(
           planItems.length > 0 ||
           addOnItems.length > 0 ||
           couponItems.length > 0 ||
           subscriptionResult.items.length > 0 ||
           redemptionItems.length > 0 ||
-          invoiceResult.items.length > 0
+          invoiceResult.items.length > 0 ||
+          paymentResult.items.length > 0
             ? 'success'
             : 'empty',
         );
@@ -459,7 +509,7 @@ export default function BillingPage() {
       cancelled = true;
       window.clearTimeout(handle);
     };
-  }, [selectedPlanStatus, selectedAddOnStatus, selectedCouponStatus, selectedSubscriptionStatus, selectedRedemptionStatus, subscriptionSearch, redemptionSearch, selectedInvoiceStatus, invoiceSearch]);
+  }, [selectedPlanStatus, selectedAddOnStatus, selectedCouponStatus, selectedSubscriptionStatus, selectedRedemptionStatus, subscriptionSearch, redemptionSearch, selectedInvoiceStatus, invoiceSearch, selectedPaymentStatus, selectedPaymentGateway, selectedPaymentTransactionType, paymentSearch, paymentPage, paymentPageSize]);
 
   const metrics = useMemo(() => {
     const totalMRR = plans
@@ -772,6 +822,59 @@ export default function BillingPage() {
     },
   ];
 
+  const paymentColumns: Column<AdminBillingPaymentTransaction>[] = [
+    {
+      key: 'createdAt',
+      header: 'Created',
+      render: (payment) => <span className="text-sm text-muted">{formatDateTime(payment.createdAt)}</span>,
+    },
+    {
+      key: 'learner',
+      header: 'Learner',
+      render: (payment) => (
+        <div className="space-y-1">
+          <p className="font-medium text-navy">{payment.learnerName}</p>
+          <p className="text-xs uppercase tracking-[0.12em] text-muted">{payment.learnerUserId}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'gateway',
+      header: 'Gateway',
+      render: (payment) => (
+        <div className="max-w-[220px] space-y-1">
+          <Badge variant="outline">{payment.gateway || 'unknown'}</Badge>
+          <p className="truncate font-mono text-xs text-muted" title={payment.gatewayTransactionId}>{payment.gatewayTransactionId}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'type',
+      header: 'Type',
+      render: (payment) => (
+        <div className="space-y-1 text-muted">
+          <p>{paymentTypeLabel(payment.transactionType)}</p>
+          <p className="text-xs">{paymentProductLabel(payment)}</p>
+        </div>
+      ),
+    },
+    {
+      key: 'amount',
+      header: 'Amount',
+      render: (payment) => <span className="text-muted">{formatCurrency(payment.amount, payment.currency)}</span>,
+    },
+    {
+      key: 'status',
+      header: 'Status',
+      render: (payment) => <Badge variant={paymentStatusVariant(payment.status)}>{payment.status || 'unknown'}</Badge>,
+    },
+    {
+      key: 'quoteId',
+      header: 'Quote',
+      render: (payment) => <span className="font-mono text-xs text-muted">{payment.quoteId ?? 'N/A'}</span>,
+    },
+  ];
+
   const planMobileCardRender = (plan: AdminBillingPlan) => (
     <div className="space-y-3">
       <div className="flex items-start justify-between gap-3">
@@ -1006,6 +1109,42 @@ export default function BillingPage() {
     </div>
   );
 
+  const paymentMobileCardRender = (payment: AdminBillingPaymentTransaction) => (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="truncate font-semibold text-navy">{payment.learnerName}</p>
+          <p className="truncate font-mono text-xs text-muted">{payment.gatewayTransactionId}</p>
+        </div>
+        <Badge variant={paymentStatusVariant(payment.status)}>{payment.status || 'unknown'}</Badge>
+      </div>
+
+      <div className="grid grid-cols-2 gap-3 text-sm">
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Amount</p>
+          <p className="mt-1 font-medium text-navy">{formatCurrency(payment.amount, payment.currency)}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Gateway</p>
+          <p className="mt-1 font-medium text-navy">{payment.gateway || 'unknown'}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Type</p>
+          <p className="mt-1 font-medium text-navy">{paymentTypeLabel(payment.transactionType)}</p>
+        </div>
+        <div className="rounded-2xl bg-background-light px-3 py-2">
+          <p className="text-[11px] uppercase tracking-[0.12em] text-muted">Created</p>
+          <p className="mt-1 font-medium text-navy">{formatDateTime(payment.createdAt)}</p>
+        </div>
+      </div>
+
+      <div className="space-y-1 text-xs text-muted">
+        <p className="break-all">{paymentProductLabel(payment)}</p>
+        {payment.quoteId ? <p className="break-all font-mono">Quote {payment.quoteId}</p> : null}
+      </div>
+    </div>
+  );
+
   const planFilterGroups: FilterGroup[] = [
     {
       id: 'status',
@@ -1087,6 +1226,38 @@ export default function BillingPage() {
     },
   ];
 
+  const paymentFilterGroups: FilterGroup[] = [
+    {
+      id: 'status',
+      label: 'Payment Status',
+      options: [
+        { id: 'pending', label: 'Pending' },
+        { id: 'completed', label: 'Completed' },
+        { id: 'failed', label: 'Failed' },
+        { id: 'refunded', label: 'Refunded' },
+        { id: 'disputed', label: 'Disputed' },
+      ],
+    },
+    {
+      id: 'gateway',
+      label: 'Gateway',
+      options: [
+        { id: 'stripe', label: 'Stripe' },
+        { id: 'paypal', label: 'PayPal' },
+      ],
+    },
+    {
+      id: 'transactionType',
+      label: 'Type',
+      options: [
+        { id: 'subscription_payment', label: 'Subscription payment' },
+        { id: 'one_time_purchase', label: 'One-time purchase' },
+        { id: 'wallet_top_up', label: 'Wallet top-up' },
+        { id: 'refund', label: 'Refund' },
+      ],
+    },
+  ];
+
   function handleSingleFilterChange(
     setter: Dispatch<SetStateAction<Record<string, string[]>>>,
     groupId: string,
@@ -1099,7 +1270,7 @@ export default function BillingPage() {
   }
 
   async function reloadBilling() {
-    const [planItems, addOnItems, couponItems, subscriptionResult, redemptionResult, invoiceResult] = await Promise.all([
+    const [planItems, addOnItems, couponItems, subscriptionResult, redemptionResult, invoiceResult, paymentResult] = await Promise.all([
       getAdminBillingPlanData({ status: selectedPlanStatus }),
       getAdminBillingAddOnData({ status: selectedAddOnStatus }),
       getAdminBillingCouponData({ status: selectedCouponStatus }),
@@ -1109,6 +1280,14 @@ export default function BillingPage() {
         status: selectedInvoiceStatus,
         search: invoiceSearch || undefined,
         pageSize: 100,
+      }),
+      getAdminBillingPaymentTransactionData({
+        status: selectedPaymentStatus,
+        gateway: selectedPaymentGateway,
+        transactionType: selectedPaymentTransactionType,
+        search: paymentSearch || undefined,
+        page: paymentPage,
+        pageSize: paymentPageSize,
       }),
     ]);
 
@@ -1120,13 +1299,16 @@ export default function BillingPage() {
     setSubscriptions(subscriptionResult.items);
     setRedemptions(redemptionItems);
     setInvoices(invoiceResult.items);
+    setPaymentTransactions(paymentResult.items);
+    setPaymentTotal(paymentResult.total);
     setPageStatus(
       planItems.length > 0 ||
       addOnItems.length > 0 ||
       couponItems.length > 0 ||
       subscriptionResult.items.length > 0 ||
       redemptionItems.length > 0 ||
-      invoiceResult.items.length > 0
+      invoiceResult.items.length > 0 ||
+      paymentResult.items.length > 0
         ? 'success'
         : 'empty',
     );
@@ -1459,6 +1641,39 @@ export default function BillingPage() {
           </div>
           <FilterBar groups={invoiceFilterGroups} selected={invoiceFilters} onChange={(groupId, optionId) => handleSingleFilterChange(setInvoiceFilters, groupId, optionId)} onClear={() => { setInvoiceFilters({ status: [] }); setInvoiceSearch(''); }} />
           <DataTable columns={invoiceColumns} data={invoices} keyExtractor={(invoice) => invoice.id} mobileCardRender={invoiceMobileCardRender} />
+        </AdminRoutePanel>
+
+        <AdminRoutePanel title="Payment Transactions" description="Read-only payment activity from checkout and wallet top-up attempts.">
+          <div className="max-w-md">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted" />
+              <Input placeholder="Search learner, quote, product, or gateway ID" value={paymentSearch} onChange={(event) => setPaymentSearch(event.target.value)} className="pl-9" />
+            </div>
+          </div>
+          <FilterBar
+            groups={paymentFilterGroups}
+            selected={paymentFilters}
+            onChange={(groupId, optionId) => handleSingleFilterChange(setPaymentFilters, groupId, optionId)}
+            onClear={() => { setPaymentFilters({ status: [], gateway: [], transactionType: [] }); setPaymentSearch(''); }}
+          />
+          <DataTable
+            aria-label="Payment transactions"
+            columns={paymentColumns}
+            data={paymentTransactions}
+            keyExtractor={(payment) => payment.id}
+            mobileCardRender={paymentMobileCardRender}
+            emptyMessage={paymentSearch || selectedPaymentStatus || selectedPaymentGateway || selectedPaymentTransactionType ? 'No payment transactions match the current filters.' : 'No payment transactions recorded yet.'}
+          />
+          <Pagination
+            page={paymentPage}
+            pageSize={paymentPageSize}
+            total={paymentTotal}
+            onPageChange={setPaymentPage}
+            onPageSizeChange={setPaymentPageSize}
+            pageSizeOptions={[20, 50, 100]}
+            itemLabel="payment transaction"
+            itemLabelPlural="payment transactions"
+          />
         </AdminRoutePanel>
       </AsyncStateWrapper>
 

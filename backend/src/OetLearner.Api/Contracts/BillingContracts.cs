@@ -220,3 +220,28 @@ public record AdminBillingInvoiceEvidenceResponse(
     AdminBillingInvoiceEvidenceCatalogAnchorResponse CatalogAnchors,
     IReadOnlyList<string> NotRecorded,
     IReadOnlyList<string> IntegrityFlags);
+
+public record AdminBillingPaymentTransactionResponse(
+    string Id,
+    string LearnerUserId,
+    string LearnerName,
+    string Gateway,
+    string GatewayTransactionId,
+    string TransactionType,
+    string Status,
+    decimal Amount,
+    string Currency,
+    string ProductType,
+    string ProductId,
+    string? QuoteId,
+    string? PlanVersionId,
+    Dictionary<string, string> AddOnVersionIds,
+    string? CouponVersionId,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt);
+
+public record AdminBillingPaymentTransactionListResponse(
+    int Total,
+    int Page,
+    int PageSize,
+    IReadOnlyList<AdminBillingPaymentTransactionResponse> Items);

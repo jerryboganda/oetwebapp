@@ -4023,6 +4023,88 @@ public partial class AdminService(
         return new { total, page, pageSize, items };
     }
 
+    public async Task<AdminBillingPaymentTransactionListResponse> GetBillingPaymentTransactionsAsync(
+        string? status,
+        string? gateway,
+        string? transactionType,
+        string? search,
+        int page,
+        int pageSize,
+        CancellationToken ct)
+    {
+        var normalizedPage = Math.Max(page, 1);
+        var normalizedPageSize = Math.Clamp(pageSize, 1, 100);
+        var query = db.PaymentTransactions.AsNoTracking().AsQueryable();
+
+        if (!string.IsNullOrWhiteSpace(status) && !string.Equals(status, "all", StringComparison.OrdinalIgnoreCase))
+        {
+            var normalizedStatus = status.Trim().ToLowerInvariant();
+            query = query.Where(payment => payment.Status == normalizedStatus);
+        }
+
+        if (!string.IsNullOrWhiteSpace(gateway) && !string.Equals(gateway, "all", StringComparison.OrdinalIgnoreCase))
+        {
+            var normalizedGateway = gateway.Trim().ToLowerInvariant();
+            query = query.Where(payment => payment.Gateway == normalizedGateway);
+        }
+
+        if (!string.IsNullOrWhiteSpace(transactionType) && !string.Equals(transactionType, "all", StringComparison.OrdinalIgnoreCase))
+        {
+            var normalizedTransactionType = transactionType.Trim().ToLowerInvariant();
+            query = query.Where(payment => payment.TransactionType == normalizedTransactionType);
+        }
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var normalizedSearch = search.Trim();
+            query = query.Where(payment =>
+                payment.LearnerUserId.Contains(normalizedSearch)
+                || payment.GatewayTransactionId.Contains(normalizedSearch)
+                || (payment.QuoteId != null && payment.QuoteId.Contains(normalizedSearch))
+                || (payment.ProductId != null && payment.ProductId.Contains(normalizedSearch))
+                || db.Users.AsNoTracking().Any(user => user.Id == payment.LearnerUserId && user.DisplayName.Contains(normalizedSearch)));
+        }
+
+        var total = await query.CountAsync(ct);
+        var payments = await GetOrderedPaymentTransactionsPageAsync(query, normalizedPage, normalizedPageSize, ct);
+
+        var userIds = payments.Select(payment => payment.LearnerUserId).Distinct().ToList();
+        var userNames = await db.Users.AsNoTracking()
+            .Where(user => userIds.Contains(user.Id))
+            .ToDictionaryAsync(user => user.Id, user => user.DisplayName, ct);
+
+        var items = payments.Select(payment => MapBillingPaymentTransaction(
+            payment,
+            userNames.TryGetValue(payment.LearnerUserId, out var userName) ? userName : payment.LearnerUserId)).ToList();
+
+        return new AdminBillingPaymentTransactionListResponse(total, normalizedPage, normalizedPageSize, items);
+    }
+
+    private async Task<List<PaymentTransaction>> GetOrderedPaymentTransactionsPageAsync(
+        IQueryable<PaymentTransaction> query,
+        int page,
+        int pageSize,
+        CancellationToken ct)
+    {
+        var skip = (page - 1) * pageSize;
+        if (!db.Database.IsSqlite())
+        {
+            return await query
+                .OrderByDescending(payment => payment.CreatedAt)
+                .ThenByDescending(payment => payment.Id)
+                .Skip(skip)
+                .Take(pageSize)
+                .ToListAsync(ct);
+        }
+
+        return (await query.ToListAsync(ct))
+            .OrderByDescending(payment => payment.CreatedAt)
+            .ThenByDescending(payment => payment.Id)
+            .Skip(skip)
+            .Take(pageSize)
+            .ToList();
+    }
+
     public async Task<AdminBillingInvoiceEvidenceResponse> GetBillingInvoiceEvidenceAsync(string invoiceId, CancellationToken ct)
     {
         var normalizedInvoiceId = invoiceId.Trim();
@@ -4164,6 +4246,26 @@ public partial class AdminService(
     private static AdminBillingInvoiceEvidencePaymentResponse MapInvoiceEvidencePayment(PaymentTransaction payment)
         => new(
             payment.Id.ToString("D"),
+            payment.Gateway,
+            payment.GatewayTransactionId,
+            payment.TransactionType,
+            payment.Status,
+            payment.Amount,
+            payment.Currency,
+            payment.ProductType ?? string.Empty,
+            payment.ProductId ?? string.Empty,
+            payment.QuoteId,
+            payment.PlanVersionId,
+            DeserializeStringDictionary(payment.AddOnVersionIdsJson),
+            payment.CouponVersionId,
+            payment.CreatedAt,
+            payment.UpdatedAt);
+
+    private static AdminBillingPaymentTransactionResponse MapBillingPaymentTransaction(PaymentTransaction payment, string learnerName)
+        => new(
+            payment.Id.ToString("D"),
+            payment.LearnerUserId,
+            learnerName,
             payment.Gateway,
             payment.GatewayTransactionId,
             payment.TransactionType,

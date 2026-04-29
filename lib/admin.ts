@@ -10,6 +10,7 @@ import {
   fetchAdminBillingCouponVersions,
   fetchAdminBillingInvoiceEvidence,
   fetchAdminBillingInvoices,
+  fetchAdminBillingPaymentTransactions,
   fetchAdminBillingPlans,
   fetchAdminBillingPlanVersions,
   fetchAdminBillingSubscriptions,
@@ -47,6 +48,8 @@ import type {
   AdminBillingCatalogVersionHistory,
   AdminBillingInvoice,
   AdminBillingInvoiceEvidence,
+  AdminBillingPaymentTransaction,
+  AdminBillingPaymentTransactionResponse,
   AdminBillingCoupon,
   AdminBillingCouponRedemption,
   AdminBillingPlan,
@@ -757,7 +760,7 @@ export async function getAdminBillingInvoiceEvidenceData(invoiceId: string): Pro
       transactionType: toStringValue(payment.transactionType),
       status: toStringValue(payment.status).toLowerCase(),
       amount: toNumberValue(payment.amount),
-      currency: toStringValue(payment.currency, 'AUD'),
+      currency: toStringValue(payment.currency, 'AUD').trim().toUpperCase() || 'AUD',
       productType: toStringValue(payment.productType),
       productId: toStringValue(payment.productId),
       quoteId: toNullableString(payment.quoteId),
@@ -811,6 +814,36 @@ export async function getAdminBillingInvoiceEvidenceData(invoiceId: string): Pro
     },
     notRecorded: parseJsonArray(raw.notRecorded),
     integrityFlags: parseJsonArray(raw.integrityFlags),
+  };
+}
+
+export async function getAdminBillingPaymentTransactionData(
+  params?: Parameters<typeof fetchAdminBillingPaymentTransactions>[0],
+): Promise<AdminBillingPaymentTransactionResponse> {
+  const raw = asRecord(await fetchAdminBillingPaymentTransactions(params));
+  return {
+    total: toNumberValue(raw.total),
+    page: toNumberValue(raw.page, 1),
+    pageSize: toNumberValue(raw.pageSize, 20),
+    items: asArray(raw.items).map<AdminBillingPaymentTransaction>((payment) => ({
+      id: toStringValue(payment.id),
+      learnerUserId: toStringValue(payment.learnerUserId),
+      learnerName: toStringValue(payment.learnerName, toStringValue(payment.learnerUserId)),
+      gateway: toStringValue(payment.gateway).toLowerCase(),
+      gatewayTransactionId: toStringValue(payment.gatewayTransactionId),
+      transactionType: toStringValue(payment.transactionType).toLowerCase(),
+      status: toStringValue(payment.status).toLowerCase(),
+      amount: toNumberValue(payment.amount),
+      currency: toStringValue(payment.currency, 'AUD').trim().toUpperCase() || 'AUD',
+      productType: toStringValue(payment.productType),
+      productId: toStringValue(payment.productId),
+      quoteId: toNullableString(payment.quoteId),
+      planVersionId: toNullableString(payment.planVersionId),
+      addOnVersionIds: asStringRecord(payment.addOnVersionIds),
+      couponVersionId: toNullableString(payment.couponVersionId),
+      createdAt: toStringValue(payment.createdAt),
+      updatedAt: toStringValue(payment.updatedAt),
+    })),
   };
 }
 

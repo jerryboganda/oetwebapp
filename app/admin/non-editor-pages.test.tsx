@@ -36,6 +36,7 @@ const admin = vi.hoisted(() => ({
   getAdminBillingCouponRedemptionData: vi.fn(),
   getAdminBillingInvoiceData: vi.fn(),
   getAdminBillingInvoiceEvidenceData: vi.fn(),
+  getAdminBillingPaymentTransactionData: vi.fn(),
   getAdminBillingSubscriptionData: vi.fn(),
   getAdminQualityAnalyticsData: vi.fn(),
   getAdminUserDetailData: vi.fn(),
@@ -164,6 +165,7 @@ vi.mock('@/lib/admin', () => ({
   getAdminBillingCouponRedemptionData: admin.getAdminBillingCouponRedemptionData,
   getAdminBillingInvoiceData: admin.getAdminBillingInvoiceData,
   getAdminBillingInvoiceEvidenceData: admin.getAdminBillingInvoiceEvidenceData,
+  getAdminBillingPaymentTransactionData: admin.getAdminBillingPaymentTransactionData,
   getAdminBillingSubscriptionData: admin.getAdminBillingSubscriptionData,
   getAdminQualityAnalyticsData: admin.getAdminQualityAnalyticsData,
   getAdminUserDetailData: admin.getAdminUserDetailData,
@@ -579,6 +581,33 @@ describe('Admin Non-Editor Pages', () => {
         },
       ],
     });
+    admin.getAdminBillingPaymentTransactionData.mockResolvedValue({
+      total: 75,
+      page: 1,
+      pageSize: 50,
+      items: [
+        {
+          id: 'payment-1',
+          learnerUserId: 'learner-1',
+          learnerName: 'Learner One',
+          gateway: 'paypal',
+          gatewayTransactionId: 'checkout-1',
+          transactionType: 'subscription_payment',
+          status: 'completed',
+          amount: 49,
+          currency: 'AUD',
+          productType: 'plan',
+          productId: 'starter',
+          quoteId: 'quote-1',
+          planVersionId: 'plan-version-2',
+          addOnVersionIds: { 'credits-5': 'addon-version-1' },
+          couponVersionId: 'coupon-version-1',
+          createdAt: '2026-04-01T11:56:00.000Z',
+          updatedAt: '2026-04-01T12:00:00.000Z',
+          metadataJson: 'SHOULD_NOT_RENDER_RAW_PROVIDER_METADATA',
+        },
+      ],
+    });
     admin.getAdminBillingPlanVersionHistoryData.mockResolvedValue({
       subject: {
         kind: 'plan',
@@ -725,6 +754,20 @@ describe('Admin Non-Editor Pages', () => {
     expect((await screen.findAllByText('Starter')).length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: /^billing operations$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^subscription plans$/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^payment transactions$/i })).toBeInTheDocument();
+    expect(screen.getAllByText('checkout-1').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('Subscription payment').length).toBeGreaterThan(0);
+    expect(admin.getAdminBillingPaymentTransactionData).toHaveBeenCalledWith({
+      status: undefined,
+      gateway: undefined,
+      transactionType: undefined,
+      search: undefined,
+      page: 1,
+      pageSize: 50,
+    });
+    expect(screen.getByText(/Showing 1.50 of 75 payment transactions/)).toBeInTheDocument();
+    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument();
+    expect(screen.queryByText('SHOULD_NOT_RENDER_RAW_PROVIDER_METADATA')).not.toBeInTheDocument();
     expect(screen.getAllByText('2 versions').length).toBeGreaterThan(0);
 
     await user.click(screen.getAllByRole('button', { name: /view version history for starter/i })[0]);
