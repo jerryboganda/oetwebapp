@@ -86,6 +86,21 @@ public static class NotificationEndpoints
             Results.Ok(await service.RegisterPushTokenAsync(http.AuthAccountId(), request, ct)))
             .RequireRateLimiting("PerUserWrite");
 
+        notifications.MapGet("/consents", async (
+            HttpContext http,
+            NotificationService service,
+            CancellationToken ct) =>
+            Results.Ok(await service.GetConsentsAsync(http.AuthAccountId(), ct)));
+
+        notifications.MapPut("/consents/{channel}", async (
+            HttpContext http,
+            string channel,
+            NotificationConsentUpdateRequest request,
+            NotificationService service,
+            CancellationToken ct) =>
+            Results.Ok(await service.UpdateConsentAsync(http.AuthAccountId(), channel, request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
         var admin = app.MapGroup("/v1/admin/notifications")
             .RequireAuthorization("AdminOnly")
             .RequireRateLimiting("PerUser");
@@ -128,6 +143,51 @@ public static class NotificationEndpoints
             [FromQuery] string? audienceRole = null,
             [FromQuery] string? eventKey = null) =>
             Results.Ok(await service.GetAdminDeliveriesAsync(page, pageSize, status, channel, audienceRole, eventKey, ct)));
+
+        admin.MapGet("/consents", async (
+            NotificationService service,
+            CancellationToken ct,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20,
+            [FromQuery] string? authAccountId = null,
+            [FromQuery] string? channel = null) =>
+            Results.Ok(await service.GetAdminConsentsAsync(page, pageSize, authAccountId, channel, ct)));
+
+        admin.MapPut("/consents/{authAccountId}/{channel}", async (
+            HttpContext http,
+            string authAccountId,
+            string channel,
+            NotificationConsentUpdateRequest request,
+            NotificationService service,
+            CancellationToken ct) =>
+            Results.Ok(await service.SetAdminConsentAsync(http.AdminId(), http.AdminName(), authAccountId, channel, request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        admin.MapGet("/suppressions", async (
+            NotificationService service,
+            CancellationToken ct,
+            [FromQuery] int page = 1,
+            [FromQuery] int pageSize = 20,
+            [FromQuery] string? authAccountId = null,
+            [FromQuery] string? channel = null,
+            [FromQuery] bool activeOnly = true) =>
+            Results.Ok(await service.GetAdminSuppressionsAsync(page, pageSize, authAccountId, channel, activeOnly, ct)));
+
+        admin.MapPost("/suppressions", async (
+            HttpContext http,
+            AdminNotificationSuppressionCreateRequest request,
+            NotificationService service,
+            CancellationToken ct) =>
+            Results.Ok(await service.CreateAdminSuppressionAsync(http.AdminId(), http.AdminName(), request, ct)))
+            .RequireRateLimiting("PerUserWrite");
+
+        admin.MapDelete("/suppressions/{suppressionId:guid}", async (
+            HttpContext http,
+            Guid suppressionId,
+            NotificationService service,
+            CancellationToken ct) =>
+            Results.Ok(await service.ReleaseAdminSuppressionAsync(http.AdminId(), http.AdminName(), suppressionId, ct)))
+            .RequireRateLimiting("PerUserWrite");
 
         admin.MapPost("/test-email", async (
             HttpContext http,

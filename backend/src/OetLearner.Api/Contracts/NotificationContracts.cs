@@ -41,6 +41,61 @@ public sealed record RegisterPushTokenRequest(
     string Token,
     string Platform);
 
+public sealed record NotificationConsentItem(
+    string AuthAccountId,
+    string Channel,
+    string Category,
+    bool IsGranted,
+    bool RequiresExplicitConsent,
+    string Source,
+    string? Reason,
+    DateTimeOffset? GrantedAt,
+    DateTimeOffset? RevokedAt,
+    DateTimeOffset UpdatedAt);
+
+public sealed record NotificationConsentUpdateRequest(
+    bool IsGranted,
+    string? Source,
+    string? Reason,
+    string? Category = null);
+
+public sealed record AdminNotificationConsentResponse(
+    IReadOnlyList<NotificationConsentItem> Items,
+    int TotalCount,
+    int Page,
+    int PageSize);
+
+public sealed record NotificationSuppressionItem(
+    Guid Id,
+    string AuthAccountId,
+    string Channel,
+    string? EventKey,
+    bool IsActive,
+    string ReasonCode,
+    string? Reason,
+    DateTimeOffset? StartsAt,
+    DateTimeOffset? ExpiresAt,
+    DateTimeOffset CreatedAt,
+    DateTimeOffset UpdatedAt,
+    DateTimeOffset? ReleasedAt,
+    string CreatedByAdminName,
+    string? ReleasedByAdminName);
+
+public sealed record AdminNotificationSuppressionCreateRequest(
+    string AuthAccountId,
+    string Channel,
+    string? EventKey,
+    string ReasonCode,
+    string? Reason,
+    DateTimeOffset? StartsAt,
+    DateTimeOffset? ExpiresAt);
+
+public sealed record AdminNotificationSuppressionResponse(
+    IReadOnlyList<NotificationSuppressionItem> Items,
+    int TotalCount,
+    int Page,
+    int PageSize);
+
 public sealed record NotificationPreferencePatchRequest(
     string? Timezone,
     bool? GlobalInAppEnabled,
@@ -68,7 +123,10 @@ public sealed record AdminNotificationCatalogEntry(
     bool DefaultInAppEnabled,
     bool DefaultEmailEnabled,
     bool DefaultPushEnabled,
-    string DefaultEmailMode);
+    bool DefaultSmsEnabled,
+    bool DefaultWhatsAppEnabled,
+    string DefaultEmailMode,
+    bool IsPolicyProtected);
 
 public sealed record AdminNotificationPolicyRow(
     string AudienceRole,
@@ -79,6 +137,9 @@ public sealed record AdminNotificationPolicyRow(
     bool EmailEnabled,
     bool PushEnabled,
     string EmailMode,
+    int? MaxDeliveriesPerHour,
+    int? MaxDeliveriesPerDay,
+    bool IsPolicyProtected,
     bool IsOverride,
     DateTimeOffset? UpdatedAt,
     string? UpdatedByAdminId,
@@ -98,7 +159,11 @@ public sealed record AdminNotificationPolicyUpdateRequest(
     bool? InAppEnabled,
     bool? EmailEnabled,
     bool? PushEnabled,
-    string? EmailMode);
+    string? EmailMode,
+    int? MaxDeliveriesPerHour = null,
+    int? MaxDeliveriesPerDay = null,
+    bool? ClearMaxDeliveriesPerHour = null,
+    bool? ClearMaxDeliveriesPerDay = null);
 
 public sealed record AdminNotificationHealthSnapshot(
     DateTimeOffset GeneratedAt,

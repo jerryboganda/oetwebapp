@@ -1,15 +1,23 @@
 import { ApiError, apiClient } from './api';
 import type {
   AdminNotificationCatalogEntry,
+  AdminNotificationConsentResponse,
   AdminNotificationHealthSnapshot,
   AdminNotificationPoliciesResponse,
   AdminNotificationPolicyRow,
+  AdminNotificationSuppressionCreateRequest,
+  AdminNotificationSuppressionResponse,
   AdminNotificationTestEmailRequest,
   NotificationAudienceRole,
+  NotificationChannel,
+  NotificationConsentChannel,
+  NotificationConsentItem,
+  NotificationConsentUpdateRequest,
   NotificationDeliveryAttemptResponse,
   NotificationFeedResponse,
   NotificationPreferencePatchRequest,
   NotificationPreferencePayload,
+  NotificationSuppressibleChannel,
   PushSubscriptionPayload,
   PushSubscriptionRegistrationResponse,
 } from './types/notifications';
@@ -100,6 +108,22 @@ export async function deletePushSubscription(subscriptionId: string): Promise<vo
   });
 }
 
+export async function fetchNotificationConsents(): Promise<NotificationConsentItem[]> {
+  return requestJson<NotificationConsentItem[]>('/v1/notifications/consents', {
+    method: 'GET',
+  });
+}
+
+export async function updateNotificationConsent(
+  channel: NotificationConsentChannel,
+  payload: NotificationConsentUpdateRequest,
+): Promise<NotificationConsentItem> {
+  return requestJson<NotificationConsentItem>(`/v1/notifications/consents/${encodeURIComponent(channel)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload),
+  });
+}
+
 export async function fetchAdminNotificationCatalog(): Promise<AdminNotificationCatalogEntry[]> {
   return requestJson<AdminNotificationCatalogEntry[]>('/v1/admin/notifications/catalog', {
     method: 'GET',
@@ -120,6 +144,10 @@ export async function updateAdminNotificationPolicy(
     emailEnabled?: boolean;
     pushEnabled?: boolean;
     emailMode?: 'off' | 'immediate' | 'daily_digest';
+    maxDeliveriesPerHour?: number | null;
+    maxDeliveriesPerDay?: number | null;
+    clearMaxDeliveriesPerHour?: boolean;
+    clearMaxDeliveriesPerDay?: boolean;
   },
 ): Promise<AdminNotificationPolicyRow> {
   return requestJson<AdminNotificationPolicyRow>(
@@ -167,6 +195,81 @@ export async function fetchAdminNotificationDeliveries(params?: {
   return requestJson<NotificationDeliveryAttemptResponse>(
     `/v1/admin/notifications/deliveries${query ? `?${query}` : ''}`,
     { method: 'GET' },
+  );
+}
+
+export async function fetchAdminNotificationConsents(params?: {
+  page?: number;
+  pageSize?: number;
+  authAccountId?: string;
+  channel?: NotificationConsentChannel;
+}): Promise<AdminNotificationConsentResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set('page', String(params.page));
+  if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
+  if (params?.authAccountId) searchParams.set('authAccountId', params.authAccountId);
+  if (params?.channel) searchParams.set('channel', params.channel);
+
+  const query = searchParams.toString();
+  return requestJson<AdminNotificationConsentResponse>(
+    `/v1/admin/notifications/consents${query ? `?${query}` : ''}`,
+    { method: 'GET' },
+  );
+}
+
+export async function setAdminNotificationConsent(
+  authAccountId: string,
+  channel: NotificationConsentChannel,
+  payload: NotificationConsentUpdateRequest,
+): Promise<NotificationConsentItem> {
+  return requestJson<NotificationConsentItem>(
+    `/v1/admin/notifications/consents/${encodeURIComponent(authAccountId)}/${encodeURIComponent(channel)}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function fetchAdminNotificationSuppressions(params?: {
+  page?: number;
+  pageSize?: number;
+  authAccountId?: string;
+  channel?: NotificationSuppressibleChannel;
+  activeOnly?: boolean;
+}): Promise<AdminNotificationSuppressionResponse> {
+  const searchParams = new URLSearchParams();
+  if (params?.page) searchParams.set('page', String(params.page));
+  if (params?.pageSize) searchParams.set('pageSize', String(params.pageSize));
+  if (params?.authAccountId) searchParams.set('authAccountId', params.authAccountId);
+  if (params?.channel) searchParams.set('channel', params.channel);
+  if (typeof params?.activeOnly === 'boolean') searchParams.set('activeOnly', String(params.activeOnly));
+
+  const query = searchParams.toString();
+  return requestJson<AdminNotificationSuppressionResponse>(
+    `/v1/admin/notifications/suppressions${query ? `?${query}` : ''}`,
+    { method: 'GET' },
+  );
+}
+
+export async function createAdminNotificationSuppression(
+  payload: AdminNotificationSuppressionCreateRequest,
+): Promise<AdminNotificationSuppressionResponse['items'][number]> {
+  return requestJson<AdminNotificationSuppressionResponse['items'][number]>(
+    '/v1/admin/notifications/suppressions',
+    {
+      method: 'POST',
+      body: JSON.stringify(payload),
+    },
+  );
+}
+
+export async function releaseAdminNotificationSuppression(
+  suppressionId: string,
+): Promise<AdminNotificationSuppressionResponse['items'][number]> {
+  return requestJson<AdminNotificationSuppressionResponse['items'][number]>(
+    `/v1/admin/notifications/suppressions/${encodeURIComponent(suppressionId)}`,
+    { method: 'DELETE' },
   );
 }
 

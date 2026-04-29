@@ -31,7 +31,28 @@ public static class NotificationCatalog
         => Entries[key];
 
     public static bool TryParseKey(string value, out NotificationEventKey key)
-        => Enum.TryParse(value, ignoreCase: true, out key);
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            key = default;
+            return false;
+        }
+
+        var normalizedValue = value.Trim();
+        foreach (var candidate in Entries.Keys)
+        {
+            if (!string.Equals(GetKey(candidate), normalizedValue, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            key = candidate;
+            return true;
+        }
+
+        key = default;
+        return false;
+    }
 
     public static string GetKey(NotificationEventKey key)
         => Enum.GetName(key) ?? key.ToString();
@@ -48,8 +69,28 @@ public static class NotificationCatalog
                 entry.DefaultChannels.InAppEnabled,
                 entry.DefaultChannels.EmailEnabled,
                 entry.DefaultChannels.PushEnabled,
-                NormalizeEmailMode(entry.DefaultChannels.EmailMode)))
+                false,
+                false,
+                NormalizeEmailMode(entry.DefaultChannels.EmailMode),
+                IsPolicyProtected(entry)))
             .ToArray();
+
+    public static bool IsPolicyProtected(NotificationEventKey key)
+        => IsPolicyProtected(Get(key));
+
+    public static bool IsPolicyProtected(NotificationCatalogEntry entry)
+        => ProtectedEventKeys.Contains(entry.Key)
+            || entry.DefaultSeverity == NotificationSeverity.Critical
+            || string.Equals(entry.Category, "security", StringComparison.OrdinalIgnoreCase);
+
+    private static readonly IReadOnlySet<NotificationEventKey> ProtectedEventKeys = new HashSet<NotificationEventKey>
+    {
+        NotificationEventKey.LearnerEmailVerificationRequested,
+        NotificationEventKey.LearnerPasswordResetRequested,
+        NotificationEventKey.LearnerInvoiceGenerated,
+        NotificationEventKey.LearnerPaymentSucceeded,
+        NotificationEventKey.LearnerRefundProcessed
+    };
 
     public static string BuildTitle(NotificationEventKey key, IReadOnlyDictionary<string, string?> tokens)
         => key switch
@@ -96,6 +137,7 @@ public static class NotificationCatalog
             NotificationEventKey.ExpertPrivateSpeakingReminder => $"Upcoming session in {ReadToken(tokens, "hoursUntil", "a few")} hours",
             NotificationEventKey.ExpertPrivateSpeakingCancelled => "A private speaking session has been cancelled",
             NotificationEventKey.AdminPrivateSpeakingBooked => $"Private speaking session booked: {ReadToken(tokens, "tutorName", "tutor")} at {ReadToken(tokens, "sessionTime", "TBD")}",
+            _ when Entries.TryGetValue(key, out var entry) => entry.Label,
             _ => "Notification update"
         };
 
@@ -144,6 +186,7 @@ public static class NotificationCatalog
             NotificationEventKey.ExpertPrivateSpeakingReminder => $"Your private speaking session starts in {ReadToken(tokens, "hoursUntil", "a few")} hours. Use the Zoom start link in your session details.",
             NotificationEventKey.ExpertPrivateSpeakingCancelled => ReadToken(tokens, "message", "A private speaking session has been cancelled by the learner or admin."),
             NotificationEventKey.AdminPrivateSpeakingBooked => $"Private speaking session booked with {ReadToken(tokens, "tutorName", "a tutor")} at {ReadToken(tokens, "sessionTime", "TBD")}. Booking ID: {ReadToken(tokens, "bookingId", "unknown")}.",
+            _ when Entries.TryGetValue(key, out var entry) => entry.Description,
             _ => "A new notification is available."
         };
 
@@ -192,7 +235,7 @@ public static class NotificationCatalog
             NotificationEventKey.ExpertPrivateSpeakingReminder => $"/expert/private-speaking/{ReadToken(tokens, "bookingId", string.Empty)}",
             NotificationEventKey.ExpertPrivateSpeakingCancelled => "/expert/private-speaking",
             NotificationEventKey.AdminPrivateSpeakingBooked => "/admin/private-speaking",
-            _ => null
+            _ => BuildFallbackActionUrl(key)
         };
 
     private static IReadOnlyCollection<NotificationCatalogEntry> BuildEntries()
@@ -242,8 +285,112 @@ public static class NotificationCatalog
             new(NotificationEventKey.ExpertPrivateSpeakingAssigned, ApplicationUserRoles.Expert, "private_speaking", "Session Assigned", "Notify experts when a learner books a private speaking session.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
             new(NotificationEventKey.ExpertPrivateSpeakingReminder, ApplicationUserRoles.Expert, "private_speaking", "Session Reminder", "Remind experts about upcoming private speaking sessions.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
             new(NotificationEventKey.ExpertPrivateSpeakingCancelled, ApplicationUserRoles.Expert, "private_speaking", "Session Cancelled", "Notify experts when a private speaking session is cancelled.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
-            new(NotificationEventKey.AdminPrivateSpeakingBooked, ApplicationUserRoles.Admin, "operations", "Private Speaking Booked", "Notify admins when a private speaking session is booked.", NotificationSeverity.Info, new(true, false, false, NotificationEmailMode.Off))
+            new(NotificationEventKey.AdminPrivateSpeakingBooked, ApplicationUserRoles.Admin, "operations", "Private Speaking Booked", "Notify admins when a private speaking session is booked.", NotificationSeverity.Info, new(true, false, false, NotificationEmailMode.Off)),
+
+            // Expanded OET lifecycle catalog
+            new(NotificationEventKey.LearnerAccountCreated, ApplicationUserRoles.Learner, "account", "Account Created", "Confirm account creation and point learners to onboarding.", NotificationSeverity.Success, new(true, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerEmailVerificationRequested, ApplicationUserRoles.Learner, "account", "Email Verification", "Ask learners to verify their email address.", NotificationSeverity.Warning, new(true, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerPasswordResetRequested, ApplicationUserRoles.Learner, "security", "Password Reset Requested", "Notify learners when a password reset is requested.", NotificationSeverity.Warning, new(true, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerClassBookingConfirmed, ApplicationUserRoles.Learner, "lessons", "Class Booking Confirmed", "Confirm class or lesson bookings for learners.", NotificationSeverity.Success, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerMockSubmitted, ApplicationUserRoles.Learner, "mocks", "Mock Submitted", "Confirm mock submission and processing status.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerInvoiceGenerated, ApplicationUserRoles.Learner, "billing", "Invoice Generated", "Notify learners when a new invoice is generated.", NotificationSeverity.Info, new(true, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerDailyStudyReminder, ApplicationUserRoles.Learner, "reminders", "Daily Study Reminder", "Prompt learners to return to their daily OET study tasks.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.DailyDigest)),
+            new(NotificationEventKey.LearnerMissedLesson, ApplicationUserRoles.Learner, "lessons", "Missed Lesson", "Notify learners after a missed lesson and route them to recovery steps.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerWeakSkillReminder, ApplicationUserRoles.Learner, "learning", "Weak Skill Reminder", "Nudge learners to practice weak OET skill areas.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.DailyDigest)),
+            new(NotificationEventKey.LearnerHomeworkDue, ApplicationUserRoles.Learner, "lessons", "Homework Due", "Remind learners about homework due dates.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.DailyDigest)),
+            new(NotificationEventKey.LearnerLessonUnlocked, ApplicationUserRoles.Learner, "lessons", "Lesson Unlocked", "Notify learners when a new lesson is available.", NotificationSeverity.Success, new(true, true, true, NotificationEmailMode.DailyDigest)),
+            new(NotificationEventKey.LearnerStreakReminder, ApplicationUserRoles.Learner, "engagement", "Streak Reminder", "Encourage learners to keep their study streak active.", NotificationSeverity.Info, new(true, false, true, NotificationEmailMode.DailyDigest)),
+            new(NotificationEventKey.LearnerMockScheduled, ApplicationUserRoles.Learner, "mocks", "Mock Scheduled", "Confirm scheduled mock exams.", NotificationSeverity.Success, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerMockReminder24h, ApplicationUserRoles.Learner, "mocks", "Mock Reminder 24h", "Remind learners twenty-four hours before a mock exam.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerMockReminder2h, ApplicationUserRoles.Learner, "mocks", "Mock Reminder 2h", "Remind learners two hours before a mock exam.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerMockReminder30m, ApplicationUserRoles.Learner, "mocks", "Mock Reminder 30m", "Remind learners thirty minutes before a mock exam.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerMockTechnicalCheck, ApplicationUserRoles.Learner, "mocks", "Mock Technical Check", "Prompt learners to complete technical checks before a mock exam.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerMockStarted, ApplicationUserRoles.Learner, "mocks", "Mock Started", "Notify learners when a mock attempt starts or becomes available.", NotificationSeverity.Info, new(true, false, true, NotificationEmailMode.Off)),
+            new(NotificationEventKey.LearnerMockIncomplete, ApplicationUserRoles.Learner, "mocks", "Mock Incomplete", "Notify learners when a mock attempt remains incomplete.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerMockAutoScoreReady, ApplicationUserRoles.Learner, "results", "Mock Auto Score Ready", "Notify learners when automated mock scores are ready.", NotificationSeverity.Success, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerMockTeacherFeedbackReady, ApplicationUserRoles.Learner, "results", "Mock Teacher Feedback Ready", "Notify learners when teacher feedback for a mock is ready.", NotificationSeverity.Success, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerMockRetakeRecommended, ApplicationUserRoles.Learner, "mocks", "Mock Retake Recommended", "Recommend a mock retake when the platform detects a useful practice opportunity.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.DailyDigest)),
+            new(NotificationEventKey.LearnerSpeakingBooked, ApplicationUserRoles.Learner, "speaking", "Speaking Booked", "Confirm speaking session bookings.", NotificationSeverity.Success, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerSpeakingReminder24h, ApplicationUserRoles.Learner, "speaking", "Speaking Reminder 24h", "Remind learners twenty-four hours before speaking sessions.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerSpeakingReminder30m, ApplicationUserRoles.Learner, "speaking", "Speaking Reminder 30m", "Remind learners thirty minutes before speaking sessions.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerSpeakingTutorJoined, ApplicationUserRoles.Learner, "speaking", "Tutor Joined", "Notify learners when the speaking tutor joins.", NotificationSeverity.Info, new(true, false, true, NotificationEmailMode.Off)),
+            new(NotificationEventKey.LearnerSpeakingStudentLate, ApplicationUserRoles.Learner, "speaking", "Speaking Session Late", "Nudge learners who are late for speaking sessions.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerSpeakingRecordingReady, ApplicationUserRoles.Learner, "speaking", "Speaking Recording Ready", "Notify learners when a speaking recording is ready.", NotificationSeverity.Success, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerSpeakingFeedbackReady, ApplicationUserRoles.Learner, "speaking", "Speaking Feedback Ready", "Notify learners when speaking feedback is ready.", NotificationSeverity.Success, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerSpeakingRescheduleNeeded, ApplicationUserRoles.Learner, "speaking", "Speaking Reschedule Needed", "Notify learners when a speaking session must be rescheduled.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.ExpertSpeakingSessionAssigned, ApplicationUserRoles.Expert, "speaking", "Speaking Session Assigned", "Notify experts when a speaking session is assigned.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.ExpertSpeakingStudentNoShow, ApplicationUserRoles.Expert, "speaking", "Student No-Show", "Notify experts when a speaking learner is marked no-show.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.ExpertSpeakingFeedbackOverdue, ApplicationUserRoles.Expert, "speaking", "Speaking Feedback Overdue", "Notify experts when speaking feedback is overdue.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.DailyDigest)),
+            new(NotificationEventKey.AdminSpeakingNoShowAlert, ApplicationUserRoles.Admin, "operations", "Speaking No-Show Alert", "Alert admins about speaking no-shows that may need intervention.", NotificationSeverity.Warning, new(true, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.AdminSpeakingOverdueFeedbackAlert, ApplicationUserRoles.Admin, "operations", "Speaking Feedback Overdue", "Alert admins when speaking feedback is overdue.", NotificationSeverity.Critical, new(true, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerWritingAssigned, ApplicationUserRoles.Learner, "writing", "Writing Assigned", "Notify learners when a writing task is assigned.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerWritingDeadlineReminder, ApplicationUserRoles.Learner, "writing", "Writing Deadline Reminder", "Remind learners about writing task deadlines.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerWritingSubmitted, ApplicationUserRoles.Learner, "writing", "Writing Submitted", "Confirm learner writing submissions.", NotificationSeverity.Success, new(true, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerWritingTeacherAssigned, ApplicationUserRoles.Learner, "writing", "Writing Teacher Assigned", "Notify learners when a writing review teacher is assigned.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerWritingFeedbackReady, ApplicationUserRoles.Learner, "writing", "Writing Feedback Ready", "Notify learners when writing feedback is ready.", NotificationSeverity.Success, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerWritingRewriteRequested, ApplicationUserRoles.Learner, "writing", "Writing Rewrite Requested", "Notify learners when a writing rewrite is requested.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerWritingRewriteOverdue, ApplicationUserRoles.Learner, "writing", "Writing Rewrite Overdue", "Remind learners when a requested writing rewrite is overdue.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.ExpertWritingAssigned, ApplicationUserRoles.Expert, "writing", "Writing Assigned", "Notify experts when writing feedback work is assigned.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.ExpertWritingFeedbackOverdue, ApplicationUserRoles.Expert, "writing", "Writing Feedback Overdue", "Notify experts when writing feedback is overdue.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.DailyDigest)),
+            new(NotificationEventKey.AdminWritingOverdueEscalation, ApplicationUserRoles.Admin, "operations", "Writing Overdue Escalation", "Alert admins when writing feedback or rewrites are overdue.", NotificationSeverity.Critical, new(true, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerTrialStarted, ApplicationUserRoles.Learner, "billing", "Trial Started", "Notify learners when a trial starts.", NotificationSeverity.Success, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerTrialEnding, ApplicationUserRoles.Learner, "billing", "Trial Ending", "Remind learners when a trial is ending soon.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerTrialExpired, ApplicationUserRoles.Learner, "billing", "Trial Expired", "Notify learners when a trial expires.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerPaymentSucceeded, ApplicationUserRoles.Learner, "billing", "Payment Succeeded", "Confirm successful learner payments.", NotificationSeverity.Success, new(true, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerPaymentFailed, ApplicationUserRoles.Learner, "billing", "Payment Failed", "Notify learners when payment fails and action is needed.", NotificationSeverity.Critical, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerRenewalComing, ApplicationUserRoles.Learner, "billing", "Renewal Coming", "Remind learners before subscription renewal.", NotificationSeverity.Info, new(true, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerSubscriptionCancelled, ApplicationUserRoles.Learner, "billing", "Subscription Cancelled", "Notify learners when a subscription is cancelled.", NotificationSeverity.Warning, new(true, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerCouponApplied, ApplicationUserRoles.Learner, "billing", "Coupon Applied", "Confirm coupon application.", NotificationSeverity.Success, new(true, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerCreditsLow, ApplicationUserRoles.Learner, "billing", "Credits Low", "Notify learners when credits are running low.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerCreditsExpiring, ApplicationUserRoles.Learner, "billing", "Credits Expiring", "Notify learners when credits will expire soon.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerRefundProcessed, ApplicationUserRoles.Learner, "billing", "Refund Processed", "Notify learners when a refund is processed.", NotificationSeverity.Info, new(true, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.LearnerTrialConversionNudge, ApplicationUserRoles.Learner, "marketing", "Trial Conversion Nudge", "Encourage trial learners to choose a plan when consent allows marketing contact.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.DailyDigest)),
+            new(NotificationEventKey.LearnerAbandonedCheckout, ApplicationUserRoles.Learner, "marketing", "Abandoned Checkout", "Recover learners who leave checkout before payment.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.DailyDigest)),
+            new(NotificationEventKey.LearnerInactiveNudge, ApplicationUserRoles.Learner, "engagement", "Inactive Learner Nudge", "Encourage inactive learners to return to study.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.DailyDigest)),
+            new(NotificationEventKey.LearnerExamUrgencyReminder, ApplicationUserRoles.Learner, "engagement", "Exam Urgency Reminder", "Remind learners about upcoming exam urgency and study focus.", NotificationSeverity.Warning, new(true, true, true, NotificationEmailMode.DailyDigest)),
+            new(NotificationEventKey.LearnerWinBack, ApplicationUserRoles.Learner, "marketing", "Win-Back", "Invite inactive or churned learners back when consent allows marketing contact.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.DailyDigest)),
+            new(NotificationEventKey.LearnerCourseLaunch, ApplicationUserRoles.Learner, "marketing", "Course Launch", "Notify opted-in learners about new course launches.", NotificationSeverity.Info, new(true, true, true, NotificationEmailMode.DailyDigest)),
+            new(NotificationEventKey.AdminSuspiciousActivityAlert, ApplicationUserRoles.Admin, "security", "Suspicious Activity Alert", "Alert admins about suspicious account activity.", NotificationSeverity.Critical, new(true, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.AdminProviderOutageAlert, ApplicationUserRoles.Admin, "operations", "Provider Outage Alert", "Alert admins when an external provider appears unavailable.", NotificationSeverity.Critical, new(true, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.AdminOverdueFeedbackSpikeAlert, ApplicationUserRoles.Admin, "operations", "Overdue Feedback Spike", "Alert admins when overdue feedback crosses configured thresholds.", NotificationSeverity.Critical, new(true, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.AdminFailedPaymentSpikeAlert, ApplicationUserRoles.Admin, "operations", "Failed Payment Spike", "Alert admins when failed payments spike.", NotificationSeverity.Critical, new(true, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.AdminCouponAbuseAlert, ApplicationUserRoles.Admin, "security", "Coupon Abuse Alert", "Alert admins about suspicious coupon activity.", NotificationSeverity.Warning, new(true, true, false, NotificationEmailMode.Immediate)),
+            new(NotificationEventKey.AdminContentFlaggedAlert, ApplicationUserRoles.Admin, "operations", "Content Flagged", "Alert admins when content is flagged for review.", NotificationSeverity.Warning, new(true, true, false, NotificationEmailMode.Immediate))
         ];
+    }
+
+    private static string? BuildFallbackActionUrl(NotificationEventKey key)
+    {
+        if (!Entries.TryGetValue(key, out var entry))
+        {
+            return null;
+        }
+
+        return (entry.AudienceRole, entry.Category) switch
+        {
+            (ApplicationUserRoles.Learner, "account") => "/settings",
+            (ApplicationUserRoles.Learner, "security") => "/settings/security",
+            (ApplicationUserRoles.Learner, "billing") => "/billing",
+            (ApplicationUserRoles.Learner, "lessons") => "/lessons",
+            (ApplicationUserRoles.Learner, "learning") => "/learning-paths",
+            (ApplicationUserRoles.Learner, "engagement") => "/dashboard",
+            (ApplicationUserRoles.Learner, "marketing") => "/dashboard",
+            (ApplicationUserRoles.Learner, "mocks") => "/mocks",
+            (ApplicationUserRoles.Learner, "results") => "/history",
+            (ApplicationUserRoles.Learner, "reminders") => "/goals",
+            (ApplicationUserRoles.Learner, "speaking") => "/conversation",
+            (ApplicationUserRoles.Learner, "writing") => "/lessons/writing",
+            (ApplicationUserRoles.Expert, "speaking") => "/expert/private-speaking",
+            (ApplicationUserRoles.Expert, "writing") => "/expert",
+            (ApplicationUserRoles.Admin, "security") => "/admin/security",
+            (ApplicationUserRoles.Admin, "operations") => "/admin",
+            _ => entry.AudienceRole switch
+            {
+                ApplicationUserRoles.Expert => "/expert",
+                ApplicationUserRoles.Admin => "/admin",
+                _ => "/dashboard"
+            }
+        };
     }
 
     private static string ReadToken(IReadOnlyDictionary<string, string?> tokens, string key, string fallback)

@@ -90,6 +90,7 @@ const notificationsApi = vi.hoisted(() => ({
   fetchAdminNotificationHealth: vi.fn(),
   fetchAdminNotificationDeliveries: vi.fn(),
   updateAdminNotificationPolicy: vi.fn(),
+  resetAdminNotificationPolicyOverride: vi.fn(),
   sendAdminNotificationTestEmail: vi.fn(),
 }));
 
@@ -225,6 +226,7 @@ vi.mock('@/lib/notifications-api', () => ({
   fetchAdminNotificationHealth: notificationsApi.fetchAdminNotificationHealth,
   fetchAdminNotificationDeliveries: notificationsApi.fetchAdminNotificationDeliveries,
   updateAdminNotificationPolicy: notificationsApi.updateAdminNotificationPolicy,
+  resetAdminNotificationPolicyOverride: notificationsApi.resetAdminNotificationPolicyOverride,
   sendAdminNotificationTestEmail: notificationsApi.sendAdminNotificationTestEmail,
 }));
 
@@ -906,7 +908,13 @@ describe('Admin Non-Editor Pages', () => {
         description: 'Learner review delivery notice',
         category: 'reviews',
         defaultSeverity: 'info',
+        defaultInAppEnabled: true,
+        defaultEmailEnabled: true,
+        defaultPushEnabled: false,
+        defaultSmsEnabled: false,
+        defaultWhatsAppEnabled: false,
         defaultEmailMode: 'immediate',
+        isPolicyProtected: false,
       },
     ]);
     notificationsApi.fetchAdminNotificationPolicies.mockResolvedValue({
@@ -920,7 +928,8 @@ describe('Admin Non-Editor Pages', () => {
           emailEnabled: true,
           pushEnabled: false,
           emailMode: 'immediate',
-          isOverride: false,
+          isPolicyProtected: false,
+          isOverride: true,
         },
       ],
       globalEmailEnabledByAudience: {
@@ -978,6 +987,21 @@ describe('Admin Non-Editor Pages', () => {
           details: 'Policy updated.',
         },
       ],
+    });
+    notificationsApi.resetAdminNotificationPolicyOverride.mockResolvedValue({
+      audienceRole: 'learner',
+      eventKey: 'review_ready',
+      label: 'Review Ready',
+      category: 'reviews',
+      inAppEnabled: true,
+      emailEnabled: true,
+      pushEnabled: false,
+      emailMode: 'immediate',
+      isPolicyProtected: false,
+      isOverride: false,
+      updatedAt: null,
+      updatedByAdminId: null,
+      updatedByAdminName: null,
     });
 
     renderPage(<NotificationsPage />);

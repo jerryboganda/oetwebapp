@@ -162,7 +162,7 @@ public class NotificationFlowsTests
         using var learnerClient = await CreateAuthenticatedClientAsync(factory, SeedData.LearnerEmail, SeedData.LocalSeedPassword);
 
         var updateResponse = await adminClient.PutAsJsonAsync(
-            "/v1/admin/notifications/policies/learner/LearnerReviewCompleted",
+            "/v1/admin/notifications/policies/Learner/LearnerReviewCompleted",
             new AdminNotificationPolicyUpdateRequest(null, false, null, null));
         updateResponse.EnsureSuccessStatusCode();
 
@@ -200,11 +200,12 @@ public class NotificationFlowsTests
         Assert.Equal(NotificationDeliveryStatus.Suppressed, emailAttempt!.Status);
         Assert.Equal("email_disabled", emailAttempt.ErrorCode);
 
-        var resetResponse = await adminClient.DeleteAsync("/v1/admin/notifications/policies/learner/LearnerReviewCompleted");
+        var resetResponse = await adminClient.DeleteAsync("/v1/admin/notifications/policies/LEARNER/LearnerReviewCompleted");
         resetResponse.EnsureSuccessStatusCode();
 
         var resetPolicy = await resetResponse.Content.ReadFromJsonAsync<AdminNotificationPolicyRow>(JsonSupport.Options);
         Assert.NotNull(resetPolicy);
+        Assert.Equal("learner", resetPolicy!.AudienceRole);
         Assert.False(resetPolicy!.IsOverride);
         Assert.True(resetPolicy.EmailEnabled);
     }
@@ -243,6 +244,356 @@ public class NotificationFlowsTests
         Assert.False(updatedPolicies!.GlobalChannelEnabledByAudience["admin"].InAppEnabled);
         Assert.False(updatedPolicies.GlobalChannelEnabledByAudience["admin"].EmailEnabled);
         Assert.False(updatedPolicies.GlobalChannelEnabledByAudience["admin"].PushEnabled);
+    }
+
+    [Fact]
+    public async Task FrequencyCap_SuppressesRepeatedNonProtectedEmailDelivery()
+    {
+        var emailSender = new RecordingEmailSender();
+        await using var factory = CreateFactoryWithOverrides(services =>
+        {
+            services.RemoveAll<IEmailSender>();
+            services.AddSingleton<IEmailSender>(emailSender);
+        });
+
+        using var adminClient = await CreateAuthenticatedClientAsync(factory, SeedData.AdminEmail, SeedData.LocalSeedPassword);
+
+        var updateResponse = await adminClient.PutAsJsonAsync(
+            "/v1/admin/notifications/policies/learner/LearnerReviewCompleted",
+            new AdminNotificationPolicyUpdateRequest(
+                null,
+                true,
+                false,
+                "immediate",
+                MaxDeliveriesPerHour: 1,
+                MaxDeliveriesPerDay: 1));
+        updateResponse.EnsureSuccessStatusCode();
+
+        var policy = await updateResponse.Content.ReadFromJsonAsync<AdminNotificationPolicyRow>(JsonSupport.Options);
+        Assert.NotNull(policy);
+        Assert.Equal(1, policy!.MaxDeliveriesPerHour);
+        Assert.Equal(1, policy.MaxDeliveriesPerDay);
+
+        var firstProof = await TriggerProofAsync(adminClient, new AdminNotificationProofTriggerRequest(
+            "LearnerReviewCompleted",
+            SeedData.LearnerEmail,
+            new Dictionary<string, string?>
+            {
+                ["attemptId"] = "wa-cap-001",
+                ["subtest"] = "writing"
+            },
+            EntityId: "frequency-cap-one"));
+
+        var secondProof = await TriggerProofAsync(adminClient, new AdminNotificationProofTriggerRequest(
+            "LearnerReviewCompleted",
+            SeedData.LearnerEmail,
+            new Dictionary<string, string?>
+            {
+                ["attemptId"] = "wa-cap-002",
+                ["subtest"] = "writing"
+            },
+            EntityId: "frequency-cap-two"));
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var firstEmailAttempt = await db.NotificationDeliveryAttempts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(attempt =>
+                attempt.NotificationEventId == firstProof.NotificationEventId
+                && attempt.Channel == NotificationChannel.Email);
+        var secondEmailAttempt = await db.NotificationDeliveryAttempts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(attempt =>
+                attempt.NotificationEventId == secondProof.NotificationEventId
+                && attempt.Channel == NotificationChannel.Email);
+
+        Assert.NotNull(firstEmailAttempt);
+        Assert.Equal(NotificationDeliveryStatus.Sent, firstEmailAttempt!.Status);
+        Assert.NotNull(secondEmailAttempt);
+        Assert.Equal(NotificationDeliveryStatus.Suppressed, secondEmailAttempt!.Status);
+        Assert.Equal("frequency_cap_exceeded", secondEmailAttempt.ErrorCode);
+        Assert.Single(emailSender.Messages, message => message.To == SeedData.LearnerEmail && message.Subject.Contains("review", StringComparison.OrdinalIgnoreCase));
+    }
+
+    [Fact]
+    public async Task AdminPolicyFrequencyCaps_CanBeCleared_AndContinueInheritingGlobalCaps()
+    {
+        await using var factory = new TestWebApplicationFactory();
+        using var adminClient = await CreateAuthenticatedClientAsync(factory, SeedData.AdminEmail, SeedData.LocalSeedPassword);
+
+        var globalCapResponse = await adminClient.PutAsJsonAsync(
+            "/v1/admin/notifications/policies/learner/__global__",
+            new AdminNotificationPolicyUpdateRequest(
+                null,
+                null,
+                null,
+                null,
+                MaxDeliveriesPerHour: 1,
+                MaxDeliveriesPerDay: 1));
+        globalCapResponse.EnsureSuccessStatusCode();
+
+        var eventCapResponse = await adminClient.PutAsJsonAsync(
+            "/v1/admin/notifications/policies/learner/LearnerReviewCompleted",
+            new AdminNotificationPolicyUpdateRequest(
+                null,
+                true,
+                null,
+                "immediate",
+                MaxDeliveriesPerHour: 2,
+                MaxDeliveriesPerDay: 2));
+        eventCapResponse.EnsureSuccessStatusCode();
+
+        var eventCap = await eventCapResponse.Content.ReadFromJsonAsync<AdminNotificationPolicyRow>(JsonSupport.Options);
+        Assert.NotNull(eventCap);
+        Assert.Equal(2, eventCap!.MaxDeliveriesPerHour);
+        Assert.Equal(2, eventCap.MaxDeliveriesPerDay);
+
+        var clearEventCapResponse = await adminClient.PutAsJsonAsync(
+            "/v1/admin/notifications/policies/learner/LearnerReviewCompleted",
+            new AdminNotificationPolicyUpdateRequest(
+                null,
+                null,
+                null,
+                null,
+                ClearMaxDeliveriesPerHour: true,
+                ClearMaxDeliveriesPerDay: true));
+        clearEventCapResponse.EnsureSuccessStatusCode();
+
+        var clearedEventCap = await clearEventCapResponse.Content.ReadFromJsonAsync<AdminNotificationPolicyRow>(JsonSupport.Options);
+        Assert.NotNull(clearedEventCap);
+        Assert.Equal(1, clearedEventCap!.MaxDeliveriesPerHour);
+        Assert.Equal(1, clearedEventCap.MaxDeliveriesPerDay);
+
+        var channelOnlyResponse = await adminClient.PutAsJsonAsync(
+            "/v1/admin/notifications/policies/learner/LearnerReviewCompleted",
+            new AdminNotificationPolicyUpdateRequest(null, false, null, null));
+        channelOnlyResponse.EnsureSuccessStatusCode();
+
+        var updatedGlobalCapResponse = await adminClient.PutAsJsonAsync(
+            "/v1/admin/notifications/policies/learner/__global__",
+            new AdminNotificationPolicyUpdateRequest(
+                null,
+                null,
+                null,
+                null,
+                MaxDeliveriesPerHour: 3,
+                MaxDeliveriesPerDay: 3));
+        updatedGlobalCapResponse.EnsureSuccessStatusCode();
+
+        var policies = await adminClient.GetFromJsonAsync<AdminNotificationPoliciesResponse>(
+            "/v1/admin/notifications/policies",
+            JsonSupport.Options);
+
+        Assert.NotNull(policies);
+        var reviewPolicy = Assert.Single(policies!.Rows, row => row.AudienceRole == "learner" && row.EventKey == "LearnerReviewCompleted");
+        Assert.False(reviewPolicy.EmailEnabled);
+        Assert.Equal(3, reviewPolicy.MaxDeliveriesPerHour);
+        Assert.Equal(3, reviewPolicy.MaxDeliveriesPerDay);
+    }
+
+    [Fact]
+    public async Task DailyDigestFrequencyCap_SuppressesOverflowWithinSameDigestBatch()
+    {
+        var emailSender = new RecordingEmailSender();
+        await using var factory = CreateFactoryWithOverrides(services =>
+        {
+            services.RemoveAll<IEmailSender>();
+            services.AddSingleton<IEmailSender>(emailSender);
+        });
+
+        using var adminClient = await CreateAuthenticatedClientAsync(factory, SeedData.AdminEmail, SeedData.LocalSeedPassword);
+
+        var updateResponse = await adminClient.PutAsJsonAsync(
+            "/v1/admin/notifications/policies/learner/LearnerStudyPlanDueReminder",
+            new AdminNotificationPolicyUpdateRequest(
+                null,
+                true,
+                false,
+                "daily_digest",
+                MaxDeliveriesPerHour: 1,
+                MaxDeliveriesPerDay: 1));
+        updateResponse.EnsureSuccessStatusCode();
+
+        var firstProof = await TriggerProofAsync(adminClient, new AdminNotificationProofTriggerRequest(
+            "LearnerStudyPlanDueReminder",
+            SeedData.LearnerEmail,
+            new Dictionary<string, string?>
+            {
+                ["itemTitle"] = "First timed writing task",
+                ["dueLabel"] = "today at 8:00 PM"
+            },
+            EntityId: "digest-cap-one"));
+
+        var secondProof = await TriggerProofAsync(adminClient, new AdminNotificationProofTriggerRequest(
+            "LearnerStudyPlanDueReminder",
+            SeedData.LearnerEmail,
+            new Dictionary<string, string?>
+            {
+                ["itemTitle"] = "Second timed reading task",
+                ["dueLabel"] = "today at 8:30 PM"
+            },
+            EntityId: "digest-cap-two",
+            DispatchDigestImmediately: true));
+
+        Assert.True(secondProof.DigestDispatchedImmediately);
+        var digestMessage = Assert.Single(emailSender.Messages);
+        Assert.Contains("First timed writing task", digestMessage.TextBody);
+        Assert.DoesNotContain("Second timed reading task", digestMessage.TextBody);
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var attempts = await db.NotificationDeliveryAttempts
+            .AsNoTracking()
+            .Where(attempt =>
+                (attempt.NotificationEventId == firstProof.NotificationEventId || attempt.NotificationEventId == secondProof.NotificationEventId)
+                && attempt.Channel == NotificationChannel.Email)
+            .ToListAsync();
+
+        var sentAttempt = Assert.Single(attempts, attempt => attempt.Status == NotificationDeliveryStatus.Sent);
+        var suppressedAttempt = Assert.Single(attempts, attempt => attempt.Status == NotificationDeliveryStatus.Suppressed);
+        Assert.Equal(firstProof.NotificationEventId, sentAttempt.NotificationEventId);
+        Assert.Equal(secondProof.NotificationEventId, suppressedAttempt.NotificationEventId);
+        Assert.Equal("frequency_cap_exceeded", suppressedAttempt.ErrorCode);
+    }
+
+    [Fact]
+    public async Task AdminCatalog_CoversExpandedOetLifecycleEvents()
+    {
+        await using var factory = new TestWebApplicationFactory();
+        using var adminClient = await CreateAuthenticatedClientAsync(factory, SeedData.AdminEmail, SeedData.LocalSeedPassword);
+
+        var catalog = await adminClient.GetFromJsonAsync<IReadOnlyList<AdminNotificationCatalogEntry>>(
+            "/v1/admin/notifications/catalog",
+            JsonSupport.Options);
+
+        Assert.NotNull(catalog);
+        var eventKeys = catalog!.Select(entry => entry.EventKey).ToHashSet(StringComparer.Ordinal);
+        Assert.All(Enum.GetNames<NotificationEventKey>(), eventKey => Assert.Contains(eventKey, eventKeys));
+
+        Assert.Contains(catalog, entry => entry.EventKey == "LearnerMockReminder24h" && entry.Category == "mocks" && entry.DefaultPushEnabled);
+        Assert.Contains(catalog, entry => entry.EventKey == "LearnerWritingFeedbackReady" && entry.Category == "writing" && entry.DefaultEmailEnabled);
+        Assert.Contains(catalog, entry => entry.EventKey == "LearnerTrialConversionNudge" && entry.Category == "marketing" && entry.DefaultEmailMode == "daily_digest");
+        Assert.Contains(catalog, entry => entry.EventKey == "AdminSuspiciousActivityAlert" && entry.Category == "security" && entry.DefaultSeverity == "critical" && entry.IsPolicyProtected);
+        Assert.Contains(catalog, entry => entry.EventKey == "LearnerEmailVerificationRequested" && entry.IsPolicyProtected);
+        Assert.Contains(catalog, entry => entry.EventKey == "LearnerInvoiceGenerated" && entry.IsPolicyProtected);
+        Assert.Contains(catalog, entry => entry.EventKey == "LearnerPaymentSucceeded" && entry.IsPolicyProtected);
+
+        Assert.Equal("Mock Reminder 24h", NotificationCatalog.BuildTitle(NotificationEventKey.LearnerMockReminder24h, new Dictionary<string, string?>()));
+        Assert.Equal("/mocks", NotificationCatalog.BuildActionUrl(NotificationEventKey.LearnerMockReminder24h, new Dictionary<string, string?>()));
+    }
+
+    [Fact]
+    public async Task ProtectedCriticalPolicies_CannotBeDisabled_ByAdminOrPreferenceOptOut()
+    {
+        await using var factory = new TestWebApplicationFactory();
+        using var adminClient = await CreateAuthenticatedClientAsync(factory, SeedData.AdminEmail, SeedData.LocalSeedPassword);
+        using var learnerClient = await CreateAuthenticatedClientAsync(factory, SeedData.LearnerEmail, SeedData.LocalSeedPassword);
+
+        var invalidEventUpdate = await adminClient.PutAsJsonAsync(
+            "/v1/admin/notifications/policies/learner/999",
+            new AdminNotificationPolicyUpdateRequest(false, false, null, "off"));
+
+        Assert.Equal(400, (int)invalidEventUpdate.StatusCode);
+
+        foreach (var protectedEventKey in new[] { "LearnerEmailVerificationRequested", "LearnerInvoiceGenerated", "LearnerPaymentSucceeded" })
+        {
+            var rejectedUpdate = await adminClient.PutAsJsonAsync(
+                $"/v1/admin/notifications/policies/learner/{protectedEventKey}",
+                new AdminNotificationPolicyUpdateRequest(false, false, null, "off"));
+
+            Assert.Equal(400, (int)rejectedUpdate.StatusCode);
+        }
+
+        var globalUpdate = await adminClient.PutAsJsonAsync(
+            "/v1/admin/notifications/policies/learner/__global__",
+            new AdminNotificationPolicyUpdateRequest(
+                false,
+                false,
+                false,
+                null,
+                MaxDeliveriesPerHour: 1,
+                MaxDeliveriesPerDay: 1));
+        globalUpdate.EnsureSuccessStatusCode();
+
+        var rejectedCapUpdate = await adminClient.PutAsJsonAsync(
+            "/v1/admin/notifications/policies/learner/LearnerPaymentSucceeded",
+            new AdminNotificationPolicyUpdateRequest(null, null, null, null, MaxDeliveriesPerHour: 1));
+
+        Assert.Equal(400, (int)rejectedCapUpdate.StatusCode);
+
+        var learnerPreferenceUpdate = await learnerClient.PatchAsJsonAsync("/v1/notifications/preferences", new NotificationPreferencePatchRequest(
+            null,
+            false,
+            false,
+            false,
+            null,
+            null,
+            null,
+            null));
+        learnerPreferenceUpdate.EnsureSuccessStatusCode();
+
+        var rejectedPreferenceUpdate = await learnerClient.PatchAsJsonAsync("/v1/notifications/preferences", new NotificationPreferencePatchRequest(
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            new Dictionary<string, NotificationEventPreferencePayload>
+            {
+                ["LearnerEmailVerificationRequested"] = new(false, false, null, "off")
+            }));
+
+        Assert.Equal(400, (int)rejectedPreferenceUpdate.StatusCode);
+
+        var policies = await adminClient.GetFromJsonAsync<AdminNotificationPoliciesResponse>(
+            "/v1/admin/notifications/policies",
+            JsonSupport.Options);
+
+        Assert.NotNull(policies);
+        Assert.Contains(policies!.Rows, row => row.EventKey == "LearnerPaymentSucceeded" && row.IsPolicyProtected && row.InAppEnabled && row.EmailEnabled);
+
+        var proof = await TriggerProofAsync(adminClient, new AdminNotificationProofTriggerRequest(
+            "LearnerPaymentSucceeded",
+            SeedData.LearnerEmail,
+            new Dictionary<string, string?>
+            {
+                ["message"] = "Your payment receipt is ready."
+            }));
+
+        var feed = await learnerClient.GetFromJsonAsync<NotificationFeedResponse>("/v1/notifications?page=1&pageSize=20", JsonSupport.Options);
+        Assert.NotNull(feed);
+        Assert.Contains(feed!.Items, item => item.Id == proof.InboxItemId && item.EventKey == "LearnerPaymentSucceeded");
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var emailAttempt = await db.NotificationDeliveryAttempts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(attempt =>
+                attempt.NotificationEventId == proof.NotificationEventId
+                && attempt.Channel == NotificationChannel.Email);
+
+        Assert.NotNull(emailAttempt);
+        Assert.Equal(NotificationDeliveryStatus.Sent, emailAttempt!.Status);
+
+        var secondProof = await TriggerProofAsync(adminClient, new AdminNotificationProofTriggerRequest(
+            "LearnerPaymentSucceeded",
+            SeedData.LearnerEmail,
+            new Dictionary<string, string?>
+            {
+                ["message"] = "Your second payment receipt is ready."
+            },
+            EntityId: "protected-payment-two"));
+
+        var secondEmailAttempt = await db.NotificationDeliveryAttempts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(attempt =>
+                attempt.NotificationEventId == secondProof.NotificationEventId
+                && attempt.Channel == NotificationChannel.Email);
+
+        Assert.NotNull(secondEmailAttempt);
+        Assert.Equal(NotificationDeliveryStatus.Sent, secondEmailAttempt!.Status);
     }
 
     [Fact]
@@ -382,6 +733,111 @@ public class NotificationFlowsTests
         Assert.NotNull(pushAttempt);
         Assert.Equal(NotificationDeliveryStatus.Expired, pushAttempt!.Status);
         Assert.Equal("subscription_expired", pushAttempt.ErrorCode);
+    }
+
+    [Fact]
+    public async Task SmsConsent_CanBeStoredByCategory_AndReturnedWithGlobalDefaults()
+    {
+        await using var factory = new TestWebApplicationFactory();
+        using var adminClient = await CreateAuthenticatedClientAsync(factory, SeedData.AdminEmail, SeedData.LocalSeedPassword);
+        using var learnerClient = await CreateAuthenticatedClientAsync(factory, SeedData.LearnerEmail, SeedData.LocalSeedPassword);
+
+        var initialConsents = await learnerClient.GetFromJsonAsync<IReadOnlyList<NotificationConsentItem>>(
+            "/v1/notifications/consents",
+            JsonSupport.Options);
+
+        Assert.NotNull(initialConsents);
+        var globalSmsConsent = initialConsents!.Single(item => item.Channel == "sms" && item.Category == "global");
+        Assert.False(globalSmsConsent.IsGranted);
+        Assert.True(globalSmsConsent.RequiresExplicitConsent);
+
+        var updateResponse = await learnerClient.PutAsJsonAsync(
+            "/v1/notifications/consents/sms",
+            new NotificationConsentUpdateRequest(true, "user", "Text reminders enabled.", "reminders"));
+        updateResponse.EnsureSuccessStatusCode();
+
+        var updatedConsent = await updateResponse.Content.ReadFromJsonAsync<NotificationConsentItem>(JsonSupport.Options);
+        Assert.NotNull(updatedConsent);
+        Assert.Equal("sms", updatedConsent!.Channel);
+        Assert.Equal("reminders", updatedConsent.Category);
+        Assert.True(updatedConsent.IsGranted);
+
+        var refreshedConsents = await learnerClient.GetFromJsonAsync<IReadOnlyList<NotificationConsentItem>>(
+            "/v1/notifications/consents",
+            JsonSupport.Options);
+
+        Assert.NotNull(refreshedConsents);
+        Assert.Contains(refreshedConsents!, item => item.Channel == "sms" && item.Category == "global" && !item.IsGranted);
+        Assert.Contains(refreshedConsents!, item => item.Channel == "sms" && item.Category == "reminders" && item.IsGranted);
+
+        var adminConsents = await adminClient.GetFromJsonAsync<AdminNotificationConsentResponse>(
+            $"/v1/admin/notifications/consents?authAccountId={Uri.EscapeDataString(globalSmsConsent.AuthAccountId)}&pageSize=20",
+            JsonSupport.Options);
+
+        Assert.NotNull(adminConsents);
+        Assert.Contains(adminConsents!.Items, item => item.Channel == "sms" && item.Category == "reminders" && item.IsGranted);
+    }
+
+    [Fact]
+    public async Task AdminSuppression_DisablesEmailFanout_AndCanBeReleased()
+    {
+        await using var factory = new TestWebApplicationFactory();
+        using var adminClient = await CreateAuthenticatedClientAsync(factory, SeedData.AdminEmail, SeedData.LocalSeedPassword);
+        using var learnerClient = await CreateAuthenticatedClientAsync(factory, SeedData.LearnerEmail, SeedData.LocalSeedPassword);
+
+        var initialConsents = await learnerClient.GetFromJsonAsync<IReadOnlyList<NotificationConsentItem>>(
+            "/v1/notifications/consents",
+            JsonSupport.Options);
+
+        Assert.NotNull(initialConsents);
+        var authAccountId = initialConsents!.Single(item => item.Channel == "sms" && item.Category == "global").AuthAccountId;
+
+        var suppressionResponse = await adminClient.PostAsJsonAsync(
+            "/v1/admin/notifications/suppressions",
+            new AdminNotificationSuppressionCreateRequest(
+                authAccountId,
+                "email",
+                "LearnerReviewCompleted",
+                "manual_suppression",
+                "Compliance hold for email delivery.",
+                null,
+                DateTimeOffset.UtcNow.AddHours(1)));
+        suppressionResponse.EnsureSuccessStatusCode();
+
+        var suppression = await suppressionResponse.Content.ReadFromJsonAsync<NotificationSuppressionItem>(JsonSupport.Options);
+        Assert.NotNull(suppression);
+        Assert.True(suppression!.IsActive);
+        Assert.Equal("email", suppression.Channel);
+
+        var proof = await TriggerProofAsync(adminClient, new AdminNotificationProofTriggerRequest(
+            "LearnerReviewCompleted",
+            SeedData.LearnerEmail,
+            new Dictionary<string, string?>
+            {
+                ["attemptId"] = "wa-001",
+                ["subtest"] = "writing"
+            }));
+
+        await using var scope = factory.Services.CreateAsyncScope();
+        var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+        var emailAttempt = await db.NotificationDeliveryAttempts
+            .AsNoTracking()
+            .FirstOrDefaultAsync(attempt =>
+                attempt.NotificationEventId == proof.NotificationEventId
+                && attempt.Channel == NotificationChannel.Email);
+
+        Assert.NotNull(emailAttempt);
+        Assert.Equal(NotificationDeliveryStatus.Suppressed, emailAttempt!.Status);
+        Assert.Equal("manual_suppression", emailAttempt.ErrorCode);
+        Assert.Equal("Compliance hold for email delivery.", emailAttempt.ErrorMessage);
+
+        var releaseResponse = await adminClient.DeleteAsync($"/v1/admin/notifications/suppressions/{suppression.Id}");
+        releaseResponse.EnsureSuccessStatusCode();
+
+        var releasedSuppression = await releaseResponse.Content.ReadFromJsonAsync<NotificationSuppressionItem>(JsonSupport.Options);
+        Assert.NotNull(releasedSuppression);
+        Assert.False(releasedSuppression!.IsActive);
+        Assert.NotNull(releasedSuppression.ReleasedAt);
     }
 
     private static async Task<HttpClient> CreateAuthenticatedClientAsync(WebApplicationFactory<Program> factory, string email, string password)

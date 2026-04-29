@@ -33,12 +33,35 @@ internal sealed record NotificationPolicyDecision(
     bool EmailEnabled,
     bool PushEnabled,
     NotificationEmailMode EmailMode,
-    DateTimeOffset? DeferredPushUntilUtc);
+    int? MaxDeliveriesPerHour,
+    int? MaxDeliveriesPerDay,
+    DateTimeOffset? DeferredPushUntilUtc,
+    string? EmailDisabledReasonCode,
+    string? EmailDisabledMessage,
+    string? PushDisabledReasonCode,
+    string? PushDisabledMessage);
+
+internal sealed record NotificationFrequencyCapCheck(
+    bool IsAllowed,
+    string? ReasonCode = null,
+    string? Message = null);
+
+internal sealed record NotificationChannelCompliance(
+    bool IsEnabled,
+    string? DisabledReasonCode = null,
+    string? DisabledMessage = null);
 
 internal sealed record NotificationDigestJobPayload(
     string AuthAccountId,
     string LocalDateBucket,
     string Timezone);
+
+internal sealed record NotificationFrequencyCapReservationKey(
+    string AuthAccountId,
+    NotificationChannel Channel,
+    string EventKey,
+    string Category,
+    string Window);
 
 public sealed class NotificationService(
     LearnerDbContext db,
@@ -53,6 +76,14 @@ public sealed class NotificationService(
     ILogger<NotificationService> logger)
 {
     private const int MaxPageSize = 100;
+    private const int MaxFrequencyCapLimit = 10000;
+    private static readonly NotificationDeliveryStatus[] FrequencyCapCountedStatuses =
+    [
+        NotificationDeliveryStatus.Sent,
+        NotificationDeliveryStatus.Delivered,
+        NotificationDeliveryStatus.Opened,
+        NotificationDeliveryStatus.Clicked
+    ];
     private static readonly string[] ReviewUpdateEventKeys =
     [
         NotificationCatalog.GetKey(NotificationEventKey.LearnerReviewRequested),
@@ -351,13 +382,17 @@ public sealed class NotificationService(
         {
             foreach (var (eventKey, overridePayload) in request.EventPreferences)
             {
-                if (!NotificationCatalog.TryParseKey(eventKey, out _))
+                if (!NotificationCatalog.TryParseKey(eventKey, out var parsedEventKey))
                 {
                     throw ApiException.Validation(
                         "invalid_notification_event_key",
                         $"Unsupported notification event key '{eventKey}'.",
                         [new ApiFieldError("eventPreferences", "invalid_event_key", "Provide a supported event key from the notification catalog.")]);
                 }
+
+                var catalogEntry = NotificationCatalog.Get(parsedEventKey);
+                EnsureProtectedPreferenceRequestIsAllowed(catalogEntry, overridePayload);
+                var canonicalEventKey = NotificationCatalog.GetKey(parsedEventKey);
 
                 var updatedOverride = new StoredNotificationEventPreference(
                     overridePayload.InAppEnabled,
@@ -370,11 +405,11 @@ public sealed class NotificationService(
                     && updatedOverride.PushEnabled is null
                     && updatedOverride.EmailMode is null)
                 {
-                    overrides.Remove(eventKey);
+                    overrides.Remove(canonicalEventKey);
                 }
                 else
                 {
-                    overrides[eventKey] = updatedOverride;
+                    overrides[canonicalEventKey] = updatedOverride;
                 }
             }
         }
@@ -495,6 +530,287 @@ public sealed class NotificationService(
         return new { tokenId = existing.Id };
     }
 
+    public async Task<IReadOnlyList<NotificationConsentItem>> GetConsentsAsync(string authAccountId, CancellationToken ct)
+    {
+        var consents = await db.NotificationConsents
+            .AsNoTracking()
+            .Where(consent => consent.AuthAccountId == authAccountId)
+            .ToListAsync(ct);
+
+        return BuildConsentItemsForAccount(authAccountId, consents);
+    }
+
+    public async Task<NotificationConsentItem> UpdateConsentAsync(
+        string authAccountId,
+        string channel,
+        NotificationConsentUpdateRequest request,
+        CancellationToken ct)
+    {
+        var parsedChannel = ParseChannelFilter(channel);
+        return await UpsertNotificationConsentAsync(
+            authAccountId,
+            parsedChannel,
+            NormalizeConsentCategory(request.Category),
+            request.IsGranted,
+            NormalizeConsentSource(request.Source, "user"),
+            request.Reason,
+            adminId: null,
+            adminName: null,
+            ct);
+    }
+
+    public async Task<AdminNotificationConsentResponse> GetAdminConsentsAsync(
+        int page,
+        int pageSize,
+        string? authAccountId,
+        string? channel,
+        CancellationToken ct)
+    {
+        var normalizedPage = Math.Max(1, page);
+        var normalizedPageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+        var channelFilter = string.IsNullOrWhiteSpace(channel) ? (NotificationChannel?)null : ParseChannelFilter(channel);
+        var normalizedAuthAccountId = string.IsNullOrWhiteSpace(authAccountId) ? null : authAccountId.Trim();
+
+        if (!string.IsNullOrWhiteSpace(normalizedAuthAccountId))
+        {
+            var accountExists = await db.ApplicationUserAccounts
+                .AsNoTracking()
+                .AnyAsync(account => account.Id == normalizedAuthAccountId && account.DeletedAt == null, ct);
+            if (!accountExists)
+            {
+                throw ApiException.NotFound("auth_account_not_found", "Notification account not found.");
+            }
+
+            var accountConsents = await db.NotificationConsents
+                .AsNoTracking()
+                .Where(consent => consent.AuthAccountId == normalizedAuthAccountId)
+                .ToListAsync(ct);
+
+            var accountItems = BuildConsentItemsForAccount(normalizedAuthAccountId, accountConsents)
+                .Where(item => !channelFilter.HasValue || string.Equals(item.Channel, NormalizeChannel(channelFilter.Value), StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+
+            return new AdminNotificationConsentResponse(
+                accountItems.Skip((normalizedPage - 1) * normalizedPageSize).Take(normalizedPageSize).ToArray(),
+                accountItems.Length,
+                normalizedPage,
+                normalizedPageSize);
+        }
+
+        var query = db.NotificationConsents.AsNoTracking().AsQueryable();
+        if (channelFilter.HasValue)
+        {
+            query = query.Where(consent => consent.Channel == channelFilter.Value);
+        }
+
+        var totalCount = await query.CountAsync(ct);
+        var rows = await query
+            .OrderByDescending(consent => consent.UpdatedAt)
+            .Skip((normalizedPage - 1) * normalizedPageSize)
+            .Take(normalizedPageSize)
+            .ToListAsync(ct);
+
+        return new AdminNotificationConsentResponse(rows.Select(MapConsent).ToArray(), totalCount, normalizedPage, normalizedPageSize);
+    }
+
+    public async Task<NotificationConsentItem> SetAdminConsentAsync(
+        string adminId,
+        string adminName,
+        string authAccountId,
+        string channel,
+        NotificationConsentUpdateRequest request,
+        CancellationToken ct)
+    {
+        var accountExists = await db.ApplicationUserAccounts
+            .AsNoTracking()
+            .AnyAsync(account => account.Id == authAccountId && account.DeletedAt == null, ct);
+        if (!accountExists)
+        {
+            throw ApiException.NotFound("auth_account_not_found", "Notification account not found.");
+        }
+
+        var parsedChannel = ParseChannelFilter(channel);
+        var item = await UpsertNotificationConsentAsync(
+            authAccountId,
+            parsedChannel,
+            NormalizeConsentCategory(request.Category),
+            request.IsGranted,
+            NormalizeConsentSource(request.Source, "admin"),
+            request.Reason,
+            adminId,
+            adminName,
+            ct,
+            saveChanges: false);
+
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"AUD-{Guid.NewGuid():N}",
+            OccurredAt = timeProvider.GetUtcNow(),
+            ActorId = adminId,
+            ActorName = adminName,
+            Action = "notification_consent_updated",
+            ResourceType = "NotificationConsent",
+            ResourceId = $"{authAccountId}:{NormalizeChannel(parsedChannel)}",
+            Details = $"Set notification consent to {request.IsGranted} for {authAccountId}/{NormalizeChannel(parsedChannel)}/{NormalizeConsentCategory(request.Category)}"
+        });
+        await db.SaveChangesAsync(ct);
+
+        return item;
+    }
+
+    public async Task<AdminNotificationSuppressionResponse> GetAdminSuppressionsAsync(
+        int page,
+        int pageSize,
+        string? authAccountId,
+        string? channel,
+        bool activeOnly,
+        CancellationToken ct)
+    {
+        var normalizedPage = Math.Max(1, page);
+        var normalizedPageSize = Math.Clamp(pageSize, 1, MaxPageSize);
+        var channelFilter = string.IsNullOrWhiteSpace(channel) ? (NotificationChannel?)null : ParseChannelFilter(channel);
+        var normalizedAuthAccountId = string.IsNullOrWhiteSpace(authAccountId) ? null : authAccountId.Trim();
+
+        var query = db.NotificationSuppressions.AsNoTracking().AsQueryable();
+        if (!string.IsNullOrWhiteSpace(normalizedAuthAccountId))
+        {
+            query = query.Where(suppression => suppression.AuthAccountId == normalizedAuthAccountId);
+        }
+
+        if (channelFilter.HasValue)
+        {
+            query = query.Where(suppression => suppression.Channel == channelFilter.Value);
+        }
+
+        if (activeOnly)
+        {
+            query = query.Where(suppression => suppression.IsActive);
+        }
+
+        var totalCount = await query.CountAsync(ct);
+        var rows = await query
+            .OrderByDescending(suppression => suppression.UpdatedAt)
+            .Skip((normalizedPage - 1) * normalizedPageSize)
+            .Take(normalizedPageSize)
+            .ToListAsync(ct);
+
+        return new AdminNotificationSuppressionResponse(rows.Select(MapSuppression).ToArray(), totalCount, normalizedPage, normalizedPageSize);
+    }
+
+    public async Task<NotificationSuppressionItem> CreateAdminSuppressionAsync(
+        string adminId,
+        string adminName,
+        AdminNotificationSuppressionCreateRequest request,
+        CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.AuthAccountId))
+        {
+            throw ApiException.Validation(
+                "auth_account_required",
+                "An auth account id is required for notification suppression.",
+                [new ApiFieldError("authAccountId", "required", "Provide the account that should be suppressed.")]);
+        }
+
+        var authAccountId = request.AuthAccountId.Trim();
+
+        var accountExists = await db.ApplicationUserAccounts
+            .AsNoTracking()
+            .AnyAsync(account => account.Id == authAccountId && account.DeletedAt == null, ct);
+        if (!accountExists)
+        {
+            throw ApiException.NotFound("auth_account_not_found", "Notification account not found.");
+        }
+
+        var parsedChannel = ParseChannelFilter(request.Channel);
+        if (parsedChannel == NotificationChannel.InApp)
+        {
+            throw ApiException.Validation(
+                "invalid_notification_suppression_channel",
+                "In-app notifications cannot be suppressed because they are the canonical notification record.",
+                [new ApiFieldError("channel", "invalid_suppression_channel", "Use email, push, sms, or whatsapp.")]);
+        }
+
+        var normalizedEventKey = NormalizeOptionalEventKey(request.EventKey);
+        var now = timeProvider.GetUtcNow();
+        var startsAt = request.StartsAt ?? now;
+        if (request.ExpiresAt.HasValue && request.ExpiresAt.Value <= startsAt)
+        {
+            throw ApiException.Validation(
+                "invalid_suppression_expiry",
+                "Notification suppression expiry must be after the start time.",
+                [new ApiFieldError("expiresAt", "invalid_range", "Use an expiry after startsAt.")]);
+        }
+
+        var suppression = new NotificationSuppression
+        {
+            Id = Guid.NewGuid(),
+            AuthAccountId = authAccountId,
+            Channel = parsedChannel,
+            EventKey = normalizedEventKey,
+            IsActive = true,
+            ReasonCode = NormalizeReasonCode(request.ReasonCode),
+            Reason = string.IsNullOrWhiteSpace(request.Reason) ? null : request.Reason.Trim(),
+            CreatedByAdminId = adminId,
+            CreatedByAdminName = adminName,
+            StartsAt = startsAt,
+            ExpiresAt = request.ExpiresAt,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        db.NotificationSuppressions.Add(suppression);
+        db.AuditEvents.Add(new AuditEvent
+        {
+            Id = $"AUD-{Guid.NewGuid():N}",
+            OccurredAt = now,
+            ActorId = adminId,
+            ActorName = adminName,
+            Action = "notification_suppression_created",
+            ResourceType = "NotificationSuppression",
+            ResourceId = suppression.Id.ToString(),
+            Details = $"Suppressed {NormalizeChannel(parsedChannel)} notifications for {authAccountId}"
+        });
+
+        await db.SaveChangesAsync(ct);
+        return MapSuppression(suppression);
+    }
+
+    public async Task<NotificationSuppressionItem> ReleaseAdminSuppressionAsync(
+        string adminId,
+        string adminName,
+        Guid suppressionId,
+        CancellationToken ct)
+    {
+        var suppression = await db.NotificationSuppressions
+            .FirstOrDefaultAsync(existingSuppression => existingSuppression.Id == suppressionId, ct)
+            ?? throw ApiException.NotFound("notification_suppression_not_found", "Notification suppression not found.");
+
+        if (suppression.IsActive)
+        {
+            suppression.IsActive = false;
+            suppression.ReleasedByAdminId = adminId;
+            suppression.ReleasedByAdminName = adminName;
+            suppression.ReleasedAt = timeProvider.GetUtcNow();
+            suppression.UpdatedAt = timeProvider.GetUtcNow();
+
+            db.AuditEvents.Add(new AuditEvent
+            {
+                Id = $"AUD-{Guid.NewGuid():N}",
+                OccurredAt = timeProvider.GetUtcNow(),
+                ActorId = adminId,
+                ActorName = adminName,
+                Action = "notification_suppression_released",
+                ResourceType = "NotificationSuppression",
+                ResourceId = suppression.Id.ToString(),
+                Details = $"Released notification suppression for {suppression.AuthAccountId}/{NormalizeChannel(suppression.Channel)}"
+            });
+
+            await db.SaveChangesAsync(ct);
+        }
+
+        return MapSuppression(suppression);
+    }
+
     public Task<IReadOnlyList<AdminNotificationCatalogEntry>> GetAdminCatalogAsync(CancellationToken ct)
         => Task.FromResult<IReadOnlyList<AdminNotificationCatalogEntry>>(NotificationCatalog.ToAdminEntries());
 
@@ -522,16 +838,22 @@ public sealed class NotificationService(
         var rows = NotificationCatalog.All
             .Select(entry =>
             {
+                overrideLookup.TryGetValue((entry.AudienceRole, NotificationCatalog.GlobalPolicyEventKey), out var globalOverride);
                 overrideLookup.TryGetValue((entry.AudienceRole, NotificationCatalog.GetKey(entry.Key)), out var rowOverride);
+                var isPolicyProtected = NotificationCatalog.IsPolicyProtected(entry);
+                var frequencyCap = ResolveEffectiveFrequencyCap(entry, globalOverride, rowOverride, isPolicyProtected);
                 return new AdminNotificationPolicyRow(
                     entry.AudienceRole,
                     NotificationCatalog.GetKey(entry.Key),
                     entry.Category,
                     entry.Label,
-                    rowOverride?.InAppEnabled ?? entry.DefaultChannels.InAppEnabled,
-                    rowOverride?.EmailEnabled ?? entry.DefaultChannels.EmailEnabled,
-                    rowOverride?.PushEnabled ?? entry.DefaultChannels.PushEnabled,
-                    NormalizeEmailMode(rowOverride?.EmailMode ?? entry.DefaultChannels.EmailMode),
+                    isPolicyProtected ? entry.DefaultChannels.InAppEnabled : rowOverride?.InAppEnabled ?? entry.DefaultChannels.InAppEnabled,
+                    isPolicyProtected ? entry.DefaultChannels.EmailEnabled : rowOverride?.EmailEnabled ?? entry.DefaultChannels.EmailEnabled,
+                    isPolicyProtected ? entry.DefaultChannels.PushEnabled : rowOverride?.PushEnabled ?? entry.DefaultChannels.PushEnabled,
+                    NormalizeEmailMode(isPolicyProtected ? entry.DefaultChannels.EmailMode : rowOverride?.EmailMode ?? entry.DefaultChannels.EmailMode),
+                    frequencyCap.MaxPerHour,
+                    frequencyCap.MaxPerDay,
+                    isPolicyProtected,
                     rowOverride is not null,
                     rowOverride?.UpdatedAt,
                     rowOverride?.UpdatedByAdminId,
@@ -553,10 +875,14 @@ public sealed class NotificationService(
         AdminNotificationPolicyUpdateRequest request,
         CancellationToken ct)
     {
-        ValidateAudienceRole(audienceRole);
+        audienceRole = NormalizeAudienceRole(audienceRole);
 
         NotificationCatalogEntry? catalogEntry = null;
-        if (!string.Equals(eventKey, NotificationCatalog.GlobalPolicyEventKey, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(eventKey, NotificationCatalog.GlobalPolicyEventKey, StringComparison.OrdinalIgnoreCase))
+        {
+            eventKey = NotificationCatalog.GlobalPolicyEventKey;
+        }
+        else
         {
             if (!NotificationCatalog.TryParseKey(eventKey, out var parsedEventKey))
             {
@@ -567,6 +893,7 @@ public sealed class NotificationService(
             }
 
             catalogEntry = NotificationCatalog.Get(parsedEventKey);
+            eventKey = NotificationCatalog.GetKey(parsedEventKey);
             if (!string.Equals(catalogEntry.AudienceRole, audienceRole, StringComparison.OrdinalIgnoreCase))
             {
                 throw ApiException.Validation(
@@ -574,6 +901,8 @@ public sealed class NotificationService(
                     $"Event {eventKey} does not belong to audience {audienceRole}.",
                     [new ApiFieldError("audienceRole", "invalid", "The event key does not match the selected audience role.")]);
             }
+
+            EnsureProtectedPolicyRequestIsAllowed(catalogEntry, request);
         }
 
         var overrideRow = await db.NotificationPolicyOverrides
@@ -596,6 +925,22 @@ public sealed class NotificationService(
         if (request.EmailMode is not null)
         {
             overrideRow.EmailMode = ParseEmailMode(request.EmailMode);
+        }
+        if (request.ClearMaxDeliveriesPerHour == true)
+        {
+            overrideRow.MaxDeliveriesPerHour = null;
+        }
+        else if (request.MaxDeliveriesPerHour.HasValue)
+        {
+            overrideRow.MaxDeliveriesPerHour = NormalizeFrequencyCapLimit(request.MaxDeliveriesPerHour.Value, nameof(request.MaxDeliveriesPerHour));
+        }
+        if (request.ClearMaxDeliveriesPerDay == true)
+        {
+            overrideRow.MaxDeliveriesPerDay = null;
+        }
+        else if (request.MaxDeliveriesPerDay.HasValue)
+        {
+            overrideRow.MaxDeliveriesPerDay = NormalizeFrequencyCapLimit(request.MaxDeliveriesPerDay.Value, nameof(request.MaxDeliveriesPerDay));
         }
         overrideRow.UpdatedByAdminId = adminId;
         overrideRow.UpdatedByAdminName = adminName;
@@ -626,21 +971,33 @@ public sealed class NotificationService(
                 overrideRow.EmailEnabled ?? true,
                 overrideRow.PushEnabled ?? true,
                 NormalizeEmailMode(overrideRow.EmailMode ?? NotificationEmailMode.Off),
+                overrideRow.MaxDeliveriesPerHour,
+                overrideRow.MaxDeliveriesPerDay,
+                false,
                 true,
                 overrideRow.UpdatedAt,
                 overrideRow.UpdatedByAdminId,
                 overrideRow.UpdatedByAdminName);
         }
 
+        var isProtectedPolicy = NotificationCatalog.IsPolicyProtected(catalogEntry);
+        var globalOverride = await db.NotificationPolicyOverrides
+            .AsNoTracking()
+            .FirstOrDefaultAsync(existingOverride => existingOverride.AudienceRole == audienceRole && existingOverride.EventKey == NotificationCatalog.GlobalPolicyEventKey, ct);
+        var frequencyCap = ResolveEffectiveFrequencyCap(catalogEntry, globalOverride, overrideRow, isProtectedPolicy);
+
         return new AdminNotificationPolicyRow(
             audienceRole,
             eventKey,
             catalogEntry.Category,
             catalogEntry.Label,
-            overrideRow.InAppEnabled ?? catalogEntry.DefaultChannels.InAppEnabled,
-            overrideRow.EmailEnabled ?? catalogEntry.DefaultChannels.EmailEnabled,
-            overrideRow.PushEnabled ?? catalogEntry.DefaultChannels.PushEnabled,
-            NormalizeEmailMode(overrideRow.EmailMode ?? catalogEntry.DefaultChannels.EmailMode),
+            isProtectedPolicy ? catalogEntry.DefaultChannels.InAppEnabled : overrideRow.InAppEnabled ?? catalogEntry.DefaultChannels.InAppEnabled,
+            isProtectedPolicy ? catalogEntry.DefaultChannels.EmailEnabled : overrideRow.EmailEnabled ?? catalogEntry.DefaultChannels.EmailEnabled,
+            isProtectedPolicy ? catalogEntry.DefaultChannels.PushEnabled : overrideRow.PushEnabled ?? catalogEntry.DefaultChannels.PushEnabled,
+            NormalizeEmailMode(isProtectedPolicy ? catalogEntry.DefaultChannels.EmailMode : overrideRow.EmailMode ?? catalogEntry.DefaultChannels.EmailMode),
+            frequencyCap.MaxPerHour,
+            frequencyCap.MaxPerDay,
+            isProtectedPolicy,
             true,
             overrideRow.UpdatedAt,
             overrideRow.UpdatedByAdminId,
@@ -654,10 +1011,14 @@ public sealed class NotificationService(
         string eventKey,
         CancellationToken ct)
     {
-        ValidateAudienceRole(audienceRole);
+        audienceRole = NormalizeAudienceRole(audienceRole);
 
         NotificationCatalogEntry? catalogEntry = null;
-        if (!string.Equals(eventKey, NotificationCatalog.GlobalPolicyEventKey, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(eventKey, NotificationCatalog.GlobalPolicyEventKey, StringComparison.OrdinalIgnoreCase))
+        {
+            eventKey = NotificationCatalog.GlobalPolicyEventKey;
+        }
+        else
         {
             if (!NotificationCatalog.TryParseKey(eventKey, out var parsedEventKey))
             {
@@ -668,6 +1029,7 @@ public sealed class NotificationService(
             }
 
             catalogEntry = NotificationCatalog.Get(parsedEventKey);
+            eventKey = NotificationCatalog.GetKey(parsedEventKey);
             if (!string.Equals(catalogEntry.AudienceRole, audienceRole, StringComparison.OrdinalIgnoreCase))
             {
                 throw ApiException.Validation(
@@ -709,11 +1071,20 @@ public sealed class NotificationService(
                 true,
                 true,
                 NormalizeEmailMode(NotificationEmailMode.Off),
+                null,
+                null,
+                false,
                 false,
                 null,
                 null,
                 null);
         }
+
+            var isPolicyProtected = NotificationCatalog.IsPolicyProtected(catalogEntry);
+            var globalOverride = await db.NotificationPolicyOverrides
+                .AsNoTracking()
+                .FirstOrDefaultAsync(existingOverride => existingOverride.AudienceRole == audienceRole && existingOverride.EventKey == NotificationCatalog.GlobalPolicyEventKey, ct);
+            var frequencyCap = ResolveEffectiveFrequencyCap(catalogEntry, globalOverride, null, isPolicyProtected);
 
         return new AdminNotificationPolicyRow(
             audienceRole,
@@ -724,6 +1095,9 @@ public sealed class NotificationService(
             catalogEntry.DefaultChannels.EmailEnabled,
             catalogEntry.DefaultChannels.PushEnabled,
             NormalizeEmailMode(catalogEntry.DefaultChannels.EmailMode),
+            frequencyCap.MaxPerHour,
+            frequencyCap.MaxPerDay,
+            isPolicyProtected,
             false,
             null,
             null,
@@ -825,11 +1199,7 @@ public sealed class NotificationService(
 
         var statusFilter = string.IsNullOrWhiteSpace(status) ? (NotificationDeliveryStatus?)null : ParseDeliveryStatusFilter(status);
         var channelFilter = string.IsNullOrWhiteSpace(channel) ? (NotificationChannel?)null : ParseChannelFilter(channel);
-        var normalizedAudienceRole = string.IsNullOrWhiteSpace(audienceRole) ? null : audienceRole.Trim().ToLowerInvariant();
-        if (!string.IsNullOrWhiteSpace(normalizedAudienceRole))
-        {
-            ValidateAudienceRole(normalizedAudienceRole);
-        }
+        var normalizedAudienceRole = string.IsNullOrWhiteSpace(audienceRole) ? null : NormalizeAudienceRole(audienceRole);
 
         string? normalizedEventKey = null;
         if (!string.IsNullOrWhiteSpace(eventKey))
@@ -1120,7 +1490,17 @@ public sealed class NotificationService(
 
         if (decision.EmailEnabled)
         {
-            if (decision.EmailMode == NotificationEmailMode.Immediate)
+            var emailFrequencyCap = await ResolveFrequencyCapAsync(notificationEvent, NotificationChannel.Email, decision, ct);
+            if (!emailFrequencyCap.IsAllowed)
+            {
+                await RecordSuppressedAttemptIfMissingAsync(
+                    notificationEvent,
+                    NotificationChannel.Email,
+                    emailFrequencyCap.ReasonCode ?? "frequency_cap_exceeded",
+                    emailFrequencyCap.Message ?? "Email delivery skipped because a notification frequency cap was reached.",
+                    ct);
+            }
+            else if (decision.EmailMode == NotificationEmailMode.Immediate)
             {
                 await SendImmediateEmailAsync(notificationEvent, ct);
             }
@@ -1131,12 +1511,27 @@ public sealed class NotificationService(
         }
         else
         {
-            await RecordSuppressedAttemptIfMissingAsync(notificationEvent, NotificationChannel.Email, "email_disabled", "Email delivery was disabled by policy or user preference.", ct);
+            await RecordSuppressedAttemptIfMissingAsync(
+                notificationEvent,
+                NotificationChannel.Email,
+                decision.EmailDisabledReasonCode ?? "email_disabled",
+                decision.EmailDisabledMessage ?? "Email delivery was disabled by policy or user preference.",
+                ct);
         }
 
         if (decision.PushEnabled)
         {
-            if (decision.DeferredPushUntilUtc.HasValue)
+            var pushFrequencyCap = await ResolveFrequencyCapAsync(notificationEvent, NotificationChannel.Push, decision, ct);
+            if (!pushFrequencyCap.IsAllowed)
+            {
+                await RecordSuppressedAttemptIfMissingAsync(
+                    notificationEvent,
+                    NotificationChannel.Push,
+                    pushFrequencyCap.ReasonCode ?? "frequency_cap_exceeded",
+                    pushFrequencyCap.Message ?? "Push delivery skipped because a notification frequency cap was reached.",
+                    ct);
+            }
+            else if (decision.DeferredPushUntilUtc.HasValue)
             {
                 await QueueDeferredPushAsync(notificationEvent, decision.DeferredPushUntilUtc.Value, ct);
             }
@@ -1147,7 +1542,12 @@ public sealed class NotificationService(
         }
         else
         {
-            await RecordSuppressedAttemptIfMissingAsync(notificationEvent, NotificationChannel.Push, "push_disabled", "Push delivery was disabled by policy or user preference.", ct);
+            await RecordSuppressedAttemptIfMissingAsync(
+                notificationEvent,
+                NotificationChannel.Push,
+                decision.PushDisabledReasonCode ?? "push_disabled",
+                decision.PushDisabledMessage ?? "Push delivery was disabled by policy or user preference.",
+                ct);
         }
 
         notificationEvent.State = AsyncState.Completed;
@@ -1170,6 +1570,7 @@ public sealed class NotificationService(
             .ToListAsync(ct);
 
         var digestEvents = new List<NotificationEvent>();
+        var digestFrequencyCapReservations = new Dictionary<NotificationFrequencyCapReservationKey, int>();
         foreach (var notificationEvent in notificationEvents)
         {
             if (!NotificationCatalog.TryParseKey(notificationEvent.EventKey, out var eventKey))
@@ -1194,10 +1595,24 @@ public sealed class NotificationService(
                     attempt.NotificationEventId == notificationEvent.Id
                     && attempt.Channel == NotificationChannel.Email
                     && attempt.Status == NotificationDeliveryStatus.Sent, ct);
-            if (!emailAlreadySent)
+            if (emailAlreadySent)
             {
-                digestEvents.Add(notificationEvent);
+                continue;
             }
+
+            var emailFrequencyCap = await TryReserveFrequencyCapSlotAsync(notificationEvent, NotificationChannel.Email, decision, digestFrequencyCapReservations, ct);
+            if (!emailFrequencyCap.IsAllowed)
+            {
+                await RecordSuppressedAttemptIfMissingAsync(
+                    notificationEvent,
+                    NotificationChannel.Email,
+                    emailFrequencyCap.ReasonCode ?? "frequency_cap_exceeded",
+                    emailFrequencyCap.Message ?? "Email digest delivery skipped because a notification frequency cap was reached.",
+                    ct);
+                continue;
+            }
+
+            digestEvents.Add(notificationEvent);
         }
 
         if (digestEvents.Count == 0)
@@ -1409,18 +1824,85 @@ public sealed class NotificationService(
     }
 
     private static void ValidateAudienceRole(string audienceRole)
+        => _ = NormalizeAudienceRole(audienceRole);
+
+    private static string NormalizeAudienceRole(string audienceRole)
     {
-        if (string.Equals(audienceRole, ApplicationUserRoles.Learner, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(audienceRole, ApplicationUserRoles.Expert, StringComparison.OrdinalIgnoreCase)
-            || string.Equals(audienceRole, ApplicationUserRoles.Admin, StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(audienceRole, ApplicationUserRoles.Learner, StringComparison.OrdinalIgnoreCase))
         {
-            return;
+            return ApplicationUserRoles.Learner;
+        }
+
+        if (string.Equals(audienceRole, ApplicationUserRoles.Expert, StringComparison.OrdinalIgnoreCase))
+        {
+            return ApplicationUserRoles.Expert;
+        }
+
+        if (string.Equals(audienceRole, ApplicationUserRoles.Admin, StringComparison.OrdinalIgnoreCase))
+        {
+            return ApplicationUserRoles.Admin;
         }
 
         throw ApiException.Validation(
             "invalid_notification_audience",
             $"Unsupported audience role '{audienceRole}'.",
             [new ApiFieldError("audienceRole", "invalid_audience_role", "Use learner, expert, or admin.")]);
+    }
+
+    private static void EnsureProtectedPolicyRequestIsAllowed(
+        NotificationCatalogEntry catalogEntry,
+        AdminNotificationPolicyUpdateRequest request)
+    {
+        if (!NotificationCatalog.IsPolicyProtected(catalogEntry))
+        {
+            return;
+        }
+
+        var disablesRequiredChannel =
+            (catalogEntry.DefaultChannels.InAppEnabled && request.InAppEnabled == false)
+            || (catalogEntry.DefaultChannels.EmailEnabled && request.EmailEnabled == false)
+            || (catalogEntry.DefaultChannels.PushEnabled && request.PushEnabled == false);
+        var disablesRequiredEmail = catalogEntry.DefaultChannels.EmailEnabled
+            && ParseEmailMode(request.EmailMode) == NotificationEmailMode.Off;
+        var addsFrequencyCap = (request.MaxDeliveriesPerHour.HasValue && request.MaxDeliveriesPerHour.Value > 0)
+            || (request.MaxDeliveriesPerDay.HasValue && request.MaxDeliveriesPerDay.Value > 0);
+
+        if (!disablesRequiredChannel && !disablesRequiredEmail && !addsFrequencyCap)
+        {
+            return;
+        }
+
+        throw ApiException.Validation(
+            "protected_notification_policy",
+            $"{NotificationCatalog.GetKey(catalogEntry.Key)} is a protected notification and cannot be disabled or frequency-capped.",
+            [new ApiFieldError("eventKey", "protected_policy", "Critical, security, verification, and payment receipt notifications cannot be disabled or capped by policy overrides.")]);
+    }
+
+    private static void EnsureProtectedPreferenceRequestIsAllowed(
+        NotificationCatalogEntry catalogEntry,
+        NotificationEventPreferencePayload request)
+    {
+        if (!NotificationCatalog.IsPolicyProtected(catalogEntry))
+        {
+            return;
+        }
+
+        var disablesRequiredChannel =
+            (catalogEntry.DefaultChannels.InAppEnabled && request.InAppEnabled == false)
+            || (catalogEntry.DefaultChannels.EmailEnabled && request.EmailEnabled == false)
+            || (catalogEntry.DefaultChannels.PushEnabled && request.PushEnabled == false);
+        var disablesRequiredEmail = catalogEntry.DefaultChannels.EmailEnabled
+            && ParseEmailMode(request.EmailMode) == NotificationEmailMode.Off;
+
+        if (!disablesRequiredChannel && !disablesRequiredEmail)
+        {
+            return;
+        }
+
+        throw ApiException.Validation(
+            "protected_notification_preference",
+            $"{NotificationCatalog.GetKey(catalogEntry.Key)} is a protected notification and cannot be disabled.",
+            [new ApiFieldError("eventPreferences", "protected_policy", "Critical, security, verification, and payment receipt notifications cannot be disabled.")]);
     }
 
     private static bool ResolveGlobalAudienceEmailEnabled(
@@ -1439,6 +1921,67 @@ public sealed class NotificationService(
                 globalOverride.EmailEnabled ?? true,
                 globalOverride.PushEnabled ?? true)
             : new AdminNotificationAudienceChannelPolicy(true, true, true);
+
+    private static (int? MaxPerHour, int? MaxPerDay) ResolveEffectiveFrequencyCap(
+        NotificationCatalogEntry catalogEntry,
+        NotificationPolicyOverride? globalOverride,
+        NotificationPolicyOverride? eventOverride,
+        bool isPolicyProtected)
+    {
+        if (isPolicyProtected)
+        {
+            return (null, null);
+        }
+
+        var defaultCap = ResolveDefaultFrequencyCap(catalogEntry);
+        return (
+            ResolveFrequencyCapLimit(eventOverride?.MaxDeliveriesPerHour, globalOverride?.MaxDeliveriesPerHour, defaultCap.MaxPerHour),
+            ResolveFrequencyCapLimit(eventOverride?.MaxDeliveriesPerDay, globalOverride?.MaxDeliveriesPerDay, defaultCap.MaxPerDay));
+    }
+
+    private static int? ResolveFrequencyCapLimit(int? eventLimit, int? globalLimit, int? defaultLimit)
+    {
+        if (eventLimit.HasValue)
+        {
+            return eventLimit.Value <= 0 ? null : eventLimit.Value;
+        }
+
+        if (globalLimit.HasValue)
+        {
+            return globalLimit.Value <= 0 ? null : globalLimit.Value;
+        }
+
+        return defaultLimit;
+    }
+
+    private static (int? MaxPerHour, int? MaxPerDay) ResolveDefaultFrequencyCap(NotificationCatalogEntry catalogEntry)
+    {
+        if (NotificationCatalog.IsPolicyProtected(catalogEntry))
+        {
+            return (null, null);
+        }
+
+        return catalogEntry.Category.ToLowerInvariant() switch
+        {
+            "marketing" => (1, 3),
+            "engagement" => (2, 6),
+            "learning" or "reminders" or "study_plan" => (3, 8),
+            _ => (null, null)
+        };
+    }
+
+    private static int NormalizeFrequencyCapLimit(int value, string fieldName)
+    {
+        if (value is < 0 or > MaxFrequencyCapLimit)
+        {
+            throw ApiException.Validation(
+                "invalid_notification_frequency_cap",
+            $"Notification frequency caps must be between 0 and {MaxFrequencyCapLimit} deliveries.",
+            [new ApiFieldError(fieldName, "invalid_frequency_cap", $"Use 0 for no cap, or a value between 1 and {MaxFrequencyCapLimit}.")]);
+        }
+
+        return value;
+    }
 
     private async Task<bool> MirrorLegacyLearnerNotificationsAsync(
         string authAccountId,
@@ -1827,12 +2370,400 @@ public sealed class NotificationService(
             item.ReadAt);
     }
 
+    private static readonly NotificationChannel[] ConsentManagedChannels =
+    [
+        NotificationChannel.Sms,
+        NotificationChannel.WhatsApp
+    ];
+
+    private static IReadOnlyList<NotificationConsentItem> BuildConsentItemsForAccount(
+        string authAccountId,
+        IReadOnlyCollection<NotificationConsent> consents)
+    {
+        var consentLookup = consents
+            .Where(consent => string.Equals(consent.Category, "global", StringComparison.OrdinalIgnoreCase))
+            .GroupBy(consent => consent.Channel)
+            .ToDictionary(group => group.Key, group => group.OrderByDescending(consent => consent.UpdatedAt).First());
+        var globalItems = ConsentManagedChannels
+            .Select(channel => consentLookup.TryGetValue(channel, out var consent)
+                ? MapConsent(consent)
+                : BuildDefaultConsent(authAccountId, channel))
+            .ToArray();
+
+        var categoryItems = consents
+            .Where(consent => !string.Equals(consent.Category, "global", StringComparison.OrdinalIgnoreCase))
+            .OrderBy(consent => consent.Channel)
+            .ThenBy(consent => consent.Category, StringComparer.OrdinalIgnoreCase)
+            .Select(MapConsent)
+            .ToArray();
+
+        return globalItems.Concat(categoryItems).ToArray();
+    }
+
+    private static NotificationConsentItem BuildDefaultConsent(string authAccountId, NotificationChannel channel)
+        => new(
+            authAccountId,
+            NormalizeChannel(channel),
+            "global",
+            !RequiresExplicitConsent(channel),
+            RequiresExplicitConsent(channel),
+            "default",
+            null,
+            !RequiresExplicitConsent(channel) ? DateTimeOffset.UnixEpoch : null,
+            null,
+            DateTimeOffset.UnixEpoch);
+
+    private static NotificationConsentItem MapConsent(NotificationConsent consent)
+        => new(
+            consent.AuthAccountId,
+            NormalizeChannel(consent.Channel),
+            consent.Category,
+            consent.IsGranted,
+            RequiresExplicitConsent(consent.Channel),
+            consent.Source,
+            consent.Reason,
+            consent.GrantedAt,
+            consent.RevokedAt,
+            consent.UpdatedAt);
+
+    private static NotificationSuppressionItem MapSuppression(NotificationSuppression suppression)
+        => new(
+            suppression.Id,
+            suppression.AuthAccountId,
+            NormalizeChannel(suppression.Channel),
+            suppression.EventKey,
+            suppression.IsActive,
+            suppression.ReasonCode,
+            suppression.Reason,
+            suppression.StartsAt,
+            suppression.ExpiresAt,
+            suppression.CreatedAt,
+            suppression.UpdatedAt,
+            suppression.ReleasedAt,
+            suppression.CreatedByAdminName,
+            suppression.ReleasedByAdminName);
+
+    private static bool RequiresExplicitConsent(NotificationChannel channel)
+        => channel is NotificationChannel.Sms or NotificationChannel.WhatsApp;
+
+    private async Task<NotificationConsentItem> UpsertNotificationConsentAsync(
+        string authAccountId,
+        NotificationChannel channel,
+        string category,
+        bool isGranted,
+        string source,
+        string? reason,
+        string? adminId,
+        string? adminName,
+        CancellationToken ct,
+        bool saveChanges = true)
+    {
+        EnsureConsentManagedChannel(channel);
+
+        var now = timeProvider.GetUtcNow();
+        var consent = await db.NotificationConsents
+            .FirstOrDefaultAsync(existingConsent =>
+                existingConsent.AuthAccountId == authAccountId
+                && existingConsent.Channel == channel
+                && existingConsent.Category == category, ct);
+
+        if (consent is null)
+        {
+            consent = new NotificationConsent
+            {
+                Id = Guid.NewGuid(),
+                AuthAccountId = authAccountId,
+                Channel = channel,
+                Category = category,
+                CreatedAt = now
+            };
+            db.NotificationConsents.Add(consent);
+        }
+
+        consent.IsGranted = isGranted;
+        consent.Source = source;
+        consent.Reason = string.IsNullOrWhiteSpace(reason) ? null : reason.Trim();
+        consent.UpdatedByAdminId = adminId;
+        consent.UpdatedByAdminName = adminName;
+        consent.GrantedAt = isGranted ? now : consent.GrantedAt;
+        consent.RevokedAt = isGranted ? null : now;
+        consent.UpdatedAt = now;
+
+        if (saveChanges)
+        {
+            await db.SaveChangesAsync(ct);
+        }
+
+        return MapConsent(consent);
+    }
+
+    private async Task<NotificationChannelCompliance> ResolveChannelComplianceAsync(
+        string authAccountId,
+        NotificationChannel channel,
+        string eventKey,
+        string category,
+        CancellationToken ct)
+    {
+        if (channel == NotificationChannel.InApp)
+        {
+            return new NotificationChannelCompliance(true);
+        }
+
+        var now = timeProvider.GetUtcNow();
+        var suppressionCandidates = await db.NotificationSuppressions
+            .AsNoTracking()
+            .Where(suppression =>
+                suppression.AuthAccountId == authAccountId
+                && suppression.Channel == channel
+                && suppression.IsActive
+                && (suppression.EventKey == null || suppression.EventKey == eventKey))
+            .Select(suppression => new
+            {
+                suppression.EventKey,
+                suppression.ReasonCode,
+                suppression.Reason,
+                suppression.StartsAt,
+                suppression.ExpiresAt
+            })
+            .ToListAsync(ct);
+
+        var activeSuppression = suppressionCandidates
+            .Where(suppression =>
+                (!suppression.StartsAt.HasValue || suppression.StartsAt <= now)
+                && (!suppression.ExpiresAt.HasValue || suppression.ExpiresAt > now))
+            .OrderByDescending(suppression => string.Equals(suppression.EventKey, eventKey, StringComparison.OrdinalIgnoreCase))
+            .ThenBy(suppression => suppression.ExpiresAt ?? DateTimeOffset.MaxValue)
+            .FirstOrDefault();
+
+        if (activeSuppression is not null)
+        {
+            return new NotificationChannelCompliance(
+                false,
+                activeSuppression.ReasonCode,
+                activeSuppression.Reason ?? $"Notification delivery was suppressed by {activeSuppression.ReasonCode}.");
+        }
+
+        if (!RequiresExplicitConsent(channel))
+        {
+            return new NotificationChannelCompliance(true);
+        }
+
+        var consent = await db.NotificationConsents
+            .AsNoTracking()
+            .Where(existingConsent =>
+                existingConsent.AuthAccountId == authAccountId
+                && existingConsent.Channel == channel
+                && (existingConsent.Category == category || existingConsent.Category == "global"))
+            .OrderByDescending(existingConsent => existingConsent.Category == category)
+            .FirstOrDefaultAsync(ct);
+
+        return consent?.IsGranted == true
+            ? new NotificationChannelCompliance(true)
+            : new NotificationChannelCompliance(
+                false,
+                "explicit_consent_required",
+                $"{NormalizeChannel(channel)} delivery requires explicit consent for the {category} category.");
+    }
+
+    private async Task<NotificationFrequencyCapCheck> ResolveFrequencyCapAsync(
+        NotificationEvent notificationEvent,
+        NotificationChannel channel,
+        NotificationPolicyDecision decision,
+        CancellationToken ct)
+    {
+        if (channel is not (NotificationChannel.Email or NotificationChannel.Push)
+            || (!decision.MaxDeliveriesPerHour.HasValue && !decision.MaxDeliveriesPerDay.HasValue))
+        {
+            return new NotificationFrequencyCapCheck(true);
+        }
+
+        var now = timeProvider.GetUtcNow();
+        if (decision.MaxDeliveriesPerHour.HasValue
+            && await HasReachedFrequencyCapAsync(notificationEvent, channel, now.AddHours(-1), decision.MaxDeliveriesPerHour.Value, ct))
+        {
+            return new NotificationFrequencyCapCheck(
+                false,
+                "frequency_cap_exceeded",
+                $"{NormalizeChannel(channel)} delivery skipped because {notificationEvent.EventKey} reached the hourly cap of {decision.MaxDeliveriesPerHour.Value} for this account.");
+        }
+
+        if (decision.MaxDeliveriesPerDay.HasValue
+            && await HasReachedFrequencyCapAsync(notificationEvent, channel, now.AddDays(-1), decision.MaxDeliveriesPerDay.Value, ct))
+        {
+            return new NotificationFrequencyCapCheck(
+                false,
+                "frequency_cap_exceeded",
+                $"{NormalizeChannel(channel)} delivery skipped because {notificationEvent.EventKey} reached the daily cap of {decision.MaxDeliveriesPerDay.Value} for this account.");
+        }
+
+        return new NotificationFrequencyCapCheck(true);
+    }
+
+    private async Task<bool> HasReachedFrequencyCapAsync(
+        NotificationEvent notificationEvent,
+        NotificationChannel channel,
+        DateTimeOffset windowStartUtc,
+        int limit,
+        CancellationToken ct)
+    {
+        var deliveredEventCount = await CountFrequencyCapDeliveriesAsync(notificationEvent, channel, windowStartUtc, ct);
+
+        return deliveredEventCount >= limit;
+    }
+
+    private async Task<NotificationFrequencyCapCheck> TryReserveFrequencyCapSlotAsync(
+        NotificationEvent notificationEvent,
+        NotificationChannel channel,
+        NotificationPolicyDecision decision,
+        IDictionary<NotificationFrequencyCapReservationKey, int> reservations,
+        CancellationToken ct)
+    {
+        if (channel is not (NotificationChannel.Email or NotificationChannel.Push)
+            || (!decision.MaxDeliveriesPerHour.HasValue && !decision.MaxDeliveriesPerDay.HasValue))
+        {
+            return new NotificationFrequencyCapCheck(true);
+        }
+
+        var now = timeProvider.GetUtcNow();
+        var checks = new List<(NotificationFrequencyCapReservationKey Key, DateTimeOffset WindowStartUtc, int Limit, string WindowLabel)>();
+        if (decision.MaxDeliveriesPerHour.HasValue)
+        {
+            checks.Add((
+                new NotificationFrequencyCapReservationKey(notificationEvent.RecipientAuthAccountId, channel, notificationEvent.EventKey, notificationEvent.Category, "hour"),
+                now.AddHours(-1),
+                decision.MaxDeliveriesPerHour.Value,
+                "hourly"));
+        }
+
+        if (decision.MaxDeliveriesPerDay.HasValue)
+        {
+            checks.Add((
+                new NotificationFrequencyCapReservationKey(notificationEvent.RecipientAuthAccountId, channel, notificationEvent.EventKey, notificationEvent.Category, "day"),
+                now.AddDays(-1),
+                decision.MaxDeliveriesPerDay.Value,
+                "daily"));
+        }
+
+        foreach (var check in checks)
+        {
+            var persistedCount = await CountFrequencyCapDeliveriesAsync(notificationEvent, channel, check.WindowStartUtc, ct);
+            reservations.TryGetValue(check.Key, out var reservedCount);
+            if (persistedCount + reservedCount >= check.Limit)
+            {
+                return new NotificationFrequencyCapCheck(
+                    false,
+                    "frequency_cap_exceeded",
+                    $"{NormalizeChannel(channel)} delivery skipped because {notificationEvent.EventKey} reached the {check.WindowLabel} cap of {check.Limit} for this account.");
+            }
+        }
+
+        foreach (var check in checks)
+        {
+            reservations.TryGetValue(check.Key, out var reservedCount);
+            reservations[check.Key] = reservedCount + 1;
+        }
+
+        return new NotificationFrequencyCapCheck(true);
+    }
+
+    private async Task<int> CountFrequencyCapDeliveriesAsync(
+        NotificationEvent notificationEvent,
+        NotificationChannel channel,
+        DateTimeOffset windowStartUtc,
+        CancellationToken ct)
+    {
+        return await db.NotificationDeliveryAttempts
+            .AsNoTracking()
+            .Where(attempt =>
+                attempt.AuthAccountId == notificationEvent.RecipientAuthAccountId
+                && attempt.NotificationEventId != notificationEvent.Id
+                && attempt.Channel == channel
+                && attempt.AttemptedAt >= windowStartUtc
+                && FrequencyCapCountedStatuses.Contains(attempt.Status))
+            .Join(
+                db.NotificationEvents.AsNoTracking().Where(existingEvent =>
+                    existingEvent.RecipientAuthAccountId == notificationEvent.RecipientAuthAccountId
+                    && existingEvent.EventKey == notificationEvent.EventKey
+                    && existingEvent.Category == notificationEvent.Category),
+                attempt => attempt.NotificationEventId,
+                existingEvent => existingEvent.Id,
+                (attempt, _) => attempt.NotificationEventId)
+            .Distinct()
+            .CountAsync(ct);
+    }
+
+    private static string NormalizeConsentCategory(string? category)
+    {
+        if (string.IsNullOrWhiteSpace(category))
+        {
+            return "global";
+        }
+
+        var normalized = category.Trim().ToLowerInvariant().Replace('-', '_');
+        return normalized.Length <= 64 ? normalized : normalized[..64];
+    }
+
+    private static void EnsureConsentManagedChannel(NotificationChannel channel)
+    {
+        if (RequiresExplicitConsent(channel))
+        {
+            return;
+        }
+
+        throw ApiException.Validation(
+            "invalid_notification_consent_channel",
+            $"Notification consent is only managed for sms and whatsapp channels, not {NormalizeChannel(channel)}.",
+            [new ApiFieldError("channel", "invalid_consent_channel", "Use sms or whatsapp.")]);
+    }
+
+    private static string NormalizeConsentSource(string? source, string fallback)
+    {
+        var normalized = string.IsNullOrWhiteSpace(source) ? fallback : source.Trim().ToLowerInvariant().Replace('-', '_');
+        return normalized.Length <= 64 ? normalized : normalized[..64];
+    }
+
+    private static string NormalizeReasonCode(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "manual_suppression";
+        }
+
+        var normalized = new string(value
+            .Trim()
+            .ToLowerInvariant()
+            .Select(character => char.IsLetterOrDigit(character) ? character : '_')
+            .ToArray());
+
+        return normalized.Length <= 128 ? normalized : normalized[..128];
+    }
+
+    private static string? NormalizeOptionalEventKey(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (!NotificationCatalog.TryParseKey(value, out var eventKey))
+        {
+            throw ApiException.Validation(
+                "invalid_notification_event_key",
+                $"Unsupported notification event key '{value}'.",
+                [new ApiFieldError("eventKey", "invalid_event_key", "Use an event key returned by the notification catalog.")]);
+        }
+
+        return NotificationCatalog.GetKey(eventKey);
+    }
+
     private static string NormalizeChannel(string? channel)
         => channel?.Trim().ToLowerInvariant() switch
         {
             "inapp" or "in_app" or "in-app" => "in_app",
             "email" => "email",
             "push" => "push",
+            "sms" or "text" => "sms",
+            "whatsapp" or "whats_app" or "whats-app" => "whatsapp",
             null or "" => "in_app",
             var other => other.Replace('-', '_')
         };
@@ -1843,6 +2774,8 @@ public sealed class NotificationService(
             NotificationChannel.InApp => "in_app",
             NotificationChannel.Email => "email",
             NotificationChannel.Push => "push",
+            NotificationChannel.Sms => "sms",
+            NotificationChannel.WhatsApp => "whatsapp",
             _ => throw new ArgumentOutOfRangeException(nameof(channel), channel, "Unsupported notification channel.")
         };
 
@@ -1852,10 +2785,12 @@ public sealed class NotificationService(
             "in_app" => NotificationChannel.InApp,
             "email" => NotificationChannel.Email,
             "push" => NotificationChannel.Push,
+            "sms" => NotificationChannel.Sms,
+            "whatsapp" => NotificationChannel.WhatsApp,
             var other => throw ApiException.Validation(
                 "invalid_notification_channel",
                 $"Unsupported notification channel '{other}'.",
-                [new ApiFieldError("channel", "invalid_channel", "Use in_app, email, or push.")])
+                [new ApiFieldError("channel", "invalid_channel", "Use in_app, email, push, sms, or whatsapp.")])
         };
 
     private static string NormalizeSeverity(NotificationSeverity severity)
@@ -1876,6 +2811,13 @@ public sealed class NotificationService(
             NotificationDeliveryStatus.Suppressed => "suppressed",
             NotificationDeliveryStatus.Failed => "failed",
             NotificationDeliveryStatus.Expired => "expired",
+            NotificationDeliveryStatus.Created => "created",
+            NotificationDeliveryStatus.Queued => "queued",
+            NotificationDeliveryStatus.Delivered => "delivered",
+            NotificationDeliveryStatus.Opened => "opened",
+            NotificationDeliveryStatus.Clicked => "clicked",
+            NotificationDeliveryStatus.Bounced => "bounced",
+            NotificationDeliveryStatus.Unsubscribed => "unsubscribed",
             _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Unsupported notification delivery status.")
         };
 
@@ -1887,10 +2829,17 @@ public sealed class NotificationService(
             "suppressed" => NotificationDeliveryStatus.Suppressed,
             "failed" => NotificationDeliveryStatus.Failed,
             "expired" => NotificationDeliveryStatus.Expired,
+            "created" => NotificationDeliveryStatus.Created,
+            "queued" => NotificationDeliveryStatus.Queued,
+            "delivered" => NotificationDeliveryStatus.Delivered,
+            "opened" => NotificationDeliveryStatus.Opened,
+            "clicked" => NotificationDeliveryStatus.Clicked,
+            "bounced" => NotificationDeliveryStatus.Bounced,
+            "unsubscribed" => NotificationDeliveryStatus.Unsubscribed,
             var other => throw ApiException.Validation(
                 "invalid_notification_delivery_status",
                 $"Unsupported notification delivery status '{other}'.",
-                [new ApiFieldError("status", "invalid_status", "Use pending, sent, suppressed, failed, or expired.")])
+                [new ApiFieldError("status", "invalid_status", "Use a supported delivery status such as pending, sent, delivered, bounced, or unsubscribed.")])
         };
 
     private static string? NormalizeActionUrl(string? actionUrl)
@@ -1947,6 +2896,7 @@ public sealed class NotificationService(
         var systemInAppEnabled = notificationsEnabled && GetFeatureFlagState(featureLookup, "notifications-in-app", true);
         var systemEmailEnabled = notificationsEnabled && GetFeatureFlagState(featureLookup, "notifications-email", true);
         var systemPushEnabled = notificationsEnabled && GetFeatureFlagState(featureLookup, "notifications-push", true);
+        var isPolicyProtected = NotificationCatalog.IsPolicyProtected(catalog);
 
         var inAppEnabled = ResolveChannelState(
             systemInAppEnabled,
@@ -1972,9 +2922,51 @@ public sealed class NotificationService(
             userOverride?.PushEnabled,
             catalog.DefaultChannels.PushEnabled);
 
+        if (isPolicyProtected)
+        {
+            inAppEnabled = systemInAppEnabled && catalog.DefaultChannels.InAppEnabled;
+            emailEnabled = systemEmailEnabled && catalog.DefaultChannels.EmailEnabled;
+            pushEnabled = systemPushEnabled && catalog.DefaultChannels.PushEnabled;
+        }
+
+        string? emailDisabledReasonCode = null;
+        string? emailDisabledMessage = null;
+        string? pushDisabledReasonCode = null;
+        string? pushDisabledMessage = null;
+
+        if (inAppEnabled)
+        {
+            inAppEnabled = (await ResolveChannelComplianceAsync(authAccountId, NotificationChannel.InApp, eventKeyName, catalog.Category, ct)).IsEnabled;
+        }
+
+        if (emailEnabled)
+        {
+            var emailCompliance = await ResolveChannelComplianceAsync(authAccountId, NotificationChannel.Email, eventKeyName, catalog.Category, ct);
+            emailEnabled = emailCompliance.IsEnabled;
+            if (!emailCompliance.IsEnabled)
+            {
+                emailDisabledReasonCode = emailCompliance.DisabledReasonCode;
+                emailDisabledMessage = emailCompliance.DisabledMessage;
+            }
+        }
+
+        if (pushEnabled)
+        {
+            var pushCompliance = await ResolveChannelComplianceAsync(authAccountId, NotificationChannel.Push, eventKeyName, catalog.Category, ct);
+            pushEnabled = pushCompliance.IsEnabled;
+            if (!pushCompliance.IsEnabled)
+            {
+                pushDisabledReasonCode = pushCompliance.DisabledReasonCode;
+                pushDisabledMessage = pushCompliance.DisabledMessage;
+            }
+        }
+
         var emailMode = emailEnabled
-            ? ResolveEmailMode(catalog.DefaultChannels.EmailMode, eventAdminOverride?.EmailMode, userOverride?.EmailMode)
+            ? isPolicyProtected
+                ? catalog.DefaultChannels.EmailMode
+                : ResolveEmailMode(catalog.DefaultChannels.EmailMode, eventAdminOverride?.EmailMode, userOverride?.EmailMode)
             : NotificationEmailMode.Off;
+        var frequencyCap = ResolveEffectiveFrequencyCap(catalog, globalAdminOverride, eventAdminOverride, isPolicyProtected);
 
         DateTimeOffset? deferredPushUntilUtc = null;
         if (pushEnabled
@@ -2001,7 +2993,13 @@ public sealed class NotificationService(
             emailEnabled,
             pushEnabled,
             emailMode,
-            deferredPushUntilUtc);
+            frequencyCap.MaxPerHour,
+            frequencyCap.MaxPerDay,
+            deferredPushUntilUtc,
+            emailDisabledReasonCode,
+            emailDisabledMessage,
+            pushDisabledReasonCode,
+            pushDisabledMessage);
     }
 
     private async Task<NotificationInboxItem> EnsureInboxItemAsync(
@@ -2411,13 +3409,24 @@ public sealed class NotificationService(
             AuthAccountId = notificationEvent.RecipientAuthAccountId,
             Channel = channel,
             Status = NotificationDeliveryStatus.Suppressed,
-            Provider = channel == NotificationChannel.Push ? "web_push" : emailSender.GetType().Name,
+            Provider = ResolveProviderName(channel, emailSender.GetType().Name),
             ErrorCode = errorCode,
             ErrorMessage = message,
             AttemptedAt = timeProvider.GetUtcNow()
         });
         await db.SaveChangesAsync(ct);
     }
+
+    private static string ResolveProviderName(NotificationChannel channel, string emailProviderName)
+        => channel switch
+        {
+            NotificationChannel.InApp => "in_app",
+            NotificationChannel.Email => emailProviderName,
+            NotificationChannel.Push => "web_push",
+            NotificationChannel.Sms => "sms",
+            NotificationChannel.WhatsApp => "whatsapp",
+            _ => "notification"
+        };
 
     private void EnsureProofHarnessEnabled()
     {

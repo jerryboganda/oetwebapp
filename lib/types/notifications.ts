@@ -1,8 +1,22 @@
 export type NotificationAudienceRole = 'learner' | 'expert' | 'admin';
-export type NotificationChannel = 'in_app' | 'email' | 'push';
+export type NotificationChannel = 'in_app' | 'email' | 'push' | 'sms' | 'whatsapp';
+export type NotificationConsentChannel = 'sms' | 'whatsapp';
+export type NotificationSuppressibleChannel = 'email' | 'push' | 'sms' | 'whatsapp';
 export type NotificationSeverity = 'info' | 'success' | 'warning' | 'critical';
 export type NotificationEmailMode = 'off' | 'immediate' | 'daily_digest';
-export type NotificationDeliveryStatus = 'pending' | 'sent' | 'suppressed' | 'failed' | 'expired';
+export type NotificationDeliveryStatus =
+  | 'pending'
+  | 'sent'
+  | 'suppressed'
+  | 'failed'
+  | 'expired'
+  | 'created'
+  | 'queued'
+  | 'delivered'
+  | 'opened'
+  | 'clicked'
+  | 'bounced'
+  | 'unsubscribed';
 
 export interface NotificationFeedItem {
   id: string;
@@ -60,6 +74,67 @@ export interface PushSubscriptionRegistrationResponse {
   subscriptionId: string;
 }
 
+export interface NotificationConsentItem {
+  authAccountId: string;
+  channel: NotificationConsentChannel;
+  category: string;
+  isGranted: boolean;
+  requiresExplicitConsent: boolean;
+  source: string;
+  reason: string | null;
+  grantedAt: string | null;
+  revokedAt: string | null;
+  updatedAt: string;
+}
+
+export interface NotificationConsentUpdateRequest {
+  isGranted: boolean;
+  source?: string | null;
+  reason?: string | null;
+  category?: string | null;
+}
+
+export interface AdminNotificationConsentResponse {
+  items: NotificationConsentItem[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
+export interface NotificationSuppressionItem {
+  id: string;
+  authAccountId: string;
+  channel: NotificationSuppressibleChannel;
+  eventKey: string | null;
+  isActive: boolean;
+  reasonCode: string;
+  reason: string | null;
+  startsAt: string | null;
+  expiresAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+  releasedAt: string | null;
+  createdByAdminName: string;
+  releasedByAdminName: string | null;
+}
+
+export interface AdminNotificationSuppressionCreateRequest {
+  authAccountId: string;
+  channel: NotificationSuppressibleChannel;
+  eventKey?: string | null;
+  reasonCode: string;
+  reason?: string | null;
+  startsAt?: string | null;
+  expiresAt?: string | null;
+}
+
+export interface AdminNotificationSuppressionResponse {
+  items: NotificationSuppressionItem[];
+  totalCount: number;
+  page: number;
+  pageSize: number;
+}
+
 export interface NotificationFeedResponse {
   items: NotificationFeedItem[];
   totalCount: number;
@@ -78,7 +153,10 @@ export interface AdminNotificationCatalogEntry {
   defaultInAppEnabled: boolean;
   defaultEmailEnabled: boolean;
   defaultPushEnabled: boolean;
+  defaultSmsEnabled: boolean;
+  defaultWhatsAppEnabled: boolean;
   defaultEmailMode: NotificationEmailMode;
+  isPolicyProtected: boolean;
 }
 
 export interface AdminNotificationPolicyRow {
@@ -90,6 +168,9 @@ export interface AdminNotificationPolicyRow {
   emailEnabled: boolean;
   pushEnabled: boolean;
   emailMode: NotificationEmailMode;
+  maxDeliveriesPerHour: number | null;
+  maxDeliveriesPerDay: number | null;
+  isPolicyProtected: boolean;
   isOverride: boolean;
   updatedAt: string | null;
   updatedByAdminId: string | null;

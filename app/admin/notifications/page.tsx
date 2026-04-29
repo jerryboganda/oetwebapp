@@ -64,7 +64,7 @@ const EMPTY_DELIVERY_FILTERS: DeliveryFilters = {
   eventKey: '',
 };
 
-interface PolicyDraft extends Pick<AdminNotificationPolicyRow, 'inAppEnabled' | 'emailEnabled' | 'pushEnabled' | 'emailMode'> {}
+interface PolicyDraft extends Pick<AdminNotificationPolicyRow, 'inAppEnabled' | 'emailEnabled' | 'pushEnabled' | 'emailMode' | 'maxDeliveriesPerHour' | 'maxDeliveriesPerDay'> {}
 
 function policyKey(audienceRole: NotificationAudienceRole, eventKey: string) {
   return `${audienceRole}:${eventKey}`;
@@ -90,6 +90,54 @@ function deliveryStatusVariant(status: NotificationDeliveryAttemptItem['status']
 
 function boolLabel(value: boolean) {
   return value ? 'On' : 'Off';
+}
+
+function capInputValue(value: number | null | undefined) {
+  return value == null ? '' : String(value);
+}
+
+function parseCapInputValue(value: string, fallback: number | null) {
+  if (value.trim() === '') {
+    return null;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? Math.max(0, Math.trunc(parsed)) : fallback;
+}
+
+type AdminNotificationPolicyUpdatePayload = Parameters<typeof updateAdminNotificationPolicy>[2];
+
+function buildPolicyUpdatePayload(row: AdminNotificationPolicyRow, draft: PolicyDraft): AdminNotificationPolicyUpdatePayload {
+  const payload: AdminNotificationPolicyUpdatePayload = {};
+
+  if (draft.inAppEnabled !== row.inAppEnabled) {
+    payload.inAppEnabled = draft.inAppEnabled;
+  }
+  if (draft.emailEnabled !== row.emailEnabled) {
+    payload.emailEnabled = draft.emailEnabled;
+  }
+  if (draft.pushEnabled !== row.pushEnabled) {
+    payload.pushEnabled = draft.pushEnabled;
+  }
+  if (draft.emailMode !== row.emailMode) {
+    payload.emailMode = draft.emailMode;
+  }
+  if (draft.maxDeliveriesPerHour !== row.maxDeliveriesPerHour) {
+    if (draft.maxDeliveriesPerHour == null) {
+      payload.clearMaxDeliveriesPerHour = true;
+    } else {
+      payload.maxDeliveriesPerHour = draft.maxDeliveriesPerHour;
+    }
+  }
+  if (draft.maxDeliveriesPerDay !== row.maxDeliveriesPerDay) {
+    if (draft.maxDeliveriesPerDay == null) {
+      payload.clearMaxDeliveriesPerDay = true;
+    } else {
+      payload.maxDeliveriesPerDay = draft.maxDeliveriesPerDay;
+    }
+  }
+
+  return payload;
 }
 
 function normalizeGlobalChannels(
@@ -227,6 +275,7 @@ export default function AdminNotificationsPage() {
         <div className="space-y-1">
           <p className="font-medium text-navy">{row.label}</p>
           <p className="font-mono text-[11px] text-muted">{row.eventKey}</p>
+          {row.isPolicyProtected ? <Badge variant="warning">Protected</Badge> : null}
         </div>
       ),
     },
@@ -246,6 +295,7 @@ export default function AdminNotificationsPage() {
             type="button"
             size="sm"
             variant={draft.inAppEnabled ? 'primary' : 'outline'}
+            disabled={row.isPolicyProtected}
             onClick={() => setDrafts((current) => ({
               ...current,
               [key]: { ...draft, inAppEnabled: !draft.inAppEnabled },
@@ -267,6 +317,7 @@ export default function AdminNotificationsPage() {
             type="button"
             size="sm"
             variant={draft.emailEnabled ? 'primary' : 'outline'}
+            disabled={row.isPolicyProtected}
             onClick={() => setDrafts((current) => ({
               ...current,
               [key]: { ...draft, emailEnabled: !draft.emailEnabled },
@@ -288,6 +339,7 @@ export default function AdminNotificationsPage() {
             type="button"
             size="sm"
             variant={draft.pushEnabled ? 'primary' : 'outline'}
+            disabled={row.isPolicyProtected}
             onClick={() => setDrafts((current) => ({
               ...current,
               [key]: { ...draft, pushEnabled: !draft.pushEnabled },
@@ -308,6 +360,7 @@ export default function AdminNotificationsPage() {
           <select
             className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-navy"
             value={draft.emailMode}
+            disabled={row.isPolicyProtected}
             onChange={(event) => setDrafts((current) => ({
               ...current,
               [key]: { ...draft, emailMode: event.target.value as NotificationEmailMode },
@@ -320,6 +373,53 @@ export default function AdminNotificationsPage() {
         );
       },
       className: 'min-w-44',
+    },
+    {
+      key: 'caps',
+      header: 'Caps',
+      render: (row) => {
+        const key = policyKey(row.audienceRole, row.eventKey);
+        const draft = drafts[key] ?? row;
+        return (
+          <div className="grid min-w-48 grid-cols-2 gap-2">
+            <label className="space-y-1">
+              <span className="text-[11px] font-semibold uppercase text-muted">Hour</span>
+              <input
+                aria-label={`Hourly cap for ${row.audienceRole} ${row.eventKey}`}
+                type="number"
+                min={0}
+                max={10000}
+                value={capInputValue(draft.maxDeliveriesPerHour)}
+                disabled={row.isPolicyProtected}
+                onChange={(event) => setDrafts((current) => ({
+                  ...current,
+                  [key]: { ...draft, maxDeliveriesPerHour: parseCapInputValue(event.target.value, row.maxDeliveriesPerHour) },
+                }))}
+                className="h-9 w-full rounded-lg border border-border bg-surface px-2 text-sm text-navy disabled:cursor-not-allowed disabled:bg-background-light disabled:text-muted"
+                placeholder="None"
+              />
+            </label>
+            <label className="space-y-1">
+              <span className="text-[11px] font-semibold uppercase text-muted">Day</span>
+              <input
+                aria-label={`Daily cap for ${row.audienceRole} ${row.eventKey}`}
+                type="number"
+                min={0}
+                max={10000}
+                value={capInputValue(draft.maxDeliveriesPerDay)}
+                disabled={row.isPolicyProtected}
+                onChange={(event) => setDrafts((current) => ({
+                  ...current,
+                  [key]: { ...draft, maxDeliveriesPerDay: parseCapInputValue(event.target.value, row.maxDeliveriesPerDay) },
+                }))}
+                className="h-9 w-full rounded-lg border border-border bg-surface px-2 text-sm text-navy disabled:cursor-not-allowed disabled:bg-background-light disabled:text-muted"
+                placeholder="None"
+              />
+            </label>
+          </div>
+        );
+      },
+      className: 'min-w-52',
     },
     {
       key: 'state',
@@ -343,6 +443,8 @@ export default function AdminNotificationsPage() {
             || draft.emailEnabled !== row.emailEnabled
             || draft.pushEnabled !== row.pushEnabled
             || draft.emailMode !== row.emailMode
+            || draft.maxDeliveriesPerHour !== row.maxDeliveriesPerHour
+            || draft.maxDeliveriesPerDay !== row.maxDeliveriesPerDay
           ),
         );
 
@@ -361,6 +463,7 @@ export default function AdminNotificationsPage() {
               type="button"
               size="sm"
               variant="outline"
+              aria-label={`Reset ${row.audienceRole} ${row.eventKey} policy`}
               onClick={() => void handleResetPolicy(row.audienceRole, row.eventKey)}
               disabled={!row.isOverride}
               loading={savingKey === `${key}:reset`}
@@ -452,7 +555,7 @@ export default function AdminNotificationsPage() {
 
     setSavingKey(key);
     try {
-      const response = await updateAdminNotificationPolicy(audienceRole, eventKey, draft);
+      const response = await updateAdminNotificationPolicy(audienceRole, eventKey, buildPolicyUpdatePayload(row, draft));
       setPolicies((current) => current.map((candidate) => (
         candidate.audienceRole === audienceRole && candidate.eventKey === eventKey ? response : candidate
       )));
@@ -699,6 +802,7 @@ export default function AdminNotificationsPage() {
                 <div className="mt-3 flex flex-wrap gap-2">
                   <Badge variant="info">Severity {selectedTestCatalogEntry.defaultSeverity}</Badge>
                   <Badge variant="muted">Email mode {selectedTestCatalogEntry.defaultEmailMode}</Badge>
+                  {selectedTestCatalogEntry.isPolicyProtected ? <Badge variant="warning">Protected policy</Badge> : null}
                 </div>
               </div>
             ) : null}

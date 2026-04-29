@@ -52,6 +52,8 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<NotificationDeliveryAttempt> NotificationDeliveryAttempts => Set<NotificationDeliveryAttempt>();
     public DbSet<PushSubscription> PushSubscriptions => Set<PushSubscription>();
     public DbSet<MobilePushToken> MobilePushTokens => Set<MobilePushToken>();
+    public DbSet<NotificationConsent> NotificationConsents => Set<NotificationConsent>();
+    public DbSet<NotificationSuppression> NotificationSuppressions => Set<NotificationSuppression>();
     public DbSet<SubscriptionItem> SubscriptionItems => Set<SubscriptionItem>();
     public DbSet<BillingAddOn> BillingAddOns => Set<BillingAddOn>();
     public DbSet<BillingAddOnVersion> BillingAddOnVersions => Set<BillingAddOnVersion>();
@@ -302,6 +304,8 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<NotificationEvent>().Property(x => x.EventKey).HasMaxLength(128);
         modelBuilder.Entity<NotificationInboxItem>().Property(x => x.EventKey).HasMaxLength(128);
         modelBuilder.Entity<NotificationPolicyOverride>().Property(x => x.EventKey).HasMaxLength(128);
+        modelBuilder.Entity<NotificationSuppression>().Property(x => x.EventKey).HasMaxLength(128);
+        modelBuilder.Entity<NotificationTemplate>().Property(x => x.MetadataJson).HasDefaultValue("{}");
 
         // Rulebook authoring (admin-managed)
         modelBuilder.Entity<RulebookVersion>().HasIndex(x => new { x.Kind, x.Profession, x.Status });
@@ -347,6 +351,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
             modelBuilder.Entity<Evaluation>().Property(x => x.CriterionScoresJson).HasColumnType("jsonb");
             modelBuilder.Entity<Evaluation>().Property(x => x.FeedbackItemsJson).HasColumnType("jsonb");
             modelBuilder.Entity<PaymentWebhookEvent>().Property(x => x.PayloadJson).HasColumnType("jsonb");
+            modelBuilder.Entity<NotificationTemplate>().Property(x => x.MetadataJson).HasColumnType("jsonb");
 
             // Composite primary keys on the range-partitioned append-only
             // tables. Postgres requires every UNIQUE/PK on a partitioned
