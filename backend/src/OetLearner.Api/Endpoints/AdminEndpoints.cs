@@ -302,6 +302,10 @@ public static class AdminEndpoints
             => Results.Ok(await service.GetBillingSubscriptionsAsync(status, search, page ?? 1, pageSize ?? 20, ct)))
             .WithAdminRead("AdminBillingRead");
 
+        admin.MapGet("/billing/entitlement-diagnostics", async (AdminService service, CancellationToken ct)
+            => Results.Ok(await service.GetBillingEntitlementDiagnosticsAsync(ct)))
+            .WithAdminRead("AdminBillingRead");
+
         admin.MapGet("/billing/redemptions", async (AdminService service, CancellationToken ct, string? couponCode, string? userId, int? page, int? pageSize)
             => Results.Ok(await service.GetBillingCouponRedemptionsAsync(couponCode, userId, page ?? 1, pageSize ?? 20, ct)))
             .WithAdminRead("AdminBillingRead");

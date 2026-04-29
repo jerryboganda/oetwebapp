@@ -9,6 +9,7 @@ using Microsoft.EntityFrameworkCore.Storage;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
+using OetLearner.Api.Services.Entitlements;
 
 namespace OetLearner.Api.Services;
 
@@ -24,6 +25,7 @@ public partial class AdminService(
     private const string SuspendedUserStatus = "suspended";
     private const string DeletedUserStatus = "deleted";
     private const int CatalogJsonMaxLength = 2048;
+    private const int BillingDiagnosticsExampleLimit = 3;
 
     private static readonly HashSet<string> PlanIntervals = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -334,6 +336,8 @@ public partial class AdminService(
         string ApplicablePlanCodesJson,
         string ApplicableAddOnCodesJson,
         string? Notes);
+
+    private sealed record BillingEntitlementContentShape(bool IsLegacy, string Reason);
 
     private static BillingPlanCatalogInput ToBillingPlanCatalogInput(AdminBillingPlanCreateRequest request) => new(
         request.Code,
@@ -3946,6 +3950,251 @@ public partial class AdminService(
         }).ToList();
 
         return new { total, page, pageSize, items };
+    }
+
+    public async Task<AdminBillingEntitlementDiagnosticsResponse> GetBillingEntitlementDiagnosticsAsync(CancellationToken ct)
+    {
+        var generatedAt = DateTimeOffset.UtcNow;
+        var activeSubscriptions = await db.Subscriptions.AsNoTracking()
+            .Where(subscription => subscription.Status == SubscriptionStatus.Active || subscription.Status == SubscriptionStatus.Trial)
+            .OrderByDescending(subscription => subscription.ChangedAt)
+            .ThenByDescending(subscription => subscription.StartedAt)
+            .Select(subscription => new
+            {
+                subscription.Id,
+                subscription.UserId,
+                subscription.PlanId,
+                subscription.Status
+            })
+            .ToListAsync(ct);
+
+        var subscriptionPlanRefs = activeSubscriptions
+            .Select(subscription => subscription.PlanId.Trim())
+            .Where(planId => !string.IsNullOrWhiteSpace(planId))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        var allPlans = await db.BillingPlans.AsNoTracking().ToListAsync(ct);
+        var plans = allPlans
+            .Where(plan => (plan.Status == BillingPlanStatus.Active && plan.IsVisible)
+                || subscriptionPlanRefs.Contains(plan.Id.Trim())
+                || subscriptionPlanRefs.Contains(plan.Code.Trim()))
+            .OrderBy(plan => plan.DisplayOrder)
+            .ThenBy(plan => plan.Code)
+            .ToList();
+
+        var activeAiQuotaPlanCodes = await db.AiQuotaPlans.AsNoTracking()
+            .Where(plan => plan.IsActive)
+            .Select(plan => plan.Code)
+            .ToListAsync(ct);
+        var activeAiQuotaPlans = new HashSet<string>(
+            activeAiQuotaPlanCodes.Select(code => code.Trim().ToLowerInvariant()),
+            StringComparer.OrdinalIgnoreCase);
+
+        var knownPlanKeys = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var plan in allPlans)
+        {
+            knownPlanKeys.Add(plan.Id.Trim());
+            knownPlanKeys.Add(plan.Code.Trim());
+        }
+
+        var invalidAiExamples = new List<AdminBillingEntitlementDiagnosticExampleResponse>();
+        var fallbackExamples = new List<AdminBillingEntitlementDiagnosticExampleResponse>();
+        var legacyContentExamples = new List<AdminBillingEntitlementDiagnosticExampleResponse>();
+        var missingPlanExamples = new List<AdminBillingEntitlementDiagnosticExampleResponse>();
+        var invalidAiCount = 0;
+        var fallbackCount = 0;
+        var legacyContentCount = 0;
+        var missingPlanCount = 0;
+
+        foreach (var plan in plans)
+        {
+            var mapping = AiQuotaPlanMappingResolver.Resolve(plan);
+            var directAiPlanActive = activeAiQuotaPlans.Contains(AiQuotaPlanMappingResolver.NormalizeCode(plan.Code) ?? string.Empty);
+            if (mapping?.Source == "explicit-invalid")
+            {
+                invalidAiCount++;
+                AddExample(invalidAiExamples, PlanExample(
+                    plan,
+                    "Has an invalid ai.quotaPlanCode value and will fall back to the free AI quota plan.",
+                    new Dictionary<string, string> { ["mappingSource"] = mapping.Source }));
+            }
+            else if (mapping?.Source == "explicit" && !activeAiQuotaPlans.Contains(mapping.Code ?? string.Empty))
+            {
+                invalidAiCount++;
+                AddExample(invalidAiExamples, PlanExample(
+                    plan,
+                    $"Maps to AI quota plan '{mapping.Code}', but that quota plan is missing or inactive.",
+                    new Dictionary<string, string>
+                    {
+                        ["aiQuotaPlanCode"] = mapping.Code ?? string.Empty,
+                        ["mappingSource"] = mapping.Source
+                    }));
+            }
+            else if (directAiPlanActive)
+            {
+                // Runtime AI quota resolution uses a direct active billing-code match before seeded fallback mapping.
+            }
+            else if (mapping?.Source == "fallback" && activeAiQuotaPlans.Contains(mapping.Code ?? string.Empty))
+            {
+                fallbackCount++;
+                AddExample(fallbackExamples, PlanExample(
+                    plan,
+                    $"Uses seeded fallback AI quota mapping to '{mapping.Code}'. Add ai.quotaPlanCode to make the catalog explicit.",
+                    new Dictionary<string, string>
+                    {
+                        ["aiQuotaPlanCode"] = mapping.Code ?? string.Empty,
+                        ["mappingSource"] = mapping.Source
+                    }));
+            }
+            else if (mapping?.Source == "fallback")
+            {
+                invalidAiCount++;
+                AddExample(invalidAiExamples, PlanExample(
+                    plan,
+                    $"Seeded fallback AI quota plan '{mapping.Code}' is missing or inactive.",
+                    new Dictionary<string, string>
+                    {
+                        ["aiQuotaPlanCode"] = mapping.Code ?? string.Empty,
+                        ["mappingSource"] = mapping.Source
+                    }));
+            }
+            else if (mapping is null
+                && plan.Price > 0m
+                && !directAiPlanActive)
+            {
+                invalidAiCount++;
+                AddExample(invalidAiExamples, PlanExample(
+                    plan,
+                    "Paid plan has no explicit AI quota mapping, seeded fallback, or direct active AI quota plan code.",
+                    new Dictionary<string, string> { ["mappingSource"] = "missing" }));
+            }
+
+            var contentShape = InspectBillingContentShape(plan.EntitlementsJson);
+            if (contentShape.IsLegacy)
+            {
+                legacyContentCount++;
+                AddExample(legacyContentExamples, PlanExample(
+                    plan,
+                    contentShape.Reason,
+                    new Dictionary<string, string> { ["contentShape"] = contentShape.Reason }));
+            }
+        }
+
+        foreach (var subscription in activeSubscriptions)
+        {
+            if (!knownPlanKeys.Contains(subscription.PlanId.Trim()))
+            {
+                missingPlanCount++;
+                AddExample(missingPlanExamples, new AdminBillingEntitlementDiagnosticExampleResponse(
+                    "subscription",
+                    subscription.Id,
+                    subscription.PlanId,
+                    subscription.UserId,
+                    $"Active/trial subscription points to missing billing plan '{subscription.PlanId}'.",
+                    new Dictionary<string, string>
+                    {
+                        ["userId"] = subscription.UserId,
+                        ["status"] = subscription.Status.ToString().ToLowerInvariant(),
+                        ["planId"] = subscription.PlanId
+                    }));
+            }
+        }
+
+        var checks = new[]
+        {
+            new AdminBillingEntitlementDiagnosticCheckResponse(
+                "invalid_ai_quota_mapping",
+                "Invalid AI quota mappings",
+                "danger",
+                invalidAiCount,
+                invalidAiExamples),
+            new AdminBillingEntitlementDiagnosticCheckResponse(
+                "missing_plan_subscriptions",
+                "Missing plan subscriptions",
+                "danger",
+                missingPlanCount,
+                missingPlanExamples),
+            new AdminBillingEntitlementDiagnosticCheckResponse(
+                "fallback_ai_quota_mapping",
+                "Fallback AI quota mappings",
+                "warning",
+                fallbackCount,
+                fallbackExamples),
+            new AdminBillingEntitlementDiagnosticCheckResponse(
+                "legacy_content_shape",
+                "Legacy content shape",
+                "warning",
+                legacyContentCount,
+                legacyContentExamples),
+        };
+
+        return new AdminBillingEntitlementDiagnosticsResponse(
+            generatedAt,
+            new AdminBillingEntitlementDiagnosticsSummaryResponse(
+                invalidAiCount,
+                missingPlanCount,
+                fallbackCount,
+                legacyContentCount,
+                invalidAiCount + missingPlanCount + fallbackCount + legacyContentCount),
+            checks);
+    }
+
+    private static void AddExample(
+        List<AdminBillingEntitlementDiagnosticExampleResponse> examples,
+        AdminBillingEntitlementDiagnosticExampleResponse example)
+    {
+        if (examples.Count < BillingDiagnosticsExampleLimit)
+        {
+            examples.Add(example);
+        }
+    }
+
+    private static AdminBillingEntitlementDiagnosticExampleResponse PlanExample(
+        BillingPlan plan,
+        string message,
+        Dictionary<string, string> metadata)
+    {
+        metadata["status"] = plan.Status.ToString().ToLowerInvariant();
+        metadata["isVisible"] = plan.IsVisible ? "true" : "false";
+
+        return new AdminBillingEntitlementDiagnosticExampleResponse(
+            "plan",
+            plan.Id,
+            plan.Code,
+            plan.Name,
+            message,
+            metadata);
+    }
+
+    private static BillingEntitlementContentShape InspectBillingContentShape(string? entitlementsJson)
+    {
+        if (string.IsNullOrWhiteSpace(entitlementsJson))
+        {
+            return new BillingEntitlementContentShape(true, "Missing content entitlement node for package/media access.");
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(entitlementsJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object)
+            {
+                return new BillingEntitlementContentShape(true, "Entitlements JSON is not an object, so content access remains legacy-shaped.");
+            }
+
+            if (!document.RootElement.TryGetProperty("content", out var content))
+            {
+                return new BillingEntitlementContentShape(true, "Missing content entitlement node for package/media access.");
+            }
+
+            return content.ValueKind == JsonValueKind.Object
+                ? new BillingEntitlementContentShape(false, string.Empty)
+                : new BillingEntitlementContentShape(true, "Content entitlement node is present but not an object.");
+        }
+        catch (JsonException)
+        {
+            return new BillingEntitlementContentShape(true, "Entitlements JSON is invalid, so content access remains legacy-shaped.");
+        }
     }
 
     public async Task<object> GetBillingCouponRedemptionsAsync(string? couponCode, string? userId, int page, int pageSize, CancellationToken ct)

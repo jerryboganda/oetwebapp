@@ -8,6 +8,7 @@ import {
   fetchAdminBillingCouponRedemptions,
   fetchAdminBillingCoupons,
   fetchAdminBillingCouponVersions,
+  fetchAdminBillingEntitlementDiagnostics,
   fetchAdminBillingInvoiceEvidence,
   fetchAdminBillingInvoices,
   fetchAdminBillingPaymentTransactions,
@@ -46,6 +47,9 @@ import type {
   AdminBillingCatalogSubject,
   AdminBillingCatalogVersion,
   AdminBillingCatalogVersionHistory,
+  AdminBillingEntitlementDiagnosticCheck,
+  AdminBillingEntitlementDiagnostics,
+  AdminBillingEntitlementDiagnosticExample,
   AdminBillingInvoice,
   AdminBillingInvoiceEvidence,
   AdminBillingPaymentTransaction,
@@ -867,6 +871,40 @@ export async function getAdminBillingSubscriptionData(params?: Parameters<typeof
       currency: toStringValue(item.currency, 'AUD'),
       interval: toStringValue(item.interval, 'month'),
       addOnCount: toNumberValue(item.addOnCount),
+    })),
+  };
+}
+
+function normalizeDiagnosticsSeverity(value: unknown): 'info' | 'warning' | 'danger' {
+  const severity = toStringValue(value).toLowerCase();
+  return severity === 'danger' || severity === 'warning' ? severity : 'info';
+}
+
+export async function getAdminBillingEntitlementDiagnosticsData(): Promise<AdminBillingEntitlementDiagnostics> {
+  const raw = asRecord(await fetchAdminBillingEntitlementDiagnostics());
+  const summary = asRecord(raw.summary);
+  return {
+    generatedAt: toStringValue(raw.generatedAt),
+    summary: {
+      invalidAiQuotaMappings: toNumberValue(summary.invalidAiQuotaMappings),
+      missingPlanSubscriptions: toNumberValue(summary.missingPlanSubscriptions),
+      fallbackMappings: toNumberValue(summary.fallbackMappings),
+      legacyContentShape: toNumberValue(summary.legacyContentShape),
+      totalWarnings: toNumberValue(summary.totalWarnings),
+    },
+    checks: asArray(raw.checks).map<AdminBillingEntitlementDiagnosticCheck>((check) => ({
+      key: toStringValue(check.key),
+      label: toStringValue(check.label),
+      severity: normalizeDiagnosticsSeverity(check.severity),
+      count: toNumberValue(check.count),
+      examples: asArray(check.examples).map<AdminBillingEntitlementDiagnosticExample>((example) => ({
+        subjectType: toStringValue(example.subjectType),
+        subjectId: toStringValue(example.subjectId),
+        subjectCode: toStringValue(example.subjectCode),
+        subjectName: toStringValue(example.subjectName),
+        message: toStringValue(example.message),
+        metadata: asStringRecord(example.metadata),
+      })),
     })),
   };
 }

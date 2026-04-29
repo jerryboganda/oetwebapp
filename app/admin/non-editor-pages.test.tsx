@@ -34,6 +34,7 @@ const admin = vi.hoisted(() => ({
   getAdminBillingCouponData: vi.fn(),
   getAdminBillingCouponVersionHistoryData: vi.fn(),
   getAdminBillingCouponRedemptionData: vi.fn(),
+  getAdminBillingEntitlementDiagnosticsData: vi.fn(),
   getAdminBillingInvoiceData: vi.fn(),
   getAdminBillingInvoiceEvidenceData: vi.fn(),
   getAdminBillingPaymentTransactionData: vi.fn(),
@@ -166,6 +167,7 @@ vi.mock('@/lib/admin', () => ({
   getAdminBillingCouponData: admin.getAdminBillingCouponData,
   getAdminBillingCouponVersionHistoryData: admin.getAdminBillingCouponVersionHistoryData,
   getAdminBillingCouponRedemptionData: admin.getAdminBillingCouponRedemptionData,
+  getAdminBillingEntitlementDiagnosticsData: admin.getAdminBillingEntitlementDiagnosticsData,
   getAdminBillingInvoiceData: admin.getAdminBillingInvoiceData,
   getAdminBillingInvoiceEvidenceData: admin.getAdminBillingInvoiceEvidenceData,
   getAdminBillingPaymentTransactionData: admin.getAdminBillingPaymentTransactionData,
@@ -615,6 +617,48 @@ describe('Admin Non-Editor Pages', () => {
         },
       ],
     });
+    admin.getAdminBillingEntitlementDiagnosticsData.mockResolvedValue({
+      generatedAt: '2026-04-01T12:05:00.000Z',
+      summary: {
+        invalidAiQuotaMappings: 1,
+        missingPlanSubscriptions: 0,
+        fallbackMappings: 1,
+        legacyContentShape: 1,
+        totalWarnings: 3,
+      },
+      checks: [
+        {
+          key: 'invalid_ai_quota_mapping',
+          label: 'Invalid AI quota mappings',
+          severity: 'danger',
+          count: 1,
+          examples: [
+            {
+              subjectType: 'plan',
+              subjectId: 'plan-1',
+              subjectCode: 'starter',
+              subjectName: 'Starter',
+              message: "Maps to AI quota plan 'starter-legacy', but that quota plan is missing or inactive.",
+              metadata: { aiQuotaPlanCode: 'starter-legacy' },
+            },
+          ],
+        },
+        {
+          key: 'fallback_ai_quota_mapping',
+          label: 'Fallback AI quota mappings',
+          severity: 'warning',
+          count: 1,
+          examples: [],
+        },
+        {
+          key: 'legacy_content_shape',
+          label: 'Legacy content shape',
+          severity: 'warning',
+          count: 1,
+          examples: [],
+        },
+      ],
+    });
     admin.getAdminBillingPlanVersionHistoryData.mockResolvedValue({
       subject: {
         kind: 'plan',
@@ -760,6 +804,9 @@ describe('Admin Non-Editor Pages', () => {
     expect(await screen.findByRole('main', { name: /billing operations/i })).toBeInTheDocument();
     expect((await screen.findAllByText('Starter')).length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: /^billing operations$/i })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: /^entitlement diagnostics$/i })).toBeInTheDocument();
+    expect((await screen.findAllByText('Invalid AI quota mappings')).length).toBeGreaterThan(0);
+    expect(await screen.findByText(/starter-legacy/)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^subscription plans$/i })).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /^payment transactions$/i })).toBeInTheDocument();
     expect(screen.getAllByText('checkout-1').length).toBeGreaterThan(0);

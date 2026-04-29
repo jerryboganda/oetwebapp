@@ -149,6 +149,7 @@ Implemented scope:
 - Wire `AiQuotaService` through the resolver so cancelled, expired, pending, suspended, or past-due subscriptions no longer unlock paid AI quota plans.
 - Add catalog-level AI quota mapping via `BillingPlan.EntitlementsJson.ai.quotaPlanCode`, with conservative compatibility fallbacks for seeded billing plan codes (`basic-monthly` -> `starter`; premium/yearly/intensive -> `pro`; legacy trial -> `free`) and validation against active `AiQuotaPlan` rows.
 - Align monthly AI credit renewal grants with the same mapped quota-plan resolution and add a filtered unique renewal-reference index so concurrent workers cannot double-grant `PlanRenewal` credits. Pre-deploy check: group `AiCreditLedger` rows by non-null `ReferenceId` where `Source = PlanRenewal` and remediate duplicates before applying the migration.
+- Add a read-only admin billing entitlement diagnostics endpoint and warning panel that surfaces invalid AI quota mappings, fallback mappings, active/trial subscriptions pointing to missing plans, and legacy/missing content entitlement shape without changing learner access behavior.
 - Add regression coverage for resolver subscription precedence, plan code normalization, active add-on visibility, freeze overlay visibility, AI free-plan fallback, and existing module entitlement behavior.
 
 Remaining scope:

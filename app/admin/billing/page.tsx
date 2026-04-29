@@ -1,14 +1,14 @@
 'use client';
 
 import { type Dispatch, type ReactNode, type SetStateAction, useEffect, useMemo, useRef, useState } from 'react';
-import { CreditCard, DollarSign, FileSearch, History as HistoryIcon, Package, Receipt, Search, Ticket, Users } from 'lucide-react';
+import { AlertTriangle, CreditCard, DollarSign, FileSearch, History as HistoryIcon, Package, Receipt, Search, Ticket, Users } from 'lucide-react';
 import { AdminRouteSummaryCard, AdminRouteSectionHeader, AdminRoutePanel, AdminRouteWorkspace } from '@/components/domain/admin-route-surface';
 import { AsyncStateWrapper } from '@/components/state/async-state-wrapper';
 import { DataTable, type Column } from '@/components/ui/data-table';
 import { EmptyState } from '@/components/ui/empty-error';
 import { FilterBar, type FilterGroup } from '@/components/ui/filter-bar';
 import { Pagination } from '@/components/ui/pagination';
-import { Toast } from '@/components/ui/alert';
+import { InlineAlert, Toast } from '@/components/ui/alert';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox, Input, Select, Textarea } from '@/components/ui/form-controls';
@@ -28,6 +28,7 @@ import {
   getAdminBillingCouponData,
   getAdminBillingCouponRedemptionData,
   getAdminBillingCouponVersionHistoryData,
+  getAdminBillingEntitlementDiagnosticsData,
   getAdminBillingInvoiceEvidenceData,
   getAdminBillingInvoiceData,
   getAdminBillingPaymentTransactionData,
@@ -41,6 +42,7 @@ import type {
   AdminBillingCatalogVersionHistory,
   AdminBillingCoupon,
   AdminBillingCouponRedemption,
+  AdminBillingEntitlementDiagnostics,
   AdminBillingInvoice,
   AdminBillingInvoiceEvidence,
   AdminBillingPaymentTransaction,
@@ -58,6 +60,7 @@ type CatalogVersionMetadata = {
   latestVersionNumber?: number | null;
   versionCount?: number;
 };
+type DiagnosticsLoadResult = { data: AdminBillingEntitlementDiagnostics | null; status: 'success' | 'error' };
 
 interface BillingPlanFormState {
   code: string;
@@ -223,6 +226,15 @@ function renderCatalogVersionMeta(item: CatalogVersionMetadata) {
       <span className="text-xs text-muted">{versionCount} {versionCount === 1 ? 'version' : 'versions'}</span>
     </div>
   );
+}
+
+async function loadEntitlementDiagnostics(): Promise<DiagnosticsLoadResult> {
+  try {
+    return { data: await getAdminBillingEntitlementDiagnosticsData(), status: 'success' };
+  } catch (error) {
+    console.error(error);
+    return { data: null, status: 'error' };
+  }
 }
 
 function formatSummaryValue(value: unknown): string {
@@ -409,6 +421,8 @@ export default function BillingPage() {
   const [redemptions, setRedemptions] = useState<AdminBillingCouponRedemption[]>([]);
   const [invoices, setInvoices] = useState<AdminBillingInvoice[]>([]);
   const [paymentTransactions, setPaymentTransactions] = useState<AdminBillingPaymentTransaction[]>([]);
+  const [entitlementDiagnostics, setEntitlementDiagnostics] = useState<AdminBillingEntitlementDiagnostics | null>(null);
+  const [entitlementDiagnosticsStatus, setEntitlementDiagnosticsStatus] = useState<PageStatus>('loading');
   const [isPlanModalOpen, setIsPlanModalOpen] = useState(false);
   const [isAddOnModalOpen, setIsAddOnModalOpen] = useState(false);
   const [isCouponModalOpen, setIsCouponModalOpen] = useState(false);
@@ -511,6 +525,23 @@ export default function BillingPage() {
     };
   }, [selectedPlanStatus, selectedAddOnStatus, selectedCouponStatus, selectedSubscriptionStatus, selectedRedemptionStatus, subscriptionSearch, redemptionSearch, selectedInvoiceStatus, invoiceSearch, selectedPaymentStatus, selectedPaymentGateway, selectedPaymentTransactionType, paymentSearch, paymentPage, paymentPageSize]);
 
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDiagnostics() {
+      setEntitlementDiagnosticsStatus('loading');
+      const diagnosticsResult = await loadEntitlementDiagnostics();
+      if (cancelled) return;
+      setEntitlementDiagnostics(diagnosticsResult.data);
+      setEntitlementDiagnosticsStatus(diagnosticsResult.status);
+    }
+
+    void loadDiagnostics();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const metrics = useMemo(() => {
     const totalMRR = plans
       .filter((plan) => plan.status === 'active')
@@ -525,6 +556,21 @@ export default function BillingPage() {
 
     return { totalMRR, totalSubscribers, failedInvoices, activePlans, activeAddOns, activeCoupons, activeSubscriptions };
   }, [plans, addOns, coupons, subscriptions, invoices]);
+
+  const diagnosticsWarningChecks = useMemo(
+    () => entitlementDiagnostics?.checks.filter((check) => check.count > 0) ?? [],
+    [entitlementDiagnostics],
+  );
+
+  const diagnosticsSummaryItems = useMemo(() => {
+    const summary = entitlementDiagnostics?.summary;
+    return [
+      { label: 'Invalid AI quota mappings', value: summary?.invalidAiQuotaMappings ?? 0, tone: 'danger' as const },
+      { label: 'Missing plan subscriptions', value: summary?.missingPlanSubscriptions ?? 0, tone: 'danger' as const },
+      { label: 'Fallback mappings', value: summary?.fallbackMappings ?? 0, tone: 'warning' as const },
+      { label: 'Legacy content shape', value: summary?.legacyContentShape ?? 0, tone: 'warning' as const },
+    ];
+  }, [entitlementDiagnostics]);
 
   const planColumns: Column<AdminBillingPlan>[] = [
     {
@@ -1270,48 +1316,56 @@ export default function BillingPage() {
   }
 
   async function reloadBilling() {
-    const [planItems, addOnItems, couponItems, subscriptionResult, redemptionResult, invoiceResult, paymentResult] = await Promise.all([
-      getAdminBillingPlanData({ status: selectedPlanStatus }),
-      getAdminBillingAddOnData({ status: selectedAddOnStatus }),
-      getAdminBillingCouponData({ status: selectedCouponStatus }),
-      getAdminBillingSubscriptionData({ status: selectedSubscriptionStatus, search: subscriptionSearch || undefined, pageSize: 100 }),
-      getAdminBillingCouponRedemptionData({ couponCode: redemptionSearch || undefined, pageSize: 100 }),
-      getAdminBillingInvoiceData({
-        status: selectedInvoiceStatus,
-        search: invoiceSearch || undefined,
-        pageSize: 100,
-      }),
-      getAdminBillingPaymentTransactionData({
-        status: selectedPaymentStatus,
-        gateway: selectedPaymentGateway,
-        transactionType: selectedPaymentTransactionType,
-        search: paymentSearch || undefined,
-        page: paymentPage,
-        pageSize: paymentPageSize,
-      }),
-    ]);
+    setEntitlementDiagnosticsStatus('loading');
+    const diagnosticsPromise = loadEntitlementDiagnostics();
+    try {
+      const [planItems, addOnItems, couponItems, subscriptionResult, redemptionResult, invoiceResult, paymentResult] = await Promise.all([
+        getAdminBillingPlanData({ status: selectedPlanStatus }),
+        getAdminBillingAddOnData({ status: selectedAddOnStatus }),
+        getAdminBillingCouponData({ status: selectedCouponStatus }),
+        getAdminBillingSubscriptionData({ status: selectedSubscriptionStatus, search: subscriptionSearch || undefined, pageSize: 100 }),
+        getAdminBillingCouponRedemptionData({ couponCode: redemptionSearch || undefined, pageSize: 100 }),
+        getAdminBillingInvoiceData({
+          status: selectedInvoiceStatus,
+          search: invoiceSearch || undefined,
+          pageSize: 100,
+        }),
+        getAdminBillingPaymentTransactionData({
+          status: selectedPaymentStatus,
+          gateway: selectedPaymentGateway,
+          transactionType: selectedPaymentTransactionType,
+          search: paymentSearch || undefined,
+          page: paymentPage,
+          pageSize: paymentPageSize,
+        }),
+      ]);
 
-    const redemptionItems = selectedRedemptionStatus ? redemptionResult.items.filter((item) => item.status === selectedRedemptionStatus) : redemptionResult.items;
+      const redemptionItems = selectedRedemptionStatus ? redemptionResult.items.filter((item) => item.status === selectedRedemptionStatus) : redemptionResult.items;
 
-    setPlans(planItems);
-    setAddOns(addOnItems);
-    setCoupons(couponItems);
-    setSubscriptions(subscriptionResult.items);
-    setRedemptions(redemptionItems);
-    setInvoices(invoiceResult.items);
-    setPaymentTransactions(paymentResult.items);
-    setPaymentTotal(paymentResult.total);
-    setPageStatus(
-      planItems.length > 0 ||
-      addOnItems.length > 0 ||
-      couponItems.length > 0 ||
-      subscriptionResult.items.length > 0 ||
-      redemptionItems.length > 0 ||
-      invoiceResult.items.length > 0 ||
-      paymentResult.items.length > 0
-        ? 'success'
-        : 'empty',
-    );
+      setPlans(planItems);
+      setAddOns(addOnItems);
+      setCoupons(couponItems);
+      setSubscriptions(subscriptionResult.items);
+      setRedemptions(redemptionItems);
+      setInvoices(invoiceResult.items);
+      setPaymentTransactions(paymentResult.items);
+      setPaymentTotal(paymentResult.total);
+      setPageStatus(
+        planItems.length > 0 ||
+        addOnItems.length > 0 ||
+        couponItems.length > 0 ||
+        subscriptionResult.items.length > 0 ||
+        redemptionItems.length > 0 ||
+        invoiceResult.items.length > 0 ||
+        paymentResult.items.length > 0
+          ? 'success'
+          : 'empty',
+      );
+    } finally {
+      const diagnosticsResult = await diagnosticsPromise;
+      setEntitlementDiagnostics(diagnosticsResult.data);
+      setEntitlementDiagnosticsStatus(diagnosticsResult.status);
+    }
   }
 
   function openPlanEditor(plan?: AdminBillingPlan) {
@@ -1576,6 +1630,92 @@ export default function BillingPage() {
           <AdminRouteSummaryCard label="Active Coupons" value={metrics.activeCoupons} icon={<Ticket className="h-5 w-5" />} />
           <AdminRouteSummaryCard label="Failed Invoices" value={metrics.failedInvoices} icon={<Receipt className="h-5 w-5" />} tone={metrics.failedInvoices > 0 ? 'danger' : 'default'} />
         </div>
+
+        <AdminRoutePanel
+          title="Entitlement diagnostics"
+          description="Read-only checks for billing plans, subscriptions, AI quota mapping, and legacy entitlement data."
+          actions={
+            entitlementDiagnostics ? (
+              <Badge variant={entitlementDiagnostics.summary.totalWarnings > 0 ? 'warning' : 'success'}>
+                {entitlementDiagnostics.summary.totalWarnings} warnings
+              </Badge>
+            ) : null
+          }
+        >
+          <div role="status" aria-live="polite" className="space-y-4">
+            {entitlementDiagnosticsStatus === 'loading' ? (
+              <div className="rounded-lg border border-dashed border-border bg-background-light px-4 py-5 text-sm text-muted">
+                Loading entitlement diagnostics...
+              </div>
+            ) : null}
+
+            {entitlementDiagnosticsStatus === 'error' ? (
+              <InlineAlert variant="warning" title="Diagnostics unavailable">
+                Billing operations loaded, but entitlement diagnostics could not be refreshed.
+              </InlineAlert>
+            ) : null}
+
+            {entitlementDiagnosticsStatus === 'success' && entitlementDiagnostics ? (
+              entitlementDiagnostics.summary.totalWarnings === 0 ? (
+                <InlineAlert variant="success" title="No entitlement warnings detected">
+                  Billing plans, active subscriptions, and AI quota mappings are aligned with the current diagnostics checks.
+                </InlineAlert>
+              ) : (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    {diagnosticsSummaryItems.map((item) => (
+                      <div
+                        key={item.label}
+                        className={item.tone === 'danger'
+                          ? 'rounded-lg border border-red-200 bg-red-50 px-4 py-3'
+                          : 'rounded-lg border border-amber-200 bg-amber-50 px-4 py-3'}
+                      >
+                        <p className={item.tone === 'danger' ? 'text-2xl font-bold text-red-700' : 'text-2xl font-bold text-amber-700'}>
+                          {item.value}
+                        </p>
+                        <p className={item.tone === 'danger' ? 'mt-1 text-xs font-semibold text-red-800' : 'mt-1 text-xs font-semibold text-amber-800'}>
+                          {item.label}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="space-y-3">
+                    {diagnosticsWarningChecks.map((check) => (
+                      <div key={check.key} className="rounded-lg border border-border bg-white px-4 py-3 shadow-sm">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                          <div className="flex items-center gap-2">
+                            <AlertTriangle className={check.severity === 'danger' ? 'h-4 w-4 text-red-600' : 'h-4 w-4 text-amber-600'} aria-hidden="true" />
+                            <p className="text-sm font-semibold text-navy">{check.label}</p>
+                          </div>
+                          <Badge variant={check.severity === 'danger' ? 'danger' : 'warning'}>{check.count}</Badge>
+                        </div>
+                        {check.examples.length > 0 ? (
+                          <div className="mt-3 space-y-2">
+                            {check.examples.map((example) => (
+                              <div key={`${check.key}-${example.subjectType}-${example.subjectId}`} className="rounded-md bg-background-light px-3 py-2">
+                                <div className="flex flex-wrap items-center gap-2">
+                                  <Badge variant="outline">{example.subjectType}</Badge>
+                                  <span className="text-sm font-semibold text-foreground">{example.subjectName || example.subjectCode}</span>
+                                  <span className="text-xs text-muted">{example.subjectCode}</span>
+                                </div>
+                                <p className="mt-1 text-sm leading-6 text-muted">{example.message}</p>
+                              </div>
+                            ))}
+                          </div>
+                        ) : null}
+                      </div>
+                    ))}
+                  </div>
+
+                  {entitlementDiagnostics.generatedAt ? (
+                    <p className="text-xs text-muted">Generated {new Date(entitlementDiagnostics.generatedAt).toLocaleString()}</p>
+                  ) : null}
+                </>
+              )
+            ) : null}
+          </div>
+        </AdminRoutePanel>
 
         <AdminRoutePanel
           title="Subscription Plans"

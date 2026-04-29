@@ -561,6 +561,37 @@ export interface AdminBillingSubscription {
   addOnCount: number;
 }
 
+export interface AdminBillingEntitlementDiagnosticExample {
+  subjectType: string;
+  subjectId: string;
+  subjectCode: string;
+  subjectName: string;
+  message: string;
+  metadata: Record<string, string>;
+}
+
+export interface AdminBillingEntitlementDiagnosticCheck {
+  key: string;
+  label: string;
+  severity: 'info' | 'warning' | 'danger';
+  count: number;
+  examples: AdminBillingEntitlementDiagnosticExample[];
+}
+
+export interface AdminBillingEntitlementDiagnosticsSummary {
+  invalidAiQuotaMappings: number;
+  missingPlanSubscriptions: number;
+  fallbackMappings: number;
+  legacyContentShape: number;
+  totalWarnings: number;
+}
+
+export interface AdminBillingEntitlementDiagnostics {
+  generatedAt: string;
+  summary: AdminBillingEntitlementDiagnosticsSummary;
+  checks: AdminBillingEntitlementDiagnosticCheck[];
+}
+
 export interface AdminBillingCouponRedemption {
   id: string;
   couponCode: string;

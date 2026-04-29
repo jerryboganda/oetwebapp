@@ -117,6 +117,33 @@ public record AdminBillingCatalogVersionHistoryResponse(
     AdminBillingCatalogSubjectResponse Subject,
     IReadOnlyList<AdminBillingCatalogVersionResponse> Items);
 
+public record AdminBillingEntitlementDiagnosticsSummaryResponse(
+    int InvalidAiQuotaMappings,
+    int MissingPlanSubscriptions,
+    int FallbackMappings,
+    int LegacyContentShape,
+    int TotalWarnings);
+
+public record AdminBillingEntitlementDiagnosticExampleResponse(
+    string SubjectType,
+    string SubjectId,
+    string SubjectCode,
+    string SubjectName,
+    string Message,
+    Dictionary<string, string> Metadata);
+
+public record AdminBillingEntitlementDiagnosticCheckResponse(
+    string Key,
+    string Label,
+    string Severity,
+    int Count,
+    IReadOnlyList<AdminBillingEntitlementDiagnosticExampleResponse> Examples);
+
+public record AdminBillingEntitlementDiagnosticsResponse(
+    DateTimeOffset GeneratedAt,
+    AdminBillingEntitlementDiagnosticsSummaryResponse Summary,
+    IReadOnlyList<AdminBillingEntitlementDiagnosticCheckResponse> Checks);
+
 public record AdminBillingInvoiceEvidenceInvoiceResponse(
     string Id,
     string UserId,

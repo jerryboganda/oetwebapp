@@ -3329,6 +3329,10 @@ export async function fetchAdminBillingSubscriptions(params?: { status?: string;
   return apiRequest(`/v1/admin/billing/subscriptions${q ? `?${q}` : ''}`);
 }
 
+export async function fetchAdminBillingEntitlementDiagnostics() {
+  return apiRequest('/v1/admin/billing/entitlement-diagnostics');
+}
+
 export async function fetchAdminBillingCouponRedemptions(params?: { couponCode?: string; userId?: string; page?: number; pageSize?: number }) {
   const qs = new URLSearchParams();
   if (params?.couponCode) qs.set('couponCode', params.couponCode);
