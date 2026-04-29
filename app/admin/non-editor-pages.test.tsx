@@ -38,6 +38,8 @@ const admin = vi.hoisted(() => ({
   getAdminBillingInvoiceEvidenceData: vi.fn(),
   getAdminBillingPaymentTransactionData: vi.fn(),
   getAdminBillingSubscriptionData: vi.fn(),
+  getAdminWebhookEventsData: vi.fn(),
+  getAdminWebhookSummaryData: vi.fn(),
   getAdminQualityAnalyticsData: vi.fn(),
   getAdminUserDetailData: vi.fn(),
   getAdminContentRevisionData: vi.fn(),
@@ -77,6 +79,7 @@ const api = vi.hoisted(() => ({
   restoreAdminUser: vi.fn(),
   adjustAdminUserCredits: vi.fn(),
   restoreAdminContentRevision: vi.fn(),
+  retryWebhook: vi.fn(),
 }));
 
 const notificationsApi = vi.hoisted(() => ({
@@ -167,6 +170,8 @@ vi.mock('@/lib/admin', () => ({
   getAdminBillingInvoiceEvidenceData: admin.getAdminBillingInvoiceEvidenceData,
   getAdminBillingPaymentTransactionData: admin.getAdminBillingPaymentTransactionData,
   getAdminBillingSubscriptionData: admin.getAdminBillingSubscriptionData,
+  getAdminWebhookEventsData: admin.getAdminWebhookEventsData,
+  getAdminWebhookSummaryData: admin.getAdminWebhookSummaryData,
   getAdminQualityAnalyticsData: admin.getAdminQualityAnalyticsData,
   getAdminUserDetailData: admin.getAdminUserDetailData,
   getAdminContentRevisionData: admin.getAdminContentRevisionData,
@@ -206,6 +211,7 @@ vi.mock('@/lib/api', () => ({
   restoreAdminUser: api.restoreAdminUser,
   adjustAdminUserCredits: api.adjustAdminUserCredits,
   restoreAdminContentRevision: api.restoreAdminContentRevision,
+  retryWebhook: api.retryWebhook,
   isApiError: () => false,
 }));
 
@@ -233,6 +239,7 @@ import ReviewOpsPage from './review-ops/page';
 import TaxonomyPage from './taxonomy/page';
 import UserDetailPage from './users/[id]/page';
 import UsersPage from './users/page';
+import WebhooksPage from './webhooks/page';
 import RevisionsPage from './content/[id]/revisions/page';
 import { renderWithRouter } from '@/tests/test-utils';
 
@@ -876,6 +883,126 @@ describe('Admin Non-Editor Pages', () => {
     expect(screen.getByRole('heading', { name: /role-wide channel governance/i })).toBeInTheDocument();
     expect(screen.getByText(/delivery filters/i)).toBeInTheDocument();
     expect(screen.getByRole('heading', { name: /policy change audit trail/i })).toBeInTheDocument();
+  });
+
+  it('renders webhook retry eligibility and refreshes after verified retry', async () => {
+    const user = userEvent.setup();
+    admin.getAdminWebhookEventsData
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 'webhook-retryable',
+            gateway: 'paypal',
+            eventType: 'PAYMENT.CAPTURE.COMPLETED',
+            gatewayEventId: 'provider-event-1',
+            processingStatus: 'failed',
+            verificationStatus: 'verified',
+            gatewayTransactionId: 'checkout-1',
+            normalizedStatus: 'completed',
+            attemptCount: 1,
+            retryCount: 0,
+            lastAttemptedAt: '2026-04-01T10:00:00.000Z',
+            lastRetriedAt: null,
+            retryable: true,
+            retryBlockedReason: null,
+            errorMessage: 'Transient local fulfillment failure.',
+            receivedAt: '2026-04-01T10:00:00.000Z',
+            processedAt: '2026-04-01T10:00:01.000Z',
+          },
+          {
+            id: 'webhook-legacy',
+            gateway: 'stripe',
+            eventType: 'checkout.session.completed',
+            gatewayEventId: 'provider-event-2',
+            processingStatus: 'failed',
+            verificationStatus: 'legacy',
+            gatewayTransactionId: null,
+            normalizedStatus: null,
+            attemptCount: 0,
+            retryCount: 0,
+            lastAttemptedAt: null,
+            lastRetriedAt: null,
+            retryable: false,
+            retryBlockedReason: 'This webhook was not signature-verified at ingestion.',
+            errorMessage: 'Legacy failure.',
+            receivedAt: '2026-04-01T09:00:00.000Z',
+            processedAt: '2026-04-01T09:00:01.000Z',
+          },
+        ],
+        total: 2,
+        page: 1,
+        pageSize: 20,
+      })
+      .mockResolvedValueOnce({
+        items: [
+          {
+            id: 'webhook-retryable',
+            gateway: 'paypal',
+            eventType: 'PAYMENT.CAPTURE.COMPLETED',
+            gatewayEventId: 'provider-event-1',
+            processingStatus: 'completed',
+            verificationStatus: 'verified',
+            gatewayTransactionId: 'checkout-1',
+            normalizedStatus: 'completed',
+            attemptCount: 2,
+            retryCount: 1,
+            lastAttemptedAt: '2026-04-01T10:05:00.000Z',
+            lastRetriedAt: '2026-04-01T10:05:00.000Z',
+            retryable: false,
+            retryBlockedReason: 'Only failed local webhook processing attempts can be retried.',
+            errorMessage: null,
+            receivedAt: '2026-04-01T10:00:00.000Z',
+            processedAt: '2026-04-01T10:05:01.000Z',
+          },
+        ],
+        total: 1,
+        page: 1,
+        pageSize: 20,
+      });
+    admin.getAdminWebhookSummaryData.mockResolvedValue({
+      total: 2,
+      recent24h: 2,
+      failed: 2,
+      failed24h: 2,
+      byStatus: [{ status: 'failed', count: 2 }],
+      byGateway: [{ gateway: 'paypal', count: 1 }],
+      recentFailures: [
+        {
+          id: 'webhook-legacy',
+          eventType: 'checkout.session.completed',
+          errorMessage: 'Legacy failure.',
+          receivedAt: '2026-04-01T09:00:00.000Z',
+          retryable: false,
+          retryBlockedReason: 'This webhook was not signature-verified at ingestion.',
+        },
+      ],
+    });
+    api.retryWebhook.mockResolvedValue({
+      eventId: 'webhook-retryable',
+      status: 'reprocessed',
+      processingStatus: 'completed',
+      errorMessage: null,
+      attemptCount: 2,
+      retryCount: 1,
+      gatewayTransactionId: 'checkout-1',
+      normalizedStatus: 'completed',
+    });
+
+    renderPage(<WebhooksPage />);
+
+    expect(await screen.findByRole('heading', { name: /^webhook monitoring$/i })).toBeInTheDocument();
+    expect(screen.getAllByText('PAYMENT.CAPTURE.COMPLETED').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('This webhook was not signature-verified at ingestion.').length).toBeGreaterThan(0);
+    const retryButtons = screen.getAllByRole('button', { name: /retry/i });
+    expect(retryButtons[0]).toBeEnabled();
+    expect(retryButtons[1]).toBeDisabled();
+
+    await user.click(retryButtons[0]);
+
+    expect(api.retryWebhook).toHaveBeenCalledWith('webhook-retryable');
+    expect(await screen.findByText('Webhook retry reprocessed successfully.')).toBeInTheDocument();
+    expect(admin.getAdminWebhookEventsData).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('Attempts 2 / retries 1')).toBeInTheDocument();
   });
 
   it('renders the professions registry inside the learner-style route surface', async () => {

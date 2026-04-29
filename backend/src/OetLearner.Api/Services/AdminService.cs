@@ -17,7 +17,8 @@ public partial class AdminService(
     EmailOtpService emailOtpService,
     IPasswordHasher<ApplicationUserAccount> passwordHasher,
     TimeProvider timeProvider,
-    NotificationService notifications)
+    NotificationService notifications,
+    LearnerService learnerService)
 {
     private const string ActiveUserStatus = "active";
     private const string SuspendedUserStatus = "suspended";
@@ -5897,22 +5898,67 @@ public partial class AdminService(
             query = query.Where(e => e.ProcessingStatus == status);
 
         var total = await query.CountAsync(ct);
-        var items = await query
+        var pageEvents = await query
             .OrderByDescending(e => e.ReceivedAt)
             .Skip((page - 1) * pageSize)
             .Take(pageSize)
             .Select(e => new
+            {
+                e.Id,
+                e.Gateway,
+                e.EventType,
+                e.GatewayEventId,
+                e.ProcessingStatus,
+                e.VerificationStatus,
+                e.VerifiedAt,
+                e.PayloadSha256,
+                e.ParserVersion,
+                e.GatewayTransactionId,
+                e.NormalizedStatus,
+                e.AttemptCount,
+                e.RetryCount,
+                e.LastAttemptedAt,
+                e.LastRetriedAt,
+                e.ErrorMessage,
+                e.ReceivedAt,
+                e.ProcessedAt
+            })
+            .ToListAsync(ct);
+
+        var items = pageEvents.Select(e =>
+        {
+            var retryBlockedReason = LearnerService.GetPaymentWebhookRetryBlockedReason(new PaymentWebhookEvent
+            {
+                Id = e.Id,
+                ProcessingStatus = e.ProcessingStatus,
+                VerificationStatus = e.VerificationStatus,
+                VerifiedAt = e.VerifiedAt,
+                PayloadSha256 = e.PayloadSha256,
+                ParserVersion = e.ParserVersion,
+                GatewayTransactionId = e.GatewayTransactionId,
+                NormalizedStatus = e.NormalizedStatus
+            });
+            return new
             {
                 id = e.Id,
                 gateway = e.Gateway,
                 eventType = e.EventType,
                 gatewayEventId = e.GatewayEventId,
                 processingStatus = e.ProcessingStatus,
+                verificationStatus = e.VerificationStatus,
+                gatewayTransactionId = e.GatewayTransactionId,
+                normalizedStatus = e.NormalizedStatus,
+                attemptCount = e.AttemptCount,
+                retryCount = e.RetryCount,
+                lastAttemptedAt = e.LastAttemptedAt,
+                lastRetriedAt = e.LastRetriedAt,
                 errorMessage = e.ErrorMessage,
                 receivedAt = e.ReceivedAt,
-                processedAt = e.ProcessedAt
-            })
-            .ToListAsync(ct);
+                processedAt = e.ProcessedAt,
+                retryable = retryBlockedReason is null,
+                retryBlockedReason
+            };
+        }).ToList();
 
         return new { items, total, page, pageSize };
     }
@@ -5922,8 +5968,6 @@ public partial class AdminService(
         var events = db.PaymentWebhookEvents.AsNoTracking();
         var now = DateTimeOffset.UtcNow;
         var last24h = now.AddHours(-24);
-        var last7d = now.AddDays(-7);
-
         var total = await events.CountAsync(ct);
         var recent24h = await events.CountAsync(e => e.ReceivedAt >= last24h, ct);
         var failed = await events.CountAsync(e => e.ProcessingStatus == "failed", ct);
@@ -5939,18 +5983,49 @@ public partial class AdminService(
             .Select(g => new { gateway = g.Key, count = g.Count() })
             .ToListAsync(ct);
 
-        var recentFailures = await events
+        var recentFailureEvents = await events
             .Where(e => e.ProcessingStatus == "failed")
             .OrderByDescending(e => e.ReceivedAt)
             .Take(5)
             .Select(e => new
             {
+                e.Id,
+                e.EventType,
+                e.ProcessingStatus,
+                e.VerificationStatus,
+                e.VerifiedAt,
+                e.PayloadSha256,
+                e.ParserVersion,
+                e.GatewayTransactionId,
+                e.NormalizedStatus,
+                e.ErrorMessage,
+                e.ReceivedAt
+            })
+            .ToListAsync(ct);
+
+        var recentFailures = recentFailureEvents.Select(e =>
+        {
+            var retryBlockedReason = LearnerService.GetPaymentWebhookRetryBlockedReason(new PaymentWebhookEvent
+            {
+                Id = e.Id,
+                ProcessingStatus = e.ProcessingStatus,
+                VerificationStatus = e.VerificationStatus,
+                VerifiedAt = e.VerifiedAt,
+                PayloadSha256 = e.PayloadSha256,
+                ParserVersion = e.ParserVersion,
+                GatewayTransactionId = e.GatewayTransactionId,
+                NormalizedStatus = e.NormalizedStatus
+            });
+            return new
+            {
                 id = e.Id,
                 eventType = e.EventType,
                 errorMessage = e.ErrorMessage,
-                receivedAt = e.ReceivedAt
-            })
-            .ToListAsync(ct);
+                receivedAt = e.ReceivedAt,
+                retryable = retryBlockedReason is null,
+                retryBlockedReason
+            };
+        }).ToList();
 
         return new
         {
@@ -5967,21 +6042,17 @@ public partial class AdminService(
     public async Task<object> RetryWebhookAsync(
         string actorId, string actorName, string eventId, CancellationToken ct)
     {
-        var evt = await db.PaymentWebhookEvents.FirstOrDefaultAsync(e => e.Id.ToString() == eventId, ct)
-                  ?? throw ApiException.NotFound("webhook_not_found", "Webhook event not found.");
+        if (!Guid.TryParse(eventId, out var webhookEventId))
+        {
+            throw ApiException.Validation("invalid_webhook_id", "Webhook event id is invalid.");
+        }
 
-        if (evt.ProcessingStatus != "failed")
-            throw ApiException.Validation("not_failed", "Only failed webhooks can be retried.");
-
-        evt.ProcessingStatus = "received";
-        evt.ErrorMessage = null;
-        evt.ProcessedAt = null;
-        await db.SaveChangesAsync(ct);
+        var result = await learnerService.RetryVerifiedPaymentWebhookAsync(webhookEventId, actorId, actorName, ct);
 
         await LogAuditAsync(actorId, actorName, "RetryWebhook", "PaymentWebhookEvent", eventId,
-            $"Retried webhook: {evt.EventType} ({evt.GatewayEventId})", ct);
+            $"Retried webhook: {result.Status} ({result.ProcessingStatus})", ct);
 
-        return new { eventId, status = "queued_for_retry" };
+        return result;
     }
 
     // ════════════════════════════════════════════

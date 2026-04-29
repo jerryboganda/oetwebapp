@@ -1,5 +1,8 @@
+using System.Security.Cryptography;
+using System.Text;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using OetLearner.Api.Contracts;
 using OetLearner.Api.Data;
 using OetLearner.Api.Domain;
@@ -7,6 +10,16 @@ using OetLearner.Api.Domain;
 namespace OetLearner.Api.Services;
 
 public sealed record GeneratedDownloadFile(Stream Stream, string ContentType, string FileName);
+
+public sealed record PaymentWebhookRetryResult(
+    string EventId,
+    string Status,
+    string ProcessingStatus,
+    string? ErrorMessage,
+    int AttemptCount,
+    int RetryCount,
+    string? GatewayTransactionId,
+    string? NormalizedStatus);
 
 public partial class LearnerService(
     LearnerDbContext db,
@@ -16,6 +29,9 @@ public partial class LearnerService(
     WalletService walletService,
     PaymentGatewayService paymentGateways)
 {
+    private const string PaymentWebhookParserVersion = "payment-webhook-v1";
+    private static readonly TimeSpan PaymentWebhookProcessingLease = TimeSpan.FromMinutes(5);
+
     public async Task<object> GetMeAsync(string userId, CancellationToken cancellationToken)
     {
         await EnsureLearnerProfileAsync(userId, cancellationToken);
@@ -6048,6 +6064,127 @@ public partial class LearnerService(
     public Task<object> HandlePayPalWebhookAsync(string payload, IReadOnlyDictionary<string, string> headers, CancellationToken ct)
         => HandlePaymentWebhookAsync("paypal", payload, headers, ct);
 
+    public static string? GetPaymentWebhookRetryBlockedReason(PaymentWebhookEvent evt)
+    {
+        if (!string.Equals(evt.ProcessingStatus, "failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Only failed local webhook processing attempts can be retried.";
+        }
+
+        if (!string.Equals(evt.VerificationStatus, "verified", StringComparison.OrdinalIgnoreCase) || evt.VerifiedAt is null)
+        {
+            return "This webhook was not signature-verified at ingestion. Ask the payment provider to redeliver it through the live webhook endpoint.";
+        }
+
+        if (string.IsNullOrWhiteSpace(evt.GatewayTransactionId))
+        {
+            return "This webhook does not have a trusted parsed payment transaction id.";
+        }
+
+        if (string.IsNullOrWhiteSpace(evt.NormalizedStatus))
+        {
+            return "This webhook does not have a trusted parsed payment status.";
+        }
+
+        if (!string.Equals(evt.ParserVersion, PaymentWebhookParserVersion, StringComparison.Ordinal))
+        {
+            return "This webhook was parsed by an unsupported parser version. Ask the payment provider to redeliver it through the live webhook endpoint.";
+        }
+
+        if (!IsValidSha256(evt.PayloadSha256))
+        {
+            return "This webhook does not have durable payload hash evidence from ingestion.";
+        }
+
+        if (!string.Equals(evt.NormalizedStatus, "completed", StringComparison.OrdinalIgnoreCase)
+            && !string.Equals(evt.NormalizedStatus, "failed", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Only completed or failed payment status webhooks can be retried by admin.";
+        }
+
+        return null;
+    }
+
+    public async Task<PaymentWebhookRetryResult> RetryVerifiedPaymentWebhookAsync(
+        Guid eventId,
+        string actorId,
+        string actorName,
+        CancellationToken ct)
+    {
+        var existing = await db.PaymentWebhookEvents.AsNoTracking()
+            .FirstOrDefaultAsync(e => e.Id == eventId, ct)
+            ?? throw ApiException.NotFound("webhook_not_found", "Webhook event not found.");
+
+        var blockedReason = GetPaymentWebhookRetryBlockedReason(existing);
+        if (blockedReason is not null)
+        {
+            throw ApiException.Conflict("webhook_not_retryable", blockedReason);
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var adminId = TruncateForColumn(actorId, 64);
+        var adminName = TruncateForColumn(actorName, 128);
+
+        if (db.Database.IsInMemory())
+        {
+            var tracked = await db.PaymentWebhookEvents.FirstAsync(e => e.Id == eventId, ct);
+            if (!string.Equals(tracked.ProcessingStatus, "failed", StringComparison.OrdinalIgnoreCase))
+            {
+                throw ApiException.Conflict("webhook_already_processing", "This webhook is no longer in a failed retryable state.");
+            }
+
+            tracked.ProcessingStatus = "processing";
+            tracked.ErrorMessage = null;
+            tracked.ProcessedAt = null;
+            tracked.AttemptCount += 1;
+            tracked.RetryCount += 1;
+            tracked.LastAttemptedAt = now;
+            tracked.LastRetriedAt = now;
+            tracked.LastRetriedByAdminId = adminId;
+            tracked.LastRetriedByAdminName = adminName;
+            await db.SaveChangesAsync(ct);
+        }
+        else
+        {
+            var claimed = await db.PaymentWebhookEvents
+                .Where(e => e.Id == eventId && e.ProcessingStatus == "failed")
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(e => e.ProcessingStatus, "processing")
+                    .SetProperty(e => e.ErrorMessage, (string?)null)
+                    .SetProperty(e => e.ProcessedAt, (DateTimeOffset?)null)
+                    .SetProperty(e => e.AttemptCount, e => e.AttemptCount + 1)
+                    .SetProperty(e => e.RetryCount, e => e.RetryCount + 1)
+                    .SetProperty(e => e.LastAttemptedAt, now)
+                    .SetProperty(e => e.LastRetriedAt, now)
+                    .SetProperty(e => e.LastRetriedByAdminId, adminId)
+                    .SetProperty(e => e.LastRetriedByAdminName, adminName), ct);
+
+            if (claimed == 0)
+            {
+                throw ApiException.Conflict("webhook_already_processing", "This webhook is no longer in a failed retryable state.");
+            }
+
+            db.ChangeTracker.Clear();
+        }
+
+        var retryEvent = await db.PaymentWebhookEvents.AsNoTracking().FirstAsync(e => e.Id == eventId, ct);
+        var result = await ApplyVerifiedPaymentWebhookEventAsync(
+            retryEvent.Id,
+            retryEvent.GatewayTransactionId,
+            retryEvent.NormalizedStatus,
+            ct);
+
+        return new PaymentWebhookRetryResult(
+            retryEvent.Id.ToString(),
+            BuildWebhookRetryStatus(result.ProcessingStatus),
+            result.ProcessingStatus,
+            result.ErrorMessage,
+            result.AttemptCount,
+            result.RetryCount,
+            result.GatewayTransactionId,
+            result.NormalizedStatus);
+    }
+
     private async Task<object> HandlePaymentWebhookAsync(
         string gatewayName,
         string payload,
@@ -6085,6 +6222,23 @@ public partial class LearnerService(
             };
         }
 
+        if (webhookEvent is not null && webhookEvent.ProcessingStatus == "processing")
+        {
+            var lastAttemptedAt = webhookEvent.LastAttemptedAt ?? webhookEvent.ReceivedAt;
+            if (lastAttemptedAt > receivedAt.Subtract(PaymentWebhookProcessingLease))
+            {
+                return new
+                {
+                    received = true,
+                    duplicate = true,
+                    gateway = gatewayName,
+                    eventId = webhookEvent.GatewayEventId,
+                    eventType = webhookEvent.EventType,
+                    state = webhookEvent.ProcessingStatus
+                };
+            }
+        }
+
         webhookEvent ??= new PaymentWebhookEvent
         {
             Id = Guid.NewGuid(),
@@ -6094,9 +6248,18 @@ public partial class LearnerService(
         };
 
         webhookEvent.EventType = result.EventType;
-        webhookEvent.PayloadJson = payload;
-        webhookEvent.ErrorMessage = null;
-        webhookEvent.ProcessingStatus = "processing";
+        webhookEvent.PayloadJson = result.Processed ? payload : "{}";
+        webhookEvent.PayloadSha256 = ComputePayloadSha256(payload);
+        webhookEvent.ParserVersion = PaymentWebhookParserVersion;
+        webhookEvent.VerificationStatus = result.Processed ? "verified" : "failed";
+        webhookEvent.VerifiedAt = result.Processed ? receivedAt : null;
+        webhookEvent.GatewayTransactionId = result.GatewayTransactionId;
+        webhookEvent.NormalizedStatus = result.NormalizedStatus;
+        webhookEvent.AttemptCount += 1;
+        webhookEvent.LastAttemptedAt = receivedAt;
+        webhookEvent.ErrorMessage = result.Processed ? null : result.Error ?? "Webhook verification failed.";
+        webhookEvent.ProcessingStatus = result.Processed ? "processing" : "failed";
+        webhookEvent.ProcessedAt = result.Processed ? null : DateTimeOffset.UtcNow;
         if (db.Entry(webhookEvent).State == EntityState.Detached)
         {
             db.PaymentWebhookEvents.Add(webhookEvent);
@@ -6106,10 +6269,6 @@ public partial class LearnerService(
 
         if (!result.Processed)
         {
-            webhookEvent.ProcessingStatus = "failed";
-            webhookEvent.ErrorMessage = result.Error ?? "Webhook verification failed.";
-            webhookEvent.ProcessedAt = DateTimeOffset.UtcNow;
-            await db.SaveChangesAsync(ct);
             return new
             {
                 received = false,
@@ -6121,93 +6280,11 @@ public partial class LearnerService(
             };
         }
 
-        if (string.IsNullOrWhiteSpace(result.GatewayTransactionId))
-        {
-            webhookEvent.ProcessingStatus = "ignored";
-            webhookEvent.ErrorMessage = "No checkout or payment transaction id was included in the webhook payload.";
-            webhookEvent.ProcessedAt = DateTimeOffset.UtcNow;
-            await db.SaveChangesAsync(ct);
-            return new
-            {
-                received = true,
-                gateway = gatewayName,
-                eventId = result.EventId,
-                eventType = result.EventType,
-                state = webhookEvent.ProcessingStatus
-            };
-        }
-
-        var paymentTransaction = await db.PaymentTransactions
-            .FirstOrDefaultAsync(x => x.GatewayTransactionId == result.GatewayTransactionId, ct);
-
-        if (paymentTransaction is null)
-        {
-            webhookEvent.ProcessingStatus = "ignored";
-            webhookEvent.ErrorMessage = $"Payment transaction '{result.GatewayTransactionId}' was not found.";
-            webhookEvent.ProcessedAt = DateTimeOffset.UtcNow;
-            await db.SaveChangesAsync(ct);
-            return new
-            {
-                received = true,
-                gateway = gatewayName,
-                eventId = result.EventId,
-                eventType = result.EventType,
-                state = webhookEvent.ProcessingStatus,
-                gatewayTransactionId = result.GatewayTransactionId
-            };
-        }
-
-        paymentTransaction.Status = string.IsNullOrWhiteSpace(result.NormalizedStatus)
-            ? paymentTransaction.Status
-            : result.NormalizedStatus!;
-        paymentTransaction.UpdatedAt = DateTimeOffset.UtcNow;
-
-        try
-        {
-            switch (result.NormalizedStatus)
-            {
-                case "completed":
-                    if (string.Equals(paymentTransaction.TransactionType, "wallet_top_up", StringComparison.OrdinalIgnoreCase))
-                    {
-                        await ApplyWalletTopUpCompletionAsync(paymentTransaction, ct);
-                    }
-                    else
-                    {
-                        await ApplyCheckoutCompletionAsync(paymentTransaction, ct);
-                    }
-                    webhookEvent.ProcessingStatus = "completed";
-                    break;
-
-                case "failed":
-                    await MarkCheckoutFailedAsync(paymentTransaction, ct);
-                    webhookEvent.ProcessingStatus = "failed";
-                    break;
-
-                default:
-                    webhookEvent.ProcessingStatus = "completed";
-                    break;
-            }
-
-            webhookEvent.ProcessedAt = DateTimeOffset.UtcNow;
-            await db.SaveChangesAsync(ct);
-        }
-        catch (Exception ex)
-        {
-            webhookEvent.ProcessingStatus = "failed";
-            webhookEvent.ErrorMessage = ex.Message;
-            webhookEvent.ProcessedAt = DateTimeOffset.UtcNow;
-            await db.SaveChangesAsync(ct);
-            return new
-            {
-                received = true,
-                gateway = gatewayName,
-                eventId = result.EventId,
-                eventType = result.EventType,
-                gatewayTransactionId = paymentTransaction.GatewayTransactionId,
-                error = ex.Message,
-                state = webhookEvent.ProcessingStatus
-            };
-        }
+        var applied = await ApplyVerifiedPaymentWebhookEventAsync(
+            webhookEvent.Id,
+            result.GatewayTransactionId,
+            result.NormalizedStatus,
+            ct);
 
         return new
         {
@@ -6215,11 +6292,148 @@ public partial class LearnerService(
             gateway = gatewayName,
             eventId = result.EventId,
             eventType = result.EventType,
-            gatewayTransactionId = paymentTransaction.GatewayTransactionId,
-            normalizedStatus = paymentTransaction.Status,
-            state = webhookEvent.ProcessingStatus
+            gatewayTransactionId = applied.GatewayTransactionId,
+            normalizedStatus = applied.NormalizedStatus,
+            error = applied.ErrorMessage,
+            state = applied.ProcessingStatus
         };
     }
+
+    private async Task<PaymentWebhookRetryResult> ApplyVerifiedPaymentWebhookEventAsync(
+        Guid eventId,
+        string? gatewayTransactionId,
+        string? normalizedStatus,
+        CancellationToken ct)
+    {
+        await using var tx = await BeginTransactionIfNeededAsync(ct);
+        try
+        {
+            var webhookEvent = await db.PaymentWebhookEvents.FirstAsync(e => e.Id == eventId, ct);
+            var now = DateTimeOffset.UtcNow;
+
+            if (string.IsNullOrWhiteSpace(gatewayTransactionId))
+            {
+                webhookEvent.ProcessingStatus = "ignored";
+                webhookEvent.ErrorMessage = "No checkout or payment transaction id was included in the webhook payload.";
+                webhookEvent.ProcessedAt = now;
+                await db.SaveChangesAsync(ct);
+                await CommitIfOwnedAsync(tx, ct);
+                return MapWebhookRetryResult(webhookEvent);
+            }
+
+            var paymentTransaction = await db.PaymentTransactions
+                .FirstOrDefaultAsync(x => x.GatewayTransactionId == gatewayTransactionId, ct);
+
+            if (paymentTransaction is null)
+            {
+                webhookEvent.ProcessingStatus = "ignored";
+                webhookEvent.ErrorMessage = $"Payment transaction '{gatewayTransactionId}' was not found.";
+                webhookEvent.ProcessedAt = now;
+                await db.SaveChangesAsync(ct);
+                await CommitIfOwnedAsync(tx, ct);
+                return MapWebhookRetryResult(webhookEvent);
+            }
+
+            var targetStatus = string.IsNullOrWhiteSpace(normalizedStatus)
+                ? paymentTransaction.Status
+                : normalizedStatus.Trim().ToLowerInvariant();
+
+            if (string.Equals(paymentTransaction.Status, "completed", StringComparison.OrdinalIgnoreCase)
+                && !string.Equals(targetStatus, "completed", StringComparison.OrdinalIgnoreCase))
+            {
+                webhookEvent.ProcessingStatus = "ignored";
+                webhookEvent.ErrorMessage = "Payment transaction is already completed; webhook status was not downgraded.";
+                webhookEvent.ProcessedAt = now;
+                await db.SaveChangesAsync(ct);
+                await CommitIfOwnedAsync(tx, ct);
+                return MapWebhookRetryResult(webhookEvent);
+            }
+
+            paymentTransaction.Status = targetStatus;
+            paymentTransaction.UpdatedAt = now;
+
+            switch (targetStatus)
+            {
+                case "completed" when string.Equals(paymentTransaction.TransactionType, "wallet_top_up", StringComparison.OrdinalIgnoreCase):
+                    await ApplyWalletTopUpCompletionAsync(paymentTransaction, ct);
+                    webhookEvent.ProcessingStatus = "completed";
+                    break;
+
+                case "completed":
+                    await ApplyCheckoutCompletionAsync(paymentTransaction, ct);
+                    webhookEvent.ProcessingStatus = "completed";
+                    break;
+
+                case "failed":
+                    await MarkCheckoutFailedAsync(paymentTransaction, ct);
+                    webhookEvent.ProcessingStatus = "completed";
+                    break;
+
+                default:
+                    webhookEvent.ProcessingStatus = "completed";
+                    break;
+            }
+
+            webhookEvent.ErrorMessage = null;
+            webhookEvent.ProcessedAt = now;
+            await db.SaveChangesAsync(ct);
+            await CommitIfOwnedAsync(tx, ct);
+            return MapWebhookRetryResult(webhookEvent);
+        }
+        catch (Exception ex)
+        {
+            if (tx is not null)
+            {
+                await tx.RollbackAsync(ct);
+            }
+
+            db.ChangeTracker.Clear();
+            var webhookEvent = await db.PaymentWebhookEvents.FirstAsync(e => e.Id == eventId, ct);
+            webhookEvent.ProcessingStatus = "failed";
+            webhookEvent.ErrorMessage = ex.Message;
+            webhookEvent.ProcessedAt = DateTimeOffset.UtcNow;
+            await db.SaveChangesAsync(ct);
+            return MapWebhookRetryResult(webhookEvent);
+        }
+    }
+
+    private async Task<IDbContextTransaction?> BeginTransactionIfNeededAsync(CancellationToken ct)
+    {
+        if (db.Database.CurrentTransaction is not null) return null;
+        if (db.Database.IsInMemory()) return null;
+        return await db.Database.BeginTransactionAsync(ct);
+    }
+
+    private static async Task CommitIfOwnedAsync(IDbContextTransaction? tx, CancellationToken ct)
+    {
+        if (tx is not null) await tx.CommitAsync(ct);
+    }
+
+    private static PaymentWebhookRetryResult MapWebhookRetryResult(PaymentWebhookEvent evt)
+        => new(
+            evt.Id.ToString(),
+            BuildWebhookRetryStatus(evt.ProcessingStatus),
+            evt.ProcessingStatus,
+            evt.ErrorMessage,
+            evt.AttemptCount,
+            evt.RetryCount,
+            evt.GatewayTransactionId,
+            evt.NormalizedStatus);
+
+    private static string BuildWebhookRetryStatus(string processingStatus)
+        => processingStatus switch
+        {
+            "completed" => "reprocessed",
+            "ignored" => "no_effect",
+            "failed" => "still_failed",
+            _ => processingStatus
+        };
+
+    private static string ComputePayloadSha256(string payload)
+        => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(payload))).ToLowerInvariant();
+
+    private static bool IsValidSha256(string? value)
+        => value?.Length == 64 && value.All(Uri.IsHexDigit);
 
     private async Task ApplyWalletTopUpCompletionAsync(PaymentTransaction transaction, CancellationToken ct)
     {
@@ -6262,7 +6476,7 @@ public partial class LearnerService(
             existingInvoice.CheckoutSessionId ??= transaction.GatewayTransactionId;
         }
 
-        db.BillingEvents.Add(new BillingEvent
+        await AddBillingEventIfMissingAsync(new BillingEvent
         {
             Id = $"bill-evt-{Guid.NewGuid():N}",
             UserId = transaction.LearnerUserId,
@@ -6279,7 +6493,7 @@ public partial class LearnerService(
                 gateway = transaction.Gateway
             }),
             OccurredAt = DateTimeOffset.UtcNow
-        });
+        }, ct);
     }
 
     private async Task ApplyCheckoutCompletionAsync(PaymentTransaction transaction, CancellationToken ct)
@@ -6468,7 +6682,7 @@ public partial class LearnerService(
         quote.Status = BillingQuoteStatus.Completed;
         quote.CheckoutSessionId = transaction.GatewayTransactionId;
 
-        db.BillingEvents.Add(new BillingEvent
+        await AddBillingEventIfMissingAsync(new BillingEvent
         {
             Id = $"bill-evt-{Guid.NewGuid():N}",
             UserId = transaction.LearnerUserId,
@@ -6487,7 +6701,7 @@ public partial class LearnerService(
                 gateway = transaction.Gateway
             }),
             OccurredAt = now
-        });
+        }, ct);
 
         await RecordEventAsync(transaction.LearnerUserId, "checkout_completed", new
         {
@@ -6501,7 +6715,7 @@ public partial class LearnerService(
     private async Task MarkCheckoutFailedAsync(PaymentTransaction transaction, CancellationToken ct)
     {
         var quote = await GetQuoteForTransactionAsync(transaction, ct);
-        if (quote is null || quote.Status == BillingQuoteStatus.Completed)
+        if (quote is null || quote.Status is BillingQuoteStatus.Completed or BillingQuoteStatus.Cancelled)
         {
             return;
         }
@@ -6528,7 +6742,7 @@ public partial class LearnerService(
             }
         }
 
-        db.BillingEvents.Add(new BillingEvent
+        await AddBillingEventIfMissingAsync(new BillingEvent
         {
             Id = $"bill-evt-{Guid.NewGuid():N}",
             UserId = transaction.LearnerUserId,
@@ -6544,7 +6758,28 @@ public partial class LearnerService(
                 currency = quote.Currency
             }),
             OccurredAt = DateTimeOffset.UtcNow
-        });
+        }, ct);
+    }
+
+    private async Task AddBillingEventIfMissingAsync(BillingEvent billingEvent, CancellationToken ct)
+    {
+        if (!string.IsNullOrWhiteSpace(billingEvent.EntityId))
+        {
+            var exists = await db.BillingEvents.AnyAsync(x =>
+                x.EventType == billingEvent.EventType
+                && x.EntityType == billingEvent.EntityType
+                && x.EntityId == billingEvent.EntityId
+                && x.UserId == billingEvent.UserId
+                && x.QuoteId == billingEvent.QuoteId,
+                ct);
+
+            if (exists)
+            {
+                return;
+            }
+        }
+
+        db.BillingEvents.Add(billingEvent);
     }
 
     private async Task CreditWalletForPaymentAsync(
@@ -6660,6 +6895,9 @@ public partial class LearnerService(
 
     private static string TruncateIdentifier(string value)
         => value.Length <= 64 ? value : value[..64];
+
+    private static string TruncateForColumn(string value, int maxLength)
+        => value.Length <= maxLength ? value : value[..maxLength];
 
     // ── Exam Family Reference ──
 

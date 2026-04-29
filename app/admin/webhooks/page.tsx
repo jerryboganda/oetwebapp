@@ -13,7 +13,7 @@ import { Button } from '@/components/ui/button';
 import { retryWebhook } from '@/lib/api';
 import { getAdminWebhookEventsData, getAdminWebhookSummaryData } from '@/lib/admin';
 import { useAdminAuth } from '@/lib/hooks/use-admin-auth';
-import type { AdminWebhookEvent, AdminWebhookSummary } from '@/lib/types/admin';
+import type { AdminWebhookEvent, AdminWebhookRetryResponse, AdminWebhookSummary } from '@/lib/types/admin';
 
 type PageStatus = 'loading' | 'success' | 'empty' | 'error';
 type ToastState = { variant: 'success' | 'error'; message: string } | null;
@@ -65,11 +65,18 @@ export default function WebhooksPage() {
   async function handleRetry(eventId: string) {
     setIsMutating(true);
     try {
-      await retryWebhook(eventId);
-      setToast({ variant: 'success', message: 'Webhook queued for retry.' });
-      setEvents((prev) => prev.map((e) => e.id === eventId ? { ...e, processingStatus: 'received' as const } : e));
+      const result = await retryWebhook(eventId) as AdminWebhookRetryResponse;
+      const [eventsData, summaryData] = await Promise.all([
+        getAdminWebhookEventsData({ status: selectedStatus, gateway: selectedGateway, page, pageSize: 20 }),
+        getAdminWebhookSummaryData(),
+      ]);
+      setEvents(eventsData.items);
+      setTotal(eventsData.total);
+      setSummary(summaryData);
+      setPageStatus(eventsData.items.length > 0 ? 'success' : 'empty');
+      setToast({ variant: result.processingStatus === 'failed' ? 'error' : 'success', message: formatRetryToast(result) });
     } catch {
-      setToast({ variant: 'error', message: 'Failed to retry webhook.' });
+      setToast({ variant: 'error', message: 'Webhook retry was not accepted. Check retry eligibility.' });
     } finally {
       setIsMutating(false);
     }
@@ -101,9 +108,19 @@ export default function WebhooksPage() {
     { key: 'eventType', header: 'Event Type', render: (e) => <span className="font-mono text-xs">{e.eventType}</span> },
     { key: 'gateway', header: 'Gateway', render: (e) => <Badge variant="muted">{e.gateway}</Badge> },
     {
+      key: 'normalizedStatus',
+      header: 'Payment',
+      render: (e) => e.normalizedStatus ? <Badge variant="muted">{e.normalizedStatus}</Badge> : <span className="text-xs text-muted">-</span>,
+    },
+    {
       key: 'processingStatus',
       header: 'Status',
       render: (e) => <Badge variant={statusColors[e.processingStatus] ?? 'default'}>{e.processingStatus}</Badge>,
+    },
+    {
+      key: 'attemptCount',
+      header: 'Attempts',
+      render: (e) => <span className="text-xs text-muted">{e.attemptCount} / {e.retryCount}</span>,
     },
     {
       key: 'receivedAt',
@@ -113,13 +130,21 @@ export default function WebhooksPage() {
     {
       key: 'actions',
       header: '',
-      render: (e) =>
-        e.processingStatus === 'failed' ? (
-          <Button size="sm" variant="outline" onClick={() => handleRetry(e.id)} disabled={isMutating}>
+      render: (e) => {
+        if (e.processingStatus !== 'failed') return null;
+        return (
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={() => handleRetry(e.id)}
+            disabled={isMutating || !e.retryable}
+            title={e.retryable ? 'Retry verified webhook processing' : e.retryBlockedReason ?? 'Webhook is not retryable'}
+          >
             <RefreshCw className="w-3.5 h-3.5 mr-1" />
             Retry
           </Button>
-        ) : null,
+        );
+      },
     },
   ];
 
@@ -128,7 +153,7 @@ export default function WebhooksPage() {
       {toast && <Toast variant={toast.variant} message={toast.message} onClose={() => setToast(null)} />}
       <AdminRouteSectionHeader
         title="Webhook Monitoring"
-        description="Monitor payment webhook events and retry failed deliveries."
+        description="Monitor payment webhook processing and retry verified failed processing attempts."
       />
 
       {summary && (
@@ -150,6 +175,7 @@ export default function WebhooksPage() {
               <div key={f.id} className="text-xs text-muted dark:text-muted border-l-2 border-danger/40 pl-3">
                 <span className="font-mono">{f.eventType}</span>
                 {f.errorMessage && <span className="ml-2 text-danger">{f.errorMessage}</span>}
+                {!f.retryable && f.retryBlockedReason && <span className="ml-2 text-muted">{f.retryBlockedReason}</span>}
               </div>
             ))}
           </div>
@@ -174,8 +200,11 @@ export default function WebhooksPage() {
                 <div className="flex gap-2">
                   <Badge variant="muted">{e.gateway}</Badge>
                   <Badge variant={statusColors[e.processingStatus] ?? 'default'}>{e.processingStatus}</Badge>
+                  {e.normalizedStatus && <Badge variant="muted">{e.normalizedStatus}</Badge>}
                 </div>
+                <p className="text-xs text-muted">Attempts {e.attemptCount} / retries {e.retryCount}</p>
                 {e.errorMessage && <p className="text-xs text-danger">{e.errorMessage}</p>}
+                {!e.retryable && e.retryBlockedReason && <p className="text-xs text-muted">{e.retryBlockedReason}</p>}
               </div>
             )}
           />
@@ -183,4 +212,16 @@ export default function WebhooksPage() {
       </AsyncStateWrapper>
     </AdminRouteWorkspace>
   );
+}
+
+function formatRetryToast(result: AdminWebhookRetryResponse) {
+  if (result.processingStatus === 'failed') {
+    return result.errorMessage ? `Webhook retry still failed: ${result.errorMessage}` : 'Webhook retry still failed.';
+  }
+
+  if (result.status === 'no_effect') {
+    return 'Webhook retry completed with no billing change.';
+  }
+
+  return 'Webhook retry reprocessed successfully.';
 }

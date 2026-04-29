@@ -1026,7 +1026,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.Property<string>("PayloadJson")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("jsonb");
 
                     b.Property<string>("UserId")
                         .IsRequired()
@@ -1114,7 +1114,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.Property<string>("AnalysisJson")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("jsonb");
 
                     b.Property<string>("AnswersJson")
                         .IsRequired()
@@ -4064,7 +4064,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.Property<string>("CriterionScoresJson")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("jsonb");
 
                     b.Property<string>("ExamTypeCode")
                         .IsRequired()
@@ -4073,7 +4073,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.Property<string>("FeedbackItemsJson")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("jsonb");
 
                     b.Property<DateTimeOffset?>("GeneratedAt")
                         .HasColumnType("timestamp with time zone");
@@ -4083,7 +4083,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.Property<string>("IssuesJson")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("jsonb");
 
                     b.Property<DateTimeOffset>("LastTransitionAt")
                         .HasColumnType("timestamp with time zone");
@@ -4119,7 +4119,7 @@ namespace OetLearner.Api.Data.Migrations
 
                     b.Property<string>("StrengthsJson")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("jsonb");
 
                     b.Property<string>("SubtestCode")
                         .IsRequired()
@@ -7187,9 +7187,39 @@ namespace OetLearner.Api.Data.Migrations
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
 
+                    b.Property<string>("GatewayTransactionId")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<DateTimeOffset?>("LastAttemptedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("LastRetriedByAdminId")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
+
+                    b.Property<string>("LastRetriedByAdminName")
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)");
+
+                    b.Property<DateTimeOffset?>("LastRetriedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("NormalizedStatus")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
+                    b.Property<string>("ParserVersion")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.Property<string>("PayloadJson")
                         .IsRequired()
-                        .HasColumnType("text");
+                        .HasColumnType("jsonb");
+
+                    b.Property<string>("PayloadSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)");
 
                     b.Property<DateTimeOffset?>("ProcessedAt")
                         .HasColumnType("timestamp with time zone");
@@ -7202,12 +7232,28 @@ namespace OetLearner.Api.Data.Migrations
                     b.Property<DateTimeOffset>("ReceivedAt")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<int>("AttemptCount")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("RetryCount")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset?>("VerifiedAt")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("VerificationStatus")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)");
+
                     b.HasKey("Id");
 
                     b.HasIndex("GatewayEventId")
                         .IsUnique();
 
                     b.HasIndex("ProcessingStatus", "ReceivedAt");
+
+                    b.HasIndex("VerificationStatus", "ProcessingStatus");
 
                     b.ToTable("PaymentWebhookEvents");
                 });
@@ -10449,6 +10495,10 @@ namespace OetLearner.Api.Data.Migrations
                     b.HasIndex("WalletId");
 
                     b.HasIndex("WalletId", "CreatedAt");
+
+                    b.HasIndex("WalletId", "TransactionType", "ReferenceType", "ReferenceId")
+                        .IsUnique()
+                        .HasFilter("\"ReferenceId\" IS NOT NULL AND ((\"TransactionType\" = 'top_up' AND \"ReferenceType\" = 'payment') OR (\"TransactionType\" = 'plan_grant' AND \"ReferenceType\" = 'subscription') OR (\"TransactionType\" = 'credit_purchase' AND \"ReferenceType\" = 'addon'))");
 
                     b.ToTable("WalletTransactions");
                 });

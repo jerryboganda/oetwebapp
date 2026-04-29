@@ -514,6 +514,35 @@ public class PaymentWebhookEvent
     public string ProcessingStatus { get; set; } = "received";
     // received | processing | completed | failed | ignored
 
+    [MaxLength(32)]
+    public string VerificationStatus { get; set; } = "legacy";
+    // legacy | verified | failed
+
+    public DateTimeOffset? VerifiedAt { get; set; }
+
+    [MaxLength(64)]
+    public string? PayloadSha256 { get; set; }
+
+    [MaxLength(32)]
+    public string? ParserVersion { get; set; }
+
+    [MaxLength(256)]
+    public string? GatewayTransactionId { get; set; }
+
+    [MaxLength(32)]
+    public string? NormalizedStatus { get; set; }
+
+    public int AttemptCount { get; set; }
+    public int RetryCount { get; set; }
+    public DateTimeOffset? LastAttemptedAt { get; set; }
+    public DateTimeOffset? LastRetriedAt { get; set; }
+
+    [MaxLength(64)]
+    public string? LastRetriedByAdminId { get; set; }
+
+    [MaxLength(128)]
+    public string? LastRetriedByAdminName { get; set; }
+
     public string PayloadJson { get; set; } = "{}";
 
     public string? ErrorMessage { get; set; }

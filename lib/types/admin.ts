@@ -722,9 +722,29 @@ export interface AdminWebhookEvent {
   eventType: string;
   gatewayEventId: string;
   processingStatus: 'received' | 'processing' | 'completed' | 'failed' | 'ignored';
+  verificationStatus: 'legacy' | 'verified' | 'failed';
+  gatewayTransactionId: string | null;
+  normalizedStatus: string | null;
+  attemptCount: number;
+  retryCount: number;
+  lastAttemptedAt: string | null;
+  lastRetriedAt: string | null;
+  retryable: boolean;
+  retryBlockedReason: string | null;
   errorMessage: string | null;
   receivedAt: string;
   processedAt: string | null;
+}
+
+export interface AdminWebhookRetryResponse {
+  eventId: string;
+  status: 'reprocessed' | 'no_effect' | 'still_failed' | 'processing' | string;
+  processingStatus: AdminWebhookEvent['processingStatus'];
+  errorMessage: string | null;
+  attemptCount: number;
+  retryCount: number;
+  gatewayTransactionId: string | null;
+  normalizedStatus: string | null;
 }
 
 export interface AdminWebhookEventsResponse {
@@ -741,7 +761,14 @@ export interface AdminWebhookSummary {
   failed24h: number;
   byStatus: { status: string; count: number }[];
   byGateway: { gateway: string; count: number }[];
-  recentFailures: { id: string; eventType: string; errorMessage: string | null; receivedAt: string }[];
+  recentFailures: {
+    id: string;
+    eventType: string;
+    errorMessage: string | null;
+    receivedAt: string;
+    retryable: boolean;
+    retryBlockedReason: string | null;
+  }[];
 }
 
 // ── Review Escalation ───────────────────────────────────

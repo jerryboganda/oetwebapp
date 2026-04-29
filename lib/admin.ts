@@ -1089,6 +1089,15 @@ export async function getAdminWebhookEventsData(
       eventType: toStringValue(e.eventType),
       gatewayEventId: toStringValue(e.gatewayEventId),
       processingStatus: normalizeWebhookStatus(e.processingStatus),
+      verificationStatus: normalizeWebhookVerificationStatus(e.verificationStatus),
+      gatewayTransactionId: toNullableString(e.gatewayTransactionId),
+      normalizedStatus: toNullableString(e.normalizedStatus),
+      attemptCount: toNumberValue(e.attemptCount),
+      retryCount: toNumberValue(e.retryCount),
+      lastAttemptedAt: toNullableString(e.lastAttemptedAt),
+      lastRetriedAt: toNullableString(e.lastRetriedAt),
+      retryable: Boolean(e.retryable),
+      retryBlockedReason: toNullableString(e.retryBlockedReason),
       errorMessage: toNullableString(e.errorMessage),
       receivedAt: toStringValue(e.receivedAt),
       processedAt: toNullableString(e.processedAt),
@@ -1106,6 +1115,13 @@ function normalizeWebhookStatus(value: unknown): 'received' | 'processing' | 'co
   if (normalized === 'failed') return 'failed';
   if (normalized === 'ignored') return 'ignored';
   return 'received';
+}
+
+function normalizeWebhookVerificationStatus(value: unknown): 'legacy' | 'verified' | 'failed' {
+  const normalized = toStringValue(value, 'legacy').toLowerCase();
+  if (normalized === 'verified') return 'verified';
+  if (normalized === 'failed') return 'failed';
+  return 'legacy';
 }
 
 export async function getAdminWebhookSummaryData(): Promise<AdminWebhookSummary> {
@@ -1128,6 +1144,8 @@ export async function getAdminWebhookSummaryData(): Promise<AdminWebhookSummary>
       eventType: toStringValue(f.eventType),
       errorMessage: toNullableString(f.errorMessage),
       receivedAt: toStringValue(f.receivedAt),
+      retryable: Boolean(f.retryable),
+      retryBlockedReason: toNullableString(f.retryBlockedReason),
     })),
   };
 }

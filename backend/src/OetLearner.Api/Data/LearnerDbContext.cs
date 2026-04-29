@@ -625,6 +625,10 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
 
         // Wallet transaction indexes
         modelBuilder.Entity<WalletTransaction>().HasIndex(x => new { x.WalletId, x.CreatedAt });
+        modelBuilder.Entity<WalletTransaction>()
+            .HasIndex(x => new { x.WalletId, x.TransactionType, x.ReferenceType, x.ReferenceId })
+            .IsUnique()
+            .HasFilter("\"ReferenceId\" IS NOT NULL AND ((\"TransactionType\" = 'top_up' AND \"ReferenceType\" = 'payment') OR (\"TransactionType\" = 'plan_grant' AND \"ReferenceType\" = 'subscription') OR (\"TransactionType\" = 'credit_purchase' AND \"ReferenceType\" = 'addon'))");
 
         // Payment indexes
         modelBuilder.Entity<PaymentTransaction>().HasIndex(x => new { x.LearnerUserId, x.CreatedAt });
@@ -632,6 +636,7 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
         modelBuilder.Entity<PaymentTransaction>().HasIndex(x => x.GatewayTransactionId).IsUnique();
         modelBuilder.Entity<PaymentWebhookEvent>().HasIndex(x => x.GatewayEventId).IsUnique();
         modelBuilder.Entity<PaymentWebhookEvent>().HasIndex(x => new { x.ProcessingStatus, x.ReceivedAt });
+        modelBuilder.Entity<PaymentWebhookEvent>().HasIndex(x => new { x.VerificationStatus, x.ProcessingStatus });
 
         // ── Content hierarchy indexes ──
         modelBuilder.Entity<ContentProgram>().HasIndex(x => x.Code).IsUnique();
