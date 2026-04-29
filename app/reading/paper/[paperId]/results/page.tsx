@@ -100,6 +100,48 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
 
             <section>
               <LearnerSurfaceSectionHeader
+                eyebrow="Part Breakdown"
+                title="Score by Reading section"
+                description="Use the A/B/C split to decide whether speed, workplace extracts, or long-text inference needs the next practice block."
+                className="mb-5"
+              />
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+                {review.partBreakdown.map((part) => (
+                  <div key={part.partCode} className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
+                    <p className="text-sm font-black uppercase tracking-[0.16em] text-muted">Part {part.partCode}</p>
+                    <p className="mt-2 text-2xl font-semibold text-navy">{part.rawScore}/{part.maxRawScore}</p>
+                    <p className="mt-1 text-sm text-muted">
+                      {part.correctCount} correct | {part.incorrectCount} wrong | {part.unansweredCount} unanswered
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section>
+              <LearnerSurfaceSectionHeader
+                eyebrow="Skill Breakdown"
+                title="Skill-level pattern"
+                description="Grouped by authored skill tag where available, otherwise by question type."
+                className="mb-5"
+              />
+              <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+                {review.skillBreakdown.map((skill) => (
+                  <div key={skill.label} className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-black uppercase tracking-[0.16em] text-muted">{skill.label}</p>
+                      <Badge variant="muted">{skill.totalCount} item(s)</Badge>
+                    </div>
+                    <p className="mt-2 text-sm text-muted">
+                      {skill.correctCount} correct | {skill.incorrectCount} wrong | {skill.unansweredCount} unanswered
+                    </p>
+                  </div>
+                ))}
+              </div>
+            </section>
+
+            <section>
+              <LearnerSurfaceSectionHeader
                 eyebrow="Error Clusters"
                 title="Where marks were lost"
                 description="Clusters are grouped by authored skill tag first, then by question type."

@@ -68,8 +68,12 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const [nowMs, setNowMs] = useState(() => Date.now());
   const [showConfirm, setShowConfirm] = useState(false);
   const [saveState, setSaveState] = useState<SaveState>('idle');
+  const [timingNotice, setTimingNotice] = useState<string | null>(null);
 
   const saveTimers = useRef<Record<string, ReturnType<typeof setTimeout>>>({});
+  const autoSubmitTriggered = useRef(false);
+  const dirtyQuestionIds = useRef<Set<string>>(new Set());
+  const timingState = useRef({ partALocked: false, partBCWindowEnded: false, paperExpired: false });
 
   useEffect(() => {
     const interval = setInterval(() => setNowMs(Date.now()), 1000);
@@ -106,6 +110,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
           status: saved.status,
         });
         setAnswers(restoredAnswers);
+        dirtyQuestionIds.current.clear();
       }
     } catch (err) {
       setError(readErrorMessage(err, 'Failed to load Reading paper.'));
@@ -123,6 +128,14 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     [activePart, structure],
   );
 
+  const questionPartById = useMemo(() => {
+    const map = new Map<string, ReadingPartCode>();
+    structure?.parts.forEach((part) => {
+      part.questions.forEach((question) => map.set(question.id, part.partCode));
+    });
+    return map;
+  }, [structure]);
+
   useEffect(() => {
     if (!currentPart?.questions.length) return;
     if (!activeQuestionId || !currentPart.questions.some((question) => question.id === activeQuestionId)) {
@@ -133,7 +146,23 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const totalQuestions = structure?.parts.reduce((sum, part) => sum + part.questions.length, 0) ?? 0;
   const answeredCount = Object.values(answers).filter(isAnsweredJson).length;
   const partALocked = Boolean(attempt && nowMs > new Date(attempt.partADeadlineAt).getTime());
+  const partBCWindowEnded = Boolean(attempt && nowMs > new Date(attempt.partBCDeadlineAt).getTime());
   const paperExpired = Boolean(attempt && nowMs > new Date(attempt.deadlineAt).getTime());
+  const attemptInputsLocked = partBCWindowEnded || paperExpired;
+
+  useEffect(() => {
+    timingState.current = { partALocked, partBCWindowEnded, paperExpired };
+  }, [paperExpired, partALocked, partBCWindowEnded]);
+
+  useEffect(() => {
+    if (!attempt || !partALocked) {
+      setTimingNotice(null);
+      return;
+    }
+
+    if (activePart === 'A') setActivePart('B');
+    setTimingNotice('Part A is locked. Parts B and C are now active.');
+  }, [activePart, attempt, partALocked]);
 
   const start = async () => {
     setStarting(true);
@@ -144,6 +173,9 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
       setAttempt(fromStartedAttempt(started));
       setAnswers({});
       setFlagged(new Set());
+      autoSubmitTriggered.current = false;
+      dirtyQuestionIds.current.clear();
+      setTimingNotice(null);
       setActivePart('A');
     } catch (err) {
       if (isContentLockedError(err)) {
@@ -158,21 +190,31 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
 
   const persistAnswer = useCallback(async (questionId: string, valueJson: string) => {
     if (!attempt) return;
+    const questionPart = questionPartById.get(questionId);
+    const currentTiming = timingState.current;
+    if ((questionPart === 'A' && currentTiming.partALocked) || currentTiming.partBCWindowEnded || currentTiming.paperExpired) {
+      dirtyQuestionIds.current.delete(questionId);
+      setSaveState('saved');
+      return;
+    }
+
     setSaveState('saving');
     try {
       await saveReadingAnswer(attempt.attemptId, questionId, valueJson);
+      dirtyQuestionIds.current.delete(questionId);
       setSaveState('saved');
     } catch (err) {
       setSaveState('error');
       setError(readErrorMessage(err, 'Autosave failed.'));
     }
-  }, [attempt]);
+  }, [attempt, questionPartById]);
 
   const setAnswer = (question: ReadingQuestionLearnerDto, value: unknown) => {
-    if (!attempt || isQuestionLocked(activePart, partALocked, paperExpired)) return;
+    if (!attempt || isQuestionLocked(activePart, partALocked, attemptInputsLocked)) return;
 
     const json = JSON.stringify(value);
     setAnswers((prev) => ({ ...prev, [question.id]: json }));
+    dirtyQuestionIds.current.add(question.id);
     setSaveState('saving');
     if (saveTimers.current[question.id]) clearTimeout(saveTimers.current[question.id]);
     saveTimers.current[question.id] = setTimeout(() => {
@@ -180,14 +222,27 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     }, 400);
   };
 
-  const submit = async () => {
+  const submit = useCallback(async () => {
     if (!attempt) return;
     setSubmitting(true);
     setError(null);
     try {
       Object.values(saveTimers.current).forEach(clearTimeout);
-      await Promise.all(Object.entries(answers).map(([questionId, valueJson]) =>
+      const lockedQuestionIds: string[] = [];
+      const answersToFlush = Object.entries(answers).filter(([questionId]) => {
+        if (!dirtyQuestionIds.current.has(questionId)) return false;
+        const questionPart = questionPartById.get(questionId);
+        if ((questionPart === 'A' && partALocked) || partBCWindowEnded || paperExpired) {
+          lockedQuestionIds.push(questionId);
+          return false;
+        }
+        return true;
+      });
+
+      lockedQuestionIds.forEach((questionId) => dirtyQuestionIds.current.delete(questionId));
+      await Promise.all(answersToFlush.map(([questionId, valueJson]) =>
         saveReadingAnswer(attempt.attemptId, questionId, valueJson)));
+      answersToFlush.forEach(([questionId]) => dirtyQuestionIds.current.delete(questionId));
       await submitReadingAttempt(attempt.attemptId);
       router.push(`/reading/paper/${paperId}/results?attemptId=${attempt.attemptId}`);
     } catch (err) {
@@ -195,7 +250,13 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     } finally {
       setSubmitting(false);
     }
-  };
+  }, [answers, attempt, paperId, paperExpired, partALocked, partBCWindowEnded, questionPartById, router]);
+
+  useEffect(() => {
+    if (!attempt || attempt.status !== 'InProgress' || !partBCWindowEnded || autoSubmitTriggered.current) return;
+    autoSubmitTriggered.current = true;
+    void submit();
+  }, [attempt, partBCWindowEnded, submit]);
 
   if (loading) {
     return <LearnerDashboardShell pageTitle="Reading"><Skeleton className="h-64" /></LearnerDashboardShell>;
@@ -221,6 +282,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     <LearnerDashboardShell pageTitle={structure.paper.title} backHref="/reading">
       <main className="space-y-5">
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+        {timingNotice ? <InlineAlert variant="warning">{timingNotice}</InlineAlert> : null}
 
         {!attempt ? (
           <section className="rounded-[20px] border border-border bg-surface px-5 py-8 text-center shadow-sm">
@@ -246,7 +308,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
               answeredCount={answeredCount}
               totalQuestions={totalQuestions}
               saveState={saveState}
-              paperExpired={paperExpired}
+              paperExpired={partBCWindowEnded || paperExpired}
               partALocked={partALocked}
               submitting={submitting}
               onSubmit={() => setShowConfirm(true)}
@@ -267,7 +329,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
                 answers={answers}
                 flagged={flagged}
                 activeQuestionId={activeQuestionId}
-                locked={paperExpired || (currentPart.partCode === 'A' && partALocked)}
+                locked={attemptInputsLocked || (currentPart.partCode === 'A' && partALocked)}
                 onActiveQuestionChange={setActiveQuestionId}
                 onToggleFlag={(questionId) => setFlagged((prev) => toggleSetValue(prev, questionId))}
                 onAnswerChange={setAnswer}
@@ -391,11 +453,13 @@ function PartTabs({
             key={part.partCode}
             type="button"
             onClick={() => onChange(part.partCode)}
+            disabled={part.partCode === 'A' && partALocked}
             className={cn(
               'min-h-11 shrink-0 border-b-2 px-4 py-2 text-left text-sm font-bold transition-colors',
               activePart === part.partCode
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted hover:text-navy',
+              part.partCode === 'A' && partALocked && 'cursor-not-allowed opacity-60 hover:text-muted',
             )}
           >
             <span>Part {part.partCode}</span>

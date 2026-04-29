@@ -424,6 +424,55 @@ public class ReadingAuthoringTests
     }
 
     [Fact]
+    public async Task Answer_window_rejects_BC_save_before_grace_deadline()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
+        attempt.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-61);
+        attempt.DeadlineAt = DateTimeOffset.UtcNow.AddSeconds(5);
+        await db.SaveChangesAsync();
+        var partBQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .FirstAsync(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.B);
+
+        var ex = await Assert.ThrowsAsync<ReadingAttemptException>(() =>
+            attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partBQuestion.Id, partBQuestion.CorrectAnswerJson, default));
+        Assert.Equal("answer_window_closed", ex.Code);
+        Assert.Equal(ReadingAttemptStatus.InProgress, attempt.Status);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Submit_grace_still_grades_after_answer_window_closes()
+    {
+        var (db, structure, _, _, attemptSvc) = Build();
+        await SeedPaperAsync(db, "p1");
+        await structure.EnsureCanonicalPartsAsync("p1", default);
+        await FullyAuthorPaperAsync(db, structure, "p1");
+
+        var started = await attemptSvc.StartAsync("u1", "p1", default);
+        var partBQuestion = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .FirstAsync(q => q.Part!.PaperId == "p1" && q.Part.PartCode == ReadingPartCode.B);
+        await attemptSvc.SaveAnswerAsync("u1", started.AttemptId, partBQuestion.Id, partBQuestion.CorrectAnswerJson, default);
+
+        var attempt = await db.ReadingAttempts.FirstAsync(a => a.Id == started.AttemptId);
+        attempt.StartedAt = DateTimeOffset.UtcNow.AddMinutes(-61);
+        attempt.DeadlineAt = DateTimeOffset.UtcNow.AddSeconds(5);
+        await db.SaveChangesAsync();
+
+        var result = await attemptSvc.SubmitAsync("u1", started.AttemptId, default);
+        Assert.Equal(1, result.RawScore);
+        Assert.Equal(ReadingAttemptStatus.Submitted, attempt.Status);
+        await db.DisposeAsync();
+    }
+
+    [Fact]
     public async Task Start_blocks_when_user_override_BlockAttempts_true()
     {
         var (db, structure, policy, _, attemptSvc) = Build();

@@ -192,13 +192,15 @@ public sealed class ReadingAttemptService(
                 "attempt_not_in_progress",
                 $"Cannot save to an attempt that is {attempt.Status}.");
 
+        var now = DateTimeOffset.UtcNow;
+
         // Deadline respected (inclusive of grace period — DeadlineAt already
         // has it baked in).
-        if (attempt.DeadlineAt is DateTimeOffset deadline && DateTimeOffset.UtcNow > deadline)
+        if (attempt.DeadlineAt is DateTimeOffset deadline && now > deadline)
         {
             // Auto-expire on next action — the grader handles idempotency.
             attempt.Status = ReadingAttemptStatus.Expired;
-            attempt.LastActivityAt = DateTimeOffset.UtcNow;
+            attempt.LastActivityAt = now;
             await db.SaveChangesAsync(ct);
             throw new ReadingAttemptException("attempt_deadline_passed", "Attempt deadline has passed.");
         }
@@ -218,9 +220,18 @@ public sealed class ReadingAttemptService(
                 "Question does not belong to this attempt's paper.");
 
         var resolvedPolicy = ResolvePolicySnapshot(attempt.PolicySnapshotJson);
+        var answerWindowDeadline = attempt.StartedAt.AddMinutes(
+            resolvedPolicy.PartATimerMinutes + resolvedPolicy.PartBCTimerMinutes);
+        if (now > answerWindowDeadline)
+        {
+            throw new ReadingAttemptException(
+                "answer_window_closed",
+                "The Reading answer window has ended. Submit grace only allows final grading.");
+        }
+
         if (q.Part?.PartCode == ReadingPartCode.A
             && string.Equals(resolvedPolicy.PartATimerStrictness, "hard_lock", StringComparison.OrdinalIgnoreCase)
-            && DateTimeOffset.UtcNow > attempt.StartedAt.AddMinutes(resolvedPolicy.PartATimerMinutes))
+            && now > attempt.StartedAt.AddMinutes(resolvedPolicy.PartATimerMinutes))
         {
             throw new ReadingAttemptException(
                 "part_a_locked",
@@ -241,7 +252,7 @@ public sealed class ReadingAttemptService(
         var existingAnswerCount = await db.ReadingAnswers
             .CountAsync(a => a.ReadingAttemptId == attemptId, ct);
         var isNewAnswer = row is null;
-        var now = DateTimeOffset.UtcNow;
+        now = DateTimeOffset.UtcNow;
         if (row is null)
         {
             row = new ReadingAnswer

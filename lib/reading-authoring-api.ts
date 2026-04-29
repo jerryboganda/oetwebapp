@@ -292,6 +292,21 @@ export interface ReadingAttemptReviewDto {
     incorrectCount: number;
     questionIds: string[];
   }>;
+  partBreakdown: Array<{
+    partCode: ReadingPartCode;
+    rawScore: number;
+    maxRawScore: number;
+    correctCount: number;
+    incorrectCount: number;
+    unansweredCount: number;
+  }>;
+  skillBreakdown: Array<{
+    label: string;
+    correctCount: number;
+    incorrectCount: number;
+    unansweredCount: number;
+    totalCount: number;
+  }>;
 }
 
 // ── HTTP helper ─────────────────────────────────────────────────────────

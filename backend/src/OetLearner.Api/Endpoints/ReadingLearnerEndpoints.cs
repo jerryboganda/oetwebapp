@@ -293,6 +293,37 @@ public static class ReadingLearnerEndpoints
                 .ThenBy(x => x.label)
                 .ToList();
 
+            var partBreakdown = parts
+                .Select(part =>
+                {
+                    var partCode = part.PartCode.ToString();
+                    var partItems = items.Where(i => i.PartCode == partCode).ToList();
+                    return new
+                    {
+                        partCode,
+                        rawScore = partItems.Sum(i => i.PointsEarned),
+                        maxRawScore = part.Questions.Sum(q => q.Points),
+                        correctCount = partItems.Count(i => i.IsCorrect),
+                        incorrectCount = partItems.Count(i => !i.IsCorrect && i.UserAnswer is not null),
+                        unansweredCount = partItems.Count(i => i.UserAnswer is null),
+                    };
+                })
+                .ToList();
+
+            var skillBreakdown = items
+                .GroupBy(i => string.IsNullOrWhiteSpace(i.SkillTag) ? i.QuestionType : i.SkillTag)
+                .Select(g => new
+                {
+                    label = g.Key,
+                    correctCount = g.Count(i => i.IsCorrect),
+                    incorrectCount = g.Count(i => !i.IsCorrect && i.UserAnswer is not null),
+                    unansweredCount = g.Count(i => i.UserAnswer is null),
+                    totalCount = g.Count(),
+                })
+                .OrderByDescending(x => x.incorrectCount + x.unansweredCount)
+                .ThenBy(x => x.label)
+                .ToList();
+
             return Results.Ok(new
             {
                 attempt = new
@@ -319,6 +350,8 @@ public static class ReadingLearnerEndpoints
                 },
                 items,
                 clusters,
+                partBreakdown,
+                skillBreakdown,
             });
         });
 
