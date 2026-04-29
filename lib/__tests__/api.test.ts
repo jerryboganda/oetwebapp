@@ -34,6 +34,11 @@ describe('ApiError', () => {
     expect(error.userMessage).toBe('Too many requests. Please wait a moment and try again.');
   });
 
+  it('maps auth failures to sign-in guidance', () => {
+    const error = new ApiError(401, 'not_authenticated', 'Unauthorized', false);
+    expect(error.userMessage).toBe('Your session expired. Please sign in again.');
+  });
+
   it('falls back to server message for unknown codes', () => {
     const error = new ApiError(500, 'some_custom_error', 'Server exploded', true);
     expect(error.userMessage).toBe('Server exploded');

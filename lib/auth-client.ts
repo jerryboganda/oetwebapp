@@ -328,6 +328,10 @@ export async function signIn(input: { email: string; password: string; rememberM
     clearPendingMfaChallenge();
     return { status: 'authenticated', session };
   } catch (error) {
+    if (error instanceof AuthClientError && error.status === 400 && error.code === 'auth_request_failed') {
+      throw new AuthClientError(400, 'invalid_credentials', 'Invalid email or password.', false);
+    }
+
     if (error instanceof AuthClientError && error.code === 'mfa_challenge_required') {
       const challenge = {
         email: error.details?.email ?? input.email,

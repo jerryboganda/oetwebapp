@@ -34,7 +34,7 @@ interface AuthState {
   pendingMfaChallenge: PendingMfaChallenge | null;
 }
 
-interface AuthContextValue extends AuthState {
+export interface AuthContextValue extends AuthState {
   role: UserRole | null;
   isAuthenticated: boolean;
   signIn: (email: string, password: string, rememberMe?: boolean) => Promise<SignInResult>;

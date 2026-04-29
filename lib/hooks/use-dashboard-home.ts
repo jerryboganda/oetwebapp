@@ -3,7 +3,7 @@
 import { useContext, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { AuthContext } from '@/contexts/auth-context';
 import { useAnalytics } from '@/hooks/use-analytics';
-import { fetchDashboardHome, fetchEngagement, fetchReadiness, fetchStudyPlan, fetchUserProfile } from '@/lib/api';
+import { ApiError, fetchDashboardHome, fetchEngagement, fetchReadiness, fetchStudyPlan, fetchUserProfile, isApiError } from '@/lib/api';
 import type { ReadinessData, StudyPlanTask, UserProfile } from '@/lib/mock-data';
 
 export interface EngagementData {
@@ -29,7 +29,7 @@ export interface DashboardHomeData {
 interface DashboardHomeState {
   data: DashboardHomeData;
   error: string | null;
-  status: 'loading' | 'success' | 'error';
+  status: 'loading' | 'success' | 'error' | 'partial';
 }
 
 const initialState: DashboardHomeState = {
@@ -45,6 +45,10 @@ const initialState: DashboardHomeState = {
 };
 
 function toErrorMessage(error: unknown): string {
+  if (isApiError(error)) {
+    return error.userMessage;
+  }
+
   if (error && typeof error === 'object') {
     if ('userMessage' in error && typeof error.userMessage === 'string') {
       return error.userMessage;
@@ -58,11 +62,16 @@ function toErrorMessage(error: unknown): string {
   return 'Something went wrong. Please try again.';
 }
 
+function isAuthFailure(error: unknown): error is ApiError {
+  return isApiError(error) && (error.status === 401 || error.status === 403 || error.code === 'not_authenticated' || error.code === 'unauthorized' || error.code === 'forbidden');
+}
+
 export function useDashboardHome() {
   const { track } = useAnalytics();
   const authContext = useContext(AuthContext);
   const authLoading = authContext?.loading ?? false;
   const isAuthenticated = authContext?.isAuthenticated ?? true;
+  const signOut = authContext?.signOut;
   const [state, setState] = useState<DashboardHomeState>(initialState);
 
   async function load() {
@@ -77,7 +86,7 @@ export function useDashboardHome() {
     }));
 
     try {
-      const [tasks, readiness, profile, home, engagementData] = await Promise.all([
+      const [tasksResult, readinessResult, profileResult, homeResult, engagementResult] = await Promise.allSettled([
         fetchStudyPlan(),
         fetchReadiness(),
         fetchUserProfile(),
@@ -85,7 +94,32 @@ export function useDashboardHome() {
         fetchEngagement(),
       ]);
 
-      const raw = engagementData as Partial<EngagementData>;
+      const settledResults = [tasksResult, readinessResult, profileResult, homeResult, engagementResult];
+      const hasAuthFailure = settledResults.some((result) => result.status === 'rejected' && isAuthFailure(result.reason));
+      if (hasAuthFailure) {
+        if (signOut) {
+          try {
+            await signOut();
+          } catch {
+            // If sign-out fails, stop here so auth guards can re-evaluate state.
+          }
+        }
+        return;
+      }
+
+      const taskError = tasksResult.status === 'rejected' ? tasksResult.reason : null;
+      const readinessError = readinessResult.status === 'rejected' ? readinessResult.reason : null;
+      const profileError = profileResult.status === 'rejected' ? profileResult.reason : null;
+      const homeError = homeResult.status === 'rejected' ? homeResult.reason : null;
+      const engagementError = engagementResult.status === 'rejected' ? engagementResult.reason : null;
+
+      const tasks = tasksResult.status === 'fulfilled' ? tasksResult.value : [];
+      const readiness = readinessResult.status === 'fulfilled' ? readinessResult.value : null;
+      const profile = profileResult.status === 'fulfilled' ? profileResult.value : null;
+      const home = homeResult.status === 'fulfilled' ? homeResult.value : null;
+      const engagementData = engagementResult.status === 'fulfilled' ? engagementResult.value : null;
+
+      const raw = (engagementData ?? {}) as Partial<EngagementData>;
       const engagement: EngagementData = {
         currentStreak: raw.currentStreak ?? 0,
         longestStreak: raw.longestStreak ?? 0,
@@ -98,6 +132,9 @@ export function useDashboardHome() {
         streakFreezeUsedThisWeek: raw.streakFreezeUsedThisWeek ?? false,
       };
 
+      const firstError = taskError ?? readinessError ?? profileError ?? homeError ?? engagementError;
+      const partial = !!firstError;
+
       setState({
         data: {
           home,
@@ -106,11 +143,13 @@ export function useDashboardHome() {
           tasks,
           engagement,
         },
-        error: null,
-        status: 'success',
+        error: firstError ? toErrorMessage(firstError) : null,
+        status: partial ? 'partial' : 'success',
       });
 
-      track('readiness_viewed');
+      if (!partial) {
+        track('readiness_viewed');
+      }
     } catch (error) {
       setState((current) => ({
         ...current,

@@ -61,7 +61,7 @@ export default function Dashboard() {
   const upcomingTasks = tasks.filter((task) => task.section === 'thisWeek');
   const completedToday = todayTasks.filter((task) => task.status === 'completed').length;
   const nextAction = todayTasks.find((task) => task.status !== 'completed');
-  const asyncStatus = status === 'loading' ? 'loading' : status === 'error' ? 'error' : !profile ? 'empty' : 'success' as const;
+  const asyncStatus = status === 'loading' ? 'loading' : status === 'error' ? 'error' : status === 'partial' ? 'partial' : !profile ? 'empty' : 'success' as const;
   const readinessSubTests = readiness?.subTests ?? [];
   const readinessAverage = readinessSubTests.length > 0
     ? Math.round(readinessSubTests.reduce((sum, subTest) => sum + subTest.readiness, 0) / readinessSubTests.length)
@@ -147,6 +147,7 @@ export default function Dashboard() {
         status={asyncStatus}
         onRetry={reload}
         errorMessage={error ?? undefined}
+        partialMessage={error ?? 'Some dashboard data could not be loaded right now. The rest of your workspace is still available.'}
         emptyContent={
           <div className="space-y-3 py-12 text-center">
             <p className="text-sm font-bold text-navy">Welcome to OET Prep</p>

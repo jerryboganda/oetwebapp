@@ -422,6 +422,8 @@ export function isApiError(error: unknown): error is ApiError {
 
 function mapErrorCodeToUserMessage(code: string, fallback: string): string {
   switch (code) {
+    case 'not_authenticated': return 'Your session expired. Please sign in again.';
+    case 'unauthorized': return 'Please sign in again to continue.';
     case 'draft_version_conflict': return 'Your draft was updated in another tab. Please refresh and try again.';
     case 'calibration_already_submitted': return 'This calibration case is already finalized and is now locked.';
     case 'idempotency_duplicate': return 'This action was already completed.';
@@ -458,11 +460,16 @@ async function apiRequest<T = any>(path: string, init?: RequestInit, options?: {
         let fieldErrors: Array<{ field: string; code: string; message: string }> = [];
         try {
           const error = await response.json();
-          code = error.code ?? code;
+          code = error.code ?? (response.status === 401 ? 'not_authenticated' : response.status === 403 ? 'forbidden' : code);
           message = error.message ?? error.title ?? message;
           retryable = error.retryable ?? isRetryable(response.status);
           fieldErrors = Array.isArray(error.fieldErrors) ? error.fieldErrors : [];
         } catch (err) {
+          if (response.status === 401) {
+            code = 'not_authenticated';
+          } else if (response.status === 403) {
+            code = 'forbidden';
+          }
           // Body wasn't JSON (e.g. backend returned an HTML error page). This
           // isn't actionable for the user and we still surface the status code
           // via the thrown ApiError; demote to debug so it doesn't spam the

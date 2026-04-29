@@ -35,6 +35,10 @@ function readErrorCode(error: unknown): string | null {
 }
 
 function readErrorMessage(error: unknown): string {
+  if (error && typeof error === 'object' && 'userMessage' in error && typeof error.userMessage === 'string') {
+    return error.userMessage;
+  }
+
   if (error && typeof error === 'object' && 'message' in error && typeof error.message === 'string') {
     return error.message;
   }

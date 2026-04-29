@@ -62,6 +62,22 @@ describe('auth-client', () => {
     await expect(ensureFreshAccessToken()).resolves.toBe('access-token-1');
   });
 
+  it('maps blank 400 sign-in responses to invalid credentials', async () => {
+    vi.mocked(global.fetch).mockResolvedValueOnce(new Response(null, { status: 400 }));
+
+    const { signIn } = await import('@/lib/auth-client');
+
+    await expect(signIn({
+      email: 'mindreader420123@gmail.com',
+      password: '12345678',
+      rememberMe: true,
+    })).rejects.toMatchObject({
+      status: 400,
+      code: 'invalid_credentials',
+      message: 'Invalid email or password.',
+    });
+  });
+
   it('returns an MFA challenge payload instead of persisting a partial sign-in', async () => {
     vi.mocked(global.fetch).mockResolvedValueOnce(new Response(JSON.stringify({
       code: 'mfa_challenge_required',
