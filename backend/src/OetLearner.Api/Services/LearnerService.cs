@@ -2128,9 +2128,12 @@ public partial class LearnerService(
             quoteEntity = await db.BillingQuotes.FirstOrDefaultAsync(x => x.Id == request.QuoteId && x.UserId == userId, cancellationToken)
                 ?? throw ApiException.NotFound("billing_quote_not_found", "The requested billing quote could not be found.");
 
-            if (quoteEntity.ExpiresAt < DateTimeOffset.UtcNow)
+            var now = DateTimeOffset.UtcNow;
+            if (quoteEntity.ExpiresAt < now)
             {
-                quoteEntity.Status = BillingQuoteStatus.Expired;
+                var releasedCouponKeys = await ReleasePreCheckoutCouponReservationsForQuoteAsync(quoteEntity, now, cancellationToken);
+                await db.SaveChangesAsync(cancellationToken);
+                await RefreshCouponRedemptionCountsAsync(releasedCouponKeys, now, cancellationToken);
                 await db.SaveChangesAsync(cancellationToken);
                 throw ApiException.Validation("billing_quote_expired", "This billing quote has expired.");
             }
@@ -5411,46 +5414,83 @@ public partial class LearnerService(
 
         if (persistQuote)
         {
-            db.BillingQuotes.Add(quote);
-            db.BillingEvents.Add(new BillingEvent
+            IDbContextTransaction? couponReservationTransaction = null;
+            try
             {
-                Id = $"bill-evt-{Guid.NewGuid():N}",
-                UserId = userId,
-                SubscriptionId = subscription.Id,
-                QuoteId = quote.Id,
-                EventType = "billing_quote_created",
-                EntityType = "BillingQuote",
-                EntityId = quote.Id,
-                PayloadJson = JsonSupport.Serialize(new { planCode, addOnCodes, couponCode = coupon?.Code, subtotal, discount, total }),
-                OccurredAt = now
-            });
-
-            if (coupon is not null)
-            {
-                var redemptionIdValue = $"redemption-{Guid.NewGuid():N}";
-                db.BillingCouponRedemptions.Add(new BillingCouponRedemption
+                if (coupon is not null)
                 {
-                    Id = redemptionIdValue[..Math.Min(64, redemptionIdValue.Length)],
-                    CouponCode = coupon.Code,
-                    CouponId = coupon.Id,
-                    CouponVersionId = couponVersion?.Id,
+                    couponReservationTransaction = await BeginTransactionIfNeededAsync(cancellationToken);
+                    await LockBillingCouponForReservationAsync(coupon, now, cancellationToken);
+                    await ReleaseExpiredCouponReservationsAsync(coupon, now, cancellationToken);
+
+                    var lockedCouponRedemptionCount = await CountCouponRedemptionsAsync(coupon, userId: null, cancellationToken);
+                    if (coupon.UsageLimitTotal is not null && lockedCouponRedemptionCount >= coupon.UsageLimitTotal.Value)
+                    {
+                        throw ApiException.Validation(
+                            "coupon_exhausted",
+                            "The coupon usage limit has been reached.",
+                            [new ApiFieldError("couponCode", "usage_limit", "Choose a different coupon.")]);
+                    }
+
+                    var lockedPerUserRedemptionCount = await CountCouponRedemptionsAsync(coupon, userId, cancellationToken);
+                    if (coupon.UsageLimitPerUser is not null && lockedPerUserRedemptionCount >= coupon.UsageLimitPerUser.Value)
+                    {
+                        throw ApiException.Validation(
+                            "coupon_user_limit",
+                            "You have already used this coupon.",
+                            [new ApiFieldError("couponCode", "user_limit", "This coupon can only be used once per user.")]);
+                    }
+                }
+
+                db.BillingQuotes.Add(quote);
+                db.BillingEvents.Add(new BillingEvent
+                {
+                    Id = $"bill-evt-{Guid.NewGuid():N}",
                     UserId = userId,
+                    SubscriptionId = subscription.Id,
                     QuoteId = quote.Id,
-                    DiscountAmount = discount,
-                    Currency = quote.Currency,
-                    Status = BillingRedemptionStatus.Reserved,
-                    RedeemedAt = now
+                    EventType = "billing_quote_created",
+                    EntityType = "BillingQuote",
+                    EntityId = quote.Id,
+                    PayloadJson = JsonSupport.Serialize(new { planCode, addOnCodes, couponCode = coupon?.Code, subtotal, discount, total }),
+                    OccurredAt = now
                 });
 
-                var trackedCoupon = await db.BillingCoupons.FirstOrDefaultAsync(x => x.Code == coupon.Code, cancellationToken);
-                if (trackedCoupon is not null)
+                if (coupon is not null)
                 {
-                    trackedCoupon.RedemptionCount += 1;
-                    trackedCoupon.UpdatedAt = now;
+                    var redemptionIdValue = $"redemption-{Guid.NewGuid():N}";
+                    db.BillingCouponRedemptions.Add(new BillingCouponRedemption
+                    {
+                        Id = redemptionIdValue[..Math.Min(64, redemptionIdValue.Length)],
+                        CouponCode = coupon.Code,
+                        CouponId = coupon.Id,
+                        CouponVersionId = couponVersion?.Id,
+                        UserId = userId,
+                        QuoteId = quote.Id,
+                        DiscountAmount = discount,
+                        Currency = quote.Currency,
+                        Status = BillingRedemptionStatus.Reserved,
+                        RedeemedAt = now
+                    });
+
+                    var trackedCoupon = await db.BillingCoupons.FirstOrDefaultAsync(x => x.Code == coupon.Code, cancellationToken);
+                    if (trackedCoupon is not null)
+                    {
+                        trackedCoupon.RedemptionCount += 1;
+                        trackedCoupon.UpdatedAt = now;
+                    }
+                }
+
+                await db.SaveChangesAsync(cancellationToken);
+                await CommitIfOwnedAsync(couponReservationTransaction, cancellationToken);
+            }
+            finally
+            {
+                if (couponReservationTransaction is not null)
+                {
+                    await couponReservationTransaction.DisposeAsync();
                 }
             }
-
-            await db.SaveChangesAsync(cancellationToken);
         }
 
         return new BillingQuoteResponse(
@@ -5479,12 +5519,15 @@ public partial class LearnerService(
 
         var expiredReservations = await db.BillingCouponRedemptions
             .Where(redemption => (redemption.CouponId == coupon.Id || (redemption.CouponId == null && redemption.CouponCode.ToLower() == normalizedCouponCode))
-                && redemption.Status == BillingRedemptionStatus.Reserved)
+                && redemption.Status == BillingRedemptionStatus.Reserved
+                && redemption.CheckoutSessionId == null)
             .Join(db.BillingQuotes,
                 redemption => redemption.QuoteId,
                 quote => quote.Id,
                 (redemption, quote) => new { Redemption = redemption, Quote = quote })
-            .Where(row => row.Quote.ExpiresAt < now && row.Quote.Status == BillingQuoteStatus.Created)
+            .Where(row => row.Quote.ExpiresAt < now
+                && row.Quote.CheckoutSessionId == null
+                && (row.Quote.Status == BillingQuoteStatus.Created || row.Quote.Status == BillingQuoteStatus.Expired))
             .ToListAsync(cancellationToken);
 
         if (expiredReservations.Count == 0)
@@ -5498,17 +5541,102 @@ public partial class LearnerService(
             row.Quote.Status = BillingQuoteStatus.Expired;
         }
 
-        var releasedCount = expiredReservations.Count;
-        var trackedCoupon = await db.BillingCoupons.FirstOrDefaultAsync(
-            item => item.Id == coupon.Id || item.Code.ToLower() == normalizedCouponCode,
-            cancellationToken);
-        if (trackedCoupon is not null)
+        var releasedCouponKeys = GetCouponRedemptionCountKeys(expiredReservations.Select(row => row.Redemption));
+        await db.SaveChangesAsync(cancellationToken);
+        await RefreshCouponRedemptionCountsAsync(releasedCouponKeys, now, cancellationToken);
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task<List<(string? CouponId, string CouponCode)>> ReleasePreCheckoutCouponReservationsForQuoteAsync(BillingQuote quote, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (quote.ExpiresAt >= now
+            || quote.Status is not (BillingQuoteStatus.Created or BillingQuoteStatus.Expired)
+            || !string.IsNullOrWhiteSpace(quote.CheckoutSessionId))
         {
-            trackedCoupon.RedemptionCount = Math.Max(0, trackedCoupon.RedemptionCount - releasedCount);
-            trackedCoupon.UpdatedAt = now;
+            return [];
         }
 
-        await db.SaveChangesAsync(cancellationToken);
+        quote.Status = BillingQuoteStatus.Expired;
+
+        var redemptions = await db.BillingCouponRedemptions
+            .Where(redemption => redemption.QuoteId == quote.Id
+                && redemption.Status == BillingRedemptionStatus.Reserved
+                && redemption.CheckoutSessionId == null)
+            .ToListAsync(cancellationToken);
+
+        if (redemptions.Count == 0)
+        {
+            return [];
+        }
+
+        var releasedCouponKeys = GetCouponRedemptionCountKeys(redemptions);
+        foreach (var redemption in redemptions)
+        {
+            redemption.Status = BillingRedemptionStatus.Voided;
+        }
+
+        return releasedCouponKeys;
+    }
+
+    private static List<(string? CouponId, string CouponCode)> GetCouponRedemptionCountKeys(IEnumerable<BillingCouponRedemption> releasedRedemptions)
+        => releasedRedemptions
+            .Select(redemption => (redemption.CouponId, CouponCode: NormalizeBillingCode(redemption.CouponCode)))
+            .Where(key => !string.IsNullOrWhiteSpace(key.CouponId) || !string.IsNullOrWhiteSpace(key.CouponCode))
+            .Distinct()
+            .ToList();
+
+    private async Task LockBillingCouponForReservationAsync(BillingCoupon coupon, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (db.Database.IsInMemory())
+        {
+            return;
+        }
+
+        var lockedCount = await db.BillingCoupons
+            .Where(item => item.Id == coupon.Id)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(item => item.UpdatedAt, now), cancellationToken);
+
+        if (lockedCount == 0)
+        {
+            throw ApiException.Validation(
+                "coupon_not_found",
+                "The coupon code could not be found.",
+                [new ApiFieldError("couponCode", "unknown", "Enter a valid coupon code.")]);
+        }
+    }
+
+    private async Task RefreshCouponRedemptionCountsAsync(IReadOnlyCollection<(string? CouponId, string CouponCode)> releasedCouponKeys, DateTimeOffset now, CancellationToken cancellationToken)
+    {
+        if (releasedCouponKeys.Count == 0)
+        {
+            return;
+        }
+
+        var couponIds = releasedCouponKeys
+            .Where(key => !string.IsNullOrWhiteSpace(key.CouponId))
+            .Select(key => key.CouponId!)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+        var legacyCouponCodes = releasedCouponKeys
+            .Where(key => string.IsNullOrWhiteSpace(key.CouponId))
+            .Select(key => key.CouponCode)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        if (couponIds.Count == 0 && legacyCouponCodes.Count == 0)
+        {
+            return;
+        }
+
+        var coupons = await db.BillingCoupons
+            .Where(coupon => couponIds.Contains(coupon.Id) || legacyCouponCodes.Contains(coupon.Code.ToLower()))
+            .ToListAsync(cancellationToken);
+
+        foreach (var coupon in coupons)
+        {
+            coupon.RedemptionCount = await CountCouponRedemptionsAsync(coupon, userId: null, cancellationToken);
+            coupon.UpdatedAt = now;
+        }
     }
 
     private static string NormalizeMockReviewSelection(string mockType, string? subType, bool includeReview, string? reviewSelection)

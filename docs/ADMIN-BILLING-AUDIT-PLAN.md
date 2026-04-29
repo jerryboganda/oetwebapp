@@ -50,7 +50,7 @@ Status: implemented in this branch.
 - Enforce active, purchasable plans and add-ons in quote creation.
 - Enforce add-on compatibility against the learner's current plan.
 - Persist resolved add-on codes in quotes so add-on-scoped coupons cannot be bypassed by omitting client add-on codes.
-- Release expired coupon reservations before checking coupon usage limits.
+- Release expired pre-checkout coupon reservations before checking coupon usage limits, including already-expired quote records left by failed checkout attempts.
 - Align plan/add-on checkout return URLs with `/billing`.
 - Pass the selected checkout gateway from the learner billing UI to the backend.
 - Let content entitlement lookup match subscriptions that store billing plan codes, not only billing plan IDs.
@@ -59,12 +59,12 @@ Acceptance criteria:
 
 - Hidden, inactive, archived, or incompatible catalog items cannot be quoted for checkout.
 - Add-on-scoped coupons only apply when the resolved purchased add-on is allowed.
-- Expired coupon reservations do not permanently exhaust coupon limits.
+- Expired pre-checkout coupon reservations do not permanently exhaust coupon limits, while already-open checkout reservations remain reserved for provider webhook reconciliation.
 - Checkout returns to the active learner billing page.
 
 Known residual risk:
 
-- Coupon limit race-safety still needs a larger transactional design with provider event reconciliation and concurrency tests. Phase 1 removes abandoned-reservation leakage but does not claim serializable coupon inventory.
+- Coupon reservation race-safety is improved by rechecking limits while holding the coupon row during persisted quote reservation on relational databases. Full provider event reconciliation, retry behavior for serialization/lock failures, and multi-instance concurrency tests remain larger follow-up work.
 
 ### Phase 2: Catalog Validation And Versioning
 
@@ -104,7 +104,7 @@ Residual risk after Phase 2B-2C:
 
 - Provider price mapping, provider invoice/receipt evidence, refund/dispute visibility, webhook inbox processing, and version-aware reporting/backfill are still incomplete.
 - Database-level immutability hardening is not yet enforced with triggers, restrictive permissions, or append-only database constraints; immutability is currently application-enforced.
-- Coupon usage limits are improved with parent coupon/version references, but true race-safe coupon inventory still needs a larger transactional design, provider event reconciliation, and concurrency tests.
+- Coupon usage limits are improved with parent coupon/version references and relational row-lock rechecks during persisted quote reservation, but true end-to-end coupon inventory still needs provider event reconciliation, lock/serialization retry behavior, and concurrency tests.
 
 ### Phase 3: Payment Ledger And Webhook Inbox
 

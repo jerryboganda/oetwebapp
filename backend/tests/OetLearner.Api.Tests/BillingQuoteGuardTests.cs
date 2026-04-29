@@ -313,6 +313,318 @@ public class BillingQuoteGuardTests : IClassFixture<TestWebApplicationFactory>
     }
 
     [Fact]
+    public async Task CheckoutSession_ExpiredCreatedQuoteVoidsReservedCouponRedemption()
+    {
+        var userId = $"billing-expired-checkout-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var couponCode = $"EXPIRED{suffix}".ToUpperInvariant();
+        var couponId = $"coupon-{suffix}";
+        string quoteId;
+        string redemptionId;
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            await db.Database.EnsureCreatedAsync();
+            var now = DateTimeOffset.UtcNow;
+            var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId);
+
+            db.BillingCoupons.Add(new BillingCoupon
+            {
+                Id = couponId,
+                Code = couponCode,
+                Name = "Expired Checkout Coupon",
+                Description = "Limited coupon used by expired checkout quote tests.",
+                DiscountType = BillingDiscountType.Percentage,
+                DiscountValue = 10m,
+                Currency = "AUD",
+                UsageLimitTotal = 1,
+                IsStackable = false,
+                ApplicablePlanCodesJson = "[]",
+                ApplicableAddOnCodesJson = "[]",
+                Status = BillingCouponStatus.Active,
+                RedemptionCount = 1,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+
+            quoteId = $"quote-{suffix}";
+            db.BillingQuotes.Add(new BillingQuote
+            {
+                Id = quoteId,
+                UserId = userId,
+                SubscriptionId = subscription.Id,
+                PlanCode = subscription.PlanId,
+                CouponCode = couponCode,
+                Currency = "AUD",
+                SubtotalAmount = 20m,
+                DiscountAmount = 2m,
+                TotalAmount = 18m,
+                Status = BillingQuoteStatus.Created,
+                CreatedAt = now.AddHours(-2),
+                ExpiresAt = now.AddMinutes(-30),
+                SnapshotJson = "{}"
+            });
+
+            redemptionId = $"redemption-{suffix}";
+            db.BillingCouponRedemptions.Add(new BillingCouponRedemption
+            {
+                Id = redemptionId,
+                CouponCode = couponCode,
+                CouponId = couponId,
+                UserId = userId,
+                QuoteId = quoteId,
+                DiscountAmount = 2m,
+                Currency = "AUD",
+                Status = BillingRedemptionStatus.Reserved,
+                RedeemedAt = now.AddHours(-2)
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        var response = await client.PostAsJsonAsync("/v1/billing/checkout-sessions", new
+        {
+            productType = "review_credits",
+            quantity = 1,
+            quoteId,
+            gateway = "paypal"
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        using (var json = JsonDocument.Parse(await response.Content.ReadAsStringAsync()))
+        {
+            Assert.Equal("billing_quote_expired", json.RootElement.GetProperty("code").GetString());
+        }
+
+        var retryResponse = await client.PostAsJsonAsync("/v1/billing/checkout-sessions", new
+        {
+            productType = "review_credits",
+            quantity = 1,
+            quoteId,
+            gateway = "paypal"
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, retryResponse.StatusCode);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var quote = await db.BillingQuotes.FirstAsync(x => x.Id == quoteId);
+            var redemption = await db.BillingCouponRedemptions.FirstAsync(x => x.Id == redemptionId);
+            var coupon = await db.BillingCoupons.FirstAsync(x => x.Code == couponCode);
+
+            Assert.Equal(BillingQuoteStatus.Expired, quote.Status);
+            Assert.Equal(BillingRedemptionStatus.Voided, redemption.Status);
+            Assert.Equal(0, coupon.RedemptionCount);
+        }
+    }
+
+    [Fact]
+    public async Task BillingQuote_ReleasesAlreadyExpiredPreCheckoutCouponReservationBeforeLimitCheck()
+    {
+        var userId = $"billing-expired-stranded-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var packCode = $"expired-pack-{suffix}";
+        var couponCode = $"STRANDED{suffix}".ToUpperInvariant();
+        var couponId = $"coupon-{suffix}";
+        string expiredQuoteId;
+        string expiredRedemptionId;
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            await db.Database.EnsureCreatedAsync();
+            var now = DateTimeOffset.UtcNow;
+            var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId);
+
+            db.BillingAddOns.Add(new BillingAddOn
+            {
+                Id = $"addon-{suffix}",
+                Code = packCode,
+                Name = "Stranded Coupon Pack",
+                Description = "Pack used by expired stranded coupon tests.",
+                Price = 20m,
+                Currency = "AUD",
+                Interval = "one_time",
+                DurationDays = 0,
+                GrantCredits = 19,
+                AppliesToAllPlans = true,
+                IsStackable = true,
+                QuantityStep = 1,
+                CompatiblePlanCodesJson = "[]",
+                GrantEntitlementsJson = "{}",
+                Status = BillingAddOnStatus.Active,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+
+            db.BillingCoupons.Add(new BillingCoupon
+            {
+                Id = couponId,
+                Code = couponCode,
+                Name = "Stranded Coupon",
+                Description = "Limited coupon used by already-expired cleanup tests.",
+                DiscountType = BillingDiscountType.Percentage,
+                DiscountValue = 10m,
+                Currency = "AUD",
+                UsageLimitTotal = 1,
+                IsStackable = false,
+                ApplicablePlanCodesJson = "[]",
+                ApplicableAddOnCodesJson = JsonSerializer.Serialize(new[] { packCode }),
+                Status = BillingCouponStatus.Active,
+                RedemptionCount = 1,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+
+            expiredQuoteId = $"quote-{suffix}";
+            db.BillingQuotes.Add(new BillingQuote
+            {
+                Id = expiredQuoteId,
+                UserId = userId,
+                SubscriptionId = subscription.Id,
+                PlanCode = subscription.PlanId,
+                AddOnCodesJson = JsonSerializer.Serialize(new[] { packCode }),
+                CouponCode = couponCode,
+                Currency = "AUD",
+                SubtotalAmount = 20m,
+                DiscountAmount = 2m,
+                TotalAmount = 18m,
+                Status = BillingQuoteStatus.Expired,
+                CreatedAt = now.AddHours(-2),
+                ExpiresAt = now.AddMinutes(-30),
+                SnapshotJson = "{}"
+            });
+
+            expiredRedemptionId = $"redemption-{suffix}";
+            db.BillingCouponRedemptions.Add(new BillingCouponRedemption
+            {
+                Id = expiredRedemptionId,
+                CouponCode = couponCode,
+                CouponId = couponId,
+                UserId = userId,
+                QuoteId = expiredQuoteId,
+                DiscountAmount = 2m,
+                Currency = "AUD",
+                Status = BillingRedemptionStatus.Reserved,
+                RedeemedAt = now.AddHours(-2)
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        var response = await client.GetAsync($"/v1/billing/quote?productType=review_credits&quantity=19&couponCode={Uri.EscapeDataString(couponCode)}");
+        var body = await response.Content.ReadAsStringAsync();
+        Assert.True(response.IsSuccessStatusCode, body);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var expiredRedemption = await db.BillingCouponRedemptions.FirstAsync(x => x.Id == expiredRedemptionId);
+            var coupon = await db.BillingCoupons.FirstAsync(x => x.Code == couponCode);
+
+            Assert.Equal(BillingRedemptionStatus.Voided, expiredRedemption.Status);
+            Assert.Equal(1, coupon.RedemptionCount);
+        }
+    }
+
+    [Fact]
+    public async Task CheckoutSession_ExpiredAppliedQuoteKeepsGatewayCouponReservation()
+    {
+        var userId = $"billing-expired-applied-{Guid.NewGuid():N}";
+        using var client = await CreateClientForUserAsync(userId);
+        var suffix = Guid.NewGuid().ToString("N")[..8];
+        var couponCode = $"APPLIEDX{suffix}".ToUpperInvariant();
+        var checkoutSessionId = $"checkout-{suffix}";
+        string quoteId;
+        string redemptionId;
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            await db.Database.EnsureCreatedAsync();
+            var now = DateTimeOffset.UtcNow;
+            var subscription = await db.Subscriptions.FirstAsync(x => x.UserId == userId);
+
+            db.BillingCoupons.Add(new BillingCoupon
+            {
+                Id = $"coupon-{suffix}",
+                Code = couponCode,
+                Name = "Expired Applied Coupon",
+                Description = "Limited coupon used by applied checkout retry tests.",
+                DiscountType = BillingDiscountType.Percentage,
+                DiscountValue = 10m,
+                Currency = "AUD",
+                UsageLimitTotal = 1,
+                IsStackable = false,
+                ApplicablePlanCodesJson = "[]",
+                ApplicableAddOnCodesJson = "[]",
+                Status = BillingCouponStatus.Active,
+                RedemptionCount = 1,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+
+            quoteId = $"quote-{suffix}";
+            db.BillingQuotes.Add(new BillingQuote
+            {
+                Id = quoteId,
+                UserId = userId,
+                SubscriptionId = subscription.Id,
+                PlanCode = subscription.PlanId,
+                CouponCode = couponCode,
+                Currency = "AUD",
+                SubtotalAmount = 20m,
+                DiscountAmount = 2m,
+                TotalAmount = 18m,
+                Status = BillingQuoteStatus.Applied,
+                CheckoutSessionId = checkoutSessionId,
+                CreatedAt = now.AddHours(-2),
+                ExpiresAt = now.AddMinutes(-30),
+                SnapshotJson = "{}"
+            });
+
+            redemptionId = $"redemption-{suffix}";
+            db.BillingCouponRedemptions.Add(new BillingCouponRedemption
+            {
+                Id = redemptionId,
+                CouponCode = couponCode,
+                UserId = userId,
+                QuoteId = quoteId,
+                CheckoutSessionId = checkoutSessionId,
+                DiscountAmount = 2m,
+                Currency = "AUD",
+                Status = BillingRedemptionStatus.Reserved,
+                RedeemedAt = now.AddHours(-2)
+            });
+
+            await db.SaveChangesAsync();
+        }
+
+        var response = await client.PostAsJsonAsync("/v1/billing/checkout-sessions", new
+        {
+            productType = "review_credits",
+            quantity = 1,
+            quoteId,
+            gateway = "paypal"
+        });
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+
+        await using (var scope = _factory.Services.CreateAsyncScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<LearnerDbContext>();
+            var quote = await db.BillingQuotes.FirstAsync(x => x.Id == quoteId);
+            var redemption = await db.BillingCouponRedemptions.FirstAsync(x => x.Id == redemptionId);
+            var coupon = await db.BillingCoupons.FirstAsync(x => x.Code == couponCode);
+
+            Assert.Equal(BillingQuoteStatus.Applied, quote.Status);
+            Assert.Equal(BillingRedemptionStatus.Reserved, redemption.Status);
+            Assert.Equal(1, coupon.RedemptionCount);
+        }
+    }
+
+    [Fact]
     public async Task CheckoutCompletion_UsesQuoteTimePlanSnapshotAfterCatalogMutation()
     {
         var userId = $"billing-plan-snapshot-{Guid.NewGuid():N}";
