@@ -84,11 +84,18 @@ public sealed class ReadingAttemptService(
 
         if (!string.IsNullOrWhiteSpace(scopeJson))
         {
-            try { JsonDocument.Parse(scopeJson); }
+            try { using var _ = JsonDocument.Parse(scopeJson); }
             catch (JsonException)
             {
                 throw new ReadingAttemptException("scope_json_invalid", "ScopeJson must be valid JSON.");
             }
+        }
+
+        if (IsSubsetMode(mode) && !HasNonEmptyQuestionScope(scopeJson))
+        {
+            throw new ReadingAttemptException(
+                "scope_question_ids_required",
+                "Subset practice attempts require at least one scoped question.");
         }
 
         var isPracticeMode = mode != ReadingAttemptMode.Exam;
@@ -434,6 +441,28 @@ public sealed class ReadingAttemptService(
 
     private static bool IsSubsetMode(ReadingAttemptMode mode)
         => mode is ReadingAttemptMode.Drill or ReadingAttemptMode.MiniTest or ReadingAttemptMode.ErrorBank;
+
+    private static bool HasNonEmptyQuestionScope(string? scopeJson)
+    {
+        if (string.IsNullOrWhiteSpace(scopeJson)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(scopeJson);
+            if (!doc.RootElement.TryGetProperty("questionIds", out var questionIds)
+                || questionIds.ValueKind != JsonValueKind.Array)
+            {
+                return false;
+            }
+
+            return questionIds.EnumerateArray().Any(item =>
+                item.ValueKind == JsonValueKind.String
+                && !string.IsNullOrWhiteSpace(item.GetString()));
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
 
     private static bool IsQuestionInScope(string? scopeJson, string questionId)
     {

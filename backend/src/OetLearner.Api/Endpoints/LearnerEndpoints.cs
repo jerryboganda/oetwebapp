@@ -466,7 +466,11 @@ public static class LearnerEndpoints
             partsByPaper.TryGetValue(p.Id, out var paperParts);
             paperParts ??= new List<ReadingPart>();
             var lastAttempt = attemptsByPaper.TryGetValue(p.Id, out var paperAttempts)
-                ? paperAttempts.OrderByDescending(a => a.LastActivityAt).FirstOrDefault()
+                ? paperAttempts
+                    .Where(a => a.Status == ReadingAttemptStatus.Submitted)
+                    .Where(IsCanonicalReadingScoreAttempt)
+                    .OrderByDescending(a => a.SubmittedAt ?? a.LastActivityAt)
+                    .FirstOrDefault()
                 : null;
             return new
             {
@@ -621,6 +625,7 @@ public static class LearnerEndpoints
         var attemptedPaperIds = attempts.Select(a => a.PaperId).ToHashSet();
         var submittedPaperIds = attempts
             .Where(a => a.Status == ReadingAttemptStatus.Submitted)
+            .Where(IsCanonicalReadingScoreAttempt)
             .Select(a => a.PaperId)
             .ToHashSet();
         var nextPaper = readyPapers.FirstOrDefault(p => !attemptedPaperIds.Contains(p.Id))

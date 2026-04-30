@@ -58,7 +58,13 @@ public sealed class ReadingGradingService(
         // Idempotent: if already graded, return existing result.
         if (attempt.Status == ReadingAttemptStatus.Submitted && attempt.RawScore is int existingRaw)
         {
-            return await BuildResultFromExistingAsync(attempt, existingRaw, ct);
+            var shouldRegradeSubmittedSubset = IsSubsetPracticeMode(attempt.Mode)
+                && (attempt.ScaledScore is not null
+                    || attempt.MaxRawScore == ReadingStructureService.CanonicalMaxRawScore);
+            if (!shouldRegradeSubmittedSubset)
+            {
+                return await BuildResultFromExistingAsync(attempt, existingRaw, ct);
+            }
         }
 
         // Load all questions for the paper (single round-trip)
@@ -76,10 +82,10 @@ public sealed class ReadingGradingService(
         // Phase 3b: subset modes (Drill / MiniTest / ErrorBank) only score
         // their in-scope questions; full-paper modes (Exam / Learning) keep
         // the canonical 42-question denominator and OET 0-500 conversion.
+        var isSubsetPracticeMode = IsSubsetPracticeMode(attempt.Mode);
         var scopeQuestionIds = ParseScopeQuestionIds(attempt);
-        var inScopeOnly = scopeQuestionIds is not null && scopeQuestionIds.Count > 0;
-        var gradedQuestions = inScopeOnly
-            ? questions.Where(q => scopeQuestionIds!.Contains(q.Id)).ToList()
+        var gradedQuestions = isSubsetPracticeMode
+            ? questions.Where(q => scopeQuestionIds?.Contains(q.Id) == true).ToList()
             : questions;
 
         var policy = await ResolvePolicyForAttemptAsync(attempt, ct);
@@ -109,12 +115,12 @@ public sealed class ReadingGradingService(
         }
 
         attempt.RawScore = raw;
-        attempt.MaxRawScore = inScopeOnly ? maxRaw : ReadingStructureService.CanonicalMaxRawScore;
+        attempt.MaxRawScore = isSubsetPracticeMode ? maxRaw : ReadingStructureService.CanonicalMaxRawScore;
 
         // Subset attempts skip OET 0-500 conversion: the 30/42 anchor only
         // applies to the canonical full paper. Store null so the result
         // surface treats it as practice-only.
-        attempt.ScaledScore = inScopeOnly ? null : OetScoring.OetRawToScaled(raw);
+        attempt.ScaledScore = isSubsetPracticeMode ? null : OetScoring.OetRawToScaled(raw);
         attempt.Status = ReadingAttemptStatus.Submitted;
         attempt.SubmittedAt ??= DateTimeOffset.UtcNow;
         attempt.LastActivityAt = DateTimeOffset.UtcNow;
@@ -149,7 +155,7 @@ public sealed class ReadingGradingService(
 
     private static HashSet<string>? ParseScopeQuestionIds(ReadingAttempt attempt)
     {
-        if (attempt.Mode == ReadingAttemptMode.Exam || attempt.Mode == ReadingAttemptMode.Learning)
+        if (!IsSubsetPracticeMode(attempt.Mode))
             return null;
         if (string.IsNullOrWhiteSpace(attempt.ScopeJson)) return null;
         try
@@ -168,6 +174,9 @@ public sealed class ReadingGradingService(
         }
         catch (JsonException) { return null; }
     }
+
+    private static bool IsSubsetPracticeMode(ReadingAttemptMode mode)
+        => mode is ReadingAttemptMode.Drill or ReadingAttemptMode.MiniTest or ReadingAttemptMode.ErrorBank;
 
     // ── Grader strategies ────────────────────────────────────────────────
 
@@ -505,10 +514,11 @@ public sealed class ReadingGradingService(
 
         // Subset modes only include their in-scope questions in the
         // returned details + counts.
+        var isSubsetPracticeMode = IsSubsetPracticeMode(attempt.Mode);
         var scopeIds = ParseScopeQuestionIds(attempt);
-        if (scopeIds is { Count: > 0 })
+        if (isSubsetPracticeMode)
         {
-            questions = questions.Where(q => scopeIds.Contains(q.Id)).ToList();
+            questions = questions.Where(q => scopeIds?.Contains(q.Id) == true).ToList();
         }
 
         int correct = 0, wrong = 0, unans = 0;
@@ -526,7 +536,7 @@ public sealed class ReadingGradingService(
             details.Add(new(q.Id, q.QuestionType.ToString(), ok, a.PointsEarned, q.Points));
         }
 
-        var scaled = attempt.ScaledScore;
+        var scaled = IsSubsetPracticeMode(attempt.Mode) ? null : attempt.ScaledScore;
         var grade = scaled is null ? "—" : OetScoring.OetGradeLetterFromScaled(scaled.Value);
         return new ReadingGradingResult(
             raw, attempt.MaxRawScore, scaled, grade,
