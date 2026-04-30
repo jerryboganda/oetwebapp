@@ -24,17 +24,25 @@ public interface IReadingStructureService
     Task<ReadingText> UpsertTextAsync(ReadingTextUpsert args, string adminId, CancellationToken ct);
     Task<ReadingQuestion> UpsertQuestionAsync(ReadingQuestionUpsert args, string adminId, CancellationToken ct);
 
-    Task<bool> RemoveTextAsync(string textId, string adminId, CancellationToken ct);
-    Task<bool> RemoveQuestionAsync(string questionId, string adminId, CancellationToken ct);
+    Task<bool> RemoveTextAsync(string paperId, string textId, string adminId, CancellationToken ct);
+    Task<bool> RemoveQuestionAsync(string paperId, string questionId, string adminId, CancellationToken ct);
 
     /// <summary>Reorder within a part. <paramref name="orderedIds"/> is the
     /// new order; entries keep their current DisplayOrder if not in the list.</summary>
-    Task ReorderTextsAsync(string partId, IReadOnlyList<string> orderedIds, string adminId, CancellationToken ct);
-    Task ReorderQuestionsAsync(string partId, IReadOnlyList<string> orderedIds, string adminId, CancellationToken ct);
+    Task ReorderTextsAsync(string paperId, string partId, IReadOnlyList<string> orderedIds, string adminId, CancellationToken ct);
+    Task ReorderQuestionsAsync(string paperId, string partId, IReadOnlyList<string> orderedIds, string adminId, CancellationToken ct);
 
     /// <summary>Read the full structure for a paper — admin view, includes
     /// correct answers + explanations.</summary>
     Task<ReadingStructure> GetAdminStructureAsync(string paperId, CancellationToken ct);
+
+    Task<ReadingStructureManifest> ExportManifestAsync(string paperId, CancellationToken ct);
+    Task<ReadingStructureImportResult> ImportManifestAsync(
+        string paperId,
+        ReadingStructureManifest manifest,
+        bool replaceExisting,
+        string adminId,
+        CancellationToken ct);
 
     /// <summary>Run the publish-gate validator. Returns a structured report
     /// that admin UI can surface row-by-row.</summary>
@@ -102,6 +110,43 @@ public sealed record ReadingValidationIssue(
 public sealed record ReadingValidationCounts(
     int PartACount, int PartBCount, int PartCCount, int TotalPoints);
 
+public sealed record ReadingStructureManifest(
+    IReadOnlyList<ReadingPartManifest> Parts);
+
+public sealed record ReadingPartManifest(
+    ReadingPartCode PartCode,
+    int? TimeLimitMinutes,
+    string? Instructions,
+    IReadOnlyList<ReadingTextManifest> Texts,
+    IReadOnlyList<ReadingQuestionManifest> Questions);
+
+public sealed record ReadingTextManifest(
+    int DisplayOrder,
+    string Title,
+    string? Source,
+    string BodyHtml,
+    int WordCount,
+    string? TopicTag);
+
+public sealed record ReadingQuestionManifest(
+    int DisplayOrder,
+    int Points,
+    ReadingQuestionType QuestionType,
+    string Stem,
+    string OptionsJson,
+    string CorrectAnswerJson,
+    string? AcceptedSynonymsJson,
+    bool CaseSensitive,
+    string? ExplanationMarkdown,
+    string? SkillTag,
+    int? ReadingTextDisplayOrder,
+    string? OptionDistractorsJson = null,
+    ReadingReviewState ReviewState = ReadingReviewState.Draft);
+
+public sealed record ReadingStructureImportResult(
+    ReadingStructure Structure,
+    ReadingValidationReport Report);
+
 public sealed class ReadingStructureService : IReadingStructureService
 {
     private readonly LearnerDbContext db;
@@ -145,6 +190,7 @@ public sealed class ReadingStructureService : IReadingStructureService
 
     public async Task EnsureCanonicalPartsAsync(string paperId, CancellationToken ct)
     {
+        await EnsureReadingPaperAsync(paperId, ct);
         var existing = await db.ReadingParts
             .Where(p => p.PaperId == paperId)
             .Select(p => p.PartCode)
@@ -169,6 +215,7 @@ public sealed class ReadingStructureService : IReadingStructureService
 
     public async Task<ReadingPart> UpsertPartAsync(ReadingPartUpsert args, string adminId, CancellationToken ct)
     {
+        await EnsureReadingPaperAsync(args.PaperId, ct);
         var row = await db.ReadingParts
             .FirstOrDefaultAsync(p => p.PaperId == args.PaperId && p.PartCode == args.PartCode, ct);
         var now = DateTimeOffset.UtcNow;
@@ -201,9 +248,12 @@ public sealed class ReadingStructureService : IReadingStructureService
 
     public async Task<ReadingText> UpsertTextAsync(ReadingTextUpsert args, string adminId, CancellationToken ct)
     {
+        await EnsurePartBelongsToReadingPaperAsync(args.ReadingPartId, ct);
         ReadingText? row = null;
         if (!string.IsNullOrWhiteSpace(args.Id))
             row = await db.ReadingTexts.FirstOrDefaultAsync(t => t.Id == args.Id, ct);
+        if (row is not null && !string.Equals(row.ReadingPartId, args.ReadingPartId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Existing Reading text belongs to a different part.");
         var now = DateTimeOffset.UtcNow;
         if (row is null)
         {
@@ -240,6 +290,19 @@ public sealed class ReadingStructureService : IReadingStructureService
 
     public async Task<ReadingQuestion> UpsertQuestionAsync(ReadingQuestionUpsert args, string adminId, CancellationToken ct)
     {
+        await EnsurePartBelongsToReadingPaperAsync(args.ReadingPartId, ct);
+        if (!string.IsNullOrWhiteSpace(args.ReadingTextId))
+        {
+            var textPartId = await db.ReadingTexts.AsNoTracking()
+                .Where(t => t.Id == args.ReadingTextId)
+                .Select(t => t.ReadingPartId)
+                .FirstOrDefaultAsync(ct);
+            if (textPartId is null)
+                throw new InvalidOperationException("Reading text not found.");
+            if (!string.Equals(textPartId, args.ReadingPartId, StringComparison.Ordinal))
+                throw new InvalidOperationException("Reading question text must belong to the same part.");
+        }
+
         // Validate JSON shapes before writing.
         ValidateQuestionPayload(args.QuestionType, args.OptionsJson, args.CorrectAnswerJson,
             args.AcceptedSynonymsJson);
@@ -247,6 +310,8 @@ public sealed class ReadingStructureService : IReadingStructureService
         ReadingQuestion? row = null;
         if (!string.IsNullOrWhiteSpace(args.Id))
             row = await db.ReadingQuestions.FirstOrDefaultAsync(q => q.Id == args.Id, ct);
+        if (row is not null && !string.Equals(row.ReadingPartId, args.ReadingPartId, StringComparison.Ordinal))
+            throw new InvalidOperationException("Existing Reading question belongs to a different part.");
         var now = DateTimeOffset.UtcNow;
         if (row is null)
         {
@@ -292,9 +357,12 @@ public sealed class ReadingStructureService : IReadingStructureService
         return row;
     }
 
-    public async Task<bool> RemoveTextAsync(string textId, string adminId, CancellationToken ct)
+    public async Task<bool> RemoveTextAsync(string paperId, string textId, string adminId, CancellationToken ct)
     {
-        var row = await db.ReadingTexts.FirstOrDefaultAsync(t => t.Id == textId, ct);
+        await EnsureReadingPaperAsync(paperId, ct);
+        var row = await db.ReadingTexts
+            .Include(t => t.Part)
+            .FirstOrDefaultAsync(t => t.Id == textId && t.Part != null && t.Part.PaperId == paperId, ct);
         if (row is null) return false;
         db.ReadingTexts.Remove(row);
         await WriteAuditAsync("ReadingTextRemoved", textId, row.Title, adminId, ct);
@@ -302,9 +370,12 @@ public sealed class ReadingStructureService : IReadingStructureService
         return true;
     }
 
-    public async Task<bool> RemoveQuestionAsync(string questionId, string adminId, CancellationToken ct)
+    public async Task<bool> RemoveQuestionAsync(string paperId, string questionId, string adminId, CancellationToken ct)
     {
-        var row = await db.ReadingQuestions.FirstOrDefaultAsync(q => q.Id == questionId, ct);
+        await EnsureReadingPaperAsync(paperId, ct);
+        var row = await db.ReadingQuestions
+            .Include(q => q.Part)
+            .FirstOrDefaultAsync(q => q.Id == questionId && q.Part != null && q.Part.PaperId == paperId, ct);
         if (row is null) return false;
         db.ReadingQuestions.Remove(row);
         await WriteAuditAsync("ReadingQuestionRemoved", questionId, row.Stem, adminId, ct);
@@ -312,8 +383,9 @@ public sealed class ReadingStructureService : IReadingStructureService
         return true;
     }
 
-    public async Task ReorderTextsAsync(string partId, IReadOnlyList<string> orderedIds, string adminId, CancellationToken ct)
+    public async Task ReorderTextsAsync(string paperId, string partId, IReadOnlyList<string> orderedIds, string adminId, CancellationToken ct)
     {
+        await EnsurePartBelongsToPaperAsync(paperId, partId, ct);
         var texts = await db.ReadingTexts.Where(t => t.ReadingPartId == partId).ToListAsync(ct);
         for (var i = 0; i < orderedIds.Count; i++)
         {
@@ -326,8 +398,9 @@ public sealed class ReadingStructureService : IReadingStructureService
         await db.SaveChangesAsync(ct);
     }
 
-    public async Task ReorderQuestionsAsync(string partId, IReadOnlyList<string> orderedIds, string adminId, CancellationToken ct)
+    public async Task ReorderQuestionsAsync(string paperId, string partId, IReadOnlyList<string> orderedIds, string adminId, CancellationToken ct)
     {
+        await EnsurePartBelongsToPaperAsync(paperId, partId, ct);
         var qs = await db.ReadingQuestions.Where(q => q.ReadingPartId == partId).ToListAsync(ct);
         for (var i = 0; i < orderedIds.Count; i++)
         {
@@ -355,6 +428,155 @@ public sealed class ReadingStructureService : IReadingStructureService
                 p.Texts.OrderBy(t => t.DisplayOrder).ToList(),
                 p.Questions.OrderBy(q => q.DisplayOrder).ToList()))
             .ToList());
+    }
+
+    public async Task<ReadingStructureManifest> ExportManifestAsync(string paperId, CancellationToken ct)
+    {
+        var structure = await GetAdminStructureAsync(paperId, ct);
+        return new ReadingStructureManifest(structure.Parts
+            .OrderBy(p => p.PartCode)
+            .Select(part =>
+            {
+                var textOrderById = part.Texts.ToDictionary(t => t.Id, t => t.DisplayOrder);
+                return new ReadingPartManifest(
+                    part.PartCode,
+                    part.TimeLimitMinutes,
+                    part.Instructions,
+                    part.Texts.OrderBy(t => t.DisplayOrder)
+                        .Select(t => new ReadingTextManifest(
+                            t.DisplayOrder,
+                            t.Title,
+                            t.Source,
+                            t.BodyHtml,
+                            t.WordCount,
+                            t.TopicTag))
+                        .ToList(),
+                    part.Questions.OrderBy(q => q.DisplayOrder)
+                        .Select(q => new ReadingQuestionManifest(
+                            q.DisplayOrder,
+                            q.Points,
+                            q.QuestionType,
+                            q.Stem,
+                            q.OptionsJson,
+                            q.CorrectAnswerJson,
+                            q.AcceptedSynonymsJson,
+                            q.CaseSensitive,
+                            q.ExplanationMarkdown,
+                            q.SkillTag,
+                            q.ReadingTextId is not null && textOrderById.TryGetValue(q.ReadingTextId, out var order)
+                                ? order
+                                : null,
+                            q.OptionDistractorsJson,
+                            q.ReviewState))
+                        .ToList());
+            })
+            .ToList());
+    }
+
+    public async Task<ReadingStructureImportResult> ImportManifestAsync(
+        string paperId,
+        ReadingStructureManifest manifest,
+        bool replaceExisting,
+        string adminId,
+        CancellationToken ct)
+    {
+        if (manifest is null)
+            throw new InvalidOperationException("Reading manifest is required.");
+        ValidateManifest(manifest, replaceExisting);
+
+        await using var tx = await db.Database.BeginTransactionAsync(ct);
+        await EnsureCanonicalPartsAsync(paperId, ct);
+
+        if (replaceExisting)
+        {
+            var hasAttempts = await db.ReadingAttempts.AsNoTracking()
+                .AnyAsync(a => a.PaperId == paperId, ct);
+            if (hasAttempts)
+                throw new InvalidOperationException(
+                    "Cannot replace Reading structure after learner attempts exist. Retire this paper and import into a new revision instead.");
+
+            var existing = await db.ReadingParts
+                .Where(p => p.PaperId == paperId)
+                .Include(p => p.Texts)
+                .Include(p => p.Questions)
+                .ToListAsync(ct);
+            db.ReadingQuestions.RemoveRange(existing.SelectMany(p => p.Questions));
+            db.ReadingTexts.RemoveRange(existing.SelectMany(p => p.Texts));
+            await WriteAuditAsync("ReadingStructureManifestCleared", paperId, "replaceExisting=true", adminId, ct);
+            await db.SaveChangesAsync(ct);
+        }
+
+        foreach (var partManifest in manifest.Parts.OrderBy(p => p.PartCode))
+        {
+            var part = await UpsertPartAsync(new ReadingPartUpsert(
+                paperId,
+                partManifest.PartCode,
+                partManifest.TimeLimitMinutes,
+                partManifest.Instructions ?? string.Empty), adminId, ct);
+
+            var textIdByDisplayOrder = new Dictionary<int, string>();
+            foreach (var textManifest in partManifest.Texts.OrderBy(t => t.DisplayOrder))
+            {
+                var text = await UpsertTextAsync(new ReadingTextUpsert(
+                    null,
+                    part.Id,
+                    textManifest.DisplayOrder,
+                    textManifest.Title,
+                    textManifest.Source,
+                    textManifest.BodyHtml,
+                    textManifest.WordCount,
+                    textManifest.TopicTag), adminId, ct);
+                textIdByDisplayOrder[text.DisplayOrder] = text.Id;
+            }
+
+            foreach (var questionManifest in partManifest.Questions.OrderBy(q => q.DisplayOrder))
+            {
+                var readingTextId = questionManifest.ReadingTextDisplayOrder is int textOrder
+                    && textIdByDisplayOrder.TryGetValue(textOrder, out var textId)
+                        ? textId
+                        : null;
+
+                await UpsertQuestionAsync(new ReadingQuestionUpsert(
+                    null,
+                    part.Id,
+                    readingTextId,
+                    questionManifest.DisplayOrder,
+                    questionManifest.Points,
+                    questionManifest.QuestionType,
+                    questionManifest.Stem,
+                    questionManifest.OptionsJson,
+                    questionManifest.CorrectAnswerJson,
+                    questionManifest.AcceptedSynonymsJson,
+                    questionManifest.CaseSensitive,
+                    questionManifest.ExplanationMarkdown,
+                    questionManifest.SkillTag), adminId, ct);
+            }
+
+            // Phase 4 — patch the metadata fields the upsert DTO doesn't carry.
+            // We do this in a second pass so we can match by (part, displayOrder)
+            // without round-tripping new IDs through the upsert path.
+            var importedQuestions = await db.ReadingQuestions
+                .Where(q => q.ReadingPartId == part.Id)
+                .ToListAsync(ct);
+            foreach (var qm in partManifest.Questions)
+            {
+                var row = importedQuestions.FirstOrDefault(q => q.DisplayOrder == qm.DisplayOrder);
+                if (row is null) continue;
+                if (qm.OptionDistractorsJson is { Length: > 0 })
+                    row.OptionDistractorsJson = qm.OptionDistractorsJson;
+                row.ReviewState = qm.ReviewState;
+            }
+            await db.SaveChangesAsync(ct);
+        }
+
+        await WriteAuditAsync("ReadingStructureManifestImported", paperId,
+            $"replaceExisting={replaceExisting}; parts={manifest.Parts.Count}", adminId, ct);
+        await db.SaveChangesAsync(ct);
+        await tx.CommitAsync(ct);
+
+        return new ReadingStructureImportResult(
+            await GetAdminStructureAsync(paperId, ct),
+            await ValidatePaperAsync(paperId, ct));
     }
 
     public async Task<ReadingValidationReport> ValidatePaperAsync(string paperId, CancellationToken ct)
@@ -440,6 +662,21 @@ public sealed class ReadingStructureService : IReadingStructureService
             issues.Add(new("total_points_mismatch", "error",
                 $"Total Reading points = {totalPoints}, must equal {CanonicalMaxRawScore}.", null));
 
+        // Phase 4 — every question must be Published before paper publish.
+        // Anything else surfaces as a single warning per non-published item
+        // so admins can use the validate report as a publish-readiness checklist.
+        var unpublished = parts.SelectMany(p => p.Questions)
+            .Where(q => q.ReviewState != ReadingReviewState.Published)
+            .ToList();
+        foreach (var q in unpublished)
+        {
+            issues.Add(new(
+                Code: "question_not_published",
+                Severity: "error",
+                Message: $"Question {q.DisplayOrder} is in {q.ReviewState}; advance to Published before paper publish.",
+                TargetId: q.Id));
+        }
+
         var counts = new ReadingValidationCounts(partA, partB, partC, totalPoints);
         var isReady = !issues.Any(i => i.Severity == "error");
         return new ReadingValidationReport(isReady, issues, counts);
@@ -507,6 +744,81 @@ public sealed class ReadingStructureService : IReadingStructureService
             default:
                 throw new InvalidOperationException($"Unknown question type {type}.");
         }
+    }
+
+    private static void ValidateManifest(ReadingStructureManifest manifest, bool replaceExisting)
+    {
+        if (manifest.Parts is null || manifest.Parts.Count == 0)
+            throw new InvalidOperationException("Reading manifest must contain at least one part.");
+
+        var duplicatePart = manifest.Parts
+            .GroupBy(p => p.PartCode)
+            .FirstOrDefault(g => g.Count() > 1);
+        if (duplicatePart is not null)
+            throw new InvalidOperationException($"Reading manifest contains duplicate Part {duplicatePart.Key} sections.");
+
+        if (replaceExisting)
+        {
+            foreach (var code in CanonicalShape.Keys)
+            {
+                if (!manifest.Parts.Any(p => p.PartCode == code))
+                    throw new InvalidOperationException($"Replacement manifest must include Part {code}.");
+            }
+        }
+
+        foreach (var part in manifest.Parts)
+        {
+            if (part.Texts is null)
+                throw new InvalidOperationException($"Part {part.PartCode} must include a texts array.");
+            if (part.Questions is null)
+                throw new InvalidOperationException($"Part {part.PartCode} must include a questions array.");
+            if (!CanonicalShape.ContainsKey(part.PartCode))
+                throw new InvalidOperationException($"Unsupported Reading part code {part.PartCode}.");
+            if (part.Texts.Any(t => t.DisplayOrder <= 0))
+                throw new InvalidOperationException($"Part {part.PartCode} contains a text with an invalid display order.");
+            if (part.Questions.Any(q => q.DisplayOrder <= 0))
+                throw new InvalidOperationException($"Part {part.PartCode} contains a question with an invalid display order.");
+            if (part.Texts.GroupBy(t => t.DisplayOrder).Any(g => g.Count() > 1))
+                throw new InvalidOperationException($"Part {part.PartCode} contains duplicate text display orders.");
+            if (part.Questions.GroupBy(q => q.DisplayOrder).Any(g => g.Count() > 1))
+                throw new InvalidOperationException($"Part {part.PartCode} contains duplicate question display orders.");
+            foreach (var question in part.Questions.Where(q => q.ReadingTextDisplayOrder is not null))
+            {
+                if (!part.Texts.Any(t => t.DisplayOrder == question.ReadingTextDisplayOrder))
+                    throw new InvalidOperationException(
+                        $"Part {part.PartCode} question {question.DisplayOrder} references missing text display order {question.ReadingTextDisplayOrder}.");
+            }
+        }
+    }
+
+    private async Task EnsureReadingPaperAsync(string paperId, CancellationToken ct)
+    {
+        var paper = await db.ContentPapers.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.Id == paperId, ct);
+        if (paper is null)
+            throw new InvalidOperationException("Paper not found.");
+        if (!string.Equals(paper.SubtestCode, "reading", StringComparison.OrdinalIgnoreCase))
+            throw new InvalidOperationException($"Paper subtest is '{paper.SubtestCode}', expected 'reading'.");
+    }
+
+    private async Task EnsurePartBelongsToReadingPaperAsync(string partId, CancellationToken ct)
+    {
+        var paperId = await db.ReadingParts.AsNoTracking()
+            .Where(p => p.Id == partId)
+            .Select(p => p.PaperId)
+            .FirstOrDefaultAsync(ct);
+        if (paperId is null)
+            throw new InvalidOperationException("Reading part not found.");
+        await EnsureReadingPaperAsync(paperId, ct);
+    }
+
+    private async Task EnsurePartBelongsToPaperAsync(string paperId, string partId, CancellationToken ct)
+    {
+        await EnsureReadingPaperAsync(paperId, ct);
+        var exists = await db.ReadingParts.AsNoTracking()
+            .AnyAsync(p => p.Id == partId && p.PaperId == paperId, ct);
+        if (!exists)
+            throw new InvalidOperationException("Reading part does not belong to this paper.");
     }
 
     private Task WriteAuditAsync(string action, string resourceId, string? details, string adminId, CancellationToken ct)

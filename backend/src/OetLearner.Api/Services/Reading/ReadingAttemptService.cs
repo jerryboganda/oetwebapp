@@ -24,6 +24,21 @@ namespace OetLearner.Api.Services.Reading;
 public interface IReadingAttemptService
 {
     Task<ReadingAttemptStarted> StartAsync(string userId, string paperId, CancellationToken ct);
+
+    /// <summary>
+    /// Phase 3: start an attempt in a non-exam mode (Learning / Drill /
+    /// MiniTest / ErrorBank). <paramref name="scopeJson"/> is persisted
+    /// verbatim on the attempt and must be valid JSON when provided.
+    /// Caller is responsible for any question-subset prerequisites; this
+    /// service only enforces the per-mode lifecycle rules.
+    /// </summary>
+    Task<ReadingAttemptStarted> StartInModeAsync(
+        string userId,
+        string paperId,
+        ReadingAttemptMode mode,
+        string? scopeJson,
+        CancellationToken ct);
+
     Task<ReadingAttempt> GetAsync(string userId, string attemptId, CancellationToken ct);
     Task SaveAnswerAsync(string userId, string attemptId, string questionId, string userAnswerJson, CancellationToken ct);
     Task<ReadingGradingResult> SubmitAsync(string userId, string attemptId, CancellationToken ct);
@@ -55,9 +70,28 @@ public sealed class ReadingAttemptService(
     IContentEntitlementService entitlements,
     ILogger<ReadingAttemptService> logger) : IReadingAttemptService
 {
-    public async Task<ReadingAttemptStarted> StartAsync(string userId, string paperId, CancellationToken ct)
+    public Task<ReadingAttemptStarted> StartAsync(string userId, string paperId, CancellationToken ct)
+        => StartInModeAsync(userId, paperId, ReadingAttemptMode.Exam, scopeJson: null, ct);
+
+    public async Task<ReadingAttemptStarted> StartInModeAsync(
+        string userId,
+        string paperId,
+        ReadingAttemptMode mode,
+        string? scopeJson,
+        CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(userId)) throw new ArgumentException("userId required");
+
+        if (!string.IsNullOrWhiteSpace(scopeJson))
+        {
+            try { JsonDocument.Parse(scopeJson); }
+            catch (JsonException)
+            {
+                throw new ReadingAttemptException("scope_json_invalid", "ScopeJson must be valid JSON.");
+            }
+        }
+
+        var isPracticeMode = mode != ReadingAttemptMode.Exam;
 
         var paper = await db.ContentPapers.AsNoTracking()
             .FirstOrDefaultAsync(p => p.Id == paperId && p.Status == ContentStatus.Published, ct)
@@ -85,18 +119,23 @@ public sealed class ReadingAttemptService(
             throw new InvalidOperationException(
                 userOverride.Reason ?? "Your account is blocked from starting Reading attempts.");
 
-        // Gate 3: max concurrent attempts
-        if (!policy.AllowMultipleConcurrentAttempts)
+        // Gate 3: max concurrent attempts. Practice modes are excluded —
+        // a learner may run a Learning / Drill / MiniTest / ErrorBank
+        // attempt alongside an in-flight Exam attempt without affecting it.
+        if (!policy.AllowMultipleConcurrentAttempts && !isPracticeMode)
         {
             var openCount = await db.ReadingAttempts
-                .CountAsync(a => a.UserId == userId && a.Status == ReadingAttemptStatus.InProgress, ct);
+                .CountAsync(a => a.UserId == userId
+                    && a.Status == ReadingAttemptStatus.InProgress
+                    && a.Mode == ReadingAttemptMode.Exam, ct);
             if (openCount > 0)
                 throw new InvalidOperationException(
                     "You have another Reading attempt in progress. Submit or abandon it first.");
         }
 
-        // Gate 4: per-paper attempt cap + cooldown
-        if (policy.AttemptsPerPaperPerUser > 0)
+        // Gate 4: per-paper attempt cap + cooldown. Skipped for practice
+        // modes — drills and learning runs do not consume an exam attempt.
+        if (policy.AttemptsPerPaperPerUser > 0 && !isPracticeMode)
         {
             var paperAttempts = await db.ReadingAttempts
                 .Where(a => a.UserId == userId && a.PaperId == paperId
@@ -130,10 +169,31 @@ public sealed class ReadingAttemptService(
 
         var maxRaw = ReadingStructureService.CanonicalMaxRawScore;
 
-        // Timer budget: Part A minutes + Part B+C shared minutes
-        var totalMinutes = policy.PartATimerMinutes + policy.PartBCTimerMinutes;
+        // Timer budget. Exam = canonical Part A + Part B+C. Learning =
+        // generous default budget (no hard lock). Drill / MiniTest take
+        // their minutes from ScopeJson when present.
+        int totalMinutes;
+        var miniTestMinutes = TryReadMinutesFromScope(scopeJson);
+        switch (mode)
+        {
+            case ReadingAttemptMode.Learning:
+                totalMinutes = Math.Max(60, policy.PartATimerMinutes + policy.PartBCTimerMinutes) * 4;
+                break;
+            case ReadingAttemptMode.MiniTest when miniTestMinutes is int m && m > 0:
+                totalMinutes = m;
+                break;
+            case ReadingAttemptMode.Drill:
+            case ReadingAttemptMode.ErrorBank:
+                totalMinutes = miniTestMinutes ?? Math.Max(15, policy.PartATimerMinutes);
+                break;
+            default:
+                totalMinutes = policy.PartATimerMinutes + policy.PartBCTimerMinutes;
+                break;
+        }
+
         var now = DateTimeOffset.UtcNow;
-        var partADeadline = now.AddMinutes(policy.PartATimerMinutes);
+        var partADeadline = now.AddMinutes(
+            mode == ReadingAttemptMode.Exam ? policy.PartATimerMinutes : totalMinutes);
         var partBCDeadline = now.AddMinutes(totalMinutes);
         var attempt = new ReadingAttempt
         {
@@ -147,6 +207,8 @@ public sealed class ReadingAttemptService(
             MaxRawScore = maxRaw,
             PolicySnapshotJson = JsonSerializer.Serialize(policy),
             PaperRevisionId = paper.PublishedRevisionId,
+            Mode = mode,
+            ScopeJson = scopeJson,
         };
         db.ReadingAttempts.Add(attempt);
 
@@ -154,10 +216,12 @@ public sealed class ReadingAttemptService(
         {
             Id = Guid.NewGuid().ToString("N"),
             OccurredAt = now, ActorId = userId, ActorName = userId,
-            Action = "ReadingAttemptStarted",
+            Action = mode == ReadingAttemptMode.Exam
+                ? "ReadingAttemptStarted"
+                : $"ReadingAttemptStarted_{mode}",
             ResourceType = "ReadingAttempt",
             ResourceId = attempt.Id,
-            Details = $"paper={paperId}",
+            Details = $"paper={paperId}; mode={mode}",
         });
         await db.SaveChangesAsync(ct);
 
@@ -171,8 +235,26 @@ public sealed class ReadingAttemptService(
             CanResume: true,
             Policy: policy,
             PaperTitle: paper.Title,
-            PartATimerMinutes: policy.PartATimerMinutes,
-            PartBCTimerMinutes: policy.PartBCTimerMinutes);
+            PartATimerMinutes: mode == ReadingAttemptMode.Exam ? policy.PartATimerMinutes : totalMinutes,
+            PartBCTimerMinutes: mode == ReadingAttemptMode.Exam ? policy.PartBCTimerMinutes : 0);
+    }
+
+    private static int? TryReadMinutesFromScope(string? scopeJson)
+    {
+        if (string.IsNullOrWhiteSpace(scopeJson)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(scopeJson);
+            if (doc.RootElement.TryGetProperty("minutes", out var m)
+                && m.ValueKind == JsonValueKind.Number
+                && m.TryGetInt32(out var minutes)
+                && minutes > 0 && minutes <= 240)
+            {
+                return minutes;
+            }
+        }
+        catch (JsonException) { /* ignore — fall through */ }
+        return null;
     }
 
     public Task<ReadingAttempt> GetAsync(string userId, string attemptId, CancellationToken ct)
@@ -219,9 +301,16 @@ public sealed class ReadingAttemptService(
                 "question_paper_mismatch",
                 "Question does not belong to this attempt's paper.");
 
+        if (IsSubsetMode(attempt.Mode)
+            && !IsQuestionInScope(attempt.ScopeJson, questionId))
+        {
+            throw new ReadingAttemptException(
+                "question_out_of_scope",
+                "Question is not part of this practice attempt.");
+        }
+
         var resolvedPolicy = ResolvePolicySnapshot(attempt.PolicySnapshotJson);
-        var answerWindowDeadline = attempt.StartedAt.AddMinutes(
-            resolvedPolicy.PartATimerMinutes + resolvedPolicy.PartBCTimerMinutes);
+        var answerWindowDeadline = ResolveAnswerWindowDeadline(attempt, resolvedPolicy);
         if (now > answerWindowDeadline)
         {
             throw new ReadingAttemptException(
@@ -230,6 +319,7 @@ public sealed class ReadingAttemptService(
         }
 
         if (q.Part?.PartCode == ReadingPartCode.A
+            && attempt.Mode == ReadingAttemptMode.Exam
             && string.Equals(resolvedPolicy.PartATimerStrictness, "hard_lock", StringComparison.OrdinalIgnoreCase)
             && now > attempt.StartedAt.AddMinutes(resolvedPolicy.PartATimerMinutes))
         {
@@ -321,6 +411,52 @@ public sealed class ReadingAttemptService(
         return await grader.GradeAttemptAsync(attemptId, ct);
     }
 
+    private static DateTimeOffset ResolveAnswerWindowDeadline(
+        ReadingAttempt attempt,
+        ReadingResolvedPolicy policy)
+    {
+        if (attempt.Mode == ReadingAttemptMode.Exam)
+        {
+            return attempt.StartedAt.AddMinutes(policy.PartATimerMinutes + policy.PartBCTimerMinutes);
+        }
+
+        if (attempt.DeadlineAt is DateTimeOffset deadline)
+        {
+            return deadline.AddSeconds(-Math.Max(0, policy.GracePeriodSeconds));
+        }
+
+        var minutes = TryReadMinutesFromScope(attempt.ScopeJson)
+            ?? (attempt.Mode == ReadingAttemptMode.Learning
+                ? Math.Max(60, policy.PartATimerMinutes + policy.PartBCTimerMinutes) * 4
+                : policy.PartATimerMinutes + policy.PartBCTimerMinutes);
+        return attempt.StartedAt.AddMinutes(minutes);
+    }
+
+    private static bool IsSubsetMode(ReadingAttemptMode mode)
+        => mode is ReadingAttemptMode.Drill or ReadingAttemptMode.MiniTest or ReadingAttemptMode.ErrorBank;
+
+    private static bool IsQuestionInScope(string? scopeJson, string questionId)
+    {
+        if (string.IsNullOrWhiteSpace(scopeJson)) return false;
+        try
+        {
+            using var doc = JsonDocument.Parse(scopeJson);
+            if (!doc.RootElement.TryGetProperty("questionIds", out var questionIds)
+                || questionIds.ValueKind != JsonValueKind.Array)
+            {
+                return false;
+            }
+
+            return questionIds.EnumerateArray().Any(item =>
+                item.ValueKind == JsonValueKind.String
+                && string.Equals(item.GetString(), questionId, StringComparison.Ordinal));
+        }
+        catch (JsonException)
+        {
+            return false;
+        }
+    }
+
     public async Task<int> SweepExpiredAsync(CancellationToken ct)
     {
         var policy = await policyService.GetGlobalAsync(ct);
@@ -395,9 +531,9 @@ public sealed class ReadingAttemptService(
             ShortAnswerAcceptSynonyms: false,
             MatchingAllowPartialCredit: true,
             UnknownTypeFallbackPolicy: "skip_with_zero",
-            ShowExplanationsAfterSubmit: true,
+            ShowExplanationsAfterSubmit: false,
             ShowExplanationsOnlyIfWrong: false,
-            ShowCorrectAnswerOnReview: true,
+            ShowCorrectAnswerOnReview: false,
             SubmitRateLimitPerMinute: 5,
             AutosaveRateLimitPerMinute: 120,
             ExtraTimeEntitlementPct: 0,

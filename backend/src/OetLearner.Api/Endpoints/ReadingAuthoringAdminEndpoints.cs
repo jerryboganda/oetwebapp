@@ -30,6 +30,36 @@ public static class ReadingAuthoringAdminEndpoints
             return Results.Ok(structure);
         });
 
+        group.MapGet("/manifest", async (
+            string paperId, IReadingStructureService svc, CancellationToken ct) =>
+        {
+            var manifest = await svc.ExportManifestAsync(paperId, ct);
+            return Results.Ok(manifest);
+        });
+
+        group.MapPost("/manifest", async (
+            string paperId,
+            ReadingStructureManifestImportDto dto,
+            IReadingStructureService svc,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            try
+            {
+                var result = await svc.ImportManifestAsync(paperId, dto.Manifest, dto.ReplaceExisting, adminId, ct);
+                return Results.Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+            catch (DbUpdateException)
+            {
+                return Results.Conflict(new { error = "Reading structure import could not be applied because existing learner data depends on this structure." });
+            }
+        });
+
         // Bootstrap canonical A/B/C parts (idempotent)
         group.MapPost("/ensure-canonical", async (
             string paperId, IReadingStructureService svc, CancellationToken ct) =>
@@ -53,27 +83,44 @@ public static class ReadingAuthoringAdminEndpoints
 
         group.MapPost("/texts", async (
             string paperId, ReadingTextUpsertDto dto,
-            IReadingStructureService svc, HttpContext http, CancellationToken ct) =>
+            IReadingStructureService svc, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
         {
+            var partMatchesRoute = await db.ReadingParts.AsNoTracking()
+                .AnyAsync(p => p.Id == dto.ReadingPartId && p.PaperId == paperId, ct);
+            if (!partMatchesRoute)
+                return Results.BadRequest(new { error = "Reading part does not belong to this paper." });
+
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
-            var text = await svc.UpsertTextAsync(new ReadingTextUpsert(
-                dto.Id, dto.ReadingPartId, dto.DisplayOrder, dto.Title, dto.Source,
-                dto.BodyHtml, dto.WordCount, dto.TopicTag), adminId, ct);
-            return Results.Ok(text);
+            try
+            {
+                var text = await svc.UpsertTextAsync(new ReadingTextUpsert(
+                    dto.Id, dto.ReadingPartId, dto.DisplayOrder, dto.Title, dto.Source,
+                    dto.BodyHtml, dto.WordCount, dto.TopicTag), adminId, ct);
+                return Results.Ok(text);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
         });
 
         group.MapDelete("/texts/{textId}", async (
-            string textId, IReadingStructureService svc, HttpContext http, CancellationToken ct) =>
+            string paperId, string textId, IReadingStructureService svc, HttpContext http, CancellationToken ct) =>
         {
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
-            var removed = await svc.RemoveTextAsync(textId, adminId, ct);
+            var removed = await svc.RemoveTextAsync(paperId, textId, adminId, ct);
             return removed ? Results.NoContent() : Results.NotFound();
         });
 
         group.MapPost("/questions", async (
             string paperId, ReadingQuestionUpsertDto dto,
-            IReadingStructureService svc, HttpContext http, CancellationToken ct) =>
+            IReadingStructureService svc, LearnerDbContext db, HttpContext http, CancellationToken ct) =>
         {
+            var partMatchesRoute = await db.ReadingParts.AsNoTracking()
+                .AnyAsync(p => p.Id == dto.ReadingPartId && p.PaperId == paperId, ct);
+            if (!partMatchesRoute)
+                return Results.BadRequest(new { error = "Reading part does not belong to this paper." });
+
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
             try
             {
@@ -91,28 +138,28 @@ public static class ReadingAuthoringAdminEndpoints
         });
 
         group.MapDelete("/questions/{questionId}", async (
-            string questionId, IReadingStructureService svc, HttpContext http, CancellationToken ct) =>
+            string paperId, string questionId, IReadingStructureService svc, HttpContext http, CancellationToken ct) =>
         {
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
-            var removed = await svc.RemoveQuestionAsync(questionId, adminId, ct);
+            var removed = await svc.RemoveQuestionAsync(paperId, questionId, adminId, ct);
             return removed ? Results.NoContent() : Results.NotFound();
         });
 
         group.MapPost("/parts/{partId}/reorder-texts", async (
-            string partId, ReorderDto dto,
+            string paperId, string partId, ReorderDto dto,
             IReadingStructureService svc, HttpContext http, CancellationToken ct) =>
         {
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
-            await svc.ReorderTextsAsync(partId, dto.OrderedIds, adminId, ct);
+            await svc.ReorderTextsAsync(paperId, partId, dto.OrderedIds, adminId, ct);
             return Results.NoContent();
         });
 
         group.MapPost("/parts/{partId}/reorder-questions", async (
-            string partId, ReorderDto dto,
+            string paperId, string partId, ReorderDto dto,
             IReadingStructureService svc, HttpContext http, CancellationToken ct) =>
         {
             var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
-            await svc.ReorderQuestionsAsync(partId, dto.OrderedIds, adminId, ct);
+            await svc.ReorderQuestionsAsync(paperId, partId, dto.OrderedIds, adminId, ct);
             return Results.NoContent();
         });
 
@@ -123,11 +170,181 @@ public static class ReadingAuthoringAdminEndpoints
             return Results.Ok(report);
         });
 
+        // ── Phase 4 — distractor metadata ────────────────────────────────
+        group.MapPut("/questions/{questionId}/distractors", async (
+            string paperId, string questionId,
+            ReadingDistractorsDto dto,
+            IReadingReviewService reviewSvc,
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            // Ensure the question is on this paper before mutating.
+            var match = await db.ReadingQuestions.AsNoTracking()
+                .Where(q => q.Id == questionId)
+                .Join(db.ReadingParts.AsNoTracking(), q => q.ReadingPartId, p => p.Id, (q, p) => p.PaperId)
+                .FirstOrDefaultAsync(ct);
+            if (match is null) return Results.NotFound();
+            if (!string.Equals(match, paperId, StringComparison.Ordinal))
+                return Results.BadRequest(new { error = "Question does not belong to this paper." });
+
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            try
+            {
+                var q = await reviewSvc.SetDistractorsAsync(questionId, dto.Distractors, adminId, ct);
+                return Results.Ok(new { q.Id, q.OptionDistractorsJson });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
+        // ── Phase 4 — review-state lifecycle ─────────────────────────────
+        group.MapGet("/questions/{questionId}/review-history", async (
+            string paperId, string questionId,
+            IReadingReviewService reviewSvc, CancellationToken ct) =>
+        {
+            var history = await reviewSvc.GetHistoryAsync(questionId, ct);
+            return Results.Ok(history);
+        });
+
+        group.MapPost("/questions/{questionId}/review-transition", async (
+            string paperId, string questionId,
+            ReadingReviewTransitionDto dto,
+            IReadingReviewService reviewSvc,
+            LearnerDbContext db,
+            HttpContext http,
+            CancellationToken ct) =>
+        {
+            var match = await db.ReadingQuestions.AsNoTracking()
+                .Where(q => q.Id == questionId)
+                .Join(db.ReadingParts.AsNoTracking(), q => q.ReadingPartId, p => p.Id, (q, p) => p.PaperId)
+                .FirstOrDefaultAsync(ct);
+            if (match is null) return Results.NotFound();
+            if (!string.Equals(match, paperId, StringComparison.Ordinal))
+                return Results.BadRequest(new { error = "Question does not belong to this paper." });
+
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            var displayName = http.User.FindFirstValue(ClaimTypes.Name);
+            try
+            {
+                var result = await reviewSvc.TransitionStateAsync(new ReadingReviewTransitionArgs(
+                    QuestionId: questionId,
+                    ToState: dto.ToState,
+                    ReviewerUserId: adminId,
+                    ReviewerDisplayName: displayName,
+                    Note: dto.Note,
+                    IsAdminOverride: dto.IsAdminOverride), ct);
+                return Results.Ok(result);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
+        // ── Phase 5 — paper analytics ────────────────────────────────────
+        group.MapGet("/analytics", async (
+            string paperId, IReadingAnalyticsService analytics, CancellationToken ct) =>
+        {
+            var data = await analytics.GetPaperAnalyticsAsync(paperId, ct);
+            return Results.Ok(data);
+        });
+
+        // ── Phase 6 — AI PDF extraction → admin approval ────────────────
+        group.MapPost("/extractions", async (
+            string paperId,
+            ReadingExtractionRequestDto dto,
+            HttpContext http,
+            IReadingExtractionService svc,
+            CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            try
+            {
+                var draft = await svc.CreateDraftAsync(paperId, dto?.MediaAssetId, adminId, ct);
+                return Results.Ok(draft);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
+        group.MapGet("/extractions", async (
+            string paperId, IReadingExtractionService svc, CancellationToken ct) =>
+        {
+            var drafts = await svc.ListDraftsAsync(paperId, ct);
+            return Results.Ok(drafts);
+        });
+
+        group.MapGet("/extractions/{draftId}", async (
+            string paperId, string draftId, IReadingExtractionService svc, CancellationToken ct) =>
+        {
+            var draft = await svc.GetDraftAsync(draftId, ct);
+            if (draft is null || draft.PaperId != paperId)
+                return Results.NotFound();
+            return Results.Ok(draft);
+        });
+
+        group.MapPost("/extractions/{draftId}/approve", async (
+            string paperId, string draftId,
+            HttpContext http, IReadingExtractionService svc, CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            var existing = await svc.GetDraftAsync(draftId, ct);
+            if (existing is null || existing.PaperId != paperId) return Results.NotFound();
+            try
+            {
+                var draft = await svc.ApproveDraftAsync(draftId, adminId, ct);
+                return Results.Ok(draft);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
+        group.MapPost("/extractions/{draftId}/reject", async (
+            string paperId, string draftId,
+            ReadingExtractionRejectDto? dto,
+            HttpContext http, IReadingExtractionService svc, CancellationToken ct) =>
+        {
+            var adminId = http.User.FindFirstValue(ClaimTypes.NameIdentifier) ?? "system";
+            var existing = await svc.GetDraftAsync(draftId, ct);
+            if (existing is null || existing.PaperId != paperId) return Results.NotFound();
+            try
+            {
+                var draft = await svc.RejectDraftAsync(draftId, adminId, dto?.Reason, ct);
+                return Results.Ok(draft);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { error = ex.Message });
+            }
+        });
+
         return app;
     }
 }
 
+public sealed record ReadingExtractionRequestDto(string? MediaAssetId);
+
+public sealed record ReadingExtractionRejectDto(string? Reason);
+
+public sealed record ReadingDistractorsDto(IReadOnlyDictionary<string, ReadingDistractorCategory> Distractors);
+
+public sealed record ReadingReviewTransitionDto(
+    ReadingReviewState ToState,
+    string? Note,
+    bool IsAdminOverride);
+
 public sealed record ReadingPartUpsertDto(int? TimeLimitMinutes, string? Instructions);
+
+public sealed record ReadingStructureManifestImportDto(
+    bool ReplaceExisting,
+    ReadingStructureManifest Manifest);
 
 public sealed record ReadingTextUpsertDto(
     string? Id,

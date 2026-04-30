@@ -239,6 +239,10 @@ function getAdminPageTitle(pathname: string | null) {
     return 'Notifications';
   }
 
+  if (pathname.startsWith('/admin/analytics/reading')) {
+    return 'Reading Analytics';
+  }
+
   if (pathname.startsWith('/admin/analytics')) {
     return 'Quality Analytics';
   }

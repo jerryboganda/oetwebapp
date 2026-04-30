@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using OetLearner.Api.Data;
@@ -11,9 +12,11 @@ using OetLearner.Api.Data;
 namespace OetLearner.Api.Data.Migrations
 {
     [DbContext(typeof(LearnerDbContext))]
-    partial class LearnerDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260429193607_AddReadingPhase4DistractorAndReview")]
+    partial class AddReadingPhase4DistractorAndReview
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -8614,62 +8617,6 @@ namespace OetLearner.Api.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("ReadingErrorBankEntries");
-                });
-
-            modelBuilder.Entity("OetLearner.Api.Domain.ReadingExtractionDraft", b =>
-                {
-                    b.Property<string>("Id")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<DateTimeOffset>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("CreatedByAdminId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("ExtractedManifestJson")
-                        .HasColumnType("text");
-
-                    b.Property<bool>("IsStub")
-                        .HasColumnType("boolean");
-
-                    b.Property<string>("MediaAssetId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("Notes")
-                        .HasMaxLength(2048)
-                        .HasColumnType("character varying(2048)");
-
-                    b.Property<string>("PaperId")
-                        .IsRequired()
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<string>("RawAiResponseJson")
-                        .HasMaxLength(65536)
-                        .HasColumnType("character varying(65536)");
-
-                    b.Property<DateTimeOffset?>("ResolvedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("ResolvedByAdminId")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)");
-
-                    b.Property<int>("Status")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("CreatedAt");
-
-                    b.HasIndex("PaperId", "Status");
-
-                    b.ToTable("ReadingExtractionDrafts");
                 });
 
             modelBuilder.Entity("OetLearner.Api.Domain.ReadingPart", b =>

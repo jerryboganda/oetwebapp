@@ -211,6 +211,9 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
     public DbSet<ReadingAnswer> ReadingAnswers => Set<ReadingAnswer>();
     public DbSet<ReadingPolicy> ReadingPolicies => Set<ReadingPolicy>();
     public DbSet<ReadingUserPolicyOverride> ReadingUserPolicyOverrides => Set<ReadingUserPolicyOverride>();
+    public DbSet<ReadingErrorBankEntry> ReadingErrorBankEntries => Set<ReadingErrorBankEntry>();
+    public DbSet<ReadingQuestionReviewLog> ReadingQuestionReviewLogs => Set<ReadingQuestionReviewLog>();
+    public DbSet<ReadingExtractionDraft> ReadingExtractionDrafts => Set<ReadingExtractionDraft>();
     public DbSet<BillingPlan> BillingPlans => Set<BillingPlan>();
     public DbSet<BillingPlanVersion> BillingPlanVersions => Set<BillingPlanVersion>();
     public DbSet<AdminPermissionGrant> AdminPermissionGrants => Set<AdminPermissionGrant>();
@@ -479,6 +482,11 @@ public class LearnerDbContext(DbContextOptions<LearnerDbContext> options) : DbCo
             .WithMany()
             .HasForeignKey(x => x.ReadingQuestionId)
             .OnDelete(DeleteBehavior.Restrict);
+        modelBuilder.Entity<ReadingQuestionReviewLog>()
+            .HasOne(x => x.Question)
+            .WithMany()
+            .HasForeignKey(x => x.ReadingQuestionId)
+            .OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<NotificationPreference>().HasIndex(x => x.AuthAccountId).IsUnique();
         modelBuilder.Entity<NotificationPolicyOverride>().HasIndex(x => new { x.AudienceRole, x.EventKey }).IsUnique();
         // NOTE: dropped fluent (NotificationEventId, Channel, AttemptedAt) and Endpoint-unique here

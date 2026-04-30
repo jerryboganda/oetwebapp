@@ -223,6 +223,7 @@ export default function AdminDashboardPage() {
                   { href: '/admin/billing', label: 'Billing Ops' },
                   { href: '/admin/business-intelligence', label: 'Business Intelligence' },
                   { href: '/admin/analytics/quality', label: 'Quality Analytics' },
+                  { href: '/admin/analytics/reading', label: 'Reading Analytics' },
                 ].map((link) => (
                   <AdminQuickAction key={link.href} href={link.href} label={link.label} />
                 ))}

@@ -25,22 +25,13 @@ import {
   type ReadingHomeDto,
   type ReadingHomePaperDto,
   type ReadingHomeResultDto,
+  type ReadingHomeSafeDrillDto,
 } from '@/lib/reading-authoring-api';
 import { fetchMockReports } from '@/lib/api';
 import type { MockReport } from '@/lib/mock-data';
 import { formatListeningReadingDisplay, isListeningReadingPassByRaw } from '@/lib/scoring';
 import { LearnerPageHero, LearnerSurfaceCard, LearnerSurfaceSectionHeader } from '@/components/domain';
 import type { LearnerSurfaceCardModel } from '@/lib/learner-surface';
-
-interface SafeDrillDto {
-  id?: string;
-  title?: string;
-  description?: string;
-  focusLabel?: string;
-  estimatedMinutes?: number;
-  launchRoute?: string;
-  highlights?: string[];
-}
 
 const partGuides: LearnerSurfaceCardModel[] = [
   {
@@ -134,10 +125,7 @@ export default function ReadingHome() {
     ),
     [mockReports],
   );
-  const safeDrills: SafeDrillDto[] = useMemo(() => {
-    const raw = (home as unknown as { safeDrills?: unknown[] })?.safeDrills ?? [];
-    return Array.isArray(raw) ? (raw as SafeDrillDto[]) : [];
-  }, [home]);
+  const safeDrills = home?.safeDrills ?? [];
 
   const heroHighlights = useMemo(() => ([
     {
@@ -157,7 +145,11 @@ export default function ReadingHome() {
     {
       icon: TrendingUp,
       label: 'Latest score',
-      value: latestResult ? `${latestResult.rawScore}/42 | ${latestResult.scaledScore}/500` : 'No result yet',
+      value: latestResult
+        ? latestResult.scaledScore == null
+          ? `${latestResult.rawScore}/${latestResult.maxRawScore} practice`
+          : `${latestResult.rawScore}/42 | ${latestResult.scaledScore}/500`
+        : 'No result yet',
     },
   ]), [activeAttempts, papers.length, latestResult, loading]);
 
@@ -174,6 +166,16 @@ export default function ReadingHome() {
         />
 
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
+
+        <div className="flex justify-end">
+          <Link
+            href="/reading/practice"
+            className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-4 py-2 text-sm font-medium text-blue-800 hover:bg-blue-100"
+          >
+            <Sparkles className="h-4 w-4" aria-hidden />
+            Open Practice Hub
+          </Link>
+        </div>
 
         {loading ? <ReadingHomeSkeleton /> : (
           <>
@@ -211,9 +213,9 @@ export default function ReadingHome() {
             {safeDrills.length ? (
               <section>
                 <LearnerSurfaceSectionHeader
-                  eyebrow="Focused Drills"
+                  eyebrow="Next Actions"
                   title="Targeted Reading practice"
-                  description="Short-form drills built for specific Reading sub-skills when you do not have time for a full paper."
+                  description="Evidence-based review and timed-paper actions generated from your latest structured Reading work."
                   className="mb-5"
                 />
                 <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
@@ -397,17 +399,20 @@ function paperCard(paper: ReadingHomePaperDto, attempts: ReadingHomeAttemptDto[]
 }
 
 function resultCard(result: ReadingHomeResultDto): LearnerSurfaceCardModel {
-  const passed = isListeningReadingPassByRaw(result.rawScore);
+  const isPracticeOnly = result.scaledScore == null;
+  const passed = !isPracticeOnly && isListeningReadingPassByRaw(result.rawScore);
   return {
     kind: 'evidence',
     sourceType: 'backend_summary',
-    accent: passed ? 'emerald' : 'amber',
-    eyebrow: passed ? 'Pass Evidence' : 'Review Focus',
+    accent: isPracticeOnly ? 'slate' : passed ? 'emerald' : 'amber',
+    eyebrow: isPracticeOnly ? 'Practice Evidence' : passed ? 'Pass Evidence' : 'Review Focus',
     eyebrowIcon: passed ? CheckCircle2 : Target,
     title: result.paperTitle,
-    description: formatListeningReadingDisplay(result.rawScore),
+    description: isPracticeOnly
+      ? `${result.rawScore}/${result.maxRawScore} practice marks`
+      : formatListeningReadingDisplay(result.rawScore),
     metaItems: [
-      { icon: FileText, label: `Grade ${result.gradeLetter}` },
+      { icon: FileText, label: isPracticeOnly ? 'No OET grade' : `Grade ${result.gradeLetter}` },
       { icon: Clock, label: result.submittedAt ? formatDate(result.submittedAt) : 'Submitted' },
     ],
     primaryAction: {
@@ -415,23 +420,23 @@ function resultCard(result: ReadingHomeResultDto): LearnerSurfaceCardModel {
       href: result.route,
       variant: 'outline',
     },
-    statusLabel: passed ? 'Passed' : 'Needs work',
+    statusLabel: isPracticeOnly ? 'Practice only' : passed ? 'Passed' : 'Needs work',
   };
 }
 
-function safeDrillCard(drill: SafeDrillDto): LearnerSurfaceCardModel {
+function safeDrillCard(drill: ReadingHomeSafeDrillDto): LearnerSurfaceCardModel {
   return {
     kind: 'insight',
     sourceType: 'backend_summary',
     accent: 'rose',
-    eyebrow: drill.focusLabel ?? 'Focused Drill',
+    eyebrow: drill.focusLabel,
     eyebrowIcon: Sparkles,
-    title: drill.title ?? 'Targeted Reading drill',
-    description: drill.description ?? 'Short-form practice to build a specific Reading sub-skill.',
+    title: drill.title,
+    description: drill.description,
     metaItems: [
-      { icon: Clock, label: drill.estimatedMinutes ? `${drill.estimatedMinutes} mins` : 'Short session' },
+      { icon: Clock, label: `${drill.estimatedMinutes} mins` },
     ],
-    primaryAction: drill.launchRoute ? { label: 'Open drill', href: drill.launchRoute } : undefined,
+    primaryAction: { label: 'Open action', href: drill.launchRoute },
   };
 }
 

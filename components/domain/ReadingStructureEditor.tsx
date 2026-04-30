@@ -1,7 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { CheckCircle2, FileText, Plus, RefreshCw, Trash2, AlertTriangle } from 'lucide-react';
+import { CheckCircle2, Download, FileText, Plus, RefreshCw, Trash2, AlertTriangle, Upload } from 'lucide-react';
 import { AdminRoutePanel } from '@/components/domain/admin-route-surface';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,9 @@ import { Modal } from '@/components/ui/modal';
 import { Skeleton } from '@/components/ui/skeleton';
 import {
   ensureCanonicalParts,
+  exportReadingStructureManifest,
   getReadingStructureAdmin,
+  importReadingStructureManifest,
   removeReadingQuestion,
   removeReadingText,
   upsertReadingPart,
@@ -21,6 +23,7 @@ import {
   type ReadingPartAdminDto,
   type ReadingPartCode,
   type ReadingQuestionAdminDto,
+  type ReadingStructureManifestDto,
   type ReadingQuestionType,
   type ReadingStructureAdminDto,
   type ReadingTextDto,
@@ -31,6 +34,7 @@ interface Props { paperId: string }
 
 type TextDraft = Omit<ReadingTextDto, 'id'> & { id: string | null };
 type QuestionDraft = Omit<ReadingQuestionAdminDto, 'id'> & { id: string | null };
+type ManifestModalState = { mode: 'import' | 'export'; value: string };
 
 const QUESTION_TYPE_LABELS: Record<ReadingQuestionType, string> = {
   MatchingTextReference: 'Matching (Part A)',
@@ -54,6 +58,8 @@ export function ReadingStructureEditor({ paperId }: Props) {
   const [textDraft, setTextDraft] = useState<TextDraft | null>(null);
   const [questionDraft, setQuestionDraft] = useState<QuestionDraft | null>(null);
   const [savingDraft, setSavingDraft] = useState(false);
+  const [manifestModal, setManifestModal] = useState<ManifestModalState | null>(null);
+  const [manifestBusy, setManifestBusy] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -121,6 +127,43 @@ export function ReadingStructureEditor({ paperId }: Props) {
     } finally { setSavingDraft(false); }
   };
 
+  const openManifestExport = async () => {
+    setManifestBusy(true);
+    setError(null);
+    try {
+      const manifest = await exportReadingStructureManifest(paperId);
+      setManifestModal({ mode: 'export', value: JSON.stringify(manifest, null, 2) });
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setManifestBusy(false);
+    }
+  };
+
+  const importManifest = async (value: string) => {
+    setManifestBusy(true);
+    setError(null);
+    try {
+      const parsed = JSON.parse(value) as unknown;
+      const wrappedManifest = parsed && typeof parsed === 'object' && 'manifest' in parsed
+        ? (parsed as { manifest?: unknown }).manifest
+        : parsed;
+      if (!wrappedManifest || typeof wrappedManifest !== 'object' || !Array.isArray((wrappedManifest as ReadingStructureManifestDto).parts)) {
+        throw new Error('Reading JSON must contain a manifest with a parts array.');
+      }
+      const manifest = wrappedManifest as ReadingStructureManifestDto;
+      const result = await importReadingStructureManifest(paperId, { replaceExisting: true, manifest });
+      setStructure(result.structure);
+      setReport(result.report);
+      setManifestModal(null);
+    } catch (e) {
+      const detail = (e as Error & { detail?: { error?: string } }).detail;
+      setError(detail?.error ?? (e as Error).message);
+    } finally {
+      setManifestBusy(false);
+    }
+  };
+
   if (loading && !structure) {
     return <AdminRoutePanel title="Reading structure"><Skeleton className="h-48" /></AdminRoutePanel>;
   }
@@ -128,9 +171,17 @@ export function ReadingStructureEditor({ paperId }: Props) {
   return (
     <AdminRoutePanel
       title="Reading structure"
-      actions={<Button variant="ghost" size="sm" onClick={() => void load()}>
-        <RefreshCw className="w-4 h-4" /> Refresh
-      </Button>}
+      actions={<div className="flex flex-wrap items-center gap-2">
+        <Button variant="ghost" size="sm" onClick={() => setManifestModal({ mode: 'import', value: '' })}>
+          <Upload className="w-4 h-4" /> Import JSON
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => void openManifestExport()} loading={manifestBusy}>
+          <Download className="w-4 h-4" /> Export JSON
+        </Button>
+        <Button variant="ghost" size="sm" onClick={() => void load()}>
+          <RefreshCw className="w-4 h-4" /> Refresh
+        </Button>
+      </div>}
     >
       {error && <InlineAlert variant="error">{error}</InlineAlert>}
 
@@ -192,14 +243,61 @@ export function ReadingStructureEditor({ paperId }: Props) {
       {questionDraft && (
         <QuestionEditorModal
           draft={questionDraft}
-          texts={structure?.parts.flatMap(p => p.texts) ?? []}
+          texts={structure?.parts.find((part) => part.id === questionDraft.readingPartId)?.texts ?? []}
           saving={savingDraft}
           onChange={setQuestionDraft}
           onClose={() => setQuestionDraft(null)}
           onSave={() => void saveQuestion(questionDraft)}
         />
       )}
+
+      {manifestModal && (
+        <ManifestJsonModal
+          state={manifestModal}
+          busy={manifestBusy}
+          onChange={setManifestModal}
+          onClose={() => setManifestModal(null)}
+          onImport={() => void importManifest(manifestModal.value)}
+        />
+      )}
     </AdminRoutePanel>
+  );
+}
+
+function ManifestJsonModal({ state, busy, onChange, onClose, onImport }: {
+  state: ManifestModalState;
+  busy: boolean;
+  onChange: (state: ManifestModalState) => void;
+  onClose: () => void;
+  onImport: () => void;
+}) {
+  const isImport = state.mode === 'import';
+
+  return (
+    <Modal open={true} onClose={onClose} title={isImport ? 'Import Reading JSON' : 'Export Reading JSON'} size="lg">
+      <div className="space-y-4">
+        {isImport ? (
+          <InlineAlert variant="warning">
+            Import replaces this paper&apos;s Reading texts and questions, then runs the publish validator.
+          </InlineAlert>
+        ) : null}
+        <textarea
+          className="min-h-[360px] w-full rounded-lg border border-border bg-background-light p-3 font-mono text-xs text-navy"
+          value={state.value}
+          readOnly={!isImport}
+          spellCheck={false}
+          onChange={(event) => onChange({ ...state, value: event.target.value })}
+        />
+        <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+          <Button variant="ghost" onClick={onClose}>Close</Button>
+          {isImport ? (
+            <Button variant="primary" onClick={onImport} loading={busy} disabled={!state.value.trim()}>
+              Replace structure
+            </Button>
+          ) : null}
+        </div>
+      </div>
+    </Modal>
   );
 }
 

@@ -89,4 +89,42 @@ describe('Reading page', () => {
     expect(screen.getByTestId('learner-dashboard-shell')).toBeInTheDocument();
     expect(container.querySelector('[class*="max-w-5xl"][class*="mx-auto"][class*="px-4"]')).not.toBeInTheDocument();
   });
+
+  it('renders targeted Reading next actions from safe drills', async () => {
+    mockGetReadingHome.mockResolvedValueOnce({
+      intro: 'Reading practice uses full structured papers.',
+      papers: [],
+      activeAttempts: [],
+      recentResults: [],
+      policy: {
+        partATimerMinutes: 15,
+        partBCTimerMinutes: 45,
+        allowPausingAttempt: false,
+        allowResumeAfterExpiry: false,
+        showCorrectAnswerOnReview: true,
+        showExplanationsAfterSubmit: true,
+      },
+      safeDrills: [
+        {
+          id: 'review-attempt-1-part-A',
+          title: 'Repair Part A score loss',
+          description: 'Review the attempt section where the most Reading marks were lost.',
+          focusLabel: 'Part A',
+          estimatedMinutes: 15,
+          launchRoute: '/reading/paper/paper-1/results?attemptId=attempt-1#part-breakdown',
+          highlights: ['12/20 marks in Part A', '3 unanswered item(s) to review'],
+        },
+      ],
+    });
+
+    render(<ReadingPage />);
+
+    expect(await screen.findByText('Targeted Reading practice')).toBeInTheDocument();
+    expect(screen.getByText('Repair Part A score loss')).toBeInTheDocument();
+    expect(screen.getByText('12/20 marks in Part A')).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: /open action/i })).toHaveAttribute(
+      'href',
+      '/reading/paper/paper-1/results?attemptId=attempt-1#part-breakdown',
+    );
+  });
 });

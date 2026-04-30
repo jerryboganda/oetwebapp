@@ -410,25 +410,29 @@ public static class LearnerEndpoints
             .ToDictionary(g => g.Key, g => g.ToList());
 
         var paperTitles = readyPapers.ToDictionary(p => p.Id, p => p.Title);
+        var safeDrills = BuildReadingSafeDrills(readyPapers, attempts, partsByPaper, paperTitles, policy);
         var activeAttempts = attempts
             .Where(a => a.Status == ReadingAttemptStatus.InProgress)
             .Take(3)
             .Select(a =>
             {
                 var snapshot = ResolveReadingPolicySnapshot(a.PolicySnapshotJson, policy);
+                var scopeQuestionIds = ParseReadingScopeQuestionIds(a.ScopeJson);
                 var totalQuestions = partsByPaper.TryGetValue(a.PaperId, out var paperParts)
-                    ? paperParts.Sum(p => p.Questions.Count)
+                    ? scopeQuestionIds?.Count ?? paperParts.Sum(p => p.Questions.Count)
                     : 0;
+                var (partADeadlineAt, partBCDeadlineAt) = ResolveReadingAttemptDeadlines(a, snapshot);
                 return new
                 {
                     attemptId = a.Id,
                     paperId = a.PaperId,
                     paperTitle = paperTitles.GetValueOrDefault(a.PaperId, "Reading paper"),
                     status = a.Status.ToString(),
+                    mode = a.Mode.ToString(),
                     a.StartedAt,
                     a.DeadlineAt,
-                    partADeadlineAt = a.StartedAt.AddMinutes(snapshot.PartATimerMinutes),
-                    partBCDeadlineAt = a.StartedAt.AddMinutes(snapshot.PartATimerMinutes + snapshot.PartBCTimerMinutes),
+                    partADeadlineAt,
+                    partBCDeadlineAt,
                     answeredCount = a.Answers.Count,
                     totalQuestions,
                     canResume = a.DeadlineAt is null || a.DeadlineAt >= DateTimeOffset.UtcNow || snapshot.AllowResumeAfterExpiry,
@@ -439,6 +443,7 @@ public static class LearnerEndpoints
 
         var recentResults = attempts
             .Where(a => a.Status == ReadingAttemptStatus.Submitted)
+            .Where(IsCanonicalReadingScoreAttempt)
             .OrderByDescending(a => a.SubmittedAt)
             .Take(5)
             .Select(a => new
@@ -508,12 +513,230 @@ public static class LearnerEndpoints
                 policy.ShowCorrectAnswerOnReview,
                 policy.ShowExplanationsAfterSubmit,
             },
-            safeDrills = Array.Empty<object>(),
+            safeDrills,
         };
     }
 
+    private static IReadOnlyList<object> BuildReadingSafeDrills(
+        IReadOnlyList<ContentPaper> readyPapers,
+        IReadOnlyList<ReadingAttempt> attempts,
+        IReadOnlyDictionary<string, List<ReadingPart>> partsByPaper,
+        IReadOnlyDictionary<string, string> paperTitles,
+        ReadingResolvedPolicy policy)
+    {
+        var actions = new List<object>();
+        var latestSubmitted = attempts
+            .Where(a => a.Status == ReadingAttemptStatus.Submitted)
+            .Where(IsCanonicalReadingScoreAttempt)
+            .OrderByDescending(a => a.SubmittedAt)
+            .FirstOrDefault();
+
+        if (latestSubmitted is not null && partsByPaper.TryGetValue(latestSubmitted.PaperId, out var latestParts))
+        {
+            var answersByQuestion = latestSubmitted.Answers
+                .GroupBy(a => a.ReadingQuestionId)
+                .ToDictionary(g => g.Key, g => g.OrderByDescending(a => a.AnsweredAt).First());
+            var partLosses = latestParts
+                .Select(part =>
+                {
+                    var max = part.Questions.Sum(q => q.Points);
+                    var earned = part.Questions.Sum(q =>
+                        answersByQuestion.TryGetValue(q.Id, out var answer) ? answer.PointsEarned : 0);
+                    var unanswered = part.Questions.Count(q => !answersByQuestion.ContainsKey(q.Id));
+                    return new
+                    {
+                        part.PartCode,
+                        Max = max,
+                        Earned = earned,
+                        Lost = Math.Max(0, max - earned),
+                        Unanswered = unanswered,
+                    };
+                })
+                .Where(p => p.Lost > 0)
+                .OrderByDescending(p => p.Lost)
+                .ThenByDescending(p => p.Unanswered)
+                .ToList();
+
+            var weakestPart = partLosses.FirstOrDefault();
+            if (weakestPart is not null)
+            {
+                var partMinutes = weakestPart.PartCode == ReadingPartCode.A
+                    ? policy.PartATimerMinutes
+                    : Math.Max(15, policy.PartBCTimerMinutes / 2);
+                actions.Add(new
+                {
+                    id = $"review-{latestSubmitted.Id}-part-{weakestPart.PartCode}",
+                    title = $"Repair Part {weakestPart.PartCode} score loss",
+                    description = $"Review the attempt section where the most Reading marks were lost before starting another full paper.",
+                    focusLabel = $"Part {weakestPart.PartCode}",
+                    estimatedMinutes = partMinutes,
+                    launchRoute = $"/reading/paper/{latestSubmitted.PaperId}/results?attemptId={latestSubmitted.Id}#part-breakdown",
+                    highlights = new[]
+                    {
+                        $"{weakestPart.Earned}/{weakestPart.Max} marks in Part {weakestPart.PartCode}",
+                        weakestPart.Unanswered > 0
+                            ? $"{weakestPart.Unanswered} unanswered item(s) to review"
+                            : $"{weakestPart.Lost} mark(s) lost to incorrect answers",
+                    },
+                });
+            }
+
+            var questionLookup = latestParts
+                .SelectMany(part => part.Questions.Select(q => new
+                {
+                    q.Id,
+                    Label = string.IsNullOrWhiteSpace(q.SkillTag) ? q.QuestionType.ToString() : q.SkillTag,
+                }))
+                .ToDictionary(q => q.Id, q => q.Label);
+            var weakestSkillCandidate = latestParts
+                .SelectMany(part => part.Questions)
+                .Where(q => !answersByQuestion.TryGetValue(q.Id, out var answer) || answer.IsCorrect != true)
+                .Select(q => questionLookup.TryGetValue(q.Id, out var label) ? label : null)
+                .Where(label => !string.IsNullOrWhiteSpace(label))
+                .GroupBy(label => label!)
+                .Select(g => new { Label = g.Key, Misses = g.Count() })
+                .OrderByDescending(g => g.Misses)
+                .ThenBy(g => g.Label)
+                .FirstOrDefault();
+
+            if (weakestSkillCandidate is not null)
+            {
+                actions.Add(new
+                {
+                    id = $"review-{latestSubmitted.Id}-skill-{SanitiseActionId(weakestSkillCandidate.Label)}",
+                    title = $"Target {weakestSkillCandidate.Label}",
+                    description = "Use the skill breakdown to revisit the exact item patterns that cost marks.",
+                    focusLabel = weakestSkillCandidate.Label,
+                    estimatedMinutes = 12,
+                    launchRoute = $"/reading/paper/{latestSubmitted.PaperId}/results?attemptId={latestSubmitted.Id}#skill-breakdown",
+                    highlights = new[]
+                    {
+                        $"{weakestSkillCandidate.Misses} missed or unanswered item(s) in this cluster",
+                        "Review evidence before repeating a timed paper",
+                    },
+                });
+            }
+        }
+
+        var attemptedPaperIds = attempts.Select(a => a.PaperId).ToHashSet();
+        var submittedPaperIds = attempts
+            .Where(a => a.Status == ReadingAttemptStatus.Submitted)
+            .Select(a => a.PaperId)
+            .ToHashSet();
+        var nextPaper = readyPapers.FirstOrDefault(p => !attemptedPaperIds.Contains(p.Id))
+            ?? readyPapers.FirstOrDefault(p => submittedPaperIds.Contains(p.Id))
+            ?? readyPapers.FirstOrDefault();
+        if (nextPaper is not null && actions.Count < 3)
+        {
+            actions.Add(new
+            {
+                id = $"paper-{nextPaper.Id}-full-timed",
+                title = "Run a full timed Reading paper",
+                description = "Use strict Part A and B/C timing to check whether the latest review work transfers under exam pressure.",
+                focusLabel = "Full paper",
+                estimatedMinutes = policy.PartATimerMinutes + policy.PartBCTimerMinutes,
+                launchRoute = $"/reading/paper/{nextPaper.Id}",
+                highlights = new[]
+                {
+                    paperTitles.GetValueOrDefault(nextPaper.Id, nextPaper.Title),
+                    $"{policy.PartATimerMinutes}+{policy.PartBCTimerMinutes} minute timing rhythm",
+                },
+            });
+        }
+
+        return actions.Take(3).ToList();
+    }
+
+    private static string SanitiseActionId(string value)
+        => new(value.ToLowerInvariant()
+            .Select(ch => char.IsLetterOrDigit(ch) ? ch : '-')
+            .ToArray());
+
     private static int CountPartQuestions(IReadOnlyCollection<ReadingPart> parts, ReadingPartCode code)
         => parts.FirstOrDefault(part => part.PartCode == code)?.Questions.Count ?? 0;
+
+    private static bool IsCanonicalReadingScoreAttempt(ReadingAttempt attempt)
+        => attempt.Mode is ReadingAttemptMode.Exam or ReadingAttemptMode.Learning
+            && attempt.MaxRawScore == OetScoring.ListeningReadingRawMax;
+
+    private static (DateTimeOffset PartADeadlineAt, DateTimeOffset PartBCDeadlineAt) ResolveReadingAttemptDeadlines(
+        ReadingAttempt attempt,
+        ReadingResolvedPolicy policy)
+    {
+        if (attempt.Mode == ReadingAttemptMode.Exam)
+        {
+            return (
+                attempt.StartedAt.AddMinutes(policy.PartATimerMinutes),
+                attempt.StartedAt.AddMinutes(policy.PartATimerMinutes + policy.PartBCTimerMinutes));
+        }
+
+        var answerDeadline = ResolveReadingPracticeAnswerDeadline(attempt, policy);
+        return (answerDeadline, answerDeadline);
+    }
+
+    private static DateTimeOffset ResolveReadingPracticeAnswerDeadline(
+        ReadingAttempt attempt,
+        ReadingResolvedPolicy policy)
+    {
+        if (attempt.DeadlineAt is DateTimeOffset deadline)
+        {
+            return deadline.AddSeconds(-Math.Max(0, policy.GracePeriodSeconds));
+        }
+
+        var minutes = TryReadReadingScopeMinutes(attempt.ScopeJson)
+            ?? (attempt.Mode == ReadingAttemptMode.Learning
+                ? Math.Max(60, policy.PartATimerMinutes + policy.PartBCTimerMinutes) * 4
+                : policy.PartATimerMinutes + policy.PartBCTimerMinutes);
+        return attempt.StartedAt.AddMinutes(minutes);
+    }
+
+    private static int? TryReadReadingScopeMinutes(string? scopeJson)
+    {
+        if (string.IsNullOrWhiteSpace(scopeJson)) return null;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(scopeJson);
+            if (doc.RootElement.TryGetProperty("minutes", out var minutesElement)
+                && minutesElement.ValueKind == System.Text.Json.JsonValueKind.Number
+                && minutesElement.TryGetInt32(out var minutes)
+                && minutes is > 0 and <= 240)
+            {
+                return minutes;
+            }
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+
+        return null;
+    }
+
+    private static HashSet<string>? ParseReadingScopeQuestionIds(string? scopeJson)
+    {
+        if (string.IsNullOrWhiteSpace(scopeJson)) return null;
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(scopeJson);
+            if (!doc.RootElement.TryGetProperty("questionIds", out var questionIds)
+                || questionIds.ValueKind != System.Text.Json.JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            var ids = questionIds.EnumerateArray()
+                .Where(item => item.ValueKind == System.Text.Json.JsonValueKind.String)
+                .Select(item => item.GetString())
+                .Where(id => !string.IsNullOrWhiteSpace(id))
+                .Select(id => id!)
+                .ToHashSet(StringComparer.Ordinal);
+            return ids.Count > 0 ? ids : null;
+        }
+        catch (System.Text.Json.JsonException)
+        {
+            return null;
+        }
+    }
 
     private static ReadingResolvedPolicy ResolveReadingPolicySnapshot(
         string json,

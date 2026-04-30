@@ -771,6 +771,14 @@ builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingGradingServic
     OetLearner.Api.Services.Reading.ReadingGradingService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingAttemptService,
     OetLearner.Api.Services.Reading.ReadingAttemptService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingReviewService,
+    OetLearner.Api.Services.Reading.ReadingReviewService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingAnalyticsService,
+    OetLearner.Api.Services.Reading.ReadingAnalyticsService>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionAi,
+    OetLearner.Api.Services.Reading.StubReadingExtractionAi>();
+builder.Services.AddScoped<OetLearner.Api.Services.Reading.IReadingExtractionService,
+    OetLearner.Api.Services.Reading.ReadingExtractionService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.ListeningLearnerService>();
 builder.Services.AddScoped<OetLearner.Api.Services.Listening.IListeningStructureService,
     OetLearner.Api.Services.Listening.ListeningStructureService>();
@@ -1076,6 +1084,7 @@ app.MapAiMeEndpoints();
 app.MapContentPapersAdminEndpoints();
 app.MapMockAdminEndpoints();
 app.MapContentPapersLearnerEndpoints();
+app.MapReadingAnalyticsAdminEndpoints();
 app.MapReadingAuthoringAdminEndpoints();
 app.MapListeningAuthoringAdminEndpoints();
 app.MapReadingLearnerEndpoints();

@@ -118,6 +118,8 @@ Tasks:
 4. Add homework assignment and completion tracking.
 5. Add paper-quality analytics for item discrimination and poor-performing questions.
 
+Progress note: Phase 5 now has a first concrete admin analytics slice via `/v1/admin/reading/analytics` and `/admin/analytics/reading`. It aggregates paper readiness, part/skill accuracy, attempt modes, pass-rate signals through canonical OET scoring, and the hardest submitted questions for authoring QA. Remaining Phase 5 work is deeper cohort segmentation, longitudinal trend charts, and formal item-discrimination statistics once more learner attempt volume exists.
+
 Acceptance criteria:
 
 1. Teachers can assign targeted work from dashboard evidence.
@@ -198,3 +200,58 @@ This turn starts Phase 1 and Phase 4:
 
 1. Phase 1: enforce frontend Part A no-return and auto-submit at the B/C deadline.
 2. Phase 4: add part and skill breakdowns to the learner review payload and results UI.
+
+## Continued Implementation Progress
+
+1. Phase 1 exam fidelity now includes mobile/small-screen warning, unanswered manual-submit warning, strict Part A no-return, B/C answer-window closure, and auto-submit handoff to server grading.
+2. Phase 2 authoring workflow now includes JSON manifest export/import for Reading structures. Imports replace existing texts/questions only through the Reading structure service, preserve text/question links by display order, audit the operation, and run the publish validator after import.
+3. Phase 4 learner results now include part and skill breakdowns in the review payload and UI.
+4. Phase 3/4 learner guidance now includes backend-generated targeted next actions on the Reading home page, derived from the learner's latest submitted attempt and linked directly into the relevant result review sections.
+5. **Phase 3a — DONE (this turn).** Practice Mode + Error Bank.
+   - New `ReadingAttemptMode` enum (Exam / Learning / Drill / MiniTest / ErrorBank) and `ScopeJson` column on `ReadingAttempt`.
+   - New `ReadingErrorBankEntry` table (unique on user+question, indexed on user+resolved and user+lastSeenWrongAt).
+   - `IReadingAttemptService.StartInModeAsync` relaxes concurrency cap, attempt cap, cooldown, and Part A hard-lock for non-Exam modes.
+   - Grading pipeline updates the Error Bank on submit: wrong answers upsert + increment `TimesWrong`; correct answers on previously-missed questions resolve the entry as `answered_correctly`.
+   - New learner endpoints under `/v1/reading-papers/practice/*`: start Learning attempt, list / clear Error Bank.
+   - New learner page `/reading/practice` with Learning Mode launcher + Error Bank table; link added to Reading home.
+   - Migration retained in `20260429193607_AddReadingPhase4DistractorAndReview` (includes the Phase 3 practice-mode schema plus Phase 4 review/distractor schema).
+   - Tests: 3 new cases in `ReadingAuthoringTests` (concurrent learning + exam, Part A unlocked in Learning, Error Bank lifecycle); full Reading suite 56/56.
+
+## Phase 3b — DONE (drills + mini-tests + retest)
+
+1. **Subset-aware grading**: `ReadingGradingService` now reads
+   `attempt.ScopeJson.questionIds`; subset attempts (Drill / MiniTest /
+   ErrorBank) only score their in-scope questions, set
+   `MaxRawScore = sum(in-scope points)`, and **skip** the
+   `OetRawToScaled` conversion (the 30/42=350 anchor only applies to the
+   canonical full paper). Idempotent re-grading honours scope too.
+2. **Question samplers**: `ReadingPracticeSampler.SampleAsync` (per Part
+   + skill tag) and `SampleMixedAsync` (balanced across A/B/C using the
+   20:6:16 ratio).
+3. **Drill catalogue**: 6 hardcoded templates in
+   `ReadingDrillCatalogue` — Part A scan, Part B distractor, Part C
+   inference / attitude / vocabulary / reference.
+4. **New endpoints** under `/v1/reading-papers`:
+   - `GET /practice/drills` — drill + mini-test catalogue.
+   - `POST /papers/{id}/practice/drills/{drillCode}` — start a Drill.
+   - `POST /papers/{id}/practice/mini-test` — start a 5/10/15-min Mini-Test.
+   - `POST /practice/error-bank/retest` — start an ErrorBank attempt scoped
+     to the user's most-recent open misses (single paper, ~30s/Q timer).
+5. **Player mode-aware UX**: `/reading/paper/{paperId}` now reads
+   `mode` + `scopeQuestionIds` from `GET /attempts/{id}`. For non-Exam
+   attempts the Part-A hard lock is suppressed, the rendered structure
+   is filtered to the in-scope question IDs, and an
+   `InlineAlert variant="info"` ribbon labels the run with its mode.
+6. **Practice Hub UI**: `/reading/practice` now renders the Learning
+   Mode launcher (Phase 3a) **plus** Skill Drills (Part picker + 6
+   accent-coded cards), Mini-Tests (5/10/15-min trio), and a
+   one-click Error-Bank retest CTA.
+7. **Tests**: 4 new backend cases — subset scoring + scaled
+   suppression, sampler returns Part-only set, mixed-Part sampler
+   covers ≥2 parts, ErrorBank attempt deadline ≥15min.
+
+**Verification**: backend full suite **718/718** (was 709, +9 net Phase
+3a+3b cases), `npx tsc --noEmit` clean, `npm run lint` clean, frontend
+Vitest 703/704 passing (one pre-existing flake in
+`app/admin/non-editor-pages.test.tsx` unrelated to Reading — passes in
+isolation).

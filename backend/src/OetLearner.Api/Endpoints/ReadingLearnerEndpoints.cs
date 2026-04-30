@@ -188,9 +188,9 @@ public static class ReadingLearnerEndpoints
             var policy = ResolvePolicySnapshot(attempt.PolicySnapshotJson);
             var showExplain = attempt.Status == ReadingAttemptStatus.Submitted
                 && policy.ShowExplanationsAfterSubmit;
-            var totalQuestions = await CountQuestionsForPaperAsync(db, attempt.PaperId, ct);
-            var partADeadline = attempt.StartedAt.AddMinutes(policy.PartATimerMinutes);
-            var partBCDeadline = attempt.StartedAt.AddMinutes(policy.PartATimerMinutes + policy.PartBCTimerMinutes);
+            var scopeIds = ParseScopeQuestionIdsForPlayer(attempt.ScopeJson);
+            var totalQuestions = scopeIds?.Count ?? await CountQuestionsForPaperAsync(db, attempt.PaperId, ct);
+            var (partADeadline, partBCDeadline) = ResolveAttemptDeadlines(attempt, policy);
             var now = DateTimeOffset.UtcNow;
 
             return Results.Ok(new
@@ -198,6 +198,8 @@ public static class ReadingLearnerEndpoints
                 attempt.Id,
                 attempt.PaperId,
                 status = attempt.Status.ToString(),
+                mode = attempt.Mode.ToString(),
+                scopeQuestionIds = scopeIds,
                 attempt.StartedAt,
                 attempt.DeadlineAt,
                 attempt.SubmittedAt,
@@ -255,8 +257,12 @@ public static class ReadingLearnerEndpoints
             var answers = attempt.Answers.ToDictionary(a => a.ReadingQuestionId);
             var showCorrect = policy.ShowCorrectAnswerOnReview;
             var showExplanations = policy.ShowExplanationsAfterSubmit;
+            var scopeIds = ParseScopeQuestionIdsForPlayer(attempt.ScopeJson);
+            var scopedQuestionIds = scopeIds is { Count: > 0 } ? scopeIds.ToHashSet(StringComparer.Ordinal) : null;
+            var (partADeadline, partBCDeadline) = ResolveAttemptDeadlines(attempt, policy);
             var items = parts
                 .SelectMany(part => part.Questions
+                    .Where(q => scopedQuestionIds is null || scopedQuestionIds.Contains(q.Id))
                     .OrderBy(q => q.DisplayOrder)
                     .Select(q =>
                     {
@@ -288,6 +294,12 @@ public static class ReadingLearnerEndpoints
                     label = g.Key,
                     incorrectCount = g.Count(),
                     questionIds = g.Select(i => i.QuestionId).ToList(),
+                    questions = g.Select(i => new
+                    {
+                        i.PartCode,
+                        i.DisplayOrder,
+                        label = $"Part {i.PartCode} Q{i.DisplayOrder}",
+                    }).ToList(),
                 })
                 .OrderByDescending(x => x.incorrectCount)
                 .ThenBy(x => x.label)
@@ -298,16 +310,20 @@ public static class ReadingLearnerEndpoints
                 {
                     var partCode = part.PartCode.ToString();
                     var partItems = items.Where(i => i.PartCode == partCode).ToList();
+                    var maxRawScore = part.Questions
+                        .Where(q => scopedQuestionIds is null || scopedQuestionIds.Contains(q.Id))
+                        .Sum(q => q.Points);
                     return new
                     {
                         partCode,
                         rawScore = partItems.Sum(i => i.PointsEarned),
-                        maxRawScore = part.Questions.Sum(q => q.Points),
+                        maxRawScore,
                         correctCount = partItems.Count(i => i.IsCorrect),
                         incorrectCount = partItems.Count(i => !i.IsCorrect && i.UserAnswer is not null),
                         unansweredCount = partItems.Count(i => i.UserAnswer is null),
                     };
                 })
+                .Where(part => scopedQuestionIds is null || part.maxRawScore > 0)
                 .ToList();
 
             var skillBreakdown = items
@@ -324,6 +340,10 @@ public static class ReadingLearnerEndpoints
                 .ThenBy(x => x.label)
                 .ToList();
 
+            var gradeLetter = attempt.ScaledScore is int scaledScore
+                ? OetScoring.OetGradeLetterFromScaled(scaledScore)
+                : "—";
+
             return Results.Ok(new
             {
                 attempt = new
@@ -331,15 +351,16 @@ public static class ReadingLearnerEndpoints
                     attempt.Id,
                     attempt.PaperId,
                     status = attempt.Status.ToString(),
+                    mode = attempt.Mode.ToString(),
+                    scopeQuestionIds = scopeIds,
                     attempt.StartedAt,
                     attempt.SubmittedAt,
                     attempt.RawScore,
                     attempt.MaxRawScore,
                     attempt.ScaledScore,
-                    gradeLetter = OetScoring.OetGradeLetterFromScaled(
-                        attempt.ScaledScore ?? OetScoring.OetRawToScaled(attempt.RawScore ?? 0)),
-                    partADeadlineAt = attempt.StartedAt.AddMinutes(policy.PartATimerMinutes),
-                    partBCDeadlineAt = attempt.StartedAt.AddMinutes(policy.PartATimerMinutes + policy.PartBCTimerMinutes),
+                    gradeLetter,
+                    partADeadlineAt = partADeadline,
+                    partBCDeadlineAt = partBCDeadline,
                 },
                 paper = new { paper.Id, paper.Title, paper.Slug, paper.SubtestCode },
                 policy = new
@@ -364,7 +385,443 @@ public static class ReadingLearnerEndpoints
             return Results.Ok(policy);
         });
 
+        // ════════════════════════════════════════════════════════════════
+        // Phase 3 — Practice Mode + Error Bank
+        // ════════════════════════════════════════════════════════════════
+
+        // ── Start a Learning-mode attempt against a published paper ──────
+        group.MapPost("/papers/{paperId}/practice/learning", async (
+            string paperId, IReadingAttemptService svc, HttpContext http, CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+            try
+            {
+                var scopeJson = JsonSerializer.Serialize(new { kind = "learning" });
+                var started = await svc.StartInModeAsync(
+                    userId, paperId, ReadingAttemptMode.Learning, scopeJson, ct);
+                return Results.Ok(new
+                {
+                    mode = "Learning",
+                    started.AttemptId,
+                    started.StartedAt,
+                    started.DeadlineAt,
+                    started.PartADeadlineAt,
+                    started.PartBCDeadlineAt,
+                    started.PaperTitle,
+                    started.PartATimerMinutes,
+                    started.PartBCTimerMinutes,
+                    playerRoute = $"/reading/paper/{paperId}?attemptId={started.AttemptId}&mode=learning",
+                });
+            }
+            catch (ReadingAttemptException ex)
+            {
+                return Results.BadRequest(new { code = ex.Code, error = ex.Message, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { code = "reading_attempt_rejected", error = ex.Message, message = ex.Message });
+            }
+        }).RequireRateLimiting("PerUserWrite");
+
+        // ── List the learner's current Error Bank ────────────────────────
+        group.MapGet("/practice/error-bank", async (
+            HttpContext http,
+            LearnerDbContext db,
+            CancellationToken ct,
+            string? partCode = null,
+            int? limit = null) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+
+            var take = Math.Clamp(limit ?? 50, 1, 200);
+            var query = db.ReadingErrorBankEntries.AsNoTracking()
+                .Where(e => e.UserId == userId && !e.IsResolved);
+            if (!string.IsNullOrWhiteSpace(partCode)
+                && Enum.TryParse<ReadingPartCode>(partCode, ignoreCase: true, out var pc))
+            {
+                query = query.Where(e => e.PartCode == pc);
+            }
+
+            var entries = await query
+                .OrderByDescending(e => e.LastSeenWrongAt)
+                .Take(take)
+                .ToListAsync(ct);
+
+            var questionIds = entries.Select(e => e.ReadingQuestionId).ToList();
+            var paperIds = entries.Select(e => e.PaperId).Distinct().ToList();
+            var questions = await db.ReadingQuestions.AsNoTracking()
+                .Where(q => questionIds.Contains(q.Id))
+                .ToDictionaryAsync(q => q.Id, ct);
+            var papers = await db.ContentPapers.AsNoTracking()
+                .Where(p => paperIds.Contains(p.Id))
+                .Select(p => new { p.Id, p.Title, p.Slug })
+                .ToDictionaryAsync(p => p.Id, ct);
+
+            var byPart = entries
+                .GroupBy(e => e.PartCode)
+                .ToDictionary(g => g.Key.ToString(), g => g.Count());
+
+            var summary = await db.ReadingErrorBankEntries.AsNoTracking()
+                .Where(e => e.UserId == userId)
+                .GroupBy(e => e.IsResolved)
+                .Select(g => new { resolved = g.Key, count = g.Count() })
+                .ToListAsync(ct);
+
+            return Results.Ok(new
+            {
+                totals = new
+                {
+                    open = summary.FirstOrDefault(s => !s.resolved)?.count ?? 0,
+                    resolved = summary.FirstOrDefault(s => s.resolved)?.count ?? 0,
+                    byPart,
+                },
+                entries = entries.Select(e =>
+                {
+                    questions.TryGetValue(e.ReadingQuestionId, out var q);
+                    papers.TryGetValue(e.PaperId, out var p);
+                    return new
+                    {
+                        e.Id,
+                        e.ReadingQuestionId,
+                        partCode = e.PartCode.ToString(),
+                        e.TimesWrong,
+                        e.LastSeenWrongAt,
+                        e.LastWrongAttemptId,
+                        questionStem = q?.Stem,
+                        questionType = q?.QuestionType.ToString(),
+                        skillTag = q?.SkillTag,
+                        paper = p is null ? null : new { p.Id, p.Title, p.Slug },
+                    };
+                }),
+            });
+        });
+
+        // ── Clear an Error Bank entry (learner is confident) ─────────────
+        group.MapDelete("/practice/error-bank/{entryId}", async (
+            string entryId,
+            LearnerDbContext db,
+            HttpContext http, CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+            var entry = await db.ReadingErrorBankEntries
+                .FirstOrDefaultAsync(e => e.Id == entryId && e.UserId == userId, ct);
+            if (entry is null) return Results.NotFound();
+            if (entry.IsResolved) return Results.NoContent();
+            entry.IsResolved = true;
+            entry.ResolvedAt = DateTimeOffset.UtcNow;
+            entry.ResolvedReason = "cleared_by_user";
+            await db.SaveChangesAsync(ct);
+            return Results.NoContent();
+        }).RequireRateLimiting("PerUserWrite");
+
+        // ── Catalogue: list available drill templates ────────────────────
+        group.MapGet("/practice/drills", () =>
+        {
+            return Results.Ok(new
+            {
+                drills = ReadingDrillCatalogue.All.Select(d => new
+                {
+                    d.Code,
+                    d.Title,
+                    d.Description,
+                    partCode = d.PartCode.ToString(),
+                    d.SkillTag,
+                    d.QuestionCount,
+                    d.Minutes,
+                }),
+                miniTests = new[]
+                {
+                    new { minutes = 5, label = "5-minute mini-test", questionCount = 6 },
+                    new { minutes = 10, label = "10-minute mini-test", questionCount = 12 },
+                    new { minutes = 15, label = "15-minute mini-test", questionCount = 18 },
+                },
+            });
+        });
+
+        // ── Start a Drill attempt against a paper ────────────────────────
+        group.MapPost("/papers/{paperId}/practice/drills/{drillCode}", async (
+            string paperId, string drillCode,
+            IReadingAttemptService svc, LearnerDbContext db,
+            HttpContext http, CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+
+            var template = ReadingDrillCatalogue.Find(drillCode);
+            if (template is null)
+                return Results.BadRequest(new
+                {
+                    code = "drill_unknown",
+                    error = $"Unknown drill code '{drillCode}'.",
+                    message = $"Unknown drill code '{drillCode}'.",
+                });
+
+            var sample = await ReadingPracticeSampler.SampleAsync(
+                db, paperId, template.PartCode, template.SkillTag, template.QuestionCount, ct);
+            if (sample.Count == 0)
+                return Results.BadRequest(new
+                {
+                    code = "drill_no_questions",
+                    error = "No matching questions are authored for this drill on this paper.",
+                    message = "No matching questions are authored for this drill on this paper.",
+                });
+
+            var scope = new
+            {
+                kind = "drill",
+                drillCode = template.Code,
+                label = template.Title,
+                partCode = template.PartCode.ToString(),
+                skillTag = template.SkillTag,
+                minutes = template.Minutes,
+                questionIds = sample,
+            };
+            try
+            {
+                var started = await svc.StartInModeAsync(
+                    userId, paperId, ReadingAttemptMode.Drill,
+                    JsonSerializer.Serialize(scope), ct);
+                return Results.Ok(new
+                {
+                    mode = "Drill",
+                    started.AttemptId,
+                    started.StartedAt,
+                    started.DeadlineAt,
+                    started.PaperTitle,
+                    minutes = template.Minutes,
+                    questionCount = sample.Count,
+                    drill = new { template.Code, template.Title, partCode = template.PartCode.ToString() },
+                    playerRoute = $"/reading/paper/{paperId}?attemptId={started.AttemptId}&mode=drill",
+                });
+            }
+            catch (ReadingAttemptException ex)
+            {
+                return Results.BadRequest(new { code = ex.Code, error = ex.Message, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { code = "reading_attempt_rejected", error = ex.Message, message = ex.Message });
+            }
+        }).RequireRateLimiting("PerUserWrite");
+
+        // ── Start a 5/10/15-minute Mini-Test against a paper ─────────────
+        group.MapPost("/papers/{paperId}/practice/mini-test", async (
+            string paperId, MiniTestRequest dto,
+            IReadingAttemptService svc, LearnerDbContext db,
+            HttpContext http, CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+            if (dto.Minutes is not (5 or 10 or 15))
+                return Results.BadRequest(new
+                {
+                    code = "minitest_minutes_invalid",
+                    error = "Mini-test minutes must be 5, 10, or 15.",
+                    message = "Mini-test minutes must be 5, 10, or 15.",
+                });
+
+            // Heuristic: ~1 question per 50s of available time (matches OET pace).
+            var targetCount = dto.Minutes switch { 5 => 6, 10 => 12, _ => 18 };
+            var sample = await ReadingPracticeSampler.SampleMixedAsync(db, paperId, targetCount, ct);
+            if (sample.Count == 0)
+                return Results.BadRequest(new
+                {
+                    code = "minitest_no_questions",
+                    error = "This paper has no authored questions to sample.",
+                    message = "This paper has no authored questions to sample.",
+                });
+
+            var scope = new
+            {
+                kind = "mini-test",
+                label = $"{dto.Minutes}-minute mini-test",
+                minutes = dto.Minutes,
+                questionIds = sample,
+            };
+            try
+            {
+                var started = await svc.StartInModeAsync(
+                    userId, paperId, ReadingAttemptMode.MiniTest,
+                    JsonSerializer.Serialize(scope), ct);
+                return Results.Ok(new
+                {
+                    mode = "MiniTest",
+                    started.AttemptId,
+                    started.StartedAt,
+                    started.DeadlineAt,
+                    started.PaperTitle,
+                    minutes = dto.Minutes,
+                    questionCount = sample.Count,
+                    playerRoute = $"/reading/paper/{paperId}?attemptId={started.AttemptId}&mode=mini-test",
+                });
+            }
+            catch (ReadingAttemptException ex)
+            {
+                return Results.BadRequest(new { code = ex.Code, error = ex.Message, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { code = "reading_attempt_rejected", error = ex.Message, message = ex.Message });
+            }
+        }).RequireRateLimiting("PerUserWrite");
+
+        // ── Start an Error-Bank retest run ───────────────────────────────
+        group.MapPost("/practice/error-bank/retest", async (
+            ErrorBankRetestRequest dto,
+            IReadingAttemptService svc, LearnerDbContext db,
+            HttpContext http, CancellationToken ct) =>
+        {
+            var userId = http.User.FindFirstValue(ClaimTypes.NameIdentifier)
+                ?? throw new InvalidOperationException("auth required");
+
+            var take = Math.Clamp(dto.Limit ?? 10, 1, 50);
+            var query = db.ReadingErrorBankEntries.AsNoTracking()
+                .Where(e => e.UserId == userId && !e.IsResolved);
+            if (!string.IsNullOrWhiteSpace(dto.PartCode)
+                && Enum.TryParse<ReadingPartCode>(dto.PartCode, ignoreCase: true, out var pc))
+            {
+                query = query.Where(e => e.PartCode == pc);
+            }
+
+            var entries = await query
+                .OrderByDescending(e => e.LastSeenWrongAt)
+                .Take(take)
+                .Select(e => new { e.ReadingQuestionId, e.PaperId })
+                .ToListAsync(ct);
+            if (entries.Count == 0)
+                return Results.BadRequest(new
+                {
+                    code = "error_bank_empty",
+                    error = "No open Error Bank entries to retest.",
+                    message = "No open Error Bank entries to retest.",
+                });
+
+            // Group by paper so the attempt's PaperId is well defined. The
+            // first paper with the most missed questions wins.
+            var topPaperId = entries
+                .GroupBy(e => e.PaperId)
+                .OrderByDescending(g => g.Count())
+                .First()
+                .Key;
+            var inPaper = entries.Where(e => e.PaperId == topPaperId)
+                .Select(e => e.ReadingQuestionId).ToList();
+            // Allow ~30 seconds per question
+            var minutes = Math.Clamp((int)Math.Ceiling(inPaper.Count * 0.5), 3, 30);
+
+            var scope = new
+            {
+                kind = "error-bank",
+                label = $"Retest {inPaper.Count} missed question(s)",
+                minutes,
+                questionIds = inPaper,
+            };
+            try
+            {
+                var started = await svc.StartInModeAsync(
+                    userId, topPaperId, ReadingAttemptMode.ErrorBank,
+                    JsonSerializer.Serialize(scope), ct);
+                return Results.Ok(new
+                {
+                    mode = "ErrorBank",
+                    started.AttemptId,
+                    started.PaperTitle,
+                    started.StartedAt,
+                    started.DeadlineAt,
+                    minutes,
+                    questionCount = inPaper.Count,
+                    playerRoute = $"/reading/paper/{topPaperId}?attemptId={started.AttemptId}&mode=error-bank",
+                });
+            }
+            catch (ReadingAttemptException ex)
+            {
+                return Results.BadRequest(new { code = ex.Code, error = ex.Message, message = ex.Message });
+            }
+            catch (InvalidOperationException ex)
+            {
+                return Results.BadRequest(new { code = "reading_attempt_rejected", error = ex.Message, message = ex.Message });
+            }
+        }).RequireRateLimiting("PerUserWrite");
+
         return app;
+    }
+
+    private sealed record MiniTestRequest(int Minutes);
+    private sealed record ErrorBankRetestRequest(string? PartCode, int? Limit);
+
+    private static List<string>? ParseScopeQuestionIdsForPlayer(string? scopeJson)
+    {
+        if (string.IsNullOrWhiteSpace(scopeJson)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(scopeJson);
+            if (!doc.RootElement.TryGetProperty("questionIds", out var arr)
+                || arr.ValueKind != JsonValueKind.Array)
+                return null;
+            var list = new List<string>();
+            foreach (var el in arr.EnumerateArray())
+            {
+                if (el.ValueKind == JsonValueKind.String && el.GetString() is { Length: > 0 } s)
+                    list.Add(s);
+            }
+            return list.Count > 0 ? list : null;
+        }
+        catch (JsonException) { return null; }
+    }
+
+    private static (DateTimeOffset PartADeadlineAt, DateTimeOffset PartBCDeadlineAt) ResolveAttemptDeadlines(
+        ReadingAttempt attempt,
+        ReadingResolvedPolicy policy)
+    {
+        if (attempt.Mode == ReadingAttemptMode.Exam)
+        {
+            return (
+                attempt.StartedAt.AddMinutes(policy.PartATimerMinutes),
+                attempt.StartedAt.AddMinutes(policy.PartATimerMinutes + policy.PartBCTimerMinutes));
+        }
+
+        var answerDeadline = ResolvePracticeAnswerDeadline(attempt, policy);
+        return (answerDeadline, answerDeadline);
+    }
+
+    private static DateTimeOffset ResolvePracticeAnswerDeadline(
+        ReadingAttempt attempt,
+        ReadingResolvedPolicy policy)
+    {
+        if (attempt.DeadlineAt is DateTimeOffset deadline)
+        {
+            return deadline.AddSeconds(-Math.Max(0, policy.GracePeriodSeconds));
+        }
+
+        var minutes = TryReadMinutesFromScope(attempt.ScopeJson)
+            ?? (attempt.Mode == ReadingAttemptMode.Learning
+                ? Math.Max(60, policy.PartATimerMinutes + policy.PartBCTimerMinutes) * 4
+                : policy.PartATimerMinutes + policy.PartBCTimerMinutes);
+        return attempt.StartedAt.AddMinutes(minutes);
+    }
+
+    private static int? TryReadMinutesFromScope(string? scopeJson)
+    {
+        if (string.IsNullOrWhiteSpace(scopeJson)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(scopeJson);
+            if (doc.RootElement.TryGetProperty("minutes", out var minutesElement)
+                && minutesElement.ValueKind == JsonValueKind.Number
+                && minutesElement.TryGetInt32(out var minutes)
+                && minutes is > 0 and <= 240)
+            {
+                return minutes;
+            }
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+
+        return null;
     }
 
     private static object SafeParseOptions(string json)
@@ -448,9 +905,9 @@ public static class ReadingLearnerEndpoints
             ShortAnswerAcceptSynonyms: false,
             MatchingAllowPartialCredit: true,
             UnknownTypeFallbackPolicy: "skip_with_zero",
-            ShowExplanationsAfterSubmit: true,
+            ShowExplanationsAfterSubmit: false,
             ShowExplanationsOnlyIfWrong: false,
-            ShowCorrectAnswerOnReview: true,
+            ShowCorrectAnswerOnReview: false,
             SubmitRateLimitPerMinute: 5,
             AutosaveRateLimitPerMinute: 120,
             ExtraTimeEntitlementPct: 0,

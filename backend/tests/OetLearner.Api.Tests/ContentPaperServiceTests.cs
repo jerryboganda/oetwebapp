@@ -92,6 +92,13 @@ public class ContentPaperServiceTests
                 $"Part C question {i}", "[\"A\",\"B\",\"C\",\"D\"]", "\"B\"", null, false, null, "inference"),
                 "admin-1", default);
         }
+
+        // Phase 4 — fast-forward all questions to Published so the publish
+        // gate doesn't block tests that author paper structure directly.
+        var partIds = parts.Select(p => p.Id).ToList();
+        var qs = await db.ReadingQuestions.Where(q => partIds.Contains(q.ReadingPartId)).ToListAsync();
+        foreach (var q in qs) q.ReviewState = ReadingReviewState.Published;
+        await db.SaveChangesAsync();
     }
 
     [Fact]

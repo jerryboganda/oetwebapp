@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.Text.Json.Serialization;
 using Microsoft.EntityFrameworkCore;
 
 namespace OetLearner.Api.Domain;
@@ -19,6 +20,7 @@ namespace OetLearner.Api.Domain;
 // See docs/READING-AUTHORING-PLAN.md and docs/READING-AUTHORING-POLICY.md.
 // ═════════════════════════════════════════════════════════════════════════════
 
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum ReadingPartCode
 {
     A = 1,
@@ -30,6 +32,7 @@ public enum ReadingPartCode
 /// Question-type vocabulary. Changing an existing integer value is a
 /// migration-breaking change (values persist in the DB).
 /// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum ReadingQuestionType
 {
     /// <summary>Part A: match a statement to one of texts 1-4.</summary>
@@ -47,12 +50,105 @@ public enum ReadingQuestionType
 /// <summary>
 /// Lifecycle of a learner attempt.
 /// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
 public enum ReadingAttemptStatus
 {
     InProgress = 0,
     Submitted = 1,
     Expired = 2,
     Abandoned = 3,
+}
+
+/// <summary>
+/// Reading attempt mode. Phase 3 (practice mode + drills + error bank).
+///
+/// <list type="bullet">
+/// <item><description><c>Exam</c>: strict OET simulation. Part A 15-min hard
+/// lock, Parts B+C 45-min shared timer, single concurrent attempt, no
+/// mid-attempt feedback. Default for back-compat.</description></item>
+/// <item><description><c>Learning</c>: untimed teaching mode against a full
+/// paper. No Part A hard-lock, may run alongside an exam attempt, learner
+/// receives explanations after submit. Marked NON-STANDARD in the UI.</description></item>
+/// <item><description><c>Drill</c>: skill / part-scoped drill (Part A scan,
+/// Part B distractor, Part C inference, etc.). <see cref="ReadingAttempt.ScopeJson"/>
+/// captures the question subset.</description></item>
+/// <item><description><c>MiniTest</c>: 5/10/15-minute timed mini-test against
+/// a sampled subset of questions. Same enforcement as Exam but scope is a
+/// subset.</description></item>
+/// <item><description><c>ErrorBank</c>: learner-driven retest of previously
+/// missed questions, sourced from <see cref="ReadingErrorBankEntry"/>.</description></item>
+/// </list>
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ReadingAttemptMode
+{
+    Exam = 0,
+    Learning = 1,
+    Drill = 2,
+    MiniTest = 3,
+    ErrorBank = 4,
+}
+
+/// <summary>
+/// Phase 4 — distractor categorisation for MCQ-style questions. Authors
+/// label each non-correct option with the OET teaching category so we can
+/// (a) drive analytics ("which distractor type trips this cohort up most")
+/// and (b) surface targeted feedback to learners on review.
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ReadingDistractorCategory
+{
+    /// <summary>Option means the opposite of the correct answer.</summary>
+    Opposite = 0,
+    /// <summary>Option overgeneralises ("everyone", "always").</summary>
+    TooBroad = 1,
+    /// <summary>Option narrows beyond what the text supports.</summary>
+    TooSpecific = 2,
+    /// <summary>Option attributes the claim to the wrong speaker / source.</summary>
+    WrongSpeaker = 3,
+    /// <summary>Option introduces information that isn't in the text.</summary>
+    NotInText = 4,
+    /// <summary>Option distorts a real detail (number, qualifier, scope).</summary>
+    DistortedDetail = 5,
+    /// <summary>Option is on a different topic entirely.</summary>
+    OutOfScope = 6,
+}
+
+/// <summary>
+/// Phase 4 — per-question authoring review state. A paper may only be
+/// published when every question is in <see cref="Published"/>. The state
+/// machine is strictly forward except for the <see cref="Retired"/>
+/// terminal and a single emergency rollback (any → <see cref="Draft"/> by
+/// admin with audit log).
+///
+/// <list type="number">
+/// <item><description><c>Draft</c> — author is still composing the
+/// question.</description></item>
+/// <item><description><c>AcademicReview</c> — content reviewed by an OET
+/// SME for question fidelity / level / OET style.</description></item>
+/// <item><description><c>MedicalReview</c> — clinical reviewer confirms the
+/// scenario and terminology are accurate for the profession.</description></item>
+/// <item><description><c>LanguageReview</c> — language-and-tone editor
+/// confirms register, ambiguity, and B2 readability.</description></item>
+/// <item><description><c>Pilot</c> — released to a small cohort to
+/// collect facility / discrimination data.</description></item>
+/// <item><description><c>Published</c> — eligible for inclusion in
+/// learner-facing papers.</description></item>
+/// <item><description><c>Retired</c> — withdrawn (e.g. answer compromised).
+/// Past attempts referencing this question stay valid; new attempts
+/// cannot include it.</description></item>
+/// </list>
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ReadingReviewState
+{
+    Draft = 0,
+    AcademicReview = 1,
+    MedicalReview = 2,
+    LanguageReview = 3,
+    Pilot = 4,
+    Published = 5,
+    Retired = 6,
 }
 
 /// <summary>One of three parts of a Reading paper.</summary>
@@ -183,11 +279,65 @@ public class ReadingQuestion
     [MaxLength(32)]
     public string? SkillTag { get; set; }
 
+    /// <summary>Phase 4 — JSON map keyed by option key, value is the
+    /// <see cref="ReadingDistractorCategory"/> name. Example for an MCQ4:
+    /// <c>{"A":"Opposite","B":"DistortedDetail","D":"NotInText"}</c>.
+    /// Authoring-only; NEVER serialised to learner DTOs. Optional —
+    /// questions without distractor metadata simply don't contribute to
+    /// distractor analytics.</summary>
+    public string? OptionDistractorsJson { get; set; }
+
+    /// <summary>Phase 4 — per-question authoring lifecycle. New questions
+    /// default to <see cref="ReadingReviewState.Draft"/>; the publish gate
+    /// requires every question on the paper to be
+    /// <see cref="ReadingReviewState.Published"/>.</summary>
+    public ReadingReviewState ReviewState { get; set; } = ReadingReviewState.Draft;
+
+    /// <summary>Phase 4 — most recent reviewer note (rolled forward on each
+    /// transition). For full history, see <see cref="ReadingQuestionReviewLog"/>.</summary>
+    [MaxLength(2048)]
+    public string? LatestReviewNote { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 
     public ReadingPart? Part { get; set; }
     public ReadingText? Text { get; set; }
+}
+
+/// <summary>
+/// Phase 4 — append-only audit log of every <see cref="ReadingQuestion.ReviewState"/>
+/// transition. Drives the question history pane in admin and the audit
+/// export. We deliberately keep this denormalised (no FK to user) so the
+/// log survives reviewer-account deletion.
+/// </summary>
+[Index(nameof(ReadingQuestionId), nameof(TransitionedAt))]
+public class ReadingQuestionReviewLog
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ReadingQuestionId { get; set; } = default!;
+
+    public ReadingReviewState FromState { get; set; }
+    public ReadingReviewState ToState { get; set; }
+
+    [MaxLength(64)]
+    public string ReviewerUserId { get; set; } = default!;
+
+    /// <summary>Snapshot of the reviewer's display name (so the log stays
+    /// readable even if the user is renamed/deleted).</summary>
+    [MaxLength(200)]
+    public string? ReviewerDisplayName { get; set; }
+
+    [MaxLength(2048)]
+    public string? Note { get; set; }
+
+    public DateTimeOffset TransitionedAt { get; set; }
+
+    public ReadingQuestion? Question { get; set; }
 }
 
 /// <summary>
@@ -234,6 +384,20 @@ public class ReadingAttempt
     [MaxLength(64)]
     public string? PaperRevisionId { get; set; }
 
+    /// <summary>
+    /// Phase 3: practice mode. Default <c>Exam</c> for back-compat with all
+    /// rows pre-dating this column. See <see cref="ReadingAttemptMode"/>.
+    /// </summary>
+    public ReadingAttemptMode Mode { get; set; } = ReadingAttemptMode.Exam;
+
+    /// <summary>
+    /// Phase 3: optional JSON snapshot describing which subset of questions
+    /// is in scope for this attempt (Drill / MiniTest / ErrorBank). Shape:
+    /// <c>{ "kind":"drill", "questionIds":[...], "label":"Part A scan",
+    /// "minutes": 10 }</c>. Null for Exam and Learning modes (full paper).
+    /// </summary>
+    public string? ScopeJson { get; set; }
+
     public ICollection<ReadingAnswer> Answers { get; set; } = new List<ReadingAnswer>();
 }
 
@@ -258,6 +422,15 @@ public class ReadingAnswer
 
     public bool? IsCorrect { get; set; }
     public int PointsEarned { get; set; }
+
+    /// <summary>Phase 4 — when the learner picked a wrong MCQ option that
+    /// was tagged with a distractor category in
+    /// <see cref="ReadingQuestion.OptionDistractorsJson"/>, we cache the
+    /// category here at grade time so analytics queries don't have to
+    /// re-parse the question's JSON. Null when the answer was correct,
+    /// when the question isn't an MCQ, or when no distractor metadata was
+    /// authored for the picked option.</summary>
+    public ReadingDistractorCategory? SelectedDistractorCategory { get; set; }
 
     public DateTimeOffset AnsweredAt { get; set; }
 
@@ -398,4 +571,130 @@ public class ReadingUserPolicyOverride
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
     public DateTimeOffset? ExpiresAt { get; set; }
+}
+
+/// <summary>
+/// Phase 3 — Error Bank. One row per (user, question) capturing a question
+/// the learner got wrong on a graded attempt. Refreshed at grading time:
+/// upserted on incorrect answers and removed when the learner answers the
+/// same question correctly on a later attempt or explicitly clears the
+/// entry.
+///
+/// <para>
+/// Used by the practice hub to power "retest the questions you missed"
+/// without scanning every historical <see cref="ReadingAnswer"/> row.
+/// </para>
+/// </summary>
+[Index(nameof(UserId), nameof(IsResolved))]
+[Index(nameof(UserId), nameof(LastSeenWrongAt))]
+[Index(nameof(ReadingQuestionId), nameof(UserId), IsUnique = true,
+    Name = "UX_ReadingErrorBankEntry_User_Question")]
+public class ReadingErrorBankEntry
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string UserId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string ReadingQuestionId { get; set; } = default!;
+
+    /// <summary>Cached for cheap filtering / display in the hub.</summary>
+    [MaxLength(64)]
+    public string PaperId { get; set; } = default!;
+
+    /// <summary>Cached <see cref="ReadingPartCode"/> for hub filters.</summary>
+    public ReadingPartCode PartCode { get; set; }
+
+    /// <summary>Most recent attempt where this question was missed.</summary>
+    [MaxLength(64)]
+    public string LastWrongAttemptId { get; set; } = default!;
+
+    public DateTimeOffset FirstSeenWrongAt { get; set; }
+    public DateTimeOffset LastSeenWrongAt { get; set; }
+
+    /// <summary>How many distinct submitted attempts marked this wrong.</summary>
+    public int TimesWrong { get; set; }
+
+    /// <summary>Set true when a later submitted attempt graded this question
+    /// correct, or when the learner clears the entry from the practice
+    /// hub. Resolved rows are kept for analytics but hidden from the
+    /// default error-bank view.</summary>
+    public bool IsResolved { get; set; }
+
+    public DateTimeOffset? ResolvedAt { get; set; }
+
+    [MaxLength(32)]
+    public string? ResolvedReason { get; set; }   // "answered_correctly" | "cleared_by_user" | "question_retired"
+}
+
+/// <summary>
+/// Phase 6 — staging row for AI-assisted PDF extraction. An admin uploads a
+/// PDF (as a <see cref="MediaAsset"/>), kicks off an extraction, and the AI
+/// gateway returns a candidate <c>ReadingStructureManifest</c>. The draft
+/// sits in <see cref="ReadingExtractionStatus.Pending"/> until an admin
+/// reviews and either approves (which writes the structure via the manifest
+/// importer) or rejects it.
+/// <para>
+/// Approval is gated on <c>ReadingPolicy.AiExtractionRequireHumanApproval</c>
+/// — if disabled, the service may auto-approve immediately, but in practice
+/// we keep the flag on for content fidelity.
+/// </para>
+/// </summary>
+[JsonConverter(typeof(JsonStringEnumConverter))]
+public enum ReadingExtractionStatus
+{
+    Pending = 0,
+    Approved = 1,
+    Rejected = 2,
+    Failed = 3,
+}
+
+[Index(nameof(PaperId), nameof(Status))]
+[Index(nameof(CreatedAt))]
+public class ReadingExtractionDraft
+{
+    [Key]
+    [MaxLength(64)]
+    public string Id { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string PaperId { get; set; } = default!;
+
+    /// <summary>The MediaAsset that was extracted (the source PDF).</summary>
+    [MaxLength(64)]
+    public string? MediaAssetId { get; set; }
+
+    public ReadingExtractionStatus Status { get; set; } = ReadingExtractionStatus.Pending;
+
+    /// <summary>The candidate manifest the AI produced, serialised as JSON
+    /// in the same shape <c>ReadingStructureManifest</c> uses on the wire.
+    /// Admin approval flow re-uses <c>ImportManifestAsync</c> to apply this
+    /// to the paper.</summary>
+    public string? ExtractedManifestJson { get; set; }
+
+    /// <summary>Raw AI response (for audit + debugging). Capped at 64 KB.</summary>
+    [MaxLength(65536)]
+    public string? RawAiResponseJson { get; set; }
+
+    /// <summary>Free-text reason logged when an admin rejects a draft, or
+    /// the failure reason when <see cref="Status"/> = Failed.</summary>
+    [MaxLength(2048)]
+    public string? Notes { get; set; }
+
+    /// <summary>True when the AI gateway was unavailable and a deterministic
+    /// stub was used instead. Surface this in the admin UI so the reviewer
+    /// knows the draft is a placeholder, not a real extraction.</summary>
+    public bool IsStub { get; set; }
+
+    [MaxLength(64)]
+    public string CreatedByAdminId { get; set; } = default!;
+
+    [MaxLength(64)]
+    public string? ResolvedByAdminId { get; set; }
+
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset? ResolvedAt { get; set; }
 }

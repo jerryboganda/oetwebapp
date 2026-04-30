@@ -29,7 +29,7 @@ public interface IReadingGradingService
 public sealed record ReadingGradingResult(
     int RawScore,
     int MaxRawScore,
-    int ScaledScore,
+    int? ScaledScore,
     string GradeLetter,
     int CorrectCount,
     int IncorrectCount,
@@ -73,12 +73,22 @@ public sealed class ReadingGradingService(
         var questionById = questions.ToDictionary(q => q.Id);
         var answersByQuestionId = attempt.Answers.ToDictionary(a => a.ReadingQuestionId);
 
-        var policy = await ResolvePolicyForAttemptAsync(attempt, ct);
-        var details = new List<ReadingAnswerResult>(questions.Count);
+        // Phase 3b: subset modes (Drill / MiniTest / ErrorBank) only score
+        // their in-scope questions; full-paper modes (Exam / Learning) keep
+        // the canonical 42-question denominator and OET 0-500 conversion.
+        var scopeQuestionIds = ParseScopeQuestionIds(attempt);
+        var inScopeOnly = scopeQuestionIds is not null && scopeQuestionIds.Count > 0;
+        var gradedQuestions = inScopeOnly
+            ? questions.Where(q => scopeQuestionIds!.Contains(q.Id)).ToList()
+            : questions;
 
-        int raw = 0, correctCount = 0, incorrectCount = 0, unanswered = 0;
-        foreach (var q in questions)
+        var policy = await ResolvePolicyForAttemptAsync(attempt, ct);
+        var details = new List<ReadingAnswerResult>(gradedQuestions.Count);
+
+        int raw = 0, correctCount = 0, incorrectCount = 0, unanswered = 0, maxRaw = 0;
+        foreach (var q in gradedQuestions)
         {
+            maxRaw += q.Points;
             ReadingAnswer? answer = answersByQuestionId.GetValueOrDefault(q.Id);
             if (answer is null)
             {
@@ -90,17 +100,26 @@ public sealed class ReadingGradingService(
             var (isCorrect, pts) = GradeOne(q, answer, policy);
             answer.IsCorrect = isCorrect;
             answer.PointsEarned = pts;
+            answer.SelectedDistractorCategory = isCorrect
+                ? null
+                : ResolveSelectedDistractor(q, answer);
             raw += pts;
             if (isCorrect) correctCount++; else incorrectCount++;
             details.Add(new(q.Id, q.QuestionType.ToString(), isCorrect, pts, q.Points));
         }
 
         attempt.RawScore = raw;
-        attempt.MaxRawScore = ReadingStructureService.CanonicalMaxRawScore;
-        attempt.ScaledScore = OetScoring.OetRawToScaled(raw);
+        attempt.MaxRawScore = inScopeOnly ? maxRaw : ReadingStructureService.CanonicalMaxRawScore;
+
+        // Subset attempts skip OET 0-500 conversion: the 30/42 anchor only
+        // applies to the canonical full paper. Store null so the result
+        // surface treats it as practice-only.
+        attempt.ScaledScore = inScopeOnly ? null : OetScoring.OetRawToScaled(raw);
         attempt.Status = ReadingAttemptStatus.Submitted;
         attempt.SubmittedAt ??= DateTimeOffset.UtcNow;
         attempt.LastActivityAt = DateTimeOffset.UtcNow;
+
+        await UpdateErrorBankAsync(attempt, questionById, ct);
 
         db.AuditEvents.Add(new AuditEvent
         {
@@ -111,19 +130,43 @@ public sealed class ReadingGradingService(
             Action = "ReadingAttemptGraded",
             ResourceType = "ReadingAttempt",
             ResourceId = attempt.Id,
-            Details = $"raw={raw}/{attempt.MaxRawScore} scaled={attempt.ScaledScore}",
+            Details = $"raw={raw}/{attempt.MaxRawScore} scaled={attempt.ScaledScore?.ToString() ?? "n/a"} mode={attempt.Mode}",
         });
         await db.SaveChangesAsync(ct);
 
         return new ReadingGradingResult(
             RawScore: raw,
             MaxRawScore: attempt.MaxRawScore,
-            ScaledScore: attempt.ScaledScore!.Value,
-            GradeLetter: OetScoring.OetGradeLetterFromScaled(attempt.ScaledScore!.Value),
+            ScaledScore: attempt.ScaledScore,
+            GradeLetter: attempt.ScaledScore is int scaledForReturn
+                ? OetScoring.OetGradeLetterFromScaled(scaledForReturn)
+                : "—",
             CorrectCount: correctCount,
             IncorrectCount: incorrectCount,
             UnansweredCount: unanswered,
             Answers: details);
+    }
+
+    private static HashSet<string>? ParseScopeQuestionIds(ReadingAttempt attempt)
+    {
+        if (attempt.Mode == ReadingAttemptMode.Exam || attempt.Mode == ReadingAttemptMode.Learning)
+            return null;
+        if (string.IsNullOrWhiteSpace(attempt.ScopeJson)) return null;
+        try
+        {
+            using var doc = JsonDocument.Parse(attempt.ScopeJson);
+            if (!doc.RootElement.TryGetProperty("questionIds", out var arr)
+                || arr.ValueKind != JsonValueKind.Array)
+                return null;
+            var ids = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var el in arr.EnumerateArray())
+            {
+                if (el.ValueKind == JsonValueKind.String && el.GetString() is { Length: > 0 } s)
+                    ids.Add(s);
+            }
+            return ids.Count > 0 ? ids : null;
+        }
+        catch (JsonException) { return null; }
     }
 
     // ── Grader strategies ────────────────────────────────────────────────
@@ -162,6 +205,42 @@ public sealed class ReadingGradingService(
         catch (JsonException) { user = (a.UserAnswerJson ?? "").Trim().ToUpperInvariant(); }
         var ok = !string.IsNullOrEmpty(correct) && correct == user;
         return (ok, ok ? q.Points : 0);
+    }
+
+    /// <summary>
+    /// Phase 4 — when a learner picks a wrong MCQ option that the author
+    /// tagged with a distractor category, cache it on the answer for fast
+    /// analytics. Silent on parse errors / missing metadata: this is purely
+    /// informational and must never block grading.
+    /// </summary>
+    private static ReadingDistractorCategory? ResolveSelectedDistractor(ReadingQuestion q, ReadingAnswer a)
+    {
+        if (q.QuestionType != ReadingQuestionType.MultipleChoice3
+            && q.QuestionType != ReadingQuestionType.MultipleChoice4)
+            return null;
+        if (string.IsNullOrWhiteSpace(q.OptionDistractorsJson)) return null;
+
+        string user;
+        try { user = JsonSerializer.Deserialize<string>(a.UserAnswerJson)?.Trim().ToUpperInvariant() ?? ""; }
+        catch (JsonException) { user = (a.UserAnswerJson ?? "").Trim().ToUpperInvariant(); }
+        if (user.Length == 0) return null;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(q.OptionDistractorsJson);
+            if (doc.RootElement.ValueKind != JsonValueKind.Object) return null;
+            foreach (var prop in doc.RootElement.EnumerateObject())
+            {
+                if (string.Equals(prop.Name.Trim(), user, StringComparison.OrdinalIgnoreCase)
+                    && prop.Value.ValueKind == JsonValueKind.String
+                    && Enum.TryParse<ReadingDistractorCategory>(prop.Value.GetString(), ignoreCase: true, out var cat))
+                {
+                    return cat;
+                }
+            }
+        }
+        catch (JsonException) { /* malformed metadata — drop silently */ }
+        return null;
     }
 
     private static (bool, int) GradeMatching(ReadingQuestion q, ReadingAnswer a, ReadingResolvedPolicy policy)
@@ -330,6 +409,88 @@ public sealed class ReadingGradingService(
         catch (JsonException) { return new(); }
     }
 
+    /// <summary>
+    /// Phase 3 Error Bank — keep <see cref="ReadingErrorBankEntry"/> rows
+    /// in sync with this attempt's grading. Wrong answers upsert an entry
+    /// (incrementing TimesWrong + LastSeenWrongAt). Correct answers on a
+    /// previously-missed question resolve the entry.
+    /// </summary>
+    private async Task UpdateErrorBankAsync(
+        ReadingAttempt attempt,
+        IReadOnlyDictionary<string, ReadingQuestion> questionById,
+        CancellationToken ct)
+    {
+        if (attempt.Answers.Count == 0) return;
+
+        var questionIds = attempt.Answers.Select(a => a.ReadingQuestionId).ToList();
+        var existing = await db.ReadingErrorBankEntries
+            .Where(e => e.UserId == attempt.UserId && questionIds.Contains(e.ReadingQuestionId))
+            .ToListAsync(ct);
+        var byQ = existing.ToDictionary(e => e.ReadingQuestionId);
+        var now = DateTimeOffset.UtcNow;
+
+        foreach (var ans in attempt.Answers)
+        {
+            if (!questionById.TryGetValue(ans.ReadingQuestionId, out var q)) continue;
+            var partCode = await ResolvePartCodeAsync(q, ct);
+            byQ.TryGetValue(ans.ReadingQuestionId, out var entry);
+
+            if (ans.IsCorrect == true)
+            {
+                if (entry is { IsResolved: false })
+                {
+                    entry.IsResolved = true;
+                    entry.ResolvedAt = now;
+                    entry.ResolvedReason = "answered_correctly";
+                }
+                continue;
+            }
+
+            if (entry is null)
+            {
+                entry = new ReadingErrorBankEntry
+                {
+                    Id = Guid.NewGuid().ToString("N"),
+                    UserId = attempt.UserId,
+                    ReadingQuestionId = ans.ReadingQuestionId,
+                    PaperId = attempt.PaperId,
+                    PartCode = partCode,
+                    LastWrongAttemptId = attempt.Id,
+                    FirstSeenWrongAt = now,
+                    LastSeenWrongAt = now,
+                    TimesWrong = 1,
+                    IsResolved = false,
+                };
+                db.ReadingErrorBankEntries.Add(entry);
+                byQ[ans.ReadingQuestionId] = entry;
+            }
+            else
+            {
+                entry.LastWrongAttemptId = attempt.Id;
+                entry.LastSeenWrongAt = now;
+                entry.TimesWrong += 1;
+                entry.PartCode = partCode;
+                entry.PaperId = attempt.PaperId;
+                if (entry.IsResolved)
+                {
+                    entry.IsResolved = false;
+                    entry.ResolvedAt = null;
+                    entry.ResolvedReason = null;
+                }
+            }
+        }
+    }
+
+    private async Task<ReadingPartCode> ResolvePartCodeAsync(ReadingQuestion q, CancellationToken ct)
+    {
+        if (q.Part is not null) return q.Part.PartCode;
+        var code = await db.ReadingParts.AsNoTracking()
+            .Where(p => p.Id == q.ReadingPartId)
+            .Select(p => (ReadingPartCode?)p.PartCode)
+            .FirstOrDefaultAsync(ct);
+        return code ?? ReadingPartCode.A;
+    }
+
     private async Task<ReadingGradingResult> BuildResultFromExistingAsync(
         ReadingAttempt attempt, int raw, CancellationToken ct)
     {
@@ -341,6 +502,14 @@ public sealed class ReadingGradingService(
         var questions = await db.ReadingQuestions
             .Where(q => partIds.Contains(q.ReadingPartId))
             .ToListAsync(ct);
+
+        // Subset modes only include their in-scope questions in the
+        // returned details + counts.
+        var scopeIds = ParseScopeQuestionIds(attempt);
+        if (scopeIds is { Count: > 0 })
+        {
+            questions = questions.Where(q => scopeIds.Contains(q.Id)).ToList();
+        }
 
         int correct = 0, wrong = 0, unans = 0;
         var details = new List<ReadingAnswerResult>(questions.Count);
@@ -357,10 +526,10 @@ public sealed class ReadingGradingService(
             details.Add(new(q.Id, q.QuestionType.ToString(), ok, a.PointsEarned, q.Points));
         }
 
+        var scaled = attempt.ScaledScore;
+        var grade = scaled is null ? "—" : OetScoring.OetGradeLetterFromScaled(scaled.Value);
         return new ReadingGradingResult(
-            raw, attempt.MaxRawScore,
-            attempt.ScaledScore ?? OetScoring.OetRawToScaled(raw),
-            OetScoring.OetGradeLetterFromScaled(attempt.ScaledScore ?? OetScoring.OetRawToScaled(raw)),
+            raw, attempt.MaxRawScore, scaled, grade,
             correct, wrong, unans, details);
     }
 

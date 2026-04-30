@@ -55,9 +55,26 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
     };
   }, [attemptId]);
 
+  useEffect(() => {
+    if (!review || typeof window === 'undefined') return;
+    const scrollToHash = () => {
+      const targetId = window.location.hash.replace(/^#/, '');
+      if (!targetId) return;
+
+      window.requestAnimationFrame(() => {
+        document.getElementById(targetId)?.scrollIntoView({ block: 'start' });
+      });
+    };
+
+    scrollToHash();
+    window.addEventListener('hashchange', scrollToHash);
+    return () => window.removeEventListener('hashchange', scrollToHash);
+  }, [review]);
+
   const raw = review?.attempt.rawScore ?? 0;
-  const scaled = review?.attempt.scaledScore ?? 0;
-  const passed = isListeningReadingPassByRaw(raw);
+  const scaled = review?.attempt.scaledScore ?? null;
+  const isPracticeOnly = scaled === null;
+  const passed = !isPracticeOnly && isListeningReadingPassByRaw(raw);
 
   return (
     <LearnerDashboardShell pageTitle="Reading Results" backHref="/reading">
@@ -74,31 +91,37 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
             <LearnerPageHero
               eyebrow="Reading Review"
               icon={BookOpen}
-              accent={passed ? 'emerald' : 'amber'}
+              accent={isPracticeOnly ? 'blue' : passed ? 'emerald' : 'amber'}
               title={review.paper.title}
-              description={formatListeningReadingDisplay(raw)}
+              description={isPracticeOnly
+                ? `${raw}/${review.attempt.maxRawScore} practice marks`
+                : formatListeningReadingDisplay(raw)}
               highlights={[
                 { icon: Target, label: 'Raw score', value: `${raw}/${review.attempt.maxRawScore}` },
-                { icon: FileText, label: 'Scaled score', value: `${scaled}/500` },
-                { icon: passed ? CheckCircle2 : XCircle, label: 'Grade', value: `Grade ${review.attempt.gradeLetter}` },
+                { icon: FileText, label: 'Scaled score', value: isPracticeOnly ? 'Practice only' : `${scaled}/500` },
+                { icon: isPracticeOnly ? BookOpen : passed ? CheckCircle2 : XCircle, label: 'Grade', value: isPracticeOnly ? 'No OET grade' : `Grade ${review.attempt.gradeLetter}` },
               ]}
               aside={(
                 <div className="rounded-2xl border border-border bg-background-light p-4">
-                  <Badge variant={passed ? 'success' : 'warning'}>{passed ? 'Reading pass evidence' : 'Below Reading pass anchor'}</Badge>
+                  <Badge variant={isPracticeOnly ? 'info' : passed ? 'success' : 'warning'}>
+                    {isPracticeOnly ? 'Practice-only review' : passed ? 'Reading pass evidence' : 'Below Reading pass anchor'}
+                  </Badge>
                   <p className="mt-3 text-sm leading-6 text-muted">
-                    Reading pass evidence is anchored to 30/42 equalling 350/500. Use the item review to choose the next practice route.
+                    {isPracticeOnly
+                      ? 'This subset attempt reports practice marks only. Use the item review to choose the next focused route.'
+                      : 'Reading pass evidence is anchored to 30/42 equalling 350/500. Use the item review to choose the next practice route.'}
                   </p>
                 </div>
               )}
             />
 
             <section className="grid grid-cols-1 gap-6 lg:grid-cols-3">
-              <LearnerSurfaceCard card={scoreCard(review, passed)} />
-              <LearnerSurfaceCard card={nextActionCard(passed)} />
+              <LearnerSurfaceCard card={scoreCard(review, passed, isPracticeOnly)} />
+              <LearnerSurfaceCard card={nextActionCard(passed, isPracticeOnly)} />
               <LearnerSurfaceCard card={policyCard(review)} />
             </section>
 
-            <section>
+            <section id="part-breakdown">
               <LearnerSurfaceSectionHeader
                 eyebrow="Part Breakdown"
                 title="Score by Reading section"
@@ -118,7 +141,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               </div>
             </section>
 
-            <section>
+            <section id="skill-breakdown">
               <LearnerSurfaceSectionHeader
                 eyebrow="Skill Breakdown"
                 title="Skill-level pattern"
@@ -140,7 +163,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
               </div>
             </section>
 
-            <section>
+            <section id="item-review">
               <LearnerSurfaceSectionHeader
                 eyebrow="Error Clusters"
                 title="Where marks were lost"
@@ -153,7 +176,7 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
                     <div key={cluster.label} className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
                       <p className="text-sm font-black uppercase tracking-[0.16em] text-muted">{cluster.label}</p>
                       <p className="mt-2 text-2xl font-semibold text-navy">{cluster.incorrectCount} missed</p>
-                      <p className="mt-1 text-sm text-muted">Questions {cluster.questionIds.join(', ')}</p>
+                      <p className="mt-1 text-sm text-muted">Questions {cluster.questions.map((question) => question.label).join(', ')}</p>
                     </div>
                   ))}
                 </div>
@@ -206,35 +229,39 @@ function ReadingPaperResultsContent({ params }: { params: Promise<{ paperId: str
   );
 }
 
-function scoreCard(review: ReadingAttemptReviewDto, passed: boolean): LearnerSurfaceCardModel {
+function scoreCard(review: ReadingAttemptReviewDto, passed: boolean, isPracticeOnly: boolean): LearnerSurfaceCardModel {
   return {
     kind: 'evidence',
     sourceType: 'backend_summary',
-    accent: passed ? 'emerald' : 'amber',
+    accent: isPracticeOnly ? 'blue' : passed ? 'emerald' : 'amber',
     eyebrow: 'Score',
-    eyebrowIcon: passed ? CheckCircle2 : Target,
+    eyebrowIcon: isPracticeOnly ? BookOpen : passed ? CheckCircle2 : Target,
     title: `${review.attempt.rawScore ?? 0}/${review.attempt.maxRawScore} raw`,
-    description: `${review.attempt.scaledScore ?? 0}/500 | Grade ${review.attempt.gradeLetter}`,
+    description: isPracticeOnly
+      ? 'Practice-only subset | No OET grade'
+      : `${review.attempt.scaledScore ?? 0}/500 | Grade ${review.attempt.gradeLetter}`,
     metaItems: [
-      { icon: FileText, label: passed ? 'Pass anchor met' : 'Needs 30/42' },
+      { icon: FileText, label: isPracticeOnly ? 'Subset practice' : passed ? 'Pass anchor met' : 'Needs 30/42' },
     ],
   };
 }
 
-function nextActionCard(passed: boolean): LearnerSurfaceCardModel {
+function nextActionCard(passed: boolean, isPracticeOnly: boolean): LearnerSurfaceCardModel {
   return {
     kind: 'navigation',
     sourceType: 'frontend_navigation',
     accent: 'blue',
     eyebrow: 'Next Action',
     eyebrowIcon: BookOpen,
-    title: passed ? 'Validate in a mock' : 'Repeat focused Reading practice',
-    description: passed
+    title: isPracticeOnly ? 'Keep sharpening this cluster' : passed ? 'Validate in a mock' : 'Repeat focused Reading practice',
+    description: isPracticeOnly
+      ? 'Use the reviewed items to repeat the same skill, then move back to a full Reading paper.'
+      : passed
       ? 'Use a full mock to confirm the Reading gain transfers under cross-subtest pressure.'
       : 'Review missed clusters, then start another structured Reading paper.',
     primaryAction: {
-      label: passed ? 'Enter Mock Setup' : 'Back to Reading',
-      href: passed ? '/mocks' : '/reading',
+      label: !isPracticeOnly && passed ? 'Enter Mock Setup' : 'Back to Reading',
+      href: !isPracticeOnly && passed ? '/mocks' : '/reading',
     },
   };
 }

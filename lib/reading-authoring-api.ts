@@ -75,6 +75,40 @@ export interface ReadingStructureAdminDto {
   parts: ReadingPartAdminDto[];
 }
 
+export interface ReadingStructureManifestDto {
+  parts: Array<{
+    partCode: ReadingPartCode;
+    timeLimitMinutes: number | null;
+    instructions: string | null;
+    texts: Array<{
+      displayOrder: number;
+      title: string;
+      source: string | null;
+      bodyHtml: string;
+      wordCount: number;
+      topicTag: string | null;
+    }>;
+    questions: Array<{
+      displayOrder: number;
+      points: number;
+      questionType: ReadingQuestionType;
+      stem: string;
+      optionsJson: string;
+      correctAnswerJson: string;
+      acceptedSynonymsJson: string | null;
+      caseSensitive: boolean;
+      explanationMarkdown: string | null;
+      skillTag: string | null;
+      readingTextDisplayOrder: number | null;
+    }>;
+  }>;
+}
+
+export interface ReadingStructureImportResultDto {
+  structure: ReadingStructureAdminDto;
+  report: ReadingValidationReport;
+}
+
 export interface ReadingValidationReport {
   isPublishReady: boolean;
   issues: Array<{ code: string; severity: 'error' | 'warning'; message: string; targetId: string | null }>;
@@ -98,7 +132,7 @@ export interface ReadingAttemptGraded {
   attemptId?: string;
   rawScore: number;
   maxRawScore: number;
-  scaledScore: number;
+  scaledScore: number | null;
   gradeLetter: string;
   correctCount: number;
   incorrectCount: number;
@@ -159,10 +193,20 @@ export interface ReadingHomeResultDto {
   paperTitle: string;
   rawScore: number;
   maxRawScore: number;
-  scaledScore: number;
+  scaledScore: number | null;
   gradeLetter: string;
   submittedAt: string | null;
   route: string;
+}
+
+export interface ReadingHomeSafeDrillDto {
+  id: string;
+  title: string;
+  description: string;
+  focusLabel: string;
+  estimatedMinutes: number;
+  launchRoute: string;
+  highlights: string[];
 }
 
 export interface ReadingHomeDto {
@@ -178,7 +222,7 @@ export interface ReadingHomeDto {
     showCorrectAnswerOnReview: boolean;
     showExplanationsAfterSubmit: boolean;
   };
-  safeDrills: unknown[];
+  safeDrills: ReadingHomeSafeDrillDto[];
 }
 
 export interface ReadingLearnerStructureDto {
@@ -258,6 +302,8 @@ export interface ReadingAttemptReviewDto {
     id: string;
     paperId: string;
     status: ReadingAttemptStatus;
+    mode: 'Exam' | 'Learning' | 'Drill' | 'MiniTest' | 'ErrorBank';
+    scopeQuestionIds: string[] | null;
     startedAt: string;
     submittedAt: string | null;
     rawScore: number | null;
@@ -291,6 +337,11 @@ export interface ReadingAttemptReviewDto {
     label: string;
     incorrectCount: number;
     questionIds: string[];
+    questions: Array<{
+      partCode: ReadingPartCode;
+      displayOrder: number;
+      label: string;
+    }>;
   }>;
   partBreakdown: Array<{
     partCode: ReadingPartCode;
@@ -306,6 +357,89 @@ export interface ReadingAttemptReviewDto {
     incorrectCount: number;
     unansweredCount: number;
     totalCount: number;
+  }>;
+}
+
+export interface ReadingAdminAnalyticsDto {
+  generatedAt: string;
+  windowDays: number;
+  summary: {
+    totalPapers: number;
+    publishedPapers: number;
+    examReadyPapers: number;
+    authoredQuestions: number;
+    totalAttempts: number;
+    submittedAttempts: number;
+    activeAttempts: number;
+    averageRawScore: number | null;
+    averageScaledScore: number | null;
+    passRatePercent: number | null;
+    unansweredRatePercent: number | null;
+  };
+  papers: Array<{
+    paperId: string;
+    title: string;
+    status: string;
+    difficulty: string;
+    questionCount: number;
+    totalPoints: number;
+    partACount: number;
+    partBCount: number;
+    partCCount: number;
+    isCanonicalShapeComplete: boolean;
+    isExamReady: boolean;
+    attemptCount: number;
+    submittedCount: number;
+    averageRawScore: number | null;
+    averageScaledScore: number | null;
+    passRatePercent: number | null;
+    averageCompletionSeconds: number | null;
+  }>;
+  partBreakdown: Array<{
+    partCode: ReadingPartCode;
+    questionCount: number;
+    opportunities: number;
+    correctCount: number;
+    unansweredCount: number;
+    accuracyPercent: number | null;
+  }>;
+  skillBreakdown: Array<{
+    label: string;
+    questionCount: number;
+    opportunities: number;
+    correctCount: number;
+    unansweredCount: number;
+    accuracyPercent: number | null;
+  }>;
+  hardestQuestions: Array<{
+    paperId: string;
+    paperTitle: string;
+    questionId: string;
+    partCode: ReadingPartCode | '?';
+    label: string;
+    displayOrder: number;
+    questionType: string;
+    skillTag: string;
+    stem: string;
+    opportunities: number;
+    answeredCount: number;
+    correctCount: number;
+    unansweredCount: number;
+    accuracyPercent: number | null;
+  }>;
+  modeBreakdown: Array<{
+    mode: string;
+    attemptCount: number;
+    submittedCount: number;
+    averageRawScore: number | null;
+    averageScaledScore: number | null;
+    passRatePercent: number | null;
+  }>;
+  actionInsights: Array<{
+    id: string;
+    title: string;
+    description: string;
+    tone: 'success' | 'warning' | 'danger' | string;
   }>;
 }
 
@@ -345,6 +479,16 @@ export const ensureCanonicalParts = (paperId: string) =>
 
 export const getReadingStructureAdmin = (paperId: string) =>
   api<ReadingStructureAdminDto>(`/v1/admin/papers/${paperId}/reading/structure`);
+
+export const exportReadingStructureManifest = (paperId: string) =>
+  api<ReadingStructureManifestDto>(`/v1/admin/papers/${paperId}/reading/manifest`);
+
+export const importReadingStructureManifest = (
+  paperId: string,
+  body: { replaceExisting: boolean; manifest: ReadingStructureManifestDto },
+) => api<ReadingStructureImportResultDto>(`/v1/admin/papers/${paperId}/reading/manifest`, {
+  method: 'POST', body: JSON.stringify(body),
+});
 
 export const upsertReadingPart = (paperId: string, partCode: ReadingPartCode, body: {
   timeLimitMinutes?: number | null; instructions?: string | null;
@@ -390,6 +534,9 @@ export const reorderReadingQuestions = (paperId: string, partId: string, ordered
 export const validateReadingPaper = (paperId: string) =>
   api<ReadingValidationReport>(`/v1/admin/papers/${paperId}/reading/validate`);
 
+export const getReadingAdminAnalytics = (days = 30) =>
+  api<ReadingAdminAnalyticsDto>(`/v1/admin/reading/analytics?days=${encodeURIComponent(days)}`);
+
 // ── Admin: policy ──────────────────────────────────────────────────────
 
 export const getReadingPolicy = () => api<ReadingPolicyDto>('/v1/admin/reading-policy');
@@ -417,6 +564,10 @@ export const submitReadingAttempt = (attemptId: string) =>
 export const getReadingAttempt = (attemptId: string) =>
   api<{
     id: string; paperId: string; status: ReadingAttemptStatus;
+    /** Phase 3: practice mode tag — Exam | Learning | Drill | MiniTest | ErrorBank. */
+    mode: 'Exam' | 'Learning' | 'Drill' | 'MiniTest' | 'ErrorBank';
+    /** Subset modes only — question IDs the player should expose. */
+    scopeQuestionIds: string[] | null;
     startedAt: string; deadlineAt: string | null; submittedAt: string | null;
     rawScore: number | null; scaledScore: number | null; maxRawScore: number;
     partADeadlineAt: string; partBCDeadlineAt: string;
@@ -430,3 +581,108 @@ export const getReadingAttempt = (attemptId: string) =>
 
 export const getReadingAttemptReview = (attemptId: string) =>
   api<ReadingAttemptReviewDto>(`/v1/reading-papers/attempts/${attemptId}/review`);
+
+// ── Phase 3: Practice Mode + Error Bank ────────────────────────────────
+
+export interface ReadingPracticeStartedDto {
+  mode: 'Learning' | 'Drill' | 'MiniTest' | 'ErrorBank';
+  attemptId: string;
+  startedAt: string;
+  deadlineAt: string;
+  /** Only present for Learning mode (full-paper attempts). */
+  partADeadlineAt?: string;
+  /** Only present for Learning mode (full-paper attempts). */
+  partBCDeadlineAt?: string;
+  paperTitle: string;
+  /** Only present for Learning mode (full-paper attempts). */
+  partATimerMinutes?: number;
+  /** Only present for Learning mode (full-paper attempts). */
+  partBCTimerMinutes?: number;
+  /** Subset modes only. */
+  minutes?: number;
+  /** Subset modes only — number of in-scope questions. */
+  questionCount?: number;
+  /** Drill mode only. */
+  drill?: { code: string; title: string; partCode: 'A' | 'B' | 'C' };
+  playerRoute: string;
+}
+
+export interface ReadingDrillCatalogueDto {
+  drills: Array<{
+    code: string;
+    title: string;
+    description: string;
+    partCode: 'A' | 'B' | 'C';
+    skillTag: string | null;
+    questionCount: number;
+    minutes: number;
+  }>;
+  miniTests: Array<{ minutes: 5 | 10 | 15; label: string; questionCount: number }>;
+}
+
+export interface ReadingErrorBankEntryDto {
+  id: string;
+  readingQuestionId: string;
+  partCode: ReadingPartCode;
+  timesWrong: number;
+  lastSeenWrongAt: string;
+  lastWrongAttemptId: string;
+  questionStem: string | null;
+  questionType: ReadingQuestionType | null;
+  skillTag: string | null;
+  paper: { id: string; title: string; slug: string } | null;
+}
+
+export interface ReadingErrorBankDto {
+  totals: {
+    open: number;
+    resolved: number;
+    byPart: Partial<Record<ReadingPartCode, number>>;
+  };
+  entries: ReadingErrorBankEntryDto[];
+}
+
+export const startReadingLearningAttempt = (paperId: string) =>
+  api<ReadingPracticeStartedDto>(
+    `/v1/reading-papers/papers/${paperId}/practice/learning`,
+    { method: 'POST' },
+  );
+
+export const getReadingErrorBank = (opts?: { partCode?: ReadingPartCode; limit?: number }) => {
+  const params = new URLSearchParams();
+  if (opts?.partCode) params.set('partCode', opts.partCode);
+  if (opts?.limit) params.set('limit', String(opts.limit));
+  const qs = params.toString();
+  return api<ReadingErrorBankDto>(
+    `/v1/reading-papers/practice/error-bank${qs ? `?${qs}` : ''}`,
+  );
+};
+
+export const clearReadingErrorBankEntry = (entryId: string) =>
+  api<void>(`/v1/reading-papers/practice/error-bank/${entryId}`, { method: 'DELETE' });
+
+// ── Phase 3b: Drills, Mini-Tests, Error-Bank Retest ─────────────────────
+
+export const getReadingDrillCatalogue = () =>
+  api<ReadingDrillCatalogueDto>(`/v1/reading-papers/practice/drills`);
+
+export const startReadingDrill = (paperId: string, drillCode: string) =>
+  api<ReadingPracticeStartedDto>(
+    `/v1/reading-papers/papers/${paperId}/practice/drills/${drillCode}`,
+    { method: 'POST' },
+  );
+
+export const startReadingMiniTest = (paperId: string, minutes: 5 | 10 | 15) =>
+  api<ReadingPracticeStartedDto>(
+    `/v1/reading-papers/papers/${paperId}/practice/mini-test`,
+    { method: 'POST', body: JSON.stringify({ minutes }) },
+  );
+
+export const startReadingErrorBankRetest = (opts?: {
+  partCode?: ReadingPartCode;
+  limit?: number;
+}) =>
+  api<ReadingPracticeStartedDto>(
+    `/v1/reading-papers/practice/error-bank/retest`,
+    { method: 'POST', body: JSON.stringify(opts ?? {}) },
+  );

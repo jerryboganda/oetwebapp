@@ -38,6 +38,10 @@ interface ActiveAttempt {
   answeredCount: number;
   canResume: boolean;
   status: ReadingAttemptStatus;
+  /** Phase 3: which practice mode this attempt is running under. */
+  mode: 'Exam' | 'Learning' | 'Drill' | 'MiniTest' | 'ErrorBank';
+  /** Subset modes only — in-scope question IDs (filter the structure to these). */
+  scopeQuestionIds: string[] | null;
 }
 
 export default function ReadingPaperPlayerPage({ params }: { params: Promise<{ paperId: string }> }) {
@@ -52,6 +56,10 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   const { paperId } = use(params);
   const search = useSearchParams();
   const resumeAttemptId = search?.get('attemptId') ?? '';
+  // Phase 3: optional URL hint for the practice mode (the canonical source
+  // is the resumed attempt itself — we read this only to render
+  // pre-resume context like "starting Drill…").
+  const urlMode = search?.get('mode') ?? '';
   const router = useRouter();
 
   const [structure, setStructure] = useState<ReadingLearnerStructureDto | null>(null);
@@ -108,6 +116,8 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
           answeredCount: saved.answeredCount,
           canResume: saved.canResume,
           status: saved.status,
+          mode: saved.mode,
+          scopeQuestionIds: saved.scopeQuestionIds,
         });
         setAnswers(restoredAnswers);
         dirtyQuestionIds.current.clear();
@@ -123,10 +133,29 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     void load();
   }, [load]);
 
-  const currentPart = useMemo(
-    () => structure?.parts.find((part) => part.partCode === activePart) ?? null,
-    [activePart, structure],
+  // Phase 3: when a subset attempt is in progress, restrict the rendered
+  // questions to the in-scope set so the player only shows what the
+  // grader will actually mark.
+  const displayedStructure = useMemo<ReadingLearnerStructureDto | null>(() => {
+    if (!structure) return null;
+    if (!attempt?.scopeQuestionIds || attempt.scopeQuestionIds.length === 0) return structure;
+    const scope = new Set(attempt.scopeQuestionIds);
+    return {
+      ...structure,
+      parts: structure.parts
+        .map((part) => ({
+          ...part,
+          questions: part.questions.filter((q) => scope.has(q.id)),
+        }))
+        .filter((part) => part.questions.length > 0),
+    };
+  }, [attempt?.scopeQuestionIds, structure]);
+
+  const displayedCurrentPart = useMemo(
+    () => displayedStructure?.parts.find((part) => part.partCode === activePart) ?? null,
+    [activePart, displayedStructure],
   );
+  const firstDisplayedPart = displayedStructure?.parts.find((part) => part.questions.length > 0) ?? null;
 
   const questionPartById = useMemo(() => {
     const map = new Map<string, ReadingPartCode>();
@@ -137,15 +166,34 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
   }, [structure]);
 
   useEffect(() => {
-    if (!currentPart?.questions.length) return;
-    if (!activeQuestionId || !currentPart.questions.some((question) => question.id === activeQuestionId)) {
-      setActiveQuestionId(currentPart.questions[0].id);
+    const part = displayedCurrentPart?.questions.length ? displayedCurrentPart : firstDisplayedPart;
+    if (!part?.questions.length) return;
+    if (activePart !== part.partCode) {
+      setActivePart(part.partCode);
     }
-  }, [activeQuestionId, currentPart]);
+    if (!activeQuestionId || !part.questions.some((question) => question.id === activeQuestionId)) {
+      setActiveQuestionId(part.questions[0].id);
+    }
+  }, [activePart, activeQuestionId, displayedCurrentPart, firstDisplayedPart]);
 
-  const totalQuestions = structure?.parts.reduce((sum, part) => sum + part.questions.length, 0) ?? 0;
+  const isPracticeMode = attempt !== null && attempt.mode !== 'Exam';
+  const totalQuestions = useMemo(() => {
+    if (!structure) return 0;
+    if (attempt?.scopeQuestionIds && attempt.scopeQuestionIds.length > 0) {
+      const scope = new Set(attempt.scopeQuestionIds);
+      return structure.parts.reduce(
+        (sum, part) => sum + part.questions.filter((q) => scope.has(q.id)).length,
+        0,
+      );
+    }
+    return structure.parts.reduce((sum, part) => sum + part.questions.length, 0);
+  }, [attempt?.scopeQuestionIds, structure]);
   const answeredCount = Object.values(answers).filter(isAnsweredJson).length;
-  const partALocked = Boolean(attempt && nowMs > new Date(attempt.partADeadlineAt).getTime());
+  const unansweredCount = Math.max(0, totalQuestions - answeredCount);
+  // Practice modes ignore the Part-A hard lock, but their own timer still
+  // controls autosave, input locking, and auto-submit.
+  const partALocked = !isPracticeMode
+    && Boolean(attempt && nowMs > new Date(attempt.partADeadlineAt).getTime());
   const partBCWindowEnded = Boolean(attempt && nowMs > new Date(attempt.partBCDeadlineAt).getTime());
   const paperExpired = Boolean(attempt && nowMs > new Date(attempt.deadlineAt).getTime());
   const attemptInputsLocked = partBCWindowEnded || paperExpired;
@@ -217,6 +265,12 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
     dirtyQuestionIds.current.add(question.id);
     setSaveState('saving');
     if (saveTimers.current[question.id]) clearTimeout(saveTimers.current[question.id]);
+    const activeDeadlineMs = new Date(activePart === 'A' ? attempt.partADeadlineAt : attempt.partBCDeadlineAt).getTime();
+    if (activeDeadlineMs - Date.now() <= 5000) {
+      void persistAnswer(question.id, json);
+      return;
+    }
+
     saveTimers.current[question.id] = setTimeout(() => {
       void persistAnswer(question.id, json);
     }, 400);
@@ -283,6 +337,9 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
       <main className="space-y-5">
         {error ? <InlineAlert variant="error">{error}</InlineAlert> : null}
         {timingNotice ? <InlineAlert variant="warning">{timingNotice}</InlineAlert> : null}
+        <div className="md:hidden">
+          <InlineAlert variant="warning">Full Reading exam mode is designed for a tablet or desktop-sized screen.</InlineAlert>
+        </div>
 
         {!attempt ? (
           <section className="rounded-[20px] border border-border bg-surface px-5 py-8 text-center shadow-sm">
@@ -291,16 +348,26 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
             </div>
             <h1 className="mt-4 text-2xl font-semibold tracking-tight text-navy">{structure.paper.title}</h1>
             <p className="mx-auto mt-2 max-w-2xl text-sm leading-6 text-muted">
-              Start a server-authoritative Reading attempt. Part A locks after its window, then Parts B and C share the remaining timer.
+              {urlMode && urlMode !== 'exam'
+                ? `Loading your ${urlMode.replace('-', ' ')} practice attempt…`
+                : 'Start a server-authoritative Reading attempt. Part A locks after its window, then Parts B and C share the remaining timer.'}
             </p>
-            <div className="mt-5 flex justify-center">
-              <Button variant="primary" onClick={() => void start()} loading={starting}>
-                Start attempt
-              </Button>
-            </div>
+            {!urlMode || urlMode === 'exam' ? (
+              <div className="mt-5 flex justify-center">
+                <Button variant="primary" onClick={() => void start()} loading={starting}>
+                  Start attempt
+                </Button>
+              </div>
+            ) : null}
           </section>
         ) : (
           <>
+            {isSubsetPracticeMode(attempt.mode) ? (
+              <InlineAlert variant="info">
+                <strong>{practiceModeLabel(attempt.mode)} — practice only.</strong>{' '}
+                This attempt does not produce an OET 0–500 scaled score and does not consume an exam attempt.
+              </InlineAlert>
+            ) : null}
             <AttemptToolbar
               attempt={attempt}
               activePart={activePart}
@@ -315,7 +382,7 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
             />
 
             <PartTabs
-              structure={structure}
+              structure={displayedStructure ?? structure}
               activePart={activePart}
               answers={answers}
               flagged={flagged}
@@ -323,13 +390,13 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
               onChange={(part) => setActivePart(part)}
             />
 
-            {currentPart ? (
+            {displayedCurrentPart ? (
               <PartBody
-                part={currentPart}
+                part={displayedCurrentPart}
                 answers={answers}
                 flagged={flagged}
                 activeQuestionId={activeQuestionId}
-                locked={attemptInputsLocked || (currentPart.partCode === 'A' && partALocked)}
+                locked={attemptInputsLocked || (displayedCurrentPart.partCode === 'A' && partALocked)}
                 onActiveQuestionChange={setActiveQuestionId}
                 onToggleFlag={(questionId) => setFlagged((prev) => toggleSetValue(prev, questionId))}
                 onAnswerChange={setAnswer}
@@ -339,10 +406,17 @@ function ReadingPaperPlayerContent({ params }: { params: Promise<{ paperId: stri
         )}
 
         <Modal open={showConfirm} onClose={() => setShowConfirm(false)} title="Submit Reading attempt?">
-          <p className="text-sm leading-6 text-muted">
-            You have answered <strong className="text-navy">{answeredCount}</strong> of{' '}
-            <strong className="text-navy">{totalQuestions}</strong> questions. Unanswered questions score zero.
-          </p>
+          <div className="space-y-4">
+            <p className="text-sm leading-6 text-muted">
+              You have answered <strong className="text-navy">{answeredCount}</strong> of{' '}
+              <strong className="text-navy">{totalQuestions}</strong> questions. Unanswered questions score zero.
+            </p>
+            {unansweredCount > 0 ? (
+              <InlineAlert variant="warning">
+                {unansweredCount} unanswered question{unansweredCount === 1 ? '' : 's'} will score zero if you submit now.
+              </InlineAlert>
+            ) : null}
+          </div>
           <div className="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
             <Button variant="ghost" onClick={() => setShowConfirm(false)}>Keep working</Button>
             <Button variant="primary" onClick={() => { setShowConfirm(false); void submit(); }} loading={submitting}>
@@ -378,28 +452,40 @@ function AttemptToolbar({
   submitting: boolean;
   onSubmit: () => void;
 }) {
-  const activeDeadline = activePart === 'A' ? attempt.partADeadlineAt : attempt.partBCDeadlineAt;
+  const activeDeadline = attempt.mode === 'Exam' && activePart === 'A'
+    ? attempt.partADeadlineAt
+    : attempt.partBCDeadlineAt;
   const secondsLeft = Math.max(0, Math.floor((new Date(activeDeadline).getTime() - nowMs) / 1000));
-  const timerLabel = activePart === 'A' ? 'Part A window' : 'B/C shared window';
+  const timerLabel = attempt.mode === 'Exam'
+    ? (activePart === 'A' ? 'Part A window' : 'B/C shared window')
+    : 'Practice timer';
 
   return (
-    <section className="rounded-[20px] border border-border bg-surface p-4 shadow-sm">
+    <section className="rounded-[20px] border border-border bg-surface p-4 shadow-sm" aria-label="Attempt status">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center gap-2 rounded-xl bg-background-light px-3 py-2">
-            <Clock className="h-4 w-4 text-primary" />
+          <div
+            className="flex items-center gap-2 rounded-xl bg-background-light px-3 py-2"
+            role="timer"
+            aria-live="polite"
+            aria-atomic="true"
+            aria-label={`${timerLabel}, ${formatCountdown(secondsLeft)} remaining`}
+          >
+            <Clock className="h-4 w-4 text-primary" aria-hidden="true" />
             <span className="text-xs font-bold uppercase tracking-[0.14em] text-muted">{timerLabel}</span>
             <span className="font-mono text-base font-bold text-navy">{formatCountdown(secondsLeft)}</span>
           </div>
           {partALocked ? <Badge variant="warning">Part A locked</Badge> : null}
           {paperExpired ? <Badge variant="danger">Time expired</Badge> : null}
-          <span className="text-sm font-semibold text-muted">{answeredCount}/{totalQuestions} answered</span>
+          <span className="text-sm font-semibold text-muted" aria-label={`${answeredCount} of ${totalQuestions} questions answered`}>
+            {answeredCount}/{totalQuestions} answered
+          </span>
         </div>
 
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
           <SaveStatus state={saveState} />
-          <Button variant="primary" onClick={onSubmit} loading={submitting}>
-            <Send className="h-4 w-4" />
+          <Button variant="primary" onClick={onSubmit} loading={submitting} aria-label="Submit attempt for grading">
+            <Send className="h-4 w-4" aria-hidden="true" />
             Submit
           </Button>
         </div>
@@ -418,11 +504,15 @@ function SaveStatus({ state }: { state: SaveState }) {
   const Icon = state === 'saving' ? Loader2 : state === 'error' ? AlertCircle : Save;
 
   return (
-    <span className={cn(
-      'inline-flex items-center gap-2 text-sm font-semibold',
-      state === 'error' ? 'text-danger' : 'text-muted',
-    )}>
-      <Icon className={cn('h-4 w-4', state === 'saving' && 'animate-spin')} />
+    <span
+      className={cn(
+        'inline-flex items-center gap-2 text-sm font-semibold',
+        state === 'error' ? 'text-danger' : 'text-muted',
+      )}
+      role="status"
+      aria-live="polite"
+    >
+      <Icon className={cn('h-4 w-4', state === 'saving' && 'animate-spin')} aria-hidden="true" />
       {label}
     </span>
   );
@@ -444,28 +534,41 @@ function PartTabs({
   onChange: (part: ReadingPartCode) => void;
 }) {
   return (
-    <div className="flex gap-2 overflow-x-auto border-b border-border">
+    <div
+      className="flex gap-2 overflow-x-auto border-b border-border"
+      role="tablist"
+      aria-label="Reading parts"
+    >
       {structure.parts.map((part) => {
         const answered = part.questions.filter((question) => isAnsweredJson(answers[question.id])).length;
         const flaggedCount = part.questions.filter((question) => flagged.has(question.id)).length;
+        const isActive = activePart === part.partCode;
+        const isLocked = part.partCode === 'A' && partALocked;
+        const partALabel = isLocked ? ' (locked)' : '';
         return (
           <button
             key={part.partCode}
             type="button"
+            role="tab"
+            id={`reading-part-tab-${part.partCode}`}
+            aria-controls={`reading-part-panel-${part.partCode}`}
+            aria-selected={isActive}
+            aria-label={`Part ${part.partCode}, ${answered} of ${part.questions.length} answered${flaggedCount ? `, ${flaggedCount} flagged` : ''}${partALabel}`}
+            tabIndex={isActive ? 0 : -1}
             onClick={() => onChange(part.partCode)}
-            disabled={part.partCode === 'A' && partALocked}
+            disabled={isLocked}
             className={cn(
-              'min-h-11 shrink-0 border-b-2 px-4 py-2 text-left text-sm font-bold transition-colors',
-              activePart === part.partCode
+              'min-h-11 shrink-0 border-b-2 px-4 py-2 text-left text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
+              isActive
                 ? 'border-primary text-primary'
                 : 'border-transparent text-muted hover:text-navy',
-              part.partCode === 'A' && partALocked && 'cursor-not-allowed opacity-60 hover:text-muted',
+              isLocked && 'cursor-not-allowed opacity-60 hover:text-muted',
             )}
           >
             <span>Part {part.partCode}</span>
-            <span className="ml-2 text-xs font-semibold text-muted">{answered}/{part.questions.length}</span>
-            {flaggedCount ? <span className="ml-2 text-xs text-warning">{flaggedCount} flagged</span> : null}
-            {part.partCode === 'A' && partALocked ? <span className="ml-2 text-xs text-danger">locked</span> : null}
+            <span className="ml-2 text-xs font-semibold text-muted" aria-hidden="true">{answered}/{part.questions.length}</span>
+            {flaggedCount ? <span className="ml-2 text-xs text-warning" aria-hidden="true">{flaggedCount} flagged</span> : null}
+            {isLocked ? <span className="ml-2 text-xs text-danger" aria-hidden="true">locked</span> : null}
           </button>
         );
       })}
@@ -495,8 +598,16 @@ function PartBody({
   const activeQuestion = part.questions.find((question) => question.id === activeQuestionId) ?? part.questions[0];
 
   return (
-    <div className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]">
-      <section className="max-h-[72vh] overflow-y-auto rounded-[20px] border border-border bg-surface p-5 shadow-sm">
+    <div
+      className="grid grid-cols-1 gap-4 xl:grid-cols-[minmax(0,1.1fr)_minmax(360px,0.9fr)]"
+      role="tabpanel"
+      id={`reading-part-panel-${part.partCode}`}
+      aria-labelledby={`reading-part-tab-${part.partCode}`}
+    >
+      <section
+        className="max-h-[72vh] overflow-y-auto rounded-[20px] border border-border bg-surface p-5 shadow-sm"
+        aria-label={`Reading passages for Part ${part.partCode}`}
+      >
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-sm font-black uppercase tracking-[0.18em] text-muted">Passages</h2>
           <Badge variant="muted">Part {part.partCode}</Badge>
@@ -517,7 +628,10 @@ function PartBody({
         </div>
       </section>
 
-      <section className="rounded-[20px] border border-border bg-surface p-5 shadow-sm">
+      <section
+        className="rounded-[20px] border border-border bg-surface p-5 shadow-sm"
+        aria-label={`Questions for Part ${part.partCode}`}
+      >
         <div className="mb-4 flex flex-col gap-3">
           <div className="flex items-center justify-between gap-3">
             <h2 className="text-sm font-black uppercase tracking-[0.18em] text-muted">Questions</h2>
@@ -561,8 +675,39 @@ function QuestionNavigator({
   activeQuestionId: string | null;
   onSelect: (questionId: string) => void;
 }) {
+  const handleKeyDown = useCallback(
+    (event: React.KeyboardEvent<HTMLDivElement>) => {
+      // Arrow-key navigation between question buttons. Left/Up = previous,
+      // Right/Down = next, Home = first, End = last. Wraps at the ends.
+      const key = event.key;
+      if (!['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown', 'Home', 'End'].includes(key))
+        return;
+      if (questions.length === 0) return;
+      event.preventDefault();
+      const currentIndex = Math.max(0, questions.findIndex((q) => q.id === activeQuestionId));
+      let nextIndex = currentIndex;
+      if (key === 'ArrowLeft' || key === 'ArrowUp') {
+        nextIndex = (currentIndex - 1 + questions.length) % questions.length;
+      } else if (key === 'ArrowRight' || key === 'ArrowDown') {
+        nextIndex = (currentIndex + 1) % questions.length;
+      } else if (key === 'Home') {
+        nextIndex = 0;
+      } else if (key === 'End') {
+        nextIndex = questions.length - 1;
+      }
+      const next = questions[nextIndex];
+      if (next) onSelect(next.id);
+    },
+    [questions, activeQuestionId, onSelect],
+  );
+
   return (
-    <div className="grid grid-cols-[repeat(auto-fill,minmax(42px,1fr))] gap-2">
+    <div
+      className="grid grid-cols-[repeat(auto-fill,minmax(42px,1fr))] gap-2"
+      role="group"
+      aria-label="Question navigator (use arrow keys to move between questions)"
+      onKeyDown={handleKeyDown}
+    >
       {questions.map((question) => {
         const answered = isAnsweredJson(answers[question.id]);
         const isActive = question.id === activeQuestionId;
@@ -572,16 +717,18 @@ function QuestionNavigator({
             key={question.id}
             type="button"
             onClick={() => onSelect(question.id)}
+            tabIndex={isActive ? 0 : -1}
+            aria-current={isActive ? 'true' : undefined}
             aria-label={`Question ${question.displayOrder}${answered ? ', answered' : ', unanswered'}${isFlagged ? ', flagged' : ''}`}
             className={cn(
-              'relative min-h-11 rounded-lg border text-sm font-bold transition-colors',
+              'relative min-h-11 rounded-lg border text-sm font-bold transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary',
               isActive ? 'border-primary bg-primary text-white' : 'border-border bg-background-light text-navy hover:border-primary/40',
               answered && !isActive && 'border-success/30 bg-success/10 text-success',
               isFlagged && !isActive && 'border-warning/30 bg-warning/10 text-warning',
             )}
           >
             {question.displayOrder}
-            {isFlagged ? <Bookmark className="absolute right-1 top-1 h-3 w-3 fill-current" /> : null}
+            {isFlagged ? <Bookmark className="absolute right-1 top-1 h-3 w-3 fill-current" aria-hidden="true" /> : null}
           </button>
         );
       })}
@@ -762,11 +909,31 @@ function fromStartedAttempt(started: ReadingAttemptStarted): ActiveAttempt {
     answeredCount: started.answeredCount,
     canResume: started.canResume,
     status: 'InProgress',
+    // The /attempts/{id} POST returns the full canonical attempt; mode is
+    // always Exam at this entry point. Practice modes are launched via the
+    // dedicated practice endpoints which redirect to this page with
+    // ?attemptId=… so the resume path picks up `mode` from the GET.
+    mode: 'Exam',
+    scopeQuestionIds: null,
   };
 }
 
 function isQuestionLocked(activePart: ReadingPartCode, partALocked: boolean, paperExpired: boolean) {
   return paperExpired || (activePart === 'A' && partALocked);
+}
+
+function practiceModeLabel(mode: 'Exam' | 'Learning' | 'Drill' | 'MiniTest' | 'ErrorBank'): string {
+  switch (mode) {
+    case 'Learning': return 'Learning Mode';
+    case 'Drill': return 'Skill Drill';
+    case 'MiniTest': return 'Mini-Test';
+    case 'ErrorBank': return 'Error Bank Retest';
+    default: return 'Practice';
+  }
+}
+
+function isSubsetPracticeMode(mode: 'Exam' | 'Learning' | 'Drill' | 'MiniTest' | 'ErrorBank') {
+  return mode === 'Drill' || mode === 'MiniTest' || mode === 'ErrorBank';
 }
 
 function toOptionList(options: unknown): Array<{ value: string; label: string }> {

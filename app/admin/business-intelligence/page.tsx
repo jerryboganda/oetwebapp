@@ -477,6 +477,7 @@ export default function BusinessIntelligencePage() {
                   { href: '/admin/analytics/cohort', label: 'Learner cohorts' },
                   { href: '/admin/analytics/content-effectiveness', label: 'Content effectiveness' },
                   { href: '/admin/analytics/expert-efficiency', label: 'Tutor efficiency' },
+                  { href: '/admin/analytics/reading', label: 'Reading analytics' },
                 ].map((link) => (
                   <AdminQuickAction key={link.href} href={link.href} label={link.label} />
                 ))}
